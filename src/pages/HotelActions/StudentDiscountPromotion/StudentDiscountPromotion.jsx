@@ -12,19 +12,53 @@
  *   DELETE /api/hotel-student-discount-promotion/{id}
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Card, Row, Col, Button, Table, Form, Modal, Spinner, Badge } from "react-bootstrap";
 import { FaEdit, FaTrash, FaArrowLeft, FaGraduationCap, FaEye } from "react-icons/fa";
 import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
+import Swal from "sweetalert2";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import axiosInstance from "../../../components/AxiosInstance";
 
+/**
+ * AutoGrowTextarea — drop-in for `<Form.Control as="textarea">` that
+ * resizes itself to fit its current value. Used for the Description
+ * field so long saved descriptions render in full on View instead
+ * of being clipped behind a 2-row scrollbar. Works the same in
+ * create / edit / view modes because it sizes off scrollHeight.
+ *
+ * Defined at module level so it keeps a stable component identity
+ * across the parent's re-renders — that's what lets `useRef` /
+ * `useEffect` track the same DOM node over time.
+ */
+const AutoGrowTextarea = ({ value, style, ...rest }) => {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <Form.Control
+      as="textarea"
+      ref={ref}
+      value={value}
+      {...rest}
+      style={{ overflow: "hidden", resize: "none", ...(style || {}) }}
+    />
+  );
+};
+
+// Form shape now mirrors SeniorCitizenList — a single Discount Type
+// dropdown + single value field. Payload still ships the legacy
+// `discountPercent` / `discountAmount` pair the backend reads.
 const EMPTY_FORM = {
-  discountPercent: "",
-  discountAmount: "",
+  discountType: "PERCENTAGE",
+  discountValue: "",
   validFrom: "",
   validTo: "",
   description: "",
@@ -50,27 +84,37 @@ export default function StudentDiscountPromotion() {
   // read-only. Mirrors the /occupancy-and-minimumlength pattern.
   const [isViewMode, setIsViewMode] = useState(false);
 
-  const handleView = async (promotionId) => {
-    try {
-      const res = await axiosInstance.get(
-        `/api/hotel-student-discount-promotion/${promotionId}`
-      );
-      const data = res.data || {};
-      setEditingId(promotionId);
-      setForm({
-        discountPercent: data.discountPercent ?? "",
-        discountAmount: data.discountAmount ?? "",
-        validFrom: data.validFrom || "",
-        validTo: data.validTo || "",
-        description: data.description || "",
-        active: data.active !== false,
-      });
-      setIsViewMode(true);
-      setShowModal(true);
-    } catch (err) {
-      console.error(err);
-      toast.error(err?.response?.data?.message || "Failed to load details");
+  // Map a backend row (discountPercent + discountAmount) into the
+  // type/value form shape. Used by both openEdit and handleView.
+  const formFromRow = (row) => {
+    let discountType = "PERCENTAGE";
+    let discountValue = "";
+    if (row.discountPercent != null && row.discountPercent !== "") {
+      discountType = "PERCENTAGE";
+      discountValue = row.discountPercent;
+    } else if (row.discountAmount != null && row.discountAmount !== "") {
+      discountType = "AMOUNT";
+      discountValue = row.discountAmount;
     }
+    return {
+      discountType,
+      discountValue,
+      validFrom: row.validFrom || "",
+      validTo: row.validTo || "",
+      description: row.description || "",
+      active: row.active !== false,
+    };
+  };
+
+  // View — backend has no GET-by-id endpoint for this resource
+  // (`/api/hotel-student-discount-promotion/{id}` returns 405
+  // "Method GET not supported"), so we populate the modal directly
+  // from the list row we already have. No round-trip needed.
+  const handleView = (row) => {
+    setEditingId(row.promotionId);
+    setForm(formFromRow(row));
+    setIsViewMode(true);
+    setShowModal(true);
   };
 
   const fetchAll = async () => {
@@ -97,14 +141,7 @@ export default function StudentDiscountPromotion() {
   };
   const openEdit = (row) => {
     setEditingId(row.promotionId);
-    setForm({
-      discountPercent: row.discountPercent ?? "",
-      discountAmount: row.discountAmount ?? "",
-      validFrom: row.validFrom || "",
-      validTo: row.validTo || "",
-      description: row.description || "",
-      active: row.active !== false,
-    });
+    setForm(formFromRow(row));
     setIsViewMode(false);
     setShowModal(true);
   };
@@ -116,15 +153,27 @@ export default function StudentDiscountPromotion() {
   const handleChange = (f, v) => setForm((s) => ({ ...s, [f]: v }));
 
   const handleSave = async () => {
-    if (!form.discountPercent && !form.discountAmount) {
-      toast.error("Specify a discount percent or a flat amount");
+    // Single Discount Value field with type dropdown — same UX as
+    // SeniorCitizen. Backend still stores percent/amount separately,
+    // so we map type → the right field at save time.
+    if (form.discountValue === "" || form.discountValue == null) {
+      toast.error("Enter a discount value");
+      return;
+    }
+    const value = Number(form.discountValue);
+    if (Number.isNaN(value) || value < 0) {
+      toast.error("Discount value must be a non-negative number");
+      return;
+    }
+    if (form.discountType === "PERCENTAGE" && value > 100) {
+      toast.error("Discount percentage cannot exceed 100");
       return;
     }
     try {
       const payload = {
         hotelId: Number(hotelId),
-        discountPercent: form.discountPercent ? Number(form.discountPercent) : null,
-        discountAmount: form.discountAmount ? Number(form.discountAmount) : null,
+        discountPercent: form.discountType === "PERCENTAGE" ? value : null,
+        discountAmount: form.discountType === "AMOUNT" ? value : null,
         validFrom: form.validFrom || null,
         validTo: form.validTo || null,
         description: form.description || null,
@@ -178,8 +227,17 @@ export default function StudentDiscountPromotion() {
     }
   };
 
+  // Swal confirmation popup — mirrors the meeting-space delete UX
+  // so the same dialog style is consistent across hotel-action pages.
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this promotion?")) return;
+    const result = await Swal.fire({
+      title: "Delete this promotion?",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Delete",
+      confirmButtonColor: "#d33",
+    });
+    if (!result.isConfirmed) return;
     try {
       await axiosInstance.delete(`/api/hotel-student-discount-promotion/${id}`);
       toast.success("Deleted");
@@ -242,7 +300,7 @@ export default function StudentDiscountPromotion() {
                     <th>Discount Amount</th>
                     <th>Valid From</th>
                     <th>Valid To</th>
-                    <th>Description</th>
+                    {/* <th>Description</th> */}
                     <th>Status</th>
                     <th style={{ width: 230 }}>Actions</th>
                   </tr>
@@ -271,7 +329,7 @@ export default function StudentDiscountPromotion() {
                         <td>{r.discountAmount ?? "-"}</td>
                         <td>{r.validFrom || "-"}</td>
                         <td>{r.validTo || "-"}</td>
-                        <td>{r.description || "-"}</td>
+                        {/* <td>{r.description || "-"}</td> */}
                         <td>
                           {/* Clickable Active/Inactive badge — opens
                               the confirm modal then PATCHes /status.
@@ -293,7 +351,7 @@ export default function StudentDiscountPromotion() {
                               size="sm"
                               variant="outline-info"
                               className="d-flex align-items-center gap-1"
-                              onClick={() => handleView(r.promotionId)}
+                              onClick={() => handleView(r)}
                               title="View"
                             >
                               <FaEye /> View
@@ -338,22 +396,44 @@ export default function StudentDiscountPromotion() {
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
+          {/* Layout mirrors SeniorCitizen — Discount Type dropdown
+              + single value field. Active switch removed because
+              the list page exposes Active / Inactive via the
+              clickable status badge. */}
           <Row className="g-3">
             <Col md={6}>
-              <Form.Label>Discount %</Form.Label>
-              <Form.Control type="number" min="0" max="100" step="0.01"
-                            value={form.discountPercent}
-                            disabled={isViewMode}
-                            className={isViewMode ? "bg-light" : ""}
-                            onChange={(e) => handleChange("discountPercent", e.target.value)} />
+              <Form.Label>Discount Type *</Form.Label>
+              <Form.Select
+                value={form.discountType}
+                disabled={isViewMode}
+                className={isViewMode ? "bg-light" : ""}
+                onChange={(e) => handleChange("discountType", e.target.value)}
+              >
+                <option value="PERCENTAGE">Percentage</option>
+                <option value="AMOUNT">Amount</option>
+              </Form.Select>
             </Col>
             <Col md={6}>
-              <Form.Label>Discount Amount (flat)</Form.Label>
-              <Form.Control type="number" min="0" step="0.01"
-                            value={form.discountAmount}
-                            disabled={isViewMode}
-                            className={isViewMode ? "bg-light" : ""}
-                            onChange={(e) => handleChange("discountAmount", e.target.value)} />
+              <Form.Label>
+                {form.discountType === "AMOUNT"
+                  ? "Discount Amount"
+                  : "Discount %"}
+              </Form.Label>
+              <Form.Control
+                type="number"
+                min="0"
+                max={form.discountType === "PERCENTAGE" ? "100" : undefined}
+                step="0.01"
+                value={form.discountValue}
+                disabled={isViewMode}
+                className={isViewMode ? "bg-light" : ""}
+                placeholder={
+                  form.discountType === "AMOUNT"
+                    ? "Enter flat amount"
+                    : "e.g. 15 for 15% off"
+                }
+                onChange={(e) => handleChange("discountValue", e.target.value)}
+              />
             </Col>
             <Col md={6}>
               <Form.Label>Valid From</Form.Label>
@@ -371,16 +451,10 @@ export default function StudentDiscountPromotion() {
             </Col>
             <Col md={12}>
               <Form.Label>Description</Form.Label>
-              <Form.Control as="textarea" rows={2} value={form.description}
+              <AutoGrowTextarea rows={2} value={form.description}
                             disabled={isViewMode}
                             className={isViewMode ? "bg-light" : ""}
                             onChange={(e) => handleChange("description", e.target.value)} />
-            </Col>
-            <Col md={12}>
-              <Form.Check type="switch" id="student-active-switch" label="Active"
-                          checked={form.active}
-                          disabled={isViewMode}
-                          onChange={(e) => handleChange("active", e.target.checked)} />
             </Col>
           </Row>
         </Modal.Body>

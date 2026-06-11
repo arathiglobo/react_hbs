@@ -626,18 +626,37 @@ const SpecialRates = () => {
                         />
                       </div>
                     </Col>
-                    <Col md={2}>
-                      <Form.Check
-                        type="checkbox"
-                        label="Is Refundable"
-                        checked={formData.isRefundable}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            isRefundable: e.target.checked,
-                          })
-                        }
-                      />
+                    <Col md={3}>
+                      {/* Refundability — two-radio toggle replaces the
+                          single "Is Refundable" checkbox so the
+                          operator has to make an explicit choice and
+                          the existing payload field (`isRefund`) keeps
+                          its boolean shape. */}
+                      <Form.Label className="d-block">Refundability</Form.Label>
+                      <div className="d-flex gap-3">
+                        <Form.Check
+                          type="radio"
+                          inline
+                          name="specialRefundable"
+                          id="specialRefundable-yes"
+                          label="Refundable"
+                          checked={formData.isRefundable === true}
+                          onChange={() =>
+                            setFormData({ ...formData, isRefundable: true })
+                          }
+                        />
+                        <Form.Check
+                          type="radio"
+                          inline
+                          name="specialRefundable"
+                          id="specialRefundable-no"
+                          label="Non Refundable"
+                          checked={formData.isRefundable === false}
+                          onChange={() =>
+                            setFormData({ ...formData, isRefundable: false })
+                          }
+                        />
+                      </div>
                     </Col>
                     <Col md={2}>
                       <Form.Group>

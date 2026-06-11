@@ -123,12 +123,12 @@ export default function ContractRate() {
     setShowValidityModal(true);
   };
 
-  // View — reuses the existing edit page in read-only mode. Navigating
-  // with `?mode=view` makes EditContractRate disable every input and
-  // hide the Save button (see fieldset disabled + isViewMode there).
-  // Mirrors the /occupancy-and-minimumlength view pattern.
+  // View — opens the dedicated ViewContractRate screen. That page
+  // mirrors the Edit layout but renders every control as read-only
+  // and strips the action buttons (no "+ Add" on Validity Periods,
+  // no per-row "✖", no Update). Header carries only a Close button.
   const handleView = (rateId) =>
-    navigate(`/hotel-actions/hotel/${id}/contract-rate/${rateId}/edit?mode=view`);
+    navigate(`/hotel-actions/hotel/${id}/contract-rate/${rateId}/view`);
 
   // ✅ Handle status toggle
   const handleStatusToggle = (rate) => {

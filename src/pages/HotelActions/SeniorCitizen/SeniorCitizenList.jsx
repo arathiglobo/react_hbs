@@ -19,17 +19,48 @@
  * purely by the adult ages captured on the search page.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Card, Row, Col, Button, Table, Form, Modal, Spinner, Badge,
 } from "react-bootstrap";
 import { FaEdit, FaTrash, FaArrowLeft, FaUserClock, FaEye } from "react-icons/fa";
 import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
+import Swal from "sweetalert2";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import axiosInstance from "../../../components/AxiosInstance";
+
+/**
+ * AutoGrowTextarea — drop-in for `<Form.Control as="textarea">` that
+ * resizes itself to fit its current value. Used for the Description
+ * field so long saved descriptions render in full on View instead
+ * of being clipped behind a 2-row scrollbar. Works the same in
+ * create / edit / view modes because it sizes off scrollHeight.
+ *
+ * Defined at module level so it keeps a stable component identity
+ * across the parent's re-renders — that's what lets `useRef` /
+ * `useEffect` track the same DOM node over time.
+ */
+const AutoGrowTextarea = ({ value, style, ...rest }) => {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <Form.Control
+      as="textarea"
+      ref={ref}
+      value={value}
+      {...rest}
+      style={{ overflow: "hidden", resize: "none", ...(style || {}) }}
+    />
+  );
+};
 
 const EMPTY_FORM = {
   discountType: "PERCENTAGE",
@@ -55,45 +86,45 @@ export default function SeniorCitizenList() {
   // read-only. Mirrors the /occupancy-and-minimumlength pattern.
   const [isViewMode, setIsViewMode] = useState(false);
 
-  const handleView = async (promotionId) => {
-    try {
-      const res = await axiosInstance.get(
-        `/api/hotel-senior-citizen-promotion/${promotionId}`
-      );
-      const row = res.data || {};
-      // Mirror the data-normalisation that openEdit does so the form
-      // displays the same fields regardless of whether the row uses the
-      // new discountType/Value model or the legacy percent/amount one.
-      let discountType = row.discountType;
-      let discountValue = row.discountValue;
-      if (!discountType) {
-        if (row.discountPercent != null) {
-          discountType = "PERCENTAGE";
-          discountValue = row.discountPercent;
-        } else if (row.discountAmount != null) {
-          discountType = "AMOUNT";
-          discountValue = row.discountAmount;
-        } else {
-          discountType = "PERCENTAGE";
-          discountValue = "";
-        }
+  // Normalise a backend row into the form's discountType/Value shape.
+  // Handles both new rows (carry discountType + discountValue) and
+  // older rows that only carry discountPercent / discountAmount. Used
+  // by both openEdit and the View click handler.
+  const formFromRow = (row) => {
+    let discountType = row.discountType;
+    let discountValue = row.discountValue;
+    if (!discountType) {
+      if (row.discountPercent != null) {
+        discountType = "PERCENTAGE";
+        discountValue = row.discountPercent;
+      } else if (row.discountAmount != null) {
+        discountType = "AMOUNT";
+        discountValue = row.discountAmount;
+      } else {
+        discountType = "PERCENTAGE";
+        discountValue = "";
       }
-      setEditingId(row.promotionId || row.id || promotionId);
-      setForm({
-        discountType,
-        discountValue: discountValue ?? "",
-        validFrom: row.validFrom || "",
-        validTo: row.validTo || "",
-        description: row.description || "",
-        active: row.active !== false,
-      });
-      setErrors({});
-      setIsViewMode(true);
-      setShowModal(true);
-    } catch (err) {
-      console.error(err);
-      toast.error(err?.response?.data?.message || "Failed to load details");
     }
+    return {
+      discountType,
+      discountValue: discountValue ?? "",
+      validFrom: row.validFrom || "",
+      validTo: row.validTo || "",
+      description: row.description || "",
+      active: row.active !== false,
+    };
+  };
+
+  // View — backend has no GET-by-id endpoint for this resource
+  // (`/api/hotel-senior-citizen-promotion/{id}` returns 405 "Method
+  // GET not supported"), so we populate the modal directly from the
+  // list row we already have. No round-trip needed.
+  const handleView = (row) => {
+    setEditingId(row.promotionId || row.id);
+    setForm(formFromRow(row));
+    setErrors({});
+    setIsViewMode(true);
+    setShowModal(true);
   };
 
   const fetchAll = async () => {
@@ -129,29 +160,7 @@ export default function SeniorCitizenList() {
 
   const openEdit = (row) => {
     setEditingId(row.promotionId || row.id);
-    let discountType = row.discountType;
-    let discountValue = row.discountValue;
-    if (!discountType) {
-      // Backward-compat with older rows that stored discountPercent / discountAmount.
-      if (row.discountPercent != null) {
-        discountType = "PERCENTAGE";
-        discountValue = row.discountPercent;
-      } else if (row.discountAmount != null) {
-        discountType = "AMOUNT";
-        discountValue = row.discountAmount;
-      } else {
-        discountType = "PERCENTAGE";
-        discountValue = "";
-      }
-    }
-    setForm({
-      discountType,
-      discountValue: discountValue ?? "",
-      validFrom: row.validFrom || "",
-      validTo: row.validTo || "",
-      description: row.description || "",
-      active: row.active !== false,
-    });
+    setForm(formFromRow(row));
     setErrors({});
     setIsViewMode(false);
     setShowModal(true);
@@ -216,8 +225,17 @@ export default function SeniorCitizenList() {
     }
   };
 
+  // Swal confirmation popup — mirrors the meeting-space delete UX
+  // so the same dialog style is consistent across hotel-action pages.
   const handleDelete = async (id) => {
-    if (!window.confirm("Delete this promotion?")) return;
+    const result = await Swal.fire({
+      title: "Delete this promotion?",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Delete",
+      confirmButtonColor: "#d33",
+    });
+    if (!result.isConfirmed) return;
     try {
       await axiosInstance.delete(`/api/hotel-senior-citizen-promotion/${id}`);
       toast.success("Deleted");
@@ -296,7 +314,7 @@ export default function SeniorCitizenList() {
                     <th>Discount Value</th>
                     <th>Valid From</th>
                     <th>Valid To</th>
-                    <th>Description</th>
+                    {/* <th>Description</th> */}
                     <th>Status</th>
                     <th style={{ width: 230 }}>Actions</th>
                   </tr>
@@ -327,7 +345,7 @@ export default function SeniorCitizenList() {
                           <td>{getDiscountValue(row)}</td>
                           <td>{row.validFrom || "-"}</td>
                           <td>{row.validTo || "-"}</td>
-                          <td>{row.description || "-"}</td>
+                          {/* <td>{row.description || "-"}</td> */}
                           <td>
                             <Badge bg={row.active ? "success" : "danger"}>
                               {row.active ? "Active" : "Inactive"}
@@ -339,7 +357,7 @@ export default function SeniorCitizenList() {
                                 size="sm"
                                 variant="outline-info"
                                 className="d-flex align-items-center gap-1"
-                                onClick={() => handleView(pid)}
+                                onClick={() => handleView(row)}
                                 title="View"
                               >
                                 <FaEye /> View
@@ -434,17 +452,16 @@ export default function SeniorCitizenList() {
             </Col>
             <Col md={12}>
               <Form.Label>Description</Form.Label>
-              <Form.Control as="textarea" rows={2} value={form.description}
+              <AutoGrowTextarea rows={2} value={form.description}
                             disabled={isViewMode}
                             className={isViewMode ? "bg-light" : ""}
                             onChange={(e) => handleChange("description", e.target.value)} />
             </Col>
-            <Col md={12}>
-              <Form.Check type="switch" id="sc-active-switch" label="Active"
-                          checked={form.active}
-                          disabled={isViewMode}
-                          onChange={(e) => handleChange("active", e.target.checked)} />
-            </Col>
+            {/* Active switch removed — the list page shows /
+                toggles Active/Inactive via the badge in the Status
+                column, so duplicating it here was confusing.
+                `form.active` is still seeded from the loaded row
+                (defaults true on create) and shipped on save. */}
           </Row>
         </Modal.Body>
         <Modal.Footer>

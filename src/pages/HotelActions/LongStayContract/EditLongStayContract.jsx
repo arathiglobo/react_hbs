@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   Card,
@@ -15,6 +15,39 @@ import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
+
+/**
+ * AutoGrowTextarea — drop-in replacement for `<Form.Control as="textarea">`
+ * that resizes itself to fit its current value. Long Terms &
+ * Conditions and Additional Cancellation Policies entries used to
+ * sit behind a 2-row scrollbar in `?mode=view` (and during edit too);
+ * this lets the box auto-grow so the full text is always visible.
+ *
+ * Defined at module level (not inside EditLongStayContract) so it
+ * keeps a stable component identity across the parent's re-renders
+ * — that's what lets `useRef` / `useEffect` track the same DOM node
+ * over time instead of remounting on every keystroke.
+ */
+const AutoGrowTextarea = ({ value, style, ...rest }) => {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <Form.Control
+      as="textarea"
+      ref={ref}
+      value={value}
+      {...rest}
+      // overflow:hidden + resize:none keeps the scrollbar from
+      // appearing once we've sized the box to its content.
+      style={{ overflow: "hidden", resize: "none", ...(style || {}) }}
+    />
+  );
+};
 
 export default function EditLongStayContract() {
   const navigate = useNavigate();
@@ -222,16 +255,21 @@ export default function EditLongStayContract() {
           formData.maxBookingDays === "" || formData.maxBookingDays === null
             ? null
             : Number(formData.maxBookingDays),
+        // Long-stay free-text fields land in VARCHAR(500) columns
+        // — the backend returns "A field value is too long (max 500
+        // characters allowed)" if any one exceeds. Truncate here as
+        // a safety net; the textareas / inputs below also set
+        // maxLength={500} so paste bombs get clamped at the source.
         termsAndConditions: (formData.termsAndConditions || [])
-          .map((t) => (t || "").trim())
+          .map((t) => (t || "").trim().slice(0, 500))
           .filter((t) => t.length > 0),
         cancellationPolicy: (formData.cancellationPolicy || []).map((c) => ({
           chargeType: c.chargeType || "PERCENT",
           value: c.value === "" || c.value === null ? null : Number(c.value),
-          condition: (c.condition || "").trim(),
+          condition: (c.condition || "").trim().slice(0, 500),
         })),
         cancellationPolicyNotes:
-          (formData.cancellationPolicyNotes || "").trim() || null,
+          (formData.cancellationPolicyNotes || "").trim().slice(0, 500) || null,
         rooms: formData.rooms.map((r) => ({
           // Preserve longStayRoomId for existing rows so the backend updates them
           // in place instead of treating them as removed-and-recreated. Omitted for
@@ -344,17 +382,12 @@ export default function EditLongStayContract() {
                       />
                     </Form.Group>
                   </Col>
-                  <Col md={3} className="d-flex align-items-end">
-                    <Form.Check
-                      type="switch"
-                      id="isLive"
-                      label="Active"
-                      checked={formData.isLive}
-                      onChange={(e) =>
-                        setFormData({ ...formData, isLive: e.target.checked })
-                      }
-                    />
-                  </Col>
+                  {/* Active switch removed — toggled from the list
+                      page's status badge. formData.isLive is still
+                      loaded from the saved record and re-sent in
+                      the update payload so the row keeps its
+                      current state when the operator only changes
+                      other fields. */}
                 </Row>
 
                 <Row className="mb-3">
@@ -630,6 +663,7 @@ export default function EditLongStayContract() {
                             <Form.Control
                               size="sm"
                               type="text"
+                              maxLength={500}
                               placeholder="e.g. cancelled within 30 days"
                               value={row.condition || ""}
                               onChange={(e) =>
@@ -685,9 +719,9 @@ export default function EditLongStayContract() {
                     <Form.Label className="small fw-semibold">
                       Additional Cancellation Policies (optional)
                     </Form.Label>
-                    <Form.Control
-                      as="textarea"
+                    <AutoGrowTextarea
                       rows={3}
+                      maxLength={500}
                       placeholder="Any policies that don't fit the table above…"
                       value={formData.cancellationPolicyNotes}
                       onChange={(e) =>
@@ -729,9 +763,9 @@ export default function EditLongStayContract() {
                         </Button>
                       </Card.Header>
                       <Card.Body className="py-2">
-                        <Form.Control
-                          as="textarea"
+                        <AutoGrowTextarea
                           rows={2}
+                          maxLength={500}
                           placeholder="e.g. A refundable security deposit is collected at check-in"
                           value={term}
                           onChange={(e) =>

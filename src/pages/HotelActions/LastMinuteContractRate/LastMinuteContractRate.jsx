@@ -96,12 +96,14 @@ export default function LastMinuteContractRate() {
     setShowValidityModal(true);
   };
 
-  // View — reuses the existing edit page in read-only mode. Mirrors the
-  // /occupancy-and-minimumlength view pattern (same screen, all fields
-  // populated, no inputs editable, no Save button).
+  // View — opens the dedicated ViewLastMinuteContractRate screen. That
+  // page mirrors the form layout but renders every control as
+  // read-only and strips the action buttons (no "+ Add" on Validity
+  // Periods or any policy section, no per-row "✖", no Update). Header
+  // carries only a Close button.
   const handleView = (rateId) =>
     navigate(
-      `/hotel-actions/hotel/${hotelId}/last-minute-contract-rate/${rateId}/edit?mode=view`
+      `/hotel-actions/hotel/${hotelId}/last-minute-contract-rate/${rateId}/view`
     );
 
   return (

@@ -83,9 +83,11 @@ import Policy from "./pages/HotelActions/Policy/Policy";
 import CreateContractRate from "./pages/HotelActions/ContractRate/CreateContractRate";
 import EditContractRate from "./pages/HotelActions/ContractRate/EditContractRate";
 import CopyContractRate from "./pages/HotelActions/ContractRate/CopyContractRate";
+import ViewContractRate from "./pages/HotelActions/ContractRate/ViewContractRate";
 // Last Minute Contract Rate (Phase 1 of Last Minute Booking module)
 import LastMinuteContractRate from "./pages/HotelActions/LastMinuteContractRate/LastMinuteContractRate";
 import LastMinuteContractRateForm from "./pages/HotelActions/LastMinuteContractRate/LastMinuteContractRateForm";
+import ViewLastMinuteContractRate from "./pages/HotelActions/LastMinuteContractRate/ViewLastMinuteContractRate";
 // Last Minute Booking — search/listing page (Phase 2)
 import LastMinuteBookingPage from "./pages/booking/LastMinuteBookingPage";
 // Last Minute Booking — booking creation form (Phase 3)
@@ -607,11 +609,13 @@ export default function App() {
         <Route path="/hotel-actions/:id/contract-rate" element={<PrivateRoute><ContractRate /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/contract-rate/create" element={<PrivateRoute><CreateContractRate /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/contract-rate/:contractRateId/edit" element={<PrivateRoute><EditContractRate /></PrivateRoute>} />
+        <Route path="/hotel-actions/hotel/:id/contract-rate/:contractRateId/view" element={<PrivateRoute><ViewContractRate /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/contract-rate/:editId/copy" element={<PrivateRoute><CopyContractRate /></PrivateRoute>} />
         {/* last-minute contract rate (Phase 1) — separate from normal contract rate */}
         <Route path="/hotel-actions/:id/last-minute-contract-rate" element={<PrivateRoute><LastMinuteContractRate /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/last-minute-contract-rate/create" element={<PrivateRoute><LastMinuteContractRateForm mode="create" /></PrivateRoute>} />
         <Route path="/hotel-actions/hotel/:id/last-minute-contract-rate/:rateId/edit" element={<PrivateRoute><LastMinuteContractRateForm mode="edit" /></PrivateRoute>} />
+        <Route path="/hotel-actions/hotel/:id/last-minute-contract-rate/:rateId/view" element={<PrivateRoute><ViewLastMinuteContractRate /></PrivateRoute>} />
         <Route path="/hotel-actions/:id/long-stay-contract" element={<PrivateRoute><LongStayContract /></PrivateRoute>} />
         {/* Meet & Space — manage meeting / event spaces for a hotel (new feature) */}
         <Route path="/hotel-actions/:id/meeting-space" element={<PrivateRoute><MeetingSpaceManage /></PrivateRoute>} />

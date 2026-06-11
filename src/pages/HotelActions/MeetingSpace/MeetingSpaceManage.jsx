@@ -79,105 +79,7 @@ const COMMON_AMENITIES = [
   "Dance Floor",
 ];
 
-// Random sample presets (for one-click testing).
-const SAMPLE_PRESETS = [
-  {
-    spaceName: "Grand Ballroom",
-    spaceType: "Banquet Hall",
-    description:
-      "Spacious banquet hall ideal for weddings, large conferences and gala events. " +
-      "Features high ceilings, chandelier lighting, integrated AV system and " +
-      "a fully equipped stage area.",
-    capacity: 300,
-    areaSqft: 4500,
-    floorLocation: "Ground Floor",
-    layoutOptions: ["Theatre", "Banquet", "Reception"],
-    amenities: ["Projector", "Wi-Fi", "Microphone", "AC", "Stage", "LED Wall", "Dance Floor"],
-    openTime: "08:00",
-    closeTime: "23:00",
-    minBookingHours: 4,
-    hourlyRate: 5000,
-    halfDayRate: 18000,
-    fullDayRate: 32000,
-    contractHourlyRate: 4200,
-    contractHalfDayRate: 15500,
-    contractFullDayRate: 28000,
-    specialHourlyRate: 3800,
-    specialHalfDayRate: 14000,
-    specialFullDayRate: 25000,
-    taxPercent: 18,
-    images: [
-      "https://images.unsplash.com/photo-1519167758481-83f550bb49b3?w=800",
-      "https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800",
-    ],
-    cancellationPolicies: [
-      { policyText: "Free cancellation up to 7 days before event.", daysBeforeEvent: 7, chargePercent: 0 },
-      { policyText: "50% charge if cancelled within 7 days.", daysBeforeEvent: 3, chargePercent: 50 },
-      { policyText: "100% charge within 48 hours of the event.", daysBeforeEvent: 1, chargePercent: 100 },
-    ],
-  },
-  {
-    spaceName: "Executive Board Room",
-    spaceType: "Board Room",
-    description:
-      "Private board room with 14-seat conference table, video-conferencing system " +
-      "and presentation screens.",
-    capacity: 14,
-    areaSqft: 600,
-    floorLocation: "5th Floor",
-    layoutOptions: ["Boardroom"],
-    amenities: ["Projector", "Wi-Fi", "Microphone", "AC", "Video Conferencing", "Whiteboard"],
-    openTime: "08:00",
-    closeTime: "20:00",
-    minBookingHours: 1,
-    hourlyRate: 1500,
-    halfDayRate: 5500,
-    fullDayRate: 10000,
-    contractHourlyRate: 1200,
-    contractHalfDayRate: 4500,
-    contractFullDayRate: 8500,
-    specialHourlyRate: 1000,
-    specialHalfDayRate: 3800,
-    specialFullDayRate: 7000,
-    taxPercent: 18,
-    images: ["https://images.unsplash.com/photo-1497366216548-37526070297c?w=800"],
-    cancellationPolicies: [
-      { policyText: "Free cancellation up to 24 hours before booking.", daysBeforeEvent: 1, chargePercent: 0 },
-      { policyText: "100% charge within 24 hours.", daysBeforeEvent: 0, chargePercent: 100 },
-    ],
-  },
-  {
-    spaceName: "Sky Conference Hall",
-    spaceType: "Conference Hall",
-    description:
-      "Premium top-floor conference hall with panoramic city views, modular seating " +
-      "and full audio-visual support.",
-    capacity: 120,
-    areaSqft: 2000,
-    floorLocation: "12th Floor",
-    layoutOptions: ["Theatre", "U-Shape", "Classroom", "Boardroom"],
-    amenities: ["Projector", "Wi-Fi", "Microphone", "AC", "Stage", "Podium"],
-    openTime: "09:00",
-    closeTime: "22:00",
-    minBookingHours: 2,
-    hourlyRate: 3000,
-    halfDayRate: 11000,
-    fullDayRate: 20000,
-    contractHourlyRate: 2500,
-    contractHalfDayRate: 9500,
-    contractFullDayRate: 17000,
-    specialHourlyRate: 2200,
-    specialHalfDayRate: 8500,
-    specialFullDayRate: 15000,
-    taxPercent: 18,
-    images: ["https://images.unsplash.com/photo-1505373877841-8d25f7d46678?w=800"],
-    cancellationPolicies: [
-      { policyText: "Free cancellation up to 72 hours before the event.", daysBeforeEvent: 3, chargePercent: 0 },
-      { policyText: "30% charge within 72 hours.", daysBeforeEvent: 2, chargePercent: 30 },
-      { policyText: "100% charge within 24 hours.", daysBeforeEvent: 1, chargePercent: 100 },
-    ],
-  },
-];
+
 
 const emptyForm = {
   spaceName: "",
@@ -208,8 +110,7 @@ const emptyForm = {
   cancellationPolicies: [],
 };
 
-const pickPreset = () =>
-  SAMPLE_PRESETS[Math.floor(Math.random() * SAMPLE_PRESETS.length)];
+
 
 export default function MeetingSpaceManage() {
   const { id: hotelId } = useParams();
@@ -319,7 +220,7 @@ export default function MeetingSpaceManage() {
   // ── modal helpers ─────────────────────────────────────────────────────
   const openCreate = () => {
     setEditing(null);
-    setForm({ ...emptyForm, ...pickPreset() });
+    setForm({ ...emptyForm });
     setErrors({});
     setIsViewMode(false);
     setShowForm(true);

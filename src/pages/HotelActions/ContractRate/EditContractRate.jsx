@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   Container,
   Row,
@@ -23,13 +23,6 @@ import { toast } from "react-hot-toast";
 export default function EditContractRate() {
   const navigate = useNavigate();
   const { id, contractRateId } = useParams(); // id = hotelId, contractRateId = contract rate ID
-
-  // View mode — when the URL carries `?mode=view`, the screen renders
-  // read-only (every input disabled, no Save button). Mirrors the
-  // /occupancy-and-minimumlength view pattern: same screen with all
-  // populated fields, just non-editable.
-  const [searchParams] = useSearchParams();
-  const isViewMode = searchParams.get("mode") === "view";
 
   const [formData, setFormData] = useState({
     seasonId: "",
@@ -493,19 +486,12 @@ export default function EditContractRate() {
                   hotel this Contract Rate belongs to. Same component
                   used on the action grid and the list pages. */}
               <h4 className="fw-semibold text-dark mb-0 d-flex align-items-center gap-2">
-                {isViewMode ? "View" : "Edit"} Contract Rate
+                Edit Contract Rate
                 <HotelTitleBadge hotelId={id} />
               </h4>
-              {!isViewMode && (
-                <Button variant="success" onClick={handleUpdate}>
-                  <FaSave className="me-1" /> Update
-                </Button>
-              )}
-              {isViewMode && (
-                <Button variant="secondary" onClick={() => navigate(-1)}>
-                  Close
-                </Button>
-              )}
+              <Button variant="success" onClick={handleUpdate}>
+                <FaSave className="me-1" /> Update
+              </Button>
             </div>
 
             <Card className="shadow-sm border-0 rounded-4 p-4">
@@ -514,7 +500,7 @@ export default function EditContractRate() {
                   <Spinner animation="border" />
                 </div>
               ) : (
-                <fieldset disabled={isViewMode}>
+                <>
                   {/* ✅ Top Form Fields */}
                   <Row className="mb-4 g-4">
                     <Col md={3}>
@@ -562,7 +548,6 @@ export default function EditContractRate() {
                         <Form.Label>Market Type</Form.Label>
                         <Select
                           isMulti
-                          isDisabled={isViewMode}
                           options={markets.map((m) => ({
                             value: m.marketTypeId,
                             label: m.name,
@@ -580,7 +565,6 @@ export default function EditContractRate() {
                         <Form.Label>Exclude Nationality</Form.Label>
                         <Select
                           isMulti
-                          isDisabled={isViewMode}
                           options={filteredCountries.map((c) => ({
                             value: c.id,
                             label: `${c.name} (${c.marketType})`,
@@ -856,15 +840,13 @@ export default function EditContractRate() {
                       variant="outline-danger"
                       onClick={() => navigate(-1)}
                     >
-                      {isViewMode ? "Close" : "Cancel"}
+                      Cancel
                     </Button>
-                    {!isViewMode && (
-                      <Button variant="success" onClick={handleUpdate}>
-                        Update
-                      </Button>
-                    )}
+                    <Button variant="success" onClick={handleUpdate}>
+                      Update
+                    </Button>
                   </div>
-                </fieldset>
+                </>
               )}
             </Card>
             {/* ✅ Inline cell confirmation popup */}

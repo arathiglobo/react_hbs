@@ -32,6 +32,39 @@ export default function DiscountPromotion() {
   const [seasonData, setSeasonData] = useState([]);
   const [validationErrors, setValidationErrors] = useState({});
 
+  // Per-(category, type, occupancy) discount entries, keyed by
+  // `${rommCategoryId}|${roomTypeId}|${occupancyId}` so every row in
+  // the DISCOUNT DETAILS table is independently editable. The
+  // previous version keyed by (category, type) only, which made
+  // every occupancy row of a given type share one record — so
+  // entering a value on one row "automatically came" for the rest
+  // of that room category. Each row now carries its own record and
+  // the matching `roomId` field rides along in the payload so the
+  // backend can persist per-occupancy (it already accepts roomId
+  // on the DTO — see EditDiscountPromotion's load logic).
+  const [discountRoomData, setDiscountRoomData] = useState({});
+  const keyFor = (categoryId, typeId, occupancyId) =>
+    `${categoryId}|${typeId}|${occupancyId}`;
+  const getDiscountCell = (categoryId, typeId, occupancyId, field) =>
+    discountRoomData[keyFor(categoryId, typeId, occupancyId)]?.[field] ?? "";
+  const setDiscountCell = (categoryId, typeId, occupancyId, field, value) => {
+    const key = keyFor(categoryId, typeId, occupancyId);
+    setDiscountRoomData((prev) => ({
+      ...prev,
+      [key]: {
+        hotelRoomcategoryId: String(categoryId),
+        hotelRoomtypeId: String(typeId),
+        roomId: occupancyId,
+        discountPercent: "",
+        discountValue: "",
+        lengthRestriction: "",
+        maxLengthRestriction: "",
+        ...(prev[key] || {}),
+        [field]: value,
+      },
+    }));
+  };
+
   // ✅ Validation function
   const validateForm = () => {
     const errors = {};
@@ -264,9 +297,20 @@ export default function DiscountPromotion() {
     }
 
     try {
+      // Normalise a date-or-datetime string into Spring's expected
+      // `yyyy-MM-dd'T'HH:mm:ss`. `<input type="date">` returns
+      // "yyyy-MM-dd"; `<input type="datetime-local">` returns
+      // "yyyy-MM-ddTHH:mm". The backend's Jackson DateDeserializer
+      // rejected the old `${date}:00` shape ("2026-06-30:00") because
+      // it lacked the `T` separator — see the 400 from /api/discount/save.
       const formatDate = (date) => {
         if (!date) return "";
-        return `${date}:00`;
+        if (date.includes("T")) {
+          // datetime-local → add seconds if missing.
+          return date.length === 16 ? `${date}:00` : date;
+        }
+        // date-only → bolt on midnight time.
+        return `${date}T00:00:00`;
       };
 
       const weekDay = formData.weekType === "weekdays" ? true : false;
@@ -287,17 +331,30 @@ export default function DiscountPromotion() {
         isType: "B",
       }));
 
-      // Create room DTO from dynamic hotel rooms data
-      const roomDTO = hotelRoomsData.flatMap(
-        (roomCategory) =>
-          roomCategory.roomTypeDetailsDTOs?.map((roomType) => ({
-            promo_room_id: "",
-            hotelRoomcategoryId: String(roomCategory.rommCategoryId),
-            hotelRoomtypeId: String(roomType.roomTypeId),
-            discountPercent: "20", // Default value, can be made dynamic
-            discountValue: "0", // Default value, can be made dynamic
-            lengthRestriction: "2", // Default value, can be made dynamic
-          })) || []
+      // Build roomDTO — one entry per (category, type, occupancy)
+      // so each row the operator sees in DISCOUNT DETAILS maps
+      // 1:1 to a payload entry. `roomId` carries the occupancy id
+      // (same field name EditDiscountPromotion's load logic
+      // reads back). Numbers default to "0" so a partially filled
+      // row still serialises cleanly.
+      const roomDTO = hotelRoomsData.flatMap((roomCategory) =>
+        (roomCategory.roomTypeDetailsDTOs || []).flatMap((roomType) =>
+          (roomCategory.occupancyDetailsDTOs || []).map((occupancy) => {
+            const entry =
+              discountRoomData[
+                keyFor(roomCategory.rommCategoryId, roomType.roomTypeId, occupancy.id)
+              ] || {};
+            return {
+              promo_room_id: "",
+              hotelRoomcategoryId: String(roomCategory.rommCategoryId),
+              hotelRoomtypeId: String(roomType.roomTypeId),
+              roomId: occupancy.id,
+              discountPercent: String(entry.discountPercent || "0"),
+              discountValue: String(entry.discountValue || "0"),
+              lengthRestriction: String(entry.lengthRestriction || "0"),
+            };
+          })
+        )
       );
 
       const payload = {
@@ -314,7 +371,11 @@ export default function DiscountPromotion() {
         extraBed: formData.discountForExtraBed,
         bookDate: formatDate(formData.bookByDate),
         bookDay: String(formData.bookByPriorDays),
-        remark: formData.remarks || "",
+        // Discount.remark is a VARCHAR(500) at the DB level; the
+        // backend returns 400 "field value is too long (max 500
+        // characters allowed)" if we exceed it. Truncate as a
+        // belt-and-braces in case the textarea cap was bypassed.
+        remark: (formData.remarks || "").slice(0, 500),
         validityDTO: [...validityList, ...blackoutDates],
         roomDTO: roomDTO,
       };
@@ -761,7 +822,12 @@ export default function DiscountPromotion() {
                                     <td colSpan={5}></td>
                                   </tr>
 
-                                  {/* Occupancy Rows */}
+                                  {/* Occupancy Rows — each row writes
+                                      to its own (category, type,
+                                      occupancy) record so values
+                                      typed in one row don't leak
+                                      across the rest of the room
+                                      category. */}
                                   {roomCategory.occupancyDetailsDTOs?.map((occupancy, occIndex) => (
                                     <tr key={`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`}>
                                       <td></td>
@@ -773,8 +839,22 @@ export default function DiscountPromotion() {
                                           min="0"
                                           max="100"
                                           placeholder="0"
-                                          defaultValue="0"
                                           size="sm"
+                                          value={getDiscountCell(
+                                            roomCategory.rommCategoryId,
+                                            roomType.roomTypeId,
+                                            occupancy.id,
+                                            "discountPercent"
+                                          )}
+                                          onChange={(e) =>
+                                            setDiscountCell(
+                                              roomCategory.rommCategoryId,
+                                              roomType.roomTypeId,
+                                              occupancy.id,
+                                              "discountPercent",
+                                              e.target.value
+                                            )
+                                          }
                                         />
                                       </td>
                                       <td>
@@ -782,8 +862,22 @@ export default function DiscountPromotion() {
                                           type="number"
                                           min="0"
                                           placeholder="0"
-                                          defaultValue="0"
                                           size="sm"
+                                          value={getDiscountCell(
+                                            roomCategory.rommCategoryId,
+                                            roomType.roomTypeId,
+                                            occupancy.id,
+                                            "discountValue"
+                                          )}
+                                          onChange={(e) =>
+                                            setDiscountCell(
+                                              roomCategory.rommCategoryId,
+                                              roomType.roomTypeId,
+                                              occupancy.id,
+                                              "discountValue",
+                                              e.target.value
+                                            )
+                                          }
                                         />
                                       </td>
                                       <td>
@@ -791,17 +885,50 @@ export default function DiscountPromotion() {
                                           type="number"
                                           min="0"
                                           placeholder="0"
-                                          defaultValue="0"
                                           size="sm"
+                                          value={getDiscountCell(
+                                            roomCategory.rommCategoryId,
+                                            roomType.roomTypeId,
+                                            occupancy.id,
+                                            "lengthRestriction"
+                                          )}
+                                          onChange={(e) =>
+                                            setDiscountCell(
+                                              roomCategory.rommCategoryId,
+                                              roomType.roomTypeId,
+                                              occupancy.id,
+                                              "lengthRestriction",
+                                              e.target.value
+                                            )
+                                          }
                                         />
                                       </td>
                                       <td>
+                                        {/* Max length is not part of
+                                            the backend payload yet —
+                                            kept as a UI-only field so
+                                            we don't drop the column,
+                                            but it isn't shipped. */}
                                         <Form.Control
                                           type="number"
                                           min="0"
                                           placeholder="0"
-                                          defaultValue="25"
                                           size="sm"
+                                          value={getDiscountCell(
+                                            roomCategory.rommCategoryId,
+                                            roomType.roomTypeId,
+                                            occupancy.id,
+                                            "maxLengthRestriction"
+                                          )}
+                                          onChange={(e) =>
+                                            setDiscountCell(
+                                              roomCategory.rommCategoryId,
+                                              roomType.roomTypeId,
+                                              occupancy.id,
+                                              "maxLengthRestriction",
+                                              e.target.value
+                                            )
+                                          }
                                         />
                                       </td>
                                     </tr>
@@ -816,17 +943,25 @@ export default function DiscountPromotion() {
                   </Card>
 
 
-                  {/* ================= REMARKS + BUTTONS ================= */}
+                  {/* ================= REMARKS + BUTTONS =================
+                      Backend column is VARCHAR(500) — see the 400
+                      "field value is too long" response. We cap the
+                      textarea at 500 and surface a counter so the
+                      operator knows their headroom. */}
                   <Form.Group className="mb-3">
                     <Form.Label>Remarks</Form.Label>
                     <Form.Control
                       as="textarea"
                       rows={3}
+                      maxLength={500}
                       value={formData.remarks}
                       onChange={(e) =>
                         setFormData({ ...formData, remarks: e.target.value })
                       }
                     />
+                    <Form.Text className="text-muted">
+                      {(formData.remarks || "").length} / 500
+                    </Form.Text>
                   </Form.Group>
 
                   <div className="d-flex justify-content-end gap-3 mt-3 pt-3 border-top">

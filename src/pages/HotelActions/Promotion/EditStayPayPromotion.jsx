@@ -138,18 +138,32 @@ export default function EditStayPayPromotion() {
       const data = res.data;
       console.log("Promotion data received:", data);
 
-      // Convert date format for input (YYYY-MM-DDTHH:MM)
-      const convertDateForInput = (dateStr) => {
+      // Robust ISO → input converters. The backend serialises dates in
+      // several shapes ("yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm:ss",
+      // plain "yyyy-MM-dd", legacy "dd-MM-yyyy"), and the previous
+      // helper either dropped the time or flipped a yyyy-MM-dd into
+      // dd-MM-yyyy when it didn't need to — so the validity /
+      // blackout / bookByDate inputs rendered empty in edit. We now
+      // detect which shape we got and emit the form that each input
+      // type actually accepts: `yyyy-MM-ddTHH:mm` for datetime-local
+      // (validity, blackout) and `yyyy-MM-dd` for date (bookByDate).
+      const toDateTimeInput = (dateStr) => {
         if (!dateStr) return "";
-        if (dateStr.includes("T")) {
-          return dateStr.substring(0, 16);
+        const s = String(dateStr);
+        if (s.includes("T")) return s.substring(0, 16);
+        if (s.includes(" ")) {
+          const [d, t = "00:00"] = s.split(" ");
+          return `${d}T${t.substring(0, 5)}`;
         }
-        const parts = dateStr.split("-");
+        const parts = s.split("-");
         if (parts.length === 3) {
-          return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+          if (parts[0].length === 4) return `${s}T00:00`;
+          return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}T00:00`;
         }
-        return dateStr;
+        return s;
       };
+      const toDateInput = (dateStr) => toDateTimeInput(dateStr).substring(0, 10);
+      const convertDateForInput = toDateTimeInput; // back-compat alias for callers below
 
       // Dates
       const validityList =
@@ -240,7 +254,11 @@ export default function EditStayPayPromotion() {
             : data.weekDay === 1
               ? "weekdays"
               : "weekends",
-        bookByDate: convertDateForInput(data.bookDate) || "",
+        // bookByDate input is type="date", so it needs `yyyy-MM-dd`
+        // (10 chars); the validity / blackout entries above are
+        // datetime-local (16 chars), so they keep using
+        // convertDateForInput / toDateTimeInput.
+        bookByDate: toDateInput(data.bookDate) || "",
         bookByPriorDays: data.bookDay || "",
         validityList,
         blackoutDates,
@@ -279,15 +297,28 @@ export default function EditStayPayPromotion() {
         const res = await axiosInstance.get(`/api/hotelStaypay/${editId}`);
         const data = res.data;
 
-        // Convert date format from DD-MM-YYYY to YYYY-MM-DD for date inputs
-        const convertDateForInput = (dateStr) => {
+        // Reuse the robust converters from the first effect. Same
+        // reasoning as the comment above — the validity / blackout
+        // entries feed `<input type="datetime-local">` (16-char), so
+        // we use toDateTimeInput; bookByDate feeds `<input type="date">`
+        // (10-char) so we slice further with toDateInput below.
+        const toDateTimeInput = (dateStr) => {
           if (!dateStr) return "";
-          const parts = dateStr.split("-");
-          if (parts.length === 3) {
-            return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+          const s = String(dateStr);
+          if (s.includes("T")) return s.substring(0, 16);
+          if (s.includes(" ")) {
+            const [d, t = "00:00"] = s.split(" ");
+            return `${d}T${t.substring(0, 5)}`;
           }
-          return dateStr;
+          const parts = s.split("-");
+          if (parts.length === 3) {
+            if (parts[0].length === 4) return `${s}T00:00`;
+            return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}T00:00`;
+          }
+          return s;
         };
+        const toDateInput = (dateStr) => toDateTimeInput(dateStr).substring(0, 10);
+        const convertDateForInput = toDateTimeInput;
 
         // Dates
         const validityList =
@@ -328,7 +359,7 @@ export default function EditStayPayPromotion() {
               : data.weekDay === 1
                 ? "weekdays"
                 : "weekends",
-          bookByDate: convertDateForInput(data.bookDate) || "",
+          bookByDate: toDateInput(data.bookDate) || "",
           bookByPriorDays: data.bookDay || "",
           validityList,
           blackoutDates,
@@ -483,9 +514,16 @@ export default function EditStayPayPromotion() {
     }
 
     try {
+      // Normalise to Spring's `yyyy-MM-dd'T'HH:mm:ss`. `<input type="date">`
+      // returns "yyyy-MM-dd" and the old `${date}:00` produced
+      // "2026-06-30:00", which the backend rejected because of the
+      // missing `T` separator.
       const formatDate = (date) => {
         if (!date) return "";
-        return `${date}:00`;
+        if (date.includes("T")) {
+          return date.length === 16 ? `${date}:00` : date;
+        }
+        return `${date}T00:00:00`;
       };
 
       const weekDay = formData.weekType === "weekdays" ? 1 : 0;
@@ -532,7 +570,11 @@ export default function EditStayPayPromotion() {
         bookDate: formatDate(formData.bookByDate),
         bookDay: String(formData.bookByPriorDays),
         promotionfor: formData.promotionFor === "rooms" ? "1" : "2",
-        remark: formData.remarks || "",
+        // StayPay.remark is a VARCHAR(255) — the backend returns
+        // 400 "field value is too long (max 255 characters allowed)"
+        // if we exceed it. Truncate as a safety net in case the
+        // textarea cap was bypassed.
+        remark: (formData.remarks || "").slice(0, 255),
         promotionValidityDTO: [...validityList, ...blackoutDates],
         promotionRoomDTO: hotelRoomsData.flatMap((roomCategory) =>
           roomCategory.roomTypeDetailsDTOs?.map((roomType) => ({
@@ -705,18 +747,35 @@ export default function EditStayPayPromotion() {
 
                   {/* OPTIONS */}
                   <Row className="align-items-center mb-3">
-                    <Col md={2}>
-                      <Form.Check
-                        type="checkbox"
-                        label="Is Refundable"
-                        checked={formData.isRefundable}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            isRefundable: e.target.checked,
-                          })
-                        }
-                      />
+                    <Col md={3}>
+                      {/* Refundability toggle — mirrors the create
+                          screen. Persists to the same payload field
+                          (`refund` 1/0) so save logic is unchanged. */}
+                      <Form.Label className="d-block">Refundability</Form.Label>
+                      <div className="d-flex gap-3">
+                        <Form.Check
+                          type="radio"
+                          inline
+                          name="staypayRefundable"
+                          id="editStaypayRefundable-yes"
+                          label="Refundable"
+                          checked={formData.isRefundable === true}
+                          onChange={() =>
+                            setFormData({ ...formData, isRefundable: true })
+                          }
+                        />
+                        <Form.Check
+                          type="radio"
+                          inline
+                          name="staypayRefundable"
+                          id="editStaypayRefundable-no"
+                          label="Non Refundable"
+                          checked={formData.isRefundable === false}
+                          onChange={() =>
+                            setFormData({ ...formData, isRefundable: false })
+                          }
+                        />
+                      </div>
                     </Col>
 
                     <Col md={4}>
@@ -1051,17 +1110,24 @@ export default function EditStayPayPromotion() {
                     </div>
                   </Card>
 
-                  {/* REMARKS + BUTTONS */}
+                  {/* REMARKS + BUTTONS
+                      Backend column is VARCHAR(255). Cap the input
+                      and surface a counter so the operator can see
+                      remaining headroom. */}
                   <Form.Group className="mb-3">
                     <Form.Label>Remarks</Form.Label>
                     <Form.Control
                       as="textarea"
                       rows={3}
+                      maxLength={255}
                       value={formData.remarks}
                       onChange={(e) =>
                         setFormData({ ...formData, remarks: e.target.value })
                       }
                     />
+                    <Form.Text className="text-muted">
+                      {(formData.remarks || "").length} / 255
+                    </Form.Text>
                   </Form.Group>
 
                   </fieldset>

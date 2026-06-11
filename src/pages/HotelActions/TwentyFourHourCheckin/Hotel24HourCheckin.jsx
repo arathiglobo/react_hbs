@@ -183,7 +183,7 @@ export default function Hotel24HourCheckin() {
                     <th>Daily Window</th>
                     <th>Markup %</th>
                     <th>Status</th>
-                    <th>Remarks</th>
+                    {/* <th>Remarks</th> */}
                     <th style={{ width: 230 }}>Actions</th>
                   </tr>
                 </thead>
@@ -222,9 +222,9 @@ export default function Hotel24HourCheckin() {
                             {r.active ? "Active" : "Inactive"}
                           </Badge>
                         </td>
-                        <td className="text-muted small">
+                        {/* <td className="text-muted small">
                           {r.remarks || "—"}
-                        </td>
+                        </td> */}
                         <td>
                           <div className="d-flex gap-2">
                             <Button

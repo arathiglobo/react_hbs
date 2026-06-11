@@ -1571,16 +1571,11 @@ const HotelAvailability = () => {
                             )}
                           </td>
                           <td>
+                            {/* Action order: View → Edit → Delete to
+                                match /occupancy-and-minimumlength and
+                                the rest of the hotel-action list
+                                pages. */}
                             <div className="d-flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline-primary"
-                                className="d-flex align-items-center gap-1"
-                                onClick={() => openEditModal(item)}
-                                title="Edit"
-                              >
-                                <FaEdit /> Edit
-                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline-info"
@@ -1589,6 +1584,15 @@ const HotelAvailability = () => {
                                 title="View"
                               >
                                 <FaEye /> View
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                className="d-flex align-items-center gap-1"
+                                onClick={() => openEditModal(item)}
+                                title="Edit"
+                              >
+                                <FaEdit /> Edit
                               </Button>
                               <Button
                                 size="sm"
@@ -1746,16 +1750,8 @@ const HotelAvailability = () => {
                             )}
                           </td>
                           <td>
+                            {/* Action order: View → Edit → Delete. */}
                             <div className="d-flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline-primary"
-                                className="d-flex align-items-center gap-1"
-                                onClick={() => openEditBlock(item)}
-                                title="Edit"
-                              >
-                                <FaEdit /> Edit
-                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline-info"
@@ -1764,6 +1760,15 @@ const HotelAvailability = () => {
                                 title="View"
                               >
                                 <FaEye /> View
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                className="d-flex align-items-center gap-1"
+                                onClick={() => openEditBlock(item)}
+                                title="Edit"
+                              >
+                                <FaEdit /> Edit
                               </Button>
                               <Button
                                 size="sm"
@@ -1888,16 +1893,8 @@ const HotelAvailability = () => {
                             )}
                           </td>
                           <td>
+                            {/* Action order: View → Edit → Delete. */}
                             <div className="d-flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline-primary"
-                                className="d-flex align-items-center gap-1"
-                                onClick={() => openEditStopSale(item)}
-                                title="Edit"
-                              >
-                                <FaEdit /> Edit
-                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline-info"
@@ -1906,6 +1903,15 @@ const HotelAvailability = () => {
                                 title="View"
                               >
                                 <FaEye /> View
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                className="d-flex align-items-center gap-1"
+                                onClick={() => openEditStopSale(item)}
+                                title="Edit"
+                              >
+                                <FaEdit /> Edit
                               </Button>
                               <Button
                                 size="sm"

@@ -237,9 +237,13 @@ export default function CreateLongStayContract() {
           formData.maxBookingDays === "" || formData.maxBookingDays === null
             ? null
             : Number(formData.maxBookingDays),
-        // Send arrays — backend strips blank/null entries.
+        // Long-stay free-text fields are stored in VARCHAR(500)
+        // columns at the DB level — the backend returns
+        // "A field value is too long (max 500 characters allowed)"
+        // if any one exceeds that. Truncate as a belt-and-braces in
+        // case the textarea maxLength below was bypassed (paste, etc).
         termsAndConditions: (formData.termsAndConditions || [])
-          .map((t) => (t || "").trim())
+          .map((t) => (t || "").trim().slice(0, 500))
           .filter((t) => t.length > 0),
         // Structured rows: { chargeType, value, condition }. The
         // backend's sanitizeCancellationPolicy filters out rows that
@@ -247,10 +251,10 @@ export default function CreateLongStayContract() {
         cancellationPolicy: (formData.cancellationPolicy || []).map((c) => ({
           chargeType: c.chargeType || "PERCENT",
           value: c.value === "" || c.value === null ? null : Number(c.value),
-          condition: (c.condition || "").trim(),
+          condition: (c.condition || "").trim().slice(0, 500),
         })),
         cancellationPolicyNotes:
-          (formData.cancellationPolicyNotes || "").trim() || null,
+          (formData.cancellationPolicyNotes || "").trim().slice(0, 500) || null,
         rooms: formData.rooms.map((r) => ({
           hotelRoomCategoryId: Number(r.hotelRoomCategoryId),
           hotelRoomTypeId: Number(r.hotelRoomTypeId),
@@ -375,17 +379,12 @@ export default function CreateLongStayContract() {
                       )}
                     </Form.Group>
                   </Col>
-                  <Col md={3} className="d-flex align-items-end">
-                    <Form.Check
-                      type="switch"
-                      id="isLive"
-                      label="Activate immediately"
-                      checked={formData.isLive}
-                      onChange={(e) =>
-                        setFormData({ ...formData, isLive: e.target.checked })
-                      }
-                    />
-                  </Col>
+                  {/* Activate-immediately switch removed — the list
+                      page shows / toggles Active/Inactive via the
+                      clickable status badge, so duplicating it here
+                      was confusing. formData.isLive still ships in
+                      the payload (default true on create) so the
+                      row lands Active. */}
                 </Row>
 
                 <Row className="mb-3">
@@ -671,6 +670,7 @@ export default function CreateLongStayContract() {
                             <Form.Control
                               size="sm"
                               type="text"
+                              maxLength={500}
                               placeholder="e.g. cancelled within 30 days"
                               value={row.condition || ""}
                               onChange={(e) =>
@@ -729,6 +729,7 @@ export default function CreateLongStayContract() {
                     <Form.Control
                       as="textarea"
                       rows={3}
+                      maxLength={500}
                       placeholder="Any policies that don't fit the table above…"
                       value={formData.cancellationPolicyNotes}
                       onChange={(e) =>
@@ -773,6 +774,7 @@ export default function CreateLongStayContract() {
                         <Form.Control
                           as="textarea"
                           rows={2}
+                          maxLength={500}
                           placeholder="e.g. A refundable security deposit is collected at check-in"
                           value={term}
                           onChange={(e) =>

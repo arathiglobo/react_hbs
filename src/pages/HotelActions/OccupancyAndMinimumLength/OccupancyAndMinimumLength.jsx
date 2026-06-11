@@ -1544,16 +1544,10 @@ const OccupancyAndMinimumLength = () => {
                                 Same onClick handlers, no behavior
                                 changes. The Fa* icons sit inside the
                                 buttons as visual cues. */}
+                            {/* Action order: View → Edit → Delete to
+                                match the rest of the hotel-action list
+                                pages (ContractRate, MeetingSpace, etc.). */}
                             <div className="d-flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline-primary"
-                                className="occupancyEdit d-flex align-items-center gap-1"
-                                onClick={() => openEditOcc(item)}
-                                title="Edit"
-                              >
-                                <FaEdit /> Edit
-                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline-info"
@@ -1562,6 +1556,15 @@ const OccupancyAndMinimumLength = () => {
                                 title="View"
                               >
                                 <FaEye /> View
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                className="occupancyEdit d-flex align-items-center gap-1"
+                                onClick={() => openEditOcc(item)}
+                                title="Edit"
+                              >
+                                <FaEdit /> Edit
                               </Button>
                               <Button
                                 size="sm"
@@ -2229,16 +2232,11 @@ const OccupancyAndMinimumLength = () => {
                                 replaced with labelled outline buttons.
                                 Same onClick handlers, no behavior
                                 changes. */}
+                            {/* Action order: View → Edit → Delete to
+                                match the Occupancy table above and
+                                the rest of the hotel-action list
+                                pages. */}
                             <div className="d-flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline-primary"
-                                className="minLengthEdit d-flex align-items-center gap-1"
-                                onClick={() => openEditMin(item)}
-                                title="Edit"
-                              >
-                                <FaEdit /> Edit
-                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline-info"
@@ -2247,6 +2245,15 @@ const OccupancyAndMinimumLength = () => {
                                 title="View"
                               >
                                 <FaEye /> View
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline-primary"
+                                className="minLengthEdit d-flex align-items-center gap-1"
+                                onClick={() => openEditMin(item)}
+                                title="Edit"
+                              >
+                                <FaEdit /> Edit
                               </Button>
                               <Button
                                 size="sm"

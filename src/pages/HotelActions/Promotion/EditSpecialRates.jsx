@@ -745,18 +745,35 @@ export default function EditSpecialRates() {
                         />
                       </div>
                     </Col>
-                    <Col md={2}>
-                      <Form.Check
-                        type="checkbox"
-                        label="Is Refundable"
-                        checked={formData.isRefundable}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            isRefundable: e.target.checked,
-                          })
-                        }
-                      />
+                    <Col md={3}>
+                      {/* Refundability toggle — mirrors the create
+                          screen. Persists to the same payload field
+                          (`isRefund`) so save/update logic is unchanged. */}
+                      <Form.Label className="d-block">Refundability</Form.Label>
+                      <div className="d-flex gap-3">
+                        <Form.Check
+                          type="radio"
+                          inline
+                          name="specialRefundable"
+                          id="editSpecialRefundable-yes"
+                          label="Refundable"
+                          checked={formData.isRefundable === true}
+                          onChange={() =>
+                            setFormData({ ...formData, isRefundable: true })
+                          }
+                        />
+                        <Form.Check
+                          type="radio"
+                          inline
+                          name="specialRefundable"
+                          id="editSpecialRefundable-no"
+                          label="Non Refundable"
+                          checked={formData.isRefundable === false}
+                          onChange={() =>
+                            setFormData({ ...formData, isRefundable: false })
+                          }
+                        />
+                      </div>
                     </Col>
                     <Col md={2}>
                       <Form.Group>

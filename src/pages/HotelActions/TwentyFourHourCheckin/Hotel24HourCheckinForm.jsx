@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Card, Form, Button, Row, Col, Spinner, Alert } from "react-bootstrap";
 import { FaArrowLeft } from "react-icons/fa";
@@ -46,6 +46,20 @@ export default function Hotel24HourCheckinForm({ mode }) {
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState(null);
   const [errors, setErrors] = useState({});
+
+  // Auto-grow Remarks — the textarea defaults to rows={2} which clips
+  // longer notes behind a scrollbar. We keep it as a real textarea
+  // (the operator needs to edit it), but resize it to its scrollHeight
+  // every time the value changes so the full text is always visible
+  // without scroll. Mirrors the read-only treatment we use on the
+  // view page.
+  const remarksRef = useRef(null);
+  useEffect(() => {
+    const el = remarksRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [form.remarks, loading]);
 
   // On edit, hydrate from the existing config.
   useEffect(() => {
@@ -241,15 +255,13 @@ export default function Hotel24HourCheckinForm({ mode }) {
                         Latest time of day a 24-hour check-in is allowed.
                       </small>
                     </Col>
-                    <Col md={4} className="mb-3 d-flex align-items-end">
-                      <Form.Check
-                        type="switch"
-                        id="active-switch"
-                        label="Active"
-                        checked={!!form.active}
-                        onChange={(e) => set("active", e.target.checked)}
-                      />
-                    </Col>
+                    {/* Active toggle removed from the form — the
+                        list page surfaces Active / Inactive via the
+                        clickable status badge, so duplicating it here
+                        was confusing. `form.active` is still seeded
+                        from the loaded record (defaults to true on
+                        create) and shipped in the save payload so
+                        the row stays Active by default. */}
                   </Row>
 
                   <Row>
@@ -258,9 +270,15 @@ export default function Hotel24HourCheckinForm({ mode }) {
                       <Form.Control
                         as="textarea"
                         rows={2}
+                        ref={remarksRef}
                         value={form.remarks}
                         onChange={(e) => set("remarks", e.target.value)}
                         placeholder="Optional notes about this configuration"
+                        // overflow hidden + resize none lets the
+                        // useEffect above grow the box to its
+                        // scrollHeight on every keystroke without a
+                        // scrollbar ever appearing.
+                        style={{ overflow: "hidden", resize: "none" }}
                       />
                     </Col>
                   </Row>

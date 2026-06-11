@@ -68,21 +68,35 @@ export default function EditDiscountPromotion() {
     return today.toISOString().split("T")[0];
   };
 
-  // Helper function to convert dd-mm-yyyy or ISO to YYYY-MM-DDTHH:MM
-  const convertToDateInput = (dateString) => {
-    if (!dateString) return "";
-    if (dateString.includes("T")) {
-      return dateString.substring(0, 16);
+  // Robust ISO → input converters. The backend serialises dates in
+  // several shapes ("yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm:ss",
+  // plain "yyyy-MM-dd", legacy "dd-MM-yyyy"), and the previous helper
+  // mis-flipped a "yyyy-MM-dd" string into "dd-MM-yyyy", which broke
+  // every preview that landed without a `T` separator. We now emit
+  // the form each input actually accepts: `yyyy-MM-ddTHH:mm` for
+  // datetime-local (validity, blackout) and `yyyy-MM-dd` for date
+  // inputs (bookByDate).
+  const toDateTimeInput = (dateStr) => {
+    if (!dateStr) return "";
+    const s = String(dateStr);
+    if (s.includes("T")) return s.substring(0, 16);
+    if (s.includes(" ")) {
+      const [d, t = "00:00"] = s.split(" ");
+      return `${d}T${t.substring(0, 5)}`;
     }
-    const parts = dateString.split("-");
+    const parts = s.split("-");
     if (parts.length === 3) {
-      const day = parts[0];
-      const month = parts[1];
-      const year = parts[2];
-      return `${year}-${month}-${day}`;
+      if (parts[0].length === 4) return `${s}T00:00`;
+      return `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}T00:00`;
     }
-    return dateString;
+    return s;
   };
+  const toDateInput = (dateStr) => toDateTimeInput(dateStr).substring(0, 10);
+  // Back-compat alias — call sites that fed datetime-local inputs are
+  // still correct (toDateTimeInput returns 16-char). The bookByDate
+  // call site below switches to toDateInput so the date-only field
+  // shows the saved value instead of staying blank.
+  const convertToDateInput = toDateTimeInput;
 
   const [formData, setFormData] = useState({
     season: "",
@@ -149,7 +163,7 @@ export default function EditDiscountPromotion() {
         weekType: data.allDays ? "all" : data.weekDay ? "weekdays" : "weekends",
         discountForRooms: true,
         discountForExtraBed: data.extraBed || false,
-        bookByDate: convertToDateInput(data.bookDate),
+        bookByDate: toDateInput(data.bookDate),
         bookByPriorDays: data.bookDay?.toString() || "",
         validityList: validityList,
         blackoutDates: blackoutDates,
@@ -300,9 +314,16 @@ export default function EditDiscountPromotion() {
     }
 
     try {
+      // Normalise to Spring's `yyyy-MM-dd'T'HH:mm:ss`. Date inputs
+      // give "yyyy-MM-dd"; datetime-local gives "yyyy-MM-ddTHH:mm".
+      // The old `${date}:00` produced "2026-06-30:00", which the
+      // backend rejected because of the missing `T` separator.
       const formatDate = (date) => {
         if (!date) return "";
-        return `${date}:00`;
+        if (date.includes("T")) {
+          return date.length === 16 ? `${date}:00` : date;
+        }
+        return `${date}T00:00:00`;
       };
 
       const weekDay = formData.weekType === "weekdays" ? true : false;
@@ -348,7 +369,11 @@ export default function EditDiscountPromotion() {
         extraBed: formData.discountForExtraBed,
         bookDate: formatDate(formData.bookByDate),
         bookDay: String(formData.bookByPriorDays),
-        remark: formData.remarks || "",
+        // Discount.remark is a VARCHAR(500) at the DB level — the
+        // backend returns 400 "field value is too long (max 500
+        // characters allowed)" if we exceed it. Truncate as a
+        // belt-and-braces in case the textarea cap was bypassed.
+        remark: (formData.remarks || "").slice(0, 500),
         validityDTO: [...validityList, ...blackoutDates],
         roomDTO: roomDTO,
       };
@@ -803,41 +828,73 @@ export default function EditDiscountPromotion() {
                                     <td colSpan={5}></td>
                                   </tr>
 
-                                  {/* Occupancy Rows */}
+                                  {/* Occupancy Rows — each row matches
+                                      / writes its own (category, type,
+                                      occupancy) record. The create
+                                      flow now ships `roomId =
+                                      occupancy.id` per entry, so this
+                                      keeps values from leaking across
+                                      rows of the same room category
+                                      and mirrors the same shape the
+                                      backend persists. We still fall
+                                      back to a (category, type) match
+                                      when reading so older saved
+                                      promos — which only have
+                                      one record per type — keep their
+                                      values populated on preview. */}
                                   {roomCategory.occupancyDetailsDTOs?.map((occupancy, occIndex) => {
-                                    // Find existing discount data for this combination
-                                    // First try exact match by hotelRoomcategoryId, hotelRoomtypeId, and roomId
-                                    let existingDiscount = discountRoomData.find(d =>
-                                      d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
-                                      d.hotelRoomtypeId == roomType.roomTypeId &&
-                                      d.roomId == occupancy.id
+                                    const exactMatch = discountRoomData.find(
+                                      (d) =>
+                                        d.hotelRoomcategoryId ==
+                                          roomCategory.rommCategoryId &&
+                                        d.hotelRoomtypeId == roomType.roomTypeId &&
+                                        d.roomId == occupancy.id
                                     );
+                                    const fallbackMatch = !exactMatch
+                                      ? discountRoomData.find(
+                                          (d) =>
+                                            d.hotelRoomcategoryId ==
+                                              roomCategory.rommCategoryId &&
+                                            d.hotelRoomtypeId ==
+                                              roomType.roomTypeId
+                                        )
+                                      : null;
+                                    const existingDiscount = exactMatch || fallbackMatch;
 
-                                    // If no exact match, try to find by category and type only
-                                    // This handles cases where roomId doesn't match occupancy.id
-                                    if (!existingDiscount) {
-                                      existingDiscount = discountRoomData.find(d =>
-                                        d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
-                                        d.hotelRoomtypeId == roomType.roomTypeId
-                                      );
-                                    }
-
-                                    console.log('Looking for discount data:', {
-                                      roomCategory: roomCategory.rommCategoryId,
-                                      roomType: roomType.roomTypeId,
-                                      occupancy: occupancy.id,
-                                      occupancyType: occupancy.occupanyType,
-                                      availableDiscounts: discountRoomData,
-                                      found: existingDiscount
-                                    });
-
-                                    // Debug: Show all occupancy IDs for this room category
-                                    console.log('All occupancies for this category:',
-                                      roomCategory.occupancyDetailsDTOs?.map(occ => ({
-                                        id: occ.id,
-                                        type: occ.occupanyType
-                                      }))
-                                    );
+                                    // Update helper — locates the
+                                    // (category, type, occupancy)
+                                    // record (exact match only) and
+                                    // patches a field. Inserts a fresh
+                                    // record carrying `roomId` if the
+                                    // user is touching this row for
+                                    // the first time.
+                                    const upsert = (field, value) => {
+                                      setDiscountRoomData((prev) => {
+                                        const next = [...prev];
+                                        const idx = next.findIndex(
+                                          (d) =>
+                                            d.hotelRoomcategoryId ==
+                                              roomCategory.rommCategoryId &&
+                                            d.hotelRoomtypeId ==
+                                              roomType.roomTypeId &&
+                                            d.roomId == occupancy.id
+                                        );
+                                        if (idx !== -1) {
+                                          next[idx] = { ...next[idx], [field]: value };
+                                        } else {
+                                          next.push({
+                                            hotelRoomcategoryId: String(roomCategory.rommCategoryId),
+                                            hotelRoomtypeId: String(roomType.roomTypeId),
+                                            roomId: occupancy.id,
+                                            discountPercent: "0",
+                                            discountValue: "0",
+                                            lengthRestriction: "0",
+                                            [field]: value,
+                                          });
+                                        }
+                                        return next;
+                                      });
+                                    };
 
                                     return (
                                       <tr key={`${roomCategory.rommCategoryId}_${roomType.roomTypeId}_${occupancy.id}`}>
@@ -850,39 +907,9 @@ export default function EditDiscountPromotion() {
                                             min="0"
                                             max="100"
                                             placeholder="0"
-                                            value={existingDiscount?.discountPercent || "0"}
+                                            value={existingDiscount?.discountPercent ?? ""}
                                             size="sm"
-                                            onChange={(e) => {
-                                              const updated = [...discountRoomData];
-                                              // Try exact match first
-                                              let existingIndex = updated.findIndex(d =>
-                                                d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
-                                                d.hotelRoomtypeId == roomType.roomTypeId &&
-                                                d.roomId == occupancy.id
-                                              );
-
-                                              // If no exact match, try category and type only
-                                              if (existingIndex === -1) {
-                                                existingIndex = updated.findIndex(d =>
-                                                  d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
-                                                  d.hotelRoomtypeId == roomType.roomTypeId
-                                                );
-                                              }
-
-                                              if (existingIndex !== -1) {
-                                                updated[existingIndex].discountPercent = e.target.value;
-                                              } else {
-                                                updated.push({
-                                                  hotelRoomcategoryId: roomCategory.rommCategoryId,
-                                                  hotelRoomtypeId: roomType.roomTypeId,
-                                                  roomId: occupancy.id,
-                                                  discountPercent: e.target.value,
-                                                  discountValue: "0",
-                                                  lengthRestriction: "0"
-                                                });
-                                              }
-                                              setDiscountRoomData(updated);
-                                            }}
+                                            onChange={(e) => upsert("discountPercent", e.target.value)}
                                           />
                                         </td>
                                         <td>
@@ -890,39 +917,9 @@ export default function EditDiscountPromotion() {
                                             type="number"
                                             min="0"
                                             placeholder="0"
-                                            value={existingDiscount?.discountValue || "0"}
+                                            value={existingDiscount?.discountValue ?? ""}
                                             size="sm"
-                                            onChange={(e) => {
-                                              const updated = [...discountRoomData];
-                                              // Try exact match first
-                                              let existingIndex = updated.findIndex(d =>
-                                                d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
-                                                d.hotelRoomtypeId == roomType.roomTypeId &&
-                                                d.roomId == occupancy.id
-                                              );
-
-                                              // If no exact match, try category and type only
-                                              if (existingIndex === -1) {
-                                                existingIndex = updated.findIndex(d =>
-                                                  d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
-                                                  d.hotelRoomtypeId == roomType.roomTypeId
-                                                );
-                                              }
-
-                                              if (existingIndex !== -1) {
-                                                updated[existingIndex].discountValue = e.target.value;
-                                              } else {
-                                                updated.push({
-                                                  hotelRoomcategoryId: roomCategory.rommCategoryId,
-                                                  hotelRoomtypeId: roomType.roomTypeId,
-                                                  roomId: occupancy.id,
-                                                  discountPercent: "0",
-                                                  discountValue: e.target.value,
-                                                  lengthRestriction: "0"
-                                                });
-                                              }
-                                              setDiscountRoomData(updated);
-                                            }}
+                                            onChange={(e) => upsert("discountValue", e.target.value)}
                                           />
                                         </td>
                                         <td>
@@ -930,39 +927,13 @@ export default function EditDiscountPromotion() {
                                             type="number"
                                             min="0"
                                             placeholder="0"
-                                            value={existingDiscount?.lengthRestriction === "null" ? "0" : existingDiscount?.lengthRestriction || "0"}
+                                            value={
+                                              existingDiscount?.lengthRestriction === "null"
+                                                ? ""
+                                                : existingDiscount?.lengthRestriction ?? ""
+                                            }
                                             size="sm"
-                                            onChange={(e) => {
-                                              const updated = [...discountRoomData];
-                                              // Try exact match first
-                                              let existingIndex = updated.findIndex(d =>
-                                                d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
-                                                d.hotelRoomtypeId == roomType.roomTypeId &&
-                                                d.roomId == occupancy.id
-                                              );
-
-                                              // If no exact match, try category and type only
-                                              if (existingIndex === -1) {
-                                                existingIndex = updated.findIndex(d =>
-                                                  d.hotelRoomcategoryId == roomCategory.rommCategoryId &&
-                                                  d.hotelRoomtypeId == roomType.roomTypeId
-                                                );
-                                              }
-
-                                              if (existingIndex !== -1) {
-                                                updated[existingIndex].lengthRestriction = e.target.value;
-                                              } else {
-                                                updated.push({
-                                                  hotelRoomcategoryId: roomCategory.rommCategoryId,
-                                                  hotelRoomtypeId: roomType.roomTypeId,
-                                                  roomId: occupancy.id,
-                                                  discountPercent: "0",
-                                                  discountValue: "0",
-                                                  lengthRestriction: e.target.value
-                                                });
-                                              }
-                                              setDiscountRoomData(updated);
-                                            }}
+                                            onChange={(e) => upsert("lengthRestriction", e.target.value)}
                                           />
                                         </td>
                                         <td>
@@ -995,17 +966,24 @@ export default function EditDiscountPromotion() {
                     </div>
                   </Card>
 
-                  {/* ================= REMARKS + BUTTONS ================= */}
+                  {/* ================= REMARKS + BUTTONS =================
+                      Backend column is VARCHAR(500). Cap the input
+                      and surface a counter so the operator can see
+                      remaining headroom. */}
                   <Form.Group className="mb-3">
                     <Form.Label>Remarks</Form.Label>
                     <Form.Control
                       as="textarea"
                       rows={3}
+                      maxLength={500}
                       value={formData.remarks}
                       onChange={(e) =>
                         setFormData({ ...formData, remarks: e.target.value })
                       }
                     />
+                    <Form.Text className="text-muted">
+                      {(formData.remarks || "").length} / 500
+                    </Form.Text>
                   </Form.Group>
 
                   </fieldset>

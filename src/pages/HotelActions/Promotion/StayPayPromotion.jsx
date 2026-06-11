@@ -212,9 +212,16 @@ export default function StayPayPromotion() {
     }
 
     try {
+      // Normalise to Spring's `yyyy-MM-dd'T'HH:mm:ss`. `<input type="date">`
+      // returns "yyyy-MM-dd" and the old `${date}:00` produced
+      // "2026-06-30:00", which the backend rejected because of the
+      // missing `T` separator (see the 400 from /api/hotelStaypay/save).
       const formatDate = (date) => {
         if (!date) return "";
-        return `${date}:00`;
+        if (date.includes("T")) {
+          return date.length === 16 ? `${date}:00` : date;
+        }
+        return `${date}T00:00:00`;
       };
 
       const weekDay = formData.weekType === "weekdays" ? 1 : 0;
@@ -263,7 +270,11 @@ export default function StayPayPromotion() {
         bookDate: formatDate(formData.bookByDate),
         bookDay: String(formData.bookByPriorDays),
         promotionfor: formData.promotionFor === "rooms" ? "1" : "2",
-        remark: formData.remarks || "",
+        // StayPay.remark is a VARCHAR(255) — the backend returns
+        // 400 "field value is too long (max 255 characters allowed)"
+        // if we exceed it. Truncate as a safety net in case the
+        // textarea cap below was bypassed.
+        remark: (formData.remarks || "").slice(0, 255),
         promotionValidityDTO: [...validityList, ...blackoutDates],
         promotionRoomDTO: hotelRoomsData.flatMap((roomCategory) =>
           roomCategory.roomTypeDetailsDTOs?.map((roomType) => ({
@@ -466,18 +477,36 @@ export default function StayPayPromotion() {
 
                   {/* ==================== OPTIONS ==================== */}
                   <Row className="align-items-center mb-3">
-                    <Col md={2}>
-                      <Form.Check
-                        type="checkbox"
-                        label="Is Refundable"
-                        checked={formData.isRefundable}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            isRefundable: e.target.checked,
-                          })
-                        }
-                      />
+                    <Col md={3}>
+                      {/* Refundability toggle — replaces the single
+                          "Is Refundable" checkbox so the operator has
+                          to make an explicit choice. The payload
+                          field (`refund`) keeps its 1/0 shape. */}
+                      <Form.Label className="d-block">Refundability</Form.Label>
+                      <div className="d-flex gap-3">
+                        <Form.Check
+                          type="radio"
+                          inline
+                          name="staypayRefundable"
+                          id="staypayRefundable-yes"
+                          label="Refundable"
+                          checked={formData.isRefundable === true}
+                          onChange={() =>
+                            setFormData({ ...formData, isRefundable: true })
+                          }
+                        />
+                        <Form.Check
+                          type="radio"
+                          inline
+                          name="staypayRefundable"
+                          id="staypayRefundable-no"
+                          label="Non Refundable"
+                          checked={formData.isRefundable === false}
+                          onChange={() =>
+                            setFormData({ ...formData, isRefundable: false })
+                          }
+                        />
+                      </div>
                     </Col>
 
                     <Col md={4}>
@@ -832,17 +861,24 @@ export default function StayPayPromotion() {
                   </Card>
 
 
-                  {/* ==================== REMARKS + BUTTONS ==================== */}
+                  {/* ==================== REMARKS + BUTTONS ====================
+                      Backend column is VARCHAR(255). Cap the input
+                      and surface a counter so the operator can see
+                      remaining headroom. */}
                   <Form.Group className="mb-3">
                     <Form.Label>Remarks</Form.Label>
                     <Form.Control
                       as="textarea"
                       rows={3}
+                      maxLength={255}
                       value={formData.remarks}
                       onChange={(e) =>
                         setFormData({ ...formData, remarks: e.target.value })
                       }
                     />
+                    <Form.Text className="text-muted">
+                      {(formData.remarks || "").length} / 255
+                    </Form.Text>
                   </Form.Group>
 
                   <div className="d-flex justify-content-end gap-3 mt-3 pt-3 border-top">

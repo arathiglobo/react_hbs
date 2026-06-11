@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   Container,
@@ -19,6 +19,40 @@ import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import { toast } from "react-hot-toast";
+
+/**
+ * AutoGrowTextarea — drop-in replacement for `<Form.Control as="textarea">`
+ * that resizes itself to fit its current value, so long Terms & Conditions
+ * and Cancellation Policies render in full instead of being clipped
+ * behind a scrollbar. Same behaviour applies in create, edit, AND
+ * view (`?mode=view`) since the parent fieldset only disables input
+ * — the auto-grow runs purely off the rendered scrollHeight.
+ *
+ * Defined at module level (not inside DayStayContractForm) so it
+ * keeps a stable component identity across the parent's re-renders
+ * — that's what lets `useRef` / `useEffect` track the same DOM node
+ * over time instead of remounting on every keystroke.
+ */
+const AutoGrowTextarea = ({ value, style, ...rest }) => {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [value]);
+  return (
+    <Form.Control
+      as="textarea"
+      ref={ref}
+      value={value}
+      {...rest}
+      // overflow:hidden + resize:none keeps the scrollbar from
+      // appearing once we've sized the box to its content.
+      style={{ overflow: "hidden", resize: "none", ...(style || {}) }}
+    />
+  );
+};
 
 /**
  * DayStayContractForm — used for both CREATE and EDIT.
@@ -207,9 +241,31 @@ export default function DayStayContractForm({ mode }) {
     load();
   }, [isEdit, contractId]);
 
-  // Once markets / countries arrive, hydrate the multi-select labels for edit.
+  // Once markets / countries arrive, hydrate the multi-select labels
+  // for edit. The previous version only depended on `[markets,
+  // countries, isEdit]`, so when the edit-hydration GET finished
+  // *after* the master lists had already loaded the resolution never
+  // re-fired — the chips stayed as "100" / "5" instead of "All" /
+  // "United Arab Emirates". We now also depend on formData.marketType
+  // and formData.excludeCountry, and guard with a needsResolution
+  // check so we don't loop.
   useEffect(() => {
     if (!isEdit) return;
+    if (markets.length === 0 && countries.length === 0) return;
+    const needsResolution =
+      (formData.marketType || []).some(
+        (opt) =>
+          opt.label == null ||
+          opt.label === String(opt.value) ||
+          /^#?\d+$/.test(String(opt.label))
+      ) ||
+      (formData.excludeCountry || []).some(
+        (opt) =>
+          opt.label == null ||
+          opt.label === String(opt.value) ||
+          /^#?\d+$/.test(String(opt.label))
+      );
+    if (!needsResolution) return;
     setFormData((p) => {
       const mt = (p.marketType || []).map((opt) => {
         const m = markets.find((x) => x.marketTypeId === opt.value);
@@ -223,7 +279,7 @@ export default function DayStayContractForm({ mode }) {
       });
       return { ...p, marketType: mt, excludeCountry: ec };
     });
-  }, [markets, countries, isEdit]);
+  }, [markets, countries, isEdit, formData.marketType, formData.excludeCountry]);
 
   const getMinValidityToDate = (fromDate) => fromDate || "";
 
@@ -930,8 +986,7 @@ export default function DayStayContractForm({ mode }) {
                     {formData.termsAndConditions.map((row, index) => (
                       <Row key={`day-stay-term-${index}`} className="g-2 mb-2">
                         <Col>
-                          <Form.Control
-                            as="textarea"
+                          <AutoGrowTextarea
                             rows={2}
                             placeholder={`Term ${index + 1}`}
                             value={row.value}
@@ -977,8 +1032,7 @@ export default function DayStayContractForm({ mode }) {
                         className="g-2 mb-2"
                       >
                         <Col>
-                          <Form.Control
-                            as="textarea"
+                          <AutoGrowTextarea
                             rows={2}
                             placeholder={`Cancellation policy ${index + 1}`}
                             value={row.value}
