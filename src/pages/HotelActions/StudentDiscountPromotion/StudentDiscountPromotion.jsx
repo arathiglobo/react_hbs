@@ -14,7 +14,7 @@
 
 import React, { useEffect, useState } from "react";
 import { Card, Row, Col, Button, Table, Form, Modal, Spinner, Badge } from "react-bootstrap";
-import { FaEdit, FaTrash, FaArrowLeft, FaGraduationCap } from "react-icons/fa";
+import { FaEdit, FaTrash, FaArrowLeft, FaGraduationCap, FaEye } from "react-icons/fa";
 import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
@@ -46,6 +46,33 @@ export default function StudentDiscountPromotion() {
   const [selectedRow, setSelectedRow] = useState(null);
   const [statusUpdating, setStatusUpdating] = useState(false);
 
+  // View-mode flag — when true the shared create/edit modal is rendered
+  // read-only. Mirrors the /occupancy-and-minimumlength pattern.
+  const [isViewMode, setIsViewMode] = useState(false);
+
+  const handleView = async (promotionId) => {
+    try {
+      const res = await axiosInstance.get(
+        `/api/hotel-student-discount-promotion/${promotionId}`
+      );
+      const data = res.data || {};
+      setEditingId(promotionId);
+      setForm({
+        discountPercent: data.discountPercent ?? "",
+        discountAmount: data.discountAmount ?? "",
+        validFrom: data.validFrom || "",
+        validTo: data.validTo || "",
+        description: data.description || "",
+        active: data.active !== false,
+      });
+      setIsViewMode(true);
+      setShowModal(true);
+    } catch (err) {
+      console.error(err);
+      toast.error(err?.response?.data?.message || "Failed to load details");
+    }
+  };
+
   const fetchAll = async () => {
     setLoading(true);
     try {
@@ -62,7 +89,12 @@ export default function StudentDiscountPromotion() {
     // eslint-disable-next-line
   }, [hotelId]);
 
-  const openCreate = () => { setEditingId(null); setForm(EMPTY_FORM); setShowModal(true); };
+  const openCreate = () => {
+    setEditingId(null);
+    setForm(EMPTY_FORM);
+    setIsViewMode(false);
+    setShowModal(true);
+  };
   const openEdit = (row) => {
     setEditingId(row.promotionId);
     setForm({
@@ -73,7 +105,13 @@ export default function StudentDiscountPromotion() {
       description: row.description || "",
       active: row.active !== false,
     });
+    setIsViewMode(false);
     setShowModal(true);
+  };
+  const closeModal = () => {
+    setShowModal(false);
+    setIsViewMode(false);
+    setEditingId(null);
   };
   const handleChange = (f, v) => setForm((s) => ({ ...s, [f]: v }));
 
@@ -206,7 +244,7 @@ export default function StudentDiscountPromotion() {
                     <th>Valid To</th>
                     <th>Description</th>
                     <th>Status</th>
-                    <th style={{ width: 160 }}>Actions</th>
+                    <th style={{ width: 230 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -253,6 +291,15 @@ export default function StudentDiscountPromotion() {
                           <div className="d-flex gap-2">
                             <Button
                               size="sm"
+                              variant="outline-info"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => handleView(r.promotionId)}
+                              title="View"
+                            >
+                              <FaEye /> View
+                            </Button>
+                            <Button
+                              size="sm"
                               variant="outline-primary"
                               className="d-flex align-items-center gap-1"
                               onClick={() => openEdit(r)}
@@ -281,9 +328,14 @@ export default function StudentDiscountPromotion() {
         </main>
       </div>
 
-      <Modal show={showModal} onHide={() => setShowModal(false)} centered>
+      {/* Create / Edit / View Modal — view mode disables the inputs,
+          retitles to "View" and hides the Save button. Mirrors
+          /occupancy-and-minimumlength. */}
+      <Modal show={showModal} onHide={closeModal} centered>
         <Modal.Header closeButton>
-          <Modal.Title>{editingId ? "Edit" : "Add"} Student Discount</Modal.Title>
+          <Modal.Title>
+            {isViewMode ? "View" : editingId ? "Edit" : "Add"} Student Discount
+          </Modal.Title>
         </Modal.Header>
         <Modal.Body>
           <Row className="g-3">
@@ -291,39 +343,56 @@ export default function StudentDiscountPromotion() {
               <Form.Label>Discount %</Form.Label>
               <Form.Control type="number" min="0" max="100" step="0.01"
                             value={form.discountPercent}
+                            disabled={isViewMode}
+                            className={isViewMode ? "bg-light" : ""}
                             onChange={(e) => handleChange("discountPercent", e.target.value)} />
             </Col>
             <Col md={6}>
               <Form.Label>Discount Amount (flat)</Form.Label>
               <Form.Control type="number" min="0" step="0.01"
                             value={form.discountAmount}
+                            disabled={isViewMode}
+                            className={isViewMode ? "bg-light" : ""}
                             onChange={(e) => handleChange("discountAmount", e.target.value)} />
             </Col>
             <Col md={6}>
               <Form.Label>Valid From</Form.Label>
               <Form.Control type="date" value={form.validFrom}
+                            disabled={isViewMode}
+                            className={isViewMode ? "bg-light" : ""}
                             onChange={(e) => handleChange("validFrom", e.target.value)} />
             </Col>
             <Col md={6}>
               <Form.Label>Valid To</Form.Label>
               <Form.Control type="date" value={form.validTo}
+                            disabled={isViewMode}
+                            className={isViewMode ? "bg-light" : ""}
                             onChange={(e) => handleChange("validTo", e.target.value)} />
             </Col>
             <Col md={12}>
               <Form.Label>Description</Form.Label>
               <Form.Control as="textarea" rows={2} value={form.description}
+                            disabled={isViewMode}
+                            className={isViewMode ? "bg-light" : ""}
                             onChange={(e) => handleChange("description", e.target.value)} />
             </Col>
             <Col md={12}>
               <Form.Check type="switch" id="student-active-switch" label="Active"
                           checked={form.active}
+                          disabled={isViewMode}
                           onChange={(e) => handleChange("active", e.target.checked)} />
             </Col>
           </Row>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
-          <Button variant="primary" onClick={handleSave}>{editingId ? "Update" : "Create"}</Button>
+          <Button variant="secondary" onClick={closeModal}>
+            {isViewMode ? "Close" : "Cancel"}
+          </Button>
+          {!isViewMode && (
+            <Button variant="primary" onClick={handleSave}>
+              {editingId ? "Update" : "Create"}
+            </Button>
+          )}
         </Modal.Footer>
       </Modal>
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Card, Button, Table, Spinner, Badge, Modal } from "react-bootstrap";
-import { FaArrowLeft, FaEdit, FaTrash } from "react-icons/fa";
+import { FaArrowLeft, FaEdit, FaTrash, FaEye } from "react-icons/fa";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import HotelTitleBadge from "../../../components/HotelTitleBadge";
@@ -35,6 +35,15 @@ export default function Hotel24HourCheckin() {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
   const [statusUpdating, setStatusUpdating] = useState(false);
+
+  // View — reuses the existing edit page in read-only mode by passing
+  // `?mode=view` in the URL. The form there reads useSearchParams and
+  // disables every input. Mirrors the /occupancy-and-minimumlength
+  // view pattern (same screen, no inputs editable, no Save button).
+  const handleView = (rowId) =>
+    navigate(
+      `/hotel-actions/hotel/${hotelId}/24-hour-checkin/${rowId}/edit?mode=view`
+    );
 
   // Fetch all configs for this hotel.
   const fetchRows = async () => {
@@ -135,7 +144,7 @@ export default function Hotel24HourCheckin() {
           <div className="d-flex align-items-center gap-3 mb-3">
             <Button
               variant="outline-primary"
-              onClick={() => navigate(-1)}
+              onClick={() => navigate(`/hotel-details/${hotelId}`)}
               className="d-flex align-items-center btn-sm gap-2"
             >
               <FaArrowLeft />
@@ -175,7 +184,7 @@ export default function Hotel24HourCheckin() {
                     <th>Markup %</th>
                     <th>Status</th>
                     <th>Remarks</th>
-                    <th style={{ width: 160 }}>Actions</th>
+                    <th style={{ width: 230 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -218,6 +227,15 @@ export default function Hotel24HourCheckin() {
                         </td>
                         <td>
                           <div className="d-flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline-info"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => handleView(r.id)}
+                              title="View"
+                            >
+                              <FaEye /> View
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline-primary"

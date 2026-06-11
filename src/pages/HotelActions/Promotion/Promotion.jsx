@@ -10,8 +10,10 @@ import {
   Badge,
   Card,
   Pagination,
+  Row,
+  Col,
 } from "react-bootstrap";
-import { FaArrowLeft, FaPlus, FaEdit, FaTrash } from "react-icons/fa";
+import { FaArrowLeft, FaPlus, FaEdit, FaTrash, FaEye } from "react-icons/fa";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
@@ -35,6 +37,24 @@ const Promotion = () => {
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [searchTimeout, setSearchTimeout] = useState(null);
+
+  // View — reuses the existing edit route for the row's promotion type
+  // in read-only mode (`?mode=view`). Each edit screen wraps its form
+  // in `<fieldset disabled={isViewMode}>` so every field reads non-
+  // editable and the Save button is hidden. Mirrors the
+  // /occupancy-and-minimumlength view pattern.
+  const handleView = (promo) => {
+    const type = (promo.promotionType || "").toLowerCase();
+    if (type.includes("special")) {
+      navigate(`/hotel-actions/${id}/promotion/special-rate/edit/${promo.id}?mode=view`);
+    } else if (type.includes("discount")) {
+      navigate(`/hotel-actions/${id}/promotion/discount/edit/${promo.id}?mode=view`);
+    } else if (type.includes("staypay") || type.includes("stay pay")) {
+      navigate(`/hotel-actions/${id}/promotion/staypay/edit/${promo.id}?mode=view`);
+    } else {
+      toast.error("Unknown promotion type");
+    }
+  };
 
   // ✅ Fetch Promotions with search and pagination
   const fetchPromotions = async (pageNum = 0, searchQuery = searchTerm) => {
@@ -332,7 +352,7 @@ const Promotion = () => {
                     <th>Promotion Code</th>
                     <th>Day Type</th>
                     <th>Status</th>
-                    <th style={{ width: 160 }}>Actions</th>
+                    <th style={{ width: 230 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -367,6 +387,15 @@ const Promotion = () => {
                         </td>
                         <td>
                           <div className="d-flex gap-2 justify-content-center">
+                            <Button
+                              size="sm"
+                              variant="outline-info"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => handleView(promo)}
+                              title="View"
+                            >
+                              <FaEye /> View
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline-primary"

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Card, Form, Button, Row, Col, Spinner, Alert } from "react-bootstrap";
 import { FaArrowLeft } from "react-icons/fa";
 import Sidebar from "../../../components/Sidebar";
@@ -23,6 +23,13 @@ export default function Hotel24HourCheckinForm({ mode }) {
   const navigate = useNavigate();
   const { id: hotelId, configId } = useParams();
   const isEdit = mode === "edit";
+
+  // View mode — when the URL carries `?mode=view`, the form renders
+  // read-only. We reuse this same Edit screen so all the populated
+  // fields show with the row's data, just disabled. Mirrors the
+  // /occupancy-and-minimumlength view pattern.
+  const [searchParams] = useSearchParams();
+  const isViewMode = searchParams.get("mode") === "view";
 
   // Local form state; field names match the backend DTO so submit is trivial.
   const [form, setForm] = useState({
@@ -142,7 +149,7 @@ export default function Hotel24HourCheckinForm({ mode }) {
               <FaArrowLeft /> Back
             </Button>
             <h5 className="mb-0 d-flex align-items-center gap-2">
-              {isEdit ? "Edit" : "Add"} 24 Hour Check-In Configuration
+              {isViewMode ? "View" : isEdit ? "Edit" : "Add"} 24 Hour Check-In Configuration
               <HotelTitleBadge hotelId={hotelId} />
             </h5>
           </div>
@@ -163,6 +170,7 @@ export default function Hotel24HourCheckinForm({ mode }) {
                 )}
 
                 <Form onSubmit={handleSubmit} noValidate>
+                  <fieldset disabled={isViewMode}>
                   <Row>
                     <Col md={4} className="mb-3">
                       <Form.Label>Validity From *</Form.Label>
@@ -257,21 +265,24 @@ export default function Hotel24HourCheckinForm({ mode }) {
                     </Col>
                   </Row>
 
-                  <div className="d-flex gap-2 mt-3">
-                    <Button
-                      type="submit"
-                      disabled={submitting}
-                      style={{ backgroundColor: "#0d6efd", border: "none" }}
-                    >
-                      {submitting ? "Saving…" : isEdit ? "Update" : "Create"}
-                    </Button>
+                  </fieldset>
+                  <div className="d-flex justify-content-end gap-2 mt-3">
                     <Button
                       type="button"
                       variant="secondary"
                       onClick={() => navigate(-1)}
                     >
-                      Cancel
+                      {isViewMode ? "Close" : "Cancel"}
                     </Button>
+                    {!isViewMode && (
+                      <Button
+                        type="submit"
+                        disabled={submitting}
+                        style={{ backgroundColor: "#0d6efd", border: "none" }}
+                      >
+                        {submitting ? "Saving…" : isEdit ? "Update" : "Create"}
+                      </Button>
+                    )}
                   </div>
                 </Form>
               </Card.Body>

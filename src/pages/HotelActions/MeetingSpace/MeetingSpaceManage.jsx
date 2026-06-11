@@ -35,6 +35,7 @@ import {
   FaTrash,
   FaImages,
   FaUsers,
+  FaEye,
 } from "react-icons/fa";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
@@ -230,6 +231,10 @@ export default function MeetingSpaceManage() {
   const [selectedSpace, setSelectedSpace] = useState(null);
   const [statusUpdating, setStatusUpdating] = useState(false);
 
+  // View-mode flag — reuses the same create/edit form modal in
+  // read-only mode (matching /occupancy-and-minimumlength).
+  const [isViewMode, setIsViewMode] = useState(false);
+
   // form state
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -316,8 +321,53 @@ export default function MeetingSpaceManage() {
     setEditing(null);
     setForm({ ...emptyForm, ...pickPreset() });
     setErrors({});
+    setIsViewMode(false);
     setShowForm(true);
   };
+
+  // Build the same form-state shape openEdit produces — used by both
+  // openEdit() and the View handler so the modal is fed identically.
+  const buildFormFromSpace = (s) => ({
+    spaceName: s.spaceName || "",
+    spaceType: s.spaceType || "Conference Hall",
+    description: s.description || "",
+    capacity: s.capacity ?? "",
+    areaSqft: s.areaSqft ?? "",
+    floorLocation: s.floorLocation || "",
+    layoutOptions: (s.layoutOptions || "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean),
+    amenities:
+      Array.isArray(s.amenityList) && s.amenityList.length
+        ? s.amenityList.map((a) => a.amenityName)
+        : (s.amenities || "")
+            .split(",")
+            .map((x) => x.trim())
+            .filter(Boolean),
+    openTime: s.openTime || "09:00",
+    closeTime: s.closeTime || "21:00",
+    minBookingHours: s.minBookingHours ?? 1,
+    hourlyRate: s.hourlyRate ?? "",
+    halfDayRate: s.halfDayRate ?? "",
+    fullDayRate: s.fullDayRate ?? "",
+    contractHourlyRate: s.contractHourlyRate ?? "",
+    contractHalfDayRate: s.contractHalfDayRate ?? "",
+    contractFullDayRate: s.contractFullDayRate ?? "",
+    specialHourlyRate: s.specialHourlyRate ?? "",
+    specialHalfDayRate: s.specialHalfDayRate ?? "",
+    specialFullDayRate: s.specialFullDayRate ?? "",
+    currencyId: s.currencyId ?? null,
+    currencyCode: s.currency || "INR",
+    taxPercent: s.taxPercent ?? "",
+    status: s.status || "Active",
+    images: (s.images || []).map((i) => (i.imageUrl ? i.imageUrl : i)).filter(Boolean),
+    cancellationPolicies: (s.cancellationPolicies || []).map((p) => ({
+      policyText: p.policyText || "",
+      daysBeforeEvent: p.daysBeforeEvent ?? "",
+      chargePercent: p.chargePercent ?? "",
+    })),
+  });
 
   const openEdit = (s) => {
     setEditing(s);
@@ -363,7 +413,14 @@ export default function MeetingSpaceManage() {
       })),
     });
     setErrors({});
+    setIsViewMode(false);
     setShowForm(true);
+  };
+
+  const closeForm = () => {
+    setShowForm(false);
+    setIsViewMode(false);
+    setEditing(null);
   };
 
   const handleChange = (k, v) => {
@@ -582,6 +639,25 @@ export default function MeetingSpaceManage() {
     }
   };
 
+  // View — fetch the full record by id, populate the same form state
+  // openEdit uses, then open the shared create/edit modal in read-only
+  // mode (`isViewMode=true`). The modal disables every input and hides
+  // the Save button. Mirrors the /occupancy-and-minimumlength pattern.
+  const handleView = async (spaceId) => {
+    try {
+      const res = await axiosInstance.get(`/api/meet-and-space/${spaceId}`);
+      const data = res.data || {};
+      setEditing(data);
+      setForm(buildFormFromSpace(data));
+      setErrors({});
+      setIsViewMode(true);
+      setShowForm(true);
+    } catch (err) {
+      console.error(err);
+      toast.error(err?.response?.data?.message || "Failed to load details");
+    }
+  };
+
   const handleDelete = async (row) => {
     const result = await Swal.fire({
       title: `Delete "${row.spaceName}"?`,
@@ -667,7 +743,7 @@ export default function MeetingSpaceManage() {
                     <th>Currency</th>
                     <th>Images</th>
                     <th>Status</th>
-                    <th style={{ width: 120 }}>Actions</th>
+                    <th style={{ width: 220 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -717,6 +793,15 @@ export default function MeetingSpaceManage() {
                         </td>
                         <td>
                           <div className="d-flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline-info"
+                              className="d-flex align-items-center gap-1"
+                              title="View"
+                              onClick={() => handleView(s.id)}
+                            >
+                              <FaEye /> View
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline-primary"
@@ -777,14 +862,21 @@ export default function MeetingSpaceManage() {
         </main>
       </div>
 
-      {/* ── Create / Edit Modal ────────────────────────────────────────── */}
-      <Modal show={showForm} onHide={() => setShowForm(false)} size="xl" scrollable>
+      {/* ── Create / Edit / View Modal ──────────────────────────────────
+          View mode reuses this same modal with `isViewMode=true` — the
+          inputs are wrapped in <fieldset disabled={isViewMode}>, the
+          title flips to "View …", and the Save button is hidden.
+          Matches the /occupancy-and-minimumlength view pattern. */}
+      <Modal show={showForm} onHide={closeForm} size="xl" scrollable>
         <Modal.Header closeButton>
           <Modal.Title>
-            {editing ? "Edit Meeting Space" : "Add Meeting Space"}
+            {isViewMode
+              ? "View Meeting Space"
+              : editing ? "Edit Meeting Space" : "Add Meeting Space"}
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
+          <fieldset disabled={isViewMode}>
           <Row className="g-3">
             <Col md={4}>
               <Form.Label>Space Name *</Form.Label>
@@ -975,6 +1067,7 @@ export default function MeetingSpaceManage() {
             <Col md={4}>
               <Form.Label>Currency *</Form.Label>
               <Select
+                isDisabled={isViewMode}
                 options={currencyOptions}
                 value={
                   currencyOptions.find((o) => o.value === form.currencyId) ||
@@ -1252,26 +1345,29 @@ export default function MeetingSpaceManage() {
               ))}
             </Col>
           </Row>
+          </fieldset>
         </Modal.Body>
         <Modal.Footer>
           <Button
             variant="secondary"
-            onClick={() => setShowForm(false)}
+            onClick={closeForm}
             disabled={saving}
           >
-            Cancel
+            {isViewMode ? "Close" : "Cancel"}
           </Button>
-          <Button variant="primary" onClick={handleSave} disabled={saving}>
-            {saving ? (
-              <>
-                <Spinner size="sm" animation="border" /> Saving...
-              </>
-            ) : editing ? (
-              "Update Space"
-            ) : (
-              "Create Space"
-            )}
-          </Button>
+          {!isViewMode && (
+            <Button variant="primary" onClick={handleSave} disabled={saving}>
+              {saving ? (
+                <>
+                  <Spinner size="sm" animation="border" /> Saving...
+                </>
+              ) : editing ? (
+                "Update Space"
+              ) : (
+                "Create Space"
+              )}
+            </Button>
+          )}
         </Modal.Footer>
       </Modal>
 

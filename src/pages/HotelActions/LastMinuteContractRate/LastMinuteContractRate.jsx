@@ -8,8 +8,10 @@ import {
   Badge,
   Form,
   Modal,
+  Row,
+  Col,
 } from "react-bootstrap";
-import { FaArrowLeft, FaEdit, FaTrash } from "react-icons/fa";
+import { FaArrowLeft, FaEdit, FaTrash, FaEye } from "react-icons/fa";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
@@ -33,6 +35,7 @@ export default function LastMinuteContractRate() {
   const [showValidityModal, setShowValidityModal] = useState(false);
   const [selectedValidityData, setSelectedValidityData] = useState([]);
   const [selectedRateCode, setSelectedRateCode] = useState("");
+
 
   const fetchRates = async (pageNum = 0, searchTerm = search) => {
     try {
@@ -93,6 +96,14 @@ export default function LastMinuteContractRate() {
     setShowValidityModal(true);
   };
 
+  // View — reuses the existing edit page in read-only mode. Mirrors the
+  // /occupancy-and-minimumlength view pattern (same screen, all fields
+  // populated, no inputs editable, no Save button).
+  const handleView = (rateId) =>
+    navigate(
+      `/hotel-actions/hotel/${hotelId}/last-minute-contract-rate/${rateId}/edit?mode=view`
+    );
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <Topbar />
@@ -140,7 +151,7 @@ export default function LastMinuteContractRate() {
                     <th>Days</th>
                     <th>Validity Periods</th>
                     <th>Status</th>
-                    <th style={{ width: 160 }}>Actions</th>
+                    <th style={{ width: 230 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -176,6 +187,15 @@ export default function LastMinuteContractRate() {
                         </td>
                         <td>
                           <div className="d-flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline-info"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => handleView(rate.lastMinuteContractRateId)}
+                              title="View"
+                            >
+                              <FaEye /> View
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline-primary"

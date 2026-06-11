@@ -23,7 +23,7 @@ import React, { useEffect, useState } from "react";
 import {
   Card, Row, Col, Button, Table, Form, Modal, Spinner, Badge,
 } from "react-bootstrap";
-import { FaEdit, FaTrash, FaArrowLeft, FaUserClock } from "react-icons/fa";
+import { FaEdit, FaTrash, FaArrowLeft, FaUserClock, FaEye } from "react-icons/fa";
 import { useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
@@ -51,6 +51,51 @@ export default function SeniorCitizenList() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState({});
 
+  // View-mode flag — when true the shared create/edit modal is rendered
+  // read-only. Mirrors the /occupancy-and-minimumlength pattern.
+  const [isViewMode, setIsViewMode] = useState(false);
+
+  const handleView = async (promotionId) => {
+    try {
+      const res = await axiosInstance.get(
+        `/api/hotel-senior-citizen-promotion/${promotionId}`
+      );
+      const row = res.data || {};
+      // Mirror the data-normalisation that openEdit does so the form
+      // displays the same fields regardless of whether the row uses the
+      // new discountType/Value model or the legacy percent/amount one.
+      let discountType = row.discountType;
+      let discountValue = row.discountValue;
+      if (!discountType) {
+        if (row.discountPercent != null) {
+          discountType = "PERCENTAGE";
+          discountValue = row.discountPercent;
+        } else if (row.discountAmount != null) {
+          discountType = "AMOUNT";
+          discountValue = row.discountAmount;
+        } else {
+          discountType = "PERCENTAGE";
+          discountValue = "";
+        }
+      }
+      setEditingId(row.promotionId || row.id || promotionId);
+      setForm({
+        discountType,
+        discountValue: discountValue ?? "",
+        validFrom: row.validFrom || "",
+        validTo: row.validTo || "",
+        description: row.description || "",
+        active: row.active !== false,
+      });
+      setErrors({});
+      setIsViewMode(true);
+      setShowModal(true);
+    } catch (err) {
+      console.error(err);
+      toast.error(err?.response?.data?.message || "Failed to load details");
+    }
+  };
+
   const fetchAll = async () => {
     setLoading(true);
     try {
@@ -72,7 +117,14 @@ export default function SeniorCitizenList() {
     setEditingId(null);
     setForm(EMPTY_FORM);
     setErrors({});
+    setIsViewMode(false);
     setShowModal(true);
+  };
+
+  const closeModal = () => {
+    setShowModal(false);
+    setIsViewMode(false);
+    setEditingId(null);
   };
 
   const openEdit = (row) => {
@@ -101,6 +153,7 @@ export default function SeniorCitizenList() {
       active: row.active !== false,
     });
     setErrors({});
+    setIsViewMode(false);
     setShowModal(true);
   };
 
@@ -245,7 +298,7 @@ export default function SeniorCitizenList() {
                     <th>Valid To</th>
                     <th>Description</th>
                     <th>Status</th>
-                    <th style={{ width: 160 }}>Actions</th>
+                    <th style={{ width: 230 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -284,6 +337,15 @@ export default function SeniorCitizenList() {
                             <div className="d-flex gap-2">
                               <Button
                                 size="sm"
+                                variant="outline-info"
+                                className="d-flex align-items-center gap-1"
+                                onClick={() => handleView(pid)}
+                                title="View"
+                              >
+                                <FaEye /> View
+                              </Button>
+                              <Button
+                                size="sm"
                                 variant="outline-primary"
                                 className="d-flex align-items-center gap-1"
                                 onClick={() => openEdit(row)}
@@ -313,10 +375,13 @@ export default function SeniorCitizenList() {
         </main>
       </div>
 
-      <Modal show={showModal} onHide={() => setShowModal(false)} centered>
+      {/* Create / Edit / View Modal — view mode disables the inputs,
+          retitles to "View" and hides the Save button. Mirrors the
+          /occupancy-and-minimumlength pattern. */}
+      <Modal show={showModal} onHide={closeModal} centered>
         <Modal.Header closeButton>
           <Modal.Title>
-            {editingId ? "Edit" : "Add"} Senior Citizen Discount
+            {isViewMode ? "View" : editingId ? "Edit" : "Add"} Senior Citizen Discount
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
@@ -324,6 +389,8 @@ export default function SeniorCitizenList() {
             <Col md={6}>
               <Form.Label>Discount Type *</Form.Label>
               <Form.Select value={form.discountType}
+                           disabled={isViewMode}
+                           className={isViewMode ? "bg-light" : ""}
                            isInvalid={!!errors.discountType}
                            onChange={(e) => handleChange("discountType", e.target.value)}>
                 <option value="PERCENTAGE">Percentage</option>
@@ -339,6 +406,8 @@ export default function SeniorCitizenList() {
                             max={form.discountType === "PERCENTAGE" ? "100" : undefined}
                             step="0.01"
                             value={form.discountValue}
+                            disabled={isViewMode}
+                            className={isViewMode ? "bg-light" : ""}
                             isInvalid={!!errors.discountValue}
                             onChange={(e) => handleChange("discountValue", e.target.value)}
                             placeholder={form.discountType === "AMOUNT"
@@ -348,6 +417,8 @@ export default function SeniorCitizenList() {
             <Col md={6}>
               <Form.Label>Valid From *</Form.Label>
               <Form.Control type="date" value={form.validFrom}
+                            disabled={isViewMode}
+                            className={isViewMode ? "bg-light" : ""}
                             isInvalid={!!errors.validFrom}
                             onChange={(e) => handleChange("validFrom", e.target.value)} />
               {errors.validFrom && <small className="text-danger">{errors.validFrom}</small>}
@@ -355,6 +426,8 @@ export default function SeniorCitizenList() {
             <Col md={6}>
               <Form.Label>Valid To *</Form.Label>
               <Form.Control type="date" value={form.validTo}
+                            disabled={isViewMode}
+                            className={isViewMode ? "bg-light" : ""}
                             isInvalid={!!errors.validTo}
                             onChange={(e) => handleChange("validTo", e.target.value)} />
               {errors.validTo && <small className="text-danger">{errors.validTo}</small>}
@@ -362,20 +435,27 @@ export default function SeniorCitizenList() {
             <Col md={12}>
               <Form.Label>Description</Form.Label>
               <Form.Control as="textarea" rows={2} value={form.description}
+                            disabled={isViewMode}
+                            className={isViewMode ? "bg-light" : ""}
                             onChange={(e) => handleChange("description", e.target.value)} />
             </Col>
             <Col md={12}>
               <Form.Check type="switch" id="sc-active-switch" label="Active"
                           checked={form.active}
+                          disabled={isViewMode}
                           onChange={(e) => handleChange("active", e.target.checked)} />
             </Col>
           </Row>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
-          <Button variant="primary" onClick={handleSave}>
-            {editingId ? "Update" : "Create"}
+          <Button variant="secondary" onClick={closeModal}>
+            {isViewMode ? "Close" : "Cancel"}
           </Button>
+          {!isViewMode && (
+            <Button variant="primary" onClick={handleSave}>
+              {editingId ? "Update" : "Create"}
+            </Button>
+          )}
         </Modal.Footer>
       </Modal>
     </div>

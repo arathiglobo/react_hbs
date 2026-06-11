@@ -9,6 +9,8 @@ import {
   Form,
   Pagination,
   Modal,
+  Row,
+  Col,
 } from "react-bootstrap";
 import { FaArrowLeft, FaPlus, FaEdit, FaTrash, FaEye } from "react-icons/fa";
 import axiosInstance from "../../../components/AxiosInstance";
@@ -38,6 +40,7 @@ export default function ContractRate() {
   // Modal states for status toggle
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedRate, setSelectedRate] = useState(null);
+
 
   // ✅ Fetch contract rates with pagination and search
   const fetchRates = async (pageNum = 0, searchTerm = search) => {
@@ -119,6 +122,13 @@ export default function ContractRate() {
     setSelectedRateCode(rateCode);
     setShowValidityModal(true);
   };
+
+  // View — reuses the existing edit page in read-only mode. Navigating
+  // with `?mode=view` makes EditContractRate disable every input and
+  // hide the Save button (see fieldset disabled + isViewMode there).
+  // Mirrors the /occupancy-and-minimumlength view pattern.
+  const handleView = (rateId) =>
+    navigate(`/hotel-actions/hotel/${id}/contract-rate/${rateId}/edit?mode=view`);
 
   // ✅ Handle status toggle
   const handleStatusToggle = (rate) => {
@@ -262,7 +272,7 @@ export default function ContractRate() {
                     <th>Days</th>
                     <th>Validity Periods</th>
                     <th>Status</th>
-                    <th style={{ width: 160 }}>Actions</th>
+                    <th style={{ width: 230 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -345,6 +355,15 @@ export default function ContractRate() {
 
                         <td>
                           <div className="d-flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline-info"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => handleView(rate.contractrateId)}
+                              title="View"
+                            >
+                              <FaEye /> View
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline-primary"

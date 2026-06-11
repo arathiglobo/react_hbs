@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   Container,
   Row,
@@ -20,6 +20,11 @@ import { toast } from "react-hot-toast";
 export default function EditSpecialRates() {
   const navigate = useNavigate();
   const { id, editId } = useParams();
+
+  // View mode — `?mode=view` makes the form read-only. Mirrors the
+  // /occupancy-and-minimumlength view pattern.
+  const [searchParams] = useSearchParams();
+  const isViewMode = searchParams.get("mode") === "view";
 
   const [loading, setLoading] = useState(false);
   const [markets, setMarkets] = useState([]);
@@ -603,7 +608,7 @@ export default function EditSpecialRates() {
                 <FaArrowLeft className="me-2" /> Back
               </Button>
               <h4 className="fw-semibold text-dark mb-0 d-flex align-items-center gap-2">
-                Edit Special Rate
+                {isViewMode ? "View" : "Edit"} Special Rate
                 <HotelTitleBadge hotelId={id} />
               </h4>
             </div>
@@ -615,6 +620,7 @@ export default function EditSpecialRates() {
                 </div>
               ) : (
                 <Form onSubmit={handleUpdate}>
+                  <fieldset disabled={isViewMode}>
                   {/* ✅ IDENTICAL UI CONTENT FROM CREATE PAGE STARTS HERE */}
 
                   {/* Season / Rate / Market / Exclude */}
@@ -666,6 +672,7 @@ export default function EditSpecialRates() {
                         <Form.Label>Market Type *</Form.Label>
                         <Select
                           isMulti
+                          isDisabled={isViewMode}
                           options={markets.map((m) => ({
                             value: m.marketTypeId,
                             label: m.name,
@@ -685,6 +692,7 @@ export default function EditSpecialRates() {
                         <Form.Label>Exclude Nationality</Form.Label>
                         <Select
                           isMulti
+                          isDisabled={isViewMode}
                           options={filteredCountries.map((c) => ({
                             value: c.id,
                             label: `${c.name} (${c.marketType})`,
@@ -1277,6 +1285,7 @@ export default function EditSpecialRates() {
                     </Row>
                   </Card>
 
+                  </fieldset>
                   {/* ✅ Buttons */}
                   <div className="d-flex justify-content-end gap-3 mt-4 pt-3 border-top">
                     <Button
@@ -1284,15 +1293,17 @@ export default function EditSpecialRates() {
                       className="px-4 rounded-pill"
                       onClick={() => navigate(-1)}
                     >
-                      ✖ Cancel
+                      {isViewMode ? "Close" : "✖ Cancel"}
                     </Button>
-                    <Button
-                      type="submit"
-                      variant="success"
-                      className="px-4 rounded-pill"
-                    >
-                      <FaSave className="me-2" /> Update Special Rate
-                    </Button>
+                    {!isViewMode && (
+                      <Button
+                        type="submit"
+                        variant="success"
+                        className="px-4 rounded-pill"
+                      >
+                        <FaSave className="me-2" /> Update Special Rate
+                      </Button>
+                    )}
                   </div>
                 </Form>
               )}

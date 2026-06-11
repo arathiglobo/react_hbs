@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Container,
   Row,
@@ -20,6 +20,11 @@ const PolicyUpdate = () => {
   const { id, editId } = useParams(); // hotelId, policyId
   const policyId = editId;
   const navigate = useNavigate();
+
+  // View mode — `?mode=view` makes the form read-only. Mirrors the
+  // /occupancy-and-minimumlength view pattern.
+  const [searchParams] = useSearchParams();
+  const isViewMode = searchParams.get("mode") === "view";
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -167,13 +172,14 @@ const PolicyUpdate = () => {
                 <FaArrowLeft className="me-2" /> Back
               </Button>
               <h4 className="fw-semibold text-dark mb-0 d-flex align-items-center gap-2">
-                Update Policy Details
+                {isViewMode ? "View" : "Update"} Policy Details
                 <HotelTitleBadge hotelId={id} />
               </h4>
             </div>
 
             <Card className="shadow-sm border-0 p-4 rounded-4 bg-white">
               <Form onSubmit={handleSave}>
+                <fieldset disabled={isViewMode}>
                 {/* Policy Info */}
                 <Row className="mb-4">
                   <Col md={4}>
@@ -601,6 +607,7 @@ const PolicyUpdate = () => {
                   </div>
                 </div>
 
+                </fieldset>
                 {/* Buttons */}
                 <div className="d-flex justify-content-end gap-3 mt-5 pt-3 border-top">
                   <Button
@@ -608,24 +615,26 @@ const PolicyUpdate = () => {
                     className="px-4 rounded-pill"
                     // onClick={() => navigate(`/registration/hotel/${id}/policy`)}
                     onClick={() =>  navigate(-1)}
-                    
+
                   >
-                    ✖ Cancel
+                    {isViewMode ? "Close" : "✖ Cancel"}
                   </Button>
-                  <Button
-                    type="submit"
-                    variant="success"
-                    className="px-4 rounded-pill"
-                    disabled={saving}
-                  >
-                    {saving ? (
-                      <Spinner size="sm" animation="border" />
-                    ) : (
-                      <>
-                        <FaSave className="me-2" /> Update
-                      </>
-                    )}
-                  </Button>
+                  {!isViewMode && (
+                    <Button
+                      type="submit"
+                      variant="success"
+                      className="px-4 rounded-pill"
+                      disabled={saving}
+                    >
+                      {saving ? (
+                        <Spinner size="sm" animation="border" />
+                      ) : (
+                        <>
+                          <FaSave className="me-2" /> Update
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
               </Form>
             </Card>

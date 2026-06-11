@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   Container,
   Row,
@@ -47,6 +47,11 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
   const isEdit = mode === "edit";
   const navigate = useNavigate();
   const { id: hotelId, rateId } = useParams();
+
+  // View mode — `?mode=view` makes the form read-only. Mirrors the
+  // /occupancy-and-minimumlength view pattern.
+  const [searchParams] = useSearchParams();
+  const isViewMode = searchParams.get("mode") === "view";
 
   const [formData, setFormData] = useState({
     seasonId: "",
@@ -621,7 +626,7 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
                 <FaArrowLeft className="me-2" /> Back
               </Button>
               <h4 className="fw-semibold text-dark mb-0 d-flex align-items-center gap-2">
-                {isEdit ? "Edit" : "Create"} Last Minute Contract Rate
+                {isViewMode ? "View" : isEdit ? "Edit" : "Create"} Last Minute Contract Rate
                 <HotelTitleBadge hotelId={hotelId} />
               </h4>
             </div>
@@ -630,7 +635,7 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
               {loading ? (
                 <div className="text-center py-5"><Spinner animation="border" /></div>
               ) : (
-                <>
+                <fieldset disabled={isViewMode}>
                   <Alert variant="info" className="py-2 mb-3" style={{ fontSize: "0.85rem" }}>
                     Last-minute rates are auto-suggested as <strong>10% lower</strong> than the
                     matching normal contract rate. You may edit cells, but the server will reject
@@ -687,6 +692,7 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
                         <Form.Label>Market Type</Form.Label>
                         <Select
                           isMulti
+                          isDisabled={isViewMode}
                           options={markets.map((m) => ({ value: m.marketTypeId, label: m.name }))}
                           value={formData.marketType}
                           onChange={(sel) => setFormData({ ...formData, marketType: sel || [] })}
@@ -703,6 +709,7 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
                         <Form.Label>Exclude Nationality</Form.Label>
                         <Select
                           isMulti
+                          isDisabled={isViewMode}
                           options={countries.map((c) => ({
                             value: c.id,
                             label: `${c.name} (${c.marketType})`,
@@ -1074,13 +1081,15 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
 
                   <div className="d-flex justify-content-between mt-4">
                     <Button variant="outline-danger" onClick={() => navigate(-1)}>
-                      Cancel
+                      {isViewMode ? "Close" : "Cancel"}
                     </Button>
-                    <Button variant="success" onClick={handleSave} disabled={isSubmitting}>
-                      {isSubmitting ? <Spinner size="sm" animation="border" /> : isEdit ? "Update" : "Save"}
-                    </Button>
+                    {!isViewMode && (
+                      <Button variant="success" onClick={handleSave} disabled={isSubmitting}>
+                        {isSubmitting ? <Spinner size="sm" animation="border" /> : isEdit ? "Update" : "Save"}
+                      </Button>
+                    )}
                   </div>
-                </>
+                </fieldset>
               )}
             </Card>
           </Container>

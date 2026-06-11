@@ -10,7 +10,7 @@ import {
   Spinner,
 } from "react-bootstrap";
 import { FaArrowLeft, FaPlus, FaTrash, FaSave, FaTimes } from "react-icons/fa";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
@@ -22,6 +22,11 @@ export default function EditDiscountPromotion() {
   const navigate = useNavigate();
   const { id, editId } = useParams(); // hotelId and promoId
   const promoId = editId;
+
+  // View mode — `?mode=view` makes the form read-only. Mirrors the
+  // /occupancy-and-minimumlength view pattern.
+  const [searchParams] = useSearchParams();
+  const isViewMode = searchParams.get("mode") === "view";
 
   const [loading, setLoading] = useState(false);
   const [rooms, setRooms] = useState([]);
@@ -382,7 +387,7 @@ export default function EditDiscountPromotion() {
                 <FaArrowLeft className="me-2" /> Back
               </Button>
               <h4 className="fw-semibold mb-0 text-dark d-flex align-items-center gap-2">
-                Edit Discount Promotion
+                {isViewMode ? "View" : "Edit"} Discount Promotion
                 <HotelTitleBadge hotelId={id} />
               </h4>
             </div>
@@ -394,6 +399,7 @@ export default function EditDiscountPromotion() {
                 </div>
               ) : (
                 <Form onSubmit={handleSubmit}>
+                  <fieldset disabled={isViewMode}>
                   {/* ================= BASIC INFO ================= */}
                   <Row className="mb-4 g-3">
                     {/* Season */}
@@ -472,6 +478,7 @@ export default function EditDiscountPromotion() {
                         <Form.Label>Market Type *</Form.Label>
                         <Select
                           isMulti
+                          isDisabled={isViewMode}
                           options={markets.map((m) => ({
                             value: m.marketTypeId,
                             label: m.name,
@@ -518,6 +525,7 @@ export default function EditDiscountPromotion() {
                         <Form.Label>Exclude Nationality</Form.Label>
                         <Select
                           isMulti
+                          isDisabled={isViewMode}
                           options={filteredCountries.map((c) => ({
                             value: c.id,
                             label: `${c.name} (${c.marketType})`,
@@ -1000,21 +1008,24 @@ export default function EditDiscountPromotion() {
                     />
                   </Form.Group>
 
+                  </fieldset>
                   <div className="d-flex justify-content-end gap-3 mt-3 pt-3 border-top">
                     <Button
                       variant="outline-danger"
                       className="px-4 rounded-pill"
                       onClick={() => navigate(-1)}
                     >
-                      ✖ Cancel
+                      {isViewMode ? "Close" : "✖ Cancel"}
                     </Button>
-                    <Button
-                      type="submit"
-                      variant="success"
-                      className="px-4 rounded-pill"
-                    >
-                      <FaSave className="me-2" /> Update
-                    </Button>
+                    {!isViewMode && (
+                      <Button
+                        type="submit"
+                        variant="success"
+                        className="px-4 rounded-pill"
+                      >
+                        <FaSave className="me-2" /> Update
+                      </Button>
+                    )}
                   </div>
                 </Form>
               )}

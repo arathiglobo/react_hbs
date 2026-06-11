@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   Container,
   Row,
@@ -38,6 +38,11 @@ export default function DayStayContractForm({ mode }) {
   const navigate = useNavigate();
   const { id: hotelId, contractId } = useParams();
   const isEdit = mode === "edit";
+
+  // View mode — `?mode=view` makes the form read-only. Mirrors the
+  // /occupancy-and-minimumlength view pattern.
+  const [searchParams] = useSearchParams();
+  const isViewMode = searchParams.get("mode") === "view";
 
   const [formData, setFormData] = useState({
     seasonId: "",
@@ -484,7 +489,7 @@ export default function DayStayContractForm({ mode }) {
                 <FaArrowLeft className="me-2" /> Back
               </Button>
               <h4 className="fw-semibold text-dark mb-0 d-flex align-items-center gap-2">
-                {isEdit ? "Edit" : "Create"} Day Stay Contract
+                {isViewMode ? "View" : isEdit ? "Edit" : "Create"} Day Stay Contract
                 <HotelTitleBadge hotelId={hotelId} />
               </h4>
             </div>
@@ -495,7 +500,7 @@ export default function DayStayContractForm({ mode }) {
                   <Spinner animation="border" />
                 </div>
               ) : (
-                <>
+                <fieldset disabled={isViewMode}>
                   {/* Top Form Fields — mirror of Contract Rate */}
                   <Row className="mb-4 g-4">
                     <Col md={3}>
@@ -557,6 +562,7 @@ export default function DayStayContractForm({ mode }) {
                         <Form.Label>Market Type</Form.Label>
                         <Select
                           isMulti
+                          isDisabled={isViewMode}
                           options={markets.map((m) => ({
                             value: m.marketTypeId,
                             label: m.name,
@@ -586,6 +592,7 @@ export default function DayStayContractForm({ mode }) {
                         <Form.Label>Exclude Nationality</Form.Label>
                         <Select
                           isMulti
+                          isDisabled={isViewMode}
                           options={filteredCountries.map((c) => ({
                             value: c.id,
                             label: `${c.name} (${c.marketType})`,
@@ -1012,23 +1019,25 @@ export default function DayStayContractForm({ mode }) {
                       variant="outline-danger"
                       onClick={() => navigate(-1)}
                     >
-                      Cancel
+                      {isViewMode ? "Close" : "Cancel"}
                     </Button>
-                    <Button
-                      variant="success"
-                      onClick={handleSaveClick}
-                      disabled={isSubmitting}
-                    >
-                      {isSubmitting ? (
-                        <Spinner size="sm" animation="border" />
-                      ) : isEdit ? (
-                        "Update"
-                      ) : (
-                        "Save"
-                      )}
-                    </Button>
+                    {!isViewMode && (
+                      <Button
+                        variant="success"
+                        onClick={handleSaveClick}
+                        disabled={isSubmitting}
+                      >
+                        {isSubmitting ? (
+                          <Spinner size="sm" animation="border" />
+                        ) : isEdit ? (
+                          "Update"
+                        ) : (
+                          "Save"
+                        )}
+                      </Button>
+                    )}
                   </div>
-                </>
+                </fieldset>
               )}
             </Card>
 

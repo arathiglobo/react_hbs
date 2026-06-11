@@ -10,8 +10,10 @@ import {
   Pagination,
   Modal,
   Form,
+  Row,
+  Col,
 } from "react-bootstrap";
-import { FaArrowLeft, FaPlus, FaEdit, FaTrash } from "react-icons/fa";
+import { FaArrowLeft, FaPlus, FaEdit, FaTrash, FaEye } from "react-icons/fa";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
@@ -33,6 +35,11 @@ const Policy = () => {
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [searchTimeout, setSearchTimeout] = useState(null);
+
+  // View — reuses the existing edit page in read-only mode. Mirrors the
+  // /occupancy-and-minimumlength view pattern.
+  const handleView = (policyId) =>
+    navigate(`/hotel-actions/${id}/hotel-policy/${policyId}/edit?mode=view`);
 
   // ✅ Fetch hotel policies with search and pagination
   const fetchPolicies = async (pageNum = 0, searchQuery = searchTerm) => {
@@ -277,7 +284,7 @@ const Policy = () => {
                     <th>POLICY CODE</th>
                     <th>MARKET TYPE</th>
                     <th>STATUS</th>
-                    <th style={{ width: 160 }}>ACTIONS</th>
+                    <th style={{ width: 230 }}>ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -303,6 +310,15 @@ const Policy = () => {
                         </td>
                         <td>
                           <div className="d-flex gap-2 justify-content-center">
+                            <Button
+                              size="sm"
+                              variant="outline-info"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => handleView(policy.policyId)}
+                              title="View"
+                            >
+                              <FaEye /> View
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline-primary"

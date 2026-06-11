@@ -9,6 +9,8 @@ import {
   Form,
   Pagination,
   Modal,
+  Row,
+  Col,
 } from "react-bootstrap";
 import { FaArrowLeft, FaEdit, FaTrash, FaEye } from "react-icons/fa";
 import axiosInstance from "../../../components/AxiosInstance";
@@ -40,6 +42,7 @@ export default function DayStayContract() {
 
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedRate, setSelectedRate] = useState(null);
+
 
   const fetchRates = async () => {
     try {
@@ -82,6 +85,11 @@ export default function DayStayContract() {
     setSelectedRateCode(rateCode || "");
     setShowValidityModal(true);
   };
+
+  // View — reuses the existing edit page in read-only mode. Mirrors the
+  // /occupancy-and-minimumlength view pattern.
+  const handleView = (rid) =>
+    navigate(`/hotel-actions/hotel/${id}/day-stay-contract/${rid}/edit?mode=view`);
 
   const handleStatusToggle = (rate) => {
     setSelectedRate(rate);
@@ -184,7 +192,7 @@ export default function DayStayContract() {
                     <th>Markup %</th>
                     <th>Validity Periods</th>
                     <th>Status</th>
-                    <th style={{ width: 140 }}>Actions</th>
+                    <th style={{ width: 220 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -235,6 +243,15 @@ export default function DayStayContract() {
                         </td>
                         <td>
                           <div className="d-flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline-info"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => handleView(r.id)}
+                              title="View"
+                            >
+                              <FaEye /> View
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline-primary"

@@ -9,8 +9,10 @@ import {
   Form,
   Modal,
   Pagination,
+  Row,
+  Col,
 } from "react-bootstrap";
-import { FaArrowLeft, FaEdit, FaTrash } from "react-icons/fa";
+import { FaArrowLeft, FaEdit, FaTrash, FaEye } from "react-icons/fa";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
@@ -34,6 +36,11 @@ export default function LongStayContract() {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedContract, setSelectedContract] = useState(null);
   const [statusUpdating, setStatusUpdating] = useState(false);
+
+  // View — reuses the existing edit page in read-only mode. Mirrors the
+  // /occupancy-and-minimumlength view pattern.
+  const handleView = (contractId) =>
+    navigate(`/hotel-actions/hotel/${id}/long-stay-contract/${contractId}/edit?mode=view`);
 
   const fetchContracts = async (pageNum = 0) => {
     try {
@@ -127,7 +134,7 @@ export default function LongStayContract() {
           <div className="d-flex align-items-center gap-3 mb-3">
             <Button
               variant="outline-primary"
-              onClick={() => navigate(-1)}
+              onClick={() => navigate(`/hotel-details/${id}`)}
               className="d-flex align-items-center btn-sm gap-2"
             >
               <FaArrowLeft />
@@ -179,7 +186,7 @@ export default function LongStayContract() {
                     <th>Cost Type</th>
                     <th>Validity</th>
                     <th>Status</th>
-                    <th style={{ width: 160 }}>Actions</th>
+                    <th style={{ width: 230 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -234,6 +241,15 @@ export default function LongStayContract() {
                         </td>
                         <td>
                           <div className="d-flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline-info"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => handleView(c.longStayContractId)}
+                              title="View"
+                            >
+                              <FaEye /> View
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline-primary"

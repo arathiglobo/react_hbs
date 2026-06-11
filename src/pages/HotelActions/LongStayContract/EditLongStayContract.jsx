@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   Card,
   Button,
@@ -19,6 +19,11 @@ import Topbar from "../../../components/TopBar";
 export default function EditLongStayContract() {
   const navigate = useNavigate();
   const { id, contractId } = useParams(); // hotel id, long stay contract id
+
+  // View mode — `?mode=view` makes the form read-only. Mirrors the
+  // /occupancy-and-minimumlength view pattern.
+  const [searchParams] = useSearchParams();
+  const isViewMode = searchParams.get("mode") === "view";
 
   const [formData, setFormData] = useState({
     rateCode: "",
@@ -278,7 +283,7 @@ export default function EditLongStayContract() {
               Back
             </Button>
             <h4 className="m-0 d-flex align-items-center gap-2">
-              Edit Long Stay Contract
+              {isViewMode ? "View" : "Edit"} Long Stay Contract
               <HotelTitleBadge hotelId={id} />
             </h4>
             <span />
@@ -290,7 +295,7 @@ export default function EditLongStayContract() {
                 <Spinner animation="border" variant="primary" />
               </div>
             ) : (
-              <>
+              <fieldset disabled={isViewMode}>
                 <Row className="mb-3">
                   <Col md={3}>
                     <Form.Group>
@@ -763,21 +768,23 @@ export default function EditLongStayContract() {
                     variant="outline-danger"
                     onClick={() => navigate(-1)}
                   >
-                    Cancel
+                    {isViewMode ? "Close" : "Cancel"}
                   </Button>
-                  <Button
-                    variant="success"
-                    onClick={submit}
-                    disabled={submitting}
-                  >
-                    {submitting ? (
-                      <Spinner size="sm" animation="border" />
-                    ) : (
-                      "Update"
-                    )}
-                  </Button>
+                  {!isViewMode && (
+                    <Button
+                      variant="success"
+                      onClick={submit}
+                      disabled={submitting}
+                    >
+                      {submitting ? (
+                        <Spinner size="sm" animation="border" />
+                      ) : (
+                        "Update"
+                      )}
+                    </Button>
+                  )}
                 </div>
-              </>
+              </fieldset>
             )}
           </Card>
         </main>
