@@ -247,11 +247,11 @@ export default function EditStayPayPromotion() {
         //   label: countries.find((c) => c.id === n)?.name || `Country ${n}`,
         // })),
         isRefundable: Boolean(data.refund === 1 || data.refund === "1" || data.refund === true),
-        promotionFor: data.promotionfor === "1" ? "rooms" : "extraBed",
+        promotionFor: (data.promotionfor === 1 || data.promotionfor === "1") ? "rooms" : "extraBed",
         weekType:
-          data.allDays === 1
+          (data.allDays === 1 || data.allDays === true || data.allDays === "1")
             ? "all"
-            : data.weekDay === 1
+            : (data.weekDay === 1 || data.weekDay === true || data.weekDay === "1")
               ? "weekdays"
               : "weekends",
         // bookByDate input is type="date", so it needs `yyyy-MM-dd`
@@ -352,11 +352,11 @@ export default function EditStayPayPromotion() {
             label: countries.find((c) => c.id === n)?.name || `Country ${n}`,
           })),
           isRefundable: Boolean(data.refund === 1 || data.refund === "1" || data.refund === true),
-          promotionFor: data.promotionfor === "1" ? "rooms" : "extraBed",
+          promotionFor: (data.promotionfor === 1 || data.promotionfor === "1") ? "rooms" : "extraBed",
           weekType:
-            data.allDays === 1
+            (data.allDays === 1 || data.allDays === true || data.allDays === "1")
               ? "all"
-              : data.weekDay === 1
+              : (data.weekDay === 1 || data.weekDay === true || data.weekDay === "1")
                 ? "weekdays"
                 : "weekends",
           bookByDate: toDateInput(data.bookDate) || "",
@@ -746,13 +746,13 @@ export default function EditStayPayPromotion() {
                   </Row>
 
                   {/* OPTIONS */}
-                  <Row className="align-items-center mb-3">
-                    <Col md={3}>
+                  <Row className="align-items-start mb-3 g-3">
+                    <Col md={4}>
                       {/* Refundability toggle — mirrors the create
                           screen. Persists to the same payload field
                           (`refund` 1/0) so save logic is unchanged. */}
-                      <Form.Label className="d-block">Refundability</Form.Label>
-                      <div className="d-flex gap-3">
+                      <Form.Label className="d-block fw-semibold">Refundability</Form.Label>
+                      <div className="d-flex flex-wrap gap-3">
                         <Form.Check
                           type="radio"
                           inline
@@ -779,12 +779,14 @@ export default function EditStayPayPromotion() {
                     </Col>
 
                     <Col md={4}>
-                      <Form.Label>Promotions For *</Form.Label>
-                      <div className="d-flex gap-3">
+                      <Form.Label className="d-block fw-semibold">Promotions For *</Form.Label>
+                      <div className="d-flex flex-wrap gap-3">
                         <Form.Check
                           type="radio"
+                          inline
                           label="Rooms"
                           name="promotionFor"
+                          id="edit-staypay-promotionFor-rooms"
                           checked={formData.promotionFor === "rooms"}
                           onChange={() =>
                             setFormData({ ...formData, promotionFor: "rooms" })
@@ -792,8 +794,10 @@ export default function EditStayPayPromotion() {
                         />
                         <Form.Check
                           type="radio"
+                          inline
                           label="Extra Bed"
                           name="promotionFor"
+                          id="edit-staypay-promotionFor-extrabed"
                           checked={formData.promotionFor === "extraBed"}
                           onChange={() =>
                             setFormData({
@@ -806,12 +810,14 @@ export default function EditStayPayPromotion() {
                     </Col>
 
                     <Col md={4}>
-                      <Form.Label>Please Select *</Form.Label>
-                      <div className="d-flex gap-3">
+                      <Form.Label className="d-block fw-semibold">Please Select *</Form.Label>
+                      <div className="d-flex flex-wrap gap-3">
                         <Form.Check
                           type="radio"
+                          inline
                           label="All Days"
                           name="days"
+                          id="edit-staypay-days-all"
                           checked={formData.weekType === "all"}
                           onChange={() =>
                             setFormData({ ...formData, weekType: "all" })
@@ -819,8 +825,10 @@ export default function EditStayPayPromotion() {
                         />
                         <Form.Check
                           type="radio"
+                          inline
                           label="Week Days"
                           name="days"
+                          id="edit-staypay-days-weekdays"
                           checked={formData.weekType === "weekdays"}
                           onChange={() =>
                             setFormData({ ...formData, weekType: "weekdays" })
@@ -828,8 +836,10 @@ export default function EditStayPayPromotion() {
                         />
                         <Form.Check
                           type="radio"
+                          inline
                           label="Week End Days"
                           name="days"
+                          id="edit-staypay-days-weekends"
                           checked={formData.weekType === "weekends"}
                           onChange={() =>
                             setFormData({ ...formData, weekType: "weekends" })
@@ -837,8 +847,10 @@ export default function EditStayPayPromotion() {
                         />
                       </div>
                     </Col>
+                  </Row>
 
-                    <Col md={2}>
+                  <Row className="mb-4 g-3">
+                    <Col md={3}>
                       <Form.Group>
                         <Form.Label>Book by Date</Form.Label>
                         <Form.Control
@@ -854,7 +866,7 @@ export default function EditStayPayPromotion() {
                       </Form.Group>
                     </Col>
 
-                    <Col md={2}>
+                    <Col md={3}>
                       <Form.Group>
                         <Form.Label>By Prior Days</Form.Label>
                         <Form.Control
@@ -886,10 +898,14 @@ export default function EditStayPayPromotion() {
                           </Button>
                         </div>
                         {formData.validityList.map((v, i) => (
-                          <Row key={i} className="align-items-center mb-2">
-                            <Col>
+                          <Row key={i} className="align-items-end mb-2">
+                            <Col md={5}>
+                              <Form.Label className="mb-1 small fw-semibold">
+                                FROM
+                              </Form.Label>
                               <Form.Control
                                 type="datetime-local"
+                                size="sm"
                                 value={v.from}
                                 onChange={(e) => {
                                   const updated = [...formData.validityList];
@@ -906,9 +922,13 @@ export default function EditStayPayPromotion() {
                                 }}
                               />
                             </Col>
-                            <Col>
+                            <Col md={5}>
+                              <Form.Label className="mb-1 small fw-semibold">
+                                TO
+                              </Form.Label>
                               <Form.Control
                                 type="datetime-local"
+                                size="sm"
                                 value={v.to}
                                 min={getMinValidityToDate(v.from)}
                                 onChange={(e) =>
@@ -921,8 +941,8 @@ export default function EditStayPayPromotion() {
                                 }
                               />
                             </Col>
-                            <Col xs="auto">
-                              {i > 0 && (
+                            <Col md={2} className="text-end">
+                              {formData.validityList.length > 1 && (
                                 <Button
                                   size="sm"
                                   variant="outline-danger"
@@ -952,10 +972,14 @@ export default function EditStayPayPromotion() {
                           </Button>
                         </div>
                         {formData.blackoutDates.map((b, i) => (
-                          <Row key={i} className="align-items-center mb-2">
-                            <Col>
+                          <Row key={i} className="align-items-end mb-2">
+                            <Col md={5}>
+                              <Form.Label className="mb-1 small fw-semibold">
+                                FROM
+                              </Form.Label>
                               <Form.Control
                                 type="datetime-local"
+                                size="sm"
                                 value={b.from}
                                 onChange={(e) => {
                                   const updated = [...formData.blackoutDates];
@@ -972,9 +996,13 @@ export default function EditStayPayPromotion() {
                                 }}
                               />
                             </Col>
-                            <Col>
+                            <Col md={5}>
+                              <Form.Label className="mb-1 small fw-semibold">
+                                TO
+                              </Form.Label>
                               <Form.Control
                                 type="datetime-local"
+                                size="sm"
                                 value={b.to}
                                 min={getMinValidityToDate(b.from)}
                                 onChange={(e) =>
@@ -987,8 +1015,8 @@ export default function EditStayPayPromotion() {
                                 }
                               />
                             </Col>
-                            <Col xs="auto">
-                              {i > 0 && (
+                            <Col md={2} className="text-end">
+                              {formData.blackoutDates.length > 1 && (
                                 <Button
                                   size="sm"
                                   variant="outline-danger"

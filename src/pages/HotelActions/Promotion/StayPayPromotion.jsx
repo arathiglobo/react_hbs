@@ -476,14 +476,14 @@ export default function StayPayPromotion() {
                   </Row>
 
                   {/* ==================== OPTIONS ==================== */}
-                  <Row className="align-items-center mb-3">
-                    <Col md={3}>
+                  <Row className="align-items-start mb-3 g-3">
+                    <Col md={4}>
                       {/* Refundability toggle — replaces the single
                           "Is Refundable" checkbox so the operator has
                           to make an explicit choice. The payload
                           field (`refund`) keeps its 1/0 shape. */}
-                      <Form.Label className="d-block">Refundability</Form.Label>
-                      <div className="d-flex gap-3">
+                      <Form.Label className="d-block fw-semibold">Refundability</Form.Label>
+                      <div className="d-flex flex-wrap gap-3">
                         <Form.Check
                           type="radio"
                           inline
@@ -510,12 +510,14 @@ export default function StayPayPromotion() {
                     </Col>
 
                     <Col md={4}>
-                      <Form.Label>Promotions For *</Form.Label>
-                      <div className="d-flex gap-3">
+                      <Form.Label className="d-block fw-semibold">Promotions For *</Form.Label>
+                      <div className="d-flex flex-wrap gap-3">
                         <Form.Check
                           type="radio"
+                          inline
                           label="Rooms"
                           name="promotionFor"
+                          id="staypay-promotionFor-rooms"
                           checked={formData.promotionFor === "rooms"}
                           onChange={() =>
                             setFormData({ ...formData, promotionFor: "rooms" })
@@ -523,8 +525,10 @@ export default function StayPayPromotion() {
                         />
                         <Form.Check
                           type="radio"
+                          inline
                           label="Extra Bed"
                           name="promotionFor"
+                          id="staypay-promotionFor-extrabed"
                           checked={formData.promotionFor === "extraBed"}
                           onChange={() =>
                             setFormData({
@@ -537,12 +541,14 @@ export default function StayPayPromotion() {
                     </Col>
 
                     <Col md={4}>
-                      <Form.Label>Please Select *</Form.Label>
-                      <div className="d-flex gap-3">
+                      <Form.Label className="d-block fw-semibold">Please Select *</Form.Label>
+                      <div className="d-flex flex-wrap gap-3">
                         <Form.Check
                           type="radio"
+                          inline
                           label="All Days"
                           name="days"
+                          id="staypay-days-all"
                           checked={formData.weekType === "all"}
                           onChange={() =>
                             setFormData({ ...formData, weekType: "all" })
@@ -550,8 +556,10 @@ export default function StayPayPromotion() {
                         />
                         <Form.Check
                           type="radio"
+                          inline
                           label="Week Days"
                           name="days"
+                          id="staypay-days-weekdays"
                           checked={formData.weekType === "weekdays"}
                           onChange={() =>
                             setFormData({ ...formData, weekType: "weekdays" })
@@ -559,8 +567,10 @@ export default function StayPayPromotion() {
                         />
                         <Form.Check
                           type="radio"
+                          inline
                           label="Week End Days"
                           name="days"
+                          id="staypay-days-weekends"
                           checked={formData.weekType === "weekends"}
                           onChange={() =>
                             setFormData({ ...formData, weekType: "weekends" })
@@ -568,8 +578,10 @@ export default function StayPayPromotion() {
                         />
                       </div>
                     </Col>
+                  </Row>
 
-                    <Col md={2}>
+                  <Row className="mb-4 g-3">
+                    <Col md={3}>
                       <Form.Group>
                         <Form.Label>Book by Date</Form.Label>
                         <Form.Control
@@ -585,7 +597,7 @@ export default function StayPayPromotion() {
                       </Form.Group>
                     </Col>
 
-                    <Col md={2}>
+                    <Col md={3}>
                       <Form.Group>
                         <Form.Label>By Prior Days</Form.Label>
                         <Form.Control
@@ -617,13 +629,13 @@ export default function StayPayPromotion() {
                           </Button>
                         </div>
                         {formData.validityList.map((v, i) => (
-                          <Row key={i} className="align-items-center mb-2">
+                          <Row key={i} className="align-items-end mb-2">
                             <Col md={5}>
                               <Form.Label className="mb-1 small fw-semibold">
-                                Validity From
+                                FROM
                               </Form.Label>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 size="sm"
                                 value={v.from}
                                 onChange={(e) => {
@@ -642,13 +654,13 @@ export default function StayPayPromotion() {
                             </Col>
                             <Col md={5}>
                               <Form.Label className="mb-1 small fw-semibold">
-                                Validity To
+                                TO
                               </Form.Label>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 size="sm"
                                 value={v.to}
-                                min={v.from || undefined}
+                                min={getMinValidityToDate(v.from)}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "validityList",
@@ -660,7 +672,7 @@ export default function StayPayPromotion() {
                               />
                             </Col>
                             <Col md={2} className="text-end">
-                              {i > 0 && (
+                              {formData.validityList.length > 1 && (
                                 <Button
                                   size="sm"
                                   variant="outline-danger"
@@ -690,13 +702,13 @@ export default function StayPayPromotion() {
                           </Button>
                         </div>
                         {formData.blackoutDates.map((b, i) => (
-                          <Row key={i} className="align-items-center mb-2">
+                          <Row key={i} className="align-items-end mb-2">
                             <Col md={5}>
                               <Form.Label className="mb-1 small fw-semibold">
-                                Validity From
+                                FROM
                               </Form.Label>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 size="sm"
                                 value={b.from}
                                 onChange={(e) => {
@@ -715,13 +727,13 @@ export default function StayPayPromotion() {
                             </Col>
                             <Col md={5}>
                               <Form.Label className="mb-1 small fw-semibold">
-                                Validity To
+                                TO
                               </Form.Label>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 size="sm"
                                 value={b.to}
-                                min={b.from || undefined}
+                                min={getMinValidityToDate(b.from)}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "blackoutDates",
@@ -733,7 +745,7 @@ export default function StayPayPromotion() {
                               />
                             </Col>
                             <Col md={2} className="text-end">
-                              {i > 0 && (
+                              {formData.blackoutDates.length > 1 && (
                                 <Button
                                   size="sm"
                                   variant="outline-danger"

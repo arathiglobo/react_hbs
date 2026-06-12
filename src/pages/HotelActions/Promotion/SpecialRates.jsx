@@ -808,7 +808,7 @@ const SpecialRates = () => {
 
                             {/* DELETE BUTTON */}
                             <Col md={2} className="text-end">
-                              {i > 0 && (
+                              {formData.validityList.length > 1 && (
                                 <Button
                                   size="sm"
                                   variant="outline-danger"

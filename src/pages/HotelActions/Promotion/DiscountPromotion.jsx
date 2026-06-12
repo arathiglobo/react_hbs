@@ -367,7 +367,7 @@ export default function DiscountPromotion() {
         weekDay: weekDay,
         weekEnd: weekEnd,
         allDays: allDays,
-        refund: formData.isRefundable ? 1 : 0,
+        refund: Boolean(formData.isRefundable),
         extraBed: formData.discountForExtraBed,
         bookDate: formatDate(formData.bookByDate),
         bookDay: String(formData.bookByPriorDays),
@@ -549,14 +549,16 @@ export default function DiscountPromotion() {
                   </Row>
 
                   {/* ================= DAY TYPE & REFUND ================= */}
-                  <Row className="align-items-center mb-4">
+                  <Row className="align-items-start mb-3 g-3">
                     <Col md={4}>
-                      <Form.Label>Day Type:</Form.Label>
-                      <div className="d-flex gap-3">
+                      <Form.Label className="d-block fw-semibold">Day Type</Form.Label>
+                      <div className="d-flex flex-wrap gap-3">
                         <Form.Check
                           type="radio"
+                          inline
                           label="All Days"
                           name="days"
+                          id="days-all"
                           checked={formData.weekType === "all"}
                           onChange={() =>
                             setFormData({ ...formData, weekType: "all" })
@@ -564,8 +566,10 @@ export default function DiscountPromotion() {
                         />
                         <Form.Check
                           type="radio"
+                          inline
                           label="Weekdays"
                           name="days"
+                          id="days-weekdays"
                           checked={formData.weekType === "weekdays"}
                           onChange={() =>
                             setFormData({ ...formData, weekType: "weekdays" })
@@ -573,8 +577,10 @@ export default function DiscountPromotion() {
                         />
                         <Form.Check
                           type="radio"
+                          inline
                           label="Weekends"
                           name="days"
+                          id="days-weekends"
                           checked={formData.weekType === "weekends"}
                           onChange={() =>
                             setFormData({ ...formData, weekType: "weekends" })
@@ -584,10 +590,40 @@ export default function DiscountPromotion() {
                     </Col>
 
                     <Col md={4}>
-                      <Form.Label>Discount For *</Form.Label>
-                      <div className="d-flex gap-3">
+                      <Form.Label className="d-block fw-semibold">Refundability</Form.Label>
+                      <div className="d-flex flex-wrap gap-3">
+                        <Form.Check
+                          type="radio"
+                          inline
+                          name="discountRefundable"
+                          id="discountRefundable-yes"
+                          label="Refundable"
+                          checked={formData.isRefundable === true}
+                          onChange={() =>
+                            setFormData({ ...formData, isRefundable: true })
+                          }
+                        />
+                        <Form.Check
+                          type="radio"
+                          inline
+                          name="discountRefundable"
+                          id="discountRefundable-no"
+                          label="Non Refundable"
+                          checked={formData.isRefundable === false}
+                          onChange={() =>
+                            setFormData({ ...formData, isRefundable: false })
+                          }
+                        />
+                      </div>
+                    </Col>
+
+                    <Col md={4}>
+                      <Form.Label className="d-block fw-semibold">Discount For *</Form.Label>
+                      <div className="d-flex flex-wrap gap-3">
                         <Form.Check
                           type="checkbox"
+                          inline
+                          id="discountFor-rooms"
                           label="Rooms"
                           checked={formData.discountForRooms}
                           onChange={(e) =>
@@ -599,6 +635,8 @@ export default function DiscountPromotion() {
                         />
                         <Form.Check
                           type="checkbox"
+                          inline
+                          id="discountFor-extrabed"
                           label="Extra Bed"
                           checked={formData.discountForExtraBed}
                           onChange={(e) =>
@@ -610,8 +648,10 @@ export default function DiscountPromotion() {
                         />
                       </div>
                     </Col>
+                  </Row>
 
-                    <Col md={2}>
+                  <Row className="mb-4 g-3">
+                    <Col md={3}>
                       <Form.Group>
                         <Form.Label>Book By Date</Form.Label>
                         <Form.Control
@@ -628,7 +668,7 @@ export default function DiscountPromotion() {
                       </Form.Group>
                     </Col>
 
-                    <Col md={2}>
+                    <Col md={3}>
                       <Form.Group>
                         <Form.Label>Prior Days</Form.Label>
                         <Form.Control
@@ -660,13 +700,13 @@ export default function DiscountPromotion() {
                           </Button>
                         </div>
                         {formData.validityList.map((v, i) => (
-                          <Row key={i} className="align-items-center mb-2">
+                          <Row key={i} className="align-items-end mb-2">
                             <Col md={5}>
                               <Form.Label className="mb-1 small fw-semibold">
-                                Validity From
+                                FROM
                               </Form.Label>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 size="sm"
                                 value={v.from}
                                 onChange={(e) =>
@@ -681,13 +721,13 @@ export default function DiscountPromotion() {
                             </Col>
                             <Col md={5}>
                               <Form.Label className="mb-1 small fw-semibold">
-                                Validity To
+                                TO
                               </Form.Label>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 size="sm"
                                 value={v.to}
-                                min={v.from || undefined}
+                                min={getMinValidityToDate(v.from)}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "validityList",
@@ -699,7 +739,7 @@ export default function DiscountPromotion() {
                               />
                             </Col>
                             <Col md={2} className="text-end">
-                              {i > 0 && (
+                              {formData.validityList.length > 1 && (
                                 <Button
                                   size="sm"
                                   variant="outline-danger"
@@ -729,13 +769,13 @@ export default function DiscountPromotion() {
                           </Button>
                         </div>
                         {formData.blackoutDates.map((b, i) => (
-                          <Row key={i} className="align-items-center mb-2">
+                          <Row key={i} className="align-items-end mb-2">
                             <Col md={5}>
                               <Form.Label className="mb-1 small fw-semibold">
-                                Validity From
+                                FROM
                               </Form.Label>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 size="sm"
                                 value={b.from}
                                 onChange={(e) =>
@@ -750,13 +790,13 @@ export default function DiscountPromotion() {
                             </Col>
                             <Col md={5}>
                               <Form.Label className="mb-1 small fw-semibold">
-                                Validity To
+                                TO
                               </Form.Label>
                               <Form.Control
-                                type="date"
+                                type="datetime-local"
                                 size="sm"
                                 value={b.to}
-                                min={b.from || undefined}
+                                min={getMinValidityToDate(b.from)}
                                 onChange={(e) =>
                                   handleDateChange(
                                     "blackoutDates",
@@ -768,7 +808,7 @@ export default function DiscountPromotion() {
                               />
                             </Col>
                             <Col md={2} className="text-end">
-                              {i > 0 && (
+                              {formData.blackoutDates.length > 1 && (
                                 <Button
                                   size="sm"
                                   variant="outline-danger"

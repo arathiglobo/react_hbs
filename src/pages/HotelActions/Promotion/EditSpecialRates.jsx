@@ -900,7 +900,7 @@ export default function EditSpecialRates() {
 
                             {/* DELETE BUTTON */}
                             <Col md={2} className="d-flex align-items-end">
-                              {i > 0 && (
+                              {formData.validityList.length > 1 && (
                                 <Button
                                   size="sm"
                                   variant="outline-danger"
