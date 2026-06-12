@@ -406,6 +406,8 @@ const PolicyCreate = () => {
                         <div className="d-flex align-items-center flex-wrap gap-2 mt-1">
                           <Form.Control
                             type="number"
+                            min="0"
+                            onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                             placeholder="Fee"
                             value={c.cancellationFee}
                             onChange={(e) =>
@@ -428,6 +430,8 @@ const PolicyCreate = () => {
                           </span>
                           <Form.Control
                             type="number"
+                            min="0"
+                            onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                             placeholder="Days"
                             value={c.noOfNights}
                             onChange={(e) =>
@@ -476,6 +480,8 @@ const PolicyCreate = () => {
                         <div className="d-flex align-items-center flex-wrap gap-2 mt-1">
                           <Form.Control
                             type="number"
+                            min="0"
+                            onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                             placeholder="Fee"
                             value={a.amendmentFee}
                             onChange={(e) =>
@@ -498,6 +504,8 @@ const PolicyCreate = () => {
                           </span>
                           <Form.Control
                             type="number"
+                            min="0"
+                            onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                             placeholder="Days"
                             value={a.noOfNights}
                             onChange={(e) =>
@@ -589,6 +597,8 @@ const PolicyCreate = () => {
                       </Form.Label>
                       <Form.Control
                         type="number"
+                        min="0"
+                        onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                         className="rounded-3"
                         style={{ width: "120px" }}
                         value={formData.additionalPolicy.noShowFee}
@@ -620,6 +630,8 @@ const PolicyCreate = () => {
                       </Form.Label>
                       <Form.Control
                         type="number"
+                        min="0"
+                        onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                         className="rounded-3"
                         style={{ width: "120px" }}
                         value={formData.additionalPolicy.earlyDepartureFee}
@@ -654,6 +666,8 @@ const PolicyCreate = () => {
                       </Form.Label>
                       <Form.Control
                         type="number"
+                        min="0"
+                        onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                         className="rounded-3"
                         style={{ width: "120px" }}
                         value={formData.additionalPolicy.nonRefundableFee}

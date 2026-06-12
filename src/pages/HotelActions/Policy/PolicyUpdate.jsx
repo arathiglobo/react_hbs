@@ -330,6 +330,8 @@ const PolicyUpdate = () => {
                         <div className="d-flex align-items-center flex-wrap gap-2 mt-1">
                           <Form.Control
                             type="number"
+                            min="0"
+                            onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                             style={{ width: "120px" }}
                             value={c.cancellationFee}
                             onChange={(e) =>
@@ -361,6 +363,8 @@ const PolicyUpdate = () => {
                           </span>
                           <Form.Control
                             type="number"
+                            min="0"
+                            onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                             style={{ width: "90px" }}
                             value={c.noOfNights}
                             onChange={(e) =>
@@ -422,6 +426,8 @@ const PolicyUpdate = () => {
                         <div className="d-flex align-items-center flex-wrap gap-2 mt-1">
                           <Form.Control
                             type="number"
+                            min="0"
+                            onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                             style={{ width: "120px" }}
                             value={a.amendmentFee}
                             onChange={(e) =>
@@ -453,6 +459,8 @@ const PolicyUpdate = () => {
                           </span>
                           <Form.Control
                             type="number"
+                            min="0"
+                            onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                             style={{ width: "90px" }}
                             value={a.noOfNights}
                             onChange={(e) =>
@@ -581,6 +589,8 @@ const PolicyUpdate = () => {
                         </Form.Label>
                         <Form.Control
                           type="number"
+                          min="0"
+                          onKeyDown={(e) => { if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault(); }}
                           className="rounded-3"
                           style={{ width: "120px" }}
                           value={policy.additionalPolicy[item.field]}
