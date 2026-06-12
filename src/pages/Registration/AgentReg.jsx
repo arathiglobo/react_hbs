@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Card,
   Button,
@@ -24,19 +24,30 @@ import {
 } from "react-icons/fa";
 
 // SearchableSelect Component
-const SearchableSelect = ({ 
-  options, 
-  value, 
-  onChange, 
-  placeholder, 
-  className, 
+const SearchableSelect = ({
+  options,
+  value,
+  onChange,
+  placeholder,
+  className,
   isInvalid,
   name,
-  disabled = false 
+  disabled = false,
+  // Optional: when set, parent is notified of every searchTerm change so it
+  // can run a server-side search (e.g. /api/country?search=<term>).
+  onSearchChange,
+  // Optional: preserves the visible label when the active options list no
+  // longer contains the currently-selected record (typical after a search
+  // that filters the selected item out). Pass the full object the parent
+  // cached at selection time.
+  selectedOption: selectedOptionProp,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredOptions, setFilteredOptions] = useState(options || []);
+  const onSearchChangeRef = useRef(onSearchChange);
+  onSearchChangeRef.current = onSearchChange;
+  const skipFirstSearchFireRef = useRef(true);
 
   useEffect(() => {
     if (!options || !Array.isArray(options)) {
@@ -56,6 +67,20 @@ const SearchableSelect = ({
     }
   }, [searchTerm, options]);
 
+  // Surface the search term to the parent so it can drive a server-side
+  // lookup. We skip the very first fire (mount with empty term) — the
+  // parent's own initial load handles that, and re-firing here would
+  // double-fetch.
+  useEffect(() => {
+    if (skipFirstSearchFireRef.current) {
+      skipFirstSearchFireRef.current = false;
+      return;
+    }
+    if (typeof onSearchChangeRef.current === "function") {
+      onSearchChangeRef.current(searchTerm);
+    }
+  }, [searchTerm]);
+
   const handleSelect = (option) => {
     try {
       onChange({
@@ -71,7 +96,11 @@ const SearchableSelect = ({
     }
   };
 
-  const selectedOption = options?.find(option => String(option.id) === String(value));
+  // Prefer the parent-supplied selectedOption (cached at selection time) so
+  // the display label survives when the visible options list shrinks due
+  // to a server-side search.
+  const fallbackSelected = options?.find(option => String(option.id) === String(value));
+  const selectedOption = selectedOptionProp || fallbackSelected;
 
   return (
     <div className="position-relative">
@@ -171,6 +200,12 @@ const AgentReg = () => {
   };
   const [agentCategoryies, setAgentCategoryies] = useState([]);
   const [countries, setCountries] = useState([]);
+  // Cached full record for the currently-selected country so the label keeps
+  // rendering even after a server-side search filters the active list.
+  const [selectedCountry, setSelectedCountry] = useState(null);
+  // Driven by SearchableSelect's onSearchChange; consumed by the debounced
+  // fetch below to hit /api/country?search=<term>.
+  const [countrySearchTerm, setCountrySearchTerm] = useState("");
   const [provinces, setProvinces] = useState([]);
   const [places, setPlaces] = useState([]);
   const [markup, setMarkup] = useState([]);
@@ -296,6 +331,11 @@ const AgentReg = () => {
   const [searchTimeout, setSearchTimeout] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [showLoginModal, setShowLoginModal] = useState(false);
+  // True when /auth/checkRegisteredUserExist already returns a user for the
+  // agent. In that case the modal switches to a read-only "Registered
+  // Agent" view (username display + close button) instead of the
+  // create-login form.
+  const [isAlreadyRegistered, setIsAlreadyRegistered] = useState(false);
   const [showRolesDropdown, setShowRolesDropdown] = useState(false);
   const [rolesList, setUserRolesList] = useState([]);
   const [loginModalKey, setLoginModalKey] = useState(0);
@@ -316,7 +356,18 @@ const AgentReg = () => {
 
   const [showCreditLimitModal, setShowCreditLimitModal] = useState(false);
   const [creditLimitType, setCreditLimitType] = useState("initial"); // "initial" or "update"
+  // hasInitialCredit drives the radio-button UI: true means
+  // totalCreditLimit > 0, i.e. the operator has already done the initial
+  // setup, so "Add Initial Credit Limit" is disabled and "Update" is
+  // active. False means a fresh agent — show the initial form.
   const [hasInitialCredit, setHasInitialCredit] = useState(false);
+  // creditRowExists tracks whether the agent already has a row in
+  // agent_credit_limit (regardless of total amount). The backend
+  // pre-creates a row at agent registration with totalCreditLimit = 0,
+  // so for a brand-new agent hasInitialCredit is false BUT creditRowExists
+  // is true — and POST /create would 500 with "Credit limit already
+  // exists". Submit logic uses this flag to pick PUT /update instead.
+  const [creditRowExists, setCreditRowExists] = useState(false);
   const [creditLimitFormData, setCreditLimitFormData] = useState({
     addCreditLimit: "",
     remarks: "",
@@ -411,6 +462,11 @@ const AgentReg = () => {
     });
     setProvinces([]);
     setPlaces([]);
+    // Fresh country dropdown on every new-agent open — clear any prior
+    // server-search term and reload the full list.
+    setSelectedCountry(null);
+    setCountrySearchTerm("");
+    countryList("");
     setValidationErrors({});
     setError("");
     setShowModal(true);
@@ -425,6 +481,11 @@ const AgentReg = () => {
 
       setEditing(data);
       setFormData(mapAgentToForm(data));
+      // Reset any prior server-search state so the country dropdown shows
+      // the full list (and the sync effect can locate this agent's saved
+      // country by id).
+      setCountrySearchTerm("");
+      await countryList("");
 
       if (data.countryId) {
         await provinceList(data.countryId);
@@ -460,11 +521,15 @@ const AgentReg = () => {
     }
   };
 
-  const countryList = async () => {
+  const countryList = async (search = "") => {
     try {
-      const response = await axiosInstance.get("/api/country");
-     // console.log("Countries loaded:", response.data);
-      setCountries(response.data);
+      // Always go through the search endpoint so a single shape drives
+      // both the initial population (empty term) and the live-search
+      // (typed term).
+      const response = await axiosInstance.get(
+        `/api/country?search=${encodeURIComponent(search)}`
+      );
+      setCountries(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
      // console.log("error for country list :", error);
     }
@@ -507,6 +572,45 @@ const AgentReg = () => {
      // console.log("axios call error for currency list : ", error);
     }
   };
+
+  // Debounced server-side country search. Skip the very first fire so we
+  // don't double-fetch on mount (the initial countryList() call already
+  // populates the dropdown).
+  const countrySearchInitialRef = useRef(true);
+  useEffect(() => {
+    if (countrySearchInitialRef.current) {
+      countrySearchInitialRef.current = false;
+      return;
+    }
+    const t = setTimeout(() => {
+      countryList(countrySearchTerm);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [countrySearchTerm]);
+
+  // Keep selectedCountry aligned with formData.countryId — handles edit /
+  // view flows where the form gets a countryId before the user has touched
+  // the dropdown, and also recovers if a server-search dropped the prior
+  // selection out of `countries`.
+  useEffect(() => {
+    if (!formData.countryId) {
+      setSelectedCountry(null);
+      return;
+    }
+    if (
+      selectedCountry &&
+      String(selectedCountry.id) === String(formData.countryId)
+    ) {
+      return;
+    }
+    const found = countries.find(
+      (c) => String(c.id) === String(formData.countryId)
+    );
+    // Drop a stale prior selection if the new id isn't in the current
+    // options yet; the next countries refresh (mount fetch or modal-open
+    // reset) will repopulate it.
+    setSelectedCountry(found || null);
+  }, [formData.countryId, countries]);
 
   useEffect(() => {
     // Only clear provinces/cities if we're not in edit mode or if country actually changed
@@ -990,6 +1094,10 @@ const AgentReg = () => {
 
       setEditing(data);
       setFormData(mapAgentToForm(data));
+      // Same reset as openEdit — ensure the country dropdown carries the
+      // full list so this agent's saved country resolves to a label.
+      setCountrySearchTerm("");
+      await countryList("");
 
       if (data.countryId) {
         await provinceList(data.countryId);
@@ -1033,6 +1141,7 @@ const AgentReg = () => {
     setShowRePassword(false);
 
     // Fetch existing login data for this agent
+    setIsAlreadyRegistered(false);
     try {
      // console.log("Fetching existing login data for agent:", item.id);
       const response = await axiosInstance.post(
@@ -1054,6 +1163,13 @@ const AgentReg = () => {
           repassword: "",              // same here
           userroles: [],               // fetch separately if needed
         });
+
+        // Flag the modal to render the read-only "Registered Agent" view.
+        // Only treat as registered when we actually got a username back —
+        // some backends return an empty object for "not found".
+        if (userNameValue) {
+          setIsAlreadyRegistered(true);
+        }
 
        // console.log("Form populated with existing data");
       } else {
@@ -1231,6 +1347,7 @@ const AgentReg = () => {
     setShowRolesDropdown(false);
     setShowPassword(false);
     setShowRePassword(false);
+    setIsAlreadyRegistered(false);
     setLoginModalKey((prev) => prev + 1); // Reset modal key
     setLoginFormData({
       username: "",
@@ -1264,17 +1381,30 @@ const AgentReg = () => {
       remarks: "",
     });
 
-    // Fetch existing credit limit data
+    // Fetch existing credit limit data.
+    //
+    // Two flags are derived here, and they don't always agree:
+    //   - creditRowExists: a DB row is present (drives /update vs /create
+    //     on submit, because the backend rejects /create whenever a row
+    //     already exists, even one with totalCreditLimit=0).
+    //   - hasInitialCredit: totalCreditLimit > 0, i.e. the initial setup
+    //     has actually been done (drives which radio is enabled).
+    //
+    // A brand-new agent has creditRowExists=true (the backend pre-creates
+    // an empty row) but hasInitialCredit=false — so we show "Add Initial
+    // Credit Limit", and at submit time route to PUT /update with the
+    // entered amount instead of POST /create.
     try {
       const response = await axiosInstance.get(
         `/api/agent-credit-limit/agent/${item.id}`
       );
       const creditData = response.data;
 
-      if (creditData && Number(creditData.totalCreditLimit) > 0) {
-        // ✅ Existing credit
-        setHasInitialCredit(true);
-        setCreditLimitType("update");
+      if (creditData) {
+        const initialDone = Number(creditData.totalCreditLimit) > 0;
+        setCreditRowExists(true);
+        setHasInitialCredit(initialDone);
+        setCreditLimitType(initialDone ? "update" : "initial");
         setCreditLimitFormData((prev) => ({
           ...prev,
           totalCreditLimit: creditData.totalCreditLimit || "0",
@@ -1282,7 +1412,8 @@ const AgentReg = () => {
           usedCreditLimit: creditData.usedCreditLimit || "0",
         }));
       } else {
-        // ✅ New agent (no credit)
+        // ✅ No row — first-time initial credit.
+        setCreditRowExists(false);
         setHasInitialCredit(false);
         setCreditLimitType("initial");
         setCreditLimitFormData({
@@ -1295,7 +1426,8 @@ const AgentReg = () => {
       }
     } catch (error) {
       console.error("Failed to fetch credit limit data:", error);
-      // If no credit limit exists, we'll create one when adding credit
+      // GET failed — assume no row exists yet and let the user create one.
+      setCreditRowExists(false);
       setHasInitialCredit(false);
       setCreditLimitType("initial");
     }
@@ -1345,37 +1477,62 @@ const AgentReg = () => {
       let response;
 
       if (creditLimitType === "initial") {
-        // Create initial credit limit
-        const createPayload = {
-          agentId: editing?.id,
-          totalCreditLimit: addAmount,
-        };
-
-       // console.log("Creating initial credit limit:", createPayload);
-        response = await axiosInstance.post(
-          "/api/agent-credit-limit/create",
-          null,
-          {
-            params: createPayload,
-          }
-        );
+        if (creditRowExists) {
+          // Backend pre-created an empty row at agent registration —
+          // POST /create would 500 with "already exists". Use PUT /update
+          // to set the initial total (and bring available up from 0 to
+          // the entered amount).
+          const initialViaUpdatePayload = {
+            agentId: editing?.id,
+            totalCreditLimit: addAmount,
+            availableCreditLimit: 0,
+            additionalCredit: addAmount,
+          };
+          response = await axiosInstance.put(
+            "/api/agent-credit-limit/update",
+            initialViaUpdatePayload
+          );
+        } else {
+          // No row yet — safe to call /create.
+          const createPayload = {
+            agentId: editing?.id,
+            totalCreditLimit: addAmount,
+          };
+          response = await axiosInstance.post(
+            "/api/agent-credit-limit/create",
+            null,
+            {
+              params: createPayload,
+            }
+          );
+        }
       } else {
-        // Add to existing credit limit
+        // Add to existing credit limit.
+        //
+        // The backend's PUT /update sets totalCreditLimit to whatever the
+        // request carries, and bumps availableCreditLimit by
+        // additionalCredit (read from the DB row, not from the request).
+        // So if we re-send the current total here, the post-update state
+        // is `available + additionalCredit > total`, which the backend
+        // rejects with "Available credit cannot exceed total credit
+        // limit". The total has to grow by the same add-on amount so
+        // both stay in lockstep.
+        const currentTotal = parseFloat(creditLimitFormData.totalCreditLimit) || 0;
+        const currentAvailable = parseFloat(creditLimitFormData.availableCreditLimit) || 0;
         const addCreditPayload = {
           agentId: editing?.id,
           additionalCredit: addAmount,
           remarks: creditLimitFormData.remarks,
-          totalCreditLimit: creditLimitFormData.totalCreditLimit,
-          availableCreditLimit: creditLimitFormData.availableCreditLimit
-         
+          totalCreditLimit: currentTotal + addAmount,
+          availableCreditLimit: currentAvailable,
         };
 
-       console.log("Adding credit:", addCreditPayload);
+        console.log("Adding credit:", addCreditPayload);
         response = await axiosInstance.put(
           "/api/agent-credit-limit/update",
           addCreditPayload
         );
-        
+
       }
 
       if (response.data) {
@@ -1386,6 +1543,7 @@ const AgentReg = () => {
         toast.success(successMessage);
         setCreditLimitErrors({});
         setHasInitialCredit(true); // Mark that initial credit now exists
+        setCreditRowExists(true);  // Row definitely exists post-save.
         closeCreditLimitModal();
         // Refresh the agent list to show updated credit information
         await fetchAgentList(page, search);
@@ -1401,6 +1559,8 @@ const AgentReg = () => {
   const closeCreditLimitModal = () => {
     setShowCreditLimitModal(false);
     setCreditLimitType("initial");
+    setCreditRowExists(false);
+    setHasInitialCredit(false);
     setCreditLimitFormData({
       addCreditLimit: "",
       remarks: "",
@@ -1449,16 +1609,19 @@ const AgentReg = () => {
   const handleCountryChange = (e) => {
     try {
       const value = e.target.value;
-      const selectedCountry = countries.find(country => String(country.id) === String(value));
-      const countryName = selectedCountry?.name || selectedCountry?.countryName || "Unknown";
-      
+      const picked = countries.find(country => String(country.id) === String(value));
+      // Cache the whole record — the SearchableSelect reads it via the
+      // selectedOption prop so the label survives later server-search
+      // filtering.
+      setSelectedCountry(picked || null);
+
      setFormData((prev) => ({
         ...prev,
         countryId: String(value), // Explicitly convert to string
         provinceId: "", // Reset province when country changes
         placeId: "", // Reset city when country changes
       }));
-      
+
       // Clear validation error when user makes selection
       if (validationErrors.countryId) {
         setValidationErrors(prev => ({
@@ -2362,6 +2525,8 @@ const AgentReg = () => {
                                 options={countries}
                                 isInvalid={!!validationErrors.countryId}
                                 disabled={isViewMode}
+                                onSearchChange={setCountrySearchTerm}
+                                selectedOption={selectedCountry}
                               />
                               {validationErrors.countryId && (
                                 <Form.Control.Feedback type="invalid">
@@ -3354,23 +3519,31 @@ const AgentReg = () => {
           >
             <Modal.Header closeButton>
               <Modal.Title>
-                {loginFormData.username && loginFormData.username.trim() !== ""
-                  ? "Update"
-                  : "Create"}{" "}
-                Login for Agent: {editing?.companyName || editing?.agentName}
+                {isAlreadyRegistered ? "Login" : "Create Login"} for Agent:{" "}
+                {editing?.companyName || editing?.agentName}
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
-              {loginFormData.username &&
-                loginFormData.username.trim() !== "" && (
-                  <div className="alert alert-info mb-3">
-                    <small>
-                      <i className="fas fa-info-circle me-2"></i>
-                      Existing login credentials found. You can update the
-                      username and password.
-                    </small>
+              {isAlreadyRegistered ? (
+                <div>
+                  <div className="alert alert-success mb-3 d-flex align-items-center">
+                    <i className="fas fa-check-circle me-2"></i>
+                    <span className="fw-semibold">Registered Agent</span>
                   </div>
-                )}
+                  <Form.Group className="mb-2">
+                    <Form.Label className="fw-semibold">
+                      Registered Username
+                    </Form.Label>
+                    <Form.Control
+                      type="text"
+                      value={loginFormData.username}
+                      readOnly
+                      plaintext={false}
+                      className="bg-light"
+                    />
+                  </Form.Group>
+                </div>
+              ) : (
               <Form className="loginForm">
                 <Form.Group className="mb-3">
                   <Form.Label>Username</Form.Label>
@@ -3572,6 +3745,7 @@ const AgentReg = () => {
                   )}
                 </Form.Group>
               </Form>
+              )}
             </Modal.Body>
             <Modal.Footer>
               <Button
@@ -3579,8 +3753,9 @@ const AgentReg = () => {
                 onClick={closeLoginModal}
                 disabled={isLoading}
               >
-                Cancel
+                {isAlreadyRegistered ? "Close" : "Cancel"}
               </Button>
+              {!isAlreadyRegistered && (
               <Button
                 variant="primary"
                 onClick={handleLoginSubmit}
@@ -3599,6 +3774,7 @@ const AgentReg = () => {
                   "Save"
                 )}
               </Button>
+              )}
             </Modal.Footer>
           </Modal>
 
