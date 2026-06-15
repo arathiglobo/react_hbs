@@ -132,21 +132,104 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
     };
   }, [bookingData]);
 
-  // Non-refundable rates have no "Book Now & Voucher later" option —
-  // the booking always proceeds as "Book & Voucher" because the rate is
-  // already locked-in with the supplier. If the user previously chose
-  // "Book Now & Voucher later" on a refundable rate and switched rooms,
-  // reset the selection so the downstream payload stays consistent with
-  // what the UI shows (the radio block is hidden in this case too).
-  useEffect(() => {
+  // ────────────────────────────────────────────────────────────────
+  // Booking-flow derivation (matches the confirm-booking flowchart).
+  //
+  // The flow has two big branches keyed off the cancellation deadline:
+  //
+  //   • WITHIN DEADLINE  — there is still free-cancellation time left.
+  //       - Available rate                          → RECONFIRMED
+  //       - On-Request rate                         → REQUESTED
+  //                                                   (supplier later
+  //                                                   responds with
+  //                                                   RECONFIRMED or
+  //                                                   SOLD OUT)
+  //
+  //   • OUTSIDE DEADLINE — we've crossed the free-cancellation window.
+  //       - Available rate, "Book Now Voucher Now"  → RECONFIRMED
+  //       - Available rate, "Book Now Voucher Later"→ CONFIRMED
+  //         (auto-cancels at the deadline if the admin doesn't
+  //         re-confirm it before then)
+  //       - On-Request rate                         → REQUESTED
+  //                                                   (supplier later
+  //                                                   responds with
+  //                                                   CONFIRMED or
+  //                                                   SOLD OUT)
+  //
+  // Non-refundable rates have no free-cancellation window at all, so
+  // they always behave like "voucher now" → RECONFIRMED.
+  // ────────────────────────────────────────────────────────────────
+
+  // Earliest cancellation-policy fromDate, minus 2 days, at midnight.
+  // Null when the rate has no cancellation window (non-refundable or
+  // no policy rows on the selected rate).
+  const cancellationDeadline = (() => {
     const sel = bookingData?.selectedRate;
-    if (!sel) return;
-    const isNonRefundable =
-      sel.nonRefundable === true || sel.nonRefundable === "true";
-    if (isNonRefundable && bookingConfirmation !== "Book & Voucher") {
+    if (!sel) return null;
+    if (sel.nonRefundable === true || sel.nonRefundable === "true") return null;
+    const policies = sel.cancellationPolicy || [];
+    if (policies.length === 0) return null;
+    const dates = policies
+      .map((p) => (p?.fromDate ? new Date(p.fromDate) : null))
+      .filter((d) => d && !isNaN(d.getTime()));
+    if (dates.length === 0) return null;
+    const earliest = new Date(Math.min(...dates.map((d) => d.getTime())));
+    const deadline = new Date(earliest);
+    deadline.setDate(earliest.getDate() - 2);
+    deadline.setHours(0, 0, 0, 0);
+    return deadline;
+  })();
+
+  // True only for refundable rates whose deadline has already passed.
+  // Non-refundable rates and rates without a policy row are treated as
+  // "deadline doesn't apply" → false (they skip the radio prompt and
+  // resolve directly to RECONFIRMED).
+  const isOutsideDeadline = (() => {
+    if (!cancellationDeadline) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today > cancellationDeadline;
+  })();
+
+  const isOnRequestRate = bookingData?.selectedRate?.roomStatus === "On Request";
+  const isNonRefundableRate =
+    bookingData?.selectedRate?.nonRefundable === true ||
+    bookingData?.selectedRate?.nonRefundable === "true";
+
+  // The "Book Now & Voucher later" choice is only meaningful for the
+  // single branch of the flowchart that admits it:
+  //     Available + refundable + outside deadline.
+  // In every other branch the booking resolves automatically — see the
+  // status-resolution block below — and the radio is hidden.
+  const showVoucherChoice =
+    !isOnRequestRate && !isNonRefundableRate && isOutsideDeadline;
+
+  // Resolved status that will travel to the backend on
+  // payload.bookingFlowStatus. Computed once here so the UI banner and
+  // the submit payload stay in lockstep.
+  const resolvedBookingFlowStatus = (() => {
+    if (isOnRequestRate) return "REQUESTED";
+    if (isNonRefundableRate) return "RECONFIRMED";
+    if (!isOutsideDeadline) return "RECONFIRMED";
+    return bookingConfirmation === "Book Now & Voucher later"
+      ? "CONFIRMED"
+      : "RECONFIRMED";
+  })();
+
+  // Reset bookingConfirmation back to "Book & Voucher" whenever the
+  // "Voucher Later" choice no longer applies (non-refundable rate, or
+  // we're still inside the cancellation window). Without this reset, a
+  // user who picked "later" on a different rate could carry that
+  // selection over and end up sending the wrong flow status downstream.
+  useEffect(() => {
+    if (!bookingData?.selectedRate) return;
+    if (
+      !showVoucherChoice &&
+      bookingConfirmation !== "Book & Voucher"
+    ) {
       setBookingConfirmation("Book & Voucher");
     }
-  }, [bookingData, bookingConfirmation]);
+  }, [bookingData, bookingConfirmation, showVoucherChoice]);
 
   // Load bookingData once
   useEffect(() => {
@@ -545,6 +628,13 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
         specialRequests: specialRequests,
         tourismDirhams: parseFloat(tourismDirhams) || 0,
         bookingConfirmation: bookingConfirmation || "Book & Voucher",
+        // Resolved status the booking should land on, per the
+        // confirm-booking flowchart. See the derivation block near the
+        // top of this component for the exact rules. Backend can use
+        // this directly without having to re-derive it from
+        // (roomStatus, nonRefundable, deadlineDate, bookingConfirmation).
+        bookingFlowStatus: resolvedBookingFlowStatus,
+        isOutsideDeadline,
 
         // Parent booking code for Edit -> Search -> Book Again flow.
         // When set, backend generates child bookingCode like GLBIN37/1, GLBIN37/2...
@@ -1024,61 +1114,112 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                         </Form.Group>
                       </Col>
                       {/*
-                        Booking-confirmation prompt — only renders for
-                        cancellable rates that are NOT "On Request":
-                          • "On Request" → no upfront confirmation (the
-                            supplier still has to confirm availability).
-                          • Non-refundable → the supplier already locks the
-                            rate at booking, so the "Book Now & Voucher
-                            later" option is meaningless. We proceed
-                            directly as "Book & Voucher" (state default;
-                            also enforced by the useEffect above so a
-                            previously-set "later" choice is reset).
-                        Refundable + available rates still see the radio.
+                        Booking-confirmation prompt — per the
+                        confirm-booking flowchart:
+                          • On-Request rates    → REQUESTED (auto, no
+                            user choice; supplier decides later)
+                          • Non-refundable      → RECONFIRMED (auto)
+                          • Within deadline     → RECONFIRMED (auto)
+                          • Outside deadline    → user picks Voucher
+                            Now (RECONFIRMED) or Voucher Later
+                            (CONFIRMED + auto-cancel on deadline)
+                        showVoucherChoice captures that last case.
                       */}
-                      {selectedRate?.roomStatus !== "On Request" &&
-                        !(
-                          selectedRate?.nonRefundable === true ||
-                          selectedRate?.nonRefundable === "true"
-                        ) && (
-                          <Col md={12}>
-                            <Form.Group className="mb-3">
-                              <Form.Label className="mb-2 fw-semibold">
-                                Are you sure to continue booking?
-                              </Form.Label>
-                              <div className="d-flex gap-4 mt-2">
-                                <Form.Check
-                                  type="radio"
-                                  id="book-voucher"
-                                  name="bookingConfirmation"
-                                  label="Book & Voucher"
-                                  value="Book & Voucher"
-                                  checked={
-                                    bookingConfirmation === "Book & Voucher"
-                                  }
-                                  onChange={(e) =>
-                                    setBookingConfirmation(e.target.value)
-                                  }
-                                  className="mb-2"
-                                />
-                                <Form.Check
-                                  type="radio"
-                                  id="book-now-voucher-later"
-                                  name="bookingConfirmation"
-                                  label="Book Now & Voucher later"
-                                  value="Book Now & Voucher later"
-                                  checked={
-                                    bookingConfirmation ===
-                                    "Book Now & Voucher later"
-                                  }
-                                  onChange={(e) =>
-                                    setBookingConfirmation(e.target.value)
-                                  }
-                                />
-                              </div>
-                            </Form.Group>
-                          </Col>
-                        )}
+                      <Col md={12}>
+                        <Alert
+                          variant={
+                            resolvedBookingFlowStatus === "RECONFIRMED"
+                              ? "success"
+                              : resolvedBookingFlowStatus === "CONFIRMED"
+                              ? "warning"
+                              : "info"
+                          }
+                          className="mb-3 py-2"
+                        >
+                          <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <div className="small">
+                              <strong>Booking will be created as: </strong>
+                              <Badge
+                                bg={
+                                  resolvedBookingFlowStatus === "RECONFIRMED"
+                                    ? "success"
+                                    : resolvedBookingFlowStatus === "CONFIRMED"
+                                    ? "warning"
+                                    : "info"
+                                }
+                                text={
+                                  resolvedBookingFlowStatus === "CONFIRMED"
+                                    ? "dark"
+                                    : undefined
+                                }
+                              >
+                                {resolvedBookingFlowStatus}
+                              </Badge>
+                            </div>
+                            <div className="small text-muted">
+                              {isOnRequestRate
+                                ? isOutsideDeadline
+                                  ? "On-Request rate (outside deadline) — supplier confirms with CONFIRMED or SOLD OUT."
+                                  : "On-Request rate — supplier confirms with RECONFIRMED or SOLD OUT."
+                                : isNonRefundableRate
+                                ? "Non-refundable rate — locked in at booking."
+                                : isOutsideDeadline
+                                ? bookingConfirmation === "Book Now & Voucher later"
+                                  ? "Outside deadline — will be auto-cancelled if not re-confirmed before the deadline."
+                                  : "Outside deadline — voucher issued immediately."
+                                : "Within deadline — free cancellation window still open."}
+                            </div>
+                          </div>
+                          {cancellationDeadline && (
+                            <div className="small text-muted mt-1">
+                              Cancellation deadline:{" "}
+                              <strong>
+                                {cancellationDeadline.toLocaleDateString()}
+                              </strong>
+                              {isOutsideDeadline ? " (passed)" : " (upcoming)"}
+                            </div>
+                          )}
+                        </Alert>
+                      </Col>
+                      {showVoucherChoice && (
+                        <Col md={12}>
+                          <Form.Group className="mb-3">
+                            <Form.Label className="mb-2 fw-semibold">
+                              Are you sure to continue booking?
+                            </Form.Label>
+                            <div className="d-flex gap-4 mt-2">
+                              <Form.Check
+                                type="radio"
+                                id="book-voucher"
+                                name="bookingConfirmation"
+                                label="Book Now & Voucher Now (→ Reconfirmed)"
+                                value="Book & Voucher"
+                                checked={
+                                  bookingConfirmation === "Book & Voucher"
+                                }
+                                onChange={(e) =>
+                                  setBookingConfirmation(e.target.value)
+                                }
+                                className="mb-2"
+                              />
+                              <Form.Check
+                                type="radio"
+                                id="book-now-voucher-later"
+                                name="bookingConfirmation"
+                                label="Book Now & Voucher Later (→ Confirmed, auto-cancels on deadline)"
+                                value="Book Now & Voucher later"
+                                checked={
+                                  bookingConfirmation ===
+                                  "Book Now & Voucher later"
+                                }
+                                onChange={(e) =>
+                                  setBookingConfirmation(e.target.value)
+                                }
+                              />
+                            </div>
+                          </Form.Group>
+                        </Col>
+                      )}
                     </Row>
                   </Card>
 
