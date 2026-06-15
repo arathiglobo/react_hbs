@@ -1,0 +1,11 @@
+.hamburger{
+top: -300px;
+}
+
+@media (max-width: 991px){
+    .hamburger{
+        position: relative;
+        top: -6px;
+    }
+
+}
