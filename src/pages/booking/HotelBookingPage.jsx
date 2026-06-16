@@ -1125,6 +1125,11 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                             (CONFIRMED + auto-cancel on deadline)
                         showVoucherChoice captures that last case.
                       */}
+                      {/* "Booking will be created as: …" banner hidden by
+                          request. resolvedBookingFlowStatus is still
+                          computed above and sent on the payload — only this
+                          informational Alert is suppressed. */}
+                      {false && (
                       <Col md={12}>
                         <Alert
                           variant={
@@ -1170,7 +1175,12 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                                 : "Within deadline — free cancellation window still open."}
                             </div>
                           </div>
-                          {cancellationDeadline && (
+                          {/* Cancellation-deadline line hidden by request.
+                              The `cancellationDeadline` / `isOutsideDeadline`
+                              values are still computed above and continue to
+                              drive the booking-flow status — only this
+                              display row is suppressed. */}
+                          {false && cancellationDeadline && (
                             <div className="small text-muted mt-1">
                               Cancellation deadline:{" "}
                               <strong>
@@ -1181,6 +1191,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                           )}
                         </Alert>
                       </Col>
+                      )}
                       {showVoucherChoice && (
                         <Col md={12}>
                           <Form.Group className="mb-3">
