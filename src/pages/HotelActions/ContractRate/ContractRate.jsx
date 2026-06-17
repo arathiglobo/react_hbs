@@ -1,0 +1,556 @@
+import React, { useEffect, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  Card,
+  Button,
+  Table,
+  Spinner,
+  Badge,
+  Form,
+  Pagination,
+  Modal,
+  Row,
+  Col,
+} from "react-bootstrap";
+import { FaArrowLeft, FaPlus, FaEdit, FaTrash, FaEye } from "react-icons/fa";
+import axiosInstance from "../../../components/AxiosInstance";
+import { toast } from "react-hot-toast";
+import Sidebar from "../../../components/Sidebar";
+import Topbar from "../../../components/TopBar";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
+import Swal from "sweetalert2";
+
+export default function ContractRate() {
+  const { id } = useParams(); // hotelId
+  const navigate = useNavigate();
+  const [rates, setRates] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  // Pagination and search states
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [search, setSearch] = useState("");
+  const [searchTimeout, setSearchTimeout] = useState(null);
+
+  // Modal states for validity view
+  const [showValidityModal, setShowValidityModal] = useState(false);
+  const [selectedValidityData, setSelectedValidityData] = useState([]);
+  const [selectedRateCode, setSelectedRateCode] = useState("");
+
+  // Modal states for status toggle
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedRate, setSelectedRate] = useState(null);
+
+
+  // ✅ Fetch contract rates with pagination and search
+  const fetchRates = async (pageNum = 0, searchTerm = search) => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams({
+        page: pageNum.toString(),
+        limit: "10",
+      });
+      if (searchTerm && searchTerm.trim()) {
+        params.append("search", searchTerm.trim());
+      }
+
+      const res = await axiosInstance.get(
+        `/api/hotelContractRate?${params}&hotelId=${id}`
+      );
+      if (res.data && Array.isArray(res.data)) {
+        setRates(res.data);
+        if (res.data.length < 10) {
+          setTotalPages(pageNum + 1);
+        } else {
+          setTotalPages(Math.max(totalPages, pageNum + 2));
+        }
+        setPage(pageNum);
+      } else if (res.data.content) {
+        setRates(res.data.content);
+        setTotalPages(res.data.totalPages || 1);
+        setPage(pageNum);
+      } else {
+        setRates([]);
+        setTotalPages(0);
+        setPage(0);
+      }
+    } catch (error) {
+      console.error("Error loading contract rates:", error);
+      toast.error("Failed to load contract rates");
+      setRates([]);
+      setTotalPages(0);
+      setPage(0);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRates();
+  }, []);
+
+  // Search functionality with debounce
+  useEffect(() => {
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    const timeout = setTimeout(() => {
+      fetchRates(0, search);
+    }, 500);
+    setSearchTimeout(timeout);
+    return () => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+    };
+  }, [search]);
+
+  const handleCreate = () => {
+    navigate(`/hotel-actions/hotel/${id}/contract-rate/create`);
+  };
+
+  const handleEdit = (rateId) => {
+    navigate(`/hotel-actions/hotel/${id}/contract-rate/${rateId}/edit`);
+  };
+
+  const handleCopy = (rateId) => {
+    navigate(`/hotel-actions/hotel/${id}/contract-rate/${rateId}/copy`);
+  };
+
+  const handleViewValidity = (validityData, rateCode) => {
+    setSelectedValidityData(validityData || []);
+    setSelectedRateCode(rateCode);
+    setShowValidityModal(true);
+  };
+
+  // View — opens the dedicated ViewContractRate screen. That page
+  // mirrors the Edit layout but renders every control as read-only
+  // and strips the action buttons (no "+ Add" on Validity Periods,
+  // no per-row "✖", no Update). Header carries only a Close button.
+  const handleView = (rateId) =>
+    navigate(`/hotel-actions/hotel/${id}/contract-rate/${rateId}/view`);
+
+  // ✅ Handle status toggle
+  const handleStatusToggle = (rate) => {
+    setSelectedRate(rate);
+    setShowStatusModal(true);
+  };
+
+  // ✅ Update contract rate status (following OccupancyAndMinimumLength pattern)
+  const updateContractRateStatus = async () => {
+    if (!selectedRate) {
+      console.error("No selected rate found!");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Create payload matching the backend DTO structure
+      // Based on the modal message logic:
+      // - If modal says "deactivate" (status is false/Active), send isLive: false
+      // - If modal says "activate" (status is true/Inactive), send isLive: true
+      const payload = {
+        isLive: !selectedRate.isLive,
+      };
+
+      const res = await axiosInstance.patch(
+        `/api/hotelContractRate/${id}/status/${selectedRate.contractrateId}`,
+        payload
+      );
+
+      if (res.data.status === true || res.data.status === "true") {
+        toast.success("Contract rate activated successfully");
+      } else {
+        toast.success("Contract rate deactivated successfully");
+      }
+
+      // Refresh the contract rates list to show updated data
+      await fetchRates(page, search);
+      setShowStatusModal(false);
+      setSelectedRate(null);
+    } catch (error) {
+      console.error("❌ Error updating contract rate status:", error);
+
+      // Handle different error types
+      if (error.response?.status === 404) {
+        toast.error("Contract rate not found");
+      } else if (error.response?.status === 500) {
+        toast.error("Server error occurred while updating status");
+      } else {
+        toast.error(
+          `Failed to update status: ${
+            error.response?.data?.message || error.message
+          }`
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (rateId, rateCode) => {
+    const result = await Swal.fire({
+      title: "Are you sure?",
+      text: `You want to delete contract rate "${rateCode}"?`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete it!",
+      customClass: {
+        popup: "swal-small",
+        title: "swal-small-title",
+        htmlContainer: "swal-small-text",
+      },
+    });
+
+    if (result.isConfirmed) {
+      try {
+        await axiosInstance.delete(`/api/hotelContractRate/${rateId}`);
+        toast.success("Contract rate deleted successfully");
+        fetchRates(page, search);
+      } catch (error) {
+        toast.error("Failed to delete contract rate");
+        console.error("Delete error:", error);
+      }
+    }
+  };
+
+  return (
+    <div className="min-vh-100 bg-light d-flex flex-column">
+      <Topbar />
+      <div className="d-flex flex-grow-1">
+        <Sidebar />
+        <main className="flex-grow-1 p-4">
+          <div className="d-flex align-items-center gap-3 mb-3">
+            <Button
+              variant="outline-primary"
+              onClick={() => navigate(`/hotel-details/${id}`)}
+              className="d-flex align-items-center btn-sm gap-2"
+            >
+              <FaArrowLeft />
+              Back
+            </Button>
+            <h3 className="mb-0">Contract Rates</h3>
+            <HotelTitleBadge hotelId={id} className="ms-2" />
+          </div>
+
+          <Card className="shadow-sm rounded-xl mb-3">
+            <Card.Header className="d-flex justify-content-between align-items-center text-white">
+              <span
+                className="fw-semibold cursor-pointer text-primary"
+                style={{ padding: "10px" }}
+              >
+                Contract Rates
+              </span>
+              <Form.Group className="hotel-search-bar position-relative">
+                <Form.Control
+                  type="text"
+                  placeholder="Search contract rates..."
+                  className="form-control-modern-sm"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </Form.Group>
+              <Button className="btn-green create-btn" onClick={handleCreate}>
+                + Create
+              </Button>
+            </Card.Header>
+            <Card.Body className="p-0">
+              <Table
+                striped
+                bordered
+                hover
+                responsive
+                className="mb-0 align-middle"
+              >
+                <thead>
+                  <tr>
+                    <th style={{ width: 100 }}>S/N</th>
+                    <th>Rate Code</th>
+                    <th>Days</th>
+                    <th>Validity Periods</th>
+                    <th>Status</th>
+                    <th style={{ width: 230 }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan={9} className="text-center py-4">
+                        <Spinner animation="border" variant="primary" />
+                      </td>
+                    </tr>
+                  ) : rates.length > 0 ? (
+                    rates.map((rate, index) => (
+                      <tr key={rate.contractrateId}>
+                        <td>{index + 1 + page * 10}</td>
+                        <td>{rate.rateCode || "-"}</td>
+
+                        <td>
+                          {/* {rate.allDays ? (
+                            <Badge bg="primary">All Days</Badge> 
+                           ) : (
+                            <div>
+                              <Badge bg="secondary" className="me-1">
+                                {rate.weekDay} Weekday
+                              </Badge>
+                              <Badge bg="secondary">
+                                {rate.weekEndDay} Weekend
+                              </Badge>
+                            </div>
+                          )} */}
+                          {rate.allDays ? (
+                            <span>All Days</span>
+                          ) : rate.weekDay ? (
+                            <span>Weekdays</span>
+                          ) : rate.weekEndDay ? (
+                            <span>Weekend</span>
+                          ) : (
+                            <span>-</span> // optional fallback
+                          )}
+                        </td>
+                        <td>
+                          {rate.contractRateValidityDTO?.length ? (
+                            // <Button
+                            //   variant="outline-primary"
+                            //   size="sm"
+                            //   onClick={() => handleViewValidity(rate.contractRateValidityDTO, rate.rateCode)}
+                            //   className="d-flex align-items-center gap-1"
+                            // >
+                            //   View
+                            // </Button>
+                            <Link
+                              onClick={() =>
+                                handleViewValidity(
+                                  rate.contractRateValidityDTO,
+                                  rate.rateCode
+                                )
+                              }
+                              className="text-secondary fw-medium text-decoration-underline"
+                            >
+                              View
+                            </Link>
+                          ) : (
+                            <span className="text-muted">No Validity</span>
+                          )}
+                        </td>
+                        <td>
+                          <Badge
+                            bg={rate.isLive ? "success" : "danger"}
+                            style={{ cursor: "pointer" }}
+                            onClick={() => handleStatusToggle(rate)}
+                            title={`Click to ${
+                              rate.isLive ? "activate" : "deactivate"
+                            } contract rate`}
+                          >
+                            {console.log(
+                              "rate data on toggle click::",
+                              rate.isLive
+                            )}
+                            {rate.isLive ? "Active" : "Inactive"}
+                          </Badge>
+                        </td>
+
+                        <td>
+                          <div className="d-flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline-info"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => handleView(rate.contractrateId)}
+                              title="View"
+                            >
+                              <FaEye /> View
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline-primary"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => handleEdit(rate.contractrateId)}
+                              title="Edit"
+                            >
+                              <FaEdit /> Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline-danger"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() =>
+                                handleDelete(rate.contractrateId, rate.rateCode)
+                              }
+                              title="Delete"
+                            >
+                              <FaTrash /> Delete
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={9} className="text-center text-muted py-4">
+                        <div className="py-3">
+                          <div>No contract rates found</div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </Table>
+            </Card.Body>
+          </Card>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="d-flex justify-content-center">
+              <Pagination className="mb-0">
+                <Pagination.Prev
+                  disabled={page === 0}
+                  onClick={() => fetchRates(page - 1, search)}
+                />
+                {[...Array(totalPages).keys()].map((num) => (
+                  <Pagination.Item
+                    key={num}
+                    active={num === page}
+                    onClick={() => fetchRates(num, search)}
+                  >
+                    {num + 1}
+                  </Pagination.Item>
+                ))}
+                <Pagination.Next
+                  disabled={page === totalPages - 1}
+                  onClick={() => fetchRates(page + 1, search)}
+                />
+              </Pagination>
+            </div>
+          )}
+
+          {/* Validity View Modal */}
+          <Modal
+            show={showValidityModal}
+            onHide={() => setShowValidityModal(false)}
+            centered
+          >
+            <Modal.Header closeButton>
+              <Modal.Title>Validity Periods - {selectedRateCode}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              {selectedValidityData.length > 0 ? (
+                <div className="table-responsive">
+                  <Table striped bordered hover size="sm">
+                    <thead className="table-light">
+                      <tr>
+                        <th>#</th>
+                        <th>From Date</th>
+                        <th>To Date</th>
+                        <th>Duration</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedValidityData.map((validity, index) => {
+                        const fromDate = new Date(validity.validityFrom);
+                        const toDate = new Date(validity.validityTo);
+                        const duration =
+                          Math.ceil(
+                            (toDate - fromDate) / (1000 * 60 * 60 * 24)
+                          ) + 1;
+
+                        return (
+                          <tr key={validity.contractValidityId || index}>
+                            <td>{index + 1}</td>
+                            <td>
+                              <span className="fw">
+                                {validity.validityFrom}
+                              </span>
+                            </td>
+                            <td>
+                              <span className="fw">{validity.validityTo}</span>
+                            </td>
+                            <td>
+                              {/* <Badge bg="info"> */}
+                              {duration} day{duration !== 1 ? "s" : ""}
+                              {/* </Badge> */}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <div className="text-muted">
+                    <FaEye
+                      className="mb-2"
+                      style={{ fontSize: "2rem", opacity: 0.3 }}
+                    />
+                    <p className="mb-0">No validity periods found</p>
+                  </div>
+                </div>
+              )}
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="secondary"
+                onClick={() => setShowValidityModal(false)}
+              >
+                Close
+              </Button>
+            </Modal.Footer>
+          </Modal>
+
+          {/* Status Toggle Modal */}
+          <Modal
+            show={showStatusModal}
+            onHide={() => setShowStatusModal(false)}
+            centered
+            size="sm"
+            backdrop="static"
+            keyboard={false}
+          >
+            <Modal.Header closeButton={!loading}>
+              <Modal.Title>Confirm Status Change</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              {console.log("selectedRateRate##:", selectedRate)}
+              <p>
+                Are you sure you want to{" "}
+                {selectedRate?.isLive ? "deactivate" : "activate"} this contract
+                rate?
+              </p>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="secondary"
+                onClick={() => setShowStatusModal(false)}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={updateContractRateStatus}
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    Processing...
+                  </>
+                ) : (
+                  "Confirm"
+                )}
+              </Button>
+            </Modal.Footer>
+          </Modal>
+        </main>
+      </div>
+    </div>
+  );
+}

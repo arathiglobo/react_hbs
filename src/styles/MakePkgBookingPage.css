@@ -1,0 +1,778 @@
+/* Make Package Booking Page Styles - Industry Standard */
+
+.make-pkg-booking-container {
+  background-color: #f5f5f5;
+  min-height: 100vh;
+}
+
+.content-wrapper {
+  background: transparent;
+  padding: 1rem;
+}
+
+.booking-page-header {
+  background: white;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border-left: 4px solid #007bff;
+}
+
+.booking-page-header h2 {
+  margin: 0;
+  font-weight: 600;
+  font-size: 1.75rem;
+  color: #212529;
+}
+
+.booking-page-header p {
+  margin: 0.5rem 0 0 0;
+  color: #6c757d;
+  font-size: 0.95rem;
+}
+
+/* Accordion Styling */
+.booking-accordion .accordion-item {
+  border: 1px solid #dee2e6;
+  margin-bottom: 0.75rem;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.booking-accordion .accordion-header {
+  background: #f8f9fa;
+}
+
+.booking-accordion .accordion-button {
+  background: #f8f9fa;
+  color: #212529;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0.875rem 1.25rem;
+  border: none;
+  box-shadow: none;
+}
+
+/* Down-arrow indicator on every booking-accordion header — a simple
+   small black chevron, no background. !important is needed because
+   RoomList.css ships an unscoped `.accordion-button::after` rule that
+   can win on equal specificity depending on load order. */
+.booking-accordion .accordion-button::after {
+  width: 0.85rem !important;
+  height: 0.85rem !important;
+  background-size: 0.85rem 0.85rem !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-color: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23212529'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e") !important;
+  transition: transform 0.2s ease-in-out !important;
+}
+
+.booking-accordion .accordion-button:not(.collapsed)::after {
+  background-color: transparent !important;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23212529'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e") !important;
+}
+
+.booking-accordion .accordion-button:not(.collapsed) {
+  background: #f8f9fa;
+  color: #212529;
+  box-shadow: none;
+}
+
+.booking-accordion .accordion-button:not(.collapsed)::after {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%230d6efd'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
+}
+
+.booking-accordion .accordion-button:focus {
+  box-shadow: none;
+  border: none;
+}
+
+.booking-accordion .accordion-body {
+  background: white;
+  padding: 1.25rem;
+}
+
+/* Compact in-section row used by Hotels / Tours / Transfers — replaces
+   the previous nested Card-per-item layout so each entry sits on a
+   single divider strip instead of in its own boxed card. */
+.simple-section-row {
+  border-top: 1px solid #e9ecef;
+  padding: 0.75rem 0;
+}
+.simple-section-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.simple-section-row:last-child {
+  padding-bottom: 0;
+}
+.simple-section-row-title {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+  color: #212529;
+}
+.simple-section-row-body {
+  padding-left: 1.5rem;
+}
+
+/* Itinerary Checkboxes */
+.itinerary-checkbox {
+  padding: 0.875rem 1rem;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+  transition: all 0.2s ease;
+  background: white;
+}
+
+.itinerary-checkbox:hover {
+  border-color: #007bff;
+  background: #f8f9ff;
+}
+
+.itinerary-checkbox input[type="checkbox"]:checked + label {
+  color: #007bff;
+  font-weight: 600;
+}
+
+/* Itinerary Days Container */
+.itinerary-days-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Itinerary Day Box - Simple Design Matching Screenshot */
+.itinerary-day-box {
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 0.875rem 1rem;
+  min-height: 48px;
+}
+
+.itinerary-day-box > div:first-child {
+  display: flex;
+  align-items: center;
+}
+
+.itinerary-day-box h6 {
+  color: #212529;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.itinerary-plus-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-width: 2px;
+  border-color: #dc3545;
+  color: #dc3545;
+  background-color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.itinerary-plus-btn:hover {
+  background-color: #dc3545;
+  color: white;
+  border-color: #dc3545;
+}
+
+.itinerary-plus-btn:active {
+  transform: scale(0.95);
+}
+
+.itinerary-plus-btn:focus {
+  box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+  outline: none;
+}
+
+.itinerary-plus-btn svg {
+  font-size: 0.875rem;
+}
+
+/* Itinerary Preview Items */
+.itinerary-preview-item {
+  padding: 0.5rem 0.75rem;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #e9ecef;
+  transition: all 0.2s ease;
+}
+
+.itinerary-preview-item:hover {
+  background: #f8f9fa;
+  border-color: #dee2e6;
+}
+
+.itinerary-preview-item .small {
+  color: #495057;
+  font-size: 0.875rem;
+  word-break: break-word;
+}
+
+.itinerary-preview-item button {
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0;
+  min-width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.itinerary-preview-item button:hover {
+  transform: scale(1.2);
+  color: #c82333 !important;
+}
+
+/* Itinerary Modal Styles */
+.itinerary-modal .modal-content {
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.itinerary-modal-header {
+  border-bottom: none;
+}
+
+.itinerary-modal-header .btn-close {
+  filter: brightness(0) invert(1);
+  opacity: 0.9;
+}
+
+.itinerary-modal-header .btn-close:hover {
+  opacity: 1;
+}
+
+.itinerary-search-input {
+  transition: all 0.3s ease;
+}
+
+.itinerary-search-input:focus {
+  border-color: #007bff !important;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.15) !important;
+}
+
+.itinerary-modal-list {
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.itinerary-modal-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.itinerary-modal-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.itinerary-modal-list::-webkit-scrollbar-thumb {
+  background: #007bff;
+  border-radius: 4px;
+}
+
+.itinerary-modal-list::-webkit-scrollbar-thumb:hover {
+  background: #0056b3;
+}
+
+.itinerary-modal-item {
+  transition: all 0.3s ease;
+  background: white;
+}
+
+.itinerary-modal-item:hover {
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.itinerary-modal-item-selected {
+  background: linear-gradient(135deg, #e7f3ff 0%, #f0f8ff 100%) !important;
+  border-color: #0d6efd !important;
+  box-shadow: 0 2px 8px rgba(13, 110, 253, 0.2);
+}
+
+.itinerary-modal-item-selected:hover {
+  box-shadow: 0 4px 16px rgba(13, 110, 253, 0.3);
+}
+
+/* Empty State */
+.itinerary-empty-state {
+  padding: 1rem;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px dashed #dee2e6;
+  text-align: center;
+}
+
+/* Hotel Item Card */
+.hotel-item-card {
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.hotel-item-card .card-header {
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 0.875rem 1rem;
+  border-left: 4px solid #007bff;
+}
+
+.hotel-item-card .card-body {
+  padding: 1.25rem;
+}
+
+.hotel-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.hotel-section-header h6 {
+  margin: 0;
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: #212529;
+}
+
+/* Room Table */
+.room-table {
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #dee2e6;
+}
+
+.room-table thead {
+  background: #f8f9fa;
+}
+
+.room-table thead th {
+  border: none;
+  padding: 0.75rem 0.875rem;
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.room-table tbody td {
+  padding: 0.75rem 0.875rem;
+}
+
+.room-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.room-table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+/* Guest Details Card */
+.guest-details-card {
+  background: white;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+.guest-details-card .card-header {
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 0.875rem 1.25rem;
+}
+
+.guest-details-card .card-header h6 {
+  margin: 0;
+  font-weight: 600;
+  color: #212529;
+  font-size: 0.95rem;
+}
+
+.guest-details-card .card-body {
+  background: white;
+  padding: 1rem;
+}
+
+.guest-row-item {
+  padding: 0.875rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  border-left: 3px solid #007bff;
+}
+
+.guest-row-item h6 {
+  color: #495057;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+/* Activity Item Card */
+.activity-item-card {
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.activity-item-card .card-header {
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 0.875rem 1rem;
+}
+
+.activity-item-card .card-body {
+  padding: 1.25rem;
+}
+
+.activity-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.activity-header h6 {
+  margin: 0;
+  font-weight: 600;
+  color: #212529;
+}
+
+/* Transfer Item Card */
+.transfer-item-card {
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  overflow: hidden;
+  background: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.transfer-item-card .card-header {
+  background: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 0.875rem 1rem;
+}
+
+.transfer-item-card .card-body {
+  padding: 1.25rem;
+}
+
+.transfer-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.transfer-header h6 {
+  margin: 0;
+  font-weight: 600;
+  color: #212529;
+}
+
+/* Price Summary Sidebar */
+.price-summary-card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #dee2e6;
+  overflow: hidden;
+  position: sticky;
+  top: 20px;
+}
+
+.price-summary-header {
+  background: #f8f9fa;
+  padding: 1.25rem;
+  text-align: center;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.price-summary-header h5 {
+  margin: 0;
+  font-weight: 600;
+  font-size: 1rem;
+  color: #212529;
+}
+
+.price-summary-body {
+  padding: 2rem 1.5rem;
+  text-align: center;
+}
+
+.price-display {
+  margin-bottom: 1.5rem;
+}
+
+.price-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #212529;
+  margin-bottom: 0.5rem;
+}
+
+.price-label {
+  font-size: 0.875rem;
+  color: #6c757d;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.price-divider {
+  border: none;
+  border-top: 1px solid #dee2e6;
+  margin: 1.5rem 0;
+}
+
+/* Form Styling */
+.booking-form .form-label {
+  font-weight: 500;
+  color: #495057;
+  margin-bottom: 0.375rem;
+  font-size: 0.875rem;
+}
+
+.booking-form .form-control,
+.booking-form .form-select {
+  border-radius: 6px;
+  border: 1px solid #ced4da;
+  padding: 0.5rem 0.75rem;
+  transition: all 0.2s ease;
+  font-size: 0.9rem;
+}
+
+.booking-form .form-control:focus,
+.booking-form .form-select:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.1);
+}
+
+/* Validation Error Styling - Red Color */
+.booking-form .form-control.is-invalid,
+.booking-form .form-select.is-invalid {
+  border-color: #dc3545;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath d='m5.8 3.6 .4.4.4-.4m0 4.8h.8'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right calc(0.375em + 0.1875rem) center;
+  background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+  padding-right: calc(1.5em + 0.75rem);
+}
+
+.booking-form .form-control.is-invalid:focus,
+.booking-form .form-select.is-invalid:focus {
+  border-color: #dc3545;
+  box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+.booking-form .invalid-feedback {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  font-size: 0.875rem;
+  color: #dc3545;
+  font-weight: 500;
+}
+
+.booking-form .form-control.is-invalid ~ .invalid-feedback,
+.booking-form .form-select.is-invalid ~ .invalid-feedback {
+  display: block;
+}
+
+/* Visa Section */
+.visa-section {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+  padding: 1.25rem;
+  margin-top: 1rem;
+}
+
+.visa-form-row {
+  background: white;
+  padding: 1rem;
+  border-radius: 6px;
+  margin-top: 1rem;
+  border: 1px solid #dee2e6;
+}
+
+/* Buttons */
+.btn-booking {
+  padding: 0.75rem 1.5rem;
+  font-weight: 500;
+  font-size: 0.95rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-booking-primary {
+  background: #007bff;
+  border: none;
+  color: white;
+}
+
+.btn-booking-primary:hover {
+  background: #0056b3;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
+
+.btn-booking-danger {
+  background: #dc3545;
+  border: none;
+  color: white;
+}
+
+.btn-booking-danger:hover {
+  background: #c82333;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+}
+
+/* Edit Icon */
+.edit-icon {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.edit-icon:hover {
+  transform: scale(1.15);
+  color: #28a745 !important;
+}
+
+/* Date Pricing Table */
+.date-pricing-table {
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #dee2e6;
+}
+
+.date-pricing-table thead {
+  background: #f8f9fa;
+}
+
+.date-pricing-table thead th {
+  border: none;
+  padding: 0.75rem 0.875rem;
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.875rem;
+}
+
+.date-pricing-table tbody td {
+  padding: 0.75rem 0.875rem;
+}
+
+/* Transfer Table */
+.transfer-table {
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #dee2e6;
+}
+
+.transfer-table thead {
+  background: #f8f9fa;
+}
+
+.transfer-table thead th {
+  border: none;
+  padding: 0.75rem 0.875rem;
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.875rem;
+}
+
+.transfer-table tbody td {
+  padding: 0.75rem 0.875rem;
+}
+
+/* Date Display */
+.date-display {
+  padding: 0.625rem 0.875rem;
+  background: #f8f9fa;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  border-left: 3px solid #007bff;
+}
+
+/* Loading State */
+.loading-container {
+  background: white;
+  border-radius: 8px;
+  padding: 3rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #dee2e6;
+}
+
+/* Empty State */
+.empty-state {
+  background: white;
+  border-radius: 8px;
+  padding: 3rem;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #dee2e6;
+}
+
+/* Responsive */
+@media (max-width: 991px) {
+  .price-summary-card {
+    position: relative;
+    margin-top: 2rem;
+  }
+  
+  .booking-page-header h2 {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .content-wrapper {
+    padding: 1rem;
+  }
+  
+  .booking-accordion .accordion-body {
+    padding: 1rem;
+  }
+  
+  .price-value {
+    font-size: 1.75rem;
+  }
+  
+  .btn-booking {
+    width: 100%;
+    margin-bottom: 0.5rem;
+  }
+}
