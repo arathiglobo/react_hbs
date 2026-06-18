@@ -9,6 +9,184 @@ $font-family-base: $font-family-sans-serif;
   --bs-heading-font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
+/* ---- Custom date-time picker (Validity From / To) ---- */
+.cdt {
+  position: relative;
+}
+.cdt-popup {
+  position: fixed;
+  z-index: 2000;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+  padding: 12px;
+  min-width: 470px;
+}
+.cdt-body {
+  display: flex;
+  gap: 8px;
+}
+.cdt-cal {
+  flex: 1 1 auto;
+  border-right: 1px solid #eef0f2;
+  padding-right: 10px;
+}
+.cdt-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.cdt-cal-selects {
+  display: flex;
+  gap: 6px;
+}
+.cdt-select {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: #fff;
+  cursor: pointer;
+}
+.cdt-nav {
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #374151;
+}
+.cdt-nav:hover {
+  background: #f3f4f6;
+}
+.cdt-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.cdt-dow {
+  text-align: center;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  padding: 4px 0;
+}
+.cdt-day {
+  border: none;
+  background: transparent;
+  height: 34px;
+  width: 34px;
+  margin: 0 auto;
+  border-radius: 50%;
+  font-size: 0.85rem;
+  color: #111827;
+  cursor: pointer;
+}
+.cdt-day:hover {
+  background: #eff6ff;
+}
+.cdt-day-out {
+  color: #cbd5e1;
+}
+.cdt-day-sel,
+.cdt-day-sel:hover {
+  background: #2563eb;
+  color: #fff;
+}
+.cdt-day-disabled {
+  color: #e5e7eb;
+  cursor: not-allowed;
+}
+.cdt-day-disabled:hover {
+  background: transparent;
+}
+.cdt-time {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+}
+.cdt-stepper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.cdt-chev {
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 6px;
+  line-height: 0;
+}
+.cdt-chev:hover {
+  background: #f3f4f6;
+}
+.cdt-num {
+  width: 46px;
+  text-align: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 6px 0;
+  font-weight: 600;
+  outline: none;
+}
+.cdt-num:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+.cdt-sep {
+  font-weight: 700;
+}
+.cdt-ampm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-left: 6px;
+}
+.cdt-ampm-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 8px;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+}
+.cdt-ampm-btn.active {
+  background: #dbeafe;
+  color: #2563eb;
+}
+.cdt-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #eef0f2;
+}
+.cdt-clear {
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cdt-foot-actions {
+  display: flex;
+  gap: 8px;
+}
+
 body,
 button,
 input,
@@ -172,6 +350,17 @@ top: auto;
   bottom: 100%;
   left: 100%;
   transform: none;
+}
+
+/* Booking List has the longest child list — pin its flyout to the
+   vertical centre of the viewport so nothing is clipped at the bottom. */
+.nav-item-has-children.submenu-center .submenu {
+  position: fixed;
+  top: 50% !important;
+  bottom: auto !important;
+  left: 13rem;
+  transform: translateY(-50%);
+  max-height: 22rem !important;
 }
 
 /* Show submenu when JavaScript state is active */

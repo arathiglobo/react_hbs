@@ -22,7 +22,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Card, Button, Row, Col, Form, Spinner } from "react-bootstrap";
-import { FaSearch, FaStar, FaIdBadge } from "react-icons/fa";
+import { FaSearch, FaStar, FaIdBadge, FaUserClock } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import Select from "react-select";
 import AgentSelect from "../../../components/AgentSelect";
@@ -739,16 +739,18 @@ export default function GovEmployeeSearch() {
           {/* ── Search Card — mirrors HotelSearch.jsx's chrome ── */}
           <Card className="shadow-sm rounded-xl mb-4 search-card-modern bg-white">
             <Card.Body className="p-4">
-              <div className="mb-4 text-start">
-                <h2 className="fw-semibold text-primary mb-1">
-                  <FaIdBadge className="me-2" />
-                  Government Employee — Hotel Search
+                <div className="mb-4 text-start">
+                <h2 className="fw-semibold text-primary mb-1 d-flex align-items-center">
+                  <FaUserClock className="me-2" />
+                  <div>
+                    <div style={{ fontSize: "1rem", fontWeight: "400" }}>
+                      Find Your Perfect Stay for
+                    </div>
+                    <div style={{ fontSize: "2rem", fontWeight: "700" }}>
+                      Government Employee
+                    </div>
+                  </div>
                 </h2>
-                <p className="text-muted">
-                  Browse hotels with the configured government-employee
-                  discount applied. You'll verify the employee (code or ID
-                  upload) on the booking page.
-                </p>
               </div>
 
               <Form onSubmit={handleSearchSubmit}>
