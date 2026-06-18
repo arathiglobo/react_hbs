@@ -251,7 +251,13 @@ export default function StudentRoomList() {
       },
       // Forward optional "Booking Done By Employee" picked in StudentSearch
       // onto payload so StudentBookingPage can include it in the create body.
-      payload: { ...roomData.payload, employeeId: ctx.employeeId || null },
+      payload: {
+        ...roomData.payload,
+        employeeId: ctx.employeeId || null,
+        // "Add New Item" flow — forward the parent code so the create call
+        // saves this booking as a child (STU7/1, STU7/2, …).
+        parentBookingCode: ctx.parentBookingCode || null,
+      },
       activePromotion,
       searchCtx: ctx,
     };
@@ -377,7 +383,13 @@ export default function StudentRoomList() {
           phone: hotelsdetail.hotelPhoneNumber,
         },
         // Same employeeId forwarding as the single-room flow above.
-        payload: { ...roomData.payload, employeeId: ctx.employeeId || null },
+        payload: {
+        ...roomData.payload,
+        employeeId: ctx.employeeId || null,
+        // "Add New Item" flow — forward the parent code so the create call
+        // saves this booking as a child (STU7/1, STU7/2, …).
+        parentBookingCode: ctx.parentBookingCode || null,
+      },
         activePromotion,
         searchCtx: ctx,
       };

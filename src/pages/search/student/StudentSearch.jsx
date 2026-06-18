@@ -541,6 +541,12 @@ export default function StudentSearch() {
       agentId: agent,
       // Optional "Booking Done By Employee" selection.
       employeeId: selectedEmployee?.value || null,
+      // "Add New Item" flow: when this search was opened from a booking's
+      // ADD NEW ITEM button the parent code rides in the URL
+      // (?parentBookingCode=STU7) and is threaded through so the new booking
+      // is saved as a child (STU7/1, STU7/2, …).
+      parentBookingCode:
+        new URLSearchParams(window.location.search).get("parentBookingCode") || null,
       // Display currency chosen on the search page — flows through to the
       // room list / booking page / create payload. Rates stay AED.
       currency: displayCurrency,

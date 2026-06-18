@@ -492,6 +492,10 @@ export default function StudentBookingPage() {
       deadlineDate: deadlineDateStr,
       roomStatus: selectedRate.roomStatus || null,
       bookingFlowStatus: resolvedBookingFlowStatus,
+      // "Add New Item" flow — when this booking was started from an existing
+      // booking's ADD NEW ITEM button, the parent code threads through here so
+      // the backend saves it as a child (STU7/1, STU7/2, …).
+      parentBookingCode: bookingData?.payload?.parentBookingCode || null,
       isOutsideDeadline,
       isBookandVoucher:
         selectedRate.roomStatus === "Available"
@@ -718,46 +722,28 @@ export default function StudentBookingPage() {
                   </Row>
 
                   {/* ── Student ID Card Upload ──────────────────────
-                      Reworked for clarity: a titled panel with a short
-                      explanation, an explicit 2-step flow (Choose file →
-                      Upload), inline helper text, and a clear status line
-                      that tells the operator exactly what to do next. */}
+                      Simple 2-step panel: choose a file, then Upload.
+                      The file input shows the chosen name natively and the
+                      badge shows whether it's been saved. */}
                   {verificationMethod === METHOD_UPLOAD && (
                     <div className="mt-3 p-3 rounded border" style={{ background: "#f8fbff" }}>
-                      <div className="d-flex align-items-center mb-1">
+                      <div className="d-flex align-items-center mb-2">
                         <FaFileUpload className="me-2 text-primary" />
                         <h6 className="mb-0 fw-bold">
-                          Student ID Card Upload{" "}
-                          <span className="text-danger">*</span>
+                          Student ID Card Upload <span className="text-danger">*</span>
                         </h6>
                       </div>
-                      <p className="text-muted small mb-3">
-                        Upload a clear photo or scan of the student's ID card so the
-                        student discount can be verified. Accepted formats:{" "}
-                        <strong>PDF, PNG, JPG</strong> · max size <strong>5&nbsp;MB</strong>.
-                      </p>
 
-                      <Row className="g-3 align-items-end">
-                        <Col md={6}>
-                          <Form.Label className="fw-semibold mb-1">
-                            Step 1 — Choose the ID document
-                          </Form.Label>
+                      <Row className="g-2 align-items-center">
+                        <Col md={7}>
                           <Form.Control
                             type="file"
                             accept=".pdf,.png,.jpg,.jpeg"
                             onChange={onFileChange}
                             disabled={uploading}
                           />
-                          {idFile && (
-                            <Form.Text className="text-dark">
-                              Selected: <strong>{idFile.name}</strong>
-                            </Form.Text>
-                          )}
                         </Col>
                         <Col md={3}>
-                          <Form.Label className="fw-semibold mb-1 d-block">
-                            Step 2 — Save it
-                          </Form.Label>
                           <Button
                             variant={uploadedFilePath ? "outline-success" : "primary"}
                             className="w-100"
@@ -773,32 +759,16 @@ export default function StudentBookingPage() {
                             )}
                           </Button>
                         </Col>
-                        <Col md={3}>
-                          <Form.Label className="fw-semibold mb-1 d-block">
-                            Status
-                          </Form.Label>
+                        <Col md={2} className="text-md-center">
                           {uploadedFilePath ? (
-                            <Badge bg="success" className="p-2 d-inline-flex align-items-center">
+                            <Badge bg="success" className="p-2">
                               <FaCheckCircle className="me-1" /> Uploaded
                             </Badge>
-                          ) : idFile ? (
-                            <Badge bg="warning" text="dark" className="p-2">
-                              Click “Upload” to save
-                            </Badge>
                           ) : (
-                            <Badge bg="secondary" className="p-2">
-                              No file selected
-                            </Badge>
+                            <Badge bg="secondary" className="p-2">Pending</Badge>
                           )}
                         </Col>
                       </Row>
-
-                      {uploadedFilePath && (
-                        <div className="text-success small mt-2 d-flex align-items-center">
-                          <FaCheckCircle className="me-1" />
-                          {uploadedFileName} saved — you can continue with the booking.
-                        </div>
-                      )}
                     </div>
                   )}
 

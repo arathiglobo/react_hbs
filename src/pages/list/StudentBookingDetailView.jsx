@@ -8,7 +8,8 @@
  * The student flow has no admin verification step, so Approve / Reject /
  * Re-upload are gone. Action set mirrors the hotel view (only the buttons
  * with a real student backend are wired):
- *   - ADD NEW ITEM        → navigate to /new-booking/student
+ *   - ADD NEW ITEM        → /new-booking/student?parentBookingCode=<code>
+ *                           (creates a child booking STU7/1, STU7/2, …)
  *   - CANCEL              → DELETE /api/student-booking/:id
  *   - RECONFIRM           → PATCH  /api/student-booking/:id/reconfirm
  *   - VOUCHER             → GET    /api/student-booking/:id/voucher (PDF)
@@ -607,103 +608,171 @@ export default function StudentBookingDetailView() {
                   </div>
                 </div>
 
+                {/* ── Related Sub-Bookings (created via ADD NEW ITEM) ──── */}
+                {Array.isArray(booking.subBookings) && booking.subBookings.length > 0 && (
+                  <div style={card}>
+                    <div style={SECTION_HEADER}>
+                      Related Sub-Bookings ({booking.subBookings.length})
+                    </div>
+                    <div style={{ padding: "10px 16px" }}>
+                      {booking.subBookings.map((sub, sIdx) => {
+                        const subRooms = sub.rooms?.length ?? 0;
+                        const subAdults = sub.rooms?.reduce((s, r) => s + (r.adults || 0), 0) ?? 0;
+                        const subChildren = sub.rooms?.reduce((s, r) => s + (r.children || 0), 0) ?? 0;
+                        return (
+                          <div
+                            key={sub.bookingId || sIdx}
+                            style={{ borderTop: sIdx === 0 ? "none" : "1px solid #eee", padding: "10px 0" }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              <span style={{ color: "#c0392b", fontWeight: "700", fontSize: "0.9rem" }}>
+                                {sub.bookingCode || "-"}
+                                {sub.childBookingIndex != null && (
+                                  <span
+                                    style={{
+                                      marginLeft: "8px",
+                                      color: "#888",
+                                      fontWeight: "500",
+                                      fontSize: "0.8rem",
+                                    }}
+                                  >
+                                    (Item #{sub.childBookingIndex})
+                                  </span>
+                                )}
+                              </span>
+                              <button
+                                style={{ ...BUTTON_STYLE, backgroundColor: "#555" }}
+                                onClick={() =>
+                                  navigate(`/booking-details/student-booking/${sub.bookingId}`)
+                                }
+                              >
+                                View
+                              </button>
+                            </div>
+                            <Row>
+                              <Col md={6}>
+                                <InfoRow label="Reference No." value={sub.referenceNumber} />
+                                <InfoRow label="Hotel" value={sub.hotelName} />
+                                <InfoRow label="Check-In" value={formatDateTime(sub.checkInDate)} />
+                                <InfoRow label="Check-Out" value={formatDateTime(sub.checkOutDate)} />
+                              </Col>
+                              <Col md={6}>
+                                <InfoRow
+                                  label="Rooms / Guests"
+                                  value={`${subRooms} Room${subRooms !== 1 ? "s" : ""}, ${subAdults} Adult${
+                                    subAdults !== 1 ? "s" : ""
+                                  }${
+                                    subChildren > 0
+                                      ? `, ${subChildren} Child${subChildren !== 1 ? "ren" : ""}`
+                                      : ""
+                                  }`}
+                                />
+                                <InfoRow label="Total Rate" value={money(sub.totalRate)} />
+                                <InfoRow label="Status" value={sub.confirmationStatus || "-"} />
+                                <InfoRow label="Booking Date" value={formatDateTime(sub.bookingDate)} />
+                              </Col>
+                            </Row>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {/* Agent Reference + Confirmation Number now display inline in
                     the Booking Information section (under Deadline Date), so the
                     separate cards were removed per request. */}
 
                 {/* ── Action Buttons ──────────────────────────────────────
-                    Matches BookingDetailedView: the PROFORMA vs FINAL document
-                    pair flips on showsFinalDocs; cancelled bookings only show
-                    Voucher / Invoice / Resend Mail. */}
-                {isCancelled ? (
-                  <div style={{ marginBottom: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    <button
-                      style={BUTTON_STYLE}
-                      disabled={generatingDocType === "VOUCHER"}
-                      onClick={() => handleDocument("VOUCHER", "Voucher")}
-                    >
-                      {generatingDocType === "VOUCHER" ? "GENERATING..." : "VOUCHER"}
-                    </button>
-                    <button
-                      style={BUTTON_STYLE}
-                      disabled={generatingDocType === "COMPLETED"}
-                      onClick={() => handleDocument("COMPLETED", "Invoice")}
-                    >
-                      {generatingDocType === "COMPLETED" ? "GENERATING..." : "INVOICE"}
-                    </button>
-                    <button style={BUTTON_STYLE} onClick={resendMailToAgent} disabled={resendingMail}>
-                      {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
-                    </button>
-                  </div>
-                ) : (
-                  <div style={{ marginBottom: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    <button style={BUTTON_STYLE} onClick={() => navigate("/new-booking/student")}>
-                      ADD NEW ITEM
-                    </button>
+                    The two-status flow drives the document pair:
+                      • Confirmed   → RECONFIRM + Proforma Voucher / Invoice
+                      • ReConfirmed → Voucher / Invoice
+                    A cancelled booking keeps every applicable button (only
+                    CANCEL and RECONFIRM are dropped, since neither applies to
+                    an already-cancelled record). */}
+                <div style={{ marginBottom: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button
+                    style={BUTTON_STYLE}
+                    onClick={() => {
+                      const parent = booking.parentBookingCode || booking.bookingCode;
+                      navigate(
+                        `/new-booking/student?parentBookingCode=${encodeURIComponent(parent)}`,
+                      );
+                    }}
+                  >
+                    ADD NEW ITEM
+                  </button>
+                  {!isCancelled && (
                     <button style={BUTTON_STYLE} onClick={() => setShowCancelModal(true)}>
                       CANCEL
                     </button>
-                    {!showsFinalDocs && (
-                      <button style={BUTTON_STYLE} onClick={() => setShowConfirmModal(true)}>
-                        RECONFIRM
+                  )}
+                  {!showsFinalDocs && !isCancelled && (
+                    <button style={BUTTON_STYLE} onClick={() => setShowConfirmModal(true)}>
+                      RECONFIRM
+                    </button>
+                  )}
+                  {!showsFinalDocs ? (
+                    <>
+                      <button
+                        style={BUTTON_STYLE}
+                        disabled={generatingDocType === "PROFORMA_VOUCHER"}
+                        onClick={() => handleDocument("PROFORMA_VOUCHER", "Proforma Voucher")}
+                      >
+                        {generatingDocType === "PROFORMA_VOUCHER" ? "GENERATING..." : "PROFORMA VOUCHER"}
                       </button>
-                    )}
-                    {!showsFinalDocs && (
-                      <>
-                        <button
-                          style={BUTTON_STYLE}
-                          disabled={generatingDocType === "PROFORMA_VOUCHER"}
-                          onClick={() => handleDocument("PROFORMA_VOUCHER", "Proforma Voucher")}
-                        >
-                          {generatingDocType === "PROFORMA_VOUCHER" ? "GENERATING..." : "PROFORMA VOUCHER"}
-                        </button>
-                        <button
-                          style={BUTTON_STYLE}
-                          disabled={generatingDocType === "PROFORMA_INVOICE"}
-                          onClick={() => handleDocument("PROFORMA_INVOICE", "Proforma Invoice")}
-                        >
-                          {generatingDocType === "PROFORMA_INVOICE" ? "GENERATING..." : "PROFORMA INVOICE"}
-                        </button>
-                      </>
-                    )}
-                    {showsFinalDocs && (
-                      <>
-                        <button
-                          style={BUTTON_STYLE}
-                          disabled={generatingDocType === "VOUCHER"}
-                          onClick={() => handleDocument("VOUCHER", "Voucher")}
-                        >
-                          {generatingDocType === "VOUCHER" ? "GENERATING..." : "VOUCHER"}
-                        </button>
-                        <button
-                          style={BUTTON_STYLE}
-                          disabled={generatingDocType === "COMPLETED"}
-                          onClick={() => handleDocument("COMPLETED", "Invoice")}
-                        >
-                          {generatingDocType === "COMPLETED" ? "GENERATING..." : "INVOICE"}
-                        </button>
-                      </>
-                    )}
-                    <button style={BUTTON_STYLE} onClick={openAgentRefModal}>
-                      ADD AGENT REFERENCE
-                    </button>
-                    <button style={BUTTON_STYLE} onClick={openConfirmationNoModal}>
-                      CONFIRMATION NO.
-                    </button>
-                    <button style={BUTTON_STYLE} onClick={resendMailToAgent} disabled={resendingMail}>
-                      {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
-                    </button>
-                    <button style={BUTTON_STYLE} onClick={openRemarkModal}>
-                      BOOKING REMARK
-                    </button>
-                    <button
-                      style={BUTTON_STYLE}
-                      onClick={() => navigate(`/booking-details/student-booking/${id}/notes`)}
-                    >
-                      NOTES
-                    </button>
-                  </div>
-                )}
+                      <button
+                        style={BUTTON_STYLE}
+                        disabled={generatingDocType === "PROFORMA_INVOICE"}
+                        onClick={() => handleDocument("PROFORMA_INVOICE", "Proforma Invoice")}
+                      >
+                        {generatingDocType === "PROFORMA_INVOICE" ? "GENERATING..." : "PROFORMA INVOICE"}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        style={BUTTON_STYLE}
+                        disabled={generatingDocType === "VOUCHER"}
+                        onClick={() => handleDocument("VOUCHER", "Voucher")}
+                      >
+                        {generatingDocType === "VOUCHER" ? "GENERATING..." : "VOUCHER"}
+                      </button>
+                      <button
+                        style={BUTTON_STYLE}
+                        disabled={generatingDocType === "COMPLETED"}
+                        onClick={() => handleDocument("COMPLETED", "Invoice")}
+                      >
+                        {generatingDocType === "COMPLETED" ? "GENERATING..." : "INVOICE"}
+                      </button>
+                    </>
+                  )}
+                  <button style={BUTTON_STYLE} onClick={openAgentRefModal}>
+                    ADD AGENT REFERENCE
+                  </button>
+                  <button style={BUTTON_STYLE} onClick={openConfirmationNoModal}>
+                    CONFIRMATION NO.
+                  </button>
+                  <button style={BUTTON_STYLE} onClick={resendMailToAgent} disabled={resendingMail}>
+                    {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
+                  </button>
+                  <button style={BUTTON_STYLE} onClick={openRemarkModal}>
+                    BOOKING REMARK
+                  </button>
+                  <button
+                    style={BUTTON_STYLE}
+                    onClick={() => navigate(`/booking-details/student-booking/${id}/notes`)}
+                  >
+                    NOTES
+                  </button>
+                </div>
 
                 {/* ── Booking Date footer ─────────────────────────────── */}
                 <div
