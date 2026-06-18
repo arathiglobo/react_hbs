@@ -79,12 +79,23 @@ export default function SeniorCitizenBookingPage() {
   // Setter dropped — the Tourism Dirhams input is hidden; value stays "0".
   const [tourismDirhams] = useState("0");
 
-  // ── Optional senior-citizen proof upload ──────────────────────
-  // Pure record-keeping — booking still goes through if left empty.
+  // ── Senior-citizen proof upload (required) ────────────────────
   const [proofFile, setProofFile] = useState(null);
   const [uploadedFilePath, setUploadedFilePath] = useState("");
   const [uploadedFileName, setUploadedFileName] = useState("");
   const [uploading, setUploading] = useState(false);
+
+  // ── Core booking flow — Book Now & Voucher Now / Later ────────
+  // Mirrors RoomList.jsx + HotelBookingPage.jsx: the room's roomStatus
+  // (from POST /api/hotel-rooms/search) drives which voucher options are
+  // offered, and the choice resolves to bookingFlowStatus which the backend
+  // maps to confirmationStatus ("CONFIRMED" → Confirmed; else → ReConfirmed).
+  const [bookingConfirmation, setBookingConfirmation] = useState("Book & Voucher");
+
+  // Payment mode picked on the booking page — mirrors HotelBookingPage.
+  // Sent on the create payload and persisted on the booking. CREDITLIMIT
+  // keeps the legacy default.
+  const [paymentMode, setPaymentMode] = useState("CREDITLIMIT");
 
   // ── Two-step confirm flow state ─────────────────────────────
   const [validationErrors, setValidationErrors] = useState({});
@@ -161,6 +172,9 @@ export default function SeniorCitizenBookingPage() {
     setProofFile(e.target.files?.[0] || null);
     setUploadedFilePath("");
     setUploadedFileName("");
+    if (validationErrors.document) {
+      setValidationErrors((er) => { const n = { ...er }; delete n.document; return n; });
+    }
   };
   const handleUploadProof = async () => {
     if (!proofFile) { toast.error("Choose a file first"); return; }
@@ -178,6 +192,7 @@ export default function SeniorCitizenBookingPage() {
       if (data?.success) {
         setUploadedFilePath(data.filePath);
         setUploadedFileName(data.fileName);
+        setValidationErrors((er) => { const n = { ...er }; delete n.document; return n; });
         toast.success("Proof uploaded");
       } else {
         toast.error(data?.message || "Upload failed");
@@ -199,8 +214,36 @@ export default function SeniorCitizenBookingPage() {
     })}`;
   };
 
+  // ── Booking-flow derivation (mirrors HotelBookingPage / StudentBookingPage) ──
+  const isOnRequestRate = bookingData?.selectedRate?.roomStatus === "On Request";
+  const isNonRefundableRate =
+    bookingData?.selectedRate?.nonRefundable === true ||
+    bookingData?.selectedRate?.nonRefundable === "true";
+  // Offer the Voucher Now / Voucher Later choice only for refundable,
+  // Available rates. On-request / non-refundable rates skip the choice.
+  const showVoucherChoice = !isOnRequestRate && !isNonRefundableRate;
+  // Resolved status sent on payload.bookingFlowStatus.
+  const resolvedBookingFlowStatus = (() => {
+    if (isOnRequestRate) return "REQUESTED";
+    if (isNonRefundableRate) return "RECONFIRMED";
+    return bookingConfirmation === "Book Now & Voucher later"
+      ? "CONFIRMED"
+      : "RECONFIRMED";
+  })();
+  // Reset a stale "Voucher Later" pick when the choice no longer applies.
+  useEffect(() => {
+    if (!bookingData?.selectedRate) return;
+    if (!showVoucherChoice && bookingConfirmation !== "Book & Voucher") {
+      setBookingConfirmation("Book & Voucher");
+    }
+  }, [bookingData, bookingConfirmation, showVoucherChoice]);
+
   const validateForm = () => {
     const errors = {};
+    // Senior Citizen proof document is required.
+    if (!uploadedFilePath) {
+      errors.document = "Please upload the Senior Citizen proof document";
+    }
     // Primary-guest validation removed — the Primary Guest Details
     // card has been hidden (the Guest Details grid above is the
     // single source of customer details, with the Lead radio marking
@@ -368,7 +411,15 @@ export default function SeniorCitizenBookingPage() {
       createdByRole: (activeUserRole || "AGENT").toUpperCase(),
       bookingDate: new Date().toISOString().slice(0, 19),
       deadlineDate: `${payload.checkInDate}T23:59:59`,
-      roomStatus: "CONFIRMED",
+      // Carry the real room availability + the resolved booking-flow status so
+      // the backend maps it to confirmationStatus (Confirmed / ReConfirmed).
+      roomStatus: selectedRate?.roomStatus || "Available",
+      bookingFlowStatus: resolvedBookingFlowStatus,
+      bookingConfirmation: bookingConfirmation || "Book & Voucher",
+      // Payment mode chosen on the booking page — persisted on the booking.
+      paymentMode,
+      // "Add New Item" flow — child of an existing booking (SNCIT7/1, …).
+      parentBookingCode: bookingData?.payload?.parentBookingCode || null,
       // employeeId is picked in SeniorCitizenSearch and rides on bookingData.payload.
       employeeId: bookingData?.payload?.employeeId || null,
       // Display currency chosen on the search page. `displayCurrencyRate` is
@@ -616,38 +667,50 @@ export default function SeniorCitizenBookingPage() {
                   {/* Tourism Dirhams (AED) input hidden per request. The
                       `tourismDirhams` state stays "0" so totals are unaffected. */}
 
-                  {/* Optional Senior Citizen proof upload */}
-                  <Card className="p-3 mb-2 shadow-sm border-0">
-                    <h6 className="mb-1 fw-bold text-primary d-flex align-items-center">
-                      <FaUserClock className="me-2" /> Senior Citizen Proof
-                      <Badge bg="secondary" className="ms-2">Optional</Badge>
+                  {isOnRequestRate && (
+                    <Alert variant="warning" className="py-2 mb-2">
+                      This rate is <strong>On Request</strong> — the booking will be
+                      placed and confirmed with the supplier before the voucher is issued.
+                    </Alert>
+                  )}
+
+                  {/* Senior Citizen proof upload (required) — simple 2-step
+                      panel: choose a file, then Upload. */}
+                  <Card className="p-3 mb-2 shadow-sm border-0"
+                        style={{ background: "#f8fbff" }}>
+                    <h6 className="mb-2 fw-bold d-flex align-items-center">
+                      <FaUserClock className="me-2 text-primary" /> Senior Citizen Proof Upload
+                      <span className="text-danger ms-1">*</span>
                     </h6>
-                    <div className="text-muted small mb-2">
-                      Upload Aadhar / Passport / Voter ID / Senior Citizen card. Not
-                      required — the discount applies based on the adult ages from
-                      the search — but a proof is saved on the booking for admin reference.
-                    </div>
-                    <Row className="g-2 align-items-end">
-                      <Col md={6}>
-                        <Form.Label>Document</Form.Label>
+                    <Row className="g-2 align-items-center">
+                      <Col md={7}>
                         <Form.Control type="file" accept=".pdf,.png,.jpg,.jpeg"
-                                      onChange={onProofChange} />
-                        <Form.Text className="text-muted">PDF, PNG or JPG. Max ~5 MB.</Form.Text>
+                                      onChange={onProofChange}
+                                      disabled={uploading}
+                                      isInvalid={!!validationErrors.document} />
+                        <Form.Control.Feedback type="invalid">
+                          {validationErrors.document}
+                        </Form.Control.Feedback>
                       </Col>
                       <Col md={3}>
-                        <Button variant="outline-primary"
-                                onClick={handleUploadProof}
-                                disabled={!proofFile || uploading}>
-                          {uploading ? <Spinner size="sm" />
-                            : <><FaFileUpload className="me-1" /> Upload</>}
+                        <Button
+                          variant={uploadedFilePath ? "outline-success" : "primary"}
+                          className="w-100"
+                          onClick={handleUploadProof}
+                          disabled={!proofFile || uploading}>
+                          {uploading ? (
+                            <><Spinner size="sm" className="me-1" /> Uploading…</>
+                          ) : uploadedFilePath ? (
+                            <><FaFileUpload className="me-1" /> Re-upload</>
+                          ) : (
+                            <><FaFileUpload className="me-1" /> Upload</>
+                          )}
                         </Button>
                       </Col>
-                      <Col md={3}>
+                      <Col md={2} className="text-md-center">
                         {uploadedFilePath
-                          ? <Badge bg="success" className="p-2">✓ {uploadedFileName}</Badge>
-                          : proofFile
-                            ? <span className="text-muted small">Click Upload to save</span>
-                            : <span className="text-muted small">No file selected</span>}
+                          ? <Badge bg="success" className="p-2">✓ Uploaded</Badge>
+                          : <Badge bg="secondary" className="p-2">Pending</Badge>}
                       </Col>
                     </Row>
                   </Card>
@@ -664,6 +727,31 @@ export default function SeniorCitizenBookingPage() {
                                     onChange={() => toggleSpecialRequest(req)} />
                       ))}
                     </div>
+                  </Card>
+
+                  {/* Payment Mode — mirrors HotelBookingPage. Drives the
+                      paymentMode field on the /api/senior-citizen-booking/create
+                      payload and is persisted on the booking. */}
+                  <Card className="p-3 mb-2 shadow-sm border-0">
+                    <h6 className="mb-2 fw-bold text-primary">Payment Mode</h6>
+                    <Row className="g-3">
+                      <Col md={6}>
+                        <Form.Group>
+                          <Form.Label className="fw-semibold mb-1">Mode</Form.Label>
+                          <Form.Select
+                            value={paymentMode}
+                            onChange={(e) => setPaymentMode(e.target.value)}
+                          >
+                            <option value="CREDITLIMIT">Credit Limit</option>
+                            <option value="ONLINE">Online</option>
+                            <option value="CASH">Cash</option>
+                            <option value="CARD">Card</option>
+                            <option value="BANK_TRANSFER">Bank Transfer</option>
+                            <option value="CHEQUE">Cheque</option>
+                          </Form.Select>
+                        </Form.Group>
+                      </Col>
+                    </Row>
                   </Card>
 
                   {/* "Booking Done By Employee" was moved into the
@@ -778,6 +866,33 @@ export default function SeniorCitizenBookingPage() {
                         </div>
                       </Card.Body>
                     </Card>
+
+                    {/* Booking Confirmation — Book Now & Voucher Now / Later.
+                        Placed directly above Confirm Booking. Shown only for
+                        refundable, Available rates. */}
+                    {showVoucherChoice && (
+                      <Card className="p-3 mt-3 shadow-sm border-0">
+                        <h6 className="mb-2 fw-bold text-primary">Booking Confirmation</h6>
+                        <Form.Check
+                          type="radio"
+                          id="sc-book-voucher-now"
+                          name="scBookingConfirmation"
+                          label="Book Now & Voucher Now"
+                          value="Book & Voucher"
+                          checked={bookingConfirmation === "Book & Voucher"}
+                          onChange={(e) => setBookingConfirmation(e.target.value)}
+                        />
+                        <Form.Check
+                          type="radio"
+                          id="sc-book-voucher-later"
+                          name="scBookingConfirmation"
+                          label="Book Now & Voucher Later"
+                          value="Book Now & Voucher later"
+                          checked={bookingConfirmation === "Book Now & Voucher later"}
+                          onChange={(e) => setBookingConfirmation(e.target.value)}
+                        />
+                      </Card>
+                    )}
 
                     <div className="hbp-action-bar mt-3 d-flex gap-2">
                       <Button variant="outline-secondary"

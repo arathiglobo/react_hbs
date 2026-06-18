@@ -691,35 +691,43 @@ export default function GovEmployeeSearch() {
     // room-list page header; the page itself shows all rooms in the
     // booking flow.
     const firstRoom = rooms[0] || { adults: 1, children: 0 };
-    navigate("/gov-employee-room-list", {
-      state: {
-        hotelCode: h.hotelCode,
-        hotelId: h.hotelCode,
-        hotelName: h.hotelName,
-        hotelImage: h.hotelImage,
-        address: h.hotelAddress,
-        starRating: h.starRating,
-        apiType: h.apiType,
-        apiId: apiIdFromType(h.apiType),
-        nationalityCode:
-          (selectedNationality?.code || "").length === 2
-            ? selectedNationality.code
-            : "IN",
-        checkIn,
-        checkOut,
-        noOfRooms: rooms.length,
-        adults: firstRoom.adults,
-        children: firstRoom.children,
-        roomConfigurations: rooms,
-        agentId: agent,
-        // Optional "Booking Done By Employee" selection — null when
-        // the user skipped the dropdown.
-        employeeId: selectedEmployee?.value || null,
-        // Display currency chosen on the search page — flows through to the
-        // room list / booking page / create payload. Rates stay AED.
-        currency: displayCurrency,
-      },
-    });
+    // Open /gov-employee-room-list in a NEW browser tab. React Router's
+    // navigate-state can't cross a tab boundary, so the handoff context is
+    // persisted to localStorage (shared across same-origin tabs) and
+    // GovEmployeeRoomList reads it as a fallback when location.state is empty.
+    const handoff = {
+      hotelCode: h.hotelCode,
+      hotelId: h.hotelCode,
+      hotelName: h.hotelName,
+      hotelImage: h.hotelImage,
+      address: h.hotelAddress,
+      starRating: h.starRating,
+      apiType: h.apiType,
+      apiId: apiIdFromType(h.apiType),
+      nationalityCode:
+        (selectedNationality?.code || "").length === 2
+          ? selectedNationality.code
+          : "IN",
+      checkIn,
+      checkOut,
+      noOfRooms: rooms.length,
+      adults: firstRoom.adults,
+      children: firstRoom.children,
+      roomConfigurations: rooms,
+      agentId: agent,
+      // Optional "Booking Done By Employee" selection — null when
+      // the user skipped the dropdown.
+      employeeId: selectedEmployee?.value || null,
+      // Display currency chosen on the search page — flows through to the
+      // room list / booking page / create payload. Rates stay AED.
+      currency: displayCurrency,
+    };
+    try {
+      localStorage.setItem("govEmployeeRoomListCtx", JSON.stringify(handoff));
+    } catch (e) {
+      /* ignore quota / serialization issues — new tab can still open */
+    }
+    window.open("/gov-employee-room-list", "_blank", "noopener");
   };
 
   return (
@@ -1265,8 +1273,8 @@ export default function GovEmployeeSearch() {
                     {/* Result-count line + loading spinner */}
                     <div className="d-flex justify-content-between align-items-center mb-3">
                       <small className="text-muted fw-semibold">
-                        Showing {filteredResults.length} of {results.length}{" "}
-                        hotels
+                        Showing {filteredResults.length === 0 ? 0 : 1} to{" "}
+                        {filteredResults.length} of {results.length} entries
                       </small>
                       {isLoading && (
                         <small className="text-muted d-flex align-items-center">

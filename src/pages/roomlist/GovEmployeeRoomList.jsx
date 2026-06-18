@@ -74,8 +74,19 @@ const GovEmployeeRoomList = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Search-state passed from the gov-employee search page.
-  const ctx = location.state || {};
+  // Search-state passed from the gov-employee search page. GovEmployeeSearch
+  // now opens this page in a NEW tab, where React Router's navigate-state
+  // isn't available — fall back to the handoff context it persisted to
+  // localStorage (shared across same-origin tabs).
+  const ctx = React.useMemo(() => {
+    if (location.state) return location.state;
+    try {
+      const raw = localStorage.getItem("govEmployeeRoomListCtx");
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }, [location.state]);
 
   const [roomData, setRoomData] = useState(null);   // /api/hotel-rooms/search response
   const [policyList, setPolicyList] = useState(null); // /api/hotels/{id}/policies

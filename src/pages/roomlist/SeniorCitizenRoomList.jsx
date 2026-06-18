@@ -18,7 +18,7 @@ import {
 import {
   FaBed, FaUtensils, FaStar, FaMapMarkerAlt, FaCalendarAlt, FaUsers,
   FaInfoCircle, FaCheckCircle, FaTimesCircle, FaHotel, FaMoneyBillWave,
-  FaShieldAlt, FaGlobe, FaUserClock,
+  FaShieldAlt, FaGlobe, FaUserClock, FaChevronUp, FaChevronDown,
 } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
@@ -43,7 +43,18 @@ const renderPolicyValidity = (fromDate, toDate) => {
 export default function SeniorCitizenRoomList() {
   const location = useLocation();
   const navigate = useNavigate();
-  const ctx = location.state || {};
+  // SeniorCitizenSearch now opens this page in a NEW tab, where React Router's
+  // navigate-state isn't available — fall back to the handoff context it
+  // persisted to localStorage (shared across same-origin tabs).
+  const ctx = React.useMemo(() => {
+    if (location.state) return location.state;
+    try {
+      const raw = localStorage.getItem("seniorCitizenRoomListCtx");
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return {};
+    }
+  }, [location.state]);
 
   const [roomData, setRoomData] = useState(null);
   const [policyList, setPolicyList] = useState(null); // /api/hotels/{id}/policies
@@ -170,6 +181,25 @@ export default function SeniorCitizenRoomList() {
     return <Badge bg="secondary">{String(nonRefundable)}</Badge>;
   };
 
+  // Room availability status from POST /api/hotel-rooms/search. Drives the
+  // booking flow on the booking page: "On Request" rates book as REQUESTED
+  // (no instant voucher); "Available" rates offer Book Now & Voucher Now /
+  // Later. Mirrors getRoomStatusBadge in RoomList.jsx.
+  const getRoomStatusBadge = (roomStatus) => {
+    if (roomStatus === "On Request") {
+      return (
+        <Badge bg="warning" text="dark" className="px-2 py-1 fw-bold border border-warning">
+          On Request
+        </Badge>
+      );
+    }
+    return (
+      <Badge bg="success" className="px-2 py-1 fw-bold">
+        Available
+      </Badge>
+    );
+  };
+
   useEffect(() => {
     if (!ctx?.hotelCode) {
       setError("Missing hotel context — please go back and search again.");
@@ -281,7 +311,13 @@ export default function SeniorCitizenRoomList() {
       },
       // Forward optional "Booking Done By Employee" from SeniorCitizenSearch
       // onto payload so SeniorCitizenBookingPage can read it.
-      payload: { ...roomData.payload, employeeId: ctx.employeeId || null },
+      payload: {
+        ...roomData.payload,
+        employeeId: ctx.employeeId || null,
+        // "Add New Item" flow — forward the parent code so the create call
+        // saves this booking as a child (SNCIT7/1, SNCIT7/2, …).
+        parentBookingCode: ctx.parentBookingCode || null,
+      },
       activePromotion,
       searchCtx: ctx,
     };
@@ -429,7 +465,13 @@ export default function SeniorCitizenRoomList() {
           phone: hotelsdetail.hotelPhoneNumber,
         },
         // Same employeeId forwarding as the single-room flow above.
-        payload: { ...roomData.payload, employeeId: ctx.employeeId || null },
+        payload: {
+        ...roomData.payload,
+        employeeId: ctx.employeeId || null,
+        // "Add New Item" flow — forward the parent code so the create call
+        // saves this booking as a child (SNCIT7/1, SNCIT7/2, …).
+        parentBookingCode: ctx.parentBookingCode || null,
+      },
         activePromotion,
         searchCtx: ctx,
       };
@@ -680,6 +722,13 @@ export default function SeniorCitizenRoomList() {
                                     {filteredRates.length !== 1 ? "s" : ""} available
                                   </div>
                                 </div>
+                                {/* Open/closed indicator — up when this
+                                    category is expanded, down when collapsed. */}
+                                {activeAccordion === eventKey ? (
+                                  <FaChevronUp className="text-muted" />
+                                ) : (
+                                  <FaChevronDown className="text-muted" />
+                                )}
                               </div>
                             </div>
                           </Accordion.Header>
@@ -700,7 +749,10 @@ export default function SeniorCitizenRoomList() {
                                             {getMealPlanIcon(rate.mealPlan)}
                                             <span className="fw-semibold small">{rate.mealPlan}</span>
                                           </div>
-                                          {getRefundStatusBadge(rate.nonRefundable)}
+                                          <div className="d-flex align-items-center gap-2">
+                                            {getRoomStatusBadge(rate.roomStatus)}
+                                            {getRefundStatusBadge(rate.nonRefundable)}
+                                          </div>
                                         </div>
                                         <div className="rate-pricing text-center py-2">
                                           {/* In single-room mode the

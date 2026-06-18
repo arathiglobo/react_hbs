@@ -451,7 +451,8 @@ export default function App() {
         <Route path="/booking-details/24hr-booking-list" element={<PrivateRoute><HotelBookingList24Hour /> </PrivateRoute>}/>
         {/* Last Minute Bookings list — view + cancel from this page */}
         <Route path="/booking-details/last-minute-booking-list" element={<PrivateRoute><LastMinuteBookingList /></PrivateRoute>}/>
-        <Route path="/booking-details/last-minute-booking/:id" element={<PrivateRoute><LastMinuteBookingDetailView /></PrivateRoute>}/>
+        {/* <Route path="/booking-details/last-minute-booking/:id" element={<PrivateRoute><LastMinuteBookingDetailView /></PrivateRoute>}/> */}
+        <Route path="/booking-details/last-minute-booking/:id" element={<PrivateRoute><BookingDetailedView /></PrivateRoute>}/>
         <Route path="/booking-details/hotel-booking/:id" element={<PrivateRoute><BookingDetailedView /></PrivateRoute>}/>
         <Route path="/booking-details/hotel-booking/:id/edit" element={<PrivateRoute><BookingEditPage /></PrivateRoute>}/>
         <Route path="/booking-details/hotel-booking/:id/notes" element={<PrivateRoute><BookingNotesPage /></PrivateRoute>}/>

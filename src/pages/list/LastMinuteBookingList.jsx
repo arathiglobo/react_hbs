@@ -9,6 +9,9 @@ import {
   InputGroup,
   Badge,
   Modal,
+  Row,
+  Col,
+  Pagination,
 } from "react-bootstrap";
 import {
   FaEye,
@@ -23,9 +26,14 @@ import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import { formatDateTime } from "../../utils/dateUtils";
 
+// Rows-per-page choices — same set as /booking-details/hotel-booking-list.
+const PER_PAGE_OPTIONS = [10, 25, 50, 100];
+
 const STATUS_META = {
   CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
   Confirmed: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  ReConfirmed: { label: "ReConfirmed", bg: "#e6f0ff", color: "#1d4ed8", dot: "#3b82f6" },
+  Requested: { label: "Requested", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   PENDING:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
   Cancelled: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
@@ -41,6 +49,47 @@ const getGuestNames = (booking) => {
   return booking?.customerName && booking.customerName !== "-"
     ? [booking.customerName]
     : [];
+};
+
+// Booking Type filter options — mirrors the dropdown on
+// /booking-details/hotel-booking-list, adapted to the fields the
+// last-minute list row actually carries (confirmationStatus / isCancelled /
+// checkOutDate). Filtering is client-side over the already-fetched list.
+const BOOKING_TYPE_OPTIONS = [
+  { value: "all", label: "All" },
+  { value: "upcoming", label: "Upcoming" },
+  { value: "completed", label: "Completed" },
+  { value: "reconfirmed", label: "ReConfirmed" },
+  { value: "confirmed", label: "Confirmed" },
+  { value: "requested", label: "Requested" },
+  { value: "cancelled", label: "Cancelled" },
+];
+
+// True when a booking matches the selected Booking Type. "Upcoming" /
+// "Completed" are derived from the stay's check-out date (cancelled rows are
+// excluded from both); the status options match the backend's formatted
+// confirmationStatus ("ReConfirmed" / "Confirmed" / "Requested").
+const matchesBookingType = (booking, type) => {
+  if (!type || type === "all") return true;
+  const isCancelled = booking?.isCancelled === true;
+  if (type === "cancelled") return isCancelled;
+  if (isCancelled) return false;
+
+  const status = String(booking?.confirmationStatus || "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+  if (type === "reconfirmed") return status === "reconfirmed";
+  if (type === "confirmed") return status === "confirmed";
+  if (type === "requested") return status === "requested";
+
+  const co = booking?.checkOutDate ? new Date(booking.checkOutDate) : null;
+  if (!co || isNaN(co.getTime())) return type === "upcoming";
+  co.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  if (type === "upcoming") return co >= today;
+  if (type === "completed") return co < today;
+  return true;
 };
 
 const StatusPill = ({ meta, raw }) => {
@@ -93,6 +142,15 @@ export default function LastMinuteBookingList() {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  // Booking Type filter — same control as /booking-details/hotel-booking-list.
+  const [bookingType, setBookingType] = useState("all");
+  // Time Period filter (by check-in month/year) — same control + position as
+  // /booking-details/hotel-booking-list. Either field can be set independently.
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
+  // Client-side pagination — same UX as /booking-details/hotel-booking-list.
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(PER_PAGE_OPTIONS[0]);
   // "Customers (N)" modal — opened from the "+N more" badge on the
   // Customer column to show every guest on a booking.
   const [showCustomersModal, setShowCustomersModal] = useState(false);
@@ -121,8 +179,27 @@ export default function LastMinuteBookingList() {
     fetchBookings();
   }, []);
 
-  // Client-side filter by search term (booking code / customer / hotel name).
+  // Month / Year option lists for the Time Period selectors.
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: currentYear - 2014 }, (_, i) => 2020 + i);
+
+  // Client-side filter by Booking Type, Time Period (check-in month/year),
+  // then search term (booking code / customer / hotel name).
   const filtered = bookings.filter((b) => {
+    if (!matchesBookingType(b, bookingType)) return false;
+    // Time Period — match the check-in date's month/year (mirrors the hotel
+    // list, whose month/year primarily filters on checkInDate). Each field is
+    // optional and applied independently.
+    if (selectedMonth || selectedYear) {
+      const ci = b.checkInDate ? new Date(b.checkInDate) : null;
+      if (!ci || isNaN(ci.getTime())) return false;
+      if (selectedMonth && ci.getMonth() + 1 !== Number(selectedMonth)) return false;
+      if (selectedYear && ci.getFullYear() !== Number(selectedYear)) return false;
+    }
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
     return (
@@ -132,6 +209,27 @@ export default function LastMinuteBookingList() {
       (b.hotelName || "").toLowerCase().includes(q)
     );
   });
+
+  // ── Pagination (client-side, over the filtered list) ──────────────────
+  const totalEntries = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalEntries / perPage));
+  // Clamp the active page if filtering/resizing shrank the result set.
+  const safePage = Math.min(currentPage, totalPages);
+  const startIdx = (safePage - 1) * perPage;
+  const pageItems = filtered.slice(startIdx, startIdx + perPage);
+  const displayStart = totalEntries === 0 ? 0 : startIdx + 1;
+  const displayEnd = Math.min(startIdx + perPage, totalEntries);
+
+  // Jump back to page 1 whenever the filters change so the user isn't
+  // stranded on an out-of-range page.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, bookingType, selectedMonth, selectedYear, perPage]);
+
+  const goToPage = (p) => {
+    if (p < 1 || p > totalPages) return;
+    setCurrentPage(p);
+  };
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -150,9 +248,120 @@ export default function LastMinuteBookingList() {
               paddingRight: "0.5rem",
             }}
           >
-            <div className="d-flex justify-content-between align-items-center mb-4">
-              <h5 className="mb-0 text-dark fw-semibold">Last Minute Bookings</h5>
+            {/* Header: Title + Search (left) | Time Period (right) — mirrors
+                /booking-details/hotel-booking-list */}
+            <div className="d-flex justify-content-between align-items-end mb-3">
+              <div>
+                <h3 className="fw-bold text-dark mb-2">Last Minute Bookings</h3>
+                <InputGroup style={{ height: "40px", width: "300px" }}>
+                  <InputGroup.Text
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      borderRight: "none",
+                      borderColor: "#dee2e6",
+                    }}
+                  >
+                    <FaSearch style={{ color: "#6c757d" }} />
+                  </InputGroup.Text>
+                  <Form.Control
+                    type="text"
+                    placeholder="Search by code / customer / hotel"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    style={{
+                      borderLeft: "none",
+                      fontSize: "0.85rem",
+                      borderColor: "#dee2e6",
+                      height: "40px",
+                    }}
+                  />
+                </InputGroup>
+              </div>
+              <Card
+                className="shadow-sm border-0"
+                style={{ borderRadius: "8px", minWidth: "260px" }}
+              >
+                <Card.Body className="p-3">
+                  <h6
+                    className="mb-2 fw-bold text-dark"
+                    style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                  >
+                    Time Period
+                  </h6>
+                  <Row className="g-2">
+                    <Col xs={6}>
+                      <Form.Select
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className="form-control"
+                        size="sm"
+                        style={{ fontSize: "0.82rem", height: "45px" }}
+                      >
+                        <option value="">Month</option>
+                        {months.map((month, index) => (
+                          <option key={month} value={index + 1}>
+                            {month.slice(0, 3)}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                    <Col xs={6}>
+                      <Form.Select
+                        value={selectedYear}
+                        onChange={(e) => setSelectedYear(e.target.value)}
+                        className="form-control"
+                        size="sm"
+                        style={{ fontSize: "0.82rem", height: "45px" }}
+                      >
+                        <option value="">Year</option>
+                        {years.map((year) => (
+                          <option key={year} value={year}>
+                            {year}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                  </Row>
+                </Card.Body>
+              </Card>
             </div>
+
+            {/* Booking Type filter — mirrors /booking-details/hotel-booking-list */}
+            <Row className="mb-2 g-1">
+              <Col xs={12}>
+                <Card
+                  className="shadow-sm border-0 w-100"
+                  style={{ borderRadius: "8px" }}
+                >
+                  <Card.Body className="p-3">
+                    <h6
+                      className="mb-2 fw-bold text-dark"
+                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                    >
+                      Booking Type
+                    </h6>
+
+                    <Row className="g-2">
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <Form.Select
+                          value={bookingType}
+                          onChange={(e) => setBookingType(e.target.value)}
+                          size="sm"
+                          aria-label="Booking type filter"
+                          style={{ fontSize: "0.85rem", height: "46px" }}
+                        >
+                          {BOOKING_TYPE_OPTIONS.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </Form.Select>
+                      </Col>
+                    </Row>
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
 
             <Card
               className="border mb-3 shadow-sm"
@@ -170,31 +379,6 @@ export default function LastMinuteBookingList() {
                 <span>List of Bookings</span>
               </Card.Header>
               <Card.Body style={{ padding: "1.5rem 1rem 1rem" }}>
-                <div
-                  className="d-flex flex-wrap justify-content-end align-items-center gap-2"
-                  style={{ marginBottom: "1.5rem" }}
-                >
-                  <InputGroup size="sm" style={{ width: "300px" }}>
-                    <InputGroup.Text
-                      style={{
-                        fontSize: "0.75rem",
-                        backgroundColor: "#ffffff",
-                        borderRight: "none",
-                        color: "#98a2b3",
-                      }}
-                    >
-                      <FaSearch />
-                    </InputGroup.Text>
-                    <Form.Control
-                      type="text"
-                      placeholder="Search by code / customer / hotel"
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      style={{ fontSize: "0.8rem", borderLeft: "none" }}
-                    />
-                  </InputGroup>
-                </div>
-
                 {loading ? (
                   <div className="text-center py-5">
                     <Spinner animation="border" variant="primary" />
@@ -229,14 +413,14 @@ export default function LastMinuteBookingList() {
                           </tr>
                         </thead>
                         <tbody>
-                          {filtered.map((b, idx) => {
+                          {pageItems.map((b, idx) => {
                             const statusText = b.isCancelled
                               ? "Cancelled"
                               : b.confirmationStatus || "Confirmed";
                             const sMeta = STATUS_META[statusText];
                             return (
                               <tr key={b.bookingId}>
-                                <td className="text-muted">{idx + 1}</td>
+                                <td className="text-muted">{startIdx + idx + 1}</td>
                                 {/* Customer — a booking can hold many guests.
                                     Show the first prominently; the rest sit
                                     behind a "+N more" badge that opens the
@@ -385,6 +569,69 @@ export default function LastMinuteBookingList() {
                       .saas-table tbody tr:first-child td { border-top: none; }
                       .saas-table tbody tr:hover { background-color: #fafbfc; }
                     `}</style>
+
+                    {/* Pagination footer — mirrors /booking-details/hotel-booking-list */}
+                    <div className="d-flex justify-content-between align-items-center flex-wrap gap-3 mt-3">
+                      <div className="text-muted" style={{ fontSize: "0.875rem" }}>
+                        Showing{" "}
+                        <span className="fw-semibold text-dark">{displayStart}</span>{" "}
+                        to <span className="fw-semibold text-dark">{displayEnd}</span>{" "}
+                        of <span className="fw-semibold text-dark">{totalEntries}</span>{" "}
+                        entries
+                      </div>
+                      <div className="d-flex align-items-center gap-2">
+                        <span className="text-muted" style={{ fontSize: "0.8rem" }}>
+                          Rows per page
+                        </span>
+                        <Form.Select
+                          size="sm"
+                          value={perPage}
+                          onChange={(e) => setPerPage(Number(e.target.value))}
+                          style={{ width: "auto", fontSize: "0.8rem" }}
+                        >
+                          {PER_PAGE_OPTIONS.map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </Form.Select>
+                      </div>
+                      <Pagination className="mb-0">
+                        <Pagination.Prev
+                          disabled={safePage === 1}
+                          onClick={() => goToPage(safePage - 1)}
+                          style={{
+                            cursor: safePage === 1 ? "not-allowed" : "pointer",
+                            opacity: safePage === 1 ? 0.5 : 1,
+                          }}
+                        />
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                          (pageNumber) => (
+                            <Pagination.Item
+                              key={pageNumber}
+                              active={safePage === pageNumber}
+                              onClick={() => goToPage(pageNumber)}
+                              style={{
+                                cursor: "pointer",
+                                minWidth: "38px",
+                                textAlign: "center",
+                              }}
+                            >
+                              {pageNumber}
+                            </Pagination.Item>
+                          ),
+                        )}
+                        <Pagination.Next
+                          disabled={safePage === totalPages}
+                          onClick={() => goToPage(safePage + 1)}
+                          style={{
+                            cursor:
+                              safePage === totalPages ? "not-allowed" : "pointer",
+                            opacity: safePage === totalPages ? 0.5 : 1,
+                          }}
+                        />
+                      </Pagination>
+                    </div>
                   </>
                 )}
               </Card.Body>

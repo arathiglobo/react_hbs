@@ -96,10 +96,50 @@ const getMealPlanIcon = (mealPlan) => {
   return <FaUtensils className="text-primary" />;
 };
 
-const getRefundBadge = (refundable) => {
-  if (refundable === true) return <Badge bg="success">Flexible</Badge>;
-  if (refundable === false) return <Badge bg="danger">Non-Refundable</Badge>;
-  return <Badge bg="secondary">Non-Refundable</Badge>;
+// Effective refundability for a last-minute rate. A rate flagged refundable
+// (Flexible) only stays refundable while today is on/before its free-
+// cancellation deadline — checkInDate minus the largest daysBeforeArrival
+// across its cancellation policies. Once that deadline passes (or the rate is
+// flagged non-refundable / carries no cancellation-policy day) it is treated
+// as Non-Refundable. Mirrors the deadline rule on /hotel-booking-page.
+const isRateNonRefundable = (rate, checkInDate) => {
+  if (rate?.refundable !== true) return true;
+  const days = (rate?.cancellationPolicies || [])
+    .map((p) => Number(p?.daysBeforeArrival))
+    .filter((n) => Number.isFinite(n));
+  if (days.length === 0) return false;
+  const cin = new Date(checkInDate);
+  if (isNaN(cin.getTime())) return false;
+  const deadline = new Date(cin);
+  deadline.setDate(deadline.getDate() - Math.max(...days));
+  deadline.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today > deadline;
+};
+
+const getRefundBadge = (rate, checkInDate) =>
+  isRateNonRefundable(rate, checkInDate) ? (
+    <Badge bg="danger">Non-Refundable</Badge>
+  ) : (
+    <Badge bg="success">Flexible</Badge>
+  );
+
+// Availability badge — mirrors /room-list. "On Request" (yellow) when the
+// room's category has no inventory for the dates; "Available" (green) otherwise.
+const getRoomStatusBadge = (roomStatus) => {
+  if (roomStatus === "On Request") {
+    return (
+      <Badge bg="warning" text="dark" className="ms-1">
+        On Request
+      </Badge>
+    );
+  }
+  return (
+    <Badge bg="success" className="ms-1">
+      Available
+    </Badge>
+  );
 };
 
 // Group flat room rates by roomCategoryId so each becomes one Accordion item.
@@ -564,7 +604,8 @@ export default function LastMinuteRoomList() {
                                               `Type #${rate.roomTypeId}`}
                                           </div>
                                         </div>
-                                        {getRefundBadge(rate.refundable)}
+                                        {getRefundBadge(rate, results.checkInDate)}
+                                        {getRoomStatusBadge(rate.roomStatus)}
                                       </div>
 
                                       <div className="rate-pricing text-center py-2">
@@ -664,7 +705,8 @@ export default function LastMinuteRoomList() {
                                                 `Meal Plan #${rate.mealPlanId}`}
                                             </span>
                                           </div>
-                                          {getRefundBadge(rate.refundable)}
+                                          {getRefundBadge(rate, results.checkInDate)}
+                                        {getRoomStatusBadge(rate.roomStatus)}
                                           <small className="text-muted">
                                             {rate.roomTypeName ||
                                               `Type #${rate.roomTypeId}`}

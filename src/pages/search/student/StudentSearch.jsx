@@ -18,7 +18,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Card, Button, Row, Col, Form, Spinner } from "react-bootstrap";
-import { FaSearch, FaStar, FaGraduationCap } from "react-icons/fa";
+import { FaSearch, FaStar, FaGraduationCap, FaUserClock } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import Select from "react-select";
 import AgentSelect from "../../../components/AgentSelect";
@@ -74,7 +74,8 @@ function RoomGuestSelector({ value, onChange }) {
     setRooms(next);
     onChange && onChange(next);
   };
-  const addRoom = () => update([...rooms, { adults: 1, children: 0, childAges: [] }]);
+  const addRoom = () =>
+    update([...rooms, { adults: 1, children: 0, childAges: [] }]);
   const removeRoom = (i) => update(rooms.filter((_, j) => j !== i));
   const setAdults = (i, a) =>
     update(rooms.map((r, j) => (j === i ? { ...r, adults: a } : r)));
@@ -85,10 +86,13 @@ function RoomGuestSelector({ value, onChange }) {
           ? {
               ...r,
               children: c,
-              childAges: Array.from({ length: c }, (_, k) => r.childAges[k] || 5),
+              childAges: Array.from(
+                { length: c },
+                (_, k) => r.childAges[k] || 5,
+              ),
             }
-          : r
-      )
+          : r,
+      ),
     );
   const setChildAge = (i, idx, age) =>
     update(
@@ -97,7 +101,7 @@ function RoomGuestSelector({ value, onChange }) {
         const ages = [...r.childAges];
         ages[idx] = age;
         return { ...r, childAges: ages };
-      })
+      }),
     );
 
   return (
@@ -108,7 +112,11 @@ function RoomGuestSelector({ value, onChange }) {
             <div className="rgs-room-header">
               <span className="rgs-room-label">🛏 Room {i + 1}</span>
               {rooms.length > 1 && (
-                <button type="button" className="rgs-remove-btn" onClick={() => removeRoom(i)}>
+                <button
+                  type="button"
+                  className="rgs-remove-btn"
+                  onClick={() => removeRoom(i)}
+                >
                   ✕
                 </button>
               )}
@@ -119,14 +127,24 @@ function RoomGuestSelector({ value, onChange }) {
                   <span className="rgs-counter-title">Adults</span>
                   <span className="rgs-counter-sub">Age 18+</span>
                 </div>
-                <Counter value={room.adults} min={1} max={6} onChange={(v) => setAdults(i, v)} />
+                <Counter
+                  value={room.adults}
+                  min={1}
+                  max={6}
+                  onChange={(v) => setAdults(i, v)}
+                />
               </div>
               <div className="rgs-counter-row">
                 <div className="rgs-counter-info">
                   <span className="rgs-counter-title">Children</span>
                   <span className="rgs-counter-sub">Age 0–17</span>
                 </div>
-                <Counter value={room.children} min={0} max={4} onChange={(v) => setChildren(i, v)} />
+                <Counter
+                  value={room.children}
+                  min={0}
+                  max={4}
+                  onChange={(v) => setChildren(i, v)}
+                />
               </div>
             </div>
             {room.children > 0 && (
@@ -135,11 +153,15 @@ function RoomGuestSelector({ value, onChange }) {
                 <div className="rgs-child-ages-row">
                   {Array.from({ length: room.children }).map((_, idx) => (
                     <div key={idx} className="rgs-child-age-select">
-                      <label className="rgs-child-age-label">Child {idx + 1}</label>
+                      <label className="rgs-child-age-label">
+                        Child {idx + 1}
+                      </label>
                       <Form.Select
                         size="sm"
                         value={room.childAges[idx] || 5}
-                        onChange={(e) => setChildAge(i, idx, parseInt(e.target.value))}
+                        onChange={(e) =>
+                          setChildAge(i, idx, parseInt(e.target.value))
+                        }
                         className="rgs-age-dropdown"
                       >
                         {Array.from({ length: 18 }).map((__, age) => (
@@ -191,6 +213,7 @@ export default function StudentSearch() {
   // StudentRoomList → StudentBookingPage's bookingData.payload.
   const [employees, setEmployees] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [nights, setNights] = useState(1);
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -217,7 +240,9 @@ export default function StudentSearch() {
   // (currently filled by duplicating the same totals N times); now we
   // populate it with the user's REAL per-room breakdown — a small
   // backend-compatible improvement.
-  const [rooms, setRooms] = useState([{ adults: 1, children: 0, childAges: [] }]);
+  const [rooms, setRooms] = useState([
+    { adults: 1, children: 0, childAges: [] },
+  ]);
   const [roomsOpen, setRoomsOpen] = useState(false);
 
   const [errors, setErrors] = useState({});
@@ -255,6 +280,32 @@ export default function StudentSearch() {
   const [selfAgentId, setSelfAgentId] = useState("");
 
   useEffect(() => {
+    if (checkIn && checkOut) {
+      const start = new Date(checkIn);
+      const end = new Date(checkOut);
+      const diff = Math.max(
+        1,
+        Math.ceil((end - start) / (1000 * 60 * 60 * 24)),
+      );
+      setNights(diff);
+    }
+  }, [checkIn, checkOut]);
+
+  const handleNightsChange = (value) => {
+    const val = Math.max(1, Number(value) || 1);
+    setNights(val);
+    if (checkIn) {
+      const start = new Date(checkIn);
+      const out = new Date(start);
+      out.setDate(start.getDate() + val);
+      const iso = new Date(out.getTime() - out.getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 10);
+      setCheckOut(iso);
+    }
+  };
+
+  useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
@@ -275,13 +326,18 @@ export default function StudentSearch() {
         console.warn("currency list fetch failed (non-fatal):", err);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!isAgentRole) return;
     const cached = localStorage.getItem("userId");
-    if (cached) { setSelfAgentId(cached); return; }
+    if (cached) {
+      setSelfAgentId(cached);
+      return;
+    }
     const userName =
       localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
     if (!userName) return;
@@ -296,7 +352,9 @@ export default function StudentSearch() {
         }
       })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [isAgentRole]);
 
   const currencyAgentId = isAgentRole ? selfAgentId : agent;
@@ -313,7 +371,9 @@ export default function StudentSearch() {
         if (opt) setSelectedCurrency(opt);
       })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [currencyAgentId, currencyOptions]);
 
   const aedBaseRate = useMemo(() => {
@@ -321,13 +381,18 @@ export default function StudentSearch() {
     return aed && Number.isFinite(aed.rate) && aed.rate > 0 ? aed.rate : 1;
   }, [currencyOptions]);
 
-  const displayCurrency = useMemo(() => ({
-    code: selectedCurrency?.code || "AED",
-    factor:
-      selectedCurrency && Number.isFinite(selectedCurrency.rate) && aedBaseRate
-        ? selectedCurrency.rate / aedBaseRate
-        : 1,
-  }), [selectedCurrency, aedBaseRate]);
+  const displayCurrency = useMemo(
+    () => ({
+      code: selectedCurrency?.code || "AED",
+      factor:
+        selectedCurrency &&
+        Number.isFinite(selectedCurrency.rate) &&
+        aedBaseRate
+          ? selectedCurrency.rate / aedBaseRate
+          : 1,
+    }),
+    [selectedCurrency, aedBaseRate],
+  );
   const displayCurrencyCode = displayCurrency.code;
   const convertFromAed = (aed) => (Number(aed) || 0) * displayCurrency.factor;
 
@@ -339,7 +404,9 @@ export default function StudentSearch() {
       list = list.filter((h) => (h.hotelName || "").toLowerCase().includes(q));
     }
     if (starRating?.value) {
-      list = list.filter((h) => Number(h.starRating) === Number(starRating.value));
+      list = list.filter(
+        (h) => Number(h.starRating) === Number(starRating.value),
+      );
     }
     if (hotelType.length > 0) {
       const sel = hotelType.map((t) => t.value.toLowerCase());
@@ -347,7 +414,10 @@ export default function StudentSearch() {
         sel.includes(String(h.hotelType || "hotel").toLowerCase()),
       );
     }
-    if (channelType.length > 0 && !channelType.some((c) => c.value === "inhouse")) {
+    if (
+      channelType.length > 0 &&
+      !channelType.some((c) => c.value === "inhouse")
+    ) {
       list = [];
     }
     const rate = (h) => Number(h.baseRate ?? Infinity);
@@ -408,39 +478,54 @@ export default function StudentSearch() {
     (async () => {
       try {
         const { data } = await axiosInstance.get("/api/province?limit=50");
-        const list = Array.isArray(data) ? data : data?.content || data?.data || [];
+        const list = Array.isArray(data)
+          ? data
+          : data?.content || data?.data || [];
         setDestinationOptions(
           list.map((city) => ({
             value: city.id ?? city.provinceId,
             label: `${city.stateName ?? city.name ?? ""}, ${city.country ?? ""}`,
             countryId: city.countryId,
-          }))
+          })),
         );
-      } catch (e) { /* silent */ }
+      } catch (e) {
+        /* silent */
+      }
     })();
     (async () => {
       try {
         const { data } = await axiosInstance.get("/api/country?limit=50");
         const list = Array.isArray(data) ? data : data?.content || [];
         setNationalityList(list.filter(Boolean).map(buildCountryOption));
-      } catch (e) { /* silent */ }
+      } catch (e) {
+        /* silent */
+      }
     })();
     (async () => {
       try {
         const { data } = await axiosInstance.get("/api/agent");
         const list = Array.isArray(data) ? data : data?.content || [];
         setAgents(list);
-      } catch (e) { /* silent */ }
+      } catch (e) {
+        /* silent */
+      }
     })();
   }, []);
 
   useEffect(() => {
-    if (!agent) { setAgentBalance(null); return; }
+    if (!agent) {
+      setAgentBalance(null);
+      return;
+    }
     (async () => {
       try {
-        const { data } = await axiosInstance.get(`/api/agent-credit-limit/agent/${agent}`);
+        const { data } = await axiosInstance.get(
+          `/api/agent-credit-limit/agent/${agent}`,
+        );
         setAgentBalance(data?.availableCreditLimit ?? null);
-      } catch (e) { setAgentBalance(null); }
+      } catch (e) {
+        setAgentBalance(null);
+      }
     })();
   }, [agent]);
 
@@ -449,7 +534,10 @@ export default function StudentSearch() {
   //    accepts a `roomConfigurations` array, so we now send the real
   //    per-room breakdown instead of duplicating one set N times.
   const totalAdults = rooms.reduce((a, r) => a + (Number(r.adults) || 0), 0);
-  const totalChildren = rooms.reduce((a, r) => a + (Number(r.children) || 0), 0);
+  const totalChildren = rooms.reduce(
+    (a, r) => a + (Number(r.children) || 0),
+    0,
+  );
   const totalRooms = rooms.length;
 
   const validate = () => {
@@ -473,7 +561,8 @@ export default function StudentSearch() {
         checkIn,
         checkOut,
         destinationCityId: selectedDestination.value,
-        destinationCountryId: selectedDestination.countryId ?? selectedDestination.value,
+        destinationCountryId:
+          selectedDestination.countryId ?? selectedDestination.value,
         nationalityId: selectedNationality?.value,
         nationalityCode: selectedNationality?.code,
         noOfRooms: totalRooms,
@@ -486,9 +575,15 @@ export default function StudentSearch() {
           childAges: r.childAges || [],
         })),
       };
-      const { data } = await axiosInstance.post("/api/student-hotel-search/search", payload);
+      const { data } = await axiosInstance.post(
+        "/api/student-hotel-search/search",
+        payload,
+      );
       const searchId = data?.searchId;
-      if (!searchId) { setIsLoading(false); return; }
+      if (!searchId) {
+        setIsLoading(false);
+        return;
+      }
 
       // Poll for results
       let attempts = 0;
@@ -497,7 +592,7 @@ export default function StudentSearch() {
         try {
           const { data: r } = await axiosInstance.get(
             `/api/student-hotel-search/results/${searchId}` +
-            `?agentId=${agent}&page=0&size=50&checkInDate=${checkIn}`
+              `?agentId=${agent}&page=0&size=50&checkInDate=${checkIn}`,
           );
           setResults(r?.result || []);
           if (r?.finalStatus === "COMPLETED" || attempts >= 10) {
@@ -505,7 +600,9 @@ export default function StudentSearch() {
             return;
           }
           setTimeout(poll, 1500);
-        } catch (e) { setIsLoading(false); }
+        } catch (e) {
+          setIsLoading(false);
+        }
       };
       poll();
     } catch (e) {
@@ -514,7 +611,15 @@ export default function StudentSearch() {
   };
 
   const apiIdFromType = (apiType) => {
-    const m = { inhouse: 1, jumeirah: 10, iwtx: 12, x3: 15, ratehawk: 14, darina: 16, atharva: 3 };
+    const m = {
+      inhouse: 1,
+      jumeirah: 10,
+      iwtx: 12,
+      x3: 15,
+      ratehawk: 14,
+      darina: 16,
+      atharva: 3,
+    };
     return m[(apiType || "").toLowerCase()] || 1;
   };
   const handleViewRooms = (h) => {
@@ -531,8 +636,10 @@ export default function StudentSearch() {
       starRating: h.starRating,
       apiType: h.apiType,
       apiId: apiIdFromType(h.apiType),
-      nationalityCode: (selectedNationality?.code || "").length === 2
-        ? selectedNationality.code : "IN",
+      nationalityCode:
+        (selectedNationality?.code || "").length === 2
+          ? selectedNationality.code
+          : "IN",
       checkIn,
       checkOut,
       noOfRooms: totalRooms,
@@ -546,7 +653,8 @@ export default function StudentSearch() {
       // (?parentBookingCode=STU7) and is threaded through so the new booking
       // is saved as a child (STU7/1, STU7/2, …).
       parentBookingCode:
-        new URLSearchParams(window.location.search).get("parentBookingCode") || null,
+        new URLSearchParams(window.location.search).get("parentBookingCode") ||
+        null,
       // Display currency chosen on the search page — flows through to the
       // room list / booking page / create payload. Rates stay AED.
       currency: displayCurrency,
@@ -570,60 +678,79 @@ export default function StudentSearch() {
               the dedicated-flow search pages share one look. */}
           <Card className="shadow-sm rounded-xl mb-4 search-card-modern bg-white">
             <Card.Body className="p-4">
+        
+
               <div className="mb-4 text-start">
                 <h2 className="fw-semibold text-primary mb-1 d-flex align-items-center">
-                  <FaGraduationCap className="me-2" /> Hotel Search for Students
+                  <FaUserClock className="me-2" />
+                  <div>
+                    <div style={{ fontSize: "1rem", fontWeight: "400" }}>
+                      Find Your Perfect Stay for
+                    </div>
+                    <div style={{ fontSize: "2rem", fontWeight: "700" }}>
+                     Students
+                    </div>
+                    {/* <p className="text-muted">
+                  Discover amazing hotels with the configured student discount
+                  applied and exclusive deals
+                </p> */}
+                  </div>
                 </h2>
-                <p className="text-muted">
-                    Discover amazing hotels with the configured student discount applied and exclusive deals
-                </p>
               </div>
 
               {/* Field order mirrors /new-booking/hotel (HotelSearch.jsx):
                     1. Agent  2. Destination / City  3. Nationality
-                    4. Check-In  5. Check-Out  6. Rooms & Guests
-                  (Student has no Nights field — Check-In/Check-Out
-                  define the stay directly.) The Adults / Children /
-                  Rooms trio is replaced with one "Rooms & Guests"
+                    4. Check-In 5.Nights 6. Check-Out  6. Rooms & Guests.
+                  The Adults / Children / Rooms trio is replaced with one "Rooms & Guests"
                   button + collapsible RoomGuestSelector, identical to
                   HotelSearch's pattern. */}
               <Row className="g-4">
                 {/* 1. Agent */}
                 {!isAgentRole && (
-                <Col lg={4} md={6}>
-                  <Form.Group>
-                    <Form.Label className="fw-semibold text-dark">Agent *</Form.Label>
-                    <AgentSelect
-                      agents={agents}
-                      value={agent}
-                      isInvalid={!!errors.agent}
-                      placeholder="Select Agent"
-                      onChange={(v) => setAgent(v)}
-                    />
-                    {errors.agent && (
-                      <div className="text-danger small mt-1">{errors.agent}</div>
-                    )}
-                    {agentBalance !== null && (
-                      <div className="mt-1 small">
-                        <span className="fw-semibold" style={{ color: "#dc3545" }}>
-                          Available Balance: {Number(agentBalance).toFixed(2)}
-                        </span>
-                      </div>
-                    )}
-                  </Form.Group>
-                </Col>
+                  <Col lg={4} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Agent *
+                      </Form.Label>
+                      <AgentSelect
+                        agents={agents}
+                        value={agent}
+                        isInvalid={!!errors.agent}
+                        placeholder="Select Agent"
+                        onChange={(v) => setAgent(v)}
+                      />
+                      {errors.agent && (
+                        <div className="text-danger small mt-1">
+                          {errors.agent}
+                        </div>
+                      )}
+                      {agentBalance !== null && (
+                        <div className="mt-1 small">
+                          <span
+                            className="fw-semibold"
+                            style={{ color: "#dc3545" }}
+                          >
+                            Available Balance: {Number(agentBalance).toFixed(2)}
+                          </span>
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
                 )}
 
                 {/* 2. Destination / City */}
                 <Col lg={4} md={6}>
                   <Form.Group>
-                    <Form.Label className="fw-semibold text-dark">Destination *</Form.Label>
+                    <Form.Label className="fw-semibold text-dark">
+                      Destination *
+                    </Form.Label>
                     <Select
                       options={destinationOptions}
                       value={selectedDestination}
                       onChange={setSelectedDestination}
                       placeholder="Select city / destination"
-                      isClearable isSearchable
+                      isClearable
+                      isSearchable
                       menuPortalTarget={document.body}
                       styles={{
                         menuPortal: (base) => ({ ...base, zIndex: 9999 }),
@@ -631,7 +758,9 @@ export default function StudentSearch() {
                       }}
                     />
                     {errors.destination && (
-                      <div className="text-danger small mt-1">{errors.destination}</div>
+                      <div className="text-danger small mt-1">
+                        {errors.destination}
+                      </div>
                     )}
                   </Form.Group>
                 </Col>
@@ -639,7 +768,9 @@ export default function StudentSearch() {
                 {/* 3. Nationality */}
                 <Col lg={4} md={6}>
                   <Form.Group>
-                    <Form.Label className="fw-semibold text-dark">Nationality *</Form.Label>
+                    <Form.Label className="fw-semibold text-dark">
+                      Nationality *
+                    </Form.Label>
                     <Select
                       options={nationalityList}
                       value={selectedNationality}
@@ -651,7 +782,8 @@ export default function StudentSearch() {
                         if (v.length >= 2) debouncedCountrySearch(v);
                       }}
                       placeholder="Select nationality"
-                      isClearable isSearchable
+                      isClearable
+                      isSearchable
                       menuPortalTarget={document.body}
                       styles={{
                         menuPortal: (base) => ({ ...base, zIndex: 9999 }),
@@ -659,7 +791,9 @@ export default function StudentSearch() {
                       }}
                     />
                     {errors.nationality && (
-                      <div className="text-danger small mt-1">{errors.nationality}</div>
+                      <div className="text-danger small mt-1">
+                        {errors.nationality}
+                      </div>
                     )}
                     {/* Tagging UAE nationals as resident — surfaces to the
                         operator so they know to apply the resident rate /
@@ -688,12 +822,14 @@ export default function StudentSearch() {
                     <Select
                       options={employees.map((e) => ({
                         value: e.employeeId,
-                        label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
+                        label:
+                          `${e.firstName || ""} ${e.lastName || ""}`.trim(),
                       }))}
                       value={selectedEmployee}
                       onChange={(opt) => setSelectedEmployee(opt)}
                       placeholder="Select employee"
-                      isClearable isSearchable
+                      isClearable
+                      isSearchable
                       menuPortalTarget={document.body}
                       styles={{
                         menuPortal: (base) => ({ ...base, zIndex: 9999 }),
@@ -704,20 +840,26 @@ export default function StudentSearch() {
                 </Col>
 
                 {/* 4. Check-In */}
-                <Col lg={4} md={6}>
+                <Col lg={3} md={6}>
                   <Form.Group>
-                    <Form.Label className="fw-semibold text-dark">Check-In *</Form.Label>
+                    <Form.Label className="fw-semibold text-dark">
+                      Check-In *
+                    </Form.Label>
                     <Form.Control
                       style={{ height: "42px" }}
                       type="date"
                       value={checkIn}
                       min={today}
-                      onClick={(e) => e.target.showPicker && e.target.showPicker()}
+                      onClick={(e) =>
+                        e.target.showPicker && e.target.showPicker()
+                      }
                       onChange={(e) => {
                         const newCheckIn = e.target.value;
                         setCheckIn(newCheckIn);
                         if (newCheckIn) {
-                          const nextDay = formatDate(getTomorrow(new Date(newCheckIn)));
+                          const nextDay = formatDate(
+                            getTomorrow(new Date(newCheckIn)),
+                          );
                           if (!checkOut || checkOut <= newCheckIn) {
                             setCheckOut(nextDay);
                           }
@@ -725,32 +867,60 @@ export default function StudentSearch() {
                       }}
                     />
                     {errors.checkIn && (
-                      <div className="text-danger small mt-1">{errors.checkIn}</div>
+                      <div className="text-danger small mt-1">
+                        {errors.checkIn}
+                      </div>
                     )}
                   </Form.Group>
                 </Col>
 
-                {/* 5. Check-Out */}
+                {/* 5. Nights */}
+                <Col lg={2} md={6}>
+                  <Form.Group>
+                    <Form.Label className="fw-semibold text-dark">
+                      Nights
+                    </Form.Label>
+                    <Form.Control
+                      style={{ height: "42px" }}
+                      className="form-control-modern"
+                      type="number"
+                      min={1}
+                      max={60}
+                      value={nights}
+                      onChange={(e) => handleNightsChange(e.target.value)}
+                    />
+                  </Form.Group>
+                </Col>
+
+                {/* 6. Check-Out */}
                 <Col lg={3} md={6}>
                   <Form.Group>
-                    <Form.Label className="fw-semibold text-dark">Check-Out *</Form.Label>
+                    <Form.Label className="fw-semibold text-dark">
+                      Check-Out *
+                    </Form.Label>
                     <Form.Control
                       style={{ height: "42px" }}
                       type="date"
                       value={checkOut}
                       min={minCheckOutDate}
-                      onClick={(e) => e.target.showPicker && e.target.showPicker()}
+                      onClick={(e) =>
+                        e.target.showPicker && e.target.showPicker()
+                      }
                       onChange={(e) => setCheckOut(e.target.value)}
                     />
                     {errors.checkOut && (
-                      <div className="text-danger small mt-1">{errors.checkOut}</div>
+                      <div className="text-danger small mt-1">
+                        {errors.checkOut}
+                      </div>
                     )}
                   </Form.Group>
                 </Col>
 
                 {/* 6. Rooms & Guests */}
                 <Col lg={4} md={6}>
-                  <Form.Label className="fw-semibold text-dark">Rooms & Guests</Form.Label>
+                  <Form.Label className="fw-semibold text-dark">
+                    Rooms & Guests
+                  </Form.Label>
                   <div className="d-flex gap-2">
                     <Button
                       variant="outline-primary"
@@ -808,7 +978,11 @@ export default function StudentSearch() {
                   >
                     {isLoading ? (
                       <>
-                        <Spinner animation="border" size="sm" className="me-2" />
+                        <Spinner
+                          animation="border"
+                          size="sm"
+                          className="me-2"
+                        />
                         Searching...
                       </>
                     ) : (
@@ -827,10 +1001,14 @@ export default function StudentSearch() {
             {isLoading && (
               <div className="text-center py-3">
                 <Spinner animation="border" />
-                <div className="text-muted small mt-2">Searching with student discount applied…</div>
+                <div className="text-muted small mt-2">
+                  Searching with student discount applied…
+                </div>
               </div>
             )}
-            {!isLoading && results.length === 0 && <div className="text-muted">No results yet.</div>}
+            {!isLoading && results.length === 0 && (
+              <div className="text-muted">No results yet.</div>
+            )}
 
             {results.length > 0 && (
               <Row className="g-3">
@@ -860,7 +1038,9 @@ export default function StudentSearch() {
 
                         {/* Currency — converts the AED rates shown below. */}
                         <Form.Group className="mb-2">
-                          <Form.Label className="fw-semibold small">Currency</Form.Label>
+                          <Form.Label className="fw-semibold small">
+                            Currency
+                          </Form.Label>
                           <Select
                             options={currencyOptions}
                             value={selectedCurrency}
@@ -887,7 +1067,9 @@ export default function StudentSearch() {
                         <hr />
 
                         <Form.Group className="mb-2">
-                          <Form.Label className="fw-semibold small">Hotel Type</Form.Label>
+                          <Form.Label className="fw-semibold small">
+                            Hotel Type
+                          </Form.Label>
                           <div className="filter-checkbox-list">
                             {hotelTypeOptions.map((item) => (
                               <Form.Check
@@ -895,10 +1077,18 @@ export default function StudentSearch() {
                                 type="checkbox"
                                 id={`student-hotel-type-${item.value}`}
                                 label={item.label}
-                                checked={hotelType.some((t) => t.value === item.value)}
+                                checked={hotelType.some(
+                                  (t) => t.value === item.value,
+                                )}
                                 onChange={(e) => {
-                                  if (e.target.checked) setHotelType([...hotelType, item]);
-                                  else setHotelType(hotelType.filter((t) => t.value !== item.value));
+                                  if (e.target.checked)
+                                    setHotelType([...hotelType, item]);
+                                  else
+                                    setHotelType(
+                                      hotelType.filter(
+                                        (t) => t.value !== item.value,
+                                      ),
+                                    );
                                 }}
                               />
                             ))}
@@ -908,7 +1098,9 @@ export default function StudentSearch() {
                         <hr />
 
                         <Form.Group>
-                          <Form.Label className="fw-semibold small">Channel</Form.Label>
+                          <Form.Label className="fw-semibold small">
+                            Channel
+                          </Form.Label>
                           <div className="filter-checkbox-list">
                             {channelTypeOptions.map((item) => (
                               <Form.Check
@@ -916,10 +1108,18 @@ export default function StudentSearch() {
                                 type="checkbox"
                                 id={`student-channel-${item.value}`}
                                 label={item.label}
-                                checked={channelType.some((c) => c.value === item.value)}
+                                checked={channelType.some(
+                                  (c) => c.value === item.value,
+                                )}
                                 onChange={(e) => {
-                                  if (e.target.checked) setChannelType([...channelType, item]);
-                                  else setChannelType(channelType.filter((c) => c.value !== item.value));
+                                  if (e.target.checked)
+                                    setChannelType([...channelType, item]);
+                                  else
+                                    setChannelType(
+                                      channelType.filter(
+                                        (c) => c.value !== item.value,
+                                      ),
+                                    );
                                 }}
                               />
                             ))}
@@ -999,28 +1199,44 @@ export default function StudentSearch() {
                   </div>
 
                   {filteredResults.length === 0 && (
-                    <div className="text-muted">No hotels match the current filters.</div>
+                    <div className="text-muted">
+                      No hotels match the current filters.
+                    </div>
                   )}
                   {filteredResults.map((h, idx) => (
                     <Card key={idx} className="mb-2 shadow-sm">
                       <Card.Body>
                         <Row className="align-items-center">
                           <Col md={2}>
-                            {h.hotelImage
-                              ? <img src={h.hotelImage} alt={h.hotelName} className="img-fluid rounded" />
-                              : <div className="bg-light p-3 text-center text-muted">No Image</div>}
+                            {h.hotelImage ? (
+                              <img
+                                src={h.hotelImage}
+                                alt={h.hotelName}
+                                className="img-fluid rounded"
+                              />
+                            ) : (
+                              <div className="bg-light p-3 text-center text-muted">
+                                No Image
+                              </div>
+                            )}
                           </Col>
                           <Col md={6}>
                             <h6 className="mb-1">{h.hotelName}</h6>
-                            <div className="text-muted small">{h.hotelAddress}</div>
+                            <div className="text-muted small">
+                              {h.hotelAddress}
+                            </div>
                             <div>
-                              {Array.from({ length: h.starRating || 0 }).map((_, i) => (
-                                <FaStar key={i} className="text-warning" />
-                              ))}
+                              {Array.from({ length: h.starRating || 0 }).map(
+                                (_, i) => (
+                                  <FaStar key={i} className="text-warning" />
+                                ),
+                              )}
                             </div>
                           </Col>
                           <Col md={2}>
-                            <div className="text-muted small">Student-Discounted Rate</div>
+                            <div className="text-muted small">
+                              Student-Discounted Rate
+                            </div>
                             <div className="h5 mb-0 text-success">
                               {h.baseRate != null
                                 ? `${displayCurrencyCode} ${convertFromAed(h.baseRate).toFixed(2)}`
@@ -1028,7 +1244,11 @@ export default function StudentSearch() {
                             </div>
                           </Col>
                           <Col md={2} className="text-end">
-                            <Button size="sm" variant="primary" onClick={() => handleViewRooms(h)}>
+                            <Button
+                              size="sm"
+                              variant="primary"
+                              onClick={() => handleViewRooms(h)}
+                            >
                               View Rooms
                             </Button>
                           </Col>

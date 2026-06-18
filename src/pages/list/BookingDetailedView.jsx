@@ -182,6 +182,14 @@ export default function BookingDetailedView() {
     .toUpperCase();
   const isReconfirmed = normalizedStatus === "RECONFIRMED";
   const isCancelled = normalizedStatus === "CANCELLED";
+  // When cancelled, surface the status the booking held just before
+  // cancellation (e.g. "ReConfirmed/Cancelled" / "Confirmed/Cancelled") so the
+  // prior state isn't lost. Falls back to a plain "Cancelled" for rows
+  // cancelled before this was captured (cancelledFromStatus null).
+  const displayStatus =
+    isCancelled && booking?.cancelledFromStatus
+      ? `${booking.cancelledFromStatus}/Cancelled`
+      : booking?.confirmationStatus;
   // Agent Reference and Confirmation Number can only be SAVED once the
   // booking is confirmed-or-better; before that the booking is still
   // tentative and these fields don't apply yet.
@@ -740,7 +748,9 @@ export default function BookingDetailedView() {
                           value={booking.referenceNumber}
                         />
                         <InfoRow label="Hotel Name" value={booking.hotelName} />
-                        <InfoRow label="Address" value={booking.address} />
+                        <InfoRow label="City" value={booking.city} />
+                        <InfoRow label="Hotel Address" value={booking.address} />
+                        <InfoRow label="Tel No" value={booking.telNo} />
                         <InfoRow
                           label="Star Rating"
                           value={
@@ -778,9 +788,22 @@ export default function BookingDetailedView() {
                             value={booking.employeeName}
                           />
                         )}
+                        {/* Supplier Ref. row hidden by request (showed a
+                            meaningless "0" for inhouse bookings). */}
+                        {/* Agent Reference + Confirmation No. — added via the
+                            "ADD AGENT REFERENCE" / "CONFIRMATION NO." buttons.
+                            Surface the saved values here so they're visible
+                            once entered (blank shows "-"). */}
                         <InfoRow
-                          label="Supplier Ref."
-                          value={booking.supplierReference}
+                          label="Agent Reference"
+                          value={booking.customer?.agentLpo}
+                        />
+                        <InfoRow
+                          label="Confirmation No."
+                          value={
+                            booking.confirmationNumber ||
+                            booking.customer?.confirmationNumber
+                          }
                         />
                         <InfoRow
                           label="Deadline Date"
@@ -800,9 +823,7 @@ export default function BookingDetailedView() {
                         />
                         <InfoRow
                           label="Status"
-                          value={
-                            <StatusBadge status={booking.confirmationStatus} />
-                          }
+                          value={<StatusBadge status={displayStatus} />}
                         />
                       </Col>
                     </Row>
@@ -889,7 +910,7 @@ export default function BookingDetailedView() {
                         }}
                       >
                         Room {room.roomNo ?? idx + 1} -{" "}
-                        <StatusBadge status={booking.confirmationStatus} />
+                        <StatusBadge status={displayStatus} />
                       </div>
                       {/* Per-room Rate cell already shows the room's
                           billable rate. Per spec the Tourism Dirham
@@ -1168,7 +1189,13 @@ export default function BookingDetailedView() {
                                   label="Status"
                                   value={
                                     <StatusBadge
-                                      status={sub.confirmationStatus}
+                                      status={
+                                        String(sub.confirmationStatus || "")
+                                          .toUpperCase() === "CANCELLED" &&
+                                        sub.cancelledFromStatus
+                                          ? `${sub.cancelledFromStatus}/Cancelled`
+                                          : sub.confirmationStatus
+                                      }
                                     />
                                   }
                                 />

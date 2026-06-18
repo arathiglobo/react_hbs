@@ -70,6 +70,29 @@ const applyMarkup = (baseRate, _markupPct) => {
   return Number(baseRate || 0);
 };
 
+// Effective refundability for a last-minute rate. A rate flagged refundable
+// (Flexible) only stays refundable while today is on/before its free-
+// cancellation deadline — checkInDate minus the largest daysBeforeArrival
+// across its cancellation policies. Once that deadline passes (or the rate is
+// flagged non-refundable / carries no cancellation-policy day) it is treated
+// as Non-Refundable. Mirrors the deadline rule on /hotel-booking-page and the
+// badge on /last-minute-room-list so both pages agree.
+const isRateNonRefundable = (rate, checkInDate) => {
+  if (rate?.refundable !== true) return true;
+  const days = (rate?.cancellationPolicies || [])
+    .map((p) => Number(p?.daysBeforeArrival))
+    .filter((n) => Number.isFinite(n));
+  if (days.length === 0) return false;
+  const cin = new Date(checkInDate);
+  if (isNaN(cin.getTime())) return false;
+  const deadline = new Date(cin);
+  deadline.setDate(deadline.getDate() - Math.max(...days));
+  deadline.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today > deadline;
+};
+
 export default function LastMinuteBookingForm() {
   const navigate = useNavigate();
   const { state } = useLocation();
@@ -225,6 +248,26 @@ export default function LastMinuteBookingForm() {
   const perNight = applyMarkup(ctx?.room?.lastMinuteRate || 0, markupPct);
   const adultRate = applyMarkup(ctx?.room?.adultRate || 0, markupPct);
   const childRate = applyMarkup(ctx?.room?.childRate || 0, markupPct);
+
+  // ── Booking-confirmation flow (mirrors HotelBookingPage) ──────────────
+  // Non-refundable  → auto "Book Now & Voucher Now"  (status RECONFIRMED)
+  // On-Request      → auto "Book Now & Voucher Later" (status CONFIRMED)
+  // Refundable+Avail→ show the two radios; user picks.
+  // Deadline-aware: a Flexible rate whose free-cancellation deadline has
+  // already passed is effectively non-refundable, so the voucher choice is
+  // hidden and the booking goes straight to "Book Now & Voucher Now".
+  const isNonRefundableRoom = isRateNonRefundable(ctx?.room, ctx?.checkInDate);
+  const isOnRequestRoom =
+    String(ctx?.room?.roomStatus || "").replace(/\s+/g, "").toLowerCase() ===
+    "onrequest";
+  const showVoucherChoice = !isNonRefundableRoom && !isOnRequestRoom;
+  // The voucher-choice flag sent to the backend: forced for the auto cases,
+  // otherwise driven by the selected radio.
+  const isBookAndVoucherNow = isNonRefundableRoom
+    ? true
+    : isOnRequestRoom
+      ? false
+      : bookingConfirmation === "Book & Voucher";
 
   // Resync rooms[].guests array when adults/children counts change.
   useEffect(() => {
@@ -487,6 +530,11 @@ export default function LastMinuteBookingForm() {
       displayCurrencyCode: ctx?.currency?.code || "AED",
       displayCurrencyRate:
         Number(ctx?.currency?.factor) > 0 ? Number(ctx.currency.factor) : 1,
+      // Booking-confirmation flow inputs (mirrors HotelBookingPage). The
+      // backend derives the BookingStatus (RECONFIRMED / CONFIRMED) from these
+      // + the rate's refundable flag.
+      isBookandVoucher: isBookAndVoucherNow,
+      roomStatus: ctx?.room?.roomStatus || null,
     };
 
     try {
@@ -774,18 +822,6 @@ export default function LastMinuteBookingForm() {
                       `tourismDirham` state stays at its default ("") so the
                       create payload sends null and downstream totals are
                       unaffected. */}
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label>Booking Confirmation</Form.Label>
-                      <Form.Select
-                        value={bookingConfirmation}
-                        onChange={(e) => setBookingConfirmation(e.target.value)}
-                      >
-                        <option>Book & Voucher</option>
-                        <option>Book on Hold</option>
-                      </Form.Select>
-                    </Form.Group>
-                  </Col>
                   <Col md={12}>
                     <Form.Group>
                       <Form.Label>Special Request</Form.Label>
@@ -840,7 +876,11 @@ export default function LastMinuteBookingForm() {
                             ⭐ {hotel.starRating} Star
                           </Badge>
                         )}
-                        <Badge bg="danger">Non-Refundable</Badge>
+                        {isNonRefundableRoom ? (
+                          <Badge bg="danger">Non-Refundable</Badge>
+                        ) : (
+                          <Badge bg="success">Flexible</Badge>
+                        )}
                         {room.rateCode && (
                           <Badge bg="secondary">{room.rateCode}</Badge>
                         )}
@@ -950,6 +990,43 @@ export default function LastMinuteBookingForm() {
                     </div>
                   </Card.Body>
                 </Card>
+
+                {/* Booking-confirmation choice — only for refundable rates
+                    whose free-cancellation deadline hasn't passed. When the
+                    rate is effectively non-refundable the prompt is skipped
+                    entirely and the booking goes straight to
+                    "Book Now & Voucher Now" (isBookAndVoucherNow === true). */}
+                {showVoucherChoice && (
+                  <Card className="shadow-sm rounded-3 border-0 mt-3">
+                    <Card.Body className="p-3">
+                      <Form.Group>
+                        <Form.Label className="fw-semibold">
+                          Are you sure to continue booking?
+                        </Form.Label>
+                        <div className="d-flex flex-column gap-2 mt-1">
+                          <Form.Check
+                            type="radio"
+                            id="lm-book-voucher-now"
+                            name="lmBookingConfirmation"
+                            label="Book Now & Voucher Now"
+                            value="Book & Voucher"
+                            checked={bookingConfirmation === "Book & Voucher"}
+                            onChange={(e) => setBookingConfirmation(e.target.value)}
+                          />
+                          <Form.Check
+                            type="radio"
+                            id="lm-book-voucher-later"
+                            name="lmBookingConfirmation"
+                            label="Book Now & Voucher Later"
+                            value="Book Now & Voucher later"
+                            checked={bookingConfirmation === "Book Now & Voucher later"}
+                            onChange={(e) => setBookingConfirmation(e.target.value)}
+                          />
+                        </div>
+                      </Form.Group>
+                    </Card.Body>
+                  </Card>
+                )}
 
                 <div className="hbp-action-bar mt-3 d-flex gap-2">
                   <Button

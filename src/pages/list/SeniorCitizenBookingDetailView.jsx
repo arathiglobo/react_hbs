@@ -1,16 +1,27 @@
 /**
  * SeniorCitizenBookingDetailView.jsx
  *
- * Detail view for a single senior-citizen booking. Visual shell
- * mirrors StudentBookingDetailView / BookingDetailedView so the
- * detail pages read identically across the app. Functionality
- * unchanged.
+ * Detail view for a senior-citizen booking. UI + functionality mirror
+ * StudentBookingDetailView.jsx: same card / section-header / info-row /
+ * button styling, the same two-status flow (Confirmed → Proforma docs +
+ * Reconfirm; ReConfirmed → final docs), the same action set and modals,
+ * and the same "Add New Item" → child sub-booking behaviour.
+ *
+ * Action set (all backed by /api/senior-citizen-booking):
+ *   - ADD NEW ITEM        → /new-booking/senior-citizen?parentBookingCode=<code>
+ *                           (creates a child booking SNCIT7/1, SNCIT7/2, …)
+ *   - CANCEL              → DELETE /api/senior-citizen-booking/:id
+ *   - RECONFIRM           → PATCH  /api/senior-citizen-booking/:id/reconfirm
+ *   - VOUCHER / INVOICE / PROFORMA → GET /api/senior-citizen-booking/:id/document?type=
+ *   - ADD AGENT REFERENCE → GET/POST /api/senior-citizen-booking/:id/agent-reference
+ *   - CONFIRMATION NO.    → POST   /api/senior-citizen-booking/:id/confirmation-no
+ *   - BOOKING REMARK      → POST   /api/senior-citizen-booking/:id/remark
+ *   - RESEND MAIL TO AGENT→ POST   /api/senior-citizen-booking/:id/resend-mail
  */
 
-import React, { useEffect, useState } from "react";
-import { Container, Row, Col, Spinner, Table } from "react-bootstrap";
-import { useNavigate, useParams } from "react-router-dom";
-import { FaDownload, FaTrash } from "react-icons/fa";
+import React, { useCallback, useEffect, useState } from "react";
+import { Container, Row, Col, Spinner, Table, Modal, Button, Form } from "react-bootstrap";
+import { useParams, useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
@@ -25,8 +36,6 @@ const BUTTON_STYLE = {
   fontSize: "0.78rem",
   fontWeight: "600",
   cursor: "pointer",
-  letterSpacing: "0.4px",
-  whiteSpace: "nowrap",
 };
 
 const SECTION_HEADER = {
@@ -48,25 +57,29 @@ const INFO_LABEL = {
   display: "inline-block",
 };
 
-const INFO_VALUE = {
-  color: "#222",
-  fontSize: "0.82rem",
+const INFO_VALUE = { color: "#222", fontSize: "0.82rem" };
+
+const card = {
+  border: "1px solid #ddd",
+  borderRadius: "4px",
+  marginBottom: "14px",
+  overflow: "hidden",
+  backgroundColor: "#fff",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
 };
 
 const parseLocal = (str) => {
   if (!str) return null;
-  const normalized = str.includes("T") ? str : `${str}T00:00:00`;
+  const normalized = String(str).includes("T") ? str : `${str}T00:00:00`;
   const d = new Date(normalized);
   return isNaN(d.getTime()) ? null : d;
 };
-
 const formatDate = (dateStr) => {
   const d = parseLocal(dateStr);
   if (!d) return "-";
   const day = String(d.getDate()).padStart(2, "0");
   return `${day} ${d.toLocaleString("default", { month: "short" })} ${d.getFullYear()}`;
 };
-
 const formatDateTime = (dateStr) => {
   const d = parseLocal(dateStr);
   if (!d) return "-";
@@ -76,129 +89,308 @@ const formatDateTime = (dateStr) => {
   return `${formatDate(dateStr)} ${hrs}:${min}:${sec}`;
 };
 
-const StatusBadge = ({ status }) => {
-  const s = (status || "").toUpperCase();
-  let color = "#888";
-  if (s === "CONFIRMED" || s === "RECONFIRMED") color = "#c0392b";
-  else if (s === "CANCELLED") color = "#888";
-  else if (s === "ON REQUEST") color = "#e67e22";
-  return (
-    <span style={{ color, fontWeight: "700", fontSize: "0.85rem" }}>
-      {status || "-"}
-    </span>
-  );
-};
+const InfoRow = ({ label, value }) => (
+  <div style={{ marginBottom: 6 }}>
+    <span style={INFO_LABEL}>{label}</span>
+    <span style={INFO_VALUE}>{value ?? "-"}</span>
+  </div>
+);
 
 export default function SeniorCitizenBookingDetailView() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
 
-  const fetchBooking = async () => {
+  const [booking, setBooking] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Cancel
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancellingBooking, setCancellingBooking] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState("");
+
+  // Reconfirm
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirmingBooking, setConfirmingBooking] = useState(false);
+
+  // Agent reference
+  const [showAgentRefModal, setShowAgentRefModal] = useState(false);
+  const [agentRefInput, setAgentRefInput] = useState("");
+  const [agentRefError, setAgentRefError] = useState("");
+  const [savingAgentRef, setSavingAgentRef] = useState(false);
+
+  // Confirmation number
+  const [showConfirmationNoModal, setShowConfirmationNoModal] = useState(false);
+  const [confirmationNoInput, setConfirmationNoInput] = useState("");
+  const [confirmationNoError, setConfirmationNoError] = useState("");
+  const [savingConfirmationNo, setSavingConfirmationNo] = useState(false);
+
+  // Remark
+  const [showRemarkModal, setShowRemarkModal] = useState(false);
+  const [remarkInput, setRemarkInput] = useState("");
+  const [savingRemark, setSavingRemark] = useState(false);
+
+  // Documents (Voucher / Proforma Voucher / Invoice / Proforma Invoice)
+  const [generatingDocType, setGeneratingDocType] = useState(null);
+  // Resend mail
+  const [resendingMail, setResendingMail] = useState(false);
+
+  const fetchBooking = useCallback(() => {
+    if (!id) return;
     setLoading(true);
-    try {
-      const { data: payload } = await axiosInstance.get(
-        `/api/senior-citizen-booking/${id}`,
-      );
-      if (payload?.success === false) {
-        toast.error(payload?.message || "Not found");
-        setData(null);
-      } else {
-        setData(payload);
-      }
-    } catch (e) {
-      toast.error("Failed to load booking");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchBooking(); /* eslint-disable-next-line */
+    return axiosInstance
+      .get(`/api/senior-citizen-booking/${id}`)
+      .then((res) => {
+        if (res.data?.success !== false) setBooking(res.data);
+        else toast.error(res.data?.message || "Failed to load booking details");
+      })
+      .catch(() => toast.error("Error loading booking details"))
+      .finally(() => setLoading(false));
   }, [id]);
 
-  const handleDownload = async () => {
-    if (!data) return;
-    try {
-      const res = await axiosInstance.get(
-        `/api/senior-citizen-booking/${data.bookingId}/voucher`,
-        { responseType: "blob" },
-      );
-      const url = URL.createObjectURL(
-        new Blob([res.data], { type: "application/pdf" }),
-      );
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `senior-citizen-voucher-${data.bookingId}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      toast.error("Voucher download failed");
+  useEffect(() => {
+    fetchBooking();
+  }, [fetchBooking]);
+
+  // ── Status helpers ────────────────────────────────────────────────
+  const normalizedStatus = String(booking?.confirmationStatus || "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  const isCancelled = !!booking?.cancelled;
+  const isConfirmedOrLater =
+    normalizedStatus === "CONFIRMED" ||
+    normalizedStatus === "RECONFIRMED" ||
+    normalizedStatus === "COMPLETED";
+  // Final docs available once the booking is reconfirmed/completed.
+  const showsFinalDocs = normalizedStatus === "RECONFIRMED" || normalizedStatus === "COMPLETED";
+
+  // Composite label: a Confirmed booking that's later cancelled shows
+  // "Confirmed / Cancelled".
+  const statusLabel = (() => {
+    const raw = String(booking?.confirmationStatus || "").trim();
+    if (isCancelled) {
+      if (normalizedStatus === "CONFIRMED" || normalizedStatus === "RECONFIRMED") {
+        return `${raw} / Cancelled`;
+      }
+      return "Cancelled";
     }
-  };
-
-  const handleCancel = async () => {
-    if (!data) return;
-    if ((data.refundStatus || "").toLowerCase() === "non-refundable") {
-      toast.error("This booking is non-refundable and cannot be cancelled.");
-      return;
-    }
-    if (
-      !window.confirm(
-        `Cancel booking ${data.bookingCode}? Agent credit will be restored.`,
-      )
-    )
-      return;
-    try {
-      await axiosInstance.delete(
-        `/api/senior-citizen-booking/${data.bookingId}?reason=${encodeURIComponent("Cancelled by user")}`,
-      );
-      toast.success("Booking cancelled");
-      fetchBooking();
-    } catch (e) {
-      toast.error("Cancel failed");
-    }
-  };
-
-  const card = {
-    border: "1px solid #ddd",
-    borderRadius: "4px",
-    marginBottom: "14px",
-    overflow: "hidden",
-    backgroundColor: "#fff",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-  };
-
-  // Render in the currency the booking was made in. The backend persisted the
-  // code + converted total (displayAmount = totalRate × factor); derive the
-  // factor to convert every AED figure. AED / older bookings → AED, factor 1.
-  const _scDispCode = data?.displayCurrencyCode;
-  const _scAedTotal = Number(data?.totalRate) || 0;
-  const _scDispAmt = Number(data?.displayAmount);
-  const _scConv =
-    _scDispCode &&
-    _scDispCode !== "AED" &&
-    Number.isFinite(_scDispAmt) &&
-    _scDispAmt > 0 &&
-    _scAedTotal > 0
-      ? _scDispAmt / _scAedTotal
-      : 1;
-  const curCode = _scConv !== 1 ? _scDispCode : "AED";
-  const dconv = (aed) => (Number(aed) || 0) * _scConv;
-
-  // Build a compact discount summary in either backend shape.
-  const discountSummary = (() => {
-    if (!data) return "";
-    if (data.discountType === "PERCENTAGE" && data.discountValue)
-      return `${data.discountValue}%`;
-    if (data.discountType === "AMOUNT" && data.discountValue)
-      return `flat ${data.discountValue}`;
-    const out = [];
-    if (data.discountPercent) out.push(`${data.discountPercent}%`);
-    if (data.discountAmount) out.push(`flat ${data.discountAmount}`);
-    return out.join(" + ");
+    return raw || "-";
   })();
+  const statusColor = (() => {
+    if (isCancelled) return "#888";
+    if (normalizedStatus === "CONFIRMED" || normalizedStatus === "RECONFIRMED") return "#c0392b";
+    if (normalizedStatus === "ONREQUEST" || normalizedStatus === "NOTCONFIRMED") return "#e67e22";
+    return "#888";
+  })();
+  const StatusBadge = () => (
+    <span style={{ color: statusColor, fontWeight: "700", fontSize: "0.85rem" }}>
+      {statusLabel}
+    </span>
+  );
+
+  // ── Currency ──────────────────────────────────────────────────────
+  const _dispCode = booking?.displayCurrencyCode;
+  const _aedTotal = Number(booking?.totalRate) || 0;
+  const _dispAmt = Number(booking?.displayAmount);
+  const isConverted =
+    !!_dispCode && _dispCode !== "AED" && Number.isFinite(_dispAmt) && _dispAmt > 0 && _aedTotal > 0;
+  const currencyCode = isConverted ? _dispCode : "AED";
+  const currencyFactor = isConverted ? _dispAmt / _aedTotal : 1;
+  const money = (aed) =>
+    aed == null ? "-" : `${currencyCode} ${((Number(aed) || 0) * currencyFactor).toFixed(2)}`;
+
+  // ── Handlers ──────────────────────────────────────────────────────
+  const cancelBooking = async () => {
+    try {
+      setCancellingBooking(true);
+      const res = await axiosInstance.delete(`/api/senior-citizen-booking/${id}`, {
+        params: cancellationReason ? { reason: cancellationReason } : {},
+      });
+      if (res.data?.success !== false) {
+        setShowCancelModal(false);
+        setCancellationReason("");
+        toast.success("Booking cancelled");
+        await fetchBooking();
+      } else {
+        toast.error(res.data?.message || "Failed to cancel booking");
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to cancel booking");
+    } finally {
+      setCancellingBooking(false);
+    }
+  };
+
+  const confirmBooking = async () => {
+    try {
+      setConfirmingBooking(true);
+      const res = await axiosInstance.patch(`/api/senior-citizen-booking/${id}/reconfirm`);
+      if (res.data?.success) {
+        setShowConfirmModal(false);
+        toast.success(res.data.message || "Booking reconfirmed successfully!");
+        await fetchBooking();
+      } else {
+        toast.error(res.data?.message || "Failed to reconfirm booking");
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to reconfirm booking");
+    } finally {
+      setConfirmingBooking(false);
+    }
+  };
+
+  const openAgentRefModal = async () => {
+    if (!isConfirmedOrLater) {
+      toast.error("Agent Reference can only be added once the booking is Confirmed or ReConfirmed.");
+      return;
+    }
+    setAgentRefInput(booking?.agentReference || "");
+    setAgentRefError("");
+    setShowAgentRefModal(true);
+    try {
+      const res = await axiosInstance.get(`/api/senior-citizen-booking/${id}/agent-reference`);
+      if (res?.data?.agentLpo) setAgentRefInput(res.data.agentLpo);
+    } catch (e) {
+      /* non-fatal */
+    }
+  };
+
+  const saveAgentRef = async () => {
+    const v = (agentRefInput || "").trim();
+    if (!v) {
+      setAgentRefError("Agent Reference is required");
+      return;
+    }
+    setAgentRefError("");
+    try {
+      setSavingAgentRef(true);
+      const res = await axiosInstance.post(`/api/senior-citizen-booking/${id}/agent-reference`, {
+        agentLpo: v,
+      });
+      if (res.data?.success) {
+        setShowAgentRefModal(false);
+        toast.success(res.data.message || "Agent Reference updated successfully");
+        await fetchBooking();
+      } else {
+        toast.error(res.data?.message || "Failed to update Agent Reference");
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to update Agent Reference");
+    } finally {
+      setSavingAgentRef(false);
+    }
+  };
+
+  const openConfirmationNoModal = async () => {
+    if (!isConfirmedOrLater) {
+      toast.error("Confirmation Number can only be added once the booking is Confirmed or ReConfirmed.");
+      return;
+    }
+    setConfirmationNoInput(booking?.confirmationNumber || "");
+    setConfirmationNoError("");
+    setShowConfirmationNoModal(true);
+    try {
+      const res = await axiosInstance.get(`/api/senior-citizen-booking/${id}/agent-reference`);
+      if (res?.data?.confirmationNumber) setConfirmationNoInput(res.data.confirmationNumber);
+    } catch (e) {
+      /* non-fatal */
+    }
+  };
+
+  const saveConfirmationNo = async () => {
+    const v = (confirmationNoInput || "").trim();
+    if (!v) {
+      setConfirmationNoError("Confirmation Number is required");
+      return;
+    }
+    setConfirmationNoError("");
+    try {
+      setSavingConfirmationNo(true);
+      const res = await axiosInstance.post(`/api/senior-citizen-booking/${id}/confirmation-no`, {
+        confirmationNumber: v,
+      });
+      if (res.data?.success) {
+        setShowConfirmationNoModal(false);
+        toast.success(res.data.message || "Confirmation number saved successfully!");
+        await fetchBooking();
+      } else {
+        toast.error(res.data?.message || "Failed to save confirmation number");
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to save confirmation number");
+    } finally {
+      setSavingConfirmationNo(false);
+    }
+  };
+
+  const openRemarkModal = () => {
+    setRemarkInput(booking?.remarks || "");
+    setShowRemarkModal(true);
+  };
+
+  const saveRemark = async () => {
+    const text = (remarkInput || "").trim();
+    if (!text) {
+      toast.error("Remark cannot be empty");
+      return;
+    }
+    try {
+      setSavingRemark(true);
+      const res = await axiosInstance.post(`/api/senior-citizen-booking/${id}/remark`, { remarks: text });
+      if (res.data?.success !== false) {
+        setShowRemarkModal(false);
+        toast.success(res.data?.message || "Remark saved successfully");
+        await fetchBooking();
+      } else {
+        toast.error(res.data?.message || "Failed to save remark");
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to save remark");
+    } finally {
+      setSavingRemark(false);
+    }
+  };
+
+  // Typed document download — backs Voucher / Proforma Voucher / Invoice /
+  // Proforma Invoice via GET /api/senior-citizen-booking/:id/document?type=...
+  const handleDocument = async (type, label) => {
+    try {
+      setGeneratingDocType(type);
+      const res = await axiosInstance.get(`/api/senior-citizen-booking/${id}/document`, {
+        params: { type },
+        responseType: "blob",
+      });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+      window.open(url, "_blank");
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      toast.error(`Failed to generate ${label || "document"}`);
+    } finally {
+      setGeneratingDocType(null);
+    }
+  };
+
+  const resendMailToAgent = async () => {
+    try {
+      setResendingMail(true);
+      const res = await axiosInstance.post(`/api/senior-citizen-booking/${id}/resend-mail`);
+      if (res.data?.success) {
+        toast.success(res.data.message || "Mail resent to agent");
+      } else {
+        toast.error(res.data?.message || "Failed to resend mail");
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to resend mail");
+    } finally {
+      setResendingMail(false);
+    }
+  };
+
+  const c = booking?.customer || {};
+  const guestName =
+    [c.salutation, c.firstName, c.middleName, c.lastName].filter(Boolean).join(" ") || "-";
+  const rooms = booking?.rooms || [];
+  const totalAdults = rooms.reduce((s, r) => s + (r.adults || 0), 0);
+  const totalChildren = rooms.reduce((s, r) => s + (r.children || 0), 0);
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -209,19 +401,11 @@ export default function SeniorCitizenBookingDetailView() {
           <Container fluid style={{ maxWidth: "1100px" }}>
             {/* Back button */}
             <div className="mb-3">
-              <button
-                style={{ ...BUTTON_STYLE, backgroundColor: "#555" }}
-                onClick={() => navigate(-1)}
-              >
+              <button style={{ ...BUTTON_STYLE, backgroundColor: "#555" }} onClick={() => navigate(-1)}>
                 ← Back
               </button>
               <span
-                style={{
-                  marginLeft: "12px",
-                  fontWeight: "700",
-                  fontSize: "1.1rem",
-                  color: "#333",
-                }}
+                style={{ marginLeft: "12px", fontWeight: "700", fontSize: "1.1rem", color: "#333" }}
               >
                 Booking Details
               </span>
@@ -232,344 +416,535 @@ export default function SeniorCitizenBookingDetailView() {
                 <Spinner animation="border" style={{ color: "#c0392b" }} />
                 <p className="mt-3 text-muted">Loading booking details...</p>
               </div>
-            ) : !data ? (
-              <div className="text-center py-5 text-muted">
-                Booking not found.
-              </div>
+            ) : !booking ? (
+              <div className="text-center py-5 text-muted">Booking not found.</div>
             ) : (
               <>
-                {/* ── Booking Information ───────────────────────────── */}
+                {/* ── Booking Info ─────────────────────────────────────── */}
                 <div style={card}>
                   <div style={SECTION_HEADER}>Booking Information</div>
                   <div style={{ padding: "12px 16px" }}>
                     <Row>
                       <Col md={6}>
-                        <InfoRow label="Booking Code" value={data.bookingCode} />
-                        <InfoRow label="Reference No." value={data.referenceNumber} />
-                        <InfoRow label="Hotel Name" value={data.hotelName} />
-                        <InfoRow label="Address" value={data.address} />
+                        <InfoRow label="Booking Code" value={booking.bookingCode} />
+                        <InfoRow label="Reference No." value={booking.referenceNumber} />
+                        <InfoRow label="Hotel Name" value={booking.hotelName} />
+                        <InfoRow label="Address" value={booking.address} />
                         <InfoRow
                           label="Star Rating"
-                          value={data.starRating ? `${data.starRating} Star` : "-"}
+                          value={booking.starRating ? `${booking.starRating} Star` : "-"}
                         />
-                        <InfoRow label="Check-In" value={formatDateTime(data.checkInDate)} />
-                        <InfoRow label="Check-Out" value={formatDateTime(data.checkOutDate)} />
+                        <InfoRow label="Check-In" value={formatDateTime(booking.checkInDate)} />
+                        <InfoRow label="Check-Out" value={formatDateTime(booking.checkOutDate)} />
                         <InfoRow
                           label="No. of Nights"
-                          value={data.nights ? `${data.nights} Nights` : "-"}
+                          value={booking.nights ? `${booking.nights} Nights` : "-"}
                         />
                       </Col>
                       <Col md={6}>
-                        <InfoRow label="Agent" value={data.agentName} />
-                        <InfoRow label="Source" value={data.source} />
-                        <InfoRow label="Created By" value={data.createdByRole} />
-                        {/* Optional "Booking Done By Employee" — only
-                            shown when picked at search time. */}
-                        {data.employeeName && (
-                          <InfoRow
-                            label="Booked By Employee"
-                            value={data.employeeName}
-                          />
+                        <InfoRow label="Agent" value={booking.agentId} />
+                        {booking.employeeName && (
+                          <InfoRow label="Booked By Employee" value={booking.employeeName} />
                         )}
-                        <InfoRow label="Supplier Ref." value={data.supplierReference} />
                         <InfoRow
                           label="Deadline Date"
-                          value={
-                            data.deadlineDate
-                              ? data.deadlineDate.replace("T", " ")
-                              : "-"
-                          }
+                          value={booking.deadlineDate ? booking.deadlineDate.replace("T", " ") : "-"}
                         />
-                        <InfoRow label="Refund Status" value={data.refundStatus} />
-                        <InfoRow label="Voucher" value={data.voucherGenerated} />
-                        <InfoRow
-                          label="Status"
-                          value={
-                            data.cancelled ? (
-                              <StatusBadge status="CANCELLED" />
-                            ) : (
-                              <StatusBadge
-                                status={
-                                  data.confirmationStatus ||
-                                  data.roomStatus ||
-                                  "CONFIRMED"
-                                }
-                              />
-                            )
-                          }
-                        />
+                        {booking.agentReference && (
+                          <InfoRow label="Agent Reference" value={booking.agentReference} />
+                        )}
+                        {booking.confirmationNumber && (
+                          <InfoRow label="Confirmation No." value={booking.confirmationNumber} />
+                        )}
+                        <InfoRow label="Refund Status" value={booking.refundStatus} />
+                        <InfoRow label="Voucher" value={booking.voucherGenerated} />
+                        <InfoRow label="Payment Mode" value={booking.paymentMode} />
+                        <InfoRow label="Total" value={money(booking.totalRate)} />
+                        <InfoRow label="Status" value={<StatusBadge />} />
                       </Col>
                     </Row>
                   </div>
                 </div>
 
-                {/* ── Guest Information ─────────────────────────────── */}
-                {data.customer && (
+                {/* ── Guest / Customer Info ─────────────────────────── */}
+                {booking.customer && (
                   <div style={card}>
                     <div style={SECTION_HEADER}>Guest Information</div>
                     <div style={{ padding: "12px 16px" }}>
                       <Row>
                         <Col md={6}>
-                          <InfoRow
-                            label="Guest Name"
-                            value={
-                              [
-                                data.customer.salutation,
-                                data.customer.firstName,
-                                data.customer.middleName,
-                                data.customer.lastName,
-                              ]
-                                .filter(Boolean)
-                                .join(" ") || "-"
-                            }
-                          />
-                          <InfoRow label="Email" value={data.customer.email} />
-                          <InfoRow label="Phone" value={data.customer.phone} />
-                        </Col>
-                        <Col md={6}>
-                          <InfoRow label="Passport No." value={data.customer.passportNo} />
-                          <InfoRow
-                            label="Nationality"
-                            value={data.customer.customerNationality}
-                          />
-                          <InfoRow label="Agent LPO" value={data.customer.agentLpo} />
+                          <InfoRow label="Guest Name" value={guestName} />
+                          <InfoRow label="Nationality" value={c.nativeCountry} />
                         </Col>
                       </Row>
                     </div>
                   </div>
                 )}
 
-                {/* ── Senior Citizen Qualification ──────────────────── */}
+                {/* ── Senior Citizen Verification (senior-specific) ────── */}
                 <div style={card}>
-                  <div style={SECTION_HEADER}>Senior Citizen Qualification</div>
+                  <div style={SECTION_HEADER}>Senior Citizen Verification</div>
                   <div style={{ padding: "12px 16px" }}>
                     <Row>
-                      <Col md={12}>
-                        <div
-                          style={{
-                            fontSize: "0.82rem",
-                            color: "#555",
-                            marginBottom: "10px",
-                          }}
-                        >
-                          Qualified by age — markup applied to rooms where at
-                          least one adult is 60+.
-                          {discountSummary && (
-                            <>
-                              {" "}
-                              Configured discount:{" "}
-                              <strong style={{ color: "#198754" }}>
-                                {discountSummary}
-                              </strong>
-                            </>
-                          )}
-                        </div>
+                      <Col md={6}>
+                        <InfoRow label="Senior Citizen Name" value={booking.seniorCitizenName} />
+                        <InfoRow
+                          label="Verification Method"
+                          value={
+                            booking.verificationMethod === "EMPLOYEE_CODE"
+                              ? "Employee Code"
+                              : booking.verificationMethod
+                              ? "ID Document Upload"
+                              : "-"
+                          }
+                        />
                       </Col>
-                      {(data.rooms || []).map((r) => (
-                        <Col md={4} key={r.roomBookingId || r.roomNo}>
-                          <InfoRow
-                            label={`Room ${r.roomNo} adult ages`}
-                            value={
-                              Array.isArray(r.adultAges) && r.adultAges.length
-                                ? r.adultAges.join(", ")
-                                : "-"
-                            }
-                          />
-                        </Col>
-                      ))}
+                      <Col md={6}>
+                        {booking.seniorCitizenCode && (
+                          <InfoRow label="Citizen Code" value={booking.seniorCitizenCode} />
+                        )}
+                        {booking.govEmployeeDepartment && (
+                          <InfoRow label="Department" value={booking.govEmployeeDepartment} />
+                        )}
+                      </Col>
                     </Row>
+                    {booking.govtIdFileName && (
+                      <InfoRow label="Uploaded Document" value={booking.govtIdFileName} />
+                    )}
                   </div>
                 </div>
 
-                {/* ── Rooms Details ─────────────────────────────────── */}
+                {/* ── Rooms Details ───────────────────────────────────── */}
                 <div style={card}>
                   <div style={SECTION_HEADER}>Rooms Details</div>
-                  <div style={{ padding: "10px 16px 4px" }}>
-                    <span
-                      style={{
-                        color: "#c0392b",
-                        fontWeight: "600",
-                        fontSize: "0.85rem",
-                        marginRight: "20px",
-                      }}
-                    >
-                      No of Rooms - {(data.rooms || []).length} Room
-                      {(data.rooms || []).length !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-
-                  {(data.rooms || []).map((room, idx) => (
-                    <div
-                      key={room.roomBookingId || idx}
-                      style={{ padding: "8px 16px 12px" }}
-                    >
-                      <div
-                        style={{
-                          color: "#c0392b",
-                          fontWeight: "700",
-                          fontSize: "0.88rem",
-                          marginBottom: "6px",
-                        }}
-                      >
-                        Room {room.roomNo ?? idx + 1} -{" "}
-                        <StatusBadge
-                          status={
-                            data.confirmationStatus ||
-                            data.roomStatus ||
-                            "CONFIRMED"
-                          }
-                        />
-                      </div>
-                      <Table
-                        bordered
-                        size="sm"
-                        style={{ fontSize: "0.82rem", marginBottom: "6px" }}
-                      >
-                        <thead style={{ backgroundColor: "#f8f8f8" }}>
-                          <tr>
-                            <th>Room Category</th>
-                            <th>Meal Type</th>
-                            <th>Adults</th>
-                            <th>Children</th>
-                            <th>Before</th>
-                            <th>After</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr>
-                            <td>{room.roomCategory || "-"}</td>
-                            <td>{room.mealPlan || "-"}</td>
-                            <td>{room.adults ?? "-"}</td>
-                            <td>{room.children ?? "0"}</td>
-                            <td className="text-decoration-line-through">
-                              {room.rateBeforeDiscount != null
-                                ? `${curCode} ${dconv(room.rateBeforeDiscount).toFixed(2)}`
-                                : "-"}
-                            </td>
-                            <td>
-                              {room.rate != null
-                                ? `${curCode} ${dconv(room.rate).toFixed(2)}`
-                                : "-"}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </Table>
+                  <div style={{ padding: "12px 16px" }}>
+                    <div style={{ fontSize: "0.82rem", color: "#555", marginBottom: 8 }}>
+                      No of Rooms - {rooms.length} &nbsp;|&nbsp; No of Guests - {totalAdults} Adult
+                      {totalAdults !== 1 ? "s" : ""}
+                      {totalChildren ? `, ${totalChildren} Child${totalChildren !== 1 ? "ren" : ""}` : ""}
                     </div>
-                  ))}
+                    <Table bordered size="sm" style={{ fontSize: "0.8rem", marginBottom: 8 }}>
+                      <thead style={{ backgroundColor: "#f8f9fa" }}>
+                        <tr>
+                          <th>#</th>
+                          <th>Category</th>
+                          <th>Meal Plan</th>
+                          <th>Adults</th>
+                          <th>Children</th>
+                          <th>Refund</th>
+                          <th className="text-end">Rate</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rooms.map((r, idx) => (
+                          <tr key={r.roomBookingId || idx}>
+                            <td>{r.roomNo || idx + 1}</td>
+                            <td>{r.roomCategory || "-"}</td>
+                            <td>{r.mealPlan || "-"}</td>
+                            <td>{r.adults || 0}</td>
+                            <td>{r.children || 0}</td>
+                            <td>{r.nonRefundable ? "Non-Refundable" : "Flexible"}</td>
+                            <td className="text-end">{money(r.rate)}</td>
+                          </tr>
+                        ))}
+                        {rooms.length === 0 && (
+                          <tr>
+                            <td colSpan={7} className="text-center text-muted">
+                              No rooms.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </Table>
+                    {/* Per-room guests */}
+                    {rooms.some((r) => Array.isArray(r.guests) && r.guests.length > 0) && (
+                      <div style={{ fontSize: "0.8rem" }}>
+                        {rooms.map((r, idx) =>
+                          Array.isArray(r.guests) && r.guests.length > 0 ? (
+                            <div key={r.roomBookingId || idx} className="mb-1">
+                              <span style={INFO_LABEL}>Room {r.roomNo || idx + 1} Guests</span>
+                              <span style={INFO_VALUE}>
+                                {r.guests
+                                  .map((g) =>
+                                    [g.salutation, g.firstName, g.lastName].filter(Boolean).join(" "),
+                                  )
+                                  .join(", ")}
+                              </span>
+                            </div>
+                          ) : null,
+                        )}
+                      </div>
+                    )}
+                    <div className="d-flex justify-content-between fw-bold" style={{ fontSize: "0.85rem" }}>
+                      <span>Total Rate</span>
+                      <span>{money(booking.totalRate)}</span>
+                    </div>
+                  </div>
                 </div>
 
-                {/* ── Price Summary ─────────────────────────────────── */}
+                {/* ── Cancellation Policy ─────────────────────────────── */}
                 <div style={card}>
-                  <div style={SECTION_HEADER}>Price Summary</div>
-                  <div style={{ padding: "12px 16px" }}>
-                    <Row>
-                      <Col md={4}>
-                        <InfoRow
-                          label="Total Before Discount"
-                          value={
-                            data.totalRateBeforeDiscount != null ? (
-                              <span className="text-decoration-line-through">
-                                {curCode} {dconv(data.totalRateBeforeDiscount).toFixed(2)}
-                              </span>
-                            ) : (
-                              "-"
-                            )
-                          }
-                        />
-                      </Col>
-                      <Col md={4}>
-                        <InfoRow
-                          label="Discount Applied"
-                          value={
-                            [
-                              data.discountPercent
-                                ? `${data.discountPercent}%`
-                                : "",
-                              data.discountAmount
-                                ? `flat ${curCode} ${dconv(data.discountAmount).toFixed(2)}`
-                                : "",
-                            ]
-                              .filter(Boolean)
-                              .join(" + ") || "-"
-                          }
-                        />
-                      </Col>
-                      <Col md={4}>
-                        <InfoRow
-                          label="Total Payable"
-                          value={
-                            <span
+                  <div style={SECTION_HEADER}>Cancellation Policy</div>
+                  <div style={{ padding: "12px 16px", fontSize: "0.82rem", color: "#333" }}>
+                    {String(booking.refundStatus || "").toLowerCase().includes("non")
+                      ? "Non-Refundable — this booking cannot be cancelled for a refund once confirmed."
+                      : "Flexible — cancellation is allowed per the hotel's refund terms."}
+                    {isCancelled && booking.cancellationReason && (
+                      <div className="text-danger mt-2">Cancelled — {booking.cancellationReason}</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Remarks ─────────────────────────────────────────── */}
+                <div style={card}>
+                  <div style={SECTION_HEADER}>Remarks</div>
+                  <div style={{ padding: "10px 16px", fontSize: "0.83rem", color: "#333" }}>
+                    {booking.remarks ? (
+                      <p style={{ marginBottom: 0 }}>{booking.remarks}</p>
+                    ) : (
+                      <span className="text-muted">No remarks.</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Related Sub-Bookings (created via ADD NEW ITEM) ──── */}
+                {Array.isArray(booking.subBookings) && booking.subBookings.length > 0 && (
+                  <div style={card}>
+                    <div style={SECTION_HEADER}>
+                      Related Sub-Bookings ({booking.subBookings.length})
+                    </div>
+                    <div style={{ padding: "10px 16px" }}>
+                      {booking.subBookings.map((sub, sIdx) => {
+                        const subRooms = sub.rooms?.length ?? 0;
+                        const subAdults = sub.rooms?.reduce((s, r) => s + (r.adults || 0), 0) ?? 0;
+                        const subChildren = sub.rooms?.reduce((s, r) => s + (r.children || 0), 0) ?? 0;
+                        return (
+                          <div
+                            key={sub.bookingId || sIdx}
+                            style={{ borderTop: sIdx === 0 ? "none" : "1px solid #eee", padding: "10px 0" }}
+                          >
+                            <div
                               style={{
-                                color: "#198754",
-                                fontWeight: "700",
-                                fontSize: "0.95rem",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: "6px",
                               }}
                             >
-                              {data.totalRate != null
-                                ? `${curCode} ${dconv(data.totalRate).toFixed(2)}`
-                                : "-"}
-                            </span>
-                          }
-                        />
-                      </Col>
-                    </Row>
-                  </div>
-                </div>
-
-                {/* ── Cancellation block (only when cancelled) ─────── */}
-                {data.cancelled && (
-                  <div style={card}>
-                    <div style={SECTION_HEADER}>Cancellation</div>
-                    <div style={{ padding: "12px 16px" }}>
-                      <InfoRow label="Cancelled At" value={data.cancelledAt} />
-                      <InfoRow
-                        label="Cancellation Reason"
-                        value={data.cancellationReason}
-                      />
+                              <span style={{ color: "#c0392b", fontWeight: "700", fontSize: "0.9rem" }}>
+                                {sub.bookingCode || "-"}
+                                {sub.childBookingIndex != null && (
+                                  <span
+                                    style={{
+                                      marginLeft: "8px",
+                                      color: "#888",
+                                      fontWeight: "500",
+                                      fontSize: "0.8rem",
+                                    }}
+                                  >
+                                    (Item #{sub.childBookingIndex})
+                                  </span>
+                                )}
+                              </span>
+                              <button
+                                style={{ ...BUTTON_STYLE, backgroundColor: "#555" }}
+                                onClick={() =>
+                                  navigate(`/booking-details/senior-citizen-booking/${sub.bookingId}`)
+                                }
+                              >
+                                View
+                              </button>
+                            </div>
+                            <Row>
+                              <Col md={6}>
+                                <InfoRow label="Reference No." value={sub.referenceNumber} />
+                                <InfoRow label="Hotel" value={sub.hotelName} />
+                                <InfoRow label="Check-In" value={formatDateTime(sub.checkInDate)} />
+                                <InfoRow label="Check-Out" value={formatDateTime(sub.checkOutDate)} />
+                              </Col>
+                              <Col md={6}>
+                                <InfoRow
+                                  label="Rooms / Guests"
+                                  value={`${subRooms} Room${subRooms !== 1 ? "s" : ""}, ${subAdults} Adult${
+                                    subAdults !== 1 ? "s" : ""
+                                  }${
+                                    subChildren > 0
+                                      ? `, ${subChildren} Child${subChildren !== 1 ? "ren" : ""}`
+                                      : ""
+                                  }`}
+                                />
+                                <InfoRow label="Total Rate" value={money(sub.totalRate)} />
+                                <InfoRow label="Status" value={sub.confirmationStatus || "-"} />
+                                <InfoRow label="Booking Date" value={formatDateTime(sub.bookingDate)} />
+                              </Col>
+                            </Row>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
 
-                {/* ── Bottom action buttons ─────────────────────────── */}
-                <div
-                  className="d-flex gap-2 justify-content-start"
-                  style={{ marginTop: "16px", marginBottom: "20px" }}
-                >
+                {/* ── Action Buttons ──────────────────────────────────────
+                    The two-status flow drives the document pair:
+                      • Confirmed   → RECONFIRM + Proforma Voucher / Invoice
+                      • ReConfirmed → Voucher / Invoice
+                    A cancelled booking keeps every applicable button (only
+                    CANCEL and RECONFIRM are dropped). */}
+                <div style={{ marginBottom: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   <button
-                    style={{ ...BUTTON_STYLE, backgroundColor: "#198754" }}
-                    onClick={handleDownload}
-                    title="Download Voucher"
+                    style={BUTTON_STYLE}
+                    onClick={() => {
+                      const parent = booking.parentBookingCode || booking.bookingCode;
+                      navigate(
+                        `/new-booking/senior-citizen?parentBookingCode=${encodeURIComponent(parent)}`,
+                      );
+                    }}
                   >
-                    <FaDownload style={{ marginRight: "6px" }} />
-                    Download
+                    ADD NEW ITEM
                   </button>
-                  {!data.cancelled && (
-                    <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#dc3545" }}
-                      onClick={handleCancel}
-                      title="Cancel Booking"
-                    >
-                      <FaTrash style={{ marginRight: "6px" }} />
-                      Cancel
+                  {!isCancelled && (
+                    <button style={BUTTON_STYLE} onClick={() => setShowCancelModal(true)}>
+                      CANCEL
                     </button>
                   )}
+                  {!showsFinalDocs && !isCancelled && (
+                    <button style={BUTTON_STYLE} onClick={() => setShowConfirmModal(true)}>
+                      RECONFIRM
+                    </button>
+                  )}
+                  {!showsFinalDocs ? (
+                    <>
+                      <button
+                        style={BUTTON_STYLE}
+                        disabled={generatingDocType === "PROFORMA_VOUCHER"}
+                        onClick={() => handleDocument("PROFORMA_VOUCHER", "Proforma Voucher")}
+                      >
+                        {generatingDocType === "PROFORMA_VOUCHER" ? "GENERATING..." : "PROFORMA VOUCHER"}
+                      </button>
+                      <button
+                        style={BUTTON_STYLE}
+                        disabled={generatingDocType === "PROFORMA_INVOICE"}
+                        onClick={() => handleDocument("PROFORMA_INVOICE", "Proforma Invoice")}
+                      >
+                        {generatingDocType === "PROFORMA_INVOICE" ? "GENERATING..." : "PROFORMA INVOICE"}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        style={BUTTON_STYLE}
+                        disabled={generatingDocType === "VOUCHER"}
+                        onClick={() => handleDocument("VOUCHER", "Voucher")}
+                      >
+                        {generatingDocType === "VOUCHER" ? "GENERATING..." : "VOUCHER"}
+                      </button>
+                      <button
+                        style={BUTTON_STYLE}
+                        disabled={generatingDocType === "COMPLETED"}
+                        onClick={() => handleDocument("COMPLETED", "Invoice")}
+                      >
+                        {generatingDocType === "COMPLETED" ? "GENERATING..." : "INVOICE"}
+                      </button>
+                    </>
+                  )}
+                  <button style={BUTTON_STYLE} onClick={openAgentRefModal}>
+                    ADD AGENT REFERENCE
+                  </button>
+                  <button style={BUTTON_STYLE} onClick={openConfirmationNoModal}>
+                    CONFIRMATION NO.
+                  </button>
+                  <button style={BUTTON_STYLE} onClick={resendMailToAgent} disabled={resendingMail}>
+                    {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
+                  </button>
+                  <button style={BUTTON_STYLE} onClick={openRemarkModal}>
+                    BOOKING REMARK
+                  </button>
+                </div>
+
+                {/* ── Booking Date footer ─────────────────────────────── */}
+                <div
+                  style={{
+                    textAlign: "right",
+                    fontSize: "0.8rem",
+                    color: "#555",
+                    paddingBottom: "8px",
+                  }}
+                >
+                  Booking Date : {formatDateTime(booking.bookingDate)}
                 </div>
               </>
             )}
           </Container>
         </main>
       </div>
-    </div>
-  );
-}
 
-function InfoRow({ label, value }) {
-  return (
-    <div
-      style={{ marginBottom: "6px", display: "flex", alignItems: "flex-start" }}
-    >
-      <span style={INFO_LABEL}>{label}</span>
-      <span style={{ ...INFO_VALUE, marginLeft: "8px" }}>{value ?? "-"}</span>
+      {/* Cancel Modal */}
+      <Modal show={showCancelModal} onHide={() => setShowCancelModal(false)} centered backdrop="static">
+        <Modal.Header closeButton>
+          <Modal.Title style={{ fontSize: "1rem" }}>Cancel Booking</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted small">
+            Are you sure you want to cancel this booking? Refundable bookings will have their agent
+            credit restored.
+          </p>
+          <Form.Group>
+            <Form.Label>Cancellation Reason (optional)</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={3}
+              value={cancellationReason}
+              onChange={(e) => setCancellationReason(e.target.value)}
+              placeholder="Reason for cancellation"
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setShowCancelModal(false)} disabled={cancellingBooking}>
+            Close
+          </Button>
+          <Button variant="danger" onClick={cancelBooking} disabled={cancellingBooking}>
+            {cancellingBooking ? <Spinner size="sm" /> : "Cancel Booking"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Reconfirm Modal */}
+      <Modal show={showConfirmModal} onHide={() => setShowConfirmModal(false)} centered backdrop="static">
+        <Modal.Header closeButton>
+          <Modal.Title style={{ fontSize: "1rem" }}>Reconfirm Booking</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="mb-2">Are you sure you want to reconfirm the booking?</p>
+          <div className="small" style={{ color: "#555" }}>
+            <div>
+              <strong>Booking Code:</strong> {booking?.bookingCode || "-"}
+            </div>
+            <div>
+              <strong>Hotel:</strong> {booking?.hotelName || "-"}
+            </div>
+          </div>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setShowConfirmModal(false)} disabled={confirmingBooking}>
+            Close
+          </Button>
+          <Button variant="success" onClick={confirmBooking} disabled={confirmingBooking}>
+            {confirmingBooking ? <Spinner size="sm" /> : "Reconfirm"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Agent Reference Modal */}
+      <Modal show={showAgentRefModal} onHide={() => setShowAgentRefModal(false)} centered backdrop="static" keyboard={false}>
+        <Modal.Header closeButton>
+          <Modal.Title style={{ fontSize: "1rem" }}>Agent Reference</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="mb-2">Are you sure you want to update the agent reference?</p>
+          <div className="small mb-3" style={{ color: "#555" }}>
+            <div>
+              <strong>Booking Code:</strong> {booking?.bookingCode || "-"}
+            </div>
+            <div>
+              <strong>Hotel:</strong> {booking?.hotelName || "-"}
+            </div>
+          </div>
+          <Form.Group>
+            <Form.Label>Agent Reference *</Form.Label>
+            <Form.Control
+              type="text"
+              placeholder="Enter Agent Reference"
+              value={agentRefInput}
+              onChange={(e) => {
+                setAgentRefInput(e.target.value);
+                if (agentRefError) setAgentRefError("");
+              }}
+              isInvalid={!!agentRefError}
+              disabled={savingAgentRef}
+            />
+            <Form.Control.Feedback type="invalid">{agentRefError}</Form.Control.Feedback>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setShowAgentRefModal(false)} disabled={savingAgentRef}>
+            Close
+          </Button>
+          <Button variant="primary" onClick={saveAgentRef} disabled={savingAgentRef}>
+            {savingAgentRef ? <Spinner size="sm" /> : "Save"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Confirmation Number Modal */}
+      <Modal show={showConfirmationNoModal} onHide={() => setShowConfirmationNoModal(false)} centered backdrop="static" keyboard={false}>
+        <Modal.Header closeButton>
+          <Modal.Title style={{ fontSize: "1rem" }}>Confirmation Number</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="mb-2">Are you sure you want to update the confirmation no?</p>
+          <div className="small mb-3" style={{ color: "#555" }}>
+            <div>
+              <strong>Booking Code:</strong> {booking?.bookingCode || "-"}
+            </div>
+            <div>
+              <strong>Hotel:</strong> {booking?.hotelName || "-"}
+            </div>
+          </div>
+          <Form.Group>
+            <Form.Label>Confirmation Number *</Form.Label>
+            <Form.Control
+              type="text"
+              placeholder="Enter Hotel Confirmation Number"
+              value={confirmationNoInput}
+              onChange={(e) => {
+                setConfirmationNoInput(e.target.value);
+                if (confirmationNoError) setConfirmationNoError("");
+              }}
+              isInvalid={!!confirmationNoError}
+              disabled={savingConfirmationNo}
+            />
+            <Form.Control.Feedback type="invalid">{confirmationNoError}</Form.Control.Feedback>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setShowConfirmationNoModal(false)} disabled={savingConfirmationNo}>
+            Close
+          </Button>
+          <Button variant="primary" onClick={saveConfirmationNo} disabled={savingConfirmationNo}>
+            {savingConfirmationNo ? <Spinner size="sm" /> : "Save"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Remark Modal */}
+      <Modal show={showRemarkModal} onHide={() => setShowRemarkModal(false)} centered backdrop="static" keyboard={false}>
+        <Modal.Header closeButton>
+          <Modal.Title style={{ fontSize: "1rem" }}>Booking Remark</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form.Group>
+            <Form.Label>Remark</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={4}
+              placeholder="Enter remark for this booking"
+              value={remarkInput}
+              onChange={(e) => setRemarkInput(e.target.value)}
+              disabled={savingRemark}
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setShowRemarkModal(false)} disabled={savingRemark}>
+            Close
+          </Button>
+          <Button variant="primary" onClick={saveRemark} disabled={savingRemark}>
+            {savingRemark ? <Spinner size="sm" /> : "Save"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

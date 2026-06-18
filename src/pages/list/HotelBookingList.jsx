@@ -826,9 +826,16 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
       setTotalPages(paginationMeta.totalPages || 0);
       setTotalElements(filtered.length);
     } else {
-      setBookings(currentBookings);
+      // Regular Hotel Bookings list: exclude 24-hour-checkin rows — those
+      // belong to the dedicated 24-Hour Booking List page. Presentational
+      // filter only (pagination stays server-side); totals reflect the
+      // filtered count so the footer/empty-state match what's shown.
+      const filtered = (currentBookings || []).filter(
+        (b) => !(b && (b.is24HourCheckin || b.Is24HourCheckin))
+      );
+      setBookings(filtered);
       setTotalPages(paginationMeta.totalPages || 0);
-      setTotalElements(paginationMeta.totalElements || 0);
+      setTotalElements(filtered.length);
     }
 
     setPagination((prev) => {
@@ -1258,20 +1265,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                           >
                             Booking Code
                           </th>
-                          <th
-                            style={{
-                              padding: "0.45rem 0.6rem",
-                              fontWeight: "600",
-                              textTransform: "uppercase",
-                              color: "#495057",
-                              border: "1px solid #dee2e6",
-                              whiteSpace: "normal",
-                              lineHeight: 1.2,
-                              width: COLUMN_WIDTHS.referenceCode,
-                            }}
-                          >
-                            Reference Code
-                          </th>
+                          {/* Reference Code column hidden by request. */}
                           <th
                             style={{
                               padding: "0.45rem 0.6rem",
@@ -1370,7 +1364,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                         {filteredBookings.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={11}
+                              colSpan={10}
                               className="text-center py-5 text-muted"
                               style={{
                                 border: "1px solid #dee2e6",
@@ -1548,19 +1542,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                                     {b.bookingCode || "-"}
                                   </span>
                                 </td>
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    width: COLUMN_WIDTHS.referenceCode,
-                                  }}
-                                >
-                                  <span
-                                    className="text-muted"
-                                    style={{ fontSize: "0.78rem" }}
-                                  >
-                                    {b.referenceNumber || "-"}
-                                  </span>
-                                </td>
+                                {/* Reference Code cell hidden by request. */}
                                 <td
                                   className="text-muted"
                                   style={{

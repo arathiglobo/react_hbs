@@ -86,6 +86,13 @@ export default function SeniorCitizenList() {
   // read-only. Mirrors the /occupancy-and-minimumlength pattern.
   const [isViewMode, setIsViewMode] = useState(false);
 
+  // Status-toggle modal state — mirrors the ContractRate pattern:
+  // clicking the Active/Inactive badge opens a small confirmation modal
+  // that PATCHes /status only after the operator confirms.
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedRow, setSelectedRow] = useState(null);
+  const [statusUpdating, setStatusUpdating] = useState(false);
+
   // Normalise a backend row into the form's discountType/Value shape.
   // Handles both new rows (carry discountType + discountValue) and
   // older rows that only carry discountPercent / discountAmount. Used
@@ -243,6 +250,33 @@ export default function SeniorCitizenList() {
     } catch (e) { toast.error("Delete failed"); }
   };
 
+  // Open the confirm modal for the row whose badge was clicked.
+  const handleStatusToggle = (row) => {
+    setSelectedRow(row);
+    setShowStatusModal(true);
+  };
+
+  // PATCH the flipped active value, refresh the list, close the modal.
+  const updateRowStatus = async () => {
+    if (!selectedRow) return;
+    const pid = selectedRow.promotionId || selectedRow.id;
+    try {
+      setStatusUpdating(true);
+      await axiosInstance.patch(
+        `/api/hotel-senior-citizen-promotion/${pid}/status`,
+        { active: !selectedRow.active }
+      );
+      toast.success(selectedRow.active ? "Promotion deactivated" : "Promotion activated");
+      await fetchAll();
+      setShowStatusModal(false);
+      setSelectedRow(null);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to update promotion status");
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
+
   const getDiscountType = (row) => {
     if (row.discountType) return row.discountType;
     if (row.discountPercent != null) return "PERCENTAGE";
@@ -347,7 +381,15 @@ export default function SeniorCitizenList() {
                           <td>{row.validTo || "-"}</td>
                           {/* <td>{row.description || "-"}</td> */}
                           <td>
-                            <Badge bg={row.active ? "success" : "danger"}>
+                            {/* Clickable Active/Inactive badge — opens the
+                                confirm modal then PATCHes /status. Mirrors
+                                /contract-rate. */}
+                            <Badge
+                              bg={row.active ? "success" : "danger"}
+                              style={{ cursor: "pointer" }}
+                              onClick={() => handleStatusToggle(row)}
+                              title={`Click to ${row.active ? "deactivate" : "activate"} promotion`}
+                            >
                               {row.active ? "Active" : "Inactive"}
                             </Badge>
                           </td>
@@ -473,6 +515,49 @@ export default function SeniorCitizenList() {
               {editingId ? "Update" : "Create"}
             </Button>
           )}
+        </Modal.Footer>
+      </Modal>
+
+      {/* Status-toggle confirmation modal — mirrors /contract-rate. */}
+      <Modal
+        show={showStatusModal}
+        onHide={() => setShowStatusModal(false)}
+        centered
+        size="sm"
+        backdrop="static"
+        keyboard={false}
+      >
+        <Modal.Header closeButton={!statusUpdating}>
+          <Modal.Title>Confirm Status Change</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>
+            Are you sure you want to{" "}
+            {selectedRow?.active ? "deactivate" : "activate"} this Senior Citizen discount?
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setShowStatusModal(false)}
+            disabled={statusUpdating}
+          >
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={updateRowStatus} disabled={statusUpdating}>
+            {statusUpdating ? (
+              <>
+                <span
+                  className="spinner-border spinner-border-sm me-2"
+                  role="status"
+                  aria-hidden="true"
+                ></span>
+                Processing...
+              </>
+            ) : (
+              "Confirm"
+            )}
+          </Button>
         </Modal.Footer>
       </Modal>
     </div>

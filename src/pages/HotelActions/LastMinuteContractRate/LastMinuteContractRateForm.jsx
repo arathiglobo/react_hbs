@@ -248,30 +248,12 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
                 : [""],
           });
         } else {
-          // CREATE mode: pre-fill cells from suggestions
-          const prefilledRates = [];
-          mapped.forEach((room) => {
-            (room.occupancyDetailsDTOs || []).forEach((occ) => {
-              (room.roomTypeDetailsDTOs || []).forEach((rt) => {
-                const key = `${room.hotelRoomcategoryId}|${rt.roomTypeId}|${occ.id}`;
-                const s = map[key];
-                if (s && s.suggestedRate != null) {
-                  prefilledRates.push({
-                    hotelRoomcategoryId: String(room.hotelRoomcategoryId),
-                    hotelRoomtypeId: String(rt.roomTypeId),
-                    ocuppancytypeId: String(occ.id),
-                    rate: s.suggestedRate,
-                    adultRate: s.suggestedAdultRate || 0,
-                    childRate: s.suggestedChildRate || 0,
-                    extraBed: false,
-                    meal: false,
-                    refundable: true,
-                  });
-                }
-              });
-            });
-          });
-          setFormData((f) => ({ ...f, roomRates: prefilledRates }));
+          // CREATE mode: leave every rate cell empty so the operator enters
+          // the rates manually (no auto-suggested pre-fill). The suggestions
+          // map is still loaded above and used only for the on-save validation
+          // (rate must be <= normal - markup%) and the "normal → -X%" hint
+          // shown beside each cell.
+          setFormData((f) => ({ ...f, roomRates: [] }));
         }
       } catch (err) {
         console.error(err);

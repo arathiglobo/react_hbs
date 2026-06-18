@@ -18,7 +18,13 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Card, Button, Row, Col, Form, Pagination, Spinner,
+  Card,
+  Button,
+  Row,
+  Col,
+  Form,
+  Pagination,
+  Spinner,
 } from "react-bootstrap";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
@@ -32,11 +38,23 @@ import "../../../styles/HotelSearch.css";
 function Counter({ value, min, max, onChange }) {
   return (
     <div className="rgs-counter">
-      <button type="button" className="rgs-counter-btn"
-              onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min}>−</button>
+      <button
+        type="button"
+        className="rgs-counter-btn"
+        onClick={() => onChange(Math.max(min, value - 1))}
+        disabled={value <= min}
+      >
+        −
+      </button>
       <span className="rgs-counter-val">{value}</span>
-      <button type="button" className="rgs-counter-btn"
-              onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max}>+</button>
+      <button
+        type="button"
+        className="rgs-counter-btn"
+        onClick={() => onChange(Math.min(max, value + 1))}
+        disabled={value >= max}
+      >
+        +
+      </button>
     </div>
   );
 }
@@ -50,33 +68,46 @@ function RoomGuestSelector({ value, onChange }) {
     setRooms(value);
   }, [value]);
 
-  const update = (next) => { setRooms(next); onChange && onChange(next); };
+  const update = (next) => {
+    setRooms(next);
+    onChange && onChange(next);
+  };
   const addRoom = () =>
-    update([...rooms, { adults: 1, children: 0, childAges: [], adultAges: [65] }]);
+    update([
+      ...rooms,
+      { adults: 1, children: 0, childAges: [], adultAges: [65] },
+    ]);
   const removeRoom = (index) => update(rooms.filter((_, i) => i !== index));
   const setAdults = (index, adults) =>
-    update(rooms.map((r, i) =>
-      i === index
-        ? { ...r, adults,
-            // Resize the adultAges array to match the new adult count.
-            // Default new adults to 65 so the senior-citizen markup kicks
-            // in by default — the user can override per-row below.
-            adultAges: Array.from({ length: adults }, (_, j) =>
-              (r.adultAges && r.adultAges[j] != null) ? r.adultAges[j] : 65
-            ) }
-        : r
-    ));
+    update(
+      rooms.map((r, i) =>
+        i === index
+          ? {
+              ...r,
+              adults,
+              // Resize the adultAges array to match the new adult count.
+              // Default new adults to 65 so the senior-citizen markup kicks
+              // in by default — the user can override per-row below.
+              adultAges: Array.from({ length: adults }, (_, j) =>
+                r.adultAges && r.adultAges[j] != null ? r.adultAges[j] : 65,
+              ),
+            }
+          : r,
+      ),
+    );
   // Children are not allowed on the senior-citizen flow. The Children
   // counter and per-child age inputs are hidden in this page's
   // RoomGuestSelector, but each room still carries `children: 0` and
   // `childAges: []` so the existing search payload shape stays intact.
   const setAdultAge = (roomIdx, adultIdx, age) =>
-    update(rooms.map((r, i) => {
-      if (i !== roomIdx) return r;
-      const ages = [...(r.adultAges || [])];
-      ages[adultIdx] = age;
-      return { ...r, adultAges: ages };
-    }));
+    update(
+      rooms.map((r, i) => {
+        if (i !== roomIdx) return r;
+        const ages = [...(r.adultAges || [])];
+        ages[adultIdx] = age;
+        return { ...r, adultAges: ages };
+      }),
+    );
 
   return (
     <div className="rgs-wrap">
@@ -86,7 +117,13 @@ function RoomGuestSelector({ value, onChange }) {
             <div className="rgs-room-header">
               <span className="rgs-room-label">🛏 Room {i + 1}</span>
               {rooms.length > 1 && (
-                <button type="button" className="rgs-remove-btn" onClick={() => removeRoom(i)}>✕</button>
+                <button
+                  type="button"
+                  className="rgs-remove-btn"
+                  onClick={() => removeRoom(i)}
+                >
+                  ✕
+                </button>
               )}
             </div>
             <div className="rgs-counters-col">
@@ -95,7 +132,12 @@ function RoomGuestSelector({ value, onChange }) {
                   <span className="rgs-counter-title">Adults</span>
                   <span className="rgs-counter-sub">Age 60+</span>
                 </div>
-                <Counter value={room.adults} min={1} max={6} onChange={(v) => setAdults(i, v)} />
+                <Counter
+                  value={room.adults}
+                  min={1}
+                  max={6}
+                  onChange={(v) => setAdults(i, v)}
+                />
               </div>
             </div>
             {/* Adult ages — required for the senior-citizen flow. If any
@@ -114,15 +156,22 @@ function RoomGuestSelector({ value, onChange }) {
                         <label className="rgs-child-age-label">
                           Adult {idx + 1} {isSenior ? "👵" : ""}
                         </label>
-                        <Form.Select size="sm" value={age}
-                                     onChange={(e) => setAdultAge(i, idx, parseInt(e.target.value))}
-                                     className="rgs-age-dropdown"
-                                     style={isSenior ? { borderColor: "#198754" } : undefined}>
+                        <Form.Select
+                          size="sm"
+                          value={age}
+                          onChange={(e) =>
+                            setAdultAge(i, idx, parseInt(e.target.value))
+                          }
+                          className="rgs-age-dropdown"
+                          style={
+                            isSenior ? { borderColor: "#198754" } : undefined
+                          }
+                        >
                           {Array.from({ length: 41 }).map((__, k) => {
                             const a = k + 60; // 60..100 — senior-citizen only
                             return (
                               <option key={a} value={a}>
-                                {a} yrs · Senior
+                                {a} yrs
                               </option>
                             );
                           })}
@@ -133,12 +182,12 @@ function RoomGuestSelector({ value, onChange }) {
                 </div>
               </div>
             )}
-
           </div>
         ))}
-        <button type="button" className="rgs-add-room-btn" onClick={addRoom}>
-          <span className="rgs-add-icon">+</span><span>Add Room</span>
-        </button>
+        {/* <button type="button" className="rgs-add-room-btn" onClick={addRoom}>
+          <span className="rgs-add-icon">+</span>
+          <span>Add Room</span>
+        </button> */}
       </div>
     </div>
   );
@@ -240,14 +289,20 @@ export default function SeniorCitizenSearch() {
   const resultsRef = useRef(null);
 
   const starOptions = [
-    { value: 5, label: "5 Stars" }, { value: 4, label: "4 Stars" },
-    { value: 3, label: "3 Stars" }, { value: 2, label: "2 Stars" }, { value: 1, label: "1 Star" },
+    { value: 5, label: "5 Stars" },
+    { value: 4, label: "4 Stars" },
+    { value: 3, label: "3 Stars" },
+    { value: 2, label: "2 Stars" },
+    { value: 1, label: "1 Star" },
   ];
 
   function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
-      const later = () => { clearTimeout(timeout); func(...args); };
+      const later = () => {
+        clearTimeout(timeout);
+        func(...args);
+      };
       clearTimeout(timeout);
       timeout = setTimeout(later, wait);
     };
@@ -255,19 +310,29 @@ export default function SeniorCitizenSearch() {
 
   const debouncedCitySearch = useRef(
     debounce(async (searchText = "") => {
-      if (!searchText || searchText.length < 2) { setDestinationOptions([]); return; }
+      if (!searchText || searchText.length < 2) {
+        setDestinationOptions([]);
+        return;
+      }
       setIsDestinationLoading(true);
       try {
-        const response = await axiosInstance.get(`/api/province?search=${searchText}`);
+        const response = await axiosInstance.get(
+          `/api/province?search=${searchText}`,
+        );
         const list = Array.isArray(response.data) ? response.data : [];
-        setDestinationOptions(list.slice(0, 50).map((city) => ({
-          value: city.id,
-          label: `${city.stateName}, ${city.country}`,
-          countryId: city.countryId,
-        })));
-      } catch { setDestinationOptions([]); }
-      finally { setIsDestinationLoading(false); }
-    }, 300)
+        setDestinationOptions(
+          list.slice(0, 50).map((city) => ({
+            value: city.id,
+            label: `${city.stateName}, ${city.country}`,
+            countryId: city.countryId,
+          })),
+        );
+      } catch {
+        setDestinationOptions([]);
+      } finally {
+        setIsDestinationLoading(false);
+      }
+    }, 300),
   ).current;
 
   // Some country master rows can come back with `name: null`. The
@@ -297,24 +362,36 @@ export default function SeniorCitizenSearch() {
     debounce(async (search) => {
       try {
         setIsNationalityLoading(true);
-        const response = await axiosInstance.get(`/api/country?search=${search}`);
-        setNationalityList(Array.isArray(response.data)
-          ? response.data.filter(Boolean).map(buildCountryOption)
-          : []);
-      } catch { setNationalityList([]); }
-      finally { setIsNationalityLoading(false); }
-    }, 300)
+        const response = await axiosInstance.get(
+          `/api/country?search=${search}`,
+        );
+        setNationalityList(
+          Array.isArray(response.data)
+            ? response.data.filter(Boolean).map(buildCountryOption)
+            : [],
+        );
+      } catch {
+        setNationalityList([]);
+      } finally {
+        setIsNationalityLoading(false);
+      }
+    }, 300),
   ).current;
 
   const countryList = async () => {
     try {
       setIsNationalityLoading(true);
       const response = await axiosInstance.get("/api/country?limit=50");
-      setNationalityList(Array.isArray(response.data)
-        ? response.data.filter(Boolean).map(buildCountryOption)
-        : []);
-    } catch { setNationalityList([]); }
-    finally { setIsNationalityLoading(false); }
+      setNationalityList(
+        Array.isArray(response.data)
+          ? response.data.filter(Boolean).map(buildCountryOption)
+          : [],
+      );
+    } catch {
+      setNationalityList([]);
+    } finally {
+      setIsNationalityLoading(false);
+    }
   };
 
   const loadPopularDestinations = async () => {
@@ -323,13 +400,18 @@ export default function SeniorCitizenSearch() {
       setIsDestinationLoading(true);
       const response = await axiosInstance.get("/api/province?limit=50");
       const list = Array.isArray(response.data) ? response.data : [];
-      setDestinationOptions(list.map((city) => ({
-        value: city.id,
-        label: `${city.stateName},${city.country}`,
-        countryId: city.countryId,
-      })));
-    } catch { /* silent */ }
-    finally { setIsDestinationLoading(false); }
+      setDestinationOptions(
+        list.map((city) => ({
+          value: city.id,
+          label: `${city.stateName},${city.country}`,
+          countryId: city.countryId,
+        })),
+      );
+    } catch {
+      /* silent */
+    } finally {
+      setIsDestinationLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -338,19 +420,34 @@ export default function SeniorCitizenSearch() {
       try {
         const { data } = await axiosInstance.get("/api/agent");
         setAgents(Array.isArray(data) ? data : data?.content || []);
-      } catch { setAgents([]); }
+      } catch {
+        setAgents([]);
+      }
     })();
   }, []);
 
   useEffect(() => {
-    if (!agent) { setAgentBalance(null); return; }
+    if (!agent) {
+      setAgentBalance(null);
+      return;
+    }
     let cancelled = false;
     setAgentBalanceLoading(true);
-    axiosInstance.get(`/api/agent-credit-limit/agent/${agent}`)
-      .then((res) => { if (!cancelled) setAgentBalance(res?.data?.availableCreditLimit ?? null); })
-      .catch(() => { if (!cancelled) setAgentBalance(null); })
-      .finally(() => { if (!cancelled) setAgentBalanceLoading(false); });
-    return () => { cancelled = true; };
+    axiosInstance
+      .get(`/api/agent-credit-limit/agent/${agent}`)
+      .then((res) => {
+        if (!cancelled)
+          setAgentBalance(res?.data?.availableCreditLimit ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setAgentBalance(null);
+      })
+      .finally(() => {
+        if (!cancelled) setAgentBalanceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [agent]);
 
   // For agent logins, resolve the logged-in agent's own id and seed it into
@@ -360,7 +457,10 @@ export default function SeniorCitizenSearch() {
   useEffect(() => {
     if (!isAgentRole) return;
     const cached = localStorage.getItem("userId");
-    if (cached) { setAgent(cached); return; }
+    if (cached) {
+      setAgent(cached);
+      return;
+    }
     const userName =
       localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
     if (!userName) return;
@@ -375,8 +475,12 @@ export default function SeniorCitizenSearch() {
           setAgent(id);
         }
       })
-      .catch(() => { /* silent — search just won't auto-fill the agent */ });
-    return () => { cancelled = true; };
+      .catch(() => {
+        /* silent — search just won't auto-fill the agent */
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [isAgentRole]);
 
   // Load currency list (default AED).
@@ -401,7 +505,9 @@ export default function SeniorCitizenSearch() {
         console.warn("currency list fetch failed (non-fatal):", err);
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Default the display currency to the (selected/own) agent's currency.
@@ -420,7 +526,9 @@ export default function SeniorCitizenSearch() {
         if (opt) setSelectedCurrency(opt);
       })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [agent, currencyOptions]);
 
   const aedBaseRate = useMemo(() => {
@@ -428,13 +536,18 @@ export default function SeniorCitizenSearch() {
     return aed && Number.isFinite(aed.rate) && aed.rate > 0 ? aed.rate : 1;
   }, [currencyOptions]);
 
-  const displayCurrency = useMemo(() => ({
-    code: selectedCurrency?.code || "AED",
-    factor:
-      selectedCurrency && Number.isFinite(selectedCurrency.rate) && aedBaseRate
-        ? selectedCurrency.rate / aedBaseRate
-        : 1,
-  }), [selectedCurrency, aedBaseRate]);
+  const displayCurrency = useMemo(
+    () => ({
+      code: selectedCurrency?.code || "AED",
+      factor:
+        selectedCurrency &&
+        Number.isFinite(selectedCurrency.rate) &&
+        aedBaseRate
+          ? selectedCurrency.rate / aedBaseRate
+          : 1,
+    }),
+    [selectedCurrency, aedBaseRate],
+  );
   const displayCurrencyCode = displayCurrency.code;
   const convertFromAed = (aed) => (Number(aed) || 0) * displayCurrency.factor;
 
@@ -442,7 +555,10 @@ export default function SeniorCitizenSearch() {
     if (checkIn && checkOut) {
       const start = new Date(checkIn);
       const end = new Date(checkOut);
-      const diff = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
+      const diff = Math.max(
+        1,
+        Math.ceil((end - start) / (1000 * 60 * 60 * 24)),
+      );
       setNights(diff);
     }
   }, [checkIn, checkOut]);
@@ -455,17 +571,22 @@ export default function SeniorCitizenSearch() {
       const out = new Date(start);
       out.setDate(start.getDate() + val);
       const iso = new Date(out.getTime() - out.getTimezoneOffset() * 60000)
-        .toISOString().slice(0, 10);
+        .toISOString()
+        .slice(0, 10);
       setCheckOut(iso);
     }
   };
 
   const formatDate = (date) => date.toISOString().split("T")[0];
   const getTomorrow = (date = new Date()) => {
-    const t = new Date(date); t.setDate(t.getDate() + 1); return t;
+    const t = new Date(date);
+    t.setDate(t.getDate() + 1);
+    return t;
   };
   const today = formatDate(new Date());
-  const minCheckOutDate = checkIn ? formatDate(getTomorrow(new Date(checkIn))) : formatDate(getTomorrow());
+  const minCheckOutDate = checkIn
+    ? formatDate(getTomorrow(new Date(checkIn)))
+    : formatDate(getTomorrow());
 
   const validateForm = () => {
     const e = {};
@@ -473,7 +594,8 @@ export default function SeniorCitizenSearch() {
     if (!selectedDestination) e.destination = "Destination is required";
     if (!checkIn) e.checkIn = "Check-in date is required";
     if (!checkOut) e.checkOut = "Check-out date is required";
-    else if (checkIn && checkOut <= checkIn) e.checkOut = "Check-out must be after check-in";
+    else if (checkIn && checkOut <= checkIn)
+      e.checkOut = "Check-out must be after check-in";
     // Agent logins book under themselves (picker hidden, id seeded above) —
     // skip this check for them or the search can never pass validation.
     if (!isAgentRole && !agent) e.agent = "Agent is required";
@@ -482,7 +604,7 @@ export default function SeniorCitizenSearch() {
     // adult across all rooms is aged 60+. Without this guard the flow
     // would silently apply no discount and just match the normal search.
     const hasSenior = rooms.some((r) =>
-      (r.adultAges || []).some((a) => Number(a) >= 60)
+      (r.adultAges || []).some((a) => Number(a) >= 60),
     );
     if (!hasSenior) {
       e.rooms = "At least one adult must be 60+ to use the Senior Citizen flow";
@@ -536,7 +658,8 @@ export default function SeniorCitizenSearch() {
       };
 
       const { data } = await axiosInstance.post(
-        "/api/senior-citizen-hotel-search/search", payload
+        "/api/senior-citizen-hotel-search/search",
+        payload,
       );
       const sid = data?.searchId;
       if (!sid) throw new Error("No searchId returned");
@@ -548,16 +671,33 @@ export default function SeniorCitizenSearch() {
         attempts += 1;
         try {
           const params = new URLSearchParams({
-            agentId: agent, checkInDate: checkIn,
-            page: pageIndex, size: pageSize, sortBy: "baseRate",
+            agentId: agent,
+            checkInDate: checkIn,
+            page: pageIndex,
+            size: pageSize,
+            sortBy: "baseRate",
           });
           const { data: r } = await axiosInstance.get(
-            `/api/senior-citizen-hotel-search/results/${sid}?${params.toString()}`
+            `/api/senior-citizen-hotel-search/results/${sid}?${params.toString()}`,
           );
-          const list = Array.isArray(r?.result) ? r.result : Array.isArray(r?.content) ? r.content : [];
+          const list = Array.isArray(r?.result)
+            ? r.result
+            : Array.isArray(r?.content)
+              ? r.content
+              : [];
           setAllResults(list);
-          setTotalElements(Number(r?.totalResults ?? r?.totalElements ?? list.length));
-          setTotalPages(Math.max(1, Math.ceil((Number(r?.totalResults ?? r?.totalElements ?? list.length)) / pageSize)));
+          setTotalElements(
+            Number(r?.totalResults ?? r?.totalElements ?? list.length),
+          );
+          setTotalPages(
+            Math.max(
+              1,
+              Math.ceil(
+                Number(r?.totalResults ?? r?.totalElements ?? list.length) /
+                  pageSize,
+              ),
+            ),
+          );
           setHasSearchResult(true);
           if (r?.finalStatus === "COMPLETED" || attempts >= 10) {
             setPollStatus("COMPLETED");
@@ -582,65 +722,99 @@ export default function SeniorCitizenSearch() {
 
   const filteredResults = useMemo(() => {
     let res = allResults;
-    if (starRating) res = res.filter((h) => Number(h.starRating) === Number(starRating.value));
+    if (starRating)
+      res = res.filter(
+        (h) => Number(h.starRating) === Number(starRating.value),
+      );
     if (hotelSearchTerm.trim()) {
       const q = hotelSearchTerm.toLowerCase();
       res = res.filter((h) => (h.hotelName || "").toLowerCase().includes(q));
     }
     if (hotelType.length > 0) {
       const sel = hotelType.map((t) => t.value.toLowerCase());
-      res = res.filter((h) => sel.includes(String(h.hotelType || "hotel").toLowerCase()));
+      res = res.filter((h) =>
+        sel.includes(String(h.hotelType || "hotel").toLowerCase()),
+      );
     }
-    if (channelType.length > 0 && !channelType.some((c) => c.value === "inhouse")) {
+    if (
+      channelType.length > 0 &&
+      !channelType.some((c) => c.value === "inhouse")
+    ) {
       res = [];
     }
-    if (sortBy === "priceAsc") res = [...res].sort((a, b) => (a.baseRate || 0) - (b.baseRate || 0));
-    if (sortBy === "priceDesc") res = [...res].sort((a, b) => (b.baseRate || 0) - (a.baseRate || 0));
+    if (sortBy === "priceAsc")
+      res = [...res].sort((a, b) => (a.baseRate || 0) - (b.baseRate || 0));
+    if (sortBy === "priceDesc")
+      res = [...res].sort((a, b) => (b.baseRate || 0) - (a.baseRate || 0));
     return res;
   }, [allResults, starRating, hotelSearchTerm, hotelType, channelType, sortBy]);
 
   const apiIdFromType = (apiType) => {
-    const m = { inhouse: 1, jumeirah: 10, iwtx: 12, x3: 15, ratehawk: 14, darina: 16, atharva: 3 };
+    const m = {
+      inhouse: 1,
+      jumeirah: 10,
+      iwtx: 12,
+      x3: 15,
+      ratehawk: 14,
+      darina: 16,
+      atharva: 3,
+    };
     return m[(apiType || "").toLowerCase()] || 1;
   };
 
   const handleViewRooms = (h) => {
-    // Carry the full per-room shape (including adultAges) into the
-    // room-list page — the backend re-applies the senior-citizen markup
-    // per room based on the adult ages, so it needs them again here.
-    navigate("/senior-citizen-room-list", {
-      state: {
-        hotelCode: h.hotelCode,
-        hotelId: h.hotelCode,
-        hotelName: h.hotelName,
-        hotelImage: h.hotelImage,
-        address: h.hotelAddress,
-        starRating: h.starRating,
-        apiType: h.apiType,
-        apiId: apiIdFromType(h.apiType),
-        nationalityCode: (selectedNationality?.code || "IN").toUpperCase().slice(0, 2),
-        checkIn, checkOut,
-        noOfRooms: rooms.length,
-        adults: rooms.reduce((a, r) => a + r.adults, 0),
-        children: rooms.reduce((a, r) => a + r.children, 0),
-        agentId: agent,
-        // Optional "Booking Done By Employee" selection.
-        employeeId: selectedEmployee?.value || null,
-        // Display currency chosen on the search page — flows through to the
-        // room list / booking page / create payload. Rates stay AED.
-        currency: displayCurrency,
-        // Per-room breakdown — needed by SeniorCitizenRoomList to build
-        // the room-search payload with the right adult ages.
-        rooms: rooms.map((r) => ({
-          adults: r.adults || 1,
-          children: r.children || 0,
-          childAges: r.childAges || [],
-          adultAges: Array.isArray(r.adultAges) && r.adultAges.length === (r.adults || 1)
+    // Open /senior-citizen-room-list in a NEW browser tab. React Router's
+    // navigate-state can't cross a tab boundary, so the handoff context is
+    // persisted to localStorage (shared across same-origin tabs) and
+    // SeniorCitizenRoomList reads it as a fallback when location.state is empty.
+    // Carries the full per-room shape (including adultAges) so the backend can
+    // re-apply the senior-citizen markup per room.
+    const handoff = {
+      hotelCode: h.hotelCode,
+      hotelId: h.hotelCode,
+      hotelName: h.hotelName,
+      hotelImage: h.hotelImage,
+      address: h.hotelAddress,
+      starRating: h.starRating,
+      apiType: h.apiType,
+      apiId: apiIdFromType(h.apiType),
+      nationalityCode: (selectedNationality?.code || "IN")
+        .toUpperCase()
+        .slice(0, 2),
+      checkIn,
+      checkOut,
+      noOfRooms: rooms.length,
+      adults: rooms.reduce((a, r) => a + r.adults, 0),
+      children: rooms.reduce((a, r) => a + r.children, 0),
+      agentId: agent,
+      // Optional "Booking Done By Employee" selection.
+      employeeId: selectedEmployee?.value || null,
+      // "Add New Item" flow: parent code rides in the URL
+      // (?parentBookingCode=SNCIT7) and threads through so the new booking
+      // is saved as a child (SNCIT7/1, SNCIT7/2, …).
+      parentBookingCode:
+        new URLSearchParams(window.location.search).get("parentBookingCode") || null,
+      // Display currency chosen on the search page — flows through to the
+      // room list / booking page / create payload. Rates stay AED.
+      currency: displayCurrency,
+      // Per-room breakdown — needed by SeniorCitizenRoomList to build
+      // the room-search payload with the right adult ages.
+      rooms: rooms.map((r) => ({
+        adults: r.adults || 1,
+        children: r.children || 0,
+        childAges: r.childAges || [],
+        adultAges:
+          Array.isArray(r.adultAges) && r.adultAges.length === (r.adults || 1)
             ? r.adultAges
             : Array.from({ length: r.adults || 1 }, () => 65),
-        })),
-      },
-    });
+      })),
+    };
+    try {
+      localStorage.setItem("seniorCitizenRoomListCtx", JSON.stringify(handoff));
+    } catch (e) {
+      /* ignore quota / serialization issues — new tab can still open */
+    }
+    window.open("/senior-citizen-room-list", "_blank", "noopener");
   };
 
   return (
@@ -653,12 +827,16 @@ export default function SeniorCitizenSearch() {
             <Card.Body className="p-4">
               <div className="mb-4 text-start">
                 <h2 className="fw-semibold text-primary mb-1 d-flex align-items-center">
-                  <FaUserClock className="me-2" /> Senior Citizen — Hotel Search
+                  <FaUserClock className="me-2" />
+                  <div>
+                    <div style={{ fontSize: "1rem", fontWeight: "400" }}>
+                      Find Your Perfect Stay for
+                    </div>
+                    <div style={{ fontSize: "2rem", fontWeight: "700" }}>
+                      Senior Citizen
+                    </div>
+                  </div>
                 </h2>
-                <p className="text-muted">
-                  Senior-citizen discounts are applied automatically to eligible hotels.
-                  Verification (employee code / govt-ID upload) happens on the booking page.
-                </p>
               </div>
 
               <Form onSubmit={handleSearchSubmit}>
@@ -672,40 +850,56 @@ export default function SeniorCitizenSearch() {
                   {/* 1. Agent — hidden for agent logins (they book under
                        themselves; the id is resolved automatically). */}
                   {!isAgentRole && (
-                  <Col lg={3} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">Agent *</Form.Label>
-                      <AgentSelect
-                        agents={agents}
-                        value={agent}
-                        isInvalid={!!errors.agent}
-                        onChange={(v) => {
-                          setAgent(v);
-                          if (v) clearError("agent");
-                        }}
-                      />
-                      {errors.agent && <div className="text-danger small mt-1">{errors.agent}</div>}
-                      {agent && (
-                        <div className="mt-1 small">
-                          {agentBalanceLoading ? (
-                            <span className="text-muted">Loading available balance…</span>
-                          ) : agentBalance != null ? (
-                            <span className="fw-semibold" style={{ color: "#dc3545" }}>
-                              Available Balance: {Number(agentBalance).toFixed(2)}
-                            </span>
-                          ) : (
-                            <span className="text-muted">Available balance unavailable</span>
-                          )}
-                        </div>
-                      )}
-                    </Form.Group>
-                  </Col>
+                    <Col lg={4} md={6}>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold text-dark">
+                          Agent *
+                        </Form.Label>
+                        <AgentSelect
+                          agents={agents}
+                          value={agent}
+                          isInvalid={!!errors.agent}
+                          onChange={(v) => {
+                            setAgent(v);
+                            if (v) clearError("agent");
+                          }}
+                        />
+                        {errors.agent && (
+                          <div className="text-danger small mt-1">
+                            {errors.agent}
+                          </div>
+                        )}
+                        {agent && (
+                          <div className="mt-1 small">
+                            {agentBalanceLoading ? (
+                              <span className="text-muted">
+                                Loading available balance…
+                              </span>
+                            ) : agentBalance != null ? (
+                              <span
+                                className="fw-semibold"
+                                style={{ color: "#dc3545" }}
+                              >
+                                Available Balance:{" "}
+                                {Number(agentBalance).toFixed(2)}
+                              </span>
+                            ) : (
+                              <span className="text-muted">
+                                Available balance unavailable
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </Form.Group>
+                    </Col>
                   )}
 
                   {/* 2. Destination / City */}
                   <Col lg={4} md={6}>
                     <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">Destination *</Form.Label>
+                      <Form.Label className="fw-semibold text-dark">
+                        Destination *
+                      </Form.Label>
                       <Select
                         filterOption={safeFilterOption}
                         options={destinationOptions}
@@ -715,17 +909,22 @@ export default function SeniorCitizenSearch() {
                           if (option) clearError("destination");
                         }}
                         placeholder="Where do you want to go?"
-                        isSearchable isClearable
+                        isSearchable
+                        isClearable
                         className="modern-select"
                         isLoading={isDestinationLoading}
                         noOptionsMessage={() =>
-                          isDestinationLoading ? "Searching destinations..." : "Type to search destinations..."
+                          isDestinationLoading
+                            ? "Searching destinations..."
+                            : "Type to search destinations..."
                         }
                         onMenuOpen={() => {
-                          if (destinationOptions.length === 0) loadPopularDestinations();
+                          if (destinationOptions.length === 0)
+                            loadPopularDestinations();
                         }}
                         onInputChange={(inputValue, { action }) => {
-                          if (action === "input-change") debouncedCitySearch(inputValue);
+                          if (action === "input-change")
+                            debouncedCitySearch(inputValue);
                         }}
                         menuPortalTarget={document.body}
                         styles={{
@@ -734,7 +933,9 @@ export default function SeniorCitizenSearch() {
                         }}
                       />
                       {errors.destination && (
-                        <div className="text-danger small mt-1">{errors.destination}</div>
+                        <div className="text-danger small mt-1">
+                          {errors.destination}
+                        </div>
                       )}
                     </Form.Group>
                   </Col>
@@ -742,7 +943,9 @@ export default function SeniorCitizenSearch() {
                   {/* 3. Nationality */}
                   <Col lg={4} md={6}>
                     <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">Nationality *</Form.Label>
+                      <Form.Label className="fw-semibold text-dark">
+                        Nationality *
+                      </Form.Label>
                       <Select
                         filterOption={safeFilterOption}
                         options={nationalityList}
@@ -762,7 +965,8 @@ export default function SeniorCitizenSearch() {
                         }}
                         isLoading={isNationalityLoading}
                         placeholder="Select nationality"
-                        isSearchable isClearable
+                        isSearchable
+                        isClearable
                         className="modern-select"
                         menuPortalTarget={document.body}
                         styles={{
@@ -771,7 +975,9 @@ export default function SeniorCitizenSearch() {
                         }}
                       />
                       {errors.nationality && (
-                        <div className="text-danger small mt-1">{errors.nationality}</div>
+                        <div className="text-danger small mt-1">
+                          {errors.nationality}
+                        </div>
                       )}
                       {/* Tagging UAE nationals as resident — surfaces to
                           the operator so they know to apply the resident
@@ -784,7 +990,7 @@ export default function SeniorCitizenSearch() {
                           className="mt-1 small fw-semibold"
                           style={{ color: "#0f7a3a" }}
                         >
-                          The guest is a resident of the UAE.
+                          Select "United Arab Emirates" if guest is UAE resident
                         </div>
                       )}
                     </Form.Group>
@@ -803,12 +1009,14 @@ export default function SeniorCitizenSearch() {
                         filterOption={safeFilterOption}
                         options={employees.map((e) => ({
                           value: e?.employeeId,
-                          label: `${e?.firstName || ""} ${e?.lastName || ""}`.trim(),
+                          label:
+                            `${e?.firstName || ""} ${e?.lastName || ""}`.trim(),
                         }))}
                         value={selectedEmployee}
                         onChange={(opt) => setSelectedEmployee(opt)}
                         placeholder="Select employee"
-                        isSearchable isClearable
+                        isSearchable
+                        isClearable
                         className="modern-select"
                         menuPortalTarget={document.body}
                         styles={{
@@ -820,61 +1028,116 @@ export default function SeniorCitizenSearch() {
                   </Col>
 
                   {/* 4. Check-In */}
-                  <Col lg={4} md={6}>
+                  <Col lg={3} md={6}>
                     <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">Check-in *</Form.Label>
-                      <Form.Control style={{ height: "42px" }} type="date" value={checkIn} min={today}
-                                    onClick={(e) => e.target.showPicker && e.target.showPicker()}
-                                    onChange={(e) => {
-                                      const newCheckIn = e.target.value;
-                                      setCheckIn(newCheckIn);
-                                      if (newCheckIn) {
-                                        clearError("checkIn");
-                                        setCheckOut(formatDate(getTomorrow(new Date(newCheckIn))));
-                                        clearError("checkOut");
-                                      }
-                                    }} />
-                      {errors.checkIn && <div className="text-danger small mt-1">{errors.checkIn}</div>}
+                      <Form.Label className="fw-semibold text-dark">
+                        Check-in *
+                      </Form.Label>
+                      <Form.Control
+                        style={{ height: "42px" }}
+                        type="date"
+                        value={checkIn}
+                        min={today}
+                        onClick={(e) =>
+                          e.target.showPicker && e.target.showPicker()
+                        }
+                        onChange={(e) => {
+                          const newCheckIn = e.target.value;
+                          setCheckIn(newCheckIn);
+                          if (newCheckIn) {
+                            clearError("checkIn");
+                            setCheckOut(
+                              formatDate(getTomorrow(new Date(newCheckIn))),
+                            );
+                            clearError("checkOut");
+                          }
+                        }}
+                      />
+                      {errors.checkIn && (
+                        <div className="text-danger small mt-1">
+                          {errors.checkIn}
+                        </div>
+                      )}
                     </Form.Group>
                   </Col>
 
                   {/* 5. Nights */}
                   <Col lg={2} md={6}>
                     <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">Nights</Form.Label>
-                      <Form.Control style={{ height: "42px" }} type="number" min={1} max={60}
-                                    value={nights} onChange={(e) => handleNightsChange(e.target.value)} />
+                      <Form.Label className="fw-semibold text-dark">
+                        Nights
+                      </Form.Label>
+                      <Form.Control
+                        style={{ height: "42px" }}
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={nights}
+                        onChange={(e) => handleNightsChange(e.target.value)}
+                      />
                     </Form.Group>
                   </Col>
 
                   {/* 6. Check-Out */}
                   <Col lg={3} md={6}>
                     <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">Check-out *</Form.Label>
-                      <Form.Control style={{ height: "42px" }} type="date" value={checkOut} min={minCheckOutDate}
-                                    onClick={(e) => e.target.showPicker && e.target.showPicker()}
-                                    onChange={(e) => {
-                                      setCheckOut(e.target.value);
-                                      if (e.target.value) clearError("checkOut");
-                                    }} />
-                      {errors.checkOut && <div className="text-danger small mt-1">{errors.checkOut}</div>}
+                      <Form.Label className="fw-semibold text-dark">
+                        Check-out *
+                      </Form.Label>
+                      <Form.Control
+                        style={{ height: "42px" }}
+                        type="date"
+                        value={checkOut}
+                        min={minCheckOutDate}
+                        onClick={(e) =>
+                          e.target.showPicker && e.target.showPicker()
+                        }
+                        onChange={(e) => {
+                          setCheckOut(e.target.value);
+                          if (e.target.value) clearError("checkOut");
+                        }}
+                      />
+                      {errors.checkOut && (
+                        <div className="text-danger small mt-1">
+                          {errors.checkOut}
+                        </div>
+                      )}
                     </Form.Group>
                   </Col>
 
                   {/* 7. Rooms & Guests */}
                   <Col lg={4} md={6}>
-                    <Form.Label className="fw-semibold text-dark">Rooms & Guests</Form.Label>
+                    <Form.Label className="fw-semibold text-dark">
+                      Rooms & Guests
+                    </Form.Label>
                     <div className="d-flex gap-2">
-                      <Button variant="outline-primary"
-                              className="flex-grow-1 text-start rooms-summary-btn-modern"
-                              type="button" onClick={() => setRoomsOpen((o) => !o)}>
-                        {rooms.reduce((a, r) => a + r.adults, 0)} adults
-                        {rooms.reduce((a, r) => a + r.children, 0)
-                          ? `, ${rooms.reduce((a, r) => a + r.children, 0)} child` : ""}{" "}
-                        · {rooms.length} room{rooms.length > 1 ? "s" : ""}
-                        <span className="float-end">{roomsOpen ? "▴" : "▾"}</span>
-                      </Button>
                       <Button
+                        variant="outline-primary"
+                        className="flex-grow-1 rooms-summary-btn-modern"
+                        type="button"
+                        onClick={() => setRoomsOpen((o) => !o)}
+                      >
+                        <div className="d-flex justify-content-between align-items-center w-100">
+                          <span>
+                            {rooms.reduce((a, r) => a + r.adults, 0)} adults
+                            {rooms.reduce((a, r) => a + r.children, 0)
+                              ? `, ${rooms.reduce((a, r) => a + r.children, 0)} child`
+                              : ""}{" "}
+                            · {rooms.length} room{rooms.length > 1 ? "s" : ""}
+                          </span>
+
+                          <span
+                            style={{
+                              fontSize: "1.5rem",
+                              fontWeight: "bold",
+                              lineHeight: 1,
+                            }}
+                          >
+                            {roomsOpen ? "▴" : "▾"}
+                          </span>
+                        </div>
+                      </Button>
+                      {/* <Button
                         type="button"
                         className="flex-shrink-0 btn-add-room-premium"
                         onClick={() => {
@@ -883,7 +1146,12 @@ export default function SeniorCitizenSearch() {
                           } else {
                             setRooms((prev) => [
                               ...prev,
-                              { adults: 1, children: 0, childAges: [], adultAges: [65] },
+                              {
+                                adults: 1,
+                                children: 0,
+                                childAges: [],
+                                adultAges: [65],
+                              },
                             ]);
                             clearError("rooms");
                           }
@@ -891,7 +1159,7 @@ export default function SeniorCitizenSearch() {
                       >
                         <span className="add-room-plus">+</span>
                         <span>Add Room</span>
-                      </Button>
+                      </Button> */}
                     </div>
                   </Col>
                 </Row>
@@ -899,12 +1167,15 @@ export default function SeniorCitizenSearch() {
                 {roomsOpen && (
                   <Row className="g-3 mt-3">
                     <Col md={12}>
-                      <RoomGuestSelector value={rooms} onChange={(next) => {
-                        setRooms(next);
-                        // Drop the "must include senior" error as soon as the
-                        // user adjusts the rooms — re-validated on submit.
-                        clearError("rooms");
-                      }} />
+                      <RoomGuestSelector
+                        value={rooms}
+                        onChange={(next) => {
+                          setRooms(next);
+                          // Drop the "must include senior" error as soon as the
+                          // user adjusts the rooms — re-validated on submit.
+                          clearError("rooms");
+                        }}
+                      />
                     </Col>
                   </Row>
                 )}
@@ -919,11 +1190,25 @@ export default function SeniorCitizenSearch() {
 
                 <Row className="mt-3">
                   <Col className="d-flex justify-content-center gap-3">
-                    <Button type="submit" className="btn-search-modern" disabled={isLoading} size="lg">
+                    <Button
+                      type="submit"
+                      className="btn-search-modern"
+                      disabled={isLoading}
+                      size="lg"
+                    >
                       {isLoading ? (
-                        <><Spinner animation="border" size="sm" className="me-2" /> Searching...</>
+                        <>
+                          <Spinner
+                            animation="border"
+                            size="sm"
+                            className="me-2"
+                          />{" "}
+                          Searching...
+                        </>
                       ) : (
-                        <><FaSearch className="me-2" /> SEARCH HOTELS</>
+                        <>
+                          <FaSearch className="me-2" /> SEARCH HOTELS
+                        </>
                       )}
                     </Button>
                   </Col>
@@ -937,175 +1222,290 @@ export default function SeniorCitizenSearch() {
               <Card.Body className="text-center text-muted py-5">
                 <FaSearch className="display-4 text-muted mb-3" />
                 <h4>Ready to Find Senior-Citizen-Friendly Stays?</h4>
-                <p>Fill in the form above and we'll surface hotels with active senior-citizen discounts.</p>
+                <p>
+                  Fill in the form above and we'll surface hotels with active
+                  senior-citizen discounts.
+                </p>
               </Card.Body>
             </Card>
           )}
 
           {(hasSearchResult || allResults.length > 0) && (
             <div ref={resultsRef}>
-             <Row className="g-3">
-              {/* Left filter sidebar (mirrors GovEmployeeSearch) */}
-              <Col lg={3} className="leftside d-none d-lg-block">
-                <div className="left-fixed">
-                  <Card className="shadow-sm rounded-xl filtersection">
-                    <Card.Body className="p-2">
-                      <div className="map-preview-wrapper mb-2">
-                        <img src="/images/map.jpg" alt="Map preview" className="map-preview-img" />
-                        <button className="map-overlay-btn" type="button">EXPLORE ON MAP 📍</button>
-                      </div>
-                      <Form.Control type="text" placeholder="Search Hotel Name..." className="ps-3 mb-2"
-                                    value={hotelSearchTerm} onChange={(e) => setHotelSearchTerm(e.target.value)} />
-                      {/* Currency — converts the AED rates shown below. */}
-                      <Form.Group className="mb-2">
-                        <Form.Label className="fw-semibold small">Currency</Form.Label>
-                        <Select
-                          options={currencyOptions}
-                          value={selectedCurrency}
-                          onChange={(opt) => { currencyTouchedRef.current = true; setSelectedCurrency(opt); }}
-                          placeholder="Select currency"
-                          isSearchable
-                          menuPortalTarget={document.body}
-                          styles={{
-                            control: (base) => ({ ...base, minHeight: "36px", background: "#fff" }),
-                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                            menu: (base) => ({ ...base, zIndex: 9999 }),
-                          }}
+              <Row className="g-3">
+                {/* Left filter sidebar (mirrors GovEmployeeSearch) */}
+                <Col lg={3} className="leftside d-none d-lg-block">
+                  <div className="left-fixed">
+                    <Card className="shadow-sm rounded-xl filtersection">
+                      <Card.Body className="p-2">
+                        <div className="map-preview-wrapper mb-2">
+                          <img
+                            src="/images/map.jpg"
+                            alt="Map preview"
+                            className="map-preview-img"
+                          />
+                          <button className="map-overlay-btn" type="button">
+                            EXPLORE ON MAP 📍
+                          </button>
+                        </div>
+                        <Form.Control
+                          type="text"
+                          placeholder="Search Hotel Name..."
+                          className="ps-3 mb-2"
+                          value={hotelSearchTerm}
+                          onChange={(e) => setHotelSearchTerm(e.target.value)}
                         />
-                      </Form.Group>
-                      <hr />
-                      <Form.Group className="mb-2">
-                        <Form.Label className="fw-semibold small">Hotel Type</Form.Label>
-                        <div className="filter-checkbox-list">
-                          {hotelTypeOptions.map((item) => (
-                            <Form.Check key={item.value} type="checkbox" id={`sc-hotel-type-${item.value}`}
-                              label={item.label}
-                              checked={hotelType.some((t) => t.value === item.value)}
-                              onChange={(e) => {
-                                if (e.target.checked) setHotelType([...hotelType, item]);
-                                else setHotelType(hotelType.filter((t) => t.value !== item.value));
-                              }} />
-                          ))}
-                        </div>
-                      </Form.Group>
-                      <hr />
-                      <Form.Group>
-                        <Form.Label className="fw-semibold small">Channel</Form.Label>
-                        <div className="filter-checkbox-list">
-                          {channelTypeOptions.map((item) => (
-                            <Form.Check key={item.value} type="checkbox" id={`sc-channel-${item.value}`}
-                              label={item.label}
-                              checked={channelType.some((c) => c.value === item.value)}
-                              onChange={(e) => {
-                                if (e.target.checked) setChannelType([...channelType, item]);
-                                else setChannelType(channelType.filter((c) => c.value !== item.value));
-                              }} />
-                          ))}
-                        </div>
-                      </Form.Group>
-                    </Card.Body>
-                  </Card>
-                </div>
-              </Col>
-
-              {/* Right content — star/sort strip + result cards */}
-              <Col lg={9}>
-              <Card className="shadow-sm rounded-xl mb-3 filtersection">
-                <Card.Body className="p-2">
-                  <div className="d-flex align-items-center gap-3 flex-wrap">
-                    <Select filterOption={safeFilterOption}
-                            options={starOptions} value={starRating} onChange={setStarRating}
-                            placeholder="All Stars" isClearable
+                        {/* Currency — converts the AED rates shown below. */}
+                        <Form.Group className="mb-2">
+                          <Form.Label className="fw-semibold small">
+                            Currency
+                          </Form.Label>
+                          <Select
+                            options={currencyOptions}
+                            value={selectedCurrency}
+                            onChange={(opt) => {
+                              currencyTouchedRef.current = true;
+                              setSelectedCurrency(opt);
+                            }}
+                            placeholder="Select currency"
+                            isSearchable
                             menuPortalTarget={document.body}
                             styles={{
-                              control: (base) => ({ ...base, minWidth: 160, height: 38 }),
+                              control: (base) => ({
+                                ...base,
+                                minHeight: "36px",
+                                background: "#fff",
+                              }),
                               menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                            }} />
-                    <Button size="sm" className={`sort-pill ${sortBy === "priceAsc" ? "active" : ""}`}
-                            onClick={() => setSortBy("priceAsc")}>Low to High</Button>
-                    <Button size="sm" className={`sort-pill ${sortBy === "priceDesc" ? "active" : ""}`}
-                            onClick={() => setSortBy("priceDesc")}>High to Low</Button>
-                    <Button variant="outline-primary" size="sm"
-                            onClick={() => { setStarRating(null); setSortBy("priceAsc"); setHotelSearchTerm(""); setHotelType([]); setChannelType([]); }}>
-                      Clear
-                    </Button>
+                              menu: (base) => ({ ...base, zIndex: 9999 }),
+                            }}
+                          />
+                        </Form.Group>
+                        <hr />
+                        <Form.Group className="mb-2">
+                          <Form.Label className="fw-semibold small">
+                            Hotel Type
+                          </Form.Label>
+                          <div className="filter-checkbox-list">
+                            {hotelTypeOptions.map((item) => (
+                              <Form.Check
+                                key={item.value}
+                                type="checkbox"
+                                id={`sc-hotel-type-${item.value}`}
+                                label={item.label}
+                                checked={hotelType.some(
+                                  (t) => t.value === item.value,
+                                )}
+                                onChange={(e) => {
+                                  if (e.target.checked)
+                                    setHotelType([...hotelType, item]);
+                                  else
+                                    setHotelType(
+                                      hotelType.filter(
+                                        (t) => t.value !== item.value,
+                                      ),
+                                    );
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </Form.Group>
+                        <hr />
+                        <Form.Group>
+                          <Form.Label className="fw-semibold small">
+                            Channel
+                          </Form.Label>
+                          <div className="filter-checkbox-list">
+                            {channelTypeOptions.map((item) => (
+                              <Form.Check
+                                key={item.value}
+                                type="checkbox"
+                                id={`sc-channel-${item.value}`}
+                                label={item.label}
+                                checked={channelType.some(
+                                  (c) => c.value === item.value,
+                                )}
+                                onChange={(e) => {
+                                  if (e.target.checked)
+                                    setChannelType([...channelType, item]);
+                                  else
+                                    setChannelType(
+                                      channelType.filter(
+                                        (c) => c.value !== item.value,
+                                      ),
+                                    );
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </Form.Group>
+                      </Card.Body>
+                    </Card>
                   </div>
-                </Card.Body>
-              </Card>
+                </Col>
 
-              {pollStatus === "IN_PROGRESS" && (
-                <div className="text-center mb-2 small text-muted">
-                  <Spinner animation="border" size="sm" /> Searching hotels…
-                </div>
-              )}
+                {/* Right content — star/sort strip + result cards */}
+                <Col lg={9}>
+                  <Card className="shadow-sm rounded-xl mb-3 filtersection">
+                    <Card.Body className="p-2">
+                      <div className="d-flex align-items-center gap-3 flex-wrap">
+                        <Select
+                          filterOption={safeFilterOption}
+                          options={starOptions}
+                          value={starRating}
+                          onChange={setStarRating}
+                          placeholder="All Stars"
+                          isClearable
+                          menuPortalTarget={document.body}
+                          styles={{
+                            control: (base) => ({
+                              ...base,
+                              minWidth: 160,
+                              height: 38,
+                            }),
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          }}
+                        />
+                        <Button
+                          size="sm"
+                          className={`sort-pill ${sortBy === "priceAsc" ? "active" : ""}`}
+                          onClick={() => setSortBy("priceAsc")}
+                        >
+                          Low to High
+                        </Button>
+                        <Button
+                          size="sm"
+                          className={`sort-pill ${sortBy === "priceDesc" ? "active" : ""}`}
+                          onClick={() => setSortBy("priceDesc")}
+                        >
+                          High to Low
+                        </Button>
+                        <Button
+                          variant="outline-primary"
+                          size="sm"
+                          onClick={() => {
+                            setStarRating(null);
+                            setSortBy("priceAsc");
+                            setHotelSearchTerm("");
+                            setHotelType([]);
+                            setChannelType([]);
+                          }}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                    </Card.Body>
+                  </Card>
 
-              <Row className="g-3">
-                {filteredResults.length > 0 ? filteredResults.map((hotel, idx) => (
-                  <Col xs={12} key={hotel.hotelCode || idx}>
-                    <Card className="shadow-sm">
-                      <Card.Body>
-                        <Row className="align-items-center">
-                          <Col md={2}>
-                            {hotel.hotelImage
-                              ? <img src={hotel.hotelImage} alt={hotel.hotelName}
-                                     className="img-fluid rounded" style={{ maxHeight: 100 }} />
-                              : <div className="bg-light p-3 text-center text-muted">No Image</div>}
-                          </Col>
-                          <Col md={6}>
-                            <h6 className="mb-1">{hotel.hotelName || "Hotel"}</h6>
-                            <div className="text-muted small">{hotel.hotelAddress}</div>
-                            <div>
-                              {Array.from({ length: hotel.starRating || 0 }).map((_, i) => (
-                                <FaStar key={i} className="text-warning" />
-                              ))}
-                            </div>
-                            <div className="small text-muted mt-1">
-                              Channel: {(hotel.apiType || "INHOUSE").toUpperCase()}
-                            </div>
-                          </Col>
-                          <Col md={2}>
-                            <div className="text-muted small">Senior-Citizen Rate</div>
-                            <div className="h5 mb-0 text-success">
-                              {hotel.baseRate != null
-                                ? `${displayCurrencyCode} ${convertFromAed(hotel.baseRate).toFixed(2)}`
-                                : "-"}
-                            </div>
-                          </Col>
-                          <Col md={2} className="text-end">
-                            <Button size="sm" variant="primary" onClick={() => handleViewRooms(hotel)}>
-                              View Rooms
-                            </Button>
-                          </Col>
-                        </Row>
-                      </Card.Body>
-                    </Card>
-                  </Col>
-                )) : (
-                  <Col xs={12}>
-                    <Card className="shadow-sm rounded-xl">
-                      <Card.Body className="text-center text-muted py-5">
-                        <FaSearch className="display-4 text-muted mb-3" />
-                        <h5>No results found</h5>
-                        <p>Try adjusting your filters or search criteria.</p>
-                      </Card.Body>
-                    </Card>
-                  </Col>
-                )}
+                  {pollStatus === "IN_PROGRESS" && (
+                    <div className="text-center mb-2 small text-muted">
+                      <Spinner animation="border" size="sm" /> Searching hotels…
+                    </div>
+                  )}
+
+                  <Row className="g-3">
+                    {filteredResults.length > 0 ? (
+                      filteredResults.map((hotel, idx) => (
+                        <Col xs={12} key={hotel.hotelCode || idx}>
+                          <Card className="shadow-sm">
+                            <Card.Body>
+                              <Row className="align-items-center">
+                                <Col md={2}>
+                                  {hotel.hotelImage ? (
+                                    <img
+                                      src={hotel.hotelImage}
+                                      alt={hotel.hotelName}
+                                      className="img-fluid rounded"
+                                      style={{ maxHeight: 100 }}
+                                    />
+                                  ) : (
+                                    <div className="bg-light p-3 text-center text-muted">
+                                      No Image
+                                    </div>
+                                  )}
+                                </Col>
+                                <Col md={6}>
+                                  <h6 className="mb-1">
+                                    {hotel.hotelName || "Hotel"}
+                                  </h6>
+                                  <div className="text-muted small">
+                                    {hotel.hotelAddress}
+                                  </div>
+                                  <div>
+                                    {Array.from({
+                                      length: hotel.starRating || 0,
+                                    }).map((_, i) => (
+                                      <FaStar
+                                        key={i}
+                                        className="text-warning"
+                                      />
+                                    ))}
+                                  </div>
+                                  <div className="small text-muted mt-1">
+                                    Channel:{" "}
+                                    {(hotel.apiType || "INHOUSE").toUpperCase()}
+                                  </div>
+                                </Col>
+                                <Col md={2}>
+                                  <div className="text-muted small">
+                                    Senior-Citizen Rate
+                                  </div>
+                                  <div className="h5 mb-0 text-success">
+                                    {hotel.baseRate != null
+                                      ? `${displayCurrencyCode} ${convertFromAed(hotel.baseRate).toFixed(2)}`
+                                      : "-"}
+                                  </div>
+                                </Col>
+                                <Col md={2} className="text-end">
+                                  <Button
+                                    size="sm"
+                                    variant="primary"
+                                    onClick={() => handleViewRooms(hotel)}
+                                  >
+                                    View Rooms
+                                  </Button>
+                                </Col>
+                              </Row>
+                            </Card.Body>
+                          </Card>
+                        </Col>
+                      ))
+                    ) : (
+                      <Col xs={12}>
+                        <Card className="shadow-sm rounded-xl">
+                          <Card.Body className="text-center text-muted py-5">
+                            <FaSearch className="display-4 text-muted mb-3" />
+                            <h5>No results found</h5>
+                            <p>
+                              Try adjusting your filters or search criteria.
+                            </p>
+                          </Card.Body>
+                        </Card>
+                      </Col>
+                    )}
+                  </Row>
+
+                  {totalPages > 1 && (
+                    <div className="d-flex justify-content-end mt-3">
+                      <Pagination size="sm">
+                        <Pagination.Prev
+                          disabled={pageIndex === 0}
+                          onClick={() =>
+                            setPageIndex((p) => Math.max(0, p - 1))
+                          }
+                        />
+                        <Pagination.Item active>
+                          {pageIndex + 1}
+                        </Pagination.Item>
+                        <Pagination.Next
+                          disabled={pageIndex + 1 >= totalPages}
+                          onClick={() => setPageIndex((p) => p + 1)}
+                        />
+                      </Pagination>
+                    </div>
+                  )}
+                </Col>
               </Row>
-
-              {totalPages > 1 && (
-                <div className="d-flex justify-content-end mt-3">
-                  <Pagination size="sm">
-                    <Pagination.Prev disabled={pageIndex === 0}
-                                     onClick={() => setPageIndex((p) => Math.max(0, p - 1))} />
-                    <Pagination.Item active>{pageIndex + 1}</Pagination.Item>
-                    <Pagination.Next disabled={pageIndex + 1 >= totalPages}
-                                     onClick={() => setPageIndex((p) => p + 1)} />
-                  </Pagination>
-                </div>
-              )}
-              </Col>
-             </Row>
             </div>
           )}
         </main>
