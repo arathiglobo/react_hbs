@@ -1,0 +1,1082 @@
+import React, { useEffect, useState, useRef } from "react";
+import {
+  Card,
+  Button,
+  Row,
+  Col,
+  Form,
+  Badge,
+  Spinner,
+} from "react-bootstrap";
+import Sidebar from "../../components/Sidebar";
+import TopBar from "../../components/TopBar";
+import Select from "react-select";
+import axiosInstance from "../../components/AxiosInstance";
+import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
+import {
+  FaSearch,
+  FaGlobe,
+  FaUser,
+  FaCalendarAlt,
+  FaMapMarkerAlt,
+  FaUsers,
+  FaChild,
+  FaPlus,
+} from "react-icons/fa";
+
+import { useNavigate } from "react-router-dom";
+
+// ── v2 prefetch ────────────────────────────────────────────────────────
+// The next page (MakePkgCombineSearchV2) ships the same hotel/transfer/
+// activity payloads that this page already has all the inputs for, so we
+// fire those three searches in the background here and stash the mapped
+// results in sessionStorage keyed by a hash of the criteria. The combined
+// search page reads them on mount and skips its own per-tab search — the
+// operator only hits "Search" once.
+const PREFETCH_KEYS = {
+  criteria: "makePkgV2PrefetchCriteriaKey",
+  status: "makePkgV2PrefetchStatus",
+  hotel: "makePkgV2PrefetchHotel",
+  transfer: "makePkgV2PrefetchTransfer",
+  tour: "makePkgV2PrefetchTour",
+};
+
+const computeCriteriaKey = (c) => {
+  try {
+    return JSON.stringify({
+      travelDate: c?.travelDate || "",
+      agentId: c?.agent || "",
+      natId: c?.nationality?.value ?? "",
+      natCode: c?.nationality?.code ?? "",
+      dests: (c?.itinerary || []).map((it) => ({
+        v: it?.selectedDestination?.value ?? "",
+        n: it?.nights || 1,
+      })),
+      adults: c?.adults || 1,
+      children: c?.children || 0,
+      childAges: c?.childAges || [],
+    });
+  } catch {
+    return String(Date.now());
+  }
+};
+
+const ensureHotelImage = (imageUrl) => {
+  if (!imageUrl) return "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg";
+  if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
+  if (typeof imageUrl === "string") {
+    const fileName = imageUrl.split(/[/\\]/).pop();
+    if (fileName) return `https://b2b.choosenfly.com/assets/details/profilepic/hotel/${fileName}`;
+  }
+  return "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg";
+};
+
+const ensureTransferImage = (imageUrl) => {
+  if (!imageUrl) return "https://via.placeholder.com/400x225?text=Transfer";
+  if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
+  if (typeof imageUrl === "string") {
+    const fileName = imageUrl.split(/[/\\]/).pop();
+    if (fileName) return `https://b2b.choosenfly.com/assets/details/profilepic/hotel/${fileName}`;
+  }
+  return "https://via.placeholder.com/400x225?text=Transfer";
+};
+
+const formatActivityDate = (dateString) => {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "";
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+const computeCheckOutIso = (checkIn, nights) => {
+  if (!checkIn || !nights) return "";
+  const d = new Date(checkIn);
+  if (Number.isNaN(d.getTime())) return "";
+  d.setDate(d.getDate() + parseInt(nights));
+  return d.toISOString().split("T")[0];
+};
+
+const setPrefetchStatus = (patch) => {
+  try {
+    const raw = sessionStorage.getItem(PREFETCH_KEYS.status);
+    const cur = raw ? JSON.parse(raw) : {};
+    sessionStorage.setItem(
+      PREFETCH_KEYS.status,
+      JSON.stringify({ ...cur, ...patch })
+    );
+  } catch {
+    /* private mode / quota — non-fatal */
+  }
+};
+
+// Kick off hotel + transfer + tour searches in parallel. Returns
+// immediately; each call writes its mapped result to sessionStorage when
+// it resolves so the combined search page can pick it up.
+const prefetchCombinedResults = (criteria) => {
+  const {
+    travelDate,
+    agent,
+    nationality,
+    itinerary,
+    adults,
+    children,
+    childAges,
+    destination,
+    nights,
+  } = criteria || {};
+
+  const checkIn = travelDate || "";
+  const checkOut = computeCheckOutIso(checkIn, nights || 1);
+
+  const dest =
+    destination ||
+    (itinerary && itinerary.length > 0 ? itinerary[0]?.selectedDestination : null) ||
+    {};
+
+  const nationalityId =
+    nationality?.value != null ? String(nationality.value) : "";
+  const nationalityCode = nationality?.code || "";
+  const destinationCityId = dest?.value != null ? String(dest.value) : "";
+  const destinationCountryId =
+    dest?.countryId != null ? String(dest.countryId) : "";
+  const destinationCityIds =
+    itinerary && itinerary.length > 0
+      ? itinerary
+          .map((it) => it.selectedDestination?.value)
+          .filter((v) => v != null && v !== "")
+          .map(String)
+      : destinationCityId
+        ? [destinationCityId]
+        : [];
+
+  const agentIdFinal = agent || 1;
+
+  const childAgeNums =
+    childAges && childAges.length > 0
+      ? childAges.map((a) => parseInt(a) || 0)
+      : children > 0
+        ? Array(children).fill(0)
+        : [];
+
+  const hotelPayload = {
+    nationalityId,
+    nationalityCode,
+    destinationCityId,
+    destinationCityIds,
+    destinationCountryId,
+    checkIn,
+    checkOut,
+    noOfRooms: "1",
+    roomConfigurations: [
+      {
+        roomNo: 1,
+        adultCount: String(adults || 1),
+        childCount: String(children || 0),
+        childAges: childAgeNums.length > 0 ? childAgeNums : [0],
+        adultAges: [25],
+      },
+    ],
+    agentId: agentIdFinal,
+    apiType: ["INHOUSE"],
+  };
+
+  const transferPayload = {
+    checkIn,
+    checkOut,
+    nativeCountryId: nationality?.value ? Number(nationality.value) : null,
+    destinationCountryId,
+    destinationCityId,
+    destinationCityIds,
+    searchCorCtype: "city",
+    agentid: String(agentIdFinal),
+    childAge: childAgeNums,
+    adult: adults || 1,
+    child: children || 0,
+  };
+
+  const tourPayload = {
+    activityDate: formatActivityDate(travelDate),
+    nativeCountryId: nationality?.value ? String(nationality.value) : "",
+    destinationCountryId,
+    destinationCityId,
+    destinationCityIds,
+    searchCorCtype: dest?.type || "State",
+    agentId: String(agentIdFinal),
+    childAge:
+      childAges && childAges.length > 0
+        ? childAges.map((a) => String(parseInt(a) || 0))
+        : children > 0
+          ? Array(children).fill("0")
+          : [],
+    adult: String(adults || 1),
+    child: String(children || 0),
+  };
+
+  axiosInstance
+    .post("/api/makeYourOwnPackageV2/hotel/search", hotelPayload)
+    .then((res) => {
+      const data = Array.isArray(res.data) ? res.data : [];
+      const mapped = data.map((hotel, index) => ({
+        id: hotel.hotelCode ? `local-${hotel.hotelCode}` : `local-h${index + 1}`,
+        searchId: "local",
+        hotelCode: hotel.hotelCode || null,
+        name: hotel.hotelName || "Unknown Hotel",
+        address: hotel.hotelAddress || "",
+        cityId: hotel.cityId != null ? String(hotel.cityId) : "",
+        city:
+          hotel.cityName ||
+          (hotel.hotelAddress
+            ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
+            : "Unknown City"),
+        price: hotel.baseRate ?? null,
+        badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
+        image: ensureHotelImage(hotel.hotelImage),
+        rating: hotel.starRating || 0,
+        hotelType: "hotel",
+        channelType: hotel.apiType?.toLowerCase() || "inhouse",
+      }));
+      try {
+        sessionStorage.setItem(PREFETCH_KEYS.hotel, JSON.stringify(mapped));
+      } catch {
+        /* ignore */
+      }
+      setPrefetchStatus({ hotel: "success" });
+    })
+    .catch(() => setPrefetchStatus({ hotel: "error" }));
+
+  axiosInstance
+    .post("/api/makeYourOwnPackageV2/getTransferInhouse", transferPayload)
+    .then((res) => {
+      const mapped = Array.isArray(res.data)
+        ? res.data.map((cab, index) => ({
+            cabid: cab.cabid || cab.cabId || `cab-${index}`,
+            cabname: cab.cabname || cab.cabName || "Transfer Vehicle",
+            cabdetails: cab.cabdetails || "",
+            cabpic: ensureTransferImage(cab.cabpic || cab.cabPic),
+            noOfCabs: cab.noOfCabs || 1,
+            cityId: cab.cityId != null ? String(cab.cityId) : "",
+            cityName: cab.cityName || "",
+            searchCabDetailsDTO: Array.isArray(cab.searchCabDetailsDTO)
+              ? cab.searchCabDetailsDTO
+              : [],
+          }))
+        : [];
+      try {
+        sessionStorage.setItem(PREFETCH_KEYS.transfer, JSON.stringify(mapped));
+      } catch {
+        /* ignore */
+      }
+      setPrefetchStatus({ transfer: "success" });
+    })
+    .catch(() => setPrefetchStatus({ transfer: "error" }));
+
+  axiosInstance
+    .post("/api/makeYourOwnPackageV2/getActivityInhouse", tourPayload)
+    .then((res) => {
+      const mapped = Array.isArray(res.data)
+        ? res.data.map((activity, index) => ({
+            id: activity.activityId || `activity-${index}`,
+            activityName: activity.activityname || "",
+            activityDetails: activity.activityDetails || "",
+            cityId: activity.cityId != null ? String(activity.cityId) : "",
+            cityName: activity.cityName || "",
+            starRating: activity.starRating || 0,
+            totalRate: activity.totalRate || activity.activityRate || 0,
+            totalRateWithoutMrk:
+              activity.totalRateWithoutmrk || activity.activityRate || 0,
+            activityImage:
+              activity.activityImage ||
+              "https://via.placeholder.com/400x225?text=Activity",
+            childMax: activity.childMax || 0,
+            childMin: activity.childMin || 0,
+            adultRate: activity.adultRate || 0,
+            childRate: activity.childRate || 0,
+            activityType: activity.activityType || 1,
+            maxPax: activity.maxPax || 0,
+            minPaxsic: activity.minPaxsic || 0,
+            currency: activity.currencyCode || "AED",
+            duration:
+              activity.viatorActivityDurationFrom &&
+              activity.viatorActivityDurationTo
+                ? `${activity.viatorActivityDurationFrom} - ${activity.viatorActivityDurationTo}`
+                : null,
+            apiType: activity.apiType || null,
+            viatorProductCode: activity.viatorProductCode || null,
+          }))
+        : [];
+      try {
+        sessionStorage.setItem(PREFETCH_KEYS.tour, JSON.stringify(mapped));
+      } catch {
+        /* ignore */
+      }
+      setPrefetchStatus({ tour: "success" });
+    })
+    .catch(() => setPrefetchStatus({ tour: "error" }));
+};
+
+export default function MakeUrOwnPackageV2() {
+  const navigate = useNavigate();
+
+  // Agent logins book under themselves — the backend forces the booking to
+  // the logged-in agent, so the manual Agent picker is hidden and the
+  // agent-required validation is skipped. currentActiveRole isn't set for
+  // single-role logins, so fall back to userRole; admin/super-admin/staff
+  // keep the picker exactly as before.
+  const activeRole = (localStorage.getItem("currentActiveRole") || "")
+    .trim()
+    .toUpperCase();
+  const storedRoles = (localStorage.getItem("userRole") || "").toUpperCase();
+  const isAgentRole = activeRole
+    ? activeRole === "AGENT"
+    : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
+
+  const [nationalityList, setNationalityList] = useState([]);
+  const [selectedNationality, setSelectedNationality] = useState(null);
+  const [destinationOptions, setDestinationOptions] = useState([]);
+  const [isDestinationLoading, setIsDestinationLoading] = useState(false);
+  const [isNationalityLoading, setIsNationalityLoading] = useState(false);
+
+  const [itinerary, setItinerary] = useState([
+    { id: Date.now(), selectedDestination: null, nights: 1 }
+  ]);
+  const [travelDate, setTravelDate] = useState("");
+  const [agent, setAgent] = useState("");
+  const [adults, setAdults] = useState(1);
+  const [children, setChildren] = useState(0);
+  const [childAges, setChildAges] = useState([]);
+  const [agents, setAgents] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  // Debounce utility function
+  function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout);
+        func(...args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  }
+
+  // Debounced city search function
+  const debouncedCitySearch = React.useRef(
+    debounce(async (searchText = "") => {
+      if (!searchText || searchText.length < 2) {
+        setDestinationOptions([]);
+        return;
+      }
+
+      setIsDestinationLoading(true);
+      try {
+        const response = await axiosInstance.get(
+          `/api/province?search=${searchText}`
+        );
+        const cityApiRes = Array.isArray(response.data) ? response.data : [];
+        const options = cityApiRes.slice(0, 50).map((city) => ({
+          value: city.id,
+          label: `${city.stateName}, ${city.country}`,
+          countryId: city.countryId,
+        }));
+        setDestinationOptions(options);
+      } catch (error) {
+        console.log("axios call error for city list:", error);
+        setDestinationOptions([]);
+      } finally {
+        setIsDestinationLoading(false);
+      }
+    }, 300)
+  ).current;
+
+  // Debounced country search function
+  const debouncedCountrySearch = useRef(
+    debounce(async (search) => {
+      try {
+        setIsNationalityLoading(true);
+        const response = await axiosInstance.get(`/api/country?search=${search}`);
+        const options = Array.isArray(response.data)
+          ? response.data.map((country) => ({
+            value: country.id,
+            label: country.name,
+            code: country.countryCode,
+          }))
+          : [];
+        setNationalityList(options);
+      } catch (error) {
+        console.log("axios call error for country list:", error);
+        setNationalityList([]);
+      } finally {
+        setIsNationalityLoading(false);
+      }
+    }, 300)
+  ).current;
+
+  const countryList = async (search = "") => {
+    if (search) {
+      debouncedCountrySearch(search);
+    } else {
+      try {
+        setIsNationalityLoading(true);
+        const response = await axiosInstance.get("/api/country?limit=50");
+        const options = Array.isArray(response.data)
+          ? response.data.map((country) => ({
+            value: country.id,
+            label: country.name,
+            code: country.countryCode,
+          }))
+          : [];
+        setNationalityList(options);
+      } catch (error) {
+        console.log("error for country list:", error);
+        setNationalityList([]);
+      } finally {
+        setIsNationalityLoading(false);
+      }
+    }
+  };
+
+  const handleCountryInputChange = (inputValue) => {
+    if (inputValue.length >= 2) {
+      debouncedCountrySearch(inputValue);
+    }
+  };
+
+  const cityList = (searchText = "") => {
+    debouncedCitySearch(searchText);
+  };
+
+  const loadPopularDestinations = async () => {
+    if (destinationOptions.length > 0) return;
+
+    try {
+      setIsDestinationLoading(true);
+      const response = await axiosInstance.get("/api/province?limit=20");
+      const cityApiRes = Array.isArray(response.data) ? response.data : [];
+      const options = cityApiRes.map((city) => ({
+        value: city.id,
+        label: `${city.stateName}, ${city.country}`,
+        countryId: city.countryId,
+      }));
+      setDestinationOptions(options);
+    } catch (error) {
+      console.log("Error loading popular destinations:", error);
+    } finally {
+      setIsDestinationLoading(false);
+    }
+  };
+
+  const agentList = async () => {
+    try {
+      const response = await axiosInstance.get("/api/agent");
+      setAgents(response.data);
+    } catch (error) {
+      console.log("error for agent axios list:", error);
+      setAgents([]);
+    }
+  };
+
+  useEffect(() => {
+    countryList();
+    agentList();
+  }, []);
+
+  const addDestination = () => {
+    setItinerary([...itinerary, { id: Date.now(), selectedDestination: null, nights: 1 }]);
+  };
+
+  const removeDestination = (id) => {
+    if (itinerary.length > 1) {
+      setItinerary(itinerary.filter(item => item.id !== id));
+    }
+  };
+
+  const updateDestination = (id, destination) => {
+    setItinerary(itinerary.map(item => 
+      item.id === id ? { ...item, selectedDestination: destination } : item
+    ));
+    if (destination) clearError(`destination_${id}`);
+  };
+
+  const updateNights = (id, nights) => {
+    setItinerary(itinerary.map(item => 
+      item.id === id ? { ...item, nights: parseInt(nights) || 1 } : item
+    ));
+    if (nights) clearError(`nights_${id}`);
+  };
+
+  const formatDate = (date) => date.toISOString().split("T")[0];
+  const today = formatDate(new Date());
+
+  const validateForm = () => {
+    const newErrors = {};
+
+    if (!travelDate) {
+      newErrors.travelDate = "Travel Date is required";
+    }
+
+    if (!isAgentRole && !agent) {
+      newErrors.agent = "Agent is required";
+    }
+
+    if (!selectedNationality) {
+      newErrors.nationality = "Native Country of Guest is required";
+    }
+
+    if (children > 0 && childAges.some(age => !age || age < 0 || age > 17)) {
+      newErrors.childAges = "Child age must be between 0 and 17";
+    }
+
+    itinerary.forEach((item, index) => {
+      if (!item.selectedDestination) {
+        newErrors[`destination_${item.id}`] = "Destination is required";
+      }
+      if (!item.nights || item.nights < 1) {
+        newErrors[`nights_${item.id}`] = "Nights must be at least 1";
+      }
+    });
+
+    return newErrors;
+  };
+
+  const clearError = (field) => {
+    setErrors((prev) => {
+      if (!prev[field]) return prev;
+      const { [field]: _omit, ...rest } = prev;
+      return rest;
+    });
+  };
+
+  const handleSearchSubmit = async (e) => {
+    e.preventDefault();
+    const formErrors = validateForm();
+    if (Object.keys(formErrors).length > 0) {
+      setErrors(formErrors);
+      return;
+    }
+
+    if (agent) {
+      sessionStorage.setItem("makeYourOwnPackageAgentId", agent);
+      localStorage.setItem("makeYourOwnPackageAgentId", agent);
+    }
+
+    // Store travel date in sessionStorage for use in booking page
+    if (travelDate) {
+      sessionStorage.setItem("makePkgTravelDate", travelDate);
+    }
+
+    // v2 flow flag — tells TopBar to route the cart "Proceed" button to
+    // the v2 booking-page instead of the legacy one.
+    sessionStorage.setItem("makePkgFlow", "v2");
+
+    // Build the criteria payload once so we can both pass it via
+    // location.state AND persist it to sessionStorage as a fallback —
+    // location.state evaporates on page refresh / back-forward cache,
+    // and the v2 search page falls back to sessionStorage when state is
+    // missing so the hotel-search payload always carries destination +
+    // nationality.
+    const criteriaPayload = {
+      travelDate,
+      agent,
+      nationality: selectedNationality,
+      itinerary,
+      adults,
+      children,
+      childAges: childAges.map((age) => parseInt(age) || 0),
+      destination: itinerary[0].selectedDestination,
+      nights: itinerary.reduce((acc, curr) => acc + curr.nights, 0),
+    };
+    try {
+      sessionStorage.setItem(
+        "makePkgV2Criteria",
+        JSON.stringify(criteriaPayload)
+      );
+    } catch {
+      /* private mode / quota — non-fatal */
+    }
+
+    // Drop any prior prefetch (criteria may have changed) and kick off
+    // the three search endpoints in the background — by the time the
+    // user reaches the combined search page it can hydrate from
+    // sessionStorage without re-asking the operator.
+    try {
+      sessionStorage.removeItem(PREFETCH_KEYS.hotel);
+      sessionStorage.removeItem(PREFETCH_KEYS.transfer);
+      sessionStorage.removeItem(PREFETCH_KEYS.tour);
+      sessionStorage.setItem(
+        PREFETCH_KEYS.criteria,
+        computeCriteriaKey(criteriaPayload)
+      );
+      sessionStorage.setItem(
+        PREFETCH_KEYS.status,
+        JSON.stringify({ hotel: "loading", transfer: "loading", tour: "loading" })
+      );
+    } catch {
+      /* ignore */
+    }
+    prefetchCombinedResults(criteriaPayload);
+
+    // The dedicated /addons page is removed from the flow — services are
+    // all enabled by default and add-on selection happens as the last
+    // wizard step on the search page itself. Persist the defaults the
+    // search page expects to read from sessionStorage on mount.
+    try {
+      sessionStorage.setItem(
+        "makePkgV2Services",
+        JSON.stringify({ hotel: true, transfer: true, tour: true })
+      );
+      sessionStorage.setItem("makePkgV2VisaRequired", "NO");
+    } catch {
+      /* ignore */
+    }
+
+    // Clear any previous Redis cart in the background so the v2 flow
+    // starts clean (used to be done on entry to /addons).
+    const cartAgentId =
+      sessionStorage.getItem("makeYourOwnPackageAgentId") ||
+      localStorage.getItem("makeYourOwnPackageAgentId");
+    if (cartAgentId) {
+      axiosInstance
+        .post(`/api/makeYourOwnPackageV2/cart/clear?userId=${cartAgentId}`)
+        .then(() => {
+          try {
+            window.dispatchEvent(new Event("cartUpdated"));
+          } catch {
+            /* ignore */
+          }
+        })
+        .catch(() => {
+          /* best-effort */
+        });
+    }
+
+    // Skip the /addons page and go straight to the combined search page.
+    navigate("/new-booking/make-your-own-package-v2/search", {
+      state: criteriaPayload,
+    });
+
+  };
+
+
+  // const handleSearchSubmit = async (e) => {
+  //   e.preventDefault();
+  //   const formErrors = validateForm();
+  //   if (Object.keys(formErrors).length > 0) {
+  //     setErrors(formErrors);
+  //     return;
+  //   }
+  //   setErrors({});
+  //   setIsLoading(true);
+
+  //   try {
+  //     // Here you would implement the package search logic
+  //     console.log("Package search submitted:", {
+  //       travelDate,
+  //       agent,
+  //       nationality: selectedNationality,
+  //       destination: selectedDestination,
+  //       adults,
+  //       children,
+  //       nights,
+  //     });
+
+  //     // Simulate API call
+  //     await new Promise(resolve => setTimeout(resolve, 2000));
+
+  //     // Navigate to results or show success message
+  //     alert("Package search completed! (This is a demo)");
+  //   } catch (err) {
+  //     console.error("Search failed:", err);
+  //   } finally {
+  //     setIsLoading(false);
+  //   }
+  // };
+
+  return (
+    <div className="min-vh-100 bg-light d-flex flex-column">
+      <TopBar />
+      <div className="d-flex flex-grow-1">
+        <Sidebar />
+        <main className="flex-grow-1 p-4">
+          <Card className="shadow-sm rounded-xl mb-4" style={{ backgroundColor: '#ffffff' }}>
+            <Card.Body className="p-4">
+              <div className="d-flex align-items-center mb-4">
+                <div className="me-3">
+                  <div className="bg-primary rounded p-2">
+                    <FaSearch className="text-white" size={24} />
+                  </div>
+                </div>
+                <div>
+                  <h2 className="fw-bold text-dark mb-1">
+                    Build Your Own Package
+                  </h2>
+                  <p className="text-muted mb-0">
+                    Plan your perfect vacation package
+                  </p>
+                </div>
+              </div>
+
+              <Form onSubmit={handleSearchSubmit}>
+                <Row className="g-4">
+                  <Col lg={3} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        <FaCalendarAlt className="me-2" />
+                        Travel Date <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Form.Control
+                        type="date"
+                        value={travelDate}
+                        min={today}
+                        onChange={(e) => {
+                          setTravelDate(e.target.value);
+                          if (e.target.value) clearError("travelDate");
+                        }}
+                        className="form-control-modern"
+                        isInvalid={!!errors.travelDate}
+                      />
+                      {errors.travelDate && (
+                        <div className="text-danger small mt-1">
+                          {errors.travelDate}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  {!isAgentRole && (
+                  <Col lg={3} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        <FaUser className="me-2" />
+                        Agent <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Form.Select
+                        value={agent}
+                        onChange={(e) => {
+                          setAgent(e.target.value);
+                          if (e.target.value) clearError("agent");
+                        }}
+                        className="form-control-modern"
+                        isInvalid={!!errors.agent}
+                      >
+                        <option value="">SELECT</option>
+                        {agents.map((agentItem) => (
+                          <option key={agentItem.id} value={agentItem.id}>
+                            {agentItem.companyName}
+                          </option>
+                        ))}
+                      </Form.Select>
+                      {errors.agent && (
+                        <div className="text-danger small mt-1">
+                          {errors.agent}
+                        </div>
+                      )}
+                      <AgentBalanceDisplay agentId={agent} />
+                    </Form.Group>
+                  </Col>
+                  )}
+
+                  <Col lg={3} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        <FaGlobe className="me-2" />
+                        Native Country of Guest <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Select
+                        options={nationalityList}
+                        value={selectedNationality}
+                        onChange={(option) => {
+                          setSelectedNationality(option);
+                          if (option) clearError("nationality");
+                        }}
+                        onInputChange={handleCountryInputChange}
+                        isLoading={isNationalityLoading}
+                        placeholder="SELECT"
+                        isSearchable
+                        isClearable
+                        className="modern-select"
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: base => ({ ...base, zIndex: 9999 }),
+                          control: (base) => ({
+                            ...base,
+                            minHeight: "42px",
+                            border: "1px solid #dee2e6",
+                            "&:hover": { borderColor: "#86b7fe" },
+                          }),
+                        }}
+                      />
+                      {errors.nationality && (
+                        <div className="text-danger small mt-1">
+                          {errors.nationality}
+                        </div>
+                      )}
+                      {/* Surface UAE-resident status to the operator so
+                          they can apply the resident rate. Matched on
+                          country code "AE" so a label change can't
+                          break the rule. */}
+                      {selectedNationality?.code === "AE" && (
+                        <div
+                          className="mt-1 small fw-semibold"
+                          style={{ color: "#0f7a3a" }}
+                        >
+                          The guest is a resident of the UAE.
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  <Col lg={3} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        <FaUsers className="me-2" />
+                        No of adult <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Form.Select
+                        value={adults}
+                        onChange={(e) => {
+                          setAdults(parseInt(e.target.value) || 1);
+                          if (e.target.value) clearError("adults");
+                        }}
+                        className="form-control-modern"
+                        isInvalid={!!errors.adults}
+                      >
+                        {Array.from({ length: 9 }, (_, i) => i + 1).map((num) => (
+                          <option key={num} value={num}>
+                            {num}
+                          </option>
+                        ))}
+                      </Form.Select>
+                      {errors.adults && (
+                        <div className="text-danger small mt-1">
+                          {errors.adults}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  <Col lg={3} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        <FaChild className="me-2" />
+                        No of Child <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Form.Select
+                        value={children}
+                        onChange={(e) => {
+                          const newChildren = parseInt(e.target.value) || 0;
+                          setChildren(newChildren);
+                          // Initialize or adjust child ages array
+                          if (newChildren > 0) {
+                            const newChildAges = Array.from({ length: newChildren }, (_, i) =>
+                              childAges[i] || ""
+                            );
+                            setChildAges(newChildAges);
+                          } else {
+                            setChildAges([]);
+                          }
+                          if (e.target.value) clearError("children");
+                          clearError("childAges");
+                        }}
+                        className="form-control-modern"
+                        isInvalid={!!errors.children}
+                      >
+                        {Array.from({ length: 6 }, (_, i) => i).map((num) => (
+                          <option key={num} value={num}>
+                            {num}
+                          </option>
+                        ))}
+                      </Form.Select>
+                      {errors.children && (
+                        <div className="text-danger small mt-1">
+                          {errors.children}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  {/* Child Age Fields */}
+                  {children > 0 && (
+                    <>
+                      {Array.from({ length: children }, (_, i) => (
+                        <Col key={i} lg={3} md={4} sm={6}>
+                          <Form.Group>
+                            <Form.Label className="fw-semibold text-dark">
+                              <FaChild className="me-2" />
+                              Child {i + 1} Age <span className="text-danger">*</span>
+                            </Form.Label>
+                            <Form.Control
+                              type="number"
+                              min="0"
+                              max="17"
+                              value={childAges[i] || ""}
+                              onChange={(e) => {
+                                const newAges = [...childAges];
+                                newAges[i] = e.target.value;
+                                setChildAges(newAges);
+                                clearError("childAges");
+                              }}
+                              placeholder="Enter age"
+                              className="form-control-modern"
+                              isInvalid={!!errors.childAges}
+                            />
+                            {errors.childAges && i === 0 && (
+                              <div className="text-danger small mt-1">
+                                {errors.childAges}
+                              </div>
+                            )}
+                          </Form.Group>
+                        </Col>
+                      ))}
+                    </>
+                  )}
+
+                  {itinerary.map((item, index) => (
+                    <React.Fragment key={item.id}>
+                      <Col lg={6} md={6}>
+                        <Form.Group>
+                          <Form.Label className="fw-semibold text-dark">
+                            <FaMapMarkerAlt className="me-2" />
+                            Search Destination {itinerary.length > 1 ? `#${index + 1}` : ""} <span className="text-danger">*</span>
+                          </Form.Label>
+                          <div className="d-flex align-items-center gap-2">
+                            <div className="flex-grow-1">
+                              <Select
+                                options={destinationOptions}
+                                value={item.selectedDestination}
+                                onChange={(option) => updateDestination(item.id, option)}
+                                placeholder="Search destinations..."
+                                isSearchable
+                                isClearable
+                                className="modern-select"
+                                isLoading={isDestinationLoading}
+                                noOptionsMessage={() =>
+                                  isDestinationLoading
+                                    ? "Searching destinations..."
+                                    : "Type to search destinations..."
+                                }
+                                onMenuOpen={() => {
+                                  if (destinationOptions.length === 0) {
+                                    loadPopularDestinations();
+                                  }
+                                }}
+                                onInputChange={(inputValue, { action }) => {
+                                  if (action === "input-change") {
+                                    cityList(inputValue);
+                                  }
+                                }}
+                                menuPortalTarget={document.body}
+                                styles={{
+                                  menuPortal: base => ({ ...base, zIndex: 9999 }),
+                                  control: (base) => ({
+                                    ...base,
+                                    minHeight: "42px",
+                                    border: "1px solid #dee2e6",
+                                    "&:hover": { borderColor: "#86b7fe" },
+                                  }),
+                                }}
+                              />
+                            </div>
+                            <Button 
+                              variant="primary" 
+                              className="rounded-circle d-flex align-items-center justify-content-center"
+                              style={{ width: "42px", height: "42px", minWidth: "42px" }}
+                              onClick={addDestination}
+                              title="Add another destination"
+                            >
+                              <FaPlus />
+                            </Button>
+                            {itinerary.length > 1 && (
+                              <Button 
+                                variant="outline-danger" 
+                                className="rounded-circle d-flex align-items-center justify-content-center"
+                                style={{ width: "42px", height: "42px", minWidth: "42px" }}
+                                onClick={() => removeDestination(item.id)}
+                                title="Remove destination"
+                              >
+                                <span className="fw-bold">×</span>
+                              </Button>
+                            )}
+                          </div>
+                          {errors[`destination_${item.id}`] && (
+                            <div className="text-danger small mt-1">
+                              {errors[`destination_${item.id}`]}
+                            </div>
+                          )}
+                        </Form.Group>
+                      </Col>
+
+                      <Col lg={3} md={6}>
+                        <Form.Group>
+                          <Form.Label className="fw-semibold text-dark">
+                            <FaCalendarAlt className="me-2" />
+                            Number of nights <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Control
+                            type="number"
+                            min="1"
+                            max="30"
+                            value={item.nights}
+                            onChange={(e) => updateNights(item.id, e.target.value)}
+                            className="form-control-modern"
+                            isInvalid={!!errors[`nights_${item.id}`]}
+                          />
+                          {errors[`nights_${item.id}`] && (
+                            <div className="text-danger small mt-1">
+                              {errors[`nights_${item.id}`]}
+                            </div>
+                          )}
+                        </Form.Group>
+                      </Col>
+                      <Col lg={3} className="d-none d-lg-block"></Col> {/* Spacer for alignment */}
+                    </React.Fragment>
+                  ))}
+                </Row>
+
+                <Row className="mt-4">
+                  <Col className="d-flex justify-content-center">
+                    <Button
+                      type="submit"
+                      className="btn-warning btn-lg px-5 py-3 rounded-pill"
+                      disabled={isLoading}
+                    >
+                      {isLoading ? (
+                        <>
+                          <Spinner
+                            animation="border"
+                            size="sm"
+                            className="me-2"
+                          />
+                          Creating Package...
+                        </>
+                      ) : (
+                        <>
+                          <FaSearch className="me-2" />
+                          Make your own trip
+                        </>
+                      )}
+                    </Button>
+                  </Col>
+                </Row>
+              </Form>
+            </Card.Body>
+          </Card>
+
+          <Card className="shadow-sm rounded-xl">
+            <Card.Body className="text-center text-muted py-5">
+              <FaSearch className="display-4 text-muted mb-3" />
+              <h4>Ready to Create Your Perfect Trip?</h4>
+              <p>
+                Use the search form above to plan your dream vacation package.
+              </p>
+            </Card.Body>
+          </Card>
+        </main>
+      </div>
+    </div>
+  );
+}

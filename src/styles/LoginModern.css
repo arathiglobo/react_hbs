@@ -1,0 +1,143 @@
+/* ============================================================================
+   LOGIN · MODERN SPLIT-SCREEN  (Globosoft red/white · Lexend)
+   Fills the viewport, no page scroll. Left brand panel + right sign-in card.
+   Self-contained under .lg-shell so it can't affect the rest of the app.
+   ============================================================================ */
+
+.lg-shell {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background: #ffffff;
+  font-family: 'Lexend', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #15171C;
+}
+
+/* ── Left · brand panel ──────────────────────────────────────────────────── */
+.lg-brand {
+  flex: 1 1 54%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 40px;
+  padding: 56px 60px;
+  overflow: hidden;
+  background: linear-gradient(150deg, #EC0B43 0%, #C90939 58%, #A60730 100%);
+  color: #ffffff;
+}
+.lg-brand::before {
+  content: '';
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(620px 620px at 82% -12%, rgba(255, 255, 255, .14), transparent 60%),
+    radial-gradient(520px 520px at -12% 112%, rgba(255, 255, 255, .10), transparent 60%);
+}
+.lg-brand > * { position: relative; }
+
+.lg-brand-top { display: flex; align-items: center; gap: 14px; }
+.lg-logo {
+  width: 50px; height: 50px; border-radius: 13px;
+  background: #fff; object-fit: contain; padding: 4px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .18);
+}
+.lg-brand-name { font-size: 20px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.lg-brand-sub { font-size: 12.5px; opacity: .85; letter-spacing: .01em; margin-top: 2px; }
+
+.lg-hero { max-width: 540px; }
+.lg-hero h1 {
+  font-size: clamp(32px, 3.4vw, 50px);
+  font-weight: 700; line-height: 1.08; letter-spacing: -.04em; margin: 0 0 18px;
+}
+.lg-hero p {
+  font-size: 16px; line-height: 1.65; letter-spacing: -.01em; opacity: .92;
+  margin: 0; max-width: 47ch;
+}
+
+.lg-features { display: flex; flex-direction: column; gap: 16px; }
+.lg-feature { display: flex; align-items: center; gap: 14px; font-size: 14.5px; font-weight: 500; letter-spacing: -.005em; }
+.lg-feature i {
+  width: 38px; height: 38px; flex-shrink: 0;
+  display: grid; place-items: center; font-size: 15px;
+  background: rgba(255, 255, 255, .15); border: 1px solid rgba(255, 255, 255, .12); border-radius: 11px;
+}
+
+.lg-brand-foot { font-size: 12.5px; opacity: .72; letter-spacing: -.004em; }
+
+/* ── Right · sign-in card ────────────────────────────────────────────────── */
+.lg-main {
+  flex: 1 1 46%;
+  display: flex; align-items: center; justify-content: center;
+  padding: 40px 36px;
+  background: #ffffff;
+}
+.lg-card { width: 100%; max-width: 396px; }
+
+.lg-head { margin-bottom: 30px; }
+.lg-head h2 { font-size: 30px; font-weight: 700; letter-spacing: -.035em; line-height: 1.1; margin: 0 0 8px; color: #15171C; }
+.lg-head p { font-size: 15px; color: #6B7280; letter-spacing: -.01em; margin: 0; }
+
+.lg-field { margin-bottom: 18px; }
+.lg-field label {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 600; letter-spacing: -.004em; color: #3E3E3B; margin-bottom: 8px;
+}
+.lg-field label i { color: #EC0B43; font-size: 13px; }
+.lg-field input {
+  width: 100%; padding: 13px 15px; font-family: inherit;
+  border: 1.5px solid #E5E5E1; border-radius: 12px;
+  font-size: 15px; font-weight: 500; letter-spacing: -.006em;
+  color: #15171C; background: #FAFAF8;
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.lg-field input::placeholder { color: #A8A8A3; font-weight: 400; }
+.lg-field input:focus {
+  outline: none; border-color: #EC0B43; background: #fff;
+  box-shadow: 0 0 0 4px rgba(236, 11, 67, .12);
+}
+
+.lg-error {
+  background: #FDECEF; color: #C90939; border: 1px solid #F8C9D5;
+  border-radius: 10px; padding: 11px 14px; font-size: 13.5px; text-align: center; margin-bottom: 16px;
+}
+
+.lg-submit {
+  width: 100%; margin-top: 6px; padding: 14px; font-family: inherit;
+  border: none; border-radius: 12px; cursor: pointer;
+  background: #EC0B43; color: #fff; font-size: 15px; font-weight: 600; letter-spacing: .005em;
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  box-shadow: 0 10px 26px rgba(236, 11, 67, .26);
+  transition: transform .16s cubic-bezier(.16, 1, .3, 1), background .16s ease, box-shadow .16s ease;
+}
+.lg-submit:hover { transform: translateY(-2px); background: #C90939; box-shadow: 0 16px 34px rgba(236, 11, 67, .34); }
+.lg-submit:active { transform: translateY(0); }
+
+.lg-links { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; }
+.lg-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: none; cursor: pointer; text-decoration: none; font-family: inherit;
+  color: #EC0B43; font-size: 13.5px; font-weight: 600; letter-spacing: -.004em;
+  padding: 6px 8px; border-radius: 8px; transition: background .15s ease, color .15s ease;
+}
+.lg-link:hover { background: rgba(236, 11, 67, .08); color: #C90939; }
+
+.lg-secure {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-top: 28px; padding-top: 18px; border-top: 1px solid #EFEFEC;
+  color: #9CA3AF; font-size: 12.5px; letter-spacing: -.004em;
+}
+.lg-secure i { color: #1E9E6A; }
+
+/* ── Responsive · stack; brand becomes a compact banner ──────────────────── */
+@media (max-width: 900px) {
+  .lg-shell { flex-direction: column; }
+  .lg-brand { flex: none; gap: 22px; padding: 30px 30px 34px; }
+  .lg-hero p, .lg-features, .lg-brand-foot { display: none; }
+  .lg-hero h1 { font-size: 27px; margin-bottom: 0; }
+  .lg-main { flex: 1; padding: 36px 24px; }
+}
+@media (max-width: 480px) {
+  .lg-brand { padding: 24px 22px 26px; }
+  .lg-main { padding: 30px 20px; }
+  .lg-head h2 { font-size: 26px; }
+}

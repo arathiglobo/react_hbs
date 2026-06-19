@@ -1,0 +1,1172 @@
+$font-family-sans-serif: "Lexend", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+$font-family-base: $font-family-sans-serif;
+
+/* ──────────────────────────────────────────────────────────────
+ * Brand palette — RED + WHITE site-wide theme.
+ * Setting $primary BEFORE the Bootstrap import recolours every
+ * native component (.btn-primary, links, focus rings, pagination,
+ * nav-pills, form-check, badges, etc.) in one place.
+ * ────────────────────────────────────────────────────────────── */
+$brand-red:       #EC0B43;
+$brand-red-hover: #C90939;
+$brand-red-tint:  #FDE7ED;
+$primary:         $brand-red;
+
+/* IMPORTANT: Bootstrap must be imported AFTER font + brand variables */
+@import "~bootstrap/scss/bootstrap";
+
+:root {
+  --bs-body-font-family: "Lexend", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --bs-heading-font-family: "Lexend", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* ---- Custom date-time picker (Validity From / To) ---- */
+.cdt {
+  position: relative;
+}
+.cdt-popup {
+  position: fixed;
+  z-index: 2000;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+  padding: 12px;
+  min-width: 470px;
+}
+.cdt-body {
+  display: flex;
+  gap: 8px;
+}
+.cdt-cal {
+  flex: 1 1 auto;
+  border-right: 1px solid #eef0f2;
+  padding-right: 10px;
+}
+.cdt-cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.cdt-cal-selects {
+  display: flex;
+  gap: 6px;
+}
+.cdt-select {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 4px 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: #fff;
+  cursor: pointer;
+}
+.cdt-nav {
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #374151;
+}
+.cdt-nav:hover {
+  background: #f3f4f6;
+}
+.cdt-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.cdt-dow {
+  text-align: center;
+  font-size: 0.75rem;
+  color: #9ca3af;
+  padding: 4px 0;
+}
+.cdt-day {
+  border: none;
+  background: transparent;
+  height: 34px;
+  width: 34px;
+  margin: 0 auto;
+  border-radius: 50%;
+  font-size: 0.85rem;
+  color: #111827;
+  cursor: pointer;
+}
+.cdt-day:hover {
+  background: #eff6ff;
+}
+.cdt-day-out {
+  color: #cbd5e1;
+}
+.cdt-day-sel,
+.cdt-day-sel:hover {
+  background: #2563eb;
+  color: #fff;
+}
+.cdt-day-disabled {
+  color: #e5e7eb;
+  cursor: not-allowed;
+}
+.cdt-day-disabled:hover {
+  background: transparent;
+}
+.cdt-time {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+}
+.cdt-stepper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.cdt-chev {
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 6px;
+  line-height: 0;
+}
+.cdt-chev:hover {
+  background: #f3f4f6;
+}
+.cdt-num {
+  width: 46px;
+  text-align: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 6px 0;
+  font-weight: 600;
+  outline: none;
+}
+.cdt-num:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+.cdt-sep {
+  font-weight: 700;
+}
+.cdt-ampm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-left: 6px;
+}
+.cdt-ampm-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 8px;
+  padding: 4px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+}
+.cdt-ampm-btn.active {
+  background: #dbeafe;
+  color: #2563eb;
+}
+.cdt-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #eef0f2;
+}
+.cdt-clear {
+  border: none;
+  background: transparent;
+  color: #2563eb;
+  font-weight: 600;
+  cursor: pointer;
+}
+.cdt-foot-actions {
+  display: flex;
+  gap: 8px;
+}
+
+body,
+button,
+input,
+textarea,
+select,
+.btn,
+.card,
+.modal,
+.toast,
+.dropdown-item,
+.nav-link,
+.form-control,
+.form-select {
+  font-family: "Lexend", system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
+  font-weight: 350;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Global Form.Select chevron — restored.
+ *
+ * Several page-level stylesheets (e.g. PackageBooking_Stepper.css) use the
+ * `background:` shorthand on `.form-select`, which resets background-image
+ * and removes Bootstrap's built-in down-arrow SVG. Re-applying it here with
+ * !important keeps every <Form.Select> across the app showing the toggle
+ * indicator on the right edge.
+ * ────────────────────────────────────────────────────────────────────────── */
+select.form-select,
+.form-select {
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.75rem center !important;
+  background-size: 16px 12px !important;
+  padding-right: 2.25rem !important;
+}
+
+select.form-select.form-select-sm,
+.form-select.form-select-sm {
+  background-position: right 0.5rem center !important;
+  padding-right: 2rem !important;
+}
+
+table,
+thead,
+tbody,
+tr,
+th,
+td {
+  font-family: "Lexend", system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+td{
+      font-weight: 500;
+    font-size: 13px;
+    color: #2e2e2e;
+}
+
+$indigo-500: #6366f1;
+$green-500: #10b981;
+$yellow-500: #f59e0b;
+$blue-500: #3b82f6;
+$pink-500: #ec4899;
+$purple-500: #8b5cf6;
+$bg-gray-100: #f3f4f6;
+
+/* Override Bootstrap variables if needed */
+:root{
+  --bs-primary: #{$brand-red};
+}
+
+/* Layout */
+body{
+  background: $bg-gray-100;
+}
+
+/* Topbar */
+.topbar{
+  height: 60px;
+}
+.logo-placeholder{
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: $brand-red-tint;
+  color: $brand-red;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+.profile-toggle:hover{
+  opacity: .9;
+}
+
+/* Ensure layout places sidebar under topbar on small and large screens */
+
+/* Sidebar */
+.sidebar{
+  width: 13rem;
+  background: #fff;
+  padding: 0.75rem;
+  box-shadow: 0 10px 15px rgba(0,0,0,0.06);
+  display: flex;
+  flex-direction: column;
+  min-width: 13rem !important;
+  max-width: 13rem;
+}
+
+/* Removed sidebar brand heading per request */
+.nav-item-custom .nav-link{
+  padding: .5rem .75rem;
+  border-radius: .5rem;
+  margin-bottom: 0.25rem;
+  color: #111827;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+  max-width: 100%;
+}
+
+ .nav-link .active{
+  color: $brand-red;
+}
+
+.nav-item-custom .nav-link:hover{
+  background: #f3f4f6;
+  text-decoration: none;
+}
+
+.nav-item-custom.nav-item-has-children:hover .nav-link{
+  background: #f3f4f6;
+  color: #111827;
+}
+
+/* Submenu */
+.nav-item-has-children{
+  position: relative;
+}
+
+.nav-item-has-children .submenu{
+  display: none;
+  position: absolute;
+  left: 100%;
+  top: 0;
+  min-width: 16rem;
+  background: #ffffff !important;
+  border-radius: .75rem;
+  box-shadow: 0 20px 25px rgba(0,0,0,0.1);
+  padding: .5rem;
+  z-index: 1000;
+  border: 1px solid #e5e7eb;
+  font-weight: 300;
+}
+
+/* Open submenu upwards */
+.nav-item-has-children.submenu-up .submenu {
+top: auto;
+  bottom: 100%;
+  left: 100%;
+  transform: none;
+}
+
+/* Center the long "Booking List" submenu vertically in the viewport
+   as a compact, internally scrollable panel */
+.nav-item-has-children.submenu-center .submenu {
+  position: fixed;
+  top: 50% !important;
+  bottom: auto !important;
+  left: 13rem;          /* matches the 13rem sidebar width */
+  transform: translateY(-50%);
+  max-height: 22rem !important;   /* compact height, scrolls internally */
+}
+
+/* Show submenu when JavaScript state is active */
+.nav-item-has-children .submenu.show{
+  display: block !important;
+}
+
+/* Keep hover for non-JS controlled menus */
+.nav-item-has-children:hover > .submenu:not(.show){
+  display: block;
+}
+
+/* Ensure submenu stays open when hovering over it */
+.nav-item-has-children .submenu.show:hover{
+  display: block !important;
+}
+
+/* Group headers (like "Basic settings") */
+.submenu .submenu-accordion-header {
+  display: block;
+  width: 100%;
+  padding: .4rem .75rem;
+  color: #111827 !important;
+  border-radius: .5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  margin-bottom: 0.25rem;
+  background: transparent !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+  max-width: 100%;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.submenu .submenu-accordion-header:hover {
+  background: #f3f4f6 !important;
+  color: #111827 !important;
+}
+
+.submenu .submenu-accordion-header.open {
+  background: #f3f4f6 !important;
+  color: #111827 !important;
+  border-left: none !important;
+  font-weight: 600;
+}
+
+/* Submenu items (like "Designation") */
+.submenu .submenu-link{
+  display: block;
+  padding: .4rem .75rem;
+  color: #111827 !important;
+  border-radius: .5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+  max-width: 100%;
+  margin-left: 0.5rem;
+  text-decoration: none;
+  background: transparent !important;
+}
+
+.submenu .submenu-link:hover{
+  background: #f3f4f6 !important;
+  text-decoration: none;
+  color: #111827 !important;
+}
+
+/* Submenu children container */
+.submenu-children {
+  margin-left: 0.5rem;
+}
+
+/* Caret styling */
+.caret-small {
+  font-size: 0.7rem;
+  color: #9ca3af;
+}
+
+/* Accordion groups inside submenu */
+.submenu-group{ 
+  padding: .25rem; 
+  margin-bottom: .25rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+.submenu-group:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.submenu-accordion-header{
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: .4rem .6rem;
+  border-radius: .4rem;
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #6b7280;
+  transition: all 0.2s ease;
+}
+.submenu-accordion-header:hover{ 
+  background: #f3f4f6; 
+  color: #374151;
+}
+.submenu-accordion-header.open {
+  background: #f3f4f6;
+  color: #111827;
+  font-weight: 600;
+}
+.submenu-children{ 
+  padding-left: .75rem; 
+  margin-top: .25rem;
+}
+.caret-small{ 
+  font-size: .7rem; 
+  color: #9ca3af;
+  transition: transform 0.2s ease;
+}
+.submenu-accordion-header.open .caret-small {
+  transform: rotate(180deg);
+  color: #111827;
+}
+
+/* Icon appears on hover before only second-level leaf submenu labels */
+.submenu-children .submenu-link::before{
+  content: '';
+  position: absolute;
+  left: .75rem;
+  opacity: 0;
+  transition: opacity .15s ease-in-out;
+}
+.submenu-children .submenu-link:hover::before{
+  content: '→';
+  opacity: 1;
+}
+
+/* Extra left space for sub-sub menus like Designation */
+.submenu-children .submenu-link{
+  padding-left: 1.75rem;
+}
+
+/* Action buttons — unified to the brand red for the site-wide red+white theme.
+   (Previously a multi-colour Tailwind palette; kept the class names so every
+   page that uses .btn-indigo/.btn-green/etc. picks up the brand automatically.) */
+.btn-indigo,
+.btn-green,
+.btn-yellow,
+.btn-blue,
+.btn-pink,
+.btn-purple{ background: $brand-red; color: white; border-radius: .75rem; padding: .5rem .9rem; }
+.btn-indigo:hover,
+.btn-green:hover,
+.btn-yellow:hover,
+.btn-blue:hover,
+.btn-pink:hover,
+.btn-purple:hover{ background: $brand-red-hover; color: white; }
+
+/* Cards */
+.rounded-xl{ border-radius: 1rem !important; }
+.shadow{ box-shadow: 0 4px 6px rgba(0,0,0,0.06); }
+.shadow-sm{ box-shadow: 0 2px 4px rgba(0,0,0,0.04); }
+
+/* Utility tweaks */
+.hamburger{
+  font-size: 1.25rem;
+  margin: .5rem;
+}
+
+/* Ensure offcanvas closes nicely */
+.offcanvas{
+  width: 14rem;
+}
+
+/* Responsiveness */
+@media (max-width: 991px){
+  .sidebar{ display: none; }
+  /* Mobile: show submenu stacked under parent */
+  .nav-item-has-children .submenu{
+    position: static;
+    display: block;
+    box-shadow: none;
+    padding-left: 1.5rem;
+    background: transparent;
+  }
+}
+
+/* Hotel Search optimizations */
+.img-cover{ width: 100%; height: 100%; object-fit: cover; display: block; }
+.skeleton{ background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 37%, #f3f4f6 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite; }
+@keyframes shimmer{ 0%{ background-position: 100% 0; } 100%{ background-position: -100% 0; } }
+.img-loading{ opacity: 0; transition: opacity .2s ease-in; }
+.img-loaded{ opacity: 1; transition: opacity .2s ease-in; }
+
+/* Search form tweaks */
+.rooms-summary-btn{ padding: .625rem .75rem; border-radius: .75rem; background-color: #fff; }
+
+/* Centered search card style */
+.search-card{ max-width: 1200px; margin: 0 auto 1.25rem; }
+.lazy-card{ contain: content; }
+
+/* Stylized date inputs */
+.input-with-icon .icon-left{ position: absolute; left: .75rem; top: 50%; transform: translateY(-50%); pointer-events: none; }
+.input-with-icon .date-control{ padding-left: 2rem; border-radius: .75rem; }
+
+/* Big centered search button */
+.btn-search-large{ background: $brand-red; color: #fff; border: none; padding: .9rem 2.5rem; border-radius: .75rem; box-shadow: 0 6px 14px rgba(236,11,67,.2); }
+.btn-search-large:hover{ background: $brand-red-hover; color: #fff; }
+
+/* Booking list table compact styles */
+.booking-table{
+  font-size: .92rem;
+}
+.booking-table th, .booking-table td{
+  padding: .5rem .6rem;
+  vertical-align: middle;
+}
+.booking-table .text-truncate{ max-width: 240px; }
+.text-wrap-anywhere{ word-break: break-word; overflow-wrap: anywhere; }
+
+/* Icon-only small buttons for action column */
+.icon-btn{
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: .5rem;
+}
+.icon-btn svg{ width: 16px; height: 16px; }
+
+/* Ultra-compact icon actions for tables */
+.action-icons{ display: inline-flex; gap: .35rem; }
+.icon-action{
+  width: 30px;
+  height: 30px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: .5rem;
+  color: #374151;
+}
+.icon-action:hover{ background: #f9fafb; }
+.icon-action svg{ width: 16px; height: 16px; }
+
+/* Responsive adjustments for sidebar */
+@media (max-width: 1200px) {
+  .sidebar {
+    width: 12rem;
+    min-width: 11rem;
+    max-width: 12rem;
+  }
+  
+  .nav-item-custom .nav-link {
+    font-size: 0.85rem;
+  }
+  
+  .submenu .submenu-link {
+    font-size: 0.7rem;
+  }
+  
+  .submenu .submenu-accordion-header {
+    font-size: 0.7rem;
+  }
+}
+
+@media (max-width: 992px) {
+  .sidebar {
+    width: 11rem;
+    min-width: 10rem;
+    max-width: 11rem;
+  }
+  
+  .nav-item-custom .nav-link {
+    font-size: 0.8rem;
+    padding: .4rem .6rem;
+  }
+  
+  .submenu .submenu-link {
+    font-size: 0.65rem;
+    padding: .3rem .4rem;
+  }
+  
+  .submenu .submenu-accordion-header {
+    font-size: 0.65rem;
+  }
+}
+
+/* Hotel Booking List Modern Styles */
+.booking-list-container {
+  .card {
+    transition: all 0.2s ease-in-out;
+    
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08) !important;
+    }
+  }
+  
+  .table {
+    th {
+      font-weight: 600;
+      color: #374151;
+      border-bottom: 2px solid #f3f4f6;
+      background: #fafafa;
+    }
+    
+    td {
+      border-bottom: 1px solid #f3f4f6;
+      vertical-align: middle;
+    }
+    
+    tbody tr {
+      transition: all 0.15s ease-in-out;
+      
+      &:hover {
+        background-color: #f8fafc;
+        transform: scale(1.001);
+      }
+    }
+  }
+  
+  .status-badge {
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.375rem 0.75rem;
+    border-radius: 6px;
+  }
+  
+  .action-button {
+    transition: all 0.15s ease-in-out;
+    
+    &:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+  }
+  
+  .filter-button {
+    transition: all 0.2s ease-in-out;
+    border-radius: 10px;
+    font-weight: 500;
+    
+    &:hover {
+      transform: translateY(-1px);
+    }
+    
+    &.active {
+      box-shadow: 0 4px 12px rgba(236, 11, 67, 0.25);
+    }
+  }
+  
+  .search-input {
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
+    transition: all 0.2s ease-in-out;
+    
+    &:focus {
+      border-color: $brand-red;
+      box-shadow: 0 0 0 3px rgba(236, 11, 67, 0.1);
+    }
+  }
+  
+  .pagination {
+    .page-link {
+      border: none;
+      border-radius: 8px;
+      margin: 0 2px;
+      transition: all 0.15s ease-in-out;
+      
+      &:hover {
+        background-color: #f3f4f6;
+        transform: translateY(-1px);
+      }
+      
+      &.active {
+        background-color: $brand-red;
+        color: white;
+        box-shadow: 0 4px 12px rgba(236, 11, 67, 0.25);
+      }
+    }
+  }
+  
+  .agent-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.8rem;
+    background: linear-gradient(135deg, $brand-red, $brand-red-hover);
+    color: white;
+  }
+  
+  .booking-code {
+    background: #f3f4f6;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.8rem;
+    color: #374151;
+  }
+  
+  .empty-state {
+    padding: 3rem 1rem;
+    text-align: center;
+    
+    .empty-icon {
+      font-size: 4rem;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+    
+    .empty-title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      color: #6b7280;
+      margin-bottom: 0.5rem;
+    }
+    
+    .empty-description {
+      color: #9ca3af;
+      font-size: 0.9rem;
+    }
+  }
+}
+
+/* Mapping table: allow many horizontal columns with sticky first columns */
+.mapping-table {
+  thead th,
+  tbody td {
+    white-space: nowrap;
+  }
+
+  /* Ensure columns are wide enough to trigger horizontal scroll when many */
+  thead th:not(.sticky-col):not(.sticky-col-2),
+  tbody td:not(.sticky-col):not(.sticky-col-2) {
+    min-width: 140px;
+  }
+
+  .sticky-col {
+    position: sticky;
+    left: 0;
+    background: #fff;
+    z-index: 2;
+  }
+  .sticky-col-2 {
+    position: sticky;
+    left: 100px; /* width of first sticky col */
+    background: #fff;
+    z-index: 2;
+  }
+}
+
+/* Platform vertical tabs for City Mapping */
+.platform-vertical-tabs {
+  min-width: 200px;
+}
+.platform-tab-link {
+  border-radius: 10px;
+  margin-bottom: 6px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+}
+.platform-tab-link.active {
+  background: $brand-red-tint;
+  border-color: $brand-red;
+  color: $brand-red;
+  font-weight: 600;
+}
+
+/* Mapping page tweaks */
+.mapping-page .filters-toolbar .form-label {
+  font-size: .825rem;
+  color: #6b7280;
+}
+.mapping-page .search-compact .input-group-text {
+  background: #fff;
+  border-right: 0;
+}
+.mapping-page .search-compact input {
+  border-left: 0;
+}
+
+/* Orange checkbox styling for amenities */
+.custom-orange-checkbox {
+  .form-check-input:checked {
+    background-color: #fd7e14 !important;
+    border-color: #fd7e14 !important;
+  }
+  
+  .form-check-input:focus {
+    border-color: #fd7e14 !important;
+    box-shadow: 0 0 0 0.25rem rgba(253, 126, 20, 0.25) !important;
+  }
+}
+
+/* Responsive improvements for booking list */
+@media (max-width: 1200px) {
+  .booking-list-container {
+    .table {
+      font-size: 0.85rem;
+    }
+    
+    .agent-avatar {
+      width: 28px;
+      height: 28px;
+      font-size: 0.75rem;
+    }
+  }
+}
+
+@media (max-width: 992px) {
+  .booking-list-container {
+    .card-body {
+      padding: 1rem;
+    }
+    
+    .table-responsive {
+      font-size: 0.8rem;
+    }
+    
+    .filter-button {
+      font-size: 0.8rem;
+      padding: 0.375rem 0.75rem;
+    }
+    
+    .action-button {
+      width: 32px;
+      height: 32px;
+      
+      svg {
+        width: 14px;
+        height: 14px;
+      }
+    }
+  }
+}
+
+@media (max-width: 768px) {
+  .booking-list-container {
+    .table {
+      th, td {
+        padding: 0.5rem 0.25rem;
+      }
+    }
+    
+    .booking-code {
+      font-size: 0.7rem;
+      padding: 0.125rem 0.25rem;
+    }
+    
+    .status-badge {
+      font-size: 0.7rem;
+      padding: 0.25rem 0.5rem;
+    }
+    
+    .pagination {
+      .page-link {
+        padding: 0.375rem 0.5rem;
+        font-size: 0.8rem;
+      }
+    }
+  }
+}
+
+@media (max-width: 576px) {
+  .booking-list-container {
+    .card-body {
+      padding: 0.75rem;
+    }
+    
+    .table-responsive {
+      font-size: 0.75rem;
+    }
+    
+    .agent-avatar {
+      width: 24px;
+      height: 24px;
+      font-size: 0.7rem;
+    }
+    
+    .action-button {
+      width: 28px;
+      height: 28px;
+      
+      svg {
+        width: 12px;
+        height: 12px;
+      }
+    }
+    
+    .filter-button {
+      font-size: 0.75rem;
+      padding: 0.25rem 0.5rem;
+    }
+  }
+}
+
+/* Enhanced validation error styling */
+.form-control.is-invalid,
+.form-select.is-invalid {
+  border-color: #dc3545 !important;
+  box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.25) !important;
+}
+
+.invalid-feedback {
+  color: #dc3545 !important;
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+}
+
+/* React Select validation styling */
+.react-select__control.is-invalid {
+  border-color: #dc3545 !important;
+  box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.25) !important;
+}
+
+/* Modern form controls */
+.form-control-modern {
+  border-radius: 8px !important;
+  border: 1px solid #dee2e6 !important;
+  transition: all 0.3s ease !important;
+  
+  &:focus {
+    border-color: $brand-red !important;
+    box-shadow: 0 0 0 0.2rem rgba(236, 11, 67, 0.25) !important;
+  }
+}
+
+/* Modern form checks */
+.form-check-modern {
+  .form-check-input {
+    border-radius: 4px !important;
+    border: 2px solid #dee2e6 !important;
+    transition: all 0.3s ease !important;
+    
+    &:checked {
+      background-color: $brand-red !important;
+      border-color: $brand-red !important;
+    }
+    
+    &:focus {
+      box-shadow: 0 0 0 0.2rem rgba(236, 11, 67, 0.25) !important;
+    }
+  }
+  
+  .form-check-label {
+    font-weight: 500 !important;
+    color: #495057 !important;
+  }
+}
+
+/* Gradient backgrounds */
+.bg-gradient-primary {
+  background: linear-gradient(135deg, $brand-red 0%, $brand-red-hover 100%) !important;
+}
+
+/* Enhanced card styling */
+.shadow-lg {
+  box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.175) !important;
+}
+
+/* Table hover effects */
+.hover-row:hover {
+  background-color: #f8f9fa !important;
+  transform: translateY(-1px);
+  transition: all 0.2s ease;
+}
+
+/* Enhanced button styling */
+.btn-sm {
+  padding: 0.375rem 0.75rem !important;
+  font-size: 0.875rem !important;
+  border-radius: 6px !important;
+}
+
+/* Section headers */
+.border-bottom {
+  border-bottom: 2px solid #e9ecef !important;
+}
+
+/* Icon styling */
+.text-primary {
+  color: $brand-red !important;
+}
+
+/* Enhanced table styling */
+.table-dark th {
+  background-color: #212529 !important;
+  border-color: #495057 !important;
+}
+
+.table th {
+  font-weight: 500 !important;
+  text-transform: uppercase !important;
+  font-size: 0.875rem !important;
+  letter-spacing: 0.5px !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+ * GLOBAL RED + WHITE BRAND CHROME (site-wide)
+ *
+ * Promotes the dashboard's red+white TopBar/Sidebar treatment to
+ * EVERY page (master, search, registration, list, booking, etc.),
+ * not just the role dashboards. Appended last so it overrides the
+ * earlier neutral/grey sidebar rules without editing each one.
+ * Mirrors the `.rw-dashboard`-scoped rules in pages/dashboardSkin.jsx.
+ * ════════════════════════════════════════════════════════════ */
+
+/* ── TopBar — red brand band, white logo / text / icons ── */
+.topbar{
+  background: $brand-red !important;
+  box-shadow: 0 1px 6px rgba(0,0,0,.14) !important;
+}
+.topbar .navbar-brand,
+.topbar .navbar-brand span,
+.topbar .profile-toggle,
+.topbar .profile-toggle span,
+.topbar .nav a,
+.topbar .nav button,
+.topbar .nav .text-dark,
+.topbar .text-dark{ color: #fff !important; }
+.topbar .logo-placeholder{ background: #fff !important; color: $brand-red !important; }
+.topbar .badge.bg-danger{ background: #fff !important; color: $brand-red !important; }
+
+/* ── Sidebar — white surface, slate text, red hover + red active accent ── */
+.sidebar .nav-item-custom .nav-link:hover,
+.sidebar .nav-item-custom.nav-item-has-children:hover > .nav-link{
+  background: $brand-red !important;
+  color: #fff !important;
+}
+.sidebar .nav-item-custom .nav-link:hover .sidebar-icon,
+.sidebar .nav-item-custom.nav-item-has-children:hover > .nav-link .sidebar-icon,
+.sidebar .nav-item-custom .nav-link:hover .caret,
+.sidebar .nav-item-custom.nav-item-has-children:hover > .nav-link .caret{ color: #fff !important; }
+
+/* Active / expanded top-level item → red text + tint row + red left border */
+.sidebar .nav-item-custom .nav-link.rw-active{
+  color: $brand-red !important;
+  background: $brand-red-tint !important;
+  border-left: 3px solid $brand-red !important;
+}
+.sidebar .nav-link.rw-active .sidebar-icon{ color: $brand-red !important; }
+
+/* Submenu links → slate, solid red on hover */
+.sidebar .submenu .submenu-link:hover{
+  background: $brand-red !important;
+  color: #fff !important;
+}
+/* Open accordion group header → red accent */
+.sidebar .submenu .submenu-accordion-header.open{
+  color: $brand-red !important;
+  background: $brand-red-tint !important;
+  border-left: 3px solid $brand-red !important;
+}
+
+/* ── Misc brand accents ── */
+.btn-search-large{ box-shadow: 0 6px 14px rgba(236,11,67,.2); }
+
+/* Guarantee white label text on the solid red brand buttons, even if a
+   page-level stylesheet or a Bootstrap variant tries to darken it. */
+.btn-indigo, .btn-green, .btn-yellow, .btn-blue, .btn-pink, .btn-purple,
+.btn-indigo *, .btn-green *, .btn-yellow *, .btn-blue *, .btn-pink *, .btn-purple *,
+.btn-search-large{ color: #fff !important; }
+a{ --bs-link-color-rgb: 236,11,67; --bs-link-hover-color-rgb: 201,9,57; }
+
+/* Card-header titles → brand red, site-wide.
+   Covers the title variants seen across master / registration / report /
+   list pages (fw-semibold, fw-medium, fw-bold spans, headings, card-title).
+   GUARDS:
+     • :not(.text-white):not(.bg-gradient-primary) on the header skips the
+       coloured/gradient headers whose title is already white-on-red — we
+       must not turn those red (red-on-red = invisible).
+     • :not(.btn) skips action buttons (e.g. "+ Create") that may carry a
+       weight class, so their text stays white on the red button. */
+.card-header:not(.text-white):not(.bg-gradient-primary)
+  :is(.fw-semibold, .fw-medium, .fw-bold, .card-title, h1, h2, h3, h4, h5, h6):not(.btn){
+  color: $brand-red;
+}
+
+
