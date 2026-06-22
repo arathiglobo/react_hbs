@@ -1,0 +1,90 @@
+/* ============================================================================
+   HOTEL REGISTRATION · MODERN REDESIGN  (Globosoft red/white · Lexend)
+   100% CSS, scoped under .hreg-page — no markup/field changes, so every
+   tab, field and value stays exactly as-is. Visual only.
+   Used by /registration/hotel/create and /registration/hotel/create/:id
+   ============================================================================ */
+
+.hreg-page {
+  font-family: 'Lexend', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #FAFAF8 !important;
+}
+.hreg-page main { padding: 28px 28px 48px !important; }
+@media (max-width: 640px) { .hreg-page main { padding: 20px 14px 36px !important; } }
+
+/* ── Page header ── */
+.hreg-page h2 { font-weight: 700 !important; letter-spacing: -.03em !important; }
+.hreg-page .text-muted { letter-spacing: -.006em; }
+
+/* ── Main panel card ── */
+.hreg-page .card {
+  border: 1px solid #ECECE8 !important;
+  border-radius: 18px !important;
+  background: #ffffff !important;
+  backdrop-filter: none !important;
+  box-shadow: 0 1px 3px rgba(17, 19, 24, .05), 0 18px 44px rgba(17, 19, 24, .07) !important;
+}
+.hreg-page .card-header { border-radius: 18px 18px 0 0 !important; }
+.hreg-page .card-header h4 { font-weight: 700 !important; letter-spacing: -.02em !important; }
+
+/* ── Tabs — clean modern bar, red active ── */
+.hreg-page .nav-tabs { border-bottom: 1px solid #ECECE8 !important; gap: 4px; flex-wrap: wrap; }
+.hreg-page .nav-tabs .nav-link {
+  background: transparent !important; border: none !important; border-radius: 10px !important;
+  color: #5A5A56 !important; font-weight: 500 !important; font-size: .9rem !important; letter-spacing: -.006em !important;
+  padding: .6rem 1rem !important; margin: 0 !important;
+  box-shadow: none !important;
+  transition: background .15s ease, color .15s ease;
+}
+.hreg-page .nav-tabs .nav-link:hover { background: #F6F6F4 !important; color: #15171C !important; }
+.hreg-page .nav-tabs .nav-link.active {
+  background: #FDE7ED !important; color: #EC0B43 !important; font-weight: 600 !important; box-shadow: none !important;
+}
+.hreg-page .tab-content { border: none !important; padding: 24px 2px 6px !important; }
+
+/* ── Labels + fields ── */
+.hreg-page .form-label {
+  font-size: .76rem !important; font-weight: 600 !important; letter-spacing: .03em !important;
+  text-transform: uppercase; color: #8A8A85 !important; margin-bottom: .42rem !important;
+}
+.hreg-page .form-control,
+.hreg-page .form-select {
+  border-radius: 11px !important; border: 1.5px solid #E5E5E1 !important; background: #FAFAF8 !important;
+  padding: .62rem .85rem !important; font-size: .92rem !important; font-weight: 500 !important;
+  color: #15171C !important; letter-spacing: -.006em !important;
+  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease !important;
+}
+.hreg-page .form-control:focus,
+.hreg-page .form-select:focus {
+  border-color: #EC0B43 !important; background: #fff !important; box-shadow: 0 0 0 4px rgba(236, 11, 67, .12) !important;
+}
+.hreg-page .form-control::placeholder { color: #A8A8A3 !important; font-weight: 400 !important; }
+
+/* react-select control to match (the destination / dropdown selects) */
+.hreg-page .css-13cymwt-control,
+.hreg-page [class*="-control"] {
+  border-radius: 11px !important; border-color: #E5E5E1 !important; min-height: 42px !important;
+}
+
+/* ── Inner sub-cards (Contact / Bank repeaters) ── */
+.hreg-page .card .card {
+  border-radius: 14px !important;
+  box-shadow: 0 1px 2px rgba(17, 19, 24, .04), 0 6px 16px rgba(17, 19, 24, .05) !important;
+}
+.hreg-page .card .card .card-header {
+  background: #F8F8F6 !important; border-bottom: 1px solid #ECECE8 !important; border-radius: 14px 14px 0 0 !important;
+}
+.hreg-page .card .card .card-header h6 { font-weight: 600 !important; letter-spacing: -.01em !important; color: #15171C !important; }
+
+/* ── Buttons ── */
+.hreg-page .btn { border-radius: 11px !important; font-weight: 600 !important; letter-spacing: -.004em; }
+.hreg-page .btn-primary { background: #EC0B43 !important; border-color: #EC0B43 !important; }
+.hreg-page .btn-primary:hover { background: #C90939 !important; border-color: #C90939 !important; }
+.hreg-page .btn-outline-primary { color: #EC0B43 !important; border-color: #EC0B43 !important; }
+.hreg-page .btn-outline-primary:hover { background: #EC0B43 !important; color: #fff !important; }
+
+/* ── Week-days panel ── */
+.hreg-page .week-days-container { background: #fff !important; border: 1px solid #ECECE8 !important; border-radius: 14px !important; }
+
+/* ── Section dividers / headings inside tabs ── */
+.hreg-page h5, .hreg-page h6 { letter-spacing: -.015em; }

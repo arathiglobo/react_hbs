@@ -1,0 +1,6 @@
+/* Only affect the body/message text */
+swal-small-title titleStyle {
+  font-size: 0.875em !important; /* smaller text */
+  color: #555; /* optional: softer color */
+  font-weight: 600;
+}
