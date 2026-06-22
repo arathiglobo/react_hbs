@@ -162,6 +162,7 @@ import OnlineDailySalesReport from "./pages/report/OnlineDailySalesReport";
 import TimeLimitOnlineDailySalesReport from "./pages/report/TimeLimitOnlineDailySalesReport";
 import ExternalApiRoomList from "./pages/ExternalApiRoomList";
 import HotelBookingPage from "./pages/booking/HotelBookingPage";
+import DummyPaymentPage from "./pages/booking/DummyPaymentPage";
 import ApiBookingPageForHotels from "./pages/booking/ApiBookingPageForHotels";
 import LongStaySearch from "./pages/search/LongStaySearch";
 import LongStayBookingPage from "./pages/booking/LongStayBookingPage";
@@ -417,6 +418,7 @@ export default function App() {
         {/* Last Minute Room List — opened from "View Rooms" button on the search page */}
         <Route path="/last-minute-room-list" element={<PrivateRoute><LastMinuteRoomList /></PrivateRoute>} />
         <Route path="/hotel-booking-page" element={<PrivateRoute><HotelBookingPage /></PrivateRoute>} />
+        <Route path="/payment/:gateway" element={<PrivateRoute><DummyPaymentPage /></PrivateRoute>} />
         <Route path="/new-booking/long-stay" element={<PrivateRoute><LongStaySearch /></PrivateRoute>} />
         <Route path="/long-stay-booking-page" element={<PrivateRoute><LongStayBookingPage /></PrivateRoute>} />
         <Route path="/booking-details/long-stay-booking-list" element={<PrivateRoute><LongStayBookingList /></PrivateRoute>} />

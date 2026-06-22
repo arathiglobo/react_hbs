@@ -20,6 +20,14 @@ import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
 
+// Dummy online-payment gateways shown when an agent's credit is short.
+// Each routes to /payment/<id> — a placeholder card-entry page.
+const PAYMENT_GATEWAYS = [
+  { id: "razorpay", name: "Razorpay", desc: "Cards, UPI, Net Banking" },
+  { id: "stripe", name: "Stripe", desc: "International cards" },
+  { id: "payu", name: "PayU", desc: "Cards & wallets" },
+];
+
 const SPECIAL_REQUEST_OPTIONS = [
   "Early Check-In",
   "Non-Smoking Rooms",
@@ -93,6 +101,11 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
   // don't surface the selector still work.
   const [paymentMode, setPaymentMode] = useState("CREDITLIMIT");
   const [pendingPayload, setPendingPayload] = useState(null);
+  // ── Online-payment flow (shown when the agent's credit is short) ──
+  const [showInsufficientModal, setShowInsufficientModal] = useState(false);
+  const [showGatewayModal, setShowGatewayModal] = useState(false);
+  const [insufficientAmount, setInsufficientAmount] = useState(0);
+  const [selectedGateway, setSelectedGateway] = useState("");
   const [tourismDirhams, setTourismDirhams] = useState("0");
   const [remarks, setRemarks] = useState("");
   const [specialRequests, setSpecialRequests] = useState([]);
@@ -704,24 +717,14 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
       );
 
       if (creditResponse.data === false) {
-        // ❌ Not enough credit — show Bootbox alert
-
-        toast.error("Insufficient credit. Please proceed with online payment.");
-
-        // bootbox.alert({
-        //   title: "Insufficient Credit",
-        //   message:
-        //     "Your available credit is insufficient for this booking.<br/>Please proceed with <strong>online payment</strong>.",
-        //   centerVertical: true,
-        //   closeButton: false,
-        //   buttons: {
-        //     ok: {
-        //       label: "OK",
-        //       className: "btn-primary",
-        //     },
-        //   },
-        // });
-        return; // stop here
+        // ❌ Not enough credit — route the operator into the online-
+        // payment flow instead of a plain toast. Close the Order Summary
+        // modal and open the "online payment required" popup carrying the
+        // payable amount + Pay / Cancel actions.
+        setInsufficientAmount(requiredAmount);
+        setShowConfirmModal(false);
+        setShowInsufficientModal(true);
+        return; // stop here — handled by the online-payment popup
       }
 
       // ✅ Step 2: Proceed to confirm booking
@@ -1924,6 +1927,114 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                         <i className="bi bi-check-circle me-1"></i> Confirm
                       </>
                     )}
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* ── Insufficient credit → online payment required ──
+                  Replaces the old toast. Shows the payable amount with
+                  Pay (green) / Cancel (red). Pay opens the gateway
+                  picker. */}
+              <Modal
+                show={showInsufficientModal}
+                onHide={() => setShowInsufficientModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Online Payment Required</Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="text-center py-4">
+                  <p className="mb-2 text-muted">
+                    The agent's available credit is insufficient for this
+                    booking. You need to proceed with{" "}
+                    <strong>online payment</strong>.
+                  </p>
+                  <div className="mt-3">
+                    <div className="text-muted small">Payable amount</div>
+                    <div className="fs-4 fw-bold text-dark">
+                      {formatPrice(insufficientAmount)}
+                    </div>
+                  </div>
+                </Modal.Body>
+                <Modal.Footer className="justify-content-center border-0">
+                  <Button
+                    variant="danger"
+                    onClick={() => setShowInsufficientModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="success"
+                    onClick={() => {
+                      setShowInsufficientModal(false);
+                      setSelectedGateway("");
+                      setShowGatewayModal(true);
+                    }}
+                  >
+                    Pay
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* ── Select payment gateway (dummy) ──
+                  2–3 placeholder gateways as radios; Proceed deep-links
+                  to /payment/<id> for the (dummy) card-entry page. */}
+              <Modal
+                show={showGatewayModal}
+                onHide={() => setShowGatewayModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Select Payment Gateway</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                  <p className="text-muted small mb-3">
+                    Choose a gateway to enter your card details.
+                  </p>
+                  {PAYMENT_GATEWAYS.map((g) => (
+                    <Form.Check
+                      key={g.id}
+                      type="radio"
+                      name="payment-gateway"
+                      id={`gw-${g.id}`}
+                      className="mb-2"
+                      checked={selectedGateway === g.id}
+                      onChange={() => setSelectedGateway(g.id)}
+                      label={
+                        <span>
+                          <span className="fw-semibold">{g.name}</span>
+                          <span className="text-muted small ms-2">
+                            {g.desc}
+                          </span>
+                        </span>
+                      }
+                    />
+                  ))}
+                </Modal.Body>
+                <Modal.Footer className="border-0">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowGatewayModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="success"
+                    disabled={!selectedGateway}
+                    onClick={() => {
+                      const gw = PAYMENT_GATEWAYS.find(
+                        (x) => x.id === selectedGateway,
+                      );
+                      setShowGatewayModal(false);
+                      navigate(`/payment/${selectedGateway}`, {
+                        state: {
+                          amountLabel: formatPrice(insufficientAmount),
+                          gatewayName: gw ? gw.name : selectedGateway,
+                        },
+                      });
+                    }}
+                  >
+                    Proceed to Pay
                   </Button>
                 </Modal.Footer>
               </Modal>
