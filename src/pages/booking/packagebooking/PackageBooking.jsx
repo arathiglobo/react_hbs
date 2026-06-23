@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
-import { Row, Col, Spinner } from "react-bootstrap";
+import { Row, Col, Spinner, Form } from "react-bootstrap";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
-import { FaChevronLeft } from "react-icons/fa";
+import { FaChevronLeft, FaCreditCard } from "react-icons/fa";
 
 import BasicDetails from "./tabs/BasicDetails";
 import HotelsTab from "./tabs/HotelsTab";
@@ -17,6 +17,29 @@ import PaxInformation from "./tabs/PaxInformation";
 import "../../../styles/PackageBooking_Stepper.css";
 
 const STEPS = ["Basic Details", "Hotels", "Pax Info"];
+
+// Mode of payment options — rendered in the right sidebar on the Pax Info
+// step (moved from the Hotels step). Stored on bookingData.programme.modeOfPayment.
+const PAYMENT_MODES = [
+  { value: "CREDIT", label: "Agent credit limit" },
+  { value: "CARD", label: "Card payment" },
+  { value: "BANK_TRANSFER", label: "Bank transfer" },
+  { value: "CASH", label: "Cash" },
+];
+
+// Per-person price multiplier based on the package's sharing category.
+// The searched rate is treated as the Triple Sharing baseline (1.0x);
+// fewer people sharing a room costs more per person, more sharing costs
+// less. Matches standard hotel/package pricing convention.
+const getCategoryPriceMultiplier = (categoryName) => {
+  const name = String(categoryName || "").trim().toLowerCase();
+  if (!name) return 1;
+  if (name.includes("single")) return 2.0;
+  if (name.includes("twin") || name.includes("double")) return 1.4;
+  if (name.includes("triple")) return 1.0;
+  if (name.includes("quad")) return 0.8;
+  return 1;
+};
 
 const PackageBooking = () => {
   const { id } = useParams();
@@ -210,8 +233,15 @@ const PackageBooking = () => {
     // it should be the new base for the package total.
     const effectiveBase = hotelPrice > 0 ? hotelPrice : baseRate;
 
-    setTotalPrice(effectiveBase + cabPrice + activityPrice);
-  }, [bookingData.selections, packageData, searchRate]);
+    // Apply the sharing-category multiplier (single = 2x, twin = 1.4x,
+    // triple = 1x, quadruple = 0.8x). Name is pushed up from BasicDetails
+    // when the user picks a category; falls back to 1x while empty.
+    const categoryMultiplier = getCategoryPriceMultiplier(
+      bookingData.searchParams.packageCategoryName,
+    );
+
+    setTotalPrice(effectiveBase * categoryMultiplier + cabPrice + activityPrice);
+  }, [bookingData.selections, bookingData.searchParams.packageCategoryName, packageData, searchRate]);
 
   const updateSearchParams = (params) =>
     setBookingData((prev) => ({ ...prev, searchParams: { ...prev.searchParams, ...params } }));
@@ -395,6 +425,76 @@ const PackageBooking = () => {
                   Step {currentStep} of {STEPS.length} &mdash; {STEPS[currentStep - 1]}
                 </div>
               </div>
+
+              {/* Mode of payment — only shown on the Pax Info step (3).
+                  Was previously rendered in the Hotels-step footer; moved
+                  here so it sits next to the Total Price the user is about
+                  to commit to. */}
+              {currentStep === 3 && (
+                <div className="sidebar-pay-card">
+                  <div className="sidebar-pay-title">
+                    <FaCreditCard className="me-2" />
+                    Mode of payment
+                    <span className="sidebar-pay-required">required</span>
+                  </div>
+                  <Form.Select
+                    aria-label="Mode of payment"
+                    className="sidebar-pay-select"
+                    value={bookingData.programme.modeOfPayment || ""}
+                    onChange={(e) =>
+                      updateProgramme({ modeOfPayment: e.target.value })
+                    }
+                  >
+                    <option value="">Select payment mode</option>
+                    {PAYMENT_MODES.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.label}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </div>
+              )}
+
+              <style>{`
+                .sidebar-pay-card {
+                  border: 1.5px solid #e5e7eb;
+                  border-radius: 14px;
+                  padding: 14px 16px;
+                  background: #fff;
+                  margin-top: 16px;
+                }
+                .sidebar-pay-title {
+                  display: flex;
+                  align-items: center;
+                  font-weight: 600;
+                  font-size: 0.85rem;
+                  color: #1e293b;
+                  margin-bottom: 10px;
+                }
+                .sidebar-pay-required {
+                  margin-left: auto;
+                  font-size: 0.6rem;
+                  letter-spacing: 0.08em;
+                  text-transform: uppercase;
+                  color: #b91c1c;
+                  background: #fee2e2;
+                  padding: 2px 8px;
+                  border-radius: 999px;
+                  font-weight: 700;
+                }
+                .sidebar-pay-select {
+                  border: 1.5px solid #e5e7eb !important;
+                  border-radius: 10px !important;
+                  font-size: 0.85rem !important;
+                  padding: 0.55rem 0.75rem !important;
+                  color: #1e293b !important;
+                  background-color: #ffffff !important;
+                }
+                .sidebar-pay-select:focus {
+                  border-color: #2563eb !important;
+                  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
+                }
+              `}</style>
             </Col>
           </Row>
         </main>

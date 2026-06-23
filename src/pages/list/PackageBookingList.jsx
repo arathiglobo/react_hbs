@@ -2,6 +2,8 @@ import React, { useEffect, useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Container,
+  Row,
+  Col,
   Card,
   Form,
   Table,
@@ -43,34 +45,23 @@ const PackageBookingList = () => {
   const [search, setSearch] = useState("");
   const [perPage, setPerPage] = useState(10);
   const [page, setPage] = useState(1);
-  const [timePeriod, setTimePeriod] = useState("currentMonth");
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
   const [allBookings, setAllBookings] = useState([]); // Store all bookings for client-side pagination
+  // Server-side pagination metadata. `serverPaginated` is true when the
+  // current endpoint returns a Spring Page (i.e. /bookings, /all) so we can
+  // trust its totalElements/totalPages and avoid re-slicing client-side.
+  // The /cancelled endpoint returns a plain List, so we paginate it locally.
+  const [serverPaginated, setServerPaginated] = useState(false);
+  const [serverTotalElements, setServerTotalElements] = useState(0);
+  const [serverTotalPages, setServerTotalPages] = useState(0);
 
-  // Map status to type parameter
-  const getTypeParam = (status) => {
-    switch (status) {
-      case "upcoming":
-        return 1;
-      case "completed":
-        return 2;
-      case "cancelled":
-        return 3;
-      default:
-        return 1;
-    }
-  };
-
-  // Map time period to time parameter
-  const getTimeParam = (timePeriod) => {
-    switch (timePeriod) {
-      case "currentMonth":
-        return 1;
-      case "all":
-        return 2;
-      default:
-        return 1;
-    }
-  };
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: currentYear - 2014 }, (_, i) => 2020 + i);
 
   // Fetch bookings from API
   const fetchBookings = useCallback(async () => {
@@ -89,7 +80,7 @@ const PackageBookingList = () => {
 
     try {
       setLoading(true);
-      
+
       const params = {
         page: page - 1,
         limit: perPage
@@ -102,28 +93,64 @@ const PackageBookingList = () => {
         params.staffId = userId;
       }
 
-      // Switch endpoint based on status
-      const endpoint = status === "cancelled" 
-        ? "/api/v1/package-booking/cancelled" 
-        : "/api/v1/package-booking/bookings";
-        
+      // Time Period filter — backend matches month/year against travelDate.
+      if (selectedMonth) params.month = selectedMonth;
+      if (selectedYear) params.year = selectedYear;
+
+      // Switch endpoint based on status: "all" hits the dedicated all-statuses
+      // endpoint, "cancelled" the cancelled-only list, anything else (upcoming /
+      // completed) falls back to the active-bookings endpoint.
+      let endpoint;
+      if (status === "all") {
+        endpoint = "/api/v1/package-booking/all";
+      } else if (status === "cancelled") {
+        endpoint = "/api/v1/package-booking/cancelled";
+      } else {
+        endpoint = "/api/v1/package-booking/bookings";
+      }
+
       console.log(`Package Booking API Request -> ${endpoint} with params:`, params);
       const response = await axiosInstance.get(endpoint, { params });
 
-      const bookingData = response.data?.content || response.data;
-      if (Array.isArray(bookingData)) {
-        setAllBookings(bookingData);
+      const data = response.data;
+      if (data && Array.isArray(data.content)) {
+        // Spring Page response — backend already paginated. Trust its totals
+        // and don't re-slice client-side.
+        setAllBookings(data.content);
+        setServerPaginated(true);
+        setServerTotalElements(
+          typeof data.totalElements === "number"
+            ? data.totalElements
+            : data.content.length,
+        );
+        setServerTotalPages(
+          typeof data.totalPages === "number" && data.totalPages > 0
+            ? data.totalPages
+            : 1,
+        );
+      } else if (Array.isArray(data)) {
+        // Plain list response (e.g. /cancelled). Paginate client-side.
+        setAllBookings(data);
+        setServerPaginated(false);
+        setServerTotalElements(data.length);
+        setServerTotalPages(Math.max(1, Math.ceil(data.length / perPage)));
       } else {
         setAllBookings([]);
+        setServerPaginated(false);
+        setServerTotalElements(0);
+        setServerTotalPages(0);
       }
     } catch (error) {
       console.error("Error fetching package bookings:", error);
       toast.error("Failed to load bookings");
       setAllBookings([]);
+      setServerPaginated(false);
+      setServerTotalElements(0);
+      setServerTotalPages(0);
     } finally {
       setLoading(false);
     }
-  }, [status, page, perPage, role, userId]);
+  }, [status, page, perPage, role, userId, selectedMonth, selectedYear]);
 
   // Handle role sync if it's missing from localStorage initially
   useEffect(() => {
@@ -172,7 +199,7 @@ const PackageBookingList = () => {
   // Reset to page 1 when filters or perPage change
   useEffect(() => {
     setPage(1);
-  }, [status, timePeriod, perPage]);
+  }, [status, perPage, selectedMonth, selectedYear]);
 
   // Filter and paginate bookings client-side
   const filteredBookings = useMemo(() => {
@@ -192,16 +219,24 @@ const PackageBookingList = () => {
     return filtered;
   }, [allBookings, search]);
 
-  // Paginate filtered bookings
+  // Paginate filtered bookings. When the backend already paginated (Page
+  // response) skip the local slice — `filteredBookings` is already the
+  // current page; slicing again would empty out pages 2+.
   const paginatedBookings = useMemo(() => {
+    if (serverPaginated) return filteredBookings;
     const startIndex = (page - 1) * perPage;
     const endIndex = startIndex + perPage;
     return filteredBookings.slice(startIndex, endIndex);
-  }, [filteredBookings, page, perPage]);
+  }, [filteredBookings, page, perPage, serverPaginated]);
 
-  // Calculate pagination totals
-  const totalElements = filteredBookings.length;
-  const totalPages = Math.max(1, Math.ceil(totalElements / perPage));
+  // Pagination totals: prefer server values for Page responses, fall back to
+  // the local filtered count for List responses.
+  const totalElements = serverPaginated
+    ? serverTotalElements
+    : filteredBookings.length;
+  const totalPages = serverPaginated
+    ? Math.max(1, serverTotalPages)
+    : Math.max(1, Math.ceil(filteredBookings.length / perPage));
 
   const getStatusBadge = (s) => {
     switch (s?.toLowerCase()) {
@@ -259,9 +294,135 @@ const PackageBookingList = () => {
               paddingRight: "0.5rem",
             }}
           >
-            <div className="d-flex justify-content-between align-items-center mb-4">
-              <h5 className="mb-0 text-dark fw-semibold">Package Booking</h5>
+            <div className="d-flex justify-content-between align-items-end mb-4">
+              <div>
+                <h5 className="mb-2 text-dark fw-semibold">Package Booking</h5>
+                <InputGroup
+                  style={{
+                    height: "44px",
+                    width: "320px",
+                    borderRadius: "12px",
+                    overflow: "hidden",
+                    boxShadow: "0 1px 3px rgba(17, 19, 24, 0.04)",
+                  }}
+                >
+                  <InputGroup.Text
+                    style={{
+                      backgroundColor: "#ffffff",
+                      borderRight: 0,
+                      border: "1.5px solid #E5E5E1",
+                      padding: "0 14px",
+                    }}
+                  >
+                    <FaSearch style={{ color: "#9A9A95", width: 14, height: 14 }} />
+                  </InputGroup.Text>
+                  <Form.Control
+                    type="text"
+                    placeholder="Search here..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    style={{
+                      borderLeft: 0,
+                      border: "1.5px solid #E5E5E1",
+                      backgroundColor: "#ffffff",
+                      fontSize: "0.92rem",
+                      letterSpacing: "-0.006em",
+                      height: "44px",
+                      padding: "0.55rem 0.85rem",
+                      color: "#15171C",
+                    }}
+                  />
+                </InputGroup>
+              </div>
+              <Card
+                className="shadow-sm border-0"
+                style={{ borderRadius: "8px", minWidth: "260px" }}
+              >
+                <Card.Body className="p-3">
+                  <h6
+                    className="mb-2 fw-bold text-dark"
+                    style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                  >
+                    Time Period
+                  </h6>
+                  <Row className="g-2">
+                    <Col xs={6}>
+                      <Form.Select
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className="form-control"
+                        size="sm"
+                        style={{ fontSize: "0.82rem", height: "45px" }}
+                      >
+                        <option value="">Month</option>
+                        {months.map((month, index) => (
+                          <option key={month} value={index + 1}>
+                            {month.slice(0, 3)}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                    <Col xs={6}>
+                      <Form.Select
+                        value={selectedYear}
+                        onChange={(e) => setSelectedYear(e.target.value)}
+                        className="form-control"
+                        size="sm"
+                        style={{ fontSize: "0.82rem", height: "45px" }}
+                      >
+                        <option value="">Year</option>
+                        {years.map((year) => (
+                          <option key={year} value={year}>
+                            {year}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                  </Row>
+                </Card.Body>
+              </Card>
             </div>
+
+            {/* Booking Type filter card — full-width row above the table. */}
+            <Row className="mb-3 g-1">
+              <Col xs={12}>
+                <Card
+                  className="shadow-sm border-0 w-100"
+                  style={{ borderRadius: "8px" }}
+                >
+                  <Card.Body className="p-3">
+                    <h6
+                      className="mb-2 fw-bold"
+                      style={{
+                        fontSize: "0.7rem",
+                        letterSpacing: "0.08em",
+                        textTransform: "uppercase",
+                        color: "#8A8A85",
+                      }}
+                    >
+                      Booking Type
+                    </h6>
+                    <Row className="g-2">
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <Form.Select
+                          id="package-booking-type"
+                          value={status}
+                          onChange={(e) => setStatus(e.target.value)}
+                          size="sm"
+                          aria-label="Booking type filter"
+                          style={{ fontSize: "0.85rem", height: "46px" }}
+                        >
+                          <option value="all">All</option>
+                          <option value="upcoming">Upcoming</option>
+                          <option value="completed">Completed</option>
+                          <option value="cancelled">Cancelled</option>
+                        </Form.Select>
+                      </Col>
+                    </Row>
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
 
             {/* List of Bookings Section */}
             <Card
@@ -280,74 +441,6 @@ const PackageBookingList = () => {
                 <span>List of Bookings</span>
               </Card.Header>
               <Card.Body style={{ padding: "1.5rem 1rem 1rem" }}>
-                {/* Toolbar row 1: pills + page size + search */}
-                <div
-                  className="d-flex flex-wrap justify-content-between align-items-center gap-2"
-                  style={{ marginBottom: "1.5rem" }}
-                >
-                  <div className="d-inline-flex p-1 rounded" style={{ backgroundColor: "#f3f4f6" }}>
-                    {[
-                      { value: "upcoming", label: "Upcoming" },
-                      { value: "completed", label: "Completed" },
-                      { value: "cancelled", label: "Cancelled" },
-                    ].map((opt) => {
-                      const active = status === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => setStatus(opt.value)}
-                          className="border-0 px-3 py-1"
-                          style={{
-                            backgroundColor: active ? "#ffffff" : "transparent",
-                            color: active ? "#101828" : "#667085",
-                            fontSize: "0.78rem",
-                            fontWeight: active ? 600 : 500,
-                            borderRadius: "6px",
-                            boxShadow: active ? "0 1px 2px rgba(16,24,40,0.08)" : "none",
-                            transition: "all 0.15s",
-                          }}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="d-flex align-items-center gap-2">
-                    <Form.Select
-                      value={perPage}
-                      onChange={(e) => setPerPage(Number(e.target.value))}
-                      size="sm"
-                      style={{ width: "auto", fontSize: "0.8rem" }}
-                    >
-                      {PER_PAGE_OPTIONS.map((option) => (
-                        <option key={option} value={option}>
-                          {option} / page
-                        </option>
-                      ))}
-                    </Form.Select>
-                    <InputGroup size="sm" style={{ width: "280px" }}>
-                      <InputGroup.Text
-                        style={{
-                          fontSize: "0.75rem",
-                          backgroundColor: "#ffffff",
-                          borderRight: "none",
-                          color: "#98a2b3",
-                        }}
-                      >
-                        <FaSearch />
-                      </InputGroup.Text>
-                      <Form.Control
-                        type="text"
-                        placeholder="Search bookings..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        style={{ fontSize: "0.8rem", borderLeft: "none" }}
-                      />
-                    </InputGroup>
-                  </div>
-                </div>
-
                 {/* Table */}
                 {loading ? (
                   <div className="text-center py-5">
@@ -468,50 +561,91 @@ const PackageBookingList = () => {
                       .saas-table tbody tr:first-child td { border-top: none; }
                       .saas-table tbody tr:hover { background-color: #fafbfc; }
                     `}</style>
-
-                    {/* Pagination */}
-                    <div className="d-flex justify-content-between align-items-center mt-3">
-                      <div className="text-muted small">
-                        Showing {displayStart} to {displayEnd} of {totalElements} entries
-                      </div>
-                      {totalPages > 1 && (
-                        <Pagination className="mb-0">
-                          <Pagination.Prev
-                            disabled={page === 1}
-                            onClick={() => handlePageChange(page - 1)}
-                          />
-                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                            let pageNum;
-                            if (totalPages <= 5) {
-                              pageNum = i + 1;
-                            } else if (page <= 3) {
-                              pageNum = i + 1;
-                            } else if (page >= totalPages - 2) {
-                              pageNum = totalPages - 4 + i;
-                            } else {
-                              pageNum = page - 2 + i;
-                            }
-                            return (
-                              <Pagination.Item
-                                key={pageNum}
-                                active={pageNum === page}
-                                onClick={() => handlePageChange(pageNum)}
-                              >
-                                {pageNum}
-                              </Pagination.Item>
-                            );
-                          })}
-                          <Pagination.Next
-                            disabled={page === totalPages}
-                            onClick={() => handlePageChange(page + 1)}
-                          />
-                        </Pagination>
-                      )}
-                    </div>
                   </>
                 )}
               </Card.Body>
             </Card>
+
+            {/* Pagination — separate card mirroring the hotel-booking-list footer. */}
+            {!loading && filteredBookings.length > 0 && (
+              <Card
+                className="shadow-sm border-0 mt-3"
+                style={{ borderRadius: "8px" }}
+              >
+                <Card.Body className="py-3">
+                  <div className="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <div
+                      className="text-muted"
+                      style={{ fontSize: "0.875rem" }}
+                    >
+                      Showing{" "}
+                      <span className="fw-semibold text-dark">{displayStart}</span>{" "}
+                      to{" "}
+                      <span className="fw-semibold text-dark">{displayEnd}</span>{" "}
+                      of{" "}
+                      <span className="fw-semibold text-dark">{totalElements}</span>{" "}
+                      entries
+                    </div>
+                    <div className="d-flex align-items-center gap-2">
+                      <span
+                        className="text-muted"
+                        style={{ fontSize: "0.8rem" }}
+                      >
+                        Rows per page
+                      </span>
+                      <Form.Select
+                        size="sm"
+                        value={perPage}
+                        onChange={(e) => setPerPage(Number(e.target.value))}
+                        style={{ width: "auto", fontSize: "0.8rem" }}
+                      >
+                        {PER_PAGE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </div>
+                    <Pagination className="mb-0">
+                      <Pagination.Prev
+                        disabled={page === 1}
+                        onClick={() => page > 1 && handlePageChange(page - 1)}
+                        style={{
+                          cursor: page === 1 ? "not-allowed" : "pointer",
+                          opacity: page === 1 ? 0.5 : 1,
+                        }}
+                      />
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                        (pageNumber) => (
+                          <Pagination.Item
+                            key={pageNumber}
+                            active={page === pageNumber}
+                            onClick={() => handlePageChange(pageNumber)}
+                            style={{
+                              cursor: "pointer",
+                              minWidth: "38px",
+                              textAlign: "center",
+                            }}
+                          >
+                            {pageNumber}
+                          </Pagination.Item>
+                        ),
+                      )}
+                      <Pagination.Next
+                        disabled={page === totalPages}
+                        onClick={() =>
+                          page < totalPages && handlePageChange(page + 1)
+                        }
+                        style={{
+                          cursor: page === totalPages ? "not-allowed" : "pointer",
+                          opacity: page === totalPages ? 0.5 : 1,
+                        }}
+                      />
+                    </Pagination>
+                  </div>
+                </Card.Body>
+              </Card>
+            )}
           </Container>
         </main>
       </div>

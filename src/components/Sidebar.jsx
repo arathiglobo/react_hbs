@@ -22,7 +22,7 @@ import {
   Trophy,
   Award,
 } from "lucide-react";
-import { FaBrain, FaFileAlt, FaImages, FaRobot, FaTags, FaUser } from "react-icons/fa";
+import { FaAd, FaBrain, FaFileAlt, FaImages, FaRobot, FaTags, FaUser } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
 
 
@@ -36,6 +36,20 @@ export default function Sidebar() {
   const sidebarRef = useRef(null);
   const offcanvasRef = useRef(null);
   const [hotelId, setHotelId] = useState(null);
+
+  // Desktop sidebar collapse (remembered across reloads). When collapsed the
+  // <aside> is removed so the page content reclaims the space, and a small
+  // floating button restores it.
+  const [collapsed, setCollapsed] = useState(
+    () => localStorage.getItem("sidebarCollapsed") === "true",
+  );
+  const toggleCollapsed = () => {
+    setCollapsed((c) => {
+      const next = !c;
+      localStorage.setItem("sidebarCollapsed", String(next));
+      return next;
+    });
+  };
 
   const storedRoles = (localStorage.getItem("userRole") || "")
     .split(",")
@@ -538,13 +552,18 @@ export default function Sidebar() {
     },
 
     {
-      label: "Offer",
+      label: "Banners",
       to: "/offer",
       roles: ["admin"],
     },
     {
-      label: "Upload Offer Image",
+      label: "Offer Image",
       to: "/upload-offer-image",
+      roles: ["admin"],
+    },
+    {
+      label: "Advertisements",
+      to: "/advertisements",
       roles: ["admin"],
     },
 
@@ -679,7 +698,39 @@ export default function Sidebar() {
         )}
       </header>
 
+      {/* Floating button to re-open the sidebar when collapsed (desktop) */}
+      {collapsed && (
+        <button
+          type="button"
+          className="d-none d-lg-flex"
+          onClick={toggleCollapsed}
+          aria-label="Open sidebar"
+          title="Open sidebar"
+          style={{
+            position: "fixed",
+            top: 70,
+            left: 8,
+            zIndex: 1500,
+            border: "1px solid var(--color-border, #e5e7eb)",
+            background: "#fff",
+            color: "#EC0B43",
+            width: 34,
+            height: 34,
+            borderRadius: 8,
+            cursor: "pointer",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: "0 2px 8px rgba(0,0,0,.12)",
+            fontSize: 18,
+            lineHeight: 1,
+          }}
+        >
+          ☰
+        </button>
+      )}
+
       {/* Sidebar for large screens */}
+      {!collapsed && (
       <aside
         className="sidebar d-none d-lg-block"
         ref={sidebarRef}
@@ -693,6 +744,31 @@ export default function Sidebar() {
           // zIndex: 100,
         }}
       >
+        {/* Collapse control */}
+        <div className="d-flex justify-content-end px-2 pt-2">
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-label="Collapse sidebar"
+            title="Collapse sidebar"
+            style={{
+              border: "1px solid var(--color-border, #e5e7eb)",
+              background: "#fff",
+              color: "#EC0B43",
+              width: 28,
+              height: 28,
+              borderRadius: 8,
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 16,
+              lineHeight: 1,
+            }}
+          >
+            «
+          </button>
+        </div>
         <Nav className="flex-column">
           {filteredItems.map((item) => {
             const hasChildren =
@@ -817,6 +893,7 @@ export default function Sidebar() {
           })}
         </Nav>
       </aside>
+      )}
 
       {/* Offcanvas for small screens */}
       <Offcanvas show={show} onHide={handleClose}>
@@ -991,11 +1068,14 @@ function getIcon(label) {
     case "Report":
       return <BarChart3 {...iconProps} />;
 
-    case "Offer":
+    case "Banners":
       return <Tag {...iconProps} />;
 
-    case "Upload Offer Image":
+    case "Offer Image":
       return <ImagePlus {...iconProps} />;
+
+    case "Advertisements":
+      return <FaAd {...iconProps} />;
 
     case "Occupancy":
       return <FaUser {...iconProps} />;

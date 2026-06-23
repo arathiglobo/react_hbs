@@ -139,7 +139,11 @@ const PaxInformation = ({
   // user may enter. They start with only the primary (lead) adult and may
   // opt in to enter more via the "Add extra adult" / "Add extra child"
   // buttons — they are not forced to fill every seat the category allows.
-  const maxAdults = Number(searchParams.adultCount) || 1;
+  // Always allow at least one extra adult above whatever was searched
+  // for — the "Add extra adult" button needs a non-zero headroom to be
+  // useful even when the search began with a single adult.
+  const searchedAdults = Number(searchParams.adultCount) || 1;
+  const maxAdults = Math.max(2, searchedAdults);
   const maxChildren = Number(searchParams.childCount) || 0;
 
   const currentAdults = localData.travellers.filter((t) => t.type === "Adult").length;
@@ -339,7 +343,9 @@ const PaxInformation = ({
     <Form.Select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      style={{ height: "58px", minWidth: "50px" }}
+      // minWidth + paddingRight ensure the selected text ("Mr"/"Ms"/"Mrs")
+      // isn't hidden behind Bootstrap's chevron arrow inside a narrow column.
+      style={{ height: "58px", minWidth: "90px", paddingRight: "2rem" }}
       disabled={isViewMode}
     >
       <option value="Mr">Mr</option>
@@ -387,7 +393,7 @@ const PaxInformation = ({
             )}
           </div>
           <Row className="g-3">
-            <Col md={1}>
+            <Col md={2}>
               <Form.Group>
                 <Form.Label className="booking-field-label">Title</Form.Label>
                 {titleSelect(pax.title, (v) =>
@@ -408,7 +414,7 @@ const PaxInformation = ({
                 />
               </Form.Group>
             </Col>
-            <Col md={4}>
+            <Col md={3}>
               <Form.Group>
                 <Form.Label className="booking-field-label">
                   Middle name
@@ -473,49 +479,46 @@ const PaxInformation = ({
         );
       })}
 
-      {/* Add-extra controls — only render a button when the category allows
-          more of that type. Both buttons disable themselves when the user
-          has already reached the cap. */}
-      {(maxAdults > 1 || maxChildren > 0) && (
-        <div className="d-flex flex-wrap gap-2 mt-2">
-          {maxAdults > 1 && (
-            <Button
-              variant="outline-primary"
-              size="sm"
-              onClick={() => addExtraTraveller("Adult")}
-              disabled={!canAddAdult}
-              title={
-                canAddAdult
-                  ? `Add another adult (max ${maxAdults})`
-                  : `Maximum ${maxAdults} adult${maxAdults === 1 ? "" : "s"} for this package category`
-              }
-            >
-              + Add extra adult{" "}
-              <span className="text-muted">
-                ({currentAdults}/{maxAdults})
-              </span>
-            </Button>
-          )}
-          {maxChildren > 0 && (
-            <Button
-              variant="outline-primary"
-              size="sm"
-              onClick={() => addExtraTraveller("Child")}
-              disabled={!canAddChild}
-              title={
-                canAddChild
-                  ? `Add a child (max ${maxChildren})`
-                  : `Maximum ${maxChildren} child${maxChildren === 1 ? "" : "ren"} for this package category`
-              }
-            >
-              + Add extra child{" "}
-              <span className="text-muted">
-                ({currentChildren}/{maxChildren})
-              </span>
-            </Button>
-          )}
-        </div>
-      )}
+      {/* Add-extra controls — the Adult button is always rendered (cap is
+          guaranteed >= 2 above); the Child button only renders when the
+          package category actually allows children. Both buttons disable
+          themselves when the user has already reached the cap. */}
+      <div className="d-flex flex-wrap gap-2 mt-2">
+        <Button
+          variant="outline-primary"
+          size="sm"
+          onClick={() => addExtraTraveller("Adult")}
+          disabled={!canAddAdult}
+          title={
+            canAddAdult
+              ? `Add another adult (max ${maxAdults})`
+              : `Maximum ${maxAdults} adult${maxAdults === 1 ? "" : "s"} for this package category`
+          }
+        >
+          + Add extra adult{" "}
+          <span className="text-muted">
+            ({currentAdults}/{maxAdults})
+          </span>
+        </Button>
+        {maxChildren > 0 && (
+          <Button
+            variant="outline-primary"
+            size="sm"
+            onClick={() => addExtraTraveller("Child")}
+            disabled={!canAddChild}
+            title={
+              canAddChild
+                ? `Add a child (max ${maxChildren})`
+                : `Maximum ${maxChildren} child${maxChildren === 1 ? "" : "ren"} for this package category`
+            }
+          >
+            + Add extra child{" "}
+            <span className="text-muted">
+              ({currentChildren}/{maxChildren})
+            </span>
+          </Button>
+        )}
+      </div>
 
       <div className="sticky-nav-row d-flex justify-content-between">
         <button className="btn-nav-prev" onClick={onPrev}>
@@ -525,6 +528,12 @@ const PaxInformation = ({
           className="btn-nav-next"
           onClick={() => {
             if (!validatePaxData()) return;
+            // Mode of payment moved to this step's right sidebar; gate the
+            // confirm-booking flow on it being selected.
+            if (!bookingData?.programme?.modeOfPayment) {
+              toast.error("Please select a mode of payment.");
+              return;
+            }
             // Prime the popup with whatever was previously accepted so a
             // user who reopens it doesn't have to re-tick the box.
             setTermsCheck(!!bookingData?.programme?.termsAccepted);

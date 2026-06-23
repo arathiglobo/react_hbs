@@ -38,6 +38,8 @@ const BasicDetails = ({ data, updateData, onNext }) => {
   // Whenever the selected category changes, push its adult/child/childAge/
   // occupancy into the shared booking state so downstream tabs (Pax Info,
   // Order summary, submission payload) keep working unchanged.
+  // packageCategoryName is also propagated so PackageBooking.jsx can
+  // adjust the Total Price sidebar with a sharing-based multiplier.
   useEffect(() => {
     if (!selectedCategory) return;
     const updated = {
@@ -46,6 +48,7 @@ const BasicDetails = ({ data, updateData, onNext }) => {
       childCount: selectedCategory.children != null ? selectedCategory.children : (localData.childCount || 0),
       childAge: selectedCategory.childAge != null ? selectedCategory.childAge : (localData.childAge || ""),
       occupancy: selectedCategory.occupancy != null ? selectedCategory.occupancy : (localData.occupancy ?? null),
+      packageCategoryName: selectedCategory.name || "",
     };
     setLocalData(updated);
     updateData(updated);

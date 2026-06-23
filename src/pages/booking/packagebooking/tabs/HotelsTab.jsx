@@ -9,23 +9,11 @@ import {
   FaPhoneAlt,
   FaEnvelope,
   FaPlaneDeparture,
-  FaCalendarCheck,
   FaMapMarkerAlt,
   FaChevronDown,
   FaShieldAlt,
-  FaCreditCard,
-  FaUniversity,
-  FaMoneyBillWave,
-  FaWallet,
   FaRegClock,
 } from "react-icons/fa";
-
-const PAYMENT_MODES = [
-  { value: "CREDIT", label: "Agent credit limit", icon: FaWallet },
-  { value: "CARD", label: "Card payment", icon: FaCreditCard },
-  { value: "BANK_TRANSFER", label: "Bank transfer", icon: FaUniversity },
-  { value: "CASH", label: "Cash", icon: FaMoneyBillWave },
-];
 
 const HotelsTab = ({ searchParams, bookingData, programme, updateData, updateProgramme, onPrev, onNext }) => {
   const [hotels, setHotels] = useState([]);
@@ -176,17 +164,6 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           </Col>
           <Col md={5}>
             <div className="prg-hero-inputs">
-              <label className="prg-hero-input-row">
-                <span className="prg-hero-input-icon"><FaCalendarCheck /></span>
-                <span className="prg-hero-input-body">
-                  <span className="prg-hero-input-label">Check-in date</span>
-                  <input
-                    type="date"
-                    value={programme.checkInDate || ""}
-                    onChange={(e) => setField("checkInDate", e.target.value)}
-                  />
-                </span>
-              </label>
               <label className="prg-hero-input-row">
                 <span className="prg-hero-input-icon"><FaPlaneDeparture /></span>
                 <span className="prg-hero-input-body">
@@ -393,83 +370,46 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         </div>
       </div>
 
-      {/* ────── Footer: Mode of payment ──────
-          T&C acceptance was moved to the Pax Info step (popup dialog
-          after the user clicks Confirm booking). */}
-      <Row className="g-3 mt-1">
-        <Col lg={12}>
-          <div className="prg-pay">
-            <div className="prg-pay-title">
-              <FaCreditCard className="me-2" />Mode of payment
-              <span className="prg-pay-required">required</span>
-            </div>
-            <div className="prg-pay-options">
-              {PAYMENT_MODES.map((m) => {
-                const Icon = m.icon;
-                const selected = programme.modeOfPayment === m.value;
-                return (
-                  <button
-                    type="button"
-                    key={m.value}
-                    className={`prg-pay-option ${selected ? "selected" : ""}`}
-                    onClick={() => setField("modeOfPayment", m.value)}
-                  >
-                    <Icon className="prg-pay-option-icon" />
-                    <span>{m.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </Col>
-      </Row>
+      {/* Mode of payment moved to the Pax Info step's right sidebar (below
+          the Total Price card). T&C acceptance lives in the Confirm-booking
+          popup on the same step. */}
 
       <div className="sticky-nav-row d-flex justify-content-between">
         <button className="btn-nav-prev" onClick={onPrev}>← Previous</button>
-        <button
-          className="btn-nav-next"
-          onClick={() => {
-            if (!programme.modeOfPayment) {
-              toast.error("Please select a mode of payment.");
-              return;
-            }
-            onNext();
-          }}
-        >
-          Next →
-        </button>
+        <button className="btn-nav-next" onClick={onNext}>Next →</button>
       </div>
 
       <style>{`
         /* === HERO === */
         .prg-hero {
-          background:
-            radial-gradient(1200px 200px at -10% -50%, rgba(255,255,255,0.18), transparent),
-            linear-gradient(135deg, #1e3a5f 0%, #2563eb 60%, #3b82f6 100%);
-          color: #fff;
+          background: #ffffff;
+          color: #15171C;
           padding: 22px 26px;
           border-radius: 18px;
-          box-shadow: 0 10px 30px -10px rgba(37, 99, 235, 0.45);
+          border: 1px solid #ECECE8;
+          box-shadow: 0 1px 3px rgba(17, 19, 24, 0.04), 0 10px 24px rgba(17, 19, 24, 0.04);
         }
         .prg-hero-eyebrow {
           font-size: 0.7rem;
           letter-spacing: 0.18em;
-          color: rgba(255,255,255,0.75);
+          color: #8A8A85;
           font-weight: 600;
+          text-transform: uppercase;
         }
         .prg-hero-title {
           font-size: 1.7rem;
           font-weight: 700;
           margin: 4px 0 8px;
+          color: #15171C;
           display: flex;
           align-items: center;
           gap: 10px;
           flex-wrap: wrap;
         }
-        .prg-hero-divider { opacity: 0.55; font-weight: 400; }
+        .prg-hero-divider { color: #C5C5BE; font-weight: 400; }
         .prg-hero-sub {
           font-size: 0.86rem;
-          color: rgba(255,255,255,0.8);
+          color: #6B7280;
           line-height: 1.5;
           max-width: 540px;
         }
@@ -482,16 +422,15 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           display: flex;
           align-items: center;
           gap: 12px;
-          background: rgba(255,255,255,0.12);
-          border: 1px solid rgba(255,255,255,0.25);
+          background: #FAFAF8;
+          border: 1px solid #E5E5E1;
           border-radius: 12px;
           padding: 8px 12px;
-          backdrop-filter: blur(6px);
           transition: background 0.15s, border-color 0.15s;
         }
         .prg-hero-input-row:focus-within {
-          background: rgba(255,255,255,0.18);
-          border-color: rgba(255,255,255,0.55);
+          background: #ffffff;
+          border-color: #C5C5BE;
         }
         .prg-hero-input-icon {
           width: 32px;
@@ -500,7 +439,8 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          background: rgba(255,255,255,0.18);
+          background: #F0F0EC;
+          color: #6B7280;
           flex-shrink: 0;
         }
         .prg-hero-input-body {
@@ -513,21 +453,17 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           font-size: 0.66rem;
           letter-spacing: 0.1em;
           text-transform: uppercase;
-          color: rgba(255,255,255,0.75);
+          color: #8A8A85;
         }
         .prg-hero-input-row input {
           background: transparent;
           border: none;
           outline: none;
-          color: #fff;
+          color: #15171C;
           font-size: 0.9rem;
           padding: 2px 0;
         }
-        .prg-hero-input-row input::placeholder { color: rgba(255,255,255,0.55); }
-        .prg-hero-input-row input::-webkit-calendar-picker-indicator {
-          filter: invert(1) opacity(0.8);
-          cursor: pointer;
-        }
+        .prg-hero-input-row input::placeholder { color: #9A9A95; }
 
         /* === SECTION CARDS === */
         .prg-section {
@@ -850,72 +786,9 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           padding-left: 18px;
         }
 
-        /* === PAYMENT === */
-        .prg-pay {
-          border: 1.5px solid #e5e7eb;
-          border-radius: 14px;
-          padding: 14px 16px;
-          background: #fff;
-          height: 100%;
-        }
-        .prg-pay-title {
-          display: flex;
-          align-items: center;
-          font-weight: 600;
-          font-size: 0.88rem;
-          color: #1e293b;
-          margin-bottom: 10px;
-        }
-        .prg-pay-required {
-          margin-left: auto;
-          font-size: 0.62rem;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-          color: #b91c1c;
-          background: #fee2e2;
-          padding: 2px 8px;
-          border-radius: 999px;
-          font-weight: 700;
-        }
-        .prg-pay-options {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 8px;
-        }
-        .prg-pay-option {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 10px 12px;
-          border: 1.5px solid #e5e7eb;
-          background: #fff;
-          border-radius: 10px;
-          font-size: 0.78rem;
-          font-weight: 500;
-          color: #475569;
-          cursor: pointer;
-          transition: all 0.15s;
-          text-align: left;
-        }
-        .prg-pay-option:hover {
-          border-color: #93c5fd;
-          color: #1e293b;
-        }
-        .prg-pay-option.selected {
-          border-color: #2563eb;
-          background: #eff6ff;
-          color: #1e3a8a;
-          box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
-        }
-        .prg-pay-option-icon {
-          flex-shrink: 0;
-          color: #2563eb;
-        }
-
         /* Responsive tweaks */
         @media (max-width: 991.98px) {
           .prg-hero-title { font-size: 1.4rem; }
-          .prg-pay-options { grid-template-columns: 1fr; }
         }
       `}</style>
     </div>

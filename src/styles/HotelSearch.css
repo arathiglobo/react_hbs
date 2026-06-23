@@ -1264,3 +1264,38 @@
   transform: translateY(-2px) !important; background: #C90939 !important;
   box-shadow: 0 18px 42px rgba(236, 11, 67, .40) !important;
 }
+
+/* ── Search criteria polish ──────────────────────────────────────────
+   Uniform field heights and tidy react-select controls so the criteria
+   row lines up cleanly (the destination placeholder used to wrap to two
+   lines and push that field taller than its neighbours). */
+.hs-page .search-card-modern .form-control,
+.hs-page .search-card-modern .form-select {
+  min-height: 46px !important;
+}
+.hs-page .modern-select .css-13cymwt-control,
+.hs-page .modern-select .css-t3ipsp-control {
+  min-height: 46px !important;
+  border-radius: 12px !important;
+  border: 1.5px solid #E5E5E1 !important;
+  background: #FAFAF8 !important;
+}
+/* Keep the selected value / placeholder on a single line */
+.hs-page .modern-select [class*="-placeholder"],
+.hs-page .modern-select [class*="-singleValue"] {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* A touch more breathing room between the two criteria rows */
+.hs-page .search-card-modern form .row + .row {
+  margin-top: .25rem;
+}
+
+/* Search card + ads sit side by side and match heights on large screens */
+.hs-search-ads-row {
+  align-items: stretch;
+}
+.hs-search-ads-row > .flex-grow-1 > .search-card-modern {
+  height: 100%;
+}

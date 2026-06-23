@@ -13,6 +13,7 @@ import TopBar from "../components/TopBar";
 import Select from "react-select";
 import AgentSelect from "../components/AgentSelect";
 import axiosInstance from "../components/AxiosInstance";
+import AdvertisementCarousel from "../components/AdvertisementCarousel";
 import { FaSearch, FaStar } from "react-icons/fa";
 import { useNavigate, useLocation } from "react-router-dom";
 import "../styles/HotelSearch.css";
@@ -1443,8 +1444,10 @@ export default function HotelSearch({ force24Hour = false } = {}) {
         <Sidebar />
 
         <main className="flex-grow-1 p-4 hs-page">
-          {/* ── Search Card ── */}
-          <Card className="shadow-sm rounded-xl mb-4 search-card-modern bg-white">
+          {/* ── Search Card + Ads ── */}
+          <div className="d-flex gap-3 align-items-stretch mb-4 hs-search-ads-row">
+           <div className="flex-grow-1" style={{ minWidth: 0 }}>
+          <Card className="shadow-sm rounded-xl search-card-modern bg-white h-100">
             <Card.Body className="p-4">
               <div className="mb-4 text-start">
                 <h2 className="fw-semibold text-primary mb-1">
@@ -1874,6 +1877,13 @@ export default function HotelSearch({ force24Hour = false } = {}) {
               </Form>
             </Card.Body>
           </Card>
+           </div>
+            {/* Ads carousel — city matches first, then all active ads */}
+            <AdvertisementCarousel
+              cityId={selectedDestination?.value}
+              cityName={selectedDestination?.label}
+            />
+          </div>
 
           {/* ── Progress Bar ── */}
           <SearchProgressBar
