@@ -479,7 +479,7 @@ export default function CustomBookingDetailView() {
                                   <div className="mb-1 small">
                                     Room Details
                                   </div>
-                                  <Table size="sm" className="mb-0 border">
+                                  <Table responsive size="sm" className="mb-0 border">
                                     <thead className="bg-light">
                                       <tr
                                         className="text-muted"

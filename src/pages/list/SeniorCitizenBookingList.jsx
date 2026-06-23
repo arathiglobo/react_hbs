@@ -341,7 +341,7 @@ export default function SeniorCitizenBookingList() {
         <main className="flex-grow-1 p-3" style={{ width: "100%", overflow: "hidden" }}>
           <Container fluid className="px-0">
             {/* Header: Title + Search (left) | Time Period (right) */}
-            <div className="d-flex justify-content-between align-items-end mb-3">
+            <div className="d-flex flex-wrap gap-3 justify-content-between align-items-end mb-3">
               <div>
                 <h3 className="fw-bold text-dark mb-2">Senior Citizen Bookings</h3>
                 <InputGroup style={{ height: "40px", width: "300px" }}>
@@ -479,6 +479,10 @@ export default function SeniorCitizenBookingList() {
                       style={{
                         tableLayout: "auto",
                         width: "100%",
+                        // keep the table at its natural width on small screens so
+                        // the .thin-scrollbar wrapper scrolls horizontally instead
+                        // of crushing the columns to one-letter-per-line.
+                        minWidth: "1000px",
                         fontSize: "0.78rem",
                         borderCollapse: "separate",
                         borderSpacing: 0,

@@ -218,7 +218,7 @@ export default function Calendar() {
             {/* Calendar Display */}
             <Card.Body className="p-0">
               {/* Calendar Header */}
-              <div className="d-flex justify-content-between align-items-center p-3 border-bottom">
+              <div className="d-flex flex-wrap gap-2 justify-content-between align-items-center p-3 border-bottom">
                 <div className="d-flex align-items-center">
                   <Button
                     variant="outline-secondary"
@@ -240,7 +240,7 @@ export default function Calendar() {
                     Today
                   </Button>
                 </div>
-                <h5 className="text-primary mb-0">{formatDate(currentDate)}</h5>
+                <h5 className="text-primary mb-0 text-nowrap">{formatDate(currentDate)}</h5>
               </div>
 
               {/* Calendar Grid */}

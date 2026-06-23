@@ -98,7 +98,7 @@ const ChangePassword = () => {
         <main className="flex-grow-1 p-3" style={{ minWidth: 0, overflowX: "hidden" }}>
           {/* Content */}
           <div className="container mt-5 d-flex justify-content-center">
-          <Card className="p-4 shadow-sm rounded-4" style={{ width: "450px" }}>
+          <Card className="p-4 shadow-sm rounded-4 w-100" style={{ maxWidth: "450px" }}>
             <h4 className="fw-bold text-center mb-4">Change Password</h4>
 
             {successMsg && (

@@ -242,10 +242,10 @@ const openEdit = (item) => {
         <Sidebar />
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
-            <Card.Header className="d-flex justify-content-between align-items-center">
+            <Card.Header className="d-flex flex-column flex-sm-row gap-2 justify-content-between align-items-stretch align-items-sm-center">
               <span className="fw-semibold">Country</span>
               {/* Country Name Search */}
-              <Form.Group className="hotel-search-bar">
+              <Form.Group className="hotel-search-bar flex-grow-1 flex-sm-grow-0">
                 <Form.Control
                   type="text"
                   placeholder="Search country..."

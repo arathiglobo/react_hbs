@@ -494,14 +494,14 @@ const HotelMapping = () => {
 
               {/* Search Results */}
               <div className="mt-4">
-                <div className="d-flex justify-content-between align-items-center mb-4">
+                <div className="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-4">
                   <h5 className="mb-0 fw-bold text-dark">
                     Search Results{" "}
                     {searchResults.length > 0 &&
                       `(${searchResults.length} Matches)`}
                   </h5>
                   {searchResults.length > 0 && (
-                    <div className="d-flex align-items-center gap-3">
+                    <div className="d-flex flex-wrap align-items-center gap-3">
                       <Button
                         variant="success"
                         size="sm"
@@ -524,7 +524,7 @@ const HotelMapping = () => {
                       </Button>
                       <div
                         className="position-relative"
-                        style={{ width: "300px" }}
+                        style={{ width: "min(300px, 100%)" }}
                       >
                         <Form.Control
                           type="text"

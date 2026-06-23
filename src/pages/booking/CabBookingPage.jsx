@@ -1529,7 +1529,7 @@ const CabBookingPage = () => {
           {(searchCriteria.pickupType || searchCriteria.dropoffType) && (
             <>
               <h6 className="fw-bold mb-2">Pickup &amp; Dropoff</h6>
-              <Table size="sm" bordered className="mb-3">
+              <Table responsive size="sm" bordered className="mb-3">
                 <thead className="table-light">
                   <tr>
                     <th style={{ width: "20%" }}></th>
@@ -1592,7 +1592,7 @@ const CabBookingPage = () => {
           {guests.length > 0 && (
             <>
               <h6 className="fw-bold mb-2">Passengers ({guests.length})</h6>
-              <Table size="sm" bordered className="mb-3">
+              <Table responsive size="sm" bordered className="mb-3">
                 <thead className="table-light">
                   <tr>
                     <th>#</th>

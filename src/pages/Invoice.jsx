@@ -301,7 +301,7 @@ export default function Invoice() {
         <Sidebar />
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
-            <Card.Header className="d-flex justify-content-between align-items-center">
+            <Card.Header className="d-flex flex-wrap gap-2 justify-content-between align-items-center">
               <div className="d-flex align-items-center">
                 <Button
                   variant="link"

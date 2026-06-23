@@ -134,6 +134,15 @@
   font-weight: 500;
   color: #EC0B43;
   transition: all 0.3s ease;
+  /* keep the "N adults · N room ▾" summary on a single line. It stays wide
+     enough to read (min-width); when the column is too narrow to fit it
+     alongside the Add Room button, the button wraps below (the row uses
+     flex-wrap) instead of the summary collapsing into an ugly multi-line
+     stack. Ellipsis is a safety net for extreme cases. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 150px;
 }
 
 .rooms-summary-btn-modern:hover {

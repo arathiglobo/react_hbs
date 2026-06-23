@@ -1067,7 +1067,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
         >
           <Container fluid className="px-0">
             {/* Header: Title + Search (left) | Time Period (right) */}
-            <div className="d-flex justify-content-between align-items-end mb-3">
+            <div className="d-flex flex-wrap gap-3 justify-content-between align-items-end mb-3">
               <div>
                 <h3 className="fw-bold text-dark mb-2">
                   {force24HourOnly ? "24 Hour Check-In Bookings" : "Hotel Bookings"}
@@ -1210,10 +1210,13 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                       className="mb-0 align-middle table-bordered"
                       style={{
                         // Auto layout so the table fits the page width and
-                        // column widths flex to content. Falls back to a
-                        // horizontal scroll only on extremely narrow viewports.
+                        // column widths flex to content. minWidth keeps the
+                        // table at its natural width on small screens so the
+                        // overflowX:auto wrapper scrolls horizontally instead
+                        // of crushing the columns to one-letter-per-line.
                         tableLayout: "auto",
                         width: "100%",
+                        minWidth: "1000px",
                         fontSize: "0.78rem",
                         borderCollapse: "separate",
                         borderSpacing: 0,

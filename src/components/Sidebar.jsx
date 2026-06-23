@@ -688,9 +688,19 @@ export default function Sidebar() {
             onClick={handleShow}
             aria-label="Open menu"
             style={{
+              // Pin to the top-left, vertically centered within the red
+              // TopBar (which is sticky at top:0, ~56px tall). White so it
+              // is visible on the red bar; above it via z-index. The TopBar
+              // brand has a 40px left margin on mobile to clear this button.
               position: "fixed",
-
+              top: 10,
+              left: 10,
               zIndex: 4000,
+              color: "#fff",
+              fontSize: 26,
+              lineHeight: 1,
+              padding: "2px 8px",
+              textDecoration: "none",
             }}
           >
             ☰
@@ -744,32 +754,36 @@ export default function Sidebar() {
           // zIndex: 100,
         }}
       >
-        {/* Collapse control */}
-        <div className="d-flex justify-content-end px-2 pt-2">
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            aria-label="Collapse sidebar"
-            title="Collapse sidebar"
-            style={{
-              border: "1px solid var(--color-border, #e5e7eb)",
-              background: "#fff",
-              color: "#EC0B43",
-              width: 28,
-              height: 28,
-              borderRadius: 8,
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 16,
-              lineHeight: 1,
-            }}
-          >
-            «
-          </button>
-        </div>
-        <Nav className="flex-column">
+        {/* Collapse control — pinned to the top-right corner of the sidebar
+            so it no longer reserves an empty row above the menu. The <aside>
+            is position:sticky, which anchors this absolutely-positioned button. */}
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-label="Collapse sidebar"
+          title="Collapse sidebar"
+          style={{
+            position: "absolute",
+            top: 8,
+            right: 8,
+            zIndex: 5,
+            border: "1px solid var(--color-border, #e5e7eb)",
+            background: "#fff",
+            color: "#EC0B43",
+            width: 28,
+            height: 28,
+            borderRadius: 8,
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 16,
+            lineHeight: 1,
+          }}
+        >
+          «
+        </button>
+        <Nav className="flex-column" style={{ paddingTop: 6 }}>
           {filteredItems.map((item) => {
             const hasChildren =
               Array.isArray(item.children) && item.children.length > 0;

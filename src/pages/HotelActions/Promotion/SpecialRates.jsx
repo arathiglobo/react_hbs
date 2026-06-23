@@ -548,6 +548,8 @@ const SpecialRates = () => {
                           className={
                             validationErrors.marketType ? "is-invalid" : ""
                           }
+                          menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
+                          menuPosition="fixed"
                           styles={{
                             control: (base, state) => ({
                               ...base,
@@ -558,6 +560,7 @@ const SpecialRates = () => {
                                 ? "0 0 0 0.25rem rgba(220, 53, 69, 0.25)"
                                 : base.boxShadow,
                             }),
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
                           }}
                         />
                         {validationErrors.marketType && (
@@ -587,6 +590,9 @@ const SpecialRates = () => {
                           }
                           classNamePrefix="react-select"
                           placeholder="Select Countries"
+                          menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
+                          menuPosition="fixed"
+                          styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                         />
                       </Form.Group>
                     </Col>

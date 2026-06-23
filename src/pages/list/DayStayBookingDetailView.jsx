@@ -350,7 +350,7 @@ export default function DayStayBookingDetailView() {
                     Rooms
                   </Card.Header>
                   <Card.Body>
-                    <Table size="sm" bordered className="mb-0">
+                    <Table responsive size="sm" bordered className="mb-0">
                       <thead className="table-light">
                         <tr>
                           <th>#</th>

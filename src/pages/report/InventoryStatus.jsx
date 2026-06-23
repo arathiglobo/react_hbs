@@ -26,6 +26,18 @@ export default function InventoryStatus() {
   
   // Calendar events
   const [calendarEvents, setCalendarEvents] = useState([]);
+
+  // Responsive calendar: below md the month grid + 3-button toolbar is too
+  // cramped, so switch to a single-day time view with a compact toolbar.
+  // Desktop (>=768px) keeps the original month view + toolbar unchanged.
+  const [isCalMobile, setIsCalMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 768 : false
+  );
+  useEffect(() => {
+    const onResize = () => setIsCalMobile(window.innerWidth < 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   
   // Loading states
   const [isLoadingHotels, setIsLoadingHotels] = useState(false);
@@ -513,13 +525,20 @@ export default function InventoryStatus() {
                   </div>
                 )}
                 <FullCalendar
+                  // Re-mount when crossing the breakpoint so initialView applies.
+                  key={isCalMobile ? "cal-mobile" : "cal-desktop"}
                   plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
-                  initialView="dayGridMonth"
-                  headerToolbar={{
-                    left: "prev,next today",
-                    center: "title",
-                    right: "dayGridMonth,timeGridWeek,timeGridDay",
-                  }}
+                  initialView={isCalMobile ? "timeGridDay" : "dayGridMonth"}
+                  headerToolbar={
+                    isCalMobile
+                      ? { left: "prev,next", center: "title", right: "today" }
+                      : {
+                          left: "prev,next today",
+                          center: "title",
+                          right: "dayGridMonth,timeGridWeek,timeGridDay",
+                        }
+                  }
+                  handleWindowResize={true}
                   events={calendarEvents}
                   height="80vh"
                   eventClick={(info) => {

@@ -391,7 +391,7 @@ export default function CabBookingDetailView() {
             </SectionHeader>
             <div className="border border-top-0 rounded-bottom mb-3 bg-white">
               {Array.isArray(booking.guests) && booking.guests.length > 0 ? (
-                <Table size="sm" hover className="mb-0 align-middle">
+                <Table responsive size="sm" hover className="mb-0 align-middle">
                   <thead style={{ backgroundColor: "#f8f9fa" }}>
                     <tr>
                       <th style={{ width: 50 }}>#</th>

@@ -515,7 +515,7 @@ export default function DayActivities() {
         <Sidebar />
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
-            <Card.Header className="d-flex justify-content-between align-items-center">
+            <Card.Header className="d-flex flex-wrap justify-content-between align-items-center gap-2">
               <span className="fw-semibold">Day Activities</span>
               <div className="d-flex align-items-center gap-3">
                 {/* <Form.Select className="form-select-sm" style={{ width: "auto" }}>

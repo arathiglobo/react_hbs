@@ -8,10 +8,13 @@ import {
 } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
 
-// Make the carousel (and its images) stretch to the full height of the card
-// so the ad fills down to the card's end, matching the search card height.
+// The ad sits in a flex row beside the search card. We give it its own fixed
+// height and align it to the top (align-self:flex-start) instead of letting it
+// stretch to the row height — otherwise expanding the "Rooms & Guests" panel
+// grows the search card, and the stretched ad grows (and its image distorts)
+// along with it. With a fixed height only the form grows; the ad stays put.
 const ADS_CSS = `
-.hs-ads-panel { display: flex; }
+.hs-ads-panel { display: flex; align-self: flex-start; }
 .hs-ads-panel .card { display: flex; flex-direction: column; width: 100%; }
 .hs-ads-panel .card-body { display: flex; flex-direction: column; flex: 1 1 auto; }
 .hs-ads-panel .hs-ads-carousel { flex: 1 1 auto; display: flex; }
@@ -26,10 +29,20 @@ const ADS_CSS = `
 }
 .hs-ads-slide { height: 100%; display: flex; flex-direction: column; }
 .hs-ads-img {
-  flex: 1 1 auto; min-height: 180px; overflow: hidden; border-radius: 8px;
+  /* Fixed image height + auto panel height (see .hs-ads-panel): the panel
+     sizes to image + meta so the "Learn More" meta below is never clipped,
+     while align-self:flex-start keeps the ad from stretching with the form. */
+  flex: 0 0 auto; height: 340px; overflow: hidden; border-radius: 8px;
   cursor: pointer;
+  /* neutral letterbox background behind images whose aspect ratio doesn't
+     exactly match the box (so contain doesn't leave a transparent gap) */
+  background: #f6f6f4;
+  display: flex; align-items: center; justify-content: center;
 }
-.hs-ads-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* contain (not cover) so the WHOLE ad image is always visible — cover was
+   cropping the top/bottom (or sides) of posters with different aspect ratios
+   as you moved between slides. */
+.hs-ads-img img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .hs-ads-fallback {
   flex: 1 1 auto; min-height: 180px; border-radius: 8px;
   background: linear-gradient(135deg,#4f46e5,#7c3aed);

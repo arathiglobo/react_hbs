@@ -685,6 +685,9 @@ const HoneyMoonPackageRates = () => {
                       isClearable
                       isDisabled={viewMode}
                       placeholder="Search country"
+                      menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
+                      menuPosition="fixed"
+                      styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                     />
                     {validationErrors[`country_${idx}`] && (
                       <div className="text-danger small mt-1">
@@ -713,6 +716,9 @@ const HoneyMoonPackageRates = () => {
                       placeholder={
                         !row.country ? "Select country first" : "Search place"
                       }
+                      menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
+                      menuPosition="fixed"
+                      styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                     />
                     {validationErrors[`place_${idx}`] && (
                       <div className="text-danger small mt-1">
@@ -769,6 +775,9 @@ const HoneyMoonPackageRates = () => {
                       isLoading={hotelsLoading}
                       isDisabled={viewMode}
                       placeholder="Click to choose hotels..."
+                      menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
+                      menuPosition="fixed"
+                      styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                     />
                   </Col>
                   <Col md={2}>

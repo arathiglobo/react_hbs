@@ -122,6 +122,12 @@ export default function AgentSelect({
       onChange={(opt) => onChange && onChange(opt ? opt.value : "")}
       formatOptionLabel={formatOptionLabel}
       filterOption={safeFilterOption}
+      // Render the menu in a body-level portal so it floats above
+      // sticky bars / scroll containers and never gets clipped or
+      // pushed off-screen on small viewports. Desktop position is
+      // unchanged (popper keeps it anchored to the control).
+      menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
+      menuPosition="fixed"
       styles={{
         control: (base) => ({
           ...base,
@@ -131,6 +137,7 @@ export default function AgentSelect({
           boxShadow: isInvalid ? "0 0 0 0.15rem rgba(220,53,69,.15)" : base.boxShadow,
         }),
         menu: (base) => ({ ...base, zIndex: 5 }),
+        menuPortal: (base) => ({ ...base, zIndex: 9999 }),
       }}
     />
   );

@@ -1445,7 +1445,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
 
         <main className="flex-grow-1 p-4 hs-page">
           {/* ── Search Card + Ads ── */}
-          <div className="d-flex gap-3 align-items-stretch mb-4 hs-search-ads-row">
+          <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
            <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <Card className="shadow-sm rounded-xl search-card-modern bg-white h-100">
             <Card.Body className="p-4">
@@ -1762,7 +1762,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                     <Form.Label className="fw-semibold text-dark">
                       Rooms & Guests
                     </Form.Label>
-                    <div className="d-flex gap-2">
+                    <div className="d-flex flex-wrap gap-2">
                       <Button
                         variant="outline-primary"
                         className="flex-grow-1 text-start rooms-summary-btn-modern"

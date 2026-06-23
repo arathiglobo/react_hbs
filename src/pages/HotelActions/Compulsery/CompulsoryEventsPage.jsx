@@ -911,6 +911,9 @@ const CompulsoryEventsPage = () => {
                           className={
                             formErrors.marketypeIds ? "is-invalid" : ""
                           }
+                          menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
+                          menuPosition="fixed"
+                          styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                         />
                         {formErrors.marketypeIds && (
                           <div className="invalid-feedback">

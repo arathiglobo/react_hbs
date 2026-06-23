@@ -261,7 +261,7 @@ export default function BookingEditPage() {
                         No new rooms. Click "+ Add Room" to add one.
                       </div>
                     ) : (
-                      <Table bordered size="sm" style={{ fontSize: "0.82rem" }}>
+                      <Table responsive bordered size="sm" style={{ fontSize: "0.82rem" }}>
                         <thead style={{ backgroundColor: "#f8f8f8" }}>
                           <tr>
                             <th>#</th>

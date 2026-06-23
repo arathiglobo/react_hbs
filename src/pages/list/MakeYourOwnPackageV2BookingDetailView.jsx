@@ -396,7 +396,7 @@ export default function MakeYourOwnPackageV2BookingDetailView() {
                       Hotels
                     </Card.Header>
                     <Card.Body>
-                      <Table size="sm" bordered className="mb-0">
+                      <Table responsive size="sm" bordered className="mb-0">
                         <thead className="table-light">
                           <tr>
                             <th>#</th>
@@ -440,7 +440,7 @@ export default function MakeYourOwnPackageV2BookingDetailView() {
                       Transfers
                     </Card.Header>
                     <Card.Body>
-                      <Table size="sm" bordered className="mb-0">
+                      <Table responsive size="sm" bordered className="mb-0">
                         <thead className="table-light">
                           <tr>
                             <th>#</th>
@@ -490,7 +490,7 @@ export default function MakeYourOwnPackageV2BookingDetailView() {
                       Tours &amp; Activities
                     </Card.Header>
                     <Card.Body>
-                      <Table size="sm" bordered className="mb-0">
+                      <Table responsive size="sm" bordered className="mb-0">
                         <thead className="table-light">
                           <tr>
                             <th>#</th>
@@ -533,7 +533,7 @@ export default function MakeYourOwnPackageV2BookingDetailView() {
                       Guests ({details.guests.length})
                     </Card.Header>
                     <Card.Body>
-                      <Table size="sm" bordered className="mb-0">
+                      <Table responsive size="sm" bordered className="mb-0">
                         <thead className="table-light">
                           <tr>
                             <th style={{ width: 40 }}>S.No</th>
@@ -632,6 +632,7 @@ export default function MakeYourOwnPackageV2BookingDetailView() {
                                         </span>
                                       ) : (
                                         <Table
+                                          responsive
                                           size="sm"
                                           borderless
                                           className="mb-0"

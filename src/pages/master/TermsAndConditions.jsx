@@ -606,7 +606,7 @@ export default function TermsAndConditions() {
         <Sidebar />
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
-            <Card.Header className="d-flex justify-content-between align-items-center">
+            <Card.Header className="d-flex flex-column flex-sm-row gap-2 justify-content-between align-items-stretch align-items-sm-center">
               <div>
                 <h4 className="fw-bold text-primary mb-0">Terms and Conditions</h4>
               </div>

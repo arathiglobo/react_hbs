@@ -1087,7 +1087,12 @@ export default function MeetAndSpaceBookingPage() {
                             }}
                             placeholder="Select state..."
                             isClearable
-                            styles={errors.stateId ? invalidSelectStyles : undefined}
+                            menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
+                            menuPosition="fixed"
+                            styles={{
+                              ...(errors.stateId ? invalidSelectStyles : {}),
+                              menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                            }}
                             className={errors.stateId ? "text-danger" : ""}
                           />
                           {errors.stateId && (
@@ -1122,7 +1127,12 @@ export default function MeetAndSpaceBookingPage() {
                             }}
                             placeholder="Select city..."
                             isClearable
-                            styles={errors.cityId ? invalidSelectStyles : undefined}
+                            menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
+                            menuPosition="fixed"
+                            styles={{
+                              ...(errors.cityId ? invalidSelectStyles : {}),
+                              menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                            }}
                             className={errors.cityId ? "text-danger" : ""}
                           />
                           {errors.cityId && (

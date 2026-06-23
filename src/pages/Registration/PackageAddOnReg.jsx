@@ -140,10 +140,10 @@ export default function PackageAddOnReg() {
   return (
     <div className="d-flex" style={{ minHeight: "100vh" }}>
       <Sidebar />
-      <div className="flex-grow-1" style={{ background: "#f6f8fa" }}>
+      <div className="flex-grow-1" style={{ background: "#f6f8fa", minWidth: 0 }}>
         <TopBar />
         <div className="container-fluid p-4">
-          <div className="d-flex justify-content-between align-items-center mb-3">
+          <div className="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
             <h4 className="fw-bold mb-0">MYOP Package Add-Ons</h4>
             <Button variant="primary" onClick={openCreate}>
               <FaPlus className="me-2" /> New Add-On

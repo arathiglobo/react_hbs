@@ -23,6 +23,7 @@ const Hotels = () => {
   return (
     <div className="container">
       <h2 className="text-center">List of Hotels</h2>
+      <div className="table-responsive">
       <table className="table table-striped table-bordered">
         <thead>
           <caption>Hotel List</caption>
@@ -45,6 +46,7 @@ const Hotels = () => {
           <tr></tr>
         </tbody>
       </table>
+      </div>
     </div>
   );
 };

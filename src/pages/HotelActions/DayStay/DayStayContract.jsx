@@ -316,7 +316,7 @@ export default function DayStayContract() {
             </Modal.Header>
             <Modal.Body>
               {selectedValidityData.length > 0 ? (
-                <Table striped bordered hover size="sm">
+                <Table responsive striped bordered hover size="sm">
                   <thead className="table-light">
                     <tr>
                       <th>#</th>

@@ -687,6 +687,9 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
                           value={formData.marketType}
                           onChange={(sel) => setFormData({ ...formData, marketType: sel || [] })}
                           className={validationErrors.marketType ? "is-invalid" : ""}
+                          menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
+                          menuPosition="fixed"
+                          styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                         />
                         {validationErrors.marketType && (
                           <div className="invalid-feedback d-block">{validationErrors.marketType}</div>
@@ -705,6 +708,9 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
                           }))}
                           value={formData.excludeCountry}
                           onChange={(sel) => setFormData({ ...formData, excludeCountry: sel || [] })}
+                          menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
+                          menuPosition="fixed"
+                          styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                         />
                       </Form.Group>
                     </Col>

@@ -88,6 +88,15 @@ label, .form-label { letter-spacing: -.006em; }
   overflow: hidden;
 }
 
+/* ── Responsive shell · stop the flex main column overflowing on mobile ───────
+   Every page lays out as <div class="d-flex"><Sidebar/><main class="flex-grow-1">.
+   A flex item defaults to min-width:auto, so wide children (data tables, grids)
+   push <main> past the viewport and the whole page scrolls sideways on phones.
+   min-width:0 lets <main> shrink to the viewport so inner .table-responsive /
+   overflow containers scroll instead of the page. No effect on desktop, where
+   <main> already has room — so the desktop layout is unchanged. */
+main.flex-grow-1 { min-width: 0; }
+
 /* ── Tables · a little more breathing room ────────────────────────────────── */
 .table > :not(caption) > * > * { padding-top: .72rem; padding-bottom: .72rem; }
 

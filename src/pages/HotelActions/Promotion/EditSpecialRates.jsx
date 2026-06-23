@@ -683,6 +683,9 @@ export default function EditSpecialRates() {
                           }
                           classNamePrefix="react-select"
                           placeholder="Select Market Type"
+                          menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
+                          menuPosition="fixed"
+                          styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                         />
                       </Form.Group>
                     </Col>
@@ -706,6 +709,9 @@ export default function EditSpecialRates() {
                           }
                           classNamePrefix="react-select"
                           placeholder="Select Countries"
+                          menuPortalTarget={typeof document !== "undefined" ? document.body : undefined}
+                          menuPosition="fixed"
+                          styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
                         />
                       </Form.Group>
                     </Col>

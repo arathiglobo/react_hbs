@@ -1681,10 +1681,13 @@ const handleAmenityChange = (e) => {
       <Topbar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4">
+        {/* minWidth:0 lets this flex item shrink to the viewport instead of
+            growing to its content's intrinsic width, which was causing
+            horizontal overflow on mobile. */}
+        <main className="flex-grow-1 p-4" style={{ minWidth: 0 }}>
           <Container fluid>
             {/* Header Section */}
-            <div className="d-flex justify-content-between align-items-center mb-4">
+            <div className="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-4">
               <div>
                 <h2 className="text-primary mb-1 d-flex align-items-center gap-2">
                   <FaHotel className="me-2" />
@@ -1737,7 +1740,7 @@ const handleAmenityChange = (e) => {
                     "linear-gradient(135deg, #EC0B43 0%, #C90939 100%)",
                 }}
               >
-                <div className="d-flex justify-content-between align-items-center">
+                <div className="d-flex flex-wrap gap-2 justify-content-between align-items-center">
                   <h4 className="mb-0">
                     <FaHotel className="me-2" />
                     Hotel Registration Form
@@ -2700,14 +2703,14 @@ const handleAmenityChange = (e) => {
 
                           {/* Week Days Row */}
                           <div className="mb-4">
-                            <div className="d-flex align-items-center mb-2">
+                            <div className="d-flex flex-wrap align-items-center mb-2">
                               <span
                                 className="text-danger fw-bold me-3"
                                 style={{ minWidth: "120px" }}
                               >
                                 Week Days
                               </span>
-                              <div className="d-flex gap-4">
+                              <div className="d-flex flex-wrap gap-4">
                                 {weekdays.map((day) => {
                                   const isChecked = formData.weekDays[day.key];
                                   // console.log(`Weekday ${day.label}: fieldName=${day.key}, isChecked=${isChecked}`);
@@ -2736,14 +2739,14 @@ const handleAmenityChange = (e) => {
 
                           {/* Week End Days Row */}
                           <div>
-                            <div className="d-flex align-items-center">
+                            <div className="d-flex flex-wrap align-items-center">
                               <span
                                 className="text-danger fw-bold me-3"
                                 style={{ minWidth: "120px" }}
                               >
                                 Week End Days
                               </span>
-                              <div className="d-flex gap-4">
+                              <div className="d-flex flex-wrap gap-4">
                                 {weekdays.map((day) => {
                                   // Remove 'wd' prefix and capitalize first letter
                                   const dayName = day.key.replace('wd', '');
