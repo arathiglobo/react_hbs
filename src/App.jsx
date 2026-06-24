@@ -407,7 +407,7 @@ export default function App() {
         <Route path="/report/time-limit-daily-sales" element={<TimeLimitOnlineDailySalesReport />} />
 
        {/* New Booking */}
-        <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} />
+        <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} /> 
         {/* Dedicated 24-Hour Check-In hotel search — same component as
             /new-booking/hotel but with `force24Hour` so it always runs
             in 24-hour mode (toggle hidden, time pickers visible, probe
