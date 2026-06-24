@@ -1,69 +1,60 @@
-/**
- * SchefferDriverBookingList.jsx
- *
- * Booking-list page for the Scheffer Driver new-booking flow.
- *
- *   GET /api/scheffer/grouped-list — upcoming / completed / cancelled buckets,
- *   accepts optional month / year params (Time Period filter).
- *
- * The Action column contains only the View (eye) icon — clicking it
- * navigates to a dedicated detail page
- * (/booking-details/scheffer-driver-booking/:id) where Voucher / Cancel /
- * Record-Actual-Usage live as buttons at the bottom-left.
- *
- * Visually mirrors the Hotel Booking List (`hbl-modern` skin): title +
- * 300px search left, Time Period card right, Booking Type filter card,
- * bordered table, FaInbox empty state, StatusPill, plain blue FaEye
- * action, and a pagination card with Showing/Rows-per-page/Prev-Pages-Next.
- */
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Container,
   Card,
   Form,
-  Table,
-  InputGroup,
-  Spinner,
   Row,
   Col,
+  Table,
+  Badge,
+  InputGroup,
+  Spinner,
   Pagination,
+  Button,
+  Modal,
+  Container,
 } from "react-bootstrap";
-import { FaSearch, FaEye, FaMapMarkerAlt, FaInbox } from "react-icons/fa";
-import { useNavigate } from "react-router-dom";
+import {
+  FaSearch,
+  FaEye,
+  FaTimes,
+  FaExclamationTriangle,
+  FaFilePdf,
+  FaDownload,
+  FaInbox,
+  FaUser,
+} from "react-icons/fa";
+import { toast } from "react-hot-toast";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
-import toast from "react-hot-toast";
 import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
+// Column-width hints kept in sync with HotelBookingList/LongStayBookingList
+// so the honeymoon page lines up visually under the shared hbl-modern skin.
 const COLUMN_WIDTHS = {
   sn: "40px",
-  booking: "120px",
-  customer: "160px",
-  cab: "150px",
-  travel: "260px",
+  customerName: "150px",
+  bookingCode: "110px",
+  bookDate: "95px",
+  bookingDetails: "260px",
   pax: "90px",
-  amount: "120px",
+  total: "120px",
   status: "110px",
-  action: "70px",
+  action: "110px",
 };
 
-// Status meta — Scheffer buckets map to Confirmed (upcoming),
-// Completed and Cancelled. Extra entries kept for parity with HBL.
 const STATUS_META = {
   CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  Confirmed: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
   COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
+  Completed: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
   PENDING:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  Pending:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
-  UPCOMING:  { label: "Upcoming",  bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  Cancelled: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
 };
-
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 const StatusPill = ({ meta, raw }) => {
   if (!meta) return <span className="text-muted">{raw || "-"}</span>;
@@ -95,47 +86,77 @@ const StatusPill = ({ meta, raw }) => {
   );
 };
 
-const fmtDateLong = (iso) => {
+// "dd/mm/yyyy" — same shape HotelBookingList uses so dates render identically.
+const formatShortDate = (dateString) => {
+  if (!dateString) return "";
+  const normalized = String(dateString).includes("T")
+    ? dateString
+    : `${dateString}T00:00:00`;
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return `${day}/${month}/${d.getFullYear()}`;
+};
+
+const fmtDate = (iso) => {
   if (!iso) return "-";
   const d = new Date(iso);
   if (isNaN(d)) return typeof iso === "string" ? iso.slice(0, 10) : "-";
-  return d.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 };
 
-const normStatus = (v) =>
-  String(v ?? "").replace(/[\s_-]+/g, "").toLowerCase();
-
-const SchefferDriverBookingList = ({
-  apiBase = "/api/scheffer",
-  pageTitle = "Chauffeur Driver & Limousine Bookings",
-}) => {
-  const navigate = useNavigate();
+const HoneymoonBookingList = () => {
+  const [data, setData] = useState({ content: [], totalElements: 0, totalPages: 0 });
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState({
-    upcoming: [],
-    completed: [],
-    cancelled: [],
-  });
-
-  // Filters mirror HBL: search + booking-type dropdown + month/year.
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [size, setSize] = useState(10);
   const [status, setStatus] = useState("all");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
+  const [selected, setSelected] = useState(null);
+  const [toCancel, setToCancel] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
 
-  // Pagination (1-indexed) mirrors HBL.
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(10);
+  // ── Voucher modal state ────────────────────────────────────────────
+  const [voucherFor, setVoucherFor] = useState(null);
+  const [voucherLoading, setVoucherLoading] = useState(false);
+  const [voucherPdfUrl, setVoucherPdfUrl] = useState("");
 
-  const years = useMemo(() => {
-    const current = new Date().getFullYear();
-    return Array.from({ length: current - 2014 }, (_, i) => 2020 + i);
-  }, []);
+  const openVoucher = async (booking) => {
+    setVoucherFor(booking);
+    setVoucherLoading(true);
+    setVoucherPdfUrl("");
+    try {
+      const res = await axiosInstance.get(
+        `/api/honeymoon/booking/${booking.id}/voucher`
+      );
+      if (res.data && res.data.status === "SUCCESS" && res.data.pdfUrl) {
+        setVoucherPdfUrl(res.data.pdfUrl);
+      } else {
+        toast.error(res.data?.message || "Failed to generate voucher PDF");
+      }
+    } catch (e) {
+      console.error("Voucher fetch failed", e);
+      toast.error(
+        e?.response?.data?.message || "Failed to load voucher PDF"
+      );
+    } finally {
+      setVoucherLoading(false);
+    }
+  };
 
+  const closeVoucher = () => {
+    setVoucherFor(null);
+    setVoucherPdfUrl("");
+  };
+
+  // Same seven booking-type options the Hotel Booking List ships with.
+  // Honeymoon bookings have no Reconfirmed / Invoiced flag today; those
+  // filters fall through to `false` until backend emits matching fields.
   const statusOptions = useMemo(
     () => [
       { value: "all", label: "All" },
@@ -149,66 +170,71 @@ const SchefferDriverBookingList = ({
     [],
   );
 
-  const fetchList = async () => {
+  const normStatus = (v) =>
+    String(v ?? "").replace(/[\s_-]+/g, "").toLowerCase();
+
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+  const years = useMemo(() => {
+    const current = new Date().getFullYear();
+    return Array.from({ length: current - 2014 }, (_, i) => 2020 + i);
+  }, []);
+
+  const load = async () => {
     setLoading(true);
     try {
-      const role = (localStorage.getItem("currentActiveRole") || "")
-        .toLowerCase();
-      const params = {
-        upcomingPage: 0,
-        upcomingSize: 500,
-        completedPage: 0,
-        completedSize: 500,
-        cancelledPage: 0,
-        cancelledSize: 500,
-      };
-      if (role === "agent") {
-        const agentId = localStorage.getItem("agentId");
-        if (agentId && agentId !== "null") params.agentId = agentId;
-      }
-      if (selectedMonth) params.month = selectedMonth;
-      if (selectedYear) params.year = selectedYear;
-      const res = await axiosInstance.get(`${apiBase}/grouped-list`, {
-        params,
-      });
-      const d = res.data || {};
-      setData({
-        upcoming: d.upcoming || [],
-        completed: d.completed || [],
-        cancelled: d.cancelled || [],
-      });
+      const res = await axiosInstance.get(
+        `/api/honeymoon/booking/list?page=${page}&size=${size}&search=${encodeURIComponent(debouncedSearch)}`
+      );
+      setData(res.data);
     } catch (e) {
-      console.error("Error loading bookings:", e);
-      toast.error("Failed to load bookings");
+      console.error(e);
+      setData({ content: [], totalElements: 0, totalPages: 0 });
     } finally {
       setLoading(false);
     }
   };
 
+  // Debounce the search box so we don't fire on every keystroke.
   useEffect(() => {
-    fetchList();
-    // eslint-disable-next-line
-  }, [apiBase, selectedMonth, selectedYear]);
+    const id = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(0);
+    }, 300);
+    return () => clearTimeout(id);
+  }, [search]);
 
-  // Flatten the three buckets into one list, tagging each row with the
-  // bucket it came from so the Status column / filter can use it.
-  const allRows = useMemo(() => {
-    const tag = (arr, bucket) =>
-      (arr || []).map((b) => ({ ...b, __bucket: bucket }));
-    return [
-      ...tag(data.upcoming, "upcoming"),
-      ...tag(data.completed, "completed"),
-      ...tag(data.cancelled, "cancelled"),
-    ];
-  }, [data]);
+  useEffect(() => {
+    load();
+  }, [page, size, debouncedSearch]); // eslint-disable-line
 
-  const filteredBookings = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    return allRows.filter((b) => {
-      // Bucket / status filter
-      if (status === "upcoming" && b.__bucket !== "upcoming") return false;
-      if (status === "completed" && b.__bucket !== "completed") return false;
-      if (status === "cancelled" && b.__bucket !== "cancelled") return false;
+  // Reset to first page whenever a client-side filter changes.
+  useEffect(() => {
+    setPage(0);
+  }, [status, selectedMonth, selectedYear]);
+
+  // Client-side filter pass over the current server page — mirrors the
+  // seven booking-type options + month/year time period used elsewhere.
+  const filteredContent = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    return (data.content || []).filter((b) => {
+      const isCancelled = !!b.isCancelled;
+      const ref = b.startingDate;
+      const refDate = ref ? new Date(ref) : null;
+      if (refDate && !isNaN(refDate.getTime())) refDate.setHours(0, 0, 0, 0);
+
+      if (status === "cancelled") return isCancelled;
+      if (isCancelled) return false;
+
+      if (status === "upcoming") {
+        if (!refDate || refDate < now) return false;
+      }
+      if (status === "completed") {
+        if (!refDate || refDate >= now) return false;
+      }
       if (status === "onrequest") {
         const s = normStatus(b.bookingStatus || b.confirmationStatus);
         if (s !== "pending" && s !== "onrequest") return false;
@@ -225,43 +251,43 @@ const SchefferDriverBookingList = ({
         if (!inv) return false;
       }
 
-      if (needle) {
-        const hay = [
-          b.bookingCode,
-          b.packageBookCode,
-          b.cabName,
-          b.cabProviderName,
-          b.transporter,
-          b.custFirstName,
-          b.custLastName,
-          b.pickupName,
-          b.dropoffName,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        if (!hay.includes(needle)) return false;
+      if (refDate && (selectedMonth || selectedYear)) {
+        const m = refDate.getMonth() + 1;
+        const y = refDate.getFullYear();
+        if (selectedMonth && Number(selectedMonth) !== m) return false;
+        if (selectedYear && Number(selectedYear) !== y) return false;
       }
+
       return true;
     });
-  }, [allRows, search, status]);
+  }, [data.content, status, selectedMonth, selectedYear]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [search, status, selectedMonth, selectedYear, perPage]);
+  const handleCancel = async () => {
+    if (!toCancel) return;
+    setCancelling(true);
+    try {
+      await axiosInstance.put(`/api/honeymoon/booking/${toCancel.id}/cancel`, {
+        reason: cancelReason || "Cancelled by user",
+      });
+      toast.success("Booking cancelled");
+      setToCancel(null);
+      setCancelReason("");
+      load();
+    } catch (e) {
+      toast.error("Failed to cancel");
+    } finally {
+      setCancelling(false);
+    }
+  };
 
-  const totalEntries = filteredBookings.length;
-  const safeTotalPages = Math.max(1, Math.ceil(totalEntries / perPage));
-  const currentPage = Math.min(page, safeTotalPages);
-  const serialNumberBase = (currentPage - 1) * perPage;
-  const pageBookings = filteredBookings.slice(
-    serialNumberBase,
-    serialNumberBase + perPage,
-  );
+  const totalEntries = filteredContent.length;
+  const safeTotalPages = Math.max(1, data.totalPages || 1);
+  const currentPage = page + 1;
+  const serialNumberBase = page * size;
   const hasResults = totalEntries > 0;
   const displayStart = hasResults ? serialNumberBase + 1 : 0;
   const displayEnd = hasResults
-    ? Math.min(serialNumberBase + pageBookings.length, totalEntries)
+    ? serialNumberBase + filteredContent.length
     : 0;
 
   const baseCellStyle = {
@@ -285,13 +311,6 @@ const SchefferDriverBookingList = ({
     lineHeight: 1.2,
   };
 
-  const bucketToStatusMeta = (bucket) => {
-    if (bucket === "upcoming") return STATUS_META.CONFIRMED;
-    if (bucket === "completed") return STATUS_META.COMPLETED;
-    if (bucket === "cancelled") return STATUS_META.CANCELLED;
-    return null;
-  };
-
   return (
     <div className="min-vh-100 bg-light d-flex flex-column hbl-modern">
       <TopBar />
@@ -305,7 +324,7 @@ const SchefferDriverBookingList = ({
             {/* Header: Title + Search (left) | Time Period (right) */}
             <div className="d-flex justify-content-between align-items-end mb-3">
               <div>
-                <h3 className="fw-bold text-dark mb-2">{pageTitle}</h3>
+                <h3 className="fw-bold text-dark mb-2">Honeymoon Bookings</h3>
                 <InputGroup style={{ height: "40px", width: "300px" }}>
                   <InputGroup.Text
                     style={{
@@ -351,7 +370,7 @@ const SchefferDriverBookingList = ({
                         style={{ fontSize: "0.82rem", height: "45px" }}
                       >
                         <option value="">Month</option>
-                        {MONTHS.map((month, index) => (
+                        {months.map((month, index) => (
                           <option key={month} value={index + 1}>
                             {month.slice(0, 3)}
                           </option>
@@ -379,7 +398,7 @@ const SchefferDriverBookingList = ({
               </Card>
             </div>
 
-            {/* Filters: Booking Type */}
+            {/* Filters Section */}
             <Row className="mb-2 g-1">
               <Col xs={12}>
                 <Card
@@ -418,11 +437,7 @@ const SchefferDriverBookingList = ({
             {/* Table */}
             <Card
               className="shadow-sm border-0"
-              style={{
-                borderRadius: "8px",
-                overflow: "hidden",
-                width: "100%",
-              }}
+              style={{ borderRadius: "8px", overflow: "hidden", width: "100%" }}
             >
               <Card.Body className="p-0" style={{ width: "100%" }}>
                 {loading ? (
@@ -470,34 +485,35 @@ const SchefferDriverBookingList = ({
                           <th
                             style={{
                               ...baseHeaderStyle,
-                              width: COLUMN_WIDTHS.booking,
+                              width: COLUMN_WIDTHS.customerName,
                             }}
                           >
-                            Booking
+                            Customer Name
                           </th>
                           <th
                             style={{
                               ...baseHeaderStyle,
-                              width: COLUMN_WIDTHS.customer,
+                              width: COLUMN_WIDTHS.bookingCode,
                             }}
                           >
-                            Customer
+                            Booking Code
                           </th>
                           <th
                             style={{
                               ...baseHeaderStyle,
-                              width: COLUMN_WIDTHS.cab,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.bookDate,
                             }}
                           >
-                            Cab
+                            Start Date
                           </th>
                           <th
                             style={{
                               ...baseHeaderStyle,
-                              width: COLUMN_WIDTHS.travel,
+                              width: COLUMN_WIDTHS.bookingDetails,
                             }}
                           >
-                            Travel
+                            Booking Details
                           </th>
                           <th
                             style={{
@@ -506,16 +522,16 @@ const SchefferDriverBookingList = ({
                               width: COLUMN_WIDTHS.pax,
                             }}
                           >
-                            Pax
+                            Pax / Rooms
                           </th>
                           <th
                             style={{
                               ...baseHeaderStyle,
                               textAlign: "right",
-                              width: COLUMN_WIDTHS.amount,
+                              width: COLUMN_WIDTHS.total,
                             }}
                           >
-                            Amount
+                            Total
                           </th>
                           <th
                             style={{
@@ -538,7 +554,7 @@ const SchefferDriverBookingList = ({
                         </tr>
                       </thead>
                       <tbody>
-                        {pageBookings.length === 0 ? (
+                        {filteredContent.length === 0 ? (
                           <tr>
                             <td
                               colSpan={9}
@@ -561,11 +577,15 @@ const SchefferDriverBookingList = ({
                             </td>
                           </tr>
                         ) : (
-                          pageBookings.map((b, i) => {
-                            const sMeta = bucketToStatusMeta(b.__bucket);
+                          filteredContent.map((b, i) => {
+                            const statusText = b.isCancelled
+                              ? "Cancelled"
+                              : b.bookingStatus || "Confirmed";
+                            const sMeta = STATUS_META[statusText];
+                            const pax = (b.adults || 0) + (b.children || 0);
                             return (
                               <tr
-                                key={b.id || b.custombookingId || `${b.__bucket}-${i}`}
+                                key={b.id}
                                 style={{
                                   backgroundColor:
                                     i % 2 === 0 ? "#ffffff" : "#f8f9fa",
@@ -594,159 +614,121 @@ const SchefferDriverBookingList = ({
                                 <td
                                   style={{
                                     ...baseCellStyle,
-                                    width: COLUMN_WIDTHS.booking,
+                                    width: COLUMN_WIDTHS.customerName,
                                   }}
                                 >
-                                  <div className="fw-bold text-primary">
-                                    {b.bookingCode || b.packageBookCode || "-"}
-                                  </div>
-                                  {b.createdAt && (
-                                    <div
-                                      className="text-muted"
-                                      style={{ fontSize: "0.7rem" }}
-                                    >
-                                      {fmtDateLong(b.createdAt)}
-                                    </div>
-                                  )}
-                                </td>
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    width: COLUMN_WIDTHS.customer,
-                                  }}
-                                >
-                                  <div className="fw-medium text-dark">
-                                    {[
-                                      b.custSalutation,
-                                      b.custFirstName,
-                                      b.custLastName,
-                                    ]
-                                      .filter(Boolean)
-                                      .join(" ") || "-"}
-                                  </div>
-                                  {(b.custEmail || b.custPhone) && (
-                                    <div
-                                      className="text-muted"
-                                      style={{ fontSize: "0.7rem" }}
-                                    >
-                                      {b.custEmail || b.custPhone}
-                                    </div>
-                                  )}
-                                </td>
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    width: COLUMN_WIDTHS.cab,
-                                  }}
-                                >
-                                  <div className="fw-medium text-dark">
-                                    {b.cabName || `Cab #${b.cabId || "-"}`}
-                                  </div>
-                                  {b.cabProviderName && (
-                                    <div
-                                      className="text-muted"
-                                      style={{ fontSize: "0.7rem" }}
-                                    >
-                                      {b.cabProviderName}
-                                    </div>
-                                  )}
-                                </td>
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    width: COLUMN_WIDTHS.travel,
-                                  }}
-                                >
-                                  <div className="d-flex align-items-center gap-1">
-                                    <FaMapMarkerAlt
-                                      style={{
-                                        color: "#22c55e",
-                                        fontSize: "0.7rem",
-                                      }}
-                                    />
-                                    <span className="text-dark">
-                                      {b.pickupName || "-"}
-                                    </span>
-                                    {b.pickupTime && (
-                                      <span
-                                        className="text-muted"
-                                        style={{ fontSize: "0.7rem" }}
-                                      >
-                                        @ {b.pickupTime}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="d-flex align-items-center gap-1">
-                                    <FaMapMarkerAlt
-                                      style={{
-                                        color: "#ef4444",
-                                        fontSize: "0.7rem",
-                                      }}
-                                    />
-                                    <span className="text-dark">
-                                      {b.dropoffName || "-"}
-                                    </span>
-                                    {b.dropoffTime && (
-                                      <span
-                                        className="text-muted"
-                                        style={{ fontSize: "0.7rem" }}
-                                      >
-                                        @ {b.dropoffTime}
-                                      </span>
-                                    )}
-                                  </div>
                                   <div
-                                    className="text-muted"
-                                    style={{
-                                      fontSize: "0.7rem",
-                                      marginTop: "2px",
-                                    }}
+                                    className="d-flex align-items-center"
+                                    style={{ gap: "0.35rem" }}
                                   >
-                                    {fmtDateLong(b.pickupDate)}
-                                    {b.dropOffDate
-                                      ? ` → ${fmtDateLong(b.dropOffDate)}`
-                                      : ""}
+                                    <FaUser
+                                      style={{
+                                        color: "#6c757d",
+                                        fontSize: "0.78rem",
+                                        flexShrink: 0,
+                                      }}
+                                    />
+                                    <span className="fw-medium text-dark">
+                                      {b.customerName || "-"}
+                                    </span>
                                   </div>
+                                  {b.mobile && (
+                                    <div
+                                      className="text-muted"
+                                      style={{ fontSize: "0.7rem" }}
+                                    >
+                                      {b.mobile}
+                                    </div>
+                                  )}
                                 </td>
                                 <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.bookingCode,
+                                  }}
+                                >
+                                  <span className="fw-bold text-primary">
+                                    {b.bookingNumber || "-"}
+                                  </span>
+                                </td>
+                                <td
+                                  className="text-muted"
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "center",
+                                    width: COLUMN_WIDTHS.bookDate,
+                                  }}
+                                >
+                                  {formatShortDate(b.startingDate) || "-"}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.bookingDetails,
+                                  }}
+                                >
+                                  <div
+                                    className="d-flex align-items-center"
+                                    style={{
+                                      gap: "0.35rem",
+                                      flexWrap: "wrap",
+                                    }}
+                                  >
+                                    <span
+                                      className="fw-semibold text-dark"
+                                      style={{ fontSize: "0.875rem" }}
+                                    >
+                                      {b.packageName || "-"}
+                                    </span>
+                                    {(b.startingFrom || b.destination) && (
+                                      <span
+                                        className="text-muted"
+                                        style={{ fontSize: "0.75rem" }}
+                                      >
+                                        ({b.startingFrom || "-"} →{" "}
+                                        {b.destination || "-"})
+                                      </span>
+                                    )}
+                                  </div>
+                                  {b.noOfNights ? (
+                                    <div
+                                      className="text-muted"
+                                      style={{ fontSize: "0.7rem" }}
+                                    >
+                                      {b.noOfNights} night
+                                      {b.noOfNights === 1 ? "" : "s"}
+                                    </div>
+                                  ) : null}
+                                </td>
+                                <td
+                                  className="text-muted"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    fontFamily: "monospace",
                                     width: COLUMN_WIDTHS.pax,
                                   }}
                                 >
-                                  <span
-                                    style={{
-                                      fontSize: "0.72rem",
-                                      fontWeight: 600,
-                                    }}
+                                  <div>{pax} pax</div>
+                                  <div
+                                    className="text-muted"
+                                    style={{ fontSize: "0.7rem" }}
                                   >
-                                    {b.noOfAdult || 0} ADT / {b.noOfChild || 0}{" "}
-                                    CHD
-                                  </span>
+                                    {b.rooms || 0} room
+                                    {(b.rooms || 0) === 1 ? "" : "s"}
+                                  </div>
                                 </td>
                                 <td
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "right",
-                                    width: COLUMN_WIDTHS.amount,
+                                    width: COLUMN_WIDTHS.total,
                                     whiteSpace: "nowrap",
                                   }}
                                 >
-                                  <div className="fw-semibold text-dark">
-                                    AED{" "}
-                                    {b.finalAmount != null
-                                      ? b.finalAmount
-                                      : b.totalPrice || b.totalRate || "-"}
-                                  </div>
-                                  {b.packageName && (
-                                    <div
-                                      className="text-muted"
-                                      style={{ fontSize: "0.7rem" }}
-                                    >
-                                      {b.packageName}
-                                    </div>
-                                  )}
+                                  <span className="fw-semibold text-dark">
+                                    ₹ {Number(b.totalAmount || 0).toFixed(2)}
+                                  </span>
                                 </td>
                                 <td
                                   style={{
@@ -755,10 +737,7 @@ const SchefferDriverBookingList = ({
                                     width: COLUMN_WIDTHS.status,
                                   }}
                                 >
-                                  <StatusPill
-                                    meta={sMeta}
-                                    raw={b.__bucket}
-                                  />
+                                  <StatusPill meta={sMeta} raw={statusText} />
                                 </td>
                                 <td
                                   style={{
@@ -767,7 +746,7 @@ const SchefferDriverBookingList = ({
                                     width: COLUMN_WIDTHS.action,
                                   }}
                                 >
-                                  <div className="d-flex justify-content-center align-items-center">
+                                  <div className="d-flex justify-content-center align-items-center gap-2">
                                     <FaEye
                                       role="button"
                                       tabIndex={0}
@@ -777,25 +756,62 @@ const SchefferDriverBookingList = ({
                                         color: "#007bff",
                                         cursor: "pointer",
                                       }}
-                                      onClick={() =>
-                                        navigate(
-                                          `/booking-details/scheffer-driver-booking/${b.id || b.custombookingId}`,
-                                          { state: { booking: b } },
-                                        )
-                                      }
+                                      onClick={() => setSelected(b)}
                                       onKeyDown={(e) => {
-                                        if (
-                                          e.key === "Enter" ||
-                                          e.key === " "
-                                        ) {
+                                        if (e.key === "Enter" || e.key === " ") {
                                           e.preventDefault();
-                                          navigate(
-                                            `/booking-details/scheffer-driver-booking/${b.id || b.custombookingId}`,
-                                            { state: { booking: b } },
-                                          );
+                                          setSelected(b);
                                         }
                                       }}
                                     />
+                                    <FaFilePdf
+                                      role="button"
+                                      tabIndex={0}
+                                      title="Voucher"
+                                      style={{
+                                        fontSize: "16px",
+                                        color: b.isCancelled
+                                          ? "#adb5bd"
+                                          : "#b42318",
+                                        cursor: b.isCancelled
+                                          ? "not-allowed"
+                                          : "pointer",
+                                      }}
+                                      onClick={() =>
+                                        !b.isCancelled && openVoucher(b)
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (
+                                          !b.isCancelled &&
+                                          (e.key === "Enter" || e.key === " ")
+                                        ) {
+                                          e.preventDefault();
+                                          openVoucher(b);
+                                        }
+                                      }}
+                                    />
+                                    {!b.isCancelled && (
+                                      <FaTimes
+                                        role="button"
+                                        tabIndex={0}
+                                        title="Cancel booking"
+                                        style={{
+                                          fontSize: "16px",
+                                          color: "#b42318",
+                                          cursor: "pointer",
+                                        }}
+                                        onClick={() => setToCancel(b)}
+                                        onKeyDown={(e) => {
+                                          if (
+                                            e.key === "Enter" ||
+                                            e.key === " "
+                                          ) {
+                                            e.preventDefault();
+                                            setToCancel(b);
+                                          }
+                                        }}
+                                      />
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -831,7 +847,7 @@ const SchefferDriverBookingList = ({
                       </span>{" "}
                       of{" "}
                       <span className="fw-semibold text-dark">
-                        {totalEntries}
+                        {data.totalElements || totalEntries}
                       </span>{" "}
                       entries
                     </div>
@@ -844,8 +860,11 @@ const SchefferDriverBookingList = ({
                       </span>
                       <Form.Select
                         size="sm"
-                        value={perPage}
-                        onChange={(e) => setPerPage(Number(e.target.value))}
+                        value={size}
+                        onChange={(e) => {
+                          setSize(Number(e.target.value));
+                          setPage(0);
+                        }}
                         style={{ width: "auto", fontSize: "0.8rem" }}
                       >
                         {PER_PAGE_OPTIONS.map((option) => (
@@ -859,7 +878,7 @@ const SchefferDriverBookingList = ({
                       <Pagination.Prev
                         disabled={currentPage === 1}
                         onClick={() =>
-                          currentPage > 1 && setPage(currentPage - 1)
+                          currentPage > 1 && setPage(page - 1)
                         }
                         style={{
                           cursor:
@@ -874,7 +893,7 @@ const SchefferDriverBookingList = ({
                         <Pagination.Item
                           key={pageNumber}
                           active={currentPage === pageNumber}
-                          onClick={() => setPage(pageNumber)}
+                          onClick={() => setPage(pageNumber - 1)}
                           style={{
                             cursor: "pointer",
                             minWidth: "38px",
@@ -887,8 +906,7 @@ const SchefferDriverBookingList = ({
                       <Pagination.Next
                         disabled={currentPage === safeTotalPages}
                         onClick={() =>
-                          currentPage < safeTotalPages &&
-                          setPage(currentPage + 1)
+                          currentPage < safeTotalPages && setPage(page + 1)
                         }
                         style={{
                           cursor:
@@ -907,8 +925,169 @@ const SchefferDriverBookingList = ({
           </Container>
         </main>
       </div>
+
+      <Modal show={!!selected} onHide={() => setSelected(null)} size="lg" centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Booking Details — {selected?.bookingNumber}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {selected && (
+            <>
+              <Row className="g-2 mb-3">
+                <Col md={6}><strong>Package:</strong> {selected.packageName}</Col>
+                <Col md={6}><strong>Route:</strong> {selected.startingFrom} → {selected.destination}</Col>
+                <Col md={6}><strong>Start Date:</strong> {fmtDate(selected.startingDate)}</Col>
+                <Col md={6}><strong>Nights:</strong> {selected.noOfNights}</Col>
+                <Col md={6}><strong>Rooms:</strong> {selected.rooms}</Col>
+                <Col md={6}>
+                  <strong>Pax:</strong> {selected.adults} Adults
+                  {selected.children
+                    ? `, ${selected.children} Children${
+                        Array.isArray(selected.childAges) && selected.childAges.length
+                          ? ` (ages: ${selected.childAges.join(", ")})`
+                          : ""
+                      }`
+                    : ""}
+                </Col>
+                <Col md={6}><strong>Customer:</strong> {selected.customerName} ({selected.mobile})</Col>
+                <Col md={6}><strong>Email:</strong> {selected.email || "-"}</Col>
+                <Col md={6}><strong>Agent:</strong> {selected.agentName || "-"}</Col>
+                <Col md={6}>
+                  <strong>Status:</strong>{" "}
+                  {selected.isCancelled ? (
+                    <Badge bg="danger">Cancelled</Badge>
+                  ) : (
+                    <Badge bg="success">{selected.bookingStatus || "Confirmed"}</Badge>
+                  )}
+                </Col>
+                <Col md={6}><strong>Payment Mode:</strong> {selected.paymentMode || "-"}</Col>
+                <Col md={6}><strong>Booked on:</strong> {selected.createdDate}</Col>
+                {selected.isCancelled && (
+                  <>
+                    <Col md={6}><strong>Cancelled at:</strong> {selected.cancelledAt}</Col>
+                    <Col md={12}><strong>Cancellation reason:</strong> {selected.cancellationReason || "-"}</Col>
+                  </>
+                )}
+                <Col md={12}><strong>Special Request:</strong> {selected.specialRequest || "-"}</Col>
+              </Row>
+              <Table size="sm" bordered>
+                <tbody>
+                  <tr><td>Base Rate (per pax)</td><td className="text-end">₹ {Number(selected.baseRate || 0).toFixed(2)}</td></tr>
+                  <tr><td>Markup ({selected.markupPercent || 0}%)</td><td className="text-end">₹ {Number(selected.markupAmount || 0).toFixed(2)}</td></tr>
+                  <tr><td>Tax ({selected.taxPercent || 0}%)</td><td className="text-end">₹ {Number(selected.taxAmount || 0).toFixed(2)}</td></tr>
+                  <tr className="table-light fw-bold">
+                    <td>Grand Total</td>
+                    <td className="text-end text-success">₹ {Number(selected.totalAmount || 0).toFixed(2)}</td>
+                  </tr>
+                </tbody>
+              </Table>
+            </>
+          )}
+        </Modal.Body>
+      </Modal>
+
+      {/* Voucher modal — backend returns { status, message, pdfUrl };
+          the pdfUrl is loaded into an inline iframe so the agent can scroll
+          through the voucher without leaving the page. */}
+      <Modal
+        show={!!voucherFor}
+        onHide={closeVoucher}
+        size="xl"
+        centered
+        backdrop="static"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>
+            <FaFilePdf className="text-danger me-2" />
+            Voucher — {voucherFor?.bookingNumber}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {voucherLoading ? (
+            <div className="text-center py-5">
+              <Spinner animation="border" />
+              <div className="mt-2 small text-muted">
+                Generating voucher PDF…
+              </div>
+            </div>
+          ) : voucherPdfUrl ? (
+            <div
+              style={{
+                border: "1px solid #dee2e6",
+                borderRadius: 8,
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  padding: "8px 12px",
+                  background: "#f8f9fa",
+                  fontWeight: 600,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <span>Voucher PDF Preview</span>
+                <a
+                  href={voucherPdfUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-sm btn-outline-primary"
+                >
+                  <FaDownload className="me-1" /> Open / Download
+                </a>
+              </div>
+              <iframe
+                src={voucherPdfUrl}
+                title="Honeymoon Voucher"
+                width="100%"
+                height="560px"
+                style={{ border: "none" }}
+              />
+            </div>
+          ) : (
+            <div className="text-muted text-center py-4">
+              No voucher available for this booking.
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={closeVoucher}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={!!toCancel} onHide={() => !cancelling && setToCancel(null)} centered>
+        <Modal.Header closeButton={!cancelling}>
+          <Modal.Title>
+            <FaExclamationTriangle className="text-primary me-2" /> Cancel Booking
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          Cancel booking <strong>{toCancel?.bookingNumber}</strong>?
+          <Form.Group className="mt-3">
+            <Form.Label>Reason (optional)</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={2}
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" disabled={cancelling} onClick={() => setToCancel(null)}>
+            Back
+          </Button>
+          <Button variant="danger" disabled={cancelling} onClick={handleCancel}>
+            {cancelling ? "Cancelling..." : "Confirm Cancel"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };
 
-export default SchefferDriverBookingList;
+export default HoneymoonBookingList;

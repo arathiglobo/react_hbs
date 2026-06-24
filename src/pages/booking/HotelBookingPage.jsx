@@ -111,6 +111,14 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
   const [specialRequests, setSpecialRequests] = useState([]);
   const [bookingConfirmation, setBookingConfirmation] =
     useState("Book & Voucher");
+  // No voucher option is pre-selected: the user must explicitly pick
+  // "Voucher Now" or "Voucher Later" before the booking can proceed.
+  // `bookingConfirmation` keeps its "Book & Voucher" default for the
+  // non-choice flows (on-request / non-refundable / past-deadline, where
+  // the choice card is hidden), so this separate flag is what gates the
+  // radios' checked state and the proceed validation.
+  const [voucherChoiceMade, setVoucherChoiceMade] = useState(false);
+  const [voucherChoiceError, setVoucherChoiceError] = useState(false);
   // Policy + T&C consent flow
   const [showPolicyModal, setShowPolicyModal] = useState(false);
   const [policyData, setPolicyData] = useState(null);
@@ -275,7 +283,15 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
     if (!showVoucherChoice && bookingConfirmation !== "Book & Voucher") {
       setBookingConfirmation("Book & Voucher");
     }
-  }, [bookingData, bookingConfirmation, showVoucherChoice]);
+    // When the choice card isn't shown, there's nothing for the user to
+    // pick — clear the "made a choice" flag so that if the card later
+    // re-appears (e.g. they switch back to an in-deadline refundable rate)
+    // no option is pre-selected.
+    if (!showVoucherChoice && voucherChoiceMade) {
+      setVoucherChoiceMade(false);
+      setVoucherChoiceError(false);
+    }
+  }, [bookingData, bookingConfirmation, showVoucherChoice, voucherChoiceMade]);
 
   // Load bookingData once
   useEffect(() => {
@@ -437,6 +453,14 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
       return;
     }
     setValidationErrors({});
+
+    // When the Voucher Now / Voucher Later choice is offered, the user must
+    // pick one explicitly — nothing is pre-selected. Block until they do.
+    if (showVoucherChoice && !voucherChoiceMade) {
+      setVoucherChoiceError(true);
+      toast.error("Please select a booking option to continue.");
+      return;
+    }
 
     const hotelId = bookingData?.selectedRate?.hotelId;
     if (!hotelId) {
@@ -1409,11 +1433,14 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                                 label="Book Now & Voucher Now "
                                 value="Book & Voucher"
                                 checked={
+                                  voucherChoiceMade &&
                                   bookingConfirmation === "Book & Voucher"
                                 }
-                                onChange={(e) =>
-                                  setBookingConfirmation(e.target.value)
-                                }
+                                onChange={(e) => {
+                                  setBookingConfirmation(e.target.value);
+                                  setVoucherChoiceMade(true);
+                                  setVoucherChoiceError(false);
+                                }}
                                 className="mb-0"
                               />
                               <Form.Check
@@ -1423,14 +1450,22 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                                 label="Book Now & Voucher Later"
                                 value="Book Now & Voucher later"
                                 checked={
+                                  voucherChoiceMade &&
                                   bookingConfirmation ===
-                                  "Book Now & Voucher later"
+                                    "Book Now & Voucher later"
                                 }
-                                onChange={(e) =>
-                                  setBookingConfirmation(e.target.value)
-                                }
+                                onChange={(e) => {
+                                  setBookingConfirmation(e.target.value);
+                                  setVoucherChoiceMade(true);
+                                  setVoucherChoiceError(false);
+                                }}
                               />
                             </div>
+                            {voucherChoiceError && (
+                              <div className="text-danger small mt-2">
+                                Please select a booking option to continue.
+                              </div>
+                            )}
                           </Form.Group>
                         </Card.Body>
                       </Card>

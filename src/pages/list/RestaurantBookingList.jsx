@@ -1,4 +1,16 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+/**
+ * RestaurantBookingList.jsx
+ *
+ * Booking-list page for restaurant bookings. The Action column contains
+ * only the View (eye) icon — clicking it navigates to a dedicated detail
+ * page (/booking-details/restaurant-booking/:id) where Edit / Remark /
+ * Voucher / Cancel live as buttons at the bottom-left, alongside any
+ * reconfirm / date-change flow.
+ *
+ * Visual treatment mirrors HotelBookingList / LongStayBookingList via the
+ * shared `hbl-modern` skin so all booking-list pages line up.
+ */
+import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Card,
@@ -11,44 +23,42 @@ import {
   Form,
   InputGroup,
 } from "react-bootstrap";
-import {
-  FaEye,
-  FaSearch,
-  FaUser,
-  FaInbox,
-} from "react-icons/fa";
-import axiosInstance from "../../components/AxiosInstance";
+import { FaEye, FaSearch, FaInbox } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
-import Topbar from "../../components/TopBar";
-import { toast } from "react-hot-toast";
+import TopBar from "../../components/TopBar";
+import axiosInstance from "../../components/AxiosInstance";
 import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
-// Column-width hints kept in sync with HotelBookingList / LongStayBookingList
-// so the cab list lines up visually under the shared hbl-modern skin.
+// Column-width hints kept in sync with HotelBookingList so the two pages
+// line up visually under the shared hbl-modern skin.
 const COLUMN_WIDTHS = {
   sn: "40px",
-  customerName: "150px",
-  bookingCode: "100px",
-  bookDate: "95px",
-  bookingDetails: "240px",
-  travel: "150px",
-  pax: "80px",
-  total: "110px",
-  status: "110px",
+  booking: "110px",
+  restaurant: "180px",
+  dateTime: "130px",
+  members: "70px",
+  customer: "180px",
+  status: "120px",
   action: "70px",
 };
 
+// Status palette covers every value emitted by the restaurant-booking
+// backend; new keys can be added without touching the table cells.
 const STATUS_META = {
-  CONFIRMED:  { label: "Confirmed",  bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  COMPLETED:  { label: "Completed",  bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
-  PENDING:    { label: "Pending",    bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  CANCELLED:  { label: "Cancelled",  bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
-  UPCOMING:   { label: "Upcoming",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  RECONFIRMED:{ label: "Reconfirmed",bg: "#ecfeff", color: "#0e7490", dot: "#06b6d4" },
-  INVOICED:   { label: "Invoiced",   bg: "#f5f3ff", color: "#5b21b6", dot: "#8b5cf6" },
-  ONREQUEST:  { label: "On Request", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  Confirmed:               { label: "Confirmed",              bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  "Checked In":            { label: "Checked In",             bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  Reconfirmed:             { label: "Reconfirmed",            bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
+  Completed:               { label: "Completed",              bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
+  "Pending Approval":      { label: "Pending Approval",       bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  "Guarantee Pending":     { label: "Guarantee Pending",      bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  "Date Change Requested": { label: "Date Change Requested",  bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  Pending:                 { label: "Pending",                bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  Cancelled:               { label: "Cancelled",              bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+  Rejected:                { label: "Rejected",               bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+  "Auto Cancelled":        { label: "Auto Cancelled",         bg: "#f3f4f6", color: "#475467", dot: "#98a2b3" },
+  "No Show":               { label: "No Show",                bg: "#f3f4f6", color: "#475467", dot: "#98a2b3" },
 };
 
 const StatusPill = ({ meta, raw }) => {
@@ -81,7 +91,8 @@ const StatusPill = ({ meta, raw }) => {
   );
 };
 
-// "dd/mm/yyyy" — matches HotelBookingList / LongStayBookingList row dates.
+// "dd/mm/yyyy" — same shape HotelBookingList uses in the table cells so
+// dates render identically across both pages.
 const formatShortDate = (dateString) => {
   if (!dateString) return "";
   const normalized = String(dateString).includes("T")
@@ -94,43 +105,48 @@ const formatShortDate = (dateString) => {
   return `${day}/${month}/${d.getFullYear()}`;
 };
 
+const demoBookings = [
+  {
+    id: 101,
+    bookingNumber: "RB-2026-0001",
+    restaurantName: "Spice Garden",
+    bookingDate: "2026-05-15",
+    bookingTime: "20:00",
+    memberCount: 4,
+    customerName: "John Doe",
+    mobile: "9876543210",
+    agentName: "Travel Plus",
+    totalAmount: 1450,
+    bookingStatus: "Confirmed",
+    specialRequest: "Window seat preferred",
+    items: [
+      { menuName: "Chicken Biriyani", qty: 2, price: 250, total: 500 },
+      { menuName: "Shawarma", qty: 5, price: 180, total: 900 },
+    ],
+  },
+];
+
 const normStatus = (v) =>
   String(v ?? "").replace(/[\s_-]+/g, "").toLowerCase();
 
-const formatPrice = (price) =>
-  new Intl.NumberFormat("en-AE", {
-    style: "currency",
-    currency: "AED",
-  }).format(price || 0);
-
-const CabBookingList = () => {
+const RestaurantBookingList = () => {
   const navigate = useNavigate();
-  const [role, setRole] = useState(() => {
-    return localStorage.getItem("currentActiveRole")?.toLowerCase() || null;
-  });
-  const [userId, setUserId] = useState(() => {
-    const stored = localStorage.getItem("userId");
-    return (stored && stored !== "null") ? stored : null;
-  });
-
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [apiData, setApiData] = useState({
-    upcomingBookings: { content: [] },
-    completedBookings: { content: [] },
-    cancelledBookings: { content: [] },
-  });
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
-  // Filters mirror HotelBookingList / LongStayBookingList: one Booking
-  // Type dropdown (7 options), a search box and a Month + Year card.
+  // Filters mirror Hotel Booking List: single Booking Type dropdown,
+  // search box, and Month + Year time-period card. All client-side.
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
 
-  // Client-side pagination across the merged + filtered list.
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(10);
-
+  // The same seven options Hotel Booking List ships with. Restaurant
+  // bookings have no "Invoiced" concept yet — that branch falls through
+  // to `return false` so the filter is harmless until the backend ships
+  // an invoice flag.
   const statusOptions = useMemo(
     () => [
       { value: "all", label: "All" },
@@ -153,121 +169,66 @@ const CabBookingList = () => {
     return Array.from({ length: current - 2014 }, (_, i) => 2020 + i);
   }, []);
 
-  // Handle role sync if it's missing from localStorage initially
-  useEffect(() => {
-    const storedRole = localStorage.getItem("currentActiveRole")?.toLowerCase();
-    if (storedRole && storedRole !== role) {
-      setRole(storedRole);
-    } else if (!storedRole) {
-      const userRoles = (localStorage.getItem("userRole") || "").toLowerCase().split(",");
-      if (userRoles.includes("agent")) setRole("agent");
-      else if (userRoles.includes("staff")) setRole("staff");
-      else if (userRoles.includes("admin")) setRole("admin");
-    }
-  }, [role]);
-
-  // Fetch userId if missing
-  useEffect(() => {
-    const fetchUserId = async () => {
-      if (userId && userId !== "null") return;
-      const userName = localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
-      if (!userName) return;
-      try {
-        const response = await axiosInstance.get(`/api/personalProfile/${userName}`);
-        if (response.data && response.data.id) {
-          const id = String(response.data.id);
-          setUserId(id);
-          localStorage.setItem("userId", id);
-        }
-      } catch (error) {
-        console.error("Error fetching user profile for ID:", error);
-      }
-    };
-
-    if (role === "agent" || role === "staff") {
-      fetchUserId();
-    }
-  }, [role, userId]);
-
-  const fetchBookings = useCallback(async () => {
-    if (!role) return;
-    if ((role === "agent" || role === "staff") && (!userId || userId === "null")) return;
-
+  const fetchList = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      // Pull a large window per bucket so the unified "All" view + the
-      // booking-type tabs can filter client-side without re-fetching.
-      const params = {
-        upcomingPage: 0,
-        upcomingSize: 500,
-        completedPage: 0,
-        completedSize: 500,
-        cancelledPage: 0,
-        cancelledSize: 500,
-      };
-
-      if (selectedMonth && selectedYear) {
-        params.month = Number(selectedMonth);
-        params.year = Number(selectedYear);
-      }
-      if (role === "agent" && userId) params.agentId = userId;
-      else if (role === "staff" && userId) params.staffId = userId;
-
-      const response = await axiosInstance.get("/api/cab/grouped-list", { params });
-      if (response.data && response.data.success) {
-        setApiData({
-          upcomingBookings: response.data.upcomingBookings || { content: [] },
-          completedBookings: response.data.completedBookings || { content: [] },
-          cancelledBookings: response.data.cancelledBookings || { content: [] },
-        });
-      }
-    } catch {
-      toast.error("Failed to load cab bookings");
+      const res = await axiosInstance.get("/api/restaurant/booking/list");
+      const data = Array.isArray(res.data) ? res.data : res.data?.content || [];
+      setItems(data);
+    } catch (e) {
+      console.error(e);
+      setItems(demoBookings);
     } finally {
       setLoading(false);
     }
-  }, [selectedMonth, selectedYear, role, userId]);
+  };
 
   useEffect(() => {
-    fetchBookings();
-  }, [fetchBookings]);
-
-  // Tag each booking with the bucket it came from so filters can rely on
-  // that even when the backend lacks an explicit `bookingStatus` field.
-  const allBookings = useMemo(() => {
-    const tag = (list, bucket) =>
-      (list || []).map((b) => ({ ...b, __bucket: bucket }));
-    return [
-      ...tag(apiData.upcomingBookings.content, "upcoming"),
-      ...tag(apiData.completedBookings.content, "completed"),
-      ...tag(apiData.cancelledBookings.content, "cancelled"),
-    ];
-  }, [apiData]);
+    fetchList();
+  }, []);
 
   const filteredBookings = useMemo(() => {
+    const now = new Date();
     const needle = search.trim().toLowerCase();
-    return allBookings.filter((b) => {
-      const bucket = b.__bucket;
+    return (items || []).filter((b) => {
       const isCancelled =
-        bucket === "cancelled" ||
-        normStatus(b.bookingStatus) === "cancelled" ||
+        b.bookingStatus === "Cancelled" ||
+        b.bookingStatus === "Auto Cancelled" ||
         b.cancelStatus === true;
+      const isCompleted = b.bookingStatus === "Completed";
+      const bDate = b.bookingDate
+        ? new Date(
+            String(b.bookingDate).includes("T")
+              ? b.bookingDate
+              : `${b.bookingDate}T00:00:00`,
+          )
+        : null;
 
       if (status === "cancelled" && !isCancelled) return false;
-      if (status === "upcoming" && (isCancelled || bucket !== "upcoming")) return false;
-      if (status === "completed" && (isCancelled || bucket !== "completed")) return false;
+      if (status === "upcoming") {
+        if (isCancelled || isCompleted) return false;
+        if (!bDate || bDate < now) return false;
+      }
+      if (status === "completed") {
+        if (!isCompleted) return false;
+      }
       if (status === "onrequest") {
         if (isCancelled) return false;
-        const s = normStatus(b.bookingStatus || b.confirmationStatus);
-        if (s !== "pending" && s !== "onrequest") return false;
+        const s = normStatus(b.bookingStatus);
+        if (
+          s !== "pending" &&
+          s !== "pendingapproval" &&
+          s !== "guaranteepending" &&
+          s !== "onrequest"
+        )
+          return false;
       }
       if (status === "reconfirmed") {
         if (isCancelled) return false;
-        const cs = normStatus(b.confirmationStatus);
-        if (cs !== "reconfirmed") return false;
+        if (normStatus(b.bookingStatus) !== "reconfirmed") return false;
       }
       if (status === "invoiced") {
-        if (isCancelled) return false;
+        // Restaurant bookings don't carry an invoice flag yet.
         const inv =
           normStatus(b.invoiceStatus) === "invoiced" ||
           b.invoiced === true ||
@@ -275,26 +236,19 @@ const CabBookingList = () => {
         if (!inv) return false;
       }
 
-      // Time-period filter — anchored on pickupDate (or bookingDate fallback).
-      const anchor = b.pickupDate || b.bookingDate;
-      if (anchor && (selectedMonth || selectedYear)) {
-        const d = new Date(anchor);
-        if (!isNaN(d.getTime())) {
-          const m = d.getMonth() + 1;
-          const y = d.getFullYear();
-          if (selectedMonth && Number(selectedMonth) !== m) return false;
-          if (selectedYear && Number(selectedYear) !== y) return false;
-        }
+      if (bDate && (selectedMonth || selectedYear)) {
+        const m = bDate.getMonth() + 1;
+        const y = bDate.getFullYear();
+        if (selectedMonth && Number(selectedMonth) !== m) return false;
+        if (selectedYear && Number(selectedYear) !== y) return false;
       }
 
       if (needle) {
         const hay = [
-          b.packageBookCode,
-          b.cabName,
-          b.transporter,
-          b.customer?.firstName,
-          b.customer?.lastName,
-          b.customer?.emailId,
+          b.bookingNumber,
+          b.restaurantName,
+          b.customerName,
+          b.mobile,
           b.agentName,
         ]
           .filter(Boolean)
@@ -304,9 +258,8 @@ const CabBookingList = () => {
       }
       return true;
     });
-  }, [allBookings, status, search, selectedMonth, selectedYear]);
+  }, [items, search, status, selectedMonth, selectedYear]);
 
-  // Reset to page 1 whenever a filter changes.
   useEffect(() => {
     setPage(1);
   }, [search, status, selectedMonth, selectedYear, perPage]);
@@ -346,19 +299,9 @@ const CabBookingList = () => {
     lineHeight: 1.2,
   };
 
-  // Pick the StatusPill meta from the row's bucket (since the cab API
-  // doesn't always populate a plain `bookingStatus` string).
-  const bucketMeta = (b) => {
-    if (b.__bucket === "cancelled" || normStatus(b.bookingStatus) === "cancelled")
-      return STATUS_META.CANCELLED;
-    if (b.__bucket === "completed") return STATUS_META.COMPLETED;
-    if (b.__bucket === "upcoming") return STATUS_META.UPCOMING;
-    return STATUS_META[normStatus(b.bookingStatus).toUpperCase()] || null;
-  };
-
   return (
     <div className="min-vh-100 bg-light d-flex flex-column hbl-modern">
-      <Topbar />
+      <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main
@@ -369,7 +312,7 @@ const CabBookingList = () => {
             {/* Header: Title + Search (left) | Time Period (right) */}
             <div className="d-flex justify-content-between align-items-end mb-3">
               <div>
-                <h3 className="fw-bold text-dark mb-2">Cab Bookings</h3>
+                <h3 className="fw-bold text-dark mb-2">Restaurant Bookings</h3>
                 <InputGroup style={{ height: "40px", width: "300px" }}>
                   <InputGroup.Text
                     style={{
@@ -443,7 +386,7 @@ const CabBookingList = () => {
               </Card>
             </div>
 
-            {/* Filters Section */}
+            {/* Booking Type filter */}
             <Row className="mb-2 g-1">
               <Col xs={12}>
                 <Card
@@ -518,39 +461,73 @@ const CabBookingList = () => {
                         }}
                       >
                         <tr>
-                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.sn }}>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.sn,
+                            }}
+                          >
                             S.N
                           </th>
-                          {role === "admin" && (
-                            <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.customerName }}>
-                              Agent
-                            </th>
-                          )}
-                          <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.customerName }}>
-                            Customer Name
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.booking,
+                            }}
+                          >
+                            Booking
                           </th>
-                          <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingCode }}>
-                            Booking Code
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.restaurant,
+                            }}
+                          >
+                            Restaurant
                           </th>
-                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.bookDate }}>
-                            Book Date
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.dateTime,
+                            }}
+                          >
+                            Date / Time
                           </th>
-                          <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingDetails }}>
-                            Cab Details
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.members,
+                            }}
+                          >
+                            Members
                           </th>
-                          <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.travel }}>
-                            Travel
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.customer,
+                            }}
+                          >
+                            Customer
                           </th>
-                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.pax }}>
-                            Pax
-                          </th>
-                          <th style={{ ...baseHeaderStyle, textAlign: "right", width: COLUMN_WIDTHS.total }}>
-                            Total
-                          </th>
-                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.status,
+                            }}
+                          >
                             Status
                           </th>
-                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.action }}>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.action,
+                            }}
+                          >
                             Action
                           </th>
                         </tr>
@@ -559,7 +536,7 @@ const CabBookingList = () => {
                         {pageBookings.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={role === "admin" ? 11 : 10}
+                              colSpan={8}
                               className="text-center py-5 text-muted"
                               style={{
                                 border: "1px solid #dee2e6",
@@ -580,21 +557,18 @@ const CabBookingList = () => {
                           </tr>
                         ) : (
                           pageBookings.map((b, i) => {
-                            const sMeta = bucketMeta(b);
-                            const customerName =
-                              [b.customer?.salutaion, b.customer?.firstName, b.customer?.lastName]
-                                .filter(Boolean)
-                                .join(" ") || "-";
+                            const sMeta = STATUS_META[b.bookingStatus];
                             return (
                               <tr
-                                key={b.custombookingId ?? `${b.__bucket}-${i}`}
+                                key={b.id || i}
                                 style={{
                                   backgroundColor:
                                     i % 2 === 0 ? "#ffffff" : "#f8f9fa",
                                   transition: "background-color 0.2s ease",
                                 }}
                                 onMouseEnter={(e) => {
-                                  e.currentTarget.style.backgroundColor = "#e7f3ff";
+                                  e.currentTarget.style.backgroundColor =
+                                    "#e7f3ff";
                                 }}
                                 onMouseLeave={(e) => {
                                   e.currentTarget.style.backgroundColor =
@@ -612,46 +586,24 @@ const CabBookingList = () => {
                                 >
                                   {serialNumberBase + i + 1}
                                 </td>
-                                {role === "admin" && (
-                                  <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.customerName }}>
-                                    <span className="fw-medium text-dark">
-                                      {b.agentName || "-"}
-                                    </span>
-                                  </td>
-                                )}
-                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.customerName }}>
-                                  <div
-                                    className="d-flex align-items-center"
-                                    style={{ gap: "0.4rem", flexWrap: "wrap" }}
-                                  >
-                                    <span
-                                      className="d-inline-flex align-items-center"
-                                      style={{ gap: "0.3rem" }}
-                                    >
-                                      <FaUser
-                                        style={{
-                                          color: "#6c757d",
-                                          fontSize: "0.78rem",
-                                          flexShrink: 0,
-                                        }}
-                                      />
-                                      <span className="fw-medium text-dark">
-                                        {customerName}
-                                      </span>
-                                    </span>
-                                  </div>
-                                  {b.customer?.emailId && (
-                                    <div
-                                      className="text-muted"
-                                      style={{ fontSize: "0.7rem" }}
-                                    >
-                                      {b.customer.emailId}
-                                    </div>
-                                  )}
-                                </td>
-                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.bookingCode }}>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.booking,
+                                  }}
+                                >
                                   <span className="fw-bold text-primary">
-                                    {b.packageBookCode || "-"}
+                                    {b.bookingNumber || "-"}
+                                  </span>
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.restaurant,
+                                  }}
+                                >
+                                  <span className="fw-semibold text-dark">
+                                    {b.restaurantName || "-"}
                                   </span>
                                 </td>
                                 <td
@@ -659,81 +611,48 @@ const CabBookingList = () => {
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "center",
-                                    width: COLUMN_WIDTHS.bookDate,
+                                    width: COLUMN_WIDTHS.dateTime,
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
-                                  {formatShortDate(b.bookingDate) || "-"}
-                                </td>
-                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.bookingDetails }}>
-                                  <div
-                                    className="d-flex align-items-center"
-                                    style={{ gap: "0.35rem", flexWrap: "wrap" }}
-                                  >
-                                    <span
-                                      className="fw-semibold text-dark"
-                                      style={{ fontSize: "0.875rem" }}
-                                    >
-                                      {b.cabName || "-"}
-                                    </span>
-                                    {b.transporter && (
-                                      <span
-                                        className="text-muted"
-                                        style={{ fontSize: "0.75rem" }}
-                                      >
-                                        ({b.transporter})
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    width: COLUMN_WIDTHS.travel,
-                                  }}
-                                >
-                                  <div className="text-dark" style={{ fontSize: "0.78rem" }}>
-                                    {formatShortDate(b.pickupDate) || "-"}
-                                  </div>
-                                  {(b.pickupName || b.dropoffName) && (
+                                  <div>{formatShortDate(b.bookingDate) || "-"}</div>
+                                  {b.bookingTime && (
                                     <div
                                       className="text-muted"
                                       style={{ fontSize: "0.7rem" }}
                                     >
-                                      {b.pickupName || ""}
-                                      {b.dropoffName ? ` → ${b.dropoffName}` : ""}
+                                      {b.bookingTime}
                                     </div>
                                   )}
                                 </td>
                                 <td
+                                  className="text-muted"
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "center",
-                                    width: COLUMN_WIDTHS.pax,
+                                    fontFamily: "monospace",
+                                    width: COLUMN_WIDTHS.members,
                                   }}
                                 >
-                                  <span
-                                    className="px-2 py-1 rounded"
-                                    style={{
-                                      backgroundColor: "#eff8ff",
-                                      color: "#175cd3",
-                                      fontSize: "0.7rem",
-                                      fontWeight: 600,
-                                    }}
-                                  >
-                                    {b.noOfAdult || 0}A / {b.noOfChild || 0}C
-                                  </span>
+                                  {b.memberCount ?? "-"}
                                 </td>
                                 <td
                                   style={{
                                     ...baseCellStyle,
-                                    textAlign: "right",
-                                    width: COLUMN_WIDTHS.total,
-                                    whiteSpace: "nowrap",
+                                    width: COLUMN_WIDTHS.customer,
                                   }}
                                 >
-                                  <span className="fw-semibold text-dark">
-                                    {formatPrice(b.totalPrice)}
-                                  </span>
+                                  <div className="fw-medium text-dark">
+                                    {b.customerName || "-"}
+                                  </div>
+                                  {b.mobile && (
+                                    <div
+                                      className="text-muted"
+                                      style={{ fontSize: "0.7rem" }}
+                                    >
+                                      {b.mobile}
+                                    </div>
+                                  )}
                                 </td>
                                 <td
                                   style={{
@@ -742,7 +661,10 @@ const CabBookingList = () => {
                                     width: COLUMN_WIDTHS.status,
                                   }}
                                 >
-                                  <StatusPill meta={sMeta} raw={b.bookingStatus || b.__bucket} />
+                                  <StatusPill
+                                    meta={sMeta}
+                                    raw={b.bookingStatus}
+                                  />
                                 </td>
                                 <td
                                   style={{
@@ -763,16 +685,17 @@ const CabBookingList = () => {
                                       }}
                                       onClick={() =>
                                         navigate(
-                                          `/booking-details/cab-booking/${b.custombookingId}`,
-                                          { state: { booking: b } },
+                                          `/booking-details/restaurant-booking/${b.id}`,
                                         )
                                       }
                                       onKeyDown={(e) => {
-                                        if (e.key === "Enter" || e.key === " ") {
+                                        if (
+                                          e.key === "Enter" ||
+                                          e.key === " "
+                                        ) {
                                           e.preventDefault();
                                           navigate(
-                                            `/booking-details/cab-booking/${b.custombookingId}`,
-                                            { state: { booking: b } },
+                                            `/booking-details/restaurant-booking/${b.id}`,
                                           );
                                         }
                                       }}
@@ -798,17 +721,29 @@ const CabBookingList = () => {
               >
                 <Card.Body className="py-3">
                   <div className="d-flex justify-content-between align-items-center flex-wrap gap-3">
-                    <div className="text-muted" style={{ fontSize: "0.875rem" }}>
+                    <div
+                      className="text-muted"
+                      style={{ fontSize: "0.875rem" }}
+                    >
                       Showing{" "}
-                      <span className="fw-semibold text-dark">{displayStart}</span>{" "}
+                      <span className="fw-semibold text-dark">
+                        {displayStart}
+                      </span>{" "}
                       to{" "}
-                      <span className="fw-semibold text-dark">{displayEnd}</span>{" "}
+                      <span className="fw-semibold text-dark">
+                        {displayEnd}
+                      </span>{" "}
                       of{" "}
-                      <span className="fw-semibold text-dark">{totalEntries}</span>{" "}
+                      <span className="fw-semibold text-dark">
+                        {totalEntries}
+                      </span>{" "}
                       entries
                     </div>
                     <div className="d-flex align-items-center gap-2">
-                      <span className="text-muted" style={{ fontSize: "0.8rem" }}>
+                      <span
+                        className="text-muted"
+                        style={{ fontSize: "0.8rem" }}
+                      >
                         Rows per page
                       </span>
                       <Form.Select
@@ -827,37 +762,45 @@ const CabBookingList = () => {
                     <Pagination className="mb-0">
                       <Pagination.Prev
                         disabled={currentPage === 1}
-                        onClick={() => currentPage > 1 && setPage(currentPage - 1)}
-                        style={{
-                          cursor: currentPage === 1 ? "not-allowed" : "pointer",
-                          opacity: currentPage === 1 ? 0.5 : 1,
-                        }}
-                      />
-                      {Array.from({ length: safeTotalPages }, (_, i) => i + 1).map(
-                        (pageNumber) => (
-                          <Pagination.Item
-                            key={pageNumber}
-                            active={currentPage === pageNumber}
-                            onClick={() => setPage(pageNumber)}
-                            style={{
-                              cursor: "pointer",
-                              minWidth: "38px",
-                              textAlign: "center",
-                            }}
-                          >
-                            {pageNumber}
-                          </Pagination.Item>
-                        ),
-                      )}
-                      <Pagination.Next
-                        disabled={currentPage === safeTotalPages}
                         onClick={() =>
-                          currentPage < safeTotalPages && setPage(currentPage + 1)
+                          currentPage > 1 && setPage(currentPage - 1)
                         }
                         style={{
                           cursor:
-                            currentPage === safeTotalPages ? "not-allowed" : "pointer",
-                          opacity: currentPage === safeTotalPages ? 0.5 : 1,
+                            currentPage === 1 ? "not-allowed" : "pointer",
+                          opacity: currentPage === 1 ? 0.5 : 1,
+                        }}
+                      />
+                      {Array.from(
+                        { length: safeTotalPages },
+                        (_, i) => i + 1,
+                      ).map((pageNumber) => (
+                        <Pagination.Item
+                          key={pageNumber}
+                          active={currentPage === pageNumber}
+                          onClick={() => setPage(pageNumber)}
+                          style={{
+                            cursor: "pointer",
+                            minWidth: "38px",
+                            textAlign: "center",
+                          }}
+                        >
+                          {pageNumber}
+                        </Pagination.Item>
+                      ))}
+                      <Pagination.Next
+                        disabled={currentPage === safeTotalPages}
+                        onClick={() =>
+                          currentPage < safeTotalPages &&
+                          setPage(currentPage + 1)
+                        }
+                        style={{
+                          cursor:
+                            currentPage === safeTotalPages
+                              ? "not-allowed"
+                              : "pointer",
+                          opacity:
+                            currentPage === safeTotalPages ? 0.5 : 1,
                         }}
                       />
                     </Pagination>
@@ -872,4 +815,4 @@ const CabBookingList = () => {
   );
 };
 
-export default CabBookingList;
+export default RestaurantBookingList;

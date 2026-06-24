@@ -943,6 +943,13 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
         booking.referenceNumber, // Reference Code
         booking.hotelName, // Hotel Name
         formatDate(booking.bookingDate), // 24/04/2025
+        // Stay dates — shown in the Booking Details column, so searching a
+        // check-in / check-out date (e.g. "26/06/2026") must match. Both the
+        // dd/mm/yyyy display form and the raw value are included.
+        formatDate(booking.checkInDate),
+        formatDate(booking.checkOutDate),
+        booking.checkInDate,
+        booking.checkOutDate,
         formatDeadlineDate(booking.deadlineDate), // 2025-11-04
         booking.confirmationStatus, // Confirmed / Not Confirmed
       ]
@@ -1067,7 +1074,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
         >
           <Container fluid className="px-0">
             {/* Header: Title + Search (left) | Time Period (right) */}
-            <div className="d-flex flex-wrap gap-3 justify-content-between align-items-end mb-3">
+            <div className="d-flex justify-content-between align-items-end mb-3">
               <div>
                 <h3 className="fw-bold text-dark mb-2">
                   {force24HourOnly ? "24 Hour Check-In Bookings" : "Hotel Bookings"}
@@ -1210,13 +1217,10 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                       className="mb-0 align-middle table-bordered"
                       style={{
                         // Auto layout so the table fits the page width and
-                        // column widths flex to content. minWidth keeps the
-                        // table at its natural width on small screens so the
-                        // overflowX:auto wrapper scrolls horizontally instead
-                        // of crushing the columns to one-letter-per-line.
+                        // column widths flex to content. Falls back to a
+                        // horizontal scroll only on extremely narrow viewports.
                         tableLayout: "auto",
                         width: "100%",
-                        minWidth: "1000px",
                         fontSize: "0.78rem",
                         borderCollapse: "separate",
                         borderSpacing: 0,
@@ -1673,6 +1677,36 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                                     const isNotConfirmed =
                                       normalizedStatus === "notconfirmed";
                                     const showConfirmIcon = isNotConfirmed;
+
+                                    // "On Request" bookings are stamped
+                                    // CONFIRMED by the status engine so they can
+                                    // follow the reconfirm flow, but until they
+                                    // are actually reconfirmed they must DISPLAY
+                                    // as "On Request" (orange) — only genuinely
+                                    // confirmed bookings show "Confirmed". This
+                                    // is display-only; the underlying status that
+                                    // drives confirm/voucher flows is unchanged.
+                                    const isOnRequestRoom = /^on\s*request$/i.test(
+                                      String(b.roomStatus || "").trim(),
+                                    );
+                                    if (isOnRequestRoom && isConfirmed) {
+                                      return (
+                                        <span
+                                          style={{
+                                            color: "#e67e22",
+                                            padding: "0.32rem 0.6rem",
+                                            fontSize: "0.82rem",
+                                            fontWeight: "600",
+                                            borderRadius: "0.375rem",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: "0.35rem",
+                                          }}
+                                        >
+                                          On Request
+                                        </span>
+                                      );
+                                    }
 
                                     if (isConfirmed) {
                                       return (

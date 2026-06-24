@@ -4,28 +4,57 @@ import {
   Card,
   Table,
   Spinner,
-  Form,
   Pagination,
   Container,
+  Row,
+  Col,
+  Form,
   InputGroup,
   Badge,
   Modal,
 } from "react-bootstrap";
-import { FaEye, FaSearch, FaUser, FaUsers } from "react-icons/fa";
-import { toast } from "react-hot-toast";
+import {
+  FaEye,
+  FaSearch,
+  FaUser,
+  FaUsers,
+  FaInbox,
+} from "react-icons/fa";
+import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
-import axiosInstance from "../../components/AxiosInstance";
+import { toast } from "react-hot-toast";
+import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
+// Column-width hints kept in sync with HotelBookingList so the two
+// pages line up visually under the shared hbl-modern skin.
+const COLUMN_WIDTHS = {
+  sn: "40px",
+  customerName: "150px",
+  bookingCode: "100px",
+  bookDate: "95px",
+  bookingDetails: "240px",
+  rooms: "70px",
+  total: "110px",
+  status: "110px",
+  action: "70px",
+};
+
+// Day-stay backends emit a mix of upper- and title-case status values
+// (e.g. `status: "Confirmed"` while cancellations come through as
+// `isCancelled: true` and surface as the literal string "Cancelled").
+// Both casings are mapped so the pill renders identically either way.
 const STATUS_META = {
   CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
   Confirmed: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
   COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
+  Completed: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
   PENDING:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  Cancelled: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+  Pending:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+  Cancelled: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
 };
 
 // Every customer/guest name on a day-stay booking. The list payload
@@ -85,12 +114,20 @@ const StatusPill = ({ meta, raw }) => {
   );
 };
 
-const fmtDateLong = (iso) => {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  if (isNaN(d)) return typeof iso === "string" ? iso.slice(0, 10) : "-";
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+// "dd/mm/yyyy" — same shape HotelBookingList uses in the table cells.
+const formatShortDate = (dateString) => {
+  if (!dateString) return "";
+  const normalized = String(dateString).includes("T")
+    ? dateString
+    : `${dateString}T00:00:00`;
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return `${day}/${month}/${d.getFullYear()}`;
 };
+
+const trimTime = (t) => (t ? String(t).slice(0, 5) : "");
 
 /**
  * DayStayBookingList — mirrors HotelBookingList for the Day Stay flow.
@@ -101,14 +138,13 @@ const fmtDateLong = (iso) => {
  */
 export default function DayStayBookingList() {
   const navigate = useNavigate();
-  const [rows, setRows] = useState([]);
+  const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(0);
-  const [size, setSize] = useState(10);
-  const [bookingType, setBookingType] = useState("upcoming");
-  // "Customers (N)" modal — opened from the "+N more" badge on the Guest
-  // column to show every guest on a booking.
+  const [page, setPage] = useState(1); // 1-indexed to mirror HotelBookingList
+  const [perPage, setPerPage] = useState(10);
+
+  // "Customers (N)" modal — opened from the "+N more" badge on the
+  // Customer Name column to show every guest on a booking.
   const [showCustomersModal, setShowCustomersModal] = useState(false);
   const [customersModalBooking, setCustomersModalBooking] = useState(null);
 
@@ -117,60 +153,169 @@ export default function DayStayBookingList() {
     setShowCustomersModal(true);
   };
 
-  const fetchRows = async () => {
+  // Filters — mirror the Hotel Booking List.
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
+
+  // Same seven booking-type options Hotel Booking List ships with. Day
+  // Stay only has `status` + `isCancelled` today; the Reconfirmed and
+  // Invoiced filters are wired against `confirmationStatus` /
+  // `invoiceStatus` so they light up if the backend later starts
+  // emitting those fields.
+  const statusOptions = useMemo(
+    () => [
+      { value: "all", label: "All" },
+      { value: "upcoming", label: "Upcoming" },
+      { value: "completed", label: "Completed" },
+      { value: "cancelled", label: "Cancelled" },
+      { value: "onrequest", label: "On Request" },
+      { value: "reconfirmed", label: "Reconfirmed" },
+      { value: "invoiced", label: "Invoiced" },
+    ],
+    [],
+  );
+
+  const normStatus = (v) =>
+    String(v ?? "").replace(/[\s_-]+/g, "").toLowerCase();
+
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+  const years = useMemo(() => {
+    const current = new Date().getFullYear();
+    return Array.from({ length: current - 2014 }, (_, i) => 2020 + i);
+  }, []);
+
+  const fetchBookings = async () => {
     try {
       setLoading(true);
       const res = await axiosInstance.get("/api/day-stay-booking");
-      setRows(Array.isArray(res.data) ? res.data : []);
+      setBookings(Array.isArray(res.data) ? res.data : []);
     } catch {
       toast.error("Failed to load Day Stay bookings");
-      setRows([]);
+      setBookings([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchRows();
+    fetchBookings();
   }, []);
 
-  const filtered = useMemo(() => {
+  // Apply search + status + time-period filters in one pass.
+  const filteredBookings = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const byType = rows.filter((r) => {
-      if (bookingType === "cancelled") return !!r.isCancelled;
-      if (r.isCancelled) return false;
-      const ref = r.checkInDate;
-      const refDate = ref ? new Date(ref) : null;
-      if (refDate && !isNaN(refDate.getTime())) {
-        refDate.setHours(0, 0, 0, 0);
-        if (bookingType === "completed") return refDate < today;
-        if (bookingType === "upcoming") return refDate >= today;
+    const needle = search.trim().toLowerCase();
+    return (bookings || []).filter((b) => {
+      const isCancelled = !!b.isCancelled || normStatus(b.status) === "cancelled";
+      const refDate = b.checkInDate ? new Date(b.checkInDate) : null;
+      if (refDate && !isNaN(refDate.getTime())) refDate.setHours(0, 0, 0, 0);
+
+      if (status === "cancelled" && !isCancelled) return false;
+      if (status === "upcoming") {
+        if (isCancelled) return false;
+        if (!refDate || isNaN(refDate.getTime()) || refDate < today) return false;
       }
-      return bookingType === "upcoming";
+      if (status === "completed") {
+        if (isCancelled) return false;
+        if (!refDate || isNaN(refDate.getTime()) || refDate >= today) return false;
+      }
+      if (status === "onrequest") {
+        if (isCancelled) return false;
+        const s = normStatus(b.status || b.bookingStatus || b.confirmationStatus);
+        if (s !== "pending" && s !== "onrequest") return false;
+      }
+      if (status === "reconfirmed") {
+        if (isCancelled) return false;
+        const cs = normStatus(b.confirmationStatus);
+        if (cs !== "reconfirmed") return false;
+      }
+      if (status === "invoiced") {
+        if (isCancelled) return false;
+        const inv =
+          normStatus(b.invoiceStatus) === "invoiced" ||
+          b.invoiced === true ||
+          b.isInvoiced === true;
+        if (!inv) return false;
+      }
+
+      if (refDate && !isNaN(refDate.getTime()) && (selectedMonth || selectedYear)) {
+        const m = refDate.getMonth() + 1;
+        const y = refDate.getFullYear();
+        if (selectedMonth && Number(selectedMonth) !== m) return false;
+        if (selectedYear && Number(selectedYear) !== y) return false;
+      }
+
+      if (needle) {
+        const hay = [
+          b.bookingCode,
+          b.hotelName,
+          ...getGuestNames(b),
+          // Stay Date — shown in the Stay Date column, so a date search
+          // (e.g. "26/06/2026") matches. Both dd/mm/yyyy display form and the
+          // raw value are included.
+          formatShortDate(b.checkInDate),
+          formatShortDate(b.checkOutDate),
+          b.checkInDate,
+          b.checkOutDate,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      return true;
     });
-    const q = (search || "").trim().toLowerCase();
-    if (!q) return byType;
-    return byType.filter(
-      (r) =>
-        (r.bookingCode || "").toLowerCase().includes(q) ||
-        (r.hotelName || "").toLowerCase().includes(q) ||
-        getGuestNames(r).some((n) => n.toLowerCase().includes(q)),
-    );
-  }, [rows, search, bookingType]);
+  }, [bookings, search, status, selectedMonth, selectedYear]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / size));
-  const safePage = Math.min(page, totalPages - 1);
-  const pageData = filtered.slice(safePage * size, (safePage + 1) * size);
-  const displayStart = filtered.length === 0 ? 0 : safePage * size + 1;
-  const displayEnd = Math.min(filtered.length, (safePage + 1) * size);
-
+  // Reset to page 1 whenever a filter changes.
   useEffect(() => {
-    setPage(0);
-  }, [search, bookingType]);
+    setPage(1);
+  }, [search, status, selectedMonth, selectedYear, perPage]);
+
+  // Pagination derived from the filtered list (single client-side window).
+  const totalEntries = filteredBookings.length;
+  const safeTotalPages = Math.max(1, Math.ceil(totalEntries / perPage));
+  const currentPage = Math.min(page, safeTotalPages);
+  const serialNumberBase = (currentPage - 1) * perPage;
+  const pageBookings = filteredBookings.slice(
+    serialNumberBase,
+    serialNumberBase + perPage,
+  );
+  const hasResults = totalEntries > 0;
+  const displayStart = hasResults ? serialNumberBase + 1 : 0;
+  const displayEnd = hasResults
+    ? Math.min(serialNumberBase + pageBookings.length, totalEntries)
+    : 0;
+
+  const baseCellStyle = {
+    padding: "0.5rem 0.6rem",
+    fontSize: "0.8rem",
+    border: "1px solid #dee2e6",
+    verticalAlign: "middle",
+    whiteSpace: "normal",
+    overflow: "visible",
+    wordBreak: "break-word",
+    lineHeight: 1.4,
+  };
+
+  const baseHeaderStyle = {
+    padding: "0.45rem 0.6rem",
+    fontWeight: 600,
+    textTransform: "uppercase",
+    color: "#495057",
+    border: "1px solid #dee2e6",
+    whiteSpace: "normal",
+    lineHeight: 1.2,
+  };
 
   return (
-    <div className="min-vh-100 bg-light d-flex flex-column">
+    <div className="min-vh-100 bg-light d-flex flex-column hbl-modern">
       <Topbar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
@@ -178,327 +323,593 @@ export default function DayStayBookingList() {
           className="flex-grow-1 p-3"
           style={{ width: "100%", overflow: "hidden" }}
         >
-          <Container
-            fluid
-            style={{
-              maxWidth: "100%",
-              paddingLeft: "0.5rem",
-              paddingRight: "0.5rem",
-            }}
-          >
-            <div className="d-flex justify-content-between align-items-center mb-4">
-              <h5 className="mb-0 text-dark fw-semibold">Day Stay Booking</h5>
+          <Container fluid className="px-0">
+            {/* Header: Title + Search (left) | Time Period (right) */}
+            <div className="d-flex justify-content-between align-items-end mb-3">
+              <div>
+                <h3 className="fw-bold text-dark mb-2">Day Stay Bookings</h3>
+                <InputGroup style={{ height: "40px", width: "300px" }}>
+                  <InputGroup.Text
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      borderRight: "none",
+                      borderColor: "#dee2e6",
+                    }}
+                  >
+                    <FaSearch style={{ color: "#6c757d" }} />
+                  </InputGroup.Text>
+                  <Form.Control
+                    type="text"
+                    placeholder="Search here..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    style={{
+                      borderLeft: "none",
+                      fontSize: "0.85rem",
+                      borderColor: "#dee2e6",
+                      height: "40px",
+                    }}
+                  />
+                </InputGroup>
+              </div>
+              <Card
+                className="shadow-sm border-0"
+                style={{ borderRadius: "8px", minWidth: "260px" }}
+              >
+                <Card.Body className="p-3">
+                  <h6
+                    className="mb-2 fw-bold text-dark"
+                    style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                  >
+                    Time Period
+                  </h6>
+                  <Row className="g-2">
+                    <Col xs={6}>
+                      <Form.Select
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className="form-control"
+                        size="sm"
+                        style={{ fontSize: "0.82rem", height: "45px" }}
+                      >
+                        <option value="">Month</option>
+                        {months.map((month, index) => (
+                          <option key={month} value={index + 1}>
+                            {month.slice(0, 3)}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                    <Col xs={6}>
+                      <Form.Select
+                        value={selectedYear}
+                        onChange={(e) => setSelectedYear(e.target.value)}
+                        className="form-control"
+                        size="sm"
+                        style={{ fontSize: "0.82rem", height: "45px" }}
+                      >
+                        <option value="">Year</option>
+                        {years.map((year) => (
+                          <option key={year} value={year}>
+                            {year}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                  </Row>
+                </Card.Body>
+              </Card>
             </div>
 
-            <Card
-              className="border mb-3 shadow-sm"
-              style={{ borderRadius: "6px" }}
-            >
-              <Card.Header
-                className="d-flex justify-content-between align-items-center text-dark border-bottom py-2"
-                style={{
-                  borderRadius: "6px 6px 0 0",
-                  backgroundColor: "#f8f9fa",
-                  fontSize: "0.875rem",
-                  fontWeight: 600,
-                }}
-              >
-                <span>List of Bookings</span>
-              </Card.Header>
-              <Card.Body style={{ padding: "1.5rem 1rem 1rem" }}>
-                {/* Toolbar: pills + page size + search */}
-                <div
-                  className="d-flex flex-wrap justify-content-between align-items-center gap-2"
-                  style={{ marginBottom: "1.5rem" }}
+            {/* Filters Section */}
+            <Row className="mb-2 g-1">
+              <Col xs={12}>
+                <Card
+                  className="shadow-sm border-0 w-100"
+                  style={{ borderRadius: "8px" }}
                 >
-                  <div className="d-inline-flex p-1 rounded" style={{ backgroundColor: "#f3f4f6" }}>
-                    {[
-                      { value: "upcoming", label: "Upcoming" },
-                      { value: "completed", label: "Completed" },
-                      { value: "cancelled", label: "Cancelled" },
-                    ].map((opt) => {
-                      const active = bookingType === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => {
-                            setBookingType(opt.value);
-                            setPage(0);
-                          }}
-                          className="border-0 px-3 py-1"
-                          style={{
-                            backgroundColor: active ? "#ffffff" : "transparent",
-                            color: active ? "#101828" : "#667085",
-                            fontSize: "0.78rem",
-                            fontWeight: active ? 600 : 500,
-                            borderRadius: "6px",
-                            boxShadow: active ? "0 1px 2px rgba(16,24,40,0.08)" : "none",
-                            transition: "all 0.15s",
-                          }}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="d-flex align-items-center gap-2">
-                    <Form.Select
-                      value={size}
-                      onChange={(e) => {
-                        setSize(Number(e.target.value));
-                        setPage(0);
-                      }}
-                      size="sm"
-                      style={{ width: "auto", fontSize: "0.8rem" }}
+                  <Card.Body className="p-3">
+                    <h6
+                      className="mb-2 fw-bold text-dark"
+                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
                     >
-                      {PER_PAGE_OPTIONS.map((option) => (
-                        <option key={option} value={option}>
-                          {option} / page
-                        </option>
-                      ))}
-                    </Form.Select>
-                    <InputGroup size="sm" style={{ width: "240px" }}>
-                      <InputGroup.Text
-                        style={{
-                          fontSize: "0.75rem",
-                          backgroundColor: "#ffffff",
-                          borderRight: "none",
-                          color: "#98a2b3",
-                        }}
-                      >
-                        <FaSearch />
-                      </InputGroup.Text>
-                      <Form.Control
-                        type="text"
-                        placeholder="Search bookings..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        style={{ fontSize: "0.8rem", borderLeft: "none" }}
-                      />
-                    </InputGroup>
-                  </div>
-                </div>
+                      Booking Type
+                    </h6>
+                    <Row className="g-2">
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <Form.Select
+                          value={status}
+                          onChange={(e) => setStatus(e.target.value)}
+                          size="sm"
+                          aria-label="Booking type filter"
+                          style={{ fontSize: "0.85rem", height: "46px" }}
+                        >
+                          {statusOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </Form.Select>
+                      </Col>
+                    </Row>
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
 
-                {/* Table */}
+            {/* Table */}
+            <Card
+              className="shadow-sm border-0"
+              style={{ borderRadius: "8px", overflow: "hidden", width: "100%" }}
+            >
+              <Card.Body className="p-0" style={{ width: "100%" }}>
                 {loading ? (
-                  <div className="text-center py-5">
+                  <div className="text-center p-5">
                     <Spinner animation="border" variant="primary" />
-                    <p className="mt-3 text-muted">Loading bookings...</p>
+                    <p className="mt-2 text-muted">Loading bookings...</p>
                   </div>
                 ) : (
-                  <>
-                    <div className="table-responsive saas-table-wrap">
-                      <Table hover className="mb-0 align-middle saas-table">
-                        <thead>
+                  <div
+                    className="thin-scrollbar"
+                    style={{ overflowX: "auto", width: "100%" }}
+                  >
+                    <Table
+                      hover
+                      size="sm"
+                      className="mb-0 align-middle table-bordered"
+                      style={{
+                        tableLayout: "auto",
+                        width: "100%",
+                        fontSize: "0.78rem",
+                        borderCollapse: "separate",
+                        borderSpacing: 0,
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      <thead
+                        style={{
+                          backgroundColor: "#f8f9fa",
+                          borderBottom: "2px solid #dee2e6",
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                          fontSize: "0.7rem",
+                          letterSpacing: "0.03em",
+                        }}
+                      >
+                        <tr>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.sn,
+                            }}
+                          >
+                            S.N
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.customerName,
+                            }}
+                          >
+                            Customer Name
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.bookingCode,
+                            }}
+                          >
+                            Booking Code
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.bookDate,
+                            }}
+                          >
+                            Stay Date
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.bookingDetails,
+                            }}
+                          >
+                            Booking Details
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.rooms,
+                            }}
+                          >
+                            Rooms
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "right",
+                              width: COLUMN_WIDTHS.total,
+                            }}
+                          >
+                            Total
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.status,
+                            }}
+                          >
+                            Status
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.action,
+                            }}
+                          >
+                            Action
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pageBookings.length === 0 ? (
                           <tr>
-                            <th style={{ width: "48px" }}>#</th>
-                            <th>Booking</th>
-                            <th>Hotel</th>
-                            <th>Guest</th>
-                            <th>Date / Time</th>
-                            <th className="text-center">Rooms</th>
-                            <th className="text-end">Total</th>
-                            <th>Status</th>
-                            <th className="text-center" style={{ width: "70px" }}>Action</th>
+                            <td
+                              colSpan={9}
+                              className="text-center py-5 text-muted"
+                              style={{
+                                border: "1px solid #dee2e6",
+                                backgroundColor: "#ffffff",
+                              }}
+                            >
+                              <FaInbox
+                                style={{
+                                  fontSize: "2.5rem",
+                                  marginBottom: "10px",
+                                  color: "#adb5bd",
+                                }}
+                              />
+                              <p className="mt-2 mb-0 fs-5">
+                                No bookings found.
+                              </p>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {pageData.length > 0 ? (
-                            pageData.map((r, i) => {
-                              const statusText = r.isCancelled ? "Cancelled" : (r.status || "");
-                              const sMeta = STATUS_META[statusText];
-                              return (
-                                <tr key={r.id}>
-                                  <td className="text-muted">{safePage * size + i + 1}</td>
-                                  <td>
-                                    <span className="fw-semibold text-dark">
-                                      {r.bookingCode || "-"}
-                                    </span>
-                                  </td>
-                                  <td>{r.hotelName || "-"}</td>
-                                  {/* Guest — a booking can hold many guests.
-                                      Show the first prominently; the rest sit
-                                      behind a "+N more" badge that opens the
-                                      Customers modal. */}
-                                  <td>
-                                    {(() => {
-                                      const names = getGuestNames(r);
-                                      const first = names[0] || "-";
-                                      const extra = Math.max(0, names.length - 1);
-                                      return (
-                                        <div
-                                          className="d-flex align-items-center"
-                                          style={{ gap: "0.4rem", flexWrap: "wrap" }}
+                        ) : (
+                          pageBookings.map((b, i) => {
+                            const statusText = b.isCancelled
+                              ? "Cancelled"
+                              : (b.status || "");
+                            const sMeta = STATUS_META[statusText];
+                            const timeRange =
+                              trimTime(b.checkInTime) && trimTime(b.checkOutTime)
+                                ? `${trimTime(b.checkInTime)} – ${trimTime(b.checkOutTime)}`
+                                : "";
+                            return (
+                              <tr
+                                key={b.id}
+                                style={{
+                                  backgroundColor:
+                                    i % 2 === 0 ? "#ffffff" : "#f8f9fa",
+                                  transition: "background-color 0.2s ease",
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    "#e7f3ff";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    i % 2 === 0 ? "#ffffff" : "#f8f9fa";
+                                }}
+                              >
+                                <td
+                                  className="text-muted fw-semibold"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    color: "#6c757d",
+                                    width: COLUMN_WIDTHS.sn,
+                                  }}
+                                >
+                                  {serialNumberBase + i + 1}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.customerName,
+                                  }}
+                                >
+                                  {(() => {
+                                    const names = getGuestNames(b);
+                                    const first = names[0] || "-";
+                                    const extra = Math.max(0, names.length - 1);
+                                    return (
+                                      <div
+                                        className="d-flex align-items-center"
+                                        style={{
+                                          gap: "0.4rem",
+                                          flexWrap: "wrap",
+                                        }}
+                                      >
+                                        <span
+                                          className="d-inline-flex align-items-center"
+                                          style={{ gap: "0.3rem" }}
                                         >
-                                          <span
-                                            className="d-inline-flex align-items-center"
-                                            style={{ gap: "0.3rem" }}
-                                          >
-                                            <FaUser
-                                              style={{
-                                                color: "#98a2b3",
-                                                fontSize: "0.72rem",
-                                                flexShrink: 0,
-                                              }}
-                                            />
-                                            <span className="fw-medium text-dark">
-                                              {first}
-                                            </span>
+                                          <FaUser
+                                            style={{
+                                              color: "#6c757d",
+                                              fontSize: "0.78rem",
+                                              flexShrink: 0,
+                                            }}
+                                          />
+                                          <span className="fw-medium text-dark">
+                                            {first}
                                           </span>
-                                          {extra > 0 && (
-                                            <Badge
-                                              bg="light"
-                                              text="primary"
-                                              role="button"
-                                              tabIndex={0}
-                                              title="View all customers"
-                                              onClick={() => handleShowCustomers(r)}
-                                              onKeyDown={(e) => {
-                                                if (
-                                                  e.key === "Enter" ||
-                                                  e.key === " "
-                                                ) {
-                                                  e.preventDefault();
-                                                  handleShowCustomers(r);
-                                                }
-                                              }}
-                                              style={{
-                                                cursor: "pointer",
-                                                border: "1px solid #cfe2ff",
-                                                fontWeight: 600,
-                                                fontSize: "0.68rem",
-                                              }}
-                                            >
-                                              +{extra} more
-                                            </Badge>
-                                          )}
-                                        </div>
-                                      );
-                                    })()}
-                                  </td>
-                                  <td style={{ whiteSpace: "nowrap" }}>
-                                    <div>{fmtDateLong(r.checkInDate)}</div>
-                                    <div className="text-muted" style={{ fontSize: "0.7rem" }}>
-                                      {(r.checkInTime || "").slice(0, 5)} – {(r.checkOutTime || "").slice(0, 5)}
-                                    </div>
-                                  </td>
-                                  <td className="text-center">{r.noOfRooms || 1}</td>
-                                  <td className="text-end" style={{ whiteSpace: "nowrap" }}>
-                                    <span className="fw-semibold text-dark">
-                                      {r.totalAmount != null
-                                        ? `AED ${Number(r.totalAmount).toFixed(2)}`
-                                        : "—"}
+                                        </span>
+                                        {extra > 0 && (
+                                          <Badge
+                                            bg="light"
+                                            text="primary"
+                                            role="button"
+                                            tabIndex={0}
+                                            title="View all customers"
+                                            onClick={() =>
+                                              handleShowCustomers(b)
+                                            }
+                                            onKeyDown={(e) => {
+                                              if (
+                                                e.key === "Enter" ||
+                                                e.key === " "
+                                              ) {
+                                                e.preventDefault();
+                                                handleShowCustomers(b);
+                                              }
+                                            }}
+                                            style={{
+                                              cursor: "pointer",
+                                              border: "1px solid #cfe2ff",
+                                              fontWeight: 600,
+                                              fontSize: "0.7rem",
+                                            }}
+                                          >
+                                            +{extra} more
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.bookingCode,
+                                  }}
+                                >
+                                  <span className="fw-bold text-primary">
+                                    {b.bookingCode || "-"}
+                                  </span>
+                                </td>
+                                <td
+                                  className="text-muted"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.bookDate,
+                                  }}
+                                >
+                                  {formatShortDate(b.checkInDate) || "-"}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.bookingDetails,
+                                  }}
+                                >
+                                  <div
+                                    className="d-flex align-items-center"
+                                    style={{
+                                      gap: "0.35rem",
+                                      flexWrap: "wrap",
+                                    }}
+                                  >
+                                    <span
+                                      className="fw-semibold text-dark"
+                                      style={{ fontSize: "0.875rem" }}
+                                    >
+                                      {b.hotelName || "-"}
                                     </span>
-                                  </td>
-                                  <td>
-                                    <StatusPill meta={sMeta} raw={statusText} />
-                                  </td>
-                                  <td className="text-center">
-                                    <button
-                                      type="button"
-                                      className="btn btn-sm d-inline-flex align-items-center gap-1"
+                                    {timeRange && (
+                                      <span
+                                        className="text-muted"
+                                        style={{ fontSize: "0.75rem" }}
+                                      >
+                                        ({timeRange})
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td
+                                  className="text-muted"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    fontFamily: "monospace",
+                                    width: COLUMN_WIDTHS.rooms,
+                                  }}
+                                >
+                                  {b.noOfRooms ?? 1}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "right",
+                                    width: COLUMN_WIDTHS.total,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  <span className="fw-semibold text-dark">
+                                    {b.totalAmount != null
+                                      ? `AED ${Number(b.totalAmount).toFixed(2)}`
+                                      : "-"}
+                                  </span>
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.status,
+                                  }}
+                                >
+                                  <StatusPill meta={sMeta} raw={statusText} />
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.action,
+                                  }}
+                                >
+                                  <div className="d-flex justify-content-center align-items-center">
+                                    <FaEye
+                                      role="button"
+                                      tabIndex={0}
+                                      title="View full booking details"
                                       style={{
-                                        backgroundColor: "#eff6ff",
-                                        color: "#1d4ed8",
-                                        borderRadius: "6px",
-                                        fontSize: "0.72rem",
-                                        fontWeight: 600,
-                                        padding: "0.25rem 0.6rem",
+                                        fontSize: "18px",
+                                        color: "#007bff",
+                                        cursor: "pointer",
                                       }}
                                       onClick={() =>
                                         navigate(
-                                          `/booking-details/day-stay-booking/${r.id}`,
-                                          { state: { booking: r } },
+                                          `/booking-details/day-stay-booking/${b.id}`,
+                                          { state: { booking: b } },
                                         )
                                       }
-                                      title="View details"
-                                    >
-                                      <FaEye style={{ fontSize: "12px" }} /> View
-                                    </button>
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          ) : (
-                            <tr>
-                              <td colSpan={9} className="text-center py-5 text-muted">
-                                No bookings found
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </Table>
-                    </div>
-
-                    <style>{`
-                      .saas-table-wrap { border: 1px solid #eaecf0; border-radius: 8px; overflow-x: auto; }
-                      .saas-table { font-size: 0.8rem; margin-bottom: 0; }
-                      .saas-table thead th {
-                        background-color: #f9fafb;
-                        color: #667085;
-                        font-size: 0.68rem;
-                        font-weight: 600;
-                        text-transform: uppercase;
-                        letter-spacing: 0.04em;
-                        border-bottom: 1px solid #eaecf0;
-                        border-top: none;
-                        padding: 0.65rem 0.75rem;
-                        white-space: nowrap;
-                      }
-                      .saas-table tbody td {
-                        padding: 0.65rem 0.75rem;
-                        border-top: 1px solid #f2f4f7;
-                        vertical-align: middle;
-                        color: #344054;
-                      }
-                      .saas-table tbody tr:first-child td { border-top: none; }
-                      .saas-table tbody tr:hover { background-color: #fafbfc; }
-                    `}</style>
-
-                    {/* Pagination */}
-                    <div className="d-flex justify-content-between align-items-center mt-3">
-                      <div className="text-muted small">
-                        Showing {displayStart} to {displayEnd} of{" "}
-                        {filtered.length} entries
-                      </div>
-                      {totalPages > 1 && (
-                        <Pagination className="mb-0">
-                          <Pagination.Prev
-                            disabled={safePage === 0}
-                            onClick={() => setPage((p) => Math.max(0, p - 1))}
-                          />
-                          {Array.from(
-                            { length: Math.min(5, totalPages) },
-                            (_, i) => {
-                              let pageNum;
-                              if (totalPages <= 5) pageNum = i;
-                              else if (safePage <= 2) pageNum = i;
-                              else if (safePage >= totalPages - 3)
-                                pageNum = totalPages - 5 + i;
-                              else pageNum = safePage - 2 + i;
-                              return (
-                                <Pagination.Item
-                                  key={pageNum}
-                                  active={pageNum === safePage}
-                                  onClick={() => setPage(pageNum)}
-                                >
-                                  {pageNum + 1}
-                                </Pagination.Item>
-                              );
-                            },
-                          )}
-                          <Pagination.Next
-                            disabled={safePage + 1 >= totalPages}
-                            onClick={() => setPage((p) => p + 1)}
-                          />
-                        </Pagination>
-                      )}
-                    </div>
-                  </>
+                                      onKeyDown={(e) => {
+                                        if (
+                                          e.key === "Enter" ||
+                                          e.key === " "
+                                        ) {
+                                          e.preventDefault();
+                                          navigate(
+                                            `/booking-details/day-stay-booking/${b.id}`,
+                                            { state: { booking: b } },
+                                          );
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </Table>
+                  </div>
                 )}
               </Card.Body>
             </Card>
+
+            {/* Pagination */}
+            {!loading && hasResults && (
+              <Card
+                className="shadow-sm border-0 mt-3"
+                style={{ borderRadius: "8px" }}
+              >
+                <Card.Body className="py-3">
+                  <div className="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <div
+                      className="text-muted"
+                      style={{ fontSize: "0.875rem" }}
+                    >
+                      Showing{" "}
+                      <span className="fw-semibold text-dark">
+                        {displayStart}
+                      </span>{" "}
+                      to{" "}
+                      <span className="fw-semibold text-dark">
+                        {displayEnd}
+                      </span>{" "}
+                      of{" "}
+                      <span className="fw-semibold text-dark">
+                        {totalEntries}
+                      </span>{" "}
+                      entries
+                    </div>
+                    <div className="d-flex align-items-center gap-2">
+                      <span
+                        className="text-muted"
+                        style={{ fontSize: "0.8rem" }}
+                      >
+                        Rows per page
+                      </span>
+                      <Form.Select
+                        size="sm"
+                        value={perPage}
+                        onChange={(e) => setPerPage(Number(e.target.value))}
+                        style={{ width: "auto", fontSize: "0.8rem" }}
+                      >
+                        {PER_PAGE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </div>
+                    <Pagination className="mb-0">
+                      <Pagination.Prev
+                        disabled={currentPage === 1}
+                        onClick={() =>
+                          currentPage > 1 && setPage(currentPage - 1)
+                        }
+                        style={{
+                          cursor:
+                            currentPage === 1 ? "not-allowed" : "pointer",
+                          opacity: currentPage === 1 ? 0.5 : 1,
+                        }}
+                      />
+                      {Array.from(
+                        { length: safeTotalPages },
+                        (_, i) => i + 1,
+                      ).map((pageNumber) => (
+                        <Pagination.Item
+                          key={pageNumber}
+                          active={currentPage === pageNumber}
+                          onClick={() => setPage(pageNumber)}
+                          style={{
+                            cursor: "pointer",
+                            minWidth: "38px",
+                            textAlign: "center",
+                          }}
+                        >
+                          {pageNumber}
+                        </Pagination.Item>
+                      ))}
+                      <Pagination.Next
+                        disabled={currentPage === safeTotalPages}
+                        onClick={() =>
+                          currentPage < safeTotalPages &&
+                          setPage(currentPage + 1)
+                        }
+                        style={{
+                          cursor:
+                            currentPage === safeTotalPages
+                              ? "not-allowed"
+                              : "pointer",
+                          opacity:
+                            currentPage === safeTotalPages ? 0.5 : 1,
+                        }}
+                      />
+                    </Pagination>
+                  </div>
+                </Card.Body>
+              </Card>
+            )}
           </Container>
         </main>
       </div>
@@ -510,13 +921,18 @@ export default function DayStayBookingList() {
         centered
         size="sm"
       >
-        <Modal.Header closeButton style={{ borderBottom: "2px solid #e9ecef" }}>
+        <Modal.Header
+          closeButton
+          style={{ borderBottom: "2px solid #e9ecef" }}
+        >
           <Modal.Title
             className="fw-bold d-flex align-items-center"
             style={{ fontSize: "1rem" }}
           >
             <FaUsers className="me-2 text-primary" />
-            <span>Customers ({getGuestNames(customersModalBooking).length})</span>
+            <span>
+              Customers ({getGuestNames(customersModalBooking).length})
+            </span>
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>

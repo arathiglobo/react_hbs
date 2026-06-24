@@ -6,17 +6,42 @@ import {
   Spinner,
   Pagination,
   Container,
+  Row,
+  Col,
   Form,
   InputGroup,
   Badge,
   Modal,
 } from "react-bootstrap";
-import { FaEye, FaSearch, FaUser, FaUsers } from "react-icons/fa";
+import {
+  FaEye,
+  FaSearch,
+  FaUser,
+  FaUsers,
+  FaInbox,
+} from "react-icons/fa";
 import axiosInstance from "../../components/AxiosInstance";
 import { formatDateTime } from "../../utils/dateUtils";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import { toast } from "react-hot-toast";
+import "../../styles/HotelBookingListModern.css";
+
+const PER_PAGE_OPTIONS = [10, 25, 50, 100];
+
+// Column-width hints kept in sync with HotelBookingList so the two
+// pages line up visually under the shared hbl-modern skin.
+const COLUMN_WIDTHS = {
+  sn: "40px",
+  customerName: "150px",
+  bookingCode: "100px",
+  bookDate: "95px",
+  bookingDetails: "240px",
+  nights: "70px",
+  total: "110px",
+  status: "110px",
+  action: "70px",
+};
 
 const STATUS_META = {
   CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
@@ -77,14 +102,29 @@ const StatusPill = ({ meta, raw }) => {
   );
 };
 
+// "dd/mm/yyyy" — same shape HotelBookingList uses in the table cells so
+// dates render identically across both pages.
+const formatShortDate = (dateString) => {
+  if (!dateString) return "";
+  const normalized = String(dateString).includes("T")
+    ? dateString
+    : `${dateString}T00:00:00`;
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return `${day}/${month}/${d.getFullYear()}`;
+};
+
 export default function LongStayBookingList() {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  // "Customers (N)" modal — opened from the "+N more" badge on the Guest
-  // column to show every guest on a booking.
+  const [page, setPage] = useState(1); // 1-indexed to mirror HotelBookingList
+  const [perPage, setPerPage] = useState(10);
+
+  // "Customers (N)" modal — opened from the "+N more" badge on the
+  // Customer Name column to show every guest on a booking.
   const [showCustomersModal, setShowCustomersModal] = useState(false);
   const [customersModalBooking, setCustomersModalBooking] = useState(null);
 
@@ -93,13 +133,35 @@ export default function LongStayBookingList() {
     setShowCustomersModal(true);
   };
 
-  // Filters — mirrors /booking-details/24hr-booking-list (which
-  // reuses HotelBookingList). All three are applied client-side over
-  // the full list returned by /api/longStayBooking.
+  // Filters — mirror the Hotel Booking List: a single "Booking Type"
+  // dropdown (All / Upcoming / Completed / Cancelled), a search box and
+  // a Month + Year time-period card. All applied client-side over the
+  // single fetch.
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("all"); // all | upcoming | completed | cancelled
-  const [selectedMonth, setSelectedMonth] = useState(""); // "" | 1..12
+  const [status, setStatus] = useState("all");
+  const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
+
+  // Same seven booking-type options Hotel Booking List ships with. For
+  // long-stay bookings the new three map to the closest available field:
+  // PENDING → On Request; an optional `confirmationStatus` /
+  // `invoiceStatus` is read for Reconfirmed / Invoiced so the filters
+  // light up the moment the backend starts emitting those fields.
+  const statusOptions = useMemo(
+    () => [
+      { value: "all", label: "All" },
+      { value: "upcoming", label: "Upcoming" },
+      { value: "completed", label: "Completed" },
+      { value: "cancelled", label: "Cancelled" },
+      { value: "onrequest", label: "On Request" },
+      { value: "reconfirmed", label: "Reconfirmed" },
+      { value: "invoiced", label: "Invoiced" },
+    ],
+    [],
+  );
+
+  const normStatus = (v) =>
+    String(v ?? "").replace(/[\s_-]+/g, "").toLowerCase();
 
   const months = [
     "January", "February", "March", "April", "May", "June",
@@ -107,20 +169,14 @@ export default function LongStayBookingList() {
   ];
   const years = useMemo(() => {
     const current = new Date().getFullYear();
-    return [current - 1, current, current + 1, current + 2];
+    return Array.from({ length: current - 2014 }, (_, i) => 2020 + i);
   }, []);
-
-  // Fetch a large page so the three client-side filters (search /
-  // status / month+year) can all run together. Backend pagination is
-  // bypassed in favour of a single client-side window — same trade-off
-  // HotelBookingList makes.
-  const PAGE_SIZE = 10;
 
   const fetchBookings = async () => {
     try {
       setLoading(true);
       const res = await axiosInstance.get(
-        `/api/longStayBooking?page=0&size=500`
+        `/api/longStayBooking?page=0&size=500`,
       );
       setBookings(res.data.content || []);
     } catch {
@@ -139,7 +195,6 @@ export default function LongStayBookingList() {
     const now = new Date();
     const needle = search.trim().toLowerCase();
     return (bookings || []).filter((b) => {
-      // ── Status filter ──────────────────────────────────────────
       const isCancelled =
         b.bookingStatus === "CANCELLED" || b.cancelStatus === true;
       const checkIn = b.checkInDate ? new Date(b.checkInDate) : null;
@@ -153,8 +208,25 @@ export default function LongStayBookingList() {
         if (isCancelled) return false;
         if (!checkOut || checkOut > now) return false;
       }
+      if (status === "onrequest") {
+        if (isCancelled) return false;
+        const s = normStatus(b.bookingStatus || b.confirmationStatus);
+        if (s !== "pending" && s !== "onrequest") return false;
+      }
+      if (status === "reconfirmed") {
+        if (isCancelled) return false;
+        const cs = normStatus(b.confirmationStatus);
+        if (cs !== "reconfirmed") return false;
+      }
+      if (status === "invoiced") {
+        if (isCancelled) return false;
+        const inv =
+          normStatus(b.invoiceStatus) === "invoiced" ||
+          b.invoiced === true ||
+          b.isInvoiced === true;
+        if (!inv) return false;
+      }
 
-      // ── Time-period filter (uses check-in date) ────────────────
       if (checkIn && (selectedMonth || selectedYear)) {
         const m = checkIn.getMonth() + 1;
         const y = checkIn.getFullYear();
@@ -162,7 +234,6 @@ export default function LongStayBookingList() {
         if (selectedYear && Number(selectedYear) !== y) return false;
       }
 
-      // ── Free-text search (booking code, guest, hotel, email) ───
       if (needle) {
         const hay = [
           b.bookingCode,
@@ -170,6 +241,13 @@ export default function LongStayBookingList() {
           ...getGuestNames(b),
           b.primaryGuestEmail,
           b.hotelName,
+          // Stay dates — shown in the Stay column, so a check-in / check-out
+          // date search (e.g. "26/06/2026") matches. Both dd/mm/yyyy display
+          // form and the raw value are included.
+          formatShortDate(b.checkInDate),
+          formatShortDate(b.checkOutDate),
+          b.checkInDate,
+          b.checkOutDate,
         ]
           .filter(Boolean)
           .join(" ")
@@ -180,28 +258,49 @@ export default function LongStayBookingList() {
     });
   }, [bookings, search, status, selectedMonth, selectedYear]);
 
-  // Reset to page 0 whenever a filter changes.
+  // Reset to page 1 whenever a filter changes.
   useEffect(() => {
-    setPage(0);
-  }, [search, status, selectedMonth, selectedYear]);
+    setPage(1);
+  }, [search, status, selectedMonth, selectedYear, perPage]);
 
-  // Derive pagination from the filtered list (not from backend).
-  const filteredTotalPages = Math.max(
-    1,
-    Math.ceil(filteredBookings.length / PAGE_SIZE)
-  );
+  // Pagination derived from the filtered list (single client-side window).
+  const totalEntries = filteredBookings.length;
+  const safeTotalPages = Math.max(1, Math.ceil(totalEntries / perPage));
+  const currentPage = Math.min(page, safeTotalPages);
+  const serialNumberBase = (currentPage - 1) * perPage;
   const pageBookings = filteredBookings.slice(
-    page * PAGE_SIZE,
-    (page + 1) * PAGE_SIZE
+    serialNumberBase,
+    serialNumberBase + perPage,
   );
-  // Keep the existing totalPages state in sync (used by the
-  // Pagination block below, unchanged).
-  useEffect(() => {
-    setTotalPages(filteredTotalPages);
-  }, [filteredTotalPages]);
+  const hasResults = totalEntries > 0;
+  const displayStart = hasResults ? serialNumberBase + 1 : 0;
+  const displayEnd = hasResults
+    ? Math.min(serialNumberBase + pageBookings.length, totalEntries)
+    : 0;
+
+  const baseCellStyle = {
+    padding: "0.5rem 0.6rem",
+    fontSize: "0.8rem",
+    border: "1px solid #dee2e6",
+    verticalAlign: "middle",
+    whiteSpace: "normal",
+    overflow: "visible",
+    wordBreak: "break-word",
+    lineHeight: 1.4,
+  };
+
+  const baseHeaderStyle = {
+    padding: "0.45rem 0.6rem",
+    fontWeight: 600,
+    textTransform: "uppercase",
+    color: "#495057",
+    border: "1px solid #dee2e6",
+    whiteSpace: "normal",
+    lineHeight: 1.2,
+  };
 
   return (
-    <div className="min-vh-100 bg-light d-flex flex-column">
+    <div className="min-vh-100 bg-light d-flex flex-column hbl-modern">
       <Topbar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
@@ -209,345 +308,607 @@ export default function LongStayBookingList() {
           className="flex-grow-1 p-3"
           style={{ width: "100%", overflow: "hidden" }}
         >
-          <Container
-            fluid
-            style={{
-              maxWidth: "100%",
-              paddingLeft: "0.5rem",
-              paddingRight: "0.5rem",
-            }}
-          >
-            <div className="d-flex justify-content-between align-items-center mb-4">
-              <h5 className="mb-0 text-dark fw-semibold">Long Stay Bookings</h5>
+          <Container fluid className="px-0">
+            {/* Header: Title + Search (left) | Time Period (right) */}
+            <div className="d-flex justify-content-between align-items-end mb-3">
+              <div>
+                <h3 className="fw-bold text-dark mb-2">Long Stay Bookings</h3>
+                <InputGroup style={{ height: "40px", width: "300px" }}>
+                  <InputGroup.Text
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      borderRight: "none",
+                      borderColor: "#dee2e6",
+                    }}
+                  >
+                    <FaSearch style={{ color: "#6c757d" }} />
+                  </InputGroup.Text>
+                  <Form.Control
+                    type="text"
+                    placeholder="Search here..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    style={{
+                      borderLeft: "none",
+                      fontSize: "0.85rem",
+                      borderColor: "#dee2e6",
+                      height: "40px",
+                    }}
+                  />
+                </InputGroup>
+              </div>
+              <Card
+                className="shadow-sm border-0"
+                style={{ borderRadius: "8px", minWidth: "260px" }}
+              >
+                <Card.Body className="p-3">
+                  <h6
+                    className="mb-2 fw-bold text-dark"
+                    style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                  >
+                    Time Period
+                  </h6>
+                  <Row className="g-2">
+                    <Col xs={6}>
+                      <Form.Select
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className="form-control"
+                        size="sm"
+                        style={{ fontSize: "0.82rem", height: "45px" }}
+                      >
+                        <option value="">Month</option>
+                        {months.map((month, index) => (
+                          <option key={month} value={index + 1}>
+                            {month.slice(0, 3)}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                    <Col xs={6}>
+                      <Form.Select
+                        value={selectedYear}
+                        onChange={(e) => setSelectedYear(e.target.value)}
+                        className="form-control"
+                        size="sm"
+                        style={{ fontSize: "0.82rem", height: "45px" }}
+                      >
+                        <option value="">Year</option>
+                        {years.map((year) => (
+                          <option key={year} value={year}>
+                            {year}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                  </Row>
+                </Card.Body>
+              </Card>
             </div>
 
-            <Card
-              className="border mb-3 shadow-sm"
-              style={{ borderRadius: "6px" }}
-            >
-              <Card.Header
-                className="d-flex justify-content-between align-items-center text-dark border-bottom py-2"
-                style={{
-                  borderRadius: "6px 6px 0 0",
-                  backgroundColor: "#f8f9fa",
-                  fontSize: "0.875rem",
-                  fontWeight: 600,
-                }}
-              >
-                <span>List of Bookings</span>
-              </Card.Header>
-              <Card.Body style={{ padding: "1.5rem 1rem 1rem" }}>
-                {/* Toolbar row 1: pills + Time Period */}
-                <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                  <div className="d-inline-flex p-1 rounded" style={{ backgroundColor: "#f3f4f6" }}>
-                    {[
-                      { value: "all", label: "All" },
-                      { value: "upcoming", label: "Upcoming" },
-                      { value: "completed", label: "Completed" },
-                      { value: "cancelled", label: "Cancelled" },
-                    ].map((opt) => {
-                      const active = status === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => setStatus(opt.value)}
-                          className="border-0 px-3 py-1"
-                          style={{
-                            backgroundColor: active ? "#ffffff" : "transparent",
-                            color: active ? "#101828" : "#667085",
-                            fontSize: "0.78rem",
-                            fontWeight: active ? 600 : 500,
-                            borderRadius: "6px",
-                            boxShadow: active ? "0 1px 2px rgba(16,24,40,0.08)" : "none",
-                            transition: "all 0.15s",
-                          }}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <div className="d-flex align-items-center gap-2">
-                    <span
-                      className="text-uppercase text-muted fw-semibold"
-                      style={{ fontSize: "0.68rem", letterSpacing: "0.05em" }}
-                    >
-                      Time Period
-                    </span>
-                    <Form.Select
-                      size="sm"
-                      value={selectedMonth}
-                      onChange={(e) => setSelectedMonth(e.target.value)}
-                      style={{ width: "auto", fontSize: "0.8rem", minWidth: "100px" }}
-                    >
-                      <option value="">Month</option>
-                      {months.map((month, index) => (
-                        <option key={month} value={index + 1}>
-                          {month.slice(0, 3)}
-                        </option>
-                      ))}
-                    </Form.Select>
-                    <Form.Select
-                      size="sm"
-                      value={selectedYear}
-                      onChange={(e) => setSelectedYear(e.target.value)}
-                      style={{ width: "auto", fontSize: "0.8rem", minWidth: "90px" }}
-                    >
-                      <option value="">Year</option>
-                      {years.map((year) => (
-                        <option key={year} value={year}>
-                          {year}
-                        </option>
-                      ))}
-                    </Form.Select>
-                    {(selectedMonth || selectedYear) && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedMonth("");
-                          setSelectedYear("");
-                        }}
-                        className="btn btn-sm border-0"
-                        style={{
-                          fontSize: "0.72rem",
-                          color: "#667085",
-                          padding: "0.25rem 0.5rem",
-                        }}
-                        title="Clear time period"
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Toolbar row 2: search */}
-                <div
-                  className="d-flex flex-wrap justify-content-end align-items-center gap-2"
-                  style={{ marginBottom: "1.5rem" }}
+            {/* Filters Section */}
+            <Row className="mb-2 g-1">
+              <Col xs={12}>
+                <Card
+                  className="shadow-sm border-0 w-100"
+                  style={{ borderRadius: "8px" }}
                 >
-                  <InputGroup size="sm" style={{ width: "280px" }}>
-                    <InputGroup.Text
+                  <Card.Body className="p-3">
+                    <h6
+                      className="mb-2 fw-bold text-dark"
+                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                    >
+                      Booking Type
+                    </h6>
+                    <Row className="g-2">
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <Form.Select
+                          value={status}
+                          onChange={(e) => setStatus(e.target.value)}
+                          size="sm"
+                          aria-label="Booking type filter"
+                          style={{ fontSize: "0.85rem", height: "46px" }}
+                        >
+                          {statusOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </Form.Select>
+                      </Col>
+                    </Row>
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
+
+            {/* Table */}
+            <Card
+              className="shadow-sm border-0"
+              style={{ borderRadius: "8px", overflow: "hidden", width: "100%" }}
+            >
+              <Card.Body className="p-0" style={{ width: "100%" }}>
+                {loading ? (
+                  <div className="text-center p-5">
+                    <Spinner animation="border" variant="primary" />
+                    <p className="mt-2 text-muted">Loading bookings...</p>
+                  </div>
+                ) : (
+                  <div
+                    className="thin-scrollbar"
+                    style={{ overflowX: "auto", width: "100%" }}
+                  >
+                    <Table
+                      hover
+                      size="sm"
+                      className="mb-0 align-middle table-bordered"
                       style={{
-                        fontSize: "0.75rem",
-                        backgroundColor: "#ffffff",
-                        borderRight: "none",
-                        color: "#98a2b3",
+                        tableLayout: "auto",
+                        width: "100%",
+                        fontSize: "0.78rem",
+                        borderCollapse: "separate",
+                        borderSpacing: 0,
+                        wordBreak: "break-word",
                       }}
                     >
-                      <FaSearch />
-                    </InputGroup.Text>
-                    <Form.Control
-                      type="text"
-                      placeholder="Search bookings..."
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      style={{ fontSize: "0.8rem", borderLeft: "none" }}
-                    />
-                  </InputGroup>
-                </div>
-
-                {/* Table */}
-                <div className="table-responsive saas-table-wrap">
-                  <Table hover className="mb-0 align-middle saas-table">
-                    <thead>
-                      <tr>
-                        <th style={{ width: "48px" }}>#</th>
-                        <th>Booking</th>
-                        <th>Booked On</th>
-                        <th>Hotel</th>
-                        <th>Guest</th>
-                        <th>Stay</th>
-                        <th className="text-center">Nights</th>
-                        <th className="text-end">Total</th>
-                        <th>Status</th>
-                        <th className="text-center" style={{ width: "70px" }}>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {loading ? (
-                        <tr>
-                          <td colSpan={10} className="text-center py-5">
-                            <Spinner animation="border" variant="primary" />
-                            <p className="mt-2 text-muted mb-0">Loading bookings...</p>
-                          </td>
-                        </tr>
-                      ) : pageBookings.length === 0 ? (
-                        <tr>
-                          <td colSpan={10} className="text-center py-5 text-muted">
-                            No bookings found
-                          </td>
-                        </tr>
-                      ) : (
-                        pageBookings.map((b, i) => {
-                          const sMeta = STATUS_META[b.bookingStatus];
-                          return (
-                            <tr key={b.longStayBookingId}>
-                              <td className="text-muted">{i + 1 + page * PAGE_SIZE}</td>
-                              <td>
-                                <span className="fw-semibold text-dark">
-                                  {b.bookingCode || "-"}
-                                </span>
-                              </td>
-                              <td style={{ whiteSpace: "nowrap" }}>{formatDateTime(b.bookingDateTime)}</td>
-                              <td>{b.hotelName || "-"}</td>
-                              {/* Guest — a booking can hold many guests. Show
-                                  the first prominently; the rest sit behind a
-                                  "+N more" badge that opens the Customers
-                                  modal. Email stays as a sub-line. */}
-                              <td>
-                                {(() => {
-                                  const names = getGuestNames(b);
-                                  const first = names[0] || "-";
-                                  const extra = Math.max(0, names.length - 1);
-                                  return (
-                                    <>
-                                      <div
-                                        className="d-flex align-items-center"
-                                        style={{ gap: "0.4rem", flexWrap: "wrap" }}
-                                      >
-                                        <span
-                                          className="d-inline-flex align-items-center"
-                                          style={{ gap: "0.3rem" }}
-                                        >
-                                          <FaUser
-                                            style={{
-                                              color: "#98a2b3",
-                                              fontSize: "0.72rem",
-                                              flexShrink: 0,
-                                            }}
-                                          />
-                                          <span className="fw-medium text-dark">
-                                            {first}
-                                          </span>
-                                        </span>
-                                        {extra > 0 && (
-                                          <Badge
-                                            bg="light"
-                                            text="primary"
-                                            role="button"
-                                            tabIndex={0}
-                                            title="View all customers"
-                                            onClick={() => handleShowCustomers(b)}
-                                            onKeyDown={(e) => {
-                                              if (e.key === "Enter" || e.key === " ") {
-                                                e.preventDefault();
-                                                handleShowCustomers(b);
-                                              }
-                                            }}
-                                            style={{
-                                              cursor: "pointer",
-                                              border: "1px solid #cfe2ff",
-                                              fontWeight: 600,
-                                              fontSize: "0.68rem",
-                                            }}
-                                          >
-                                            +{extra} more
-                                          </Badge>
-                                        )}
-                                      </div>
-                                      <div
-                                        className="text-muted"
-                                        style={{ fontSize: "0.7rem" }}
-                                      >
-                                        {b.primaryGuestEmail || ""}
-                                      </div>
-                                    </>
-                                  );
-                                })()}
-                              </td>
-                              <td style={{ whiteSpace: "nowrap" }}>
-                                <div>{formatDateTime(b.checkInDate)}</div>
-                                <div className="text-muted" style={{ fontSize: "0.7rem" }}>
-                                  → {formatDateTime(b.checkOutDate)}
-                                </div>
-                              </td>
-                              <td className="text-center">{b.totalNights || "-"}</td>
-                              <td className="text-end" style={{ whiteSpace: "nowrap" }}>
-                                <span className="fw-semibold text-dark">
-                                  {b.displayCurrencyCode &&
-                                  b.displayCurrencyCode !== "AED" &&
-                                  Number(b.displayAmount) > 0
-                                    ? `${b.displayCurrencyCode} ${Number(b.displayAmount).toFixed(2)}`
-                                    : (b.totalAmount ?? "-")}
-                                </span>
-                              </td>
-                              <td>
-                                <StatusPill meta={sMeta} raw={b.bookingStatus} />
-                              </td>
-                              <td className="text-center">
-                                <button
-                                  type="button"
-                                  className="btn btn-sm d-inline-flex align-items-center gap-1"
-                                  style={{
-                                    backgroundColor: "#eff6ff",
-                                    color: "#1d4ed8",
-                                    borderRadius: "6px",
-                                    fontSize: "0.72rem",
-                                    fontWeight: 600,
-                                    padding: "0.25rem 0.6rem",
-                                  }}
-                                  onClick={() =>
-                                    navigate(
-                                      `/booking-details/long-stay-booking/${b.longStayBookingId}`,
-                                      { state: { booking: b } },
-                                    )
-                                  }
-                                  title="View details"
-                                >
-                                  <FaEye style={{ fontSize: "12px" }} /> View
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </Table>
-                </div>
-
-                <style>{`
-                  .saas-table-wrap { border: 1px solid #eaecf0; border-radius: 8px; overflow-x: auto; }
-                  .saas-table { font-size: 0.8rem; margin-bottom: 0; }
-                  .saas-table thead th {
-                    background-color: #f9fafb;
-                    color: #667085;
-                    font-size: 0.68rem;
-                    font-weight: 600;
-                    text-transform: uppercase;
-                    letter-spacing: 0.04em;
-                    border-bottom: 1px solid #eaecf0;
-                    border-top: none;
-                    padding: 0.65rem 0.75rem;
-                    white-space: nowrap;
-                  }
-                  .saas-table tbody td {
-                    padding: 0.65rem 0.75rem;
-                    border-top: 1px solid #f2f4f7;
-                    vertical-align: middle;
-                    color: #344054;
-                  }
-                  .saas-table tbody tr:first-child td { border-top: none; }
-                  .saas-table tbody tr:hover { background-color: #fafbfc; }
-                `}</style>
-
-                {totalPages > 1 && (
-                  <Pagination className="justify-content-center mt-3 mb-0">
-                    {Array.from({ length: totalPages }).map((_, i) => (
-                      <Pagination.Item
-                        key={i}
-                        active={i === page}
-                        onClick={() => setPage(i)}
+                      <thead
+                        style={{
+                          backgroundColor: "#f8f9fa",
+                          borderBottom: "2px solid #dee2e6",
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                          fontSize: "0.7rem",
+                          letterSpacing: "0.03em",
+                        }}
                       >
-                        {i + 1}
-                      </Pagination.Item>
-                    ))}
-                  </Pagination>
+                        <tr>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.sn,
+                            }}
+                          >
+                            S.N
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.customerName,
+                            }}
+                          >
+                            Customer Name
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.bookingCode,
+                            }}
+                          >
+                            Booking Code
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.bookDate,
+                            }}
+                          >
+                            Book Date
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.bookingDetails,
+                            }}
+                          >
+                            Booking Details
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.nights,
+                            }}
+                          >
+                            Nights
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "right",
+                              width: COLUMN_WIDTHS.total,
+                            }}
+                          >
+                            Total
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.status,
+                            }}
+                          >
+                            Status
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.action,
+                            }}
+                          >
+                            Action
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pageBookings.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={9}
+                              className="text-center py-5 text-muted"
+                              style={{
+                                border: "1px solid #dee2e6",
+                                backgroundColor: "#ffffff",
+                              }}
+                            >
+                              <FaInbox
+                                style={{
+                                  fontSize: "2.5rem",
+                                  marginBottom: "10px",
+                                  color: "#adb5bd",
+                                }}
+                              />
+                              <p className="mt-2 mb-0 fs-5">
+                                No bookings found.
+                              </p>
+                            </td>
+                          </tr>
+                        ) : (
+                          pageBookings.map((b, i) => {
+                            const sMeta = STATUS_META[b.bookingStatus];
+                            return (
+                              <tr
+                                key={b.longStayBookingId}
+                                style={{
+                                  backgroundColor:
+                                    i % 2 === 0 ? "#ffffff" : "#f8f9fa",
+                                  transition: "background-color 0.2s ease",
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    "#e7f3ff";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    i % 2 === 0 ? "#ffffff" : "#f8f9fa";
+                                }}
+                              >
+                                <td
+                                  className="text-muted fw-semibold"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    color: "#6c757d",
+                                    width: COLUMN_WIDTHS.sn,
+                                  }}
+                                >
+                                  {serialNumberBase + i + 1}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.customerName,
+                                  }}
+                                >
+                                  {(() => {
+                                    const names = getGuestNames(b);
+                                    const first = names[0] || "-";
+                                    const extra = Math.max(0, names.length - 1);
+                                    return (
+                                      <>
+                                        <div
+                                          className="d-flex align-items-center"
+                                          style={{
+                                            gap: "0.4rem",
+                                            flexWrap: "wrap",
+                                          }}
+                                        >
+                                          <span
+                                            className="d-inline-flex align-items-center"
+                                            style={{ gap: "0.3rem" }}
+                                          >
+                                            <FaUser
+                                              style={{
+                                                color: "#6c757d",
+                                                fontSize: "0.78rem",
+                                                flexShrink: 0,
+                                              }}
+                                            />
+                                            <span className="fw-medium text-dark">
+                                              {first}
+                                            </span>
+                                          </span>
+                                          {extra > 0 && (
+                                            <Badge
+                                              bg="light"
+                                              text="primary"
+                                              role="button"
+                                              tabIndex={0}
+                                              title="View all customers"
+                                              onClick={() =>
+                                                handleShowCustomers(b)
+                                              }
+                                              onKeyDown={(e) => {
+                                                if (
+                                                  e.key === "Enter" ||
+                                                  e.key === " "
+                                                ) {
+                                                  e.preventDefault();
+                                                  handleShowCustomers(b);
+                                                }
+                                              }}
+                                              style={{
+                                                cursor: "pointer",
+                                                border: "1px solid #cfe2ff",
+                                                fontWeight: 600,
+                                                fontSize: "0.7rem",
+                                              }}
+                                            >
+                                              +{extra} more
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        {b.primaryGuestEmail && (
+                                          <div
+                                            className="text-muted"
+                                            style={{ fontSize: "0.7rem" }}
+                                          >
+                                            {b.primaryGuestEmail}
+                                          </div>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.bookingCode,
+                                  }}
+                                >
+                                  <span className="fw-bold text-primary">
+                                    {b.bookingCode || "-"}
+                                  </span>
+                                </td>
+                                <td
+                                  className="text-muted"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.bookDate,
+                                  }}
+                                >
+                                  {formatShortDate(b.bookingDateTime) ||
+                                    formatDateTime(b.bookingDateTime) ||
+                                    "-"}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.bookingDetails,
+                                  }}
+                                >
+                                  <div
+                                    className="d-flex align-items-center"
+                                    style={{
+                                      gap: "0.35rem",
+                                      flexWrap: "wrap",
+                                    }}
+                                  >
+                                    <span
+                                      className="fw-semibold text-dark"
+                                      style={{ fontSize: "0.875rem" }}
+                                    >
+                                      {b.hotelName || "-"}
+                                    </span>
+                                    {formatShortDate(b.checkInDate) &&
+                                      formatShortDate(b.checkOutDate) && (
+                                        <span
+                                          className="text-muted"
+                                          style={{ fontSize: "0.75rem" }}
+                                        >
+                                          ({formatShortDate(b.checkInDate)} -{" "}
+                                          {formatShortDate(b.checkOutDate)})
+                                        </span>
+                                      )}
+                                  </div>
+                                </td>
+                                <td
+                                  className="text-muted"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    fontFamily: "monospace",
+                                    width: COLUMN_WIDTHS.nights,
+                                  }}
+                                >
+                                  {b.totalNights ?? "-"}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "right",
+                                    width: COLUMN_WIDTHS.total,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  <span className="fw-semibold text-dark">
+                                    {b.displayCurrencyCode &&
+                                    b.displayCurrencyCode !== "AED" &&
+                                    Number(b.displayAmount) > 0
+                                      ? `${b.displayCurrencyCode} ${Number(
+                                          b.displayAmount,
+                                        ).toFixed(2)}`
+                                      : b.totalAmount ?? "-"}
+                                  </span>
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.status,
+                                  }}
+                                >
+                                  <StatusPill
+                                    meta={sMeta}
+                                    raw={b.bookingStatus}
+                                  />
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.action,
+                                  }}
+                                >
+                                  <div className="d-flex justify-content-center align-items-center">
+                                    <FaEye
+                                      role="button"
+                                      tabIndex={0}
+                                      title="View full booking details"
+                                      style={{
+                                        fontSize: "18px",
+                                        color: "#007bff",
+                                        cursor: "pointer",
+                                      }}
+                                      onClick={() =>
+                                        navigate(
+                                          `/booking-details/long-stay-booking/${b.longStayBookingId}`,
+                                          { state: { booking: b } },
+                                        )
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (
+                                          e.key === "Enter" ||
+                                          e.key === " "
+                                        ) {
+                                          e.preventDefault();
+                                          navigate(
+                                            `/booking-details/long-stay-booking/${b.longStayBookingId}`,
+                                            { state: { booking: b } },
+                                          );
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </Table>
+                  </div>
                 )}
               </Card.Body>
             </Card>
+
+            {/* Pagination */}
+            {!loading && hasResults && (
+              <Card
+                className="shadow-sm border-0 mt-3"
+                style={{ borderRadius: "8px" }}
+              >
+                <Card.Body className="py-3">
+                  <div className="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <div
+                      className="text-muted"
+                      style={{ fontSize: "0.875rem" }}
+                    >
+                      Showing{" "}
+                      <span className="fw-semibold text-dark">
+                        {displayStart}
+                      </span>{" "}
+                      to{" "}
+                      <span className="fw-semibold text-dark">
+                        {displayEnd}
+                      </span>{" "}
+                      of{" "}
+                      <span className="fw-semibold text-dark">
+                        {totalEntries}
+                      </span>{" "}
+                      entries
+                    </div>
+                    <div className="d-flex align-items-center gap-2">
+                      <span
+                        className="text-muted"
+                        style={{ fontSize: "0.8rem" }}
+                      >
+                        Rows per page
+                      </span>
+                      <Form.Select
+                        size="sm"
+                        value={perPage}
+                        onChange={(e) => setPerPage(Number(e.target.value))}
+                        style={{ width: "auto", fontSize: "0.8rem" }}
+                      >
+                        {PER_PAGE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </div>
+                    <Pagination className="mb-0">
+                      <Pagination.Prev
+                        disabled={currentPage === 1}
+                        onClick={() =>
+                          currentPage > 1 && setPage(currentPage - 1)
+                        }
+                        style={{
+                          cursor:
+                            currentPage === 1 ? "not-allowed" : "pointer",
+                          opacity: currentPage === 1 ? 0.5 : 1,
+                        }}
+                      />
+                      {Array.from(
+                        { length: safeTotalPages },
+                        (_, i) => i + 1,
+                      ).map((pageNumber) => (
+                        <Pagination.Item
+                          key={pageNumber}
+                          active={currentPage === pageNumber}
+                          onClick={() => setPage(pageNumber)}
+                          style={{
+                            cursor: "pointer",
+                            minWidth: "38px",
+                            textAlign: "center",
+                          }}
+                        >
+                          {pageNumber}
+                        </Pagination.Item>
+                      ))}
+                      <Pagination.Next
+                        disabled={currentPage === safeTotalPages}
+                        onClick={() =>
+                          currentPage < safeTotalPages &&
+                          setPage(currentPage + 1)
+                        }
+                        style={{
+                          cursor:
+                            currentPage === safeTotalPages
+                              ? "not-allowed"
+                              : "pointer",
+                          opacity:
+                            currentPage === safeTotalPages ? 0.5 : 1,
+                        }}
+                      />
+                    </Pagination>
+                  </div>
+                </Card.Body>
+              </Card>
+            )}
           </Container>
         </main>
       </div>
@@ -559,13 +920,18 @@ export default function LongStayBookingList() {
         centered
         size="sm"
       >
-        <Modal.Header closeButton style={{ borderBottom: "2px solid #e9ecef" }}>
+        <Modal.Header
+          closeButton
+          style={{ borderBottom: "2px solid #e9ecef" }}
+        >
           <Modal.Title
             className="fw-bold d-flex align-items-center"
             style={{ fontSize: "1rem" }}
           >
             <FaUsers className="me-2 text-primary" />
-            <span>Customers ({getGuestNames(customersModalBooking).length})</span>
+            <span>
+              Customers ({getGuestNames(customersModalBooking).length})
+            </span>
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>

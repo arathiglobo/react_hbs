@@ -517,7 +517,7 @@ export default function LastMinuteBookingPage() {
             <Card.Body className="p-4">
               <div className="mb-4">
                 <h2 className="fw-semibold text-primary mb-1">Last Minute Deals</h2>
-                <p className="text-muted mb-0">Discounted rooms for check-in within 2 days</p>
+                <p className="text-muted mb-0">Discounted rooms for check-in upto {checkInWindowDays} days</p>
               </div>
 
               <Form onSubmit={handleSearch}>
@@ -530,7 +530,7 @@ export default function LastMinuteBookingPage() {
                 <Row className="g-4">
                   {/* 1. Agent */}
                   {!isAgentRole && (
-                  <Col lg={3} md={6}>
+                  <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Agent</Form.Label>
                       <AgentSelect
@@ -641,7 +641,7 @@ export default function LastMinuteBookingPage() {
                   </Col>
 
                   {/* 4. Check-In (clamped to today/+1/+2) */}
-                  <Col lg={4} md={6}>
+                  <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Check-in</Form.Label>
                       <Form.Control

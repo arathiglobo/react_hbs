@@ -1,69 +1,95 @@
-/**
- * SchefferDriverBookingList.jsx
- *
- * Booking-list page for the Scheffer Driver new-booking flow.
- *
- *   GET /api/scheffer/grouped-list — upcoming / completed / cancelled buckets,
- *   accepts optional month / year params (Time Period filter).
- *
- * The Action column contains only the View (eye) icon — clicking it
- * navigates to a dedicated detail page
- * (/booking-details/scheffer-driver-booking/:id) where Voucher / Cancel /
- * Record-Actual-Usage live as buttons at the bottom-left.
- *
- * Visually mirrors the Hotel Booking List (`hbl-modern` skin): title +
- * 300px search left, Time Period card right, Booking Type filter card,
- * bordered table, FaInbox empty state, StatusPill, plain blue FaEye
- * action, and a pagination card with Showing/Rows-per-page/Prev-Pages-Next.
- */
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   Container,
   Card,
-  Form,
   Table,
-  InputGroup,
+  Button,
   Spinner,
+  Pagination,
+  Form,
+  InputGroup,
+  Modal,
   Row,
   Col,
-  Pagination,
 } from "react-bootstrap";
-import { FaSearch, FaEye, FaMapMarkerAlt, FaInbox } from "react-icons/fa";
-import { useNavigate } from "react-router-dom";
+import {
+  FaEye,
+  FaSearch,
+  FaInbox,
+  FaSpa,
+  FaUserMd,
+  FaBookOpen,
+  FaTrashAlt,
+} from "react-icons/fa";
+import toast from "react-hot-toast";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
-import toast from "react-hot-toast";
 import "../../styles/HotelBookingListModern.css";
 
+const AYURVEDA_API = "/api/v1/ayurveda";
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
+// Column-width hints kept in sync with HotelBookingList so the two
+// pages line up visually under the shared hbl-modern skin.
 const COLUMN_WIDTHS = {
   sn: "40px",
-  booking: "120px",
-  customer: "160px",
-  cab: "150px",
-  travel: "260px",
-  pax: "90px",
-  amount: "120px",
+  reference: "110px",
+  type: "120px",
+  item: "180px",
+  booked: "95px",
+  period: "150px",
+  pax: "60px",
+  total: "100px",
   status: "110px",
-  action: "70px",
+  payment: "110px",
+  action: "90px",
 };
 
-// Status meta — Scheffer buckets map to Confirmed (upcoming),
-// Completed and Cancelled. Extra entries kept for parity with HBL.
 const STATUS_META = {
   CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
   COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
   PENDING:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
-  UPCOMING:  { label: "Upcoming",  bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  Cancelled: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
 };
 
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+const PAYMENT_META = {
+  PAID:      { label: "Paid",     bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  PENDING:   { label: "Pending",  bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  FAILED:    { label: "Failed",   bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+  REFUNDED:  { label: "Refunded", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
+  UNPAID:    { label: "Unpaid",   bg: "#f3f4f6", color: "#475467" },
+};
+
+const TYPE_META = {
+  PACKAGE:      { bg: "#f0f9ff", color: "#0369a1" },
+  CONSULTATION: { bg: "#faf5ff", color: "#7e22ce" },
+  COURSE:       { bg: "#fff7ed", color: "#c2410c" },
+};
+
+const typeIcon = (type) => {
+  if (type === "PACKAGE") return <FaSpa className="me-1" />;
+  if (type === "CONSULTATION") return <FaUserMd className="me-1" />;
+  if (type === "COURSE") return <FaBookOpen className="me-1" />;
+  return null;
+};
+
+const formatAmount = (a) => (a != null ? `₹${Number(a).toFixed(2)}` : "-");
+
+// "dd/mm/yyyy" — same shape HotelBookingList uses in the table cells so
+// dates render identically across both pages.
+const formatShortDate = (dateString) => {
+  if (!dateString) return "";
+  const normalized = String(dateString).includes("T")
+    ? dateString
+    : `${dateString}T00:00:00`;
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return `${day}/${month}/${d.getFullYear()}`;
+};
 
 const StatusPill = ({ meta, raw }) => {
   if (!meta) return <span className="text-muted">{raw || "-"}</span>;
@@ -95,47 +121,31 @@ const StatusPill = ({ meta, raw }) => {
   );
 };
 
-const fmtDateLong = (iso) => {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  if (isNaN(d)) return typeof iso === "string" ? iso.slice(0, 10) : "-";
-  return d.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-};
-
-const normStatus = (v) =>
-  String(v ?? "").replace(/[\s_-]+/g, "").toLowerCase();
-
-const SchefferDriverBookingList = ({
-  apiBase = "/api/scheffer",
-  pageTitle = "Chauffeur Driver & Limousine Bookings",
-}) => {
-  const navigate = useNavigate();
+const AyurvedaBookingList = () => {
+  const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [data, setData] = useState({
-    upcoming: [],
-    completed: [],
-    cancelled: [],
-  });
+  const [page, setPage] = useState(1); // 1-indexed to mirror HotelBookingList
+  const [perPage, setPerPage] = useState(10);
 
-  // Filters mirror HBL: search + booking-type dropdown + month/year.
+  // Filters — mirror the Hotel Booking List: a single "Booking Type"
+  // dropdown (All / Upcoming / Completed / Cancelled / On Request /
+  // Reconfirmed / Invoiced), a search box and a Month + Year time-period
+  // card. All applied client-side over the single fetch.
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
 
-  // Pagination (1-indexed) mirrors HBL.
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(10);
+  // Modals — kept from the original page.
+  const [detailsBooking, setDetailsBooking] = useState(null);
+  const [cancelBooking, setCancelBooking] = useState(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
 
-  const years = useMemo(() => {
-    const current = new Date().getFullYear();
-    return Array.from({ length: current - 2014 }, (_, i) => 2020 + i);
-  }, []);
-
+  // Same seven booking-type options Hotel Booking List ships with. The
+  // last three map to closest available fields on the Ayurveda booking —
+  // PENDING status counts as On Request; Reconfirmed / Invoiced read
+  // optional flags so they light up the moment the backend emits them.
   const statusOptions = useMemo(
     () => [
       { value: "all", label: "All" },
@@ -149,75 +159,72 @@ const SchefferDriverBookingList = ({
     [],
   );
 
-  const fetchList = async () => {
+  const normStatus = (v) =>
+    String(v ?? "").replace(/[\s_-]+/g, "").toLowerCase();
+
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+  const years = useMemo(() => {
+    const current = new Date().getFullYear();
+    return Array.from({ length: current - 2014 }, (_, i) => 2020 + i);
+  }, []);
+
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const role = (localStorage.getItem("currentActiveRole") || "")
-        .toLowerCase();
-      const params = {
-        upcomingPage: 0,
-        upcomingSize: 500,
-        completedPage: 0,
-        completedSize: 500,
-        cancelledPage: 0,
-        cancelledSize: 500,
-      };
-      if (role === "agent") {
-        const agentId = localStorage.getItem("agentId");
-        if (agentId && agentId !== "null") params.agentId = agentId;
-      }
-      if (selectedMonth) params.month = selectedMonth;
-      if (selectedYear) params.year = selectedYear;
-      const res = await axiosInstance.get(`${apiBase}/grouped-list`, {
-        params,
+      // Pull a wide window once and filter client-side so the new design
+      // can keep the rich filter set without extra endpoints.
+      const res = await axiosInstance.get(`${AYURVEDA_API}/bookings`, {
+        params: { page: 0, size: 500 },
       });
-      const d = res.data || {};
-      setData({
-        upcoming: d.upcoming || [],
-        completed: d.completed || [],
-        cancelled: d.cancelled || [],
-      });
+      const data = res.data || {};
+      setBookings(Array.isArray(data.content) ? data.content : []);
     } catch (e) {
-      console.error("Error loading bookings:", e);
+      console.error(e);
       toast.error("Failed to load bookings");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchList();
-    // eslint-disable-next-line
-  }, [apiBase, selectedMonth, selectedYear]);
+    load();
+  }, [load]);
 
-  // Flatten the three buckets into one list, tagging each row with the
-  // bucket it came from so the Status column / filter can use it.
-  const allRows = useMemo(() => {
-    const tag = (arr, bucket) =>
-      (arr || []).map((b) => ({ ...b, __bucket: bucket }));
-    return [
-      ...tag(data.upcoming, "upcoming"),
-      ...tag(data.completed, "completed"),
-      ...tag(data.cancelled, "cancelled"),
-    ];
-  }, [data]);
-
+  // Apply search + status + time-period filters in one pass.
   const filteredBookings = useMemo(() => {
+    const now = new Date();
     const needle = search.trim().toLowerCase();
-    return allRows.filter((b) => {
-      // Bucket / status filter
-      if (status === "upcoming" && b.__bucket !== "upcoming") return false;
-      if (status === "completed" && b.__bucket !== "completed") return false;
-      if (status === "cancelled" && b.__bucket !== "cancelled") return false;
+    return (bookings || []).filter((b) => {
+      const isCancelled =
+        b.isCancelled === true || b.status === "CANCELLED" || b.status === "Cancelled";
+      const startDate = b.startDate ? new Date(b.startDate) : null;
+      const endDate = b.endDate ? new Date(b.endDate) : null;
+
+      if (status === "cancelled" && !isCancelled) return false;
+      if (status === "upcoming") {
+        if (isCancelled) return false;
+        if (!startDate || startDate < now) return false;
+      }
+      if (status === "completed") {
+        if (isCancelled) return false;
+        const ref = endDate || startDate;
+        if (!ref || ref > now) return false;
+      }
       if (status === "onrequest") {
-        const s = normStatus(b.bookingStatus || b.confirmationStatus);
+        if (isCancelled) return false;
+        const s = normStatus(b.status || b.confirmationStatus);
         if (s !== "pending" && s !== "onrequest") return false;
       }
       if (status === "reconfirmed") {
+        if (isCancelled) return false;
         const cs = normStatus(b.confirmationStatus);
         if (cs !== "reconfirmed") return false;
       }
       if (status === "invoiced") {
+        if (isCancelled) return false;
         const inv =
           normStatus(b.invoiceStatus) === "invoiced" ||
           b.invoiced === true ||
@@ -225,17 +232,21 @@ const SchefferDriverBookingList = ({
         if (!inv) return false;
       }
 
+      if (startDate && (selectedMonth || selectedYear)) {
+        const m = startDate.getMonth() + 1;
+        const y = startDate.getFullYear();
+        if (selectedMonth && Number(selectedMonth) !== m) return false;
+        if (selectedYear && Number(selectedYear) !== y) return false;
+      }
+
       if (needle) {
         const hay = [
-          b.bookingCode,
-          b.packageBookCode,
-          b.cabName,
-          b.cabProviderName,
-          b.transporter,
-          b.custFirstName,
-          b.custLastName,
-          b.pickupName,
-          b.dropoffName,
+          b.bookingReference,
+          b.packageName,
+          b.doctorName,
+          b.courseName,
+          b.status,
+          b.bookingType,
         ]
           .filter(Boolean)
           .join(" ")
@@ -244,12 +255,14 @@ const SchefferDriverBookingList = ({
       }
       return true;
     });
-  }, [allRows, search, status]);
+  }, [bookings, search, status, selectedMonth, selectedYear]);
 
+  // Reset to page 1 whenever a filter changes.
   useEffect(() => {
     setPage(1);
   }, [search, status, selectedMonth, selectedYear, perPage]);
 
+  // Pagination derived from the filtered list (single client-side window).
   const totalEntries = filteredBookings.length;
   const safeTotalPages = Math.max(1, Math.ceil(totalEntries / perPage));
   const currentPage = Math.min(page, safeTotalPages);
@@ -263,6 +276,26 @@ const SchefferDriverBookingList = ({
   const displayEnd = hasResults
     ? Math.min(serialNumberBase + pageBookings.length, totalEntries)
     : 0;
+
+  const submitCancel = async () => {
+    if (!cancelBooking) return;
+    setCancelling(true);
+    try {
+      await axiosInstance.post(
+        `${AYURVEDA_API}/bookings/${cancelBooking.id}/cancel`,
+        { reason: cancelReason || "Cancelled by user" },
+      );
+      toast.success("Booking cancelled");
+      setCancelBooking(null);
+      setCancelReason("");
+      load();
+    } catch (e) {
+      console.error(e);
+      toast.error("Cancel failed");
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   const baseCellStyle = {
     padding: "0.5rem 0.6rem",
@@ -285,13 +318,6 @@ const SchefferDriverBookingList = ({
     lineHeight: 1.2,
   };
 
-  const bucketToStatusMeta = (bucket) => {
-    if (bucket === "upcoming") return STATUS_META.CONFIRMED;
-    if (bucket === "completed") return STATUS_META.COMPLETED;
-    if (bucket === "cancelled") return STATUS_META.CANCELLED;
-    return null;
-  };
-
   return (
     <div className="min-vh-100 bg-light d-flex flex-column hbl-modern">
       <TopBar />
@@ -305,7 +331,7 @@ const SchefferDriverBookingList = ({
             {/* Header: Title + Search (left) | Time Period (right) */}
             <div className="d-flex justify-content-between align-items-end mb-3">
               <div>
-                <h3 className="fw-bold text-dark mb-2">{pageTitle}</h3>
+                <h3 className="fw-bold text-dark mb-2">Ayurveda Bookings</h3>
                 <InputGroup style={{ height: "40px", width: "300px" }}>
                   <InputGroup.Text
                     style={{
@@ -351,7 +377,7 @@ const SchefferDriverBookingList = ({
                         style={{ fontSize: "0.82rem", height: "45px" }}
                       >
                         <option value="">Month</option>
-                        {MONTHS.map((month, index) => (
+                        {months.map((month, index) => (
                           <option key={month} value={index + 1}>
                             {month.slice(0, 3)}
                           </option>
@@ -379,7 +405,7 @@ const SchefferDriverBookingList = ({
               </Card>
             </div>
 
-            {/* Filters: Booking Type */}
+            {/* Filters Section */}
             <Row className="mb-2 g-1">
               <Col xs={12}>
                 <Card
@@ -418,11 +444,7 @@ const SchefferDriverBookingList = ({
             {/* Table */}
             <Card
               className="shadow-sm border-0"
-              style={{
-                borderRadius: "8px",
-                overflow: "hidden",
-                width: "100%",
-              }}
+              style={{ borderRadius: "8px", overflow: "hidden", width: "100%" }}
             >
               <Card.Body className="p-0" style={{ width: "100%" }}>
                 {loading ? (
@@ -470,34 +492,43 @@ const SchefferDriverBookingList = ({
                           <th
                             style={{
                               ...baseHeaderStyle,
-                              width: COLUMN_WIDTHS.booking,
+                              width: COLUMN_WIDTHS.reference,
                             }}
                           >
-                            Booking
+                            Reference
                           </th>
                           <th
                             style={{
                               ...baseHeaderStyle,
-                              width: COLUMN_WIDTHS.customer,
+                              width: COLUMN_WIDTHS.type,
                             }}
                           >
-                            Customer
+                            Type
                           </th>
                           <th
                             style={{
                               ...baseHeaderStyle,
-                              width: COLUMN_WIDTHS.cab,
+                              width: COLUMN_WIDTHS.item,
                             }}
                           >
-                            Cab
+                            Item
                           </th>
                           <th
                             style={{
                               ...baseHeaderStyle,
-                              width: COLUMN_WIDTHS.travel,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.booked,
                             }}
                           >
-                            Travel
+                            Booked
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.period,
+                            }}
+                          >
+                            Period
                           </th>
                           <th
                             style={{
@@ -512,10 +543,10 @@ const SchefferDriverBookingList = ({
                             style={{
                               ...baseHeaderStyle,
                               textAlign: "right",
-                              width: COLUMN_WIDTHS.amount,
+                              width: COLUMN_WIDTHS.total,
                             }}
                           >
-                            Amount
+                            Total
                           </th>
                           <th
                             style={{
@@ -525,6 +556,15 @@ const SchefferDriverBookingList = ({
                             }}
                           >
                             Status
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.payment,
+                            }}
+                          >
+                            Payment
                           </th>
                           <th
                             style={{
@@ -541,7 +581,7 @@ const SchefferDriverBookingList = ({
                         {pageBookings.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={9}
+                              colSpan={11}
                               className="text-center py-5 text-muted"
                               style={{
                                 border: "1px solid #dee2e6",
@@ -562,10 +602,16 @@ const SchefferDriverBookingList = ({
                           </tr>
                         ) : (
                           pageBookings.map((b, i) => {
-                            const sMeta = bucketToStatusMeta(b.__bucket);
+                            const sMeta = STATUS_META[b.status];
+                            const pMeta = PAYMENT_META[b.paymentStatus];
+                            const tMeta =
+                              TYPE_META[b.bookingType] || {
+                                bg: "#f3f4f6",
+                                color: "#475467",
+                              };
                             return (
                               <tr
-                                key={b.id || b.custombookingId || `${b.__bucket}-${i}`}
+                                key={b.id}
                                 style={{
                                   backgroundColor:
                                     i % 2 === 0 ? "#ffffff" : "#f8f9fa",
@@ -594,159 +640,101 @@ const SchefferDriverBookingList = ({
                                 <td
                                   style={{
                                     ...baseCellStyle,
-                                    width: COLUMN_WIDTHS.booking,
+                                    width: COLUMN_WIDTHS.reference,
                                   }}
                                 >
-                                  <div className="fw-bold text-primary">
-                                    {b.bookingCode || b.packageBookCode || "-"}
-                                  </div>
-                                  {b.createdAt && (
-                                    <div
-                                      className="text-muted"
-                                      style={{ fontSize: "0.7rem" }}
-                                    >
-                                      {fmtDateLong(b.createdAt)}
-                                    </div>
-                                  )}
-                                </td>
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    width: COLUMN_WIDTHS.customer,
-                                  }}
-                                >
-                                  <div className="fw-medium text-dark">
-                                    {[
-                                      b.custSalutation,
-                                      b.custFirstName,
-                                      b.custLastName,
-                                    ]
-                                      .filter(Boolean)
-                                      .join(" ") || "-"}
-                                  </div>
-                                  {(b.custEmail || b.custPhone) && (
-                                    <div
-                                      className="text-muted"
-                                      style={{ fontSize: "0.7rem" }}
-                                    >
-                                      {b.custEmail || b.custPhone}
-                                    </div>
-                                  )}
-                                </td>
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    width: COLUMN_WIDTHS.cab,
-                                  }}
-                                >
-                                  <div className="fw-medium text-dark">
-                                    {b.cabName || `Cab #${b.cabId || "-"}`}
-                                  </div>
-                                  {b.cabProviderName && (
-                                    <div
-                                      className="text-muted"
-                                      style={{ fontSize: "0.7rem" }}
-                                    >
-                                      {b.cabProviderName}
-                                    </div>
-                                  )}
-                                </td>
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    width: COLUMN_WIDTHS.travel,
-                                  }}
-                                >
-                                  <div className="d-flex align-items-center gap-1">
-                                    <FaMapMarkerAlt
-                                      style={{
-                                        color: "#22c55e",
-                                        fontSize: "0.7rem",
-                                      }}
-                                    />
-                                    <span className="text-dark">
-                                      {b.pickupName || "-"}
-                                    </span>
-                                    {b.pickupTime && (
-                                      <span
-                                        className="text-muted"
-                                        style={{ fontSize: "0.7rem" }}
-                                      >
-                                        @ {b.pickupTime}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="d-flex align-items-center gap-1">
-                                    <FaMapMarkerAlt
-                                      style={{
-                                        color: "#ef4444",
-                                        fontSize: "0.7rem",
-                                      }}
-                                    />
-                                    <span className="text-dark">
-                                      {b.dropoffName || "-"}
-                                    </span>
-                                    {b.dropoffTime && (
-                                      <span
-                                        className="text-muted"
-                                        style={{ fontSize: "0.7rem" }}
-                                      >
-                                        @ {b.dropoffTime}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div
-                                    className="text-muted"
-                                    style={{
-                                      fontSize: "0.7rem",
-                                      marginTop: "2px",
-                                    }}
-                                  >
-                                    {fmtDateLong(b.pickupDate)}
-                                    {b.dropOffDate
-                                      ? ` → ${fmtDateLong(b.dropOffDate)}`
-                                      : ""}
-                                  </div>
-                                </td>
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    textAlign: "center",
-                                    width: COLUMN_WIDTHS.pax,
-                                  }}
-                                >
-                                  <span
-                                    style={{
-                                      fontSize: "0.72rem",
-                                      fontWeight: 600,
-                                    }}
-                                  >
-                                    {b.noOfAdult || 0} ADT / {b.noOfChild || 0}{" "}
-                                    CHD
+                                  <span className="fw-bold text-primary">
+                                    {b.bookingReference || "-"}
                                   </span>
                                 </td>
                                 <td
                                   style={{
                                     ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.type,
+                                  }}
+                                >
+                                  <span
+                                    className="d-inline-flex align-items-center px-2 py-1 rounded"
+                                    style={{
+                                      backgroundColor: tMeta.bg,
+                                      color: tMeta.color,
+                                      fontSize: "0.7rem",
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    {typeIcon(b.bookingType)}
+                                    {b.bookingType || "-"}
+                                  </span>
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.item,
+                                  }}
+                                >
+                                  <span className="fw-semibold text-dark">
+                                    {b.packageName ||
+                                      b.doctorName ||
+                                      b.courseName ||
+                                      "-"}
+                                  </span>
+                                </td>
+                                <td
+                                  className="text-muted"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.booked,
+                                  }}
+                                >
+                                  {formatShortDate(b.bookingDate) || "-"}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.period,
+                                  }}
+                                >
+                                  <div
+                                    className="d-flex align-items-center"
+                                    style={{
+                                      gap: "0.35rem",
+                                      flexWrap: "wrap",
+                                    }}
+                                  >
+                                    <span
+                                      className="text-muted"
+                                      style={{ fontSize: "0.75rem" }}
+                                    >
+                                      {formatShortDate(b.startDate) || "-"}
+                                      {formatShortDate(b.endDate)
+                                        ? ` → ${formatShortDate(b.endDate)}`
+                                        : ""}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td
+                                  className="text-muted"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    fontFamily: "monospace",
+                                    width: COLUMN_WIDTHS.pax,
+                                  }}
+                                >
+                                  {b.numberOfParticipants ?? "-"}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
                                     textAlign: "right",
-                                    width: COLUMN_WIDTHS.amount,
+                                    width: COLUMN_WIDTHS.total,
                                     whiteSpace: "nowrap",
                                   }}
                                 >
-                                  <div className="fw-semibold text-dark">
-                                    AED{" "}
-                                    {b.finalAmount != null
-                                      ? b.finalAmount
-                                      : b.totalPrice || b.totalRate || "-"}
-                                  </div>
-                                  {b.packageName && (
-                                    <div
-                                      className="text-muted"
-                                      style={{ fontSize: "0.7rem" }}
-                                    >
-                                      {b.packageName}
-                                    </div>
-                                  )}
+                                  <span className="fw-semibold text-dark">
+                                    {formatAmount(b.totalPrice)}
+                                  </span>
                                 </td>
                                 <td
                                   style={{
@@ -755,9 +743,18 @@ const SchefferDriverBookingList = ({
                                     width: COLUMN_WIDTHS.status,
                                   }}
                                 >
+                                  <StatusPill meta={sMeta} raw={b.status} />
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.payment,
+                                  }}
+                                >
                                   <StatusPill
-                                    meta={sMeta}
-                                    raw={b.__bucket}
+                                    meta={pMeta}
+                                    raw={b.paymentStatus}
                                   />
                                 </td>
                                 <td
@@ -767,7 +764,7 @@ const SchefferDriverBookingList = ({
                                     width: COLUMN_WIDTHS.action,
                                   }}
                                 >
-                                  <div className="d-flex justify-content-center align-items-center">
+                                  <div className="d-flex justify-content-center align-items-center gap-2">
                                     <FaEye
                                       role="button"
                                       tabIndex={0}
@@ -777,25 +774,39 @@ const SchefferDriverBookingList = ({
                                         color: "#007bff",
                                         cursor: "pointer",
                                       }}
-                                      onClick={() =>
-                                        navigate(
-                                          `/booking-details/scheffer-driver-booking/${b.id || b.custombookingId}`,
-                                          { state: { booking: b } },
-                                        )
-                                      }
+                                      onClick={() => setDetailsBooking(b)}
                                       onKeyDown={(e) => {
                                         if (
                                           e.key === "Enter" ||
                                           e.key === " "
                                         ) {
                                           e.preventDefault();
-                                          navigate(
-                                            `/booking-details/scheffer-driver-booking/${b.id || b.custombookingId}`,
-                                            { state: { booking: b } },
-                                          );
+                                          setDetailsBooking(b);
                                         }
                                       }}
                                     />
+                                    {!b.isCancelled && (
+                                      <FaTrashAlt
+                                        role="button"
+                                        tabIndex={0}
+                                        title="Cancel booking"
+                                        style={{
+                                          fontSize: "15px",
+                                          color: "#b42318",
+                                          cursor: "pointer",
+                                        }}
+                                        onClick={() => setCancelBooking(b)}
+                                        onKeyDown={(e) => {
+                                          if (
+                                            e.key === "Enter" ||
+                                            e.key === " "
+                                          ) {
+                                            e.preventDefault();
+                                            setCancelBooking(b);
+                                          }
+                                        }}
+                                      />
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -907,8 +918,152 @@ const SchefferDriverBookingList = ({
           </Container>
         </main>
       </div>
+
+      {/* Details Modal */}
+      <Modal
+        show={!!detailsBooking}
+        onHide={() => setDetailsBooking(null)}
+        centered
+        size="lg"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Booking Details</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {detailsBooking && (
+            <Row className="g-2">
+              <Col md={6}>
+                <strong>Reference:</strong> {detailsBooking.bookingReference}
+              </Col>
+              <Col md={6}>
+                <strong>Type:</strong> {detailsBooking.bookingType}
+              </Col>
+              <Col md={6}>
+                <strong>Status:</strong> {detailsBooking.status}
+              </Col>
+              <Col md={6}>
+                <strong>Payment:</strong> {detailsBooking.paymentStatus}
+              </Col>
+              <Col md={6}>
+                <strong>Booking Date:</strong>{" "}
+                {formatShortDate(detailsBooking.bookingDate)}
+              </Col>
+              <Col md={6}>
+                <strong>Participants:</strong>{" "}
+                {detailsBooking.numberOfParticipants}
+              </Col>
+              <Col md={6}>
+                <strong>Start Date:</strong>{" "}
+                {formatShortDate(detailsBooking.startDate)}
+              </Col>
+              <Col md={6}>
+                <strong>End Date:</strong>{" "}
+                {formatShortDate(detailsBooking.endDate)}
+              </Col>
+              {detailsBooking.packageName && (
+                <Col md={12}>
+                  <strong>Package:</strong> {detailsBooking.packageName}
+                </Col>
+              )}
+              {detailsBooking.doctorName && (
+                <Col md={12}>
+                  <strong>Doctor:</strong> {detailsBooking.doctorName}
+                </Col>
+              )}
+              {detailsBooking.courseName && (
+                <Col md={12}>
+                  <strong>Course:</strong> {detailsBooking.courseName}
+                </Col>
+              )}
+              {detailsBooking.symptoms && (
+                <Col md={12}>
+                  <strong>Symptoms:</strong> {detailsBooking.symptoms}
+                </Col>
+              )}
+              {detailsBooking.previousExperience && (
+                <Col md={12}>
+                  <strong>Previous Experience:</strong>{" "}
+                  {detailsBooking.previousExperience}
+                </Col>
+              )}
+              {detailsBooking.specialRequests && (
+                <Col md={12}>
+                  <strong>Special Requests:</strong>{" "}
+                  {detailsBooking.specialRequests}
+                </Col>
+              )}
+              <Col md={12}>
+                <strong>Total:</strong>{" "}
+                {formatAmount(detailsBooking.totalPrice)}
+              </Col>
+              {detailsBooking.isCancelled && (
+                <Col md={12}>
+                  <strong>Cancelled on:</strong>{" "}
+                  {formatShortDate(detailsBooking.cancelledDate)} —{" "}
+                  {detailsBooking.cancellationReason}
+                </Col>
+              )}
+            </Row>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setDetailsBooking(null)}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Cancel Modal */}
+      <Modal
+        show={!!cancelBooking}
+        onHide={() => setCancelBooking(null)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Cancel Booking</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {cancelBooking && (
+            <>
+              <p>
+                Are you sure you want to cancel booking{" "}
+                <strong>{cancelBooking.bookingReference}</strong>?
+              </p>
+              <Form.Group>
+                <Form.Label>Reason</Form.Label>
+                <Form.Control
+                  as="textarea"
+                  rows={3}
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                />
+              </Form.Group>
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setCancelBooking(null)}
+            disabled={cancelling}
+          >
+            Close
+          </Button>
+          <Button
+            variant="danger"
+            onClick={submitCancel}
+            disabled={cancelling}
+          >
+            {cancelling ? (
+              <Spinner size="sm" animation="border" />
+            ) : (
+              "Confirm Cancel"
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };
 
-export default SchefferDriverBookingList;
+export default AyurvedaBookingList;

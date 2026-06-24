@@ -284,6 +284,12 @@ import PackageAddOnRates from "./pages/Registration/PackageAddOnRates";
 import RoomList24Hour from "./pages/RoomList24Hour";
 import HotelBookingPage24Hour from "./pages/booking/HotelBookingPage24Hour";
 import AgentView from "./pages/Registration/AgentView";
+import LongStayBookingNotesPage from "./pages/list/LongStayBookingNotesPage";
+import CustomBookingNotesPage from "./pages/list/CustomBookingNotesPage";
+import MakeYourOwnPackageV2BookingNotesPage from "./pages/list/MakeYourOwnPackageV2BookingNotesPage";
+import CabBookingNotesPage from "./pages/list/CabBookingNotesPage";
+import SchefferDriverBookingNotesPage from "./pages/list/SchefferDriverBookingNotesPage";
+import DayStayBookingNotesPage from "./pages/list/DayStayBookingNotesPage";
 
 
 export default function App() {
@@ -425,6 +431,12 @@ export default function App() {
         <Route path="/long-stay-booking-page" element={<PrivateRoute><LongStayBookingPage /></PrivateRoute>} />
         <Route path="/booking-details/long-stay-booking-list" element={<PrivateRoute><LongStayBookingList /></PrivateRoute>} />
         <Route path="/booking-details/long-stay-booking/:id" element={<PrivateRoute><LongStayBookingDetailView /></PrivateRoute>} />
+        <Route path="/booking-details/long-stay-booking/:id/notes" element={<PrivateRoute><LongStayBookingNotesPage /></PrivateRoute>} />
+        <Route path="/booking-details/day-stay-booking/:id/notes" element={<PrivateRoute><DayStayBookingNotesPage /></PrivateRoute>} />
+        <Route path="/booking-details/custom-booking/:id/notes" element={<PrivateRoute><CustomBookingNotesPage /></PrivateRoute>} />
+        <Route path="/booking-details/make-your-own-package-v2/:id/notes" element={<PrivateRoute><MakeYourOwnPackageV2BookingNotesPage /></PrivateRoute>} />
+        <Route path="/booking-details/cab-booking/:id/notes" element={<PrivateRoute><CabBookingNotesPage /></PrivateRoute>} />
+        <Route path="/booking-details/scheffer-driver-booking/:id/notes" element={<PrivateRoute><SchefferDriverBookingNotesPage /></PrivateRoute>} />
         <Route path="/long-stay-room-list" element={<PrivateRoute><LongStayRoomList /></PrivateRoute>} />
         <Route path="/ai" element={<PrivateRoute><AiDashboard /></PrivateRoute>} />
         <Route path="/ai/demand-forecast" element={<PrivateRoute><DemandForecast /></PrivateRoute>} />

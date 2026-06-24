@@ -1,18 +1,18 @@
 /**
  * SeniorCitizenBookingList.jsx
  *
- * Booking-list page for the senior-citizen flow. UI + functionality mirror
- * StudentBookingList.jsx exactly:
+ * Booking-list page for the senior-citizen flow, reskinned to match the
+ * Hotel Booking List UI (the shared `hbl-modern` skin):
  *   - Title + search (left) | Time Period card (right)
  *   - Booking Type card (full-width row)
- *   - Auto-layout, page-fitting table with columns:
- *       S.N · Agent Name · Customer Name · Booking Code · Reference Code ·
- *       Book Date · Booking Details · Deadline Date · Payment Mode ·
- *       Notification · Action
+ *   - Bordered, hover table with shared baseHeaderStyle / baseCellStyle
+ *   - StatusPill status badges + plain blue FaEye action
  *   - Card-style pagination footer ("Showing X to Y of Z entries")
  *
  * BookingType + Time-Period filtering is applied client-side over the rows
- * returned by GET /api/senior-citizen-booking/list.
+ * returned by GET /api/senior-citizen-booking/list. Fetch URL, axios,
+ * role/userId gating, the Customers modal and the navigate target are all
+ * unchanged from the original page.
  */
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -42,10 +42,12 @@ import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
+import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
-// Column widths — soft hints for the auto-layout table (same as StudentBookingList).
+// Column-width hints kept in sync with HotelBookingList / the siblings so
+// the pages line up visually under the shared hbl-modern skin.
 const COLUMN_WIDTHS = {
   sn: "40px",
   agentName: "90px",
@@ -56,11 +58,24 @@ const COLUMN_WIDTHS = {
   bookingDetails: "230px",
   deadlineDate: "105px",
   paymentMode: "110px",
-  notification: "100px",
-  action: "110px",
+  status: "120px",
+  action: "70px",
 };
 
-// BookingType dropdown options — mirrors StudentBookingList's status filter.
+// Shared status meta (same colour language as the sibling lists). The
+// senior-citizen flow carries a couple of extra states (Not Confirmed and
+// the composite "Confirmed / Cancelled"), so those are added here.
+const STATUS_META = {
+  CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  RECONFIRMED: { label: "ReConfirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
+  PENDING: { label: "Pending", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  NOTCONFIRMED: { label: "Not Confirmed", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+};
+
+// BookingType dropdown options — the shared seven-option set. Senior-citizen
+// bookings have no "Invoiced" concept, so that option filters to empty.
 const TYPE_OPTIONS = [
   { value: "all", label: "All" },
   { value: "upcoming", label: "Upcoming" },
@@ -68,6 +83,7 @@ const TYPE_OPTIONS = [
   { value: "cancelled", label: "Cancelled" },
   { value: "onrequest", label: "On Request" },
   { value: "reconfirmed", label: "Reconfirmed" },
+  { value: "invoiced", label: "Invoiced" },
 ];
 
 const months = [
@@ -77,7 +93,7 @@ const months = [
 const currentYear = new Date().getFullYear();
 const years = Array.from({ length: currentYear - 2019 }, (_, i) => 2020 + i);
 
-// Payment-mode label — same mapping as StudentBookingList.jsx.
+// Payment-mode label — same mapping as the sibling lists.
 const getPaymentModeLabel = (booking) => {
   const raw =
     booking?.paymentMode || booking?.payment_mode || booking?.paymentType || "";
@@ -106,7 +122,37 @@ const getGuestNames = (booking) => {
   return booking?.customerName ? [booking.customerName] : [];
 };
 
-// DD/MM/YYYY — matches StudentBookingList.formatDate.
+const StatusPill = ({ meta, raw }) => {
+  if (!meta) return <span className="text-muted">{raw || "-"}</span>;
+  return (
+    <span
+      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
+      style={{
+        backgroundColor: meta.bg,
+        color: meta.color,
+        fontSize: "0.7rem",
+        fontWeight: 600,
+        lineHeight: 1,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {meta.dot && (
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            backgroundColor: meta.dot,
+            display: "inline-block",
+          }}
+        />
+      )}
+      {meta.label}
+    </span>
+  );
+};
+
+// DD/MM/YYYY — matches the sibling lists' formatShortDate.
 const formatDate = (dateString) => {
   if (!dateString) return "";
   const normalized = String(dateString).includes("T")
@@ -182,20 +228,30 @@ export default function SeniorCitizenBookingList() {
   }, [page, size, agentId]);
 
   // Composite status — a booking that was Confirmed and is later Cancelled
-  // shows "Confirmed / Cancelled".
-  const compositeStatus = (b) => {
+  // shows "Confirmed / Cancelled". Returns a StatusPill-ready meta plus the
+  // raw label for fallback.
+  const statusMetaFor = (b) => {
     const raw = String(b?.confirmationStatus || "").trim();
     const normalized = raw.replace(/\s+/g, "").toLowerCase();
     if (b?.cancelled) {
       if (normalized === "confirmed" || normalized === "reconfirmed") {
-        return { label: `${raw} / Cancelled`, kind: "cancelled" };
+        return {
+          meta: {
+            label: `${raw} / Cancelled`,
+            bg: "#fdecec",
+            color: "#b42318",
+            dot: "#ef4444",
+          },
+          raw: `${raw} / Cancelled`,
+        };
       }
-      return { label: "Cancelled", kind: "cancelled" };
+      return { meta: STATUS_META.CANCELLED, raw: "Cancelled" };
     }
-    if (normalized === "confirmed") return { label: "Confirmed", kind: "confirmed" };
-    if (normalized === "reconfirmed") return { label: "ReConfirmed", kind: "confirmed" };
-    if (normalized === "notconfirmed") return { label: "Not Confirmed", kind: "notconfirmed" };
-    return { label: raw || "-", kind: "other" };
+    if (normalized === "confirmed") return { meta: STATUS_META.CONFIRMED, raw };
+    if (normalized === "reconfirmed") return { meta: STATUS_META.RECONFIRMED, raw };
+    if (normalized === "notconfirmed") return { meta: STATUS_META.NOTCONFIRMED, raw };
+    const upper = normalized.toUpperCase();
+    return { meta: STATUS_META[upper], raw: raw || "-" };
   };
 
   const filtered = useMemo(() => {
@@ -222,6 +278,9 @@ export default function SeniorCitizenBookingList() {
               !b.cancelled &&
               (normalized === "confirmed" || normalized === "reconfirmed")
             );
+          case "invoiced":
+            // No invoiced concept on senior-citizen bookings → empty.
+            return false;
           default:
             return true;
         }
@@ -241,15 +300,27 @@ export default function SeniorCitizenBookingList() {
 
     if (search.trim()) {
       const q = search.toLowerCase();
-      list = list.filter(
-        (r) =>
-          (r.bookingCode || "").toLowerCase().includes(q) ||
-          (r.referenceNumber || "").toLowerCase().includes(q) ||
-          (r.customerName || "").toLowerCase().includes(q) ||
-          getGuestNames(r).some((n) => n.toLowerCase().includes(q)) ||
-          (r.hotelName || "").toLowerCase().includes(q) ||
-          (r.agentName || "").toLowerCase().includes(q) ||
-          (r.seniorCitizenName || "").toLowerCase().includes(q)
+      list = list.filter((r) =>
+        [
+          r.bookingCode,
+          r.referenceNumber,
+          r.customerName,
+          ...getGuestNames(r),
+          r.hotelName,
+          r.agentName,
+          r.seniorCitizenName,
+          // Stay dates — so a check-in / check-out date search (e.g.
+          // "26/06/2026") matches. Both dd/mm/yyyy display form and the
+          // raw value are included in the haystack.
+          formatDate(r.checkInDate),
+          formatDate(r.checkOutDate),
+          r.checkInDate,
+          r.checkOutDate,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(q)
       );
     }
 
@@ -276,52 +347,6 @@ export default function SeniorCitizenBookingList() {
 
   const colSpan = role === "admin" ? 11 : 10;
 
-  // Notification cell renderer — reuses StudentBookingList's colour language.
-  const renderNotification = (b) => {
-    const status = compositeStatus(b);
-    if (status.kind === "confirmed") {
-      return (
-        <span style={{ color: "#06a301", fontSize: "0.82rem", fontWeight: 600 }}>
-          {status.label}
-        </span>
-      );
-    }
-    if (status.kind === "cancelled") {
-      return (
-        <span style={{ color: "#b42318", fontSize: "0.8rem", fontWeight: 600 }}>
-          {status.label}
-        </span>
-      );
-    }
-    if (status.kind === "notconfirmed") {
-      return (
-        <span
-          className="d-inline-flex align-items-center gap-1"
-          style={{ color: "#dc3545", fontSize: "0.78rem", fontWeight: 600 }}
-        >
-          {status.label}
-          <FaExclamationCircle style={{ color: "#ff9800", fontSize: "15px" }} />
-        </span>
-      );
-    }
-    return (
-      <span className="text-muted" style={{ fontSize: "0.8rem" }}>
-        {status.label}
-      </span>
-    );
-  };
-
-  const thStyle = (w, center) => ({
-    padding: "0.45rem 0.6rem",
-    fontWeight: "600",
-    textTransform: "uppercase",
-    color: "#495057",
-    textAlign: center ? "center" : undefined,
-    border: "1px solid #dee2e6",
-    whiteSpace: "normal",
-    lineHeight: 1.2,
-    width: w,
-  });
   const baseCellStyle = {
     padding: "0.5rem 0.6rem",
     fontSize: "0.8rem",
@@ -333,15 +358,25 @@ export default function SeniorCitizenBookingList() {
     lineHeight: 1.4,
   };
 
+  const baseHeaderStyle = {
+    padding: "0.45rem 0.6rem",
+    fontWeight: 600,
+    textTransform: "uppercase",
+    color: "#495057",
+    border: "1px solid #dee2e6",
+    whiteSpace: "normal",
+    lineHeight: 1.2,
+  };
+
   return (
-    <div className="min-vh-100 bg-light d-flex flex-column">
+    <div className="min-vh-100 bg-light d-flex flex-column hbl-modern">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-3" style={{ width: "100%", overflow: "hidden" }}>
           <Container fluid className="px-0">
             {/* Header: Title + Search (left) | Time Period (right) */}
-            <div className="d-flex flex-wrap gap-3 justify-content-between align-items-end mb-3">
+            <div className="d-flex justify-content-between align-items-end mb-3">
               <div>
                 <h3 className="fw-bold text-dark mb-2">Senior Citizen Bookings</h3>
                 <InputGroup style={{ height: "40px", width: "300px" }}>
@@ -479,10 +514,6 @@ export default function SeniorCitizenBookingList() {
                       style={{
                         tableLayout: "auto",
                         width: "100%",
-                        // keep the table at its natural width on small screens so
-                        // the .thin-scrollbar wrapper scrolls horizontally instead
-                        // of crushing the columns to one-letter-per-line.
-                        minWidth: "1000px",
                         fontSize: "0.78rem",
                         borderCollapse: "separate",
                         borderSpacing: 0,
@@ -499,19 +530,41 @@ export default function SeniorCitizenBookingList() {
                         }}
                       >
                         <tr>
-                          <th style={thStyle(COLUMN_WIDTHS.sn, true)}>S.N</th>
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.sn }}>
+                            S.N
+                          </th>
                           {role === "admin" && (
-                            <th style={thStyle(COLUMN_WIDTHS.agentName)}>Agent Name</th>
+                            <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.agentName }}>
+                              Agent Name
+                            </th>
                           )}
-                          <th style={thStyle(COLUMN_WIDTHS.customerName)}>Customer Name</th>
-                          <th style={thStyle(COLUMN_WIDTHS.bookingCode)}>Booking Code</th>
-                          <th style={thStyle(COLUMN_WIDTHS.referenceCode)}>Reference Code</th>
-                          <th style={thStyle(COLUMN_WIDTHS.bookDate, true)}>Book Date</th>
-                          <th style={thStyle(COLUMN_WIDTHS.bookingDetails)}>Booking Details</th>
-                          <th style={thStyle(COLUMN_WIDTHS.deadlineDate, true)}>Deadline Date</th>
-                          <th style={thStyle(COLUMN_WIDTHS.paymentMode, true)}>Payment Mode</th>
-                          <th style={thStyle(COLUMN_WIDTHS.notification, true)}>Notification</th>
-                          <th style={thStyle(COLUMN_WIDTHS.action, true)}>Action</th>
+                          <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.customerName }}>
+                            Customer Name
+                          </th>
+                          <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingCode }}>
+                            Booking Code
+                          </th>
+                          <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.referenceCode }}>
+                            Reference Code
+                          </th>
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.bookDate }}>
+                            Book Date
+                          </th>
+                          <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingDetails }}>
+                            Booking Details
+                          </th>
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.deadlineDate }}>
+                            Deadline Date
+                          </th>
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentMode }}>
+                            Payment Mode
+                          </th>
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
+                            Status
+                          </th>
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.action }}>
+                            Action
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -534,12 +587,20 @@ export default function SeniorCitizenBookingList() {
                             const first = names[0] || "-";
                             const extra = Math.max(0, names.length - 1);
                             const payLabel = getPaymentModeLabel(b);
+                            const st = statusMetaFor(b);
                             return (
                               <tr
                                 key={b.bookingId}
                                 style={{
                                   backgroundColor: i % 2 === 0 ? "#ffffff" : "#f8f9fa",
                                   transition: "background-color 0.2s ease",
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor = "#e7f3ff";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    i % 2 === 0 ? "#ffffff" : "#f8f9fa";
                                 }}
                               >
                                 <td
@@ -662,10 +723,20 @@ export default function SeniorCitizenBookingList() {
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "center",
-                                    width: COLUMN_WIDTHS.notification,
+                                    width: COLUMN_WIDTHS.status,
                                   }}
                                 >
-                                  {renderNotification(b)}
+                                  <span className="d-inline-flex align-items-center gap-1">
+                                    <StatusPill meta={st.meta} raw={st.raw} />
+                                    {!b.cancelled &&
+                                      String(b.confirmationStatus || "")
+                                        .replace(/\s+/g, "")
+                                        .toLowerCase() === "notconfirmed" && (
+                                        <FaExclamationCircle
+                                          style={{ color: "#ff9800", fontSize: "15px" }}
+                                        />
+                                      )}
+                                  </span>
                                 </td>
                                 <td
                                   style={{

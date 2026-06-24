@@ -202,11 +202,25 @@ export default function LastMinuteBookingList() {
     }
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
+    // dd/mm/yyyy form of a date so a stay-date search (e.g. "26/06/2026")
+    // matches the check-in / check-out shown in the Stay column.
+    const fmtDM = (d) => {
+      if (!d) return "";
+      const dt = new Date(String(d).includes("T") ? d : `${d}T00:00:00`);
+      if (isNaN(dt.getTime())) return "";
+      return `${String(dt.getDate()).padStart(2, "0")}/${String(
+        dt.getMonth() + 1
+      ).padStart(2, "0")}/${dt.getFullYear()}`;
+    };
     return (
       (b.bookingCode || "").toLowerCase().includes(q) ||
       (b.customerName || "").toLowerCase().includes(q) ||
       getGuestNames(b).some((n) => n.toLowerCase().includes(q)) ||
-      (b.hotelName || "").toLowerCase().includes(q)
+      (b.hotelName || "").toLowerCase().includes(q) ||
+      fmtDM(b.checkInDate).includes(q) ||
+      fmtDM(b.checkOutDate).includes(q) ||
+      String(b.checkInDate || "").toLowerCase().includes(q) ||
+      String(b.checkOutDate || "").toLowerCase().includes(q)
     );
   });
 

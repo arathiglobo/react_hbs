@@ -22,7 +22,7 @@ import {
   Trophy,
   Award,
 } from "lucide-react";
-import { FaAd, FaBrain, FaFileAlt, FaImages, FaRobot, FaTags, FaUser } from "react-icons/fa";
+import { FaAd, FaBrain, FaBullhorn, FaBullseye, FaFileAlt, FaImages, FaRobot, FaTags, FaUser } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
 
 
@@ -551,22 +551,16 @@ export default function Sidebar() {
       ],
     },
 
+  
     {
-      label: "Banners",
-      to: "/offer",
+      label: "Marketing",
       roles: ["admin"],
+      children: [
+        { label: "Banners", to: "/offer" },
+        { label: "Offer Image", to: "/upload-offer-image" },
+        { label: "Advertisements", to: "/advertisements" },
+      ],
     },
-    {
-      label: "Offer Image",
-      to: "/upload-offer-image",
-      roles: ["admin"],
-    },
-    {
-      label: "Advertisements",
-      to: "/advertisements",
-      roles: ["admin"],
-    },
-
 
 
     // {Extranet menus}
@@ -1082,14 +1076,17 @@ function getIcon(label) {
     case "Report":
       return <BarChart3 {...iconProps} />;
 
-    case "Banners":
-      return <Tag {...iconProps} />;
+    // case "Banners":
+    //   return <Tag {...iconProps} />;
 
-    case "Offer Image":
-      return <ImagePlus {...iconProps} />;
+    // case "Offer Image":
+    //   return <ImagePlus {...iconProps} />;
 
-    case "Advertisements":
-      return <FaAd {...iconProps} />;
+    // case "Advertisements":
+    //   return <FaAd {...iconProps} />;
+
+    case "Marketing":
+      return <FaBullhorn {...iconProps} />;
 
     case "Occupancy":
       return <FaUser {...iconProps} />;

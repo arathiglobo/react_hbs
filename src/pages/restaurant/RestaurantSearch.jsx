@@ -209,70 +209,83 @@ const RestaurantSearch = () => {
     }, 300);
   };
 
-  /** Initial Place/City option load. Mirrors RestaurantRegistration.jsx
-   *  — hits /api/destination and /api/province in parallel and merges
-   *  the rows into a single grouped option list. Subsequent keystrokes
-   *  refine the list via the debounced searchDestinations() below. */
+  /** Load the City/Place options for ONE country. The picker is
+   *  country-scoped — it never loads the full master list. Two sources,
+   *  kept as separate groups:
+   *    - Places  (POST /api/destination/getCitiesByCountryId/{id}) — each
+   *      place carries its parent state in `state`, rendered as
+   *      "Place / State" (e.g. "Kochi / Kerala").
+   *    - States  (GET /api/province?countryId={id}) — rendered as the bare
+   *      state name (e.g. "Kerala").
+   *  Each option keeps its (destinationId, placeSource = DESTINATION|PROVINCE)
+   *  so the search payload contract is unchanged. */
+  const loadPlacesByCountry = async (countryId) => {
+    if (!countryId) {
+      setDestinationOptions([]);
+      return;
+    }
+    setDestinationLoading(true);
+    try {
+      const [placeRes, stateRes] = await Promise.all([
+        axiosInstance
+          .post(`/api/destination/getCitiesByCountryId/${countryId}`)
+          .catch(() => ({ data: [] })),
+        axiosInstance
+          .get(`/api/province?countryId=${countryId}&page=0&limit=50&search=`)
+          .catch(() => ({ data: [] })),
+      ]);
+      const placeRows = Array.isArray(placeRes.data)
+        ? placeRes.data
+        : placeRes.data?.content || [];
+      const stateRows = Array.isArray(stateRes.data)
+        ? stateRes.data
+        : stateRes.data?.content || [];
+      const placeOpts = placeRows
+        .filter((p) => !p.isDeleted)
+        .map((p) => {
+          const placeName = p.name || `Place #${p.id}`;
+          const stateName = p.state || p.stateName || "";
+          // "Place / State" — fall back to just the place when no parent
+          // state is resolved.
+          const label = stateName ? `${placeName} / ${stateName}` : placeName;
+          return {
+            value: `DESTINATION:${p.id}`,
+            id: p.id,
+            source: "DESTINATION",
+            label,
+            stateName: placeName,
+          };
+        });
+      const stateOpts = stateRows
+        .filter((s) => !s.isDeleted)
+        .map((s) => {
+          const name = s.stateName || s.name || `State #${s.id}`;
+          return {
+            value: `PROVINCE:${s.id}`,
+            id: s.id,
+            source: "PROVINCE",
+            label: name,
+            stateName: name,
+          };
+        });
+      setDestinationOptions([
+        { label: "Cities", options: stateOpts },
+        { label: "Places", options: placeOpts },
+      ]);
+    } catch {
+      setDestinationOptions([]);
+    } finally {
+      setDestinationLoading(false);
+    }
+  };
+
+  /** On mount, if the form was re-hydrated from a previous search that
+   *  already had a country, pre-load that country's City/Place options so
+   *  the restored selection shows correctly. Fresh visits load nothing
+   *  until a country is picked. */
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setDestinationLoading(true);
-      try {
-        const [destRes, provRes] = await Promise.all([
-          axiosInstance
-            .get("/api/destination?page=0&limit=10")
-            .catch(() => ({ data: [] })),
-          axiosInstance
-            .get("/api/province?page=0&limit=10")
-            .catch(() => ({ data: [] })),
-        ]);
-        if (cancelled) return;
-        const destRows = Array.isArray(destRes.data)
-          ? destRes.data
-          : destRes.data?.content || [];
-        const provRows = Array.isArray(provRes.data)
-          ? provRes.data
-          : provRes.data?.content || [];
-        const destOpts = destRows
-          .filter((d) => !d.isDeleted)
-          .map((d) => {
-            const label =
-              d.name || d.destinationName || `Destination #${d.id}`;
-            return {
-              value: `DESTINATION:${d.id}`,
-              id: d.id,
-              source: "DESTINATION",
-              label,
-              stateName: label,
-            };
-          });
-        const provOpts = provRows
-          .filter((p) => !p.isDeleted)
-          .map((p) => {
-            const label =
-              (p.stateName || p.name || `Province #${p.id}`) +
-              (p.country ? `, ${p.country}` : "");
-            return {
-              value: `PROVINCE:${p.id}`,
-              id: p.id,
-              source: "PROVINCE",
-              label,
-              stateName: p.stateName || p.name || label,
-            };
-          });
-        setDestinationOptions([
-          { label: "Destinations", options: destOpts },
-          { label: "Provinces", options: provOpts },
-        ]);
-      } catch {
-        if (!cancelled) setDestinationOptions([]);
-      } finally {
-        if (!cancelled) setDestinationLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    if (form.countryId) loadPlacesByCountry(form.countryId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Fetch the picked agent's available credit limit. Hits the same
@@ -297,71 +310,6 @@ const RestaurantSearch = () => {
       cancelled = true;
     };
   }, [form.agentId]);
-
-  /**
-   * Debounced destination lookup. The Place / City dropdown on
-   * registration combines /api/destination + /api/province, so the search
-   * page does the same and tags each option with its `source`
-   * ("DESTINATION" or "PROVINCE"). The picked option's source + id are
-   * sent to the backend, which uses them to match against the
-   * restaurant's destinationId + placeSource columns.
-   */
-  const debounceRef = useRef(null);
-  const searchDestinations = (input) => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      setDestinationLoading(true);
-      try {
-        const q = input ? `&search=${encodeURIComponent(input)}` : "";
-        const [destRes, provRes] = await Promise.all([
-          axiosInstance
-            .get(`/api/destination?page=0&limit=10${q}`)
-            .catch(() => ({ data: [] })),
-          axiosInstance
-            .get(`/api/province?page=0&limit=10${q}`)
-            .catch(() => ({ data: [] })),
-        ]);
-        const destRows = Array.isArray(destRes.data) ? destRes.data : destRes.data?.content || [];
-        const provRows = Array.isArray(provRes.data) ? provRes.data : provRes.data?.content || [];
-        const destOpts = destRows
-          .filter((d) => !d.isDeleted)
-          .slice(0, 25)
-          .map((d) => {
-            const label = d.name || d.destinationName || `Destination #${d.id}`;
-            return {
-              value: `DESTINATION:${d.id}`,
-              id: d.id,
-              source: "DESTINATION",
-              label,
-              stateName: label,
-            };
-          });
-        const provOpts = provRows
-          .filter((p) => !p.isDeleted)
-          .slice(0, 25)
-          .map((p) => {
-            const label =
-              (p.stateName || p.name || `Province #${p.id}`) +
-              (p.country ? `, ${p.country}` : "");
-            return {
-              value: `PROVINCE:${p.id}`,
-              id: p.id,
-              source: "PROVINCE",
-              label,
-              stateName: p.stateName || p.name || label,
-            };
-          });
-        setDestinationOptions([
-          { label: "Destinations", options: destOpts },
-          { label: "Provinces", options: provOpts },
-        ]);
-      } catch {
-        setDestinationOptions([]);
-      } finally {
-        setDestinationLoading(false);
-      }
-    }, 300);
-  };
 
   const setField = (name, value) => {
     setForm((p) => ({ ...p, [name]: value }));
@@ -398,8 +346,9 @@ const RestaurantSearch = () => {
     const err = {};
     if (!form.bookingDate) err.bookingDate = "Booking date is required";
     else if (form.bookingDate < today()) err.bookingDate = "Booking date cannot be in the past";
-    // City/Place is required. Country is optional and does NOT satisfy
-    // the destination requirement on its own.
+    // Country must be picked first — it scopes the City/Place list.
+    if (!form.countryId) err.countryId = "Country is required";
+    // City/Place is required and is loaded only for the chosen country.
     if (!form.destination)
       err.destination = "City / Place is required";
     if (!isAgentRole && !form.agentId) err.agentId = "Agent is required";
@@ -619,108 +568,8 @@ const RestaurantSearch = () => {
               <Card.Body className="p-4">
                 <Form onSubmit={handleSearch} noValidate>
                   <Row className="g-3">
-                    <Col lg={2} md={6}>
-                      <Form.Label className="fw-semibold text-dark">
-                        <FaCalendarAlt className="me-1 text-primary" /> Booking Date *
-                      </Form.Label>
-                      <Form.Control
-                        type="date"
-                        value={form.bookingDate}
-                        onChange={(e) => setField("bookingDate", e.target.value)}
-                        min={today()}
-                        isInvalid={!!errors.bookingDate}
-                        style={{ height: "42px" }}
-                      />
-                      <Form.Control.Feedback type="invalid">{errors.bookingDate}</Form.Control.Feedback>
-                    </Col>
-
-                    {/* Country — OPTIONAL, independent filter. Does NOT
-                        drive the City/Place typeahead. Search-as-you-type
-                        hits /api/country?search=<term> (debounced) so the
-                        dropdown stays responsive over large country lists. */}
-                    <Col lg={3} md={6}>
-                      <Form.Label className="fw-semibold text-dark">
-                        <FaMapMarkerAlt className="me-1 text-danger" /> Country
-                      </Form.Label>
-                      <Select
-                        placeholder={countriesLoading ? "Loading countries..." : "Select Country (optional)"}
-                        isClearable
-                        isSearchable
-                        isLoading={countriesLoading}
-                        options={countries.map((c) => ({
-                          value: c.id,
-                          label: c.name || c.countryName || `Country #${c.id}`,
-                        }))}
-                        value={
-                          form.countryId
-                            ? {
-                                value: form.countryId,
-                                label:
-                                  form.countryName ||
-                                  countries.find(
-                                    (c) => String(c.id) === String(form.countryId)
-                                  )?.name ||
-                                  `Country #${form.countryId}`,
-                              }
-                            : null
-                        }
-                        onInputChange={(input, meta) => {
-                          if (meta?.action === "input-change") {
-                            searchCountries(input);
-                          }
-                        }}
-                        onChange={(opt) => {
-                          setForm((p) => ({
-                            ...p,
-                            countryId: opt?.value || "",
-                            countryName: opt?.label || "",
-                          }));
-                          if (errors.countryId)
-                            setErrors((prev) => ({ ...prev, countryId: "" }));
-                        }}
-                        menuPortalTarget={typeof document !== "undefined" ? document.body : null}
-                        styles={rsStyles(false)}
-                      />
-                    </Col>
-
-                    {/* City / Place — combined typeahead against
-                        /api/destination + /api/province. Mirrors the
-                        same pattern used in RestaurantRegistration.jsx.
-                        Picked option stores destinationId + placeSource
-                        + destinationName on the form so the backend can
-                        resolve the right master table. */}
-                    <Col lg={4} md={6}>
-                      <Form.Label className="fw-semibold text-dark">
-                        <FaMapMarkerAlt className="me-1 text-danger" /> City / Place *
-                      </Form.Label>
-                      <Select
-                        placeholder="Search destination or province..."
-                        isClearable
-                        isSearchable
-                        options={destinationOptions}
-                        isLoading={destinationLoading}
-                        value={form.destination}
-                        onInputChange={(input, meta) => {
-                          // Refine the option list as the user types.
-                          // react-select fires this on every keystroke;
-                          // the helper debounces the actual fetch.
-                          if (meta?.action === "input-change") {
-                            searchDestinations(input);
-                          }
-                        }}
-                        onChange={(opt) => {
-                          setForm((p) => ({ ...p, destination: opt || null }));
-                          if (errors.destination)
-                            setErrors((prev) => ({ ...prev, destination: "" }));
-                        }}
-                        menuPortalTarget={typeof document !== "undefined" ? document.body : null}
-                        styles={rsStyles(!!errors.destination)}
-                      />
-                      {errors.destination && (
-                        <div className="text-danger small mt-1">{errors.destination}</div>
-                      )}
-                    </Col>
-
+                    {/* Agent — placed first per layout request. Hidden for
+                        agent logins (they book under themselves). */}
                     {!isAgentRole && (
                     <Col lg={4} md={6}>
                       <Form.Label className="fw-semibold text-dark">
@@ -755,6 +604,118 @@ const RestaurantSearch = () => {
                       )}
                     </Col>
                     )}
+
+                    <Col lg={2} md={6}>
+                      <Form.Label className="fw-semibold text-dark">
+                        <FaCalendarAlt className="me-1 text-primary" /> Booking Date *
+                      </Form.Label>
+                      <Form.Control
+                        type="date"
+                        value={form.bookingDate}
+                        onChange={(e) => setField("bookingDate", e.target.value)}
+                        min={today()}
+                        isInvalid={!!errors.bookingDate}
+                        style={{ height: "42px" }}
+                      />
+                      <Form.Control.Feedback type="invalid">{errors.bookingDate}</Form.Control.Feedback>
+                    </Col>
+
+                    {/* Country — REQUIRED. Drives the City/Place list:
+                        picking a country loads only that country's
+                        cities/places and clears any prior City/Place pick.
+                        Search-as-you-type hits /api/country?search=<term>
+                        (debounced) so the dropdown stays responsive. */}
+                    <Col lg={3} md={6}>
+                      <Form.Label className="fw-semibold text-dark">
+                        <FaMapMarkerAlt className="me-1 text-danger" /> Country *
+                      </Form.Label>
+                      <Select
+                        placeholder={countriesLoading ? "Loading countries..." : "Select Country"}
+                        isClearable
+                        isSearchable
+                        isLoading={countriesLoading}
+                        options={countries.map((c) => ({
+                          value: c.id,
+                          label: c.name || c.countryName || `Country #${c.id}`,
+                        }))}
+                        value={
+                          form.countryId
+                            ? {
+                                value: form.countryId,
+                                label:
+                                  form.countryName ||
+                                  countries.find(
+                                    (c) => String(c.id) === String(form.countryId)
+                                  )?.name ||
+                                  `Country #${form.countryId}`,
+                              }
+                            : null
+                        }
+                        onInputChange={(input, meta) => {
+                          if (meta?.action === "input-change") {
+                            searchCountries(input);
+                          }
+                        }}
+                        onChange={(opt) => {
+                          const nextId = opt?.value || "";
+                          // Country drives the City/Place list — clear the
+                          // prior City/Place pick whenever the country changes.
+                          setForm((p) => ({
+                            ...p,
+                            countryId: nextId,
+                            countryName: opt?.label || "",
+                            destination: null,
+                          }));
+                          setErrors((prev) => ({
+                            ...prev,
+                            countryId: "",
+                            destination: "",
+                          }));
+                          loadPlacesByCountry(nextId);
+                        }}
+                        menuPortalTarget={typeof document !== "undefined" ? document.body : null}
+                        styles={rsStyles(!!errors.countryId)}
+                      />
+                      {errors.countryId && (
+                        <div className="text-danger small mt-1">{errors.countryId}</div>
+                      )}
+                    </Col>
+
+                    {/* City / Place — country-scoped list (destinations +
+                        provinces for the picked country only). Disabled until
+                        a country is chosen. Picked option stores
+                        destinationId + placeSource on the form so the backend
+                        resolves the right master table — payload unchanged. */}
+                    <Col lg={4} md={6}>
+                      <Form.Label className="fw-semibold text-dark">
+                        <FaMapMarkerAlt className="me-1 text-danger" /> City / Place *
+                      </Form.Label>
+                      <Select
+                        placeholder={
+                          !form.countryId
+                            ? "Select a country first"
+                            : destinationLoading
+                            ? "Loading places..."
+                            : "Search place or city..."
+                        }
+                        isClearable
+                        isSearchable
+                        isDisabled={!form.countryId}
+                        options={destinationOptions}
+                        isLoading={destinationLoading}
+                        value={form.destination}
+                        onChange={(opt) => {
+                          setForm((p) => ({ ...p, destination: opt || null }));
+                          if (errors.destination)
+                            setErrors((prev) => ({ ...prev, destination: "" }));
+                        }}
+                        menuPortalTarget={typeof document !== "undefined" ? document.body : null}
+                        styles={rsStyles(!!errors.destination)}
+                      />
+                      {errors.destination && (
+                        <div className="text-danger small mt-1">{errors.destination}</div>
+                      )}
+                    </Col>
 
                     <Col lg={2} md={6}>
                       <Form.Label className="fw-semibold text-dark">

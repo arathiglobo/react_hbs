@@ -517,7 +517,6 @@ export default function StudentBookingDetailView() {
                     <Row>
                       <Col md={6}>
                         <InfoRow label="Booking Code" value={booking.bookingCode} />
-                        <InfoRow label="Reference No." value={booking.referenceNumber} />
                         <InfoRow label="Hotel Name" value={booking.hotelName} />
                         <InfoRow label="Address" value={booking.address} />
                         <InfoRow

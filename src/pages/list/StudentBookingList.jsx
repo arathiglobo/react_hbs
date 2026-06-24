@@ -44,8 +44,50 @@ import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
+import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
+
+// Shared status badge palette (same as LongStay/GovEmployee). Extra entries
+// cover the student Notification statuses that don't appear there.
+const STATUS_META = {
+  CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  RECONFIRMED: { label: "ReConfirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
+  PENDING: { label: "Pending", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  NOTCONFIRMED: { label: "Not Confirmed", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+};
+
+const StatusPill = ({ meta, raw }) => {
+  if (!meta) return <span className="text-muted">{raw || "-"}</span>;
+  return (
+    <span
+      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
+      style={{
+        backgroundColor: meta.bg,
+        color: meta.color,
+        fontSize: "0.7rem",
+        fontWeight: 600,
+        lineHeight: 1,
+        whiteSpace: "nowrap",
+      }}
+    >
+      {meta.dot && (
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            backgroundColor: meta.dot,
+            display: "inline-block",
+          }}
+        />
+      )}
+      {meta.label}
+    </span>
+  );
+};
 
 // Column widths — soft hints for the auto-layout table (same as HotelBookingList).
 const COLUMN_WIDTHS = {
@@ -70,6 +112,7 @@ const TYPE_OPTIONS = [
   { value: "cancelled", label: "Cancelled" },
   { value: "onrequest", label: "On Request" },
   { value: "reconfirmed", label: "Reconfirmed" },
+  { value: "invoiced", label: "Invoiced" },
 ];
 
 const months = [
@@ -224,6 +267,16 @@ export default function StudentBookingList() {
               !b.cancelled &&
               (normalized === "confirmed" || normalized === "reconfirmed")
             );
+          case "invoiced":
+            // No invoice concept on the student payload — filter to empty unless
+            // an invoiced flag happens to be present.
+            return (
+              !b.cancelled &&
+              (String(b.invoiceStatus || "").replace(/\s+/g, "").toLowerCase() ===
+                "invoiced" ||
+                b.invoiced === true ||
+                b.isInvoiced === true)
+            );
           default:
             return true;
         }
@@ -243,17 +296,29 @@ export default function StudentBookingList() {
 
     if (search.trim()) {
       const q = search.toLowerCase();
-      list = list.filter(
-        (r) =>
-          (r.bookingCode || "").toLowerCase().includes(q) ||
-          (r.referenceNumber || "").toLowerCase().includes(q) ||
-          (r.customerName || "").toLowerCase().includes(q) ||
-          getGuestNames(r).some((n) => n.toLowerCase().includes(q)) ||
-          (r.hotelName || "").toLowerCase().includes(q) ||
-          (r.agentName || "").toLowerCase().includes(q) ||
-          (r.studentName || "").toLowerCase().includes(q) ||
-          (r.institutionName || "").toLowerCase().includes(q)
-      );
+      list = list.filter((r) => {
+        const hay = [
+          r.bookingCode,
+          r.referenceNumber,
+          r.customerName,
+          ...getGuestNames(r),
+          r.hotelName,
+          r.agentName,
+          r.studentName,
+          r.institutionName,
+          // Stay dates — both the dd/mm/yyyy display form (shown in the
+          // Booking Details cell) and the raw value, so searching a date
+          // like "26/06/2026" matches.
+          formatDate(r.checkInDate),
+          formatDate(r.checkOutDate),
+          r.checkInDate,
+          r.checkOutDate,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
+      });
     }
 
     return list;
@@ -279,37 +344,35 @@ export default function StudentBookingList() {
 
   const colSpan = role === "admin" ? 11 : 10;
 
-  // Notification cell renderer — reuses HotelBookingList's colour language.
+  // Notification cell renderer — maps the composite student status onto the
+  // shared StatusPill badges so it matches the Hotel/LongStay skin. The page
+  // keeps its own "Confirmed / Cancelled" composite label.
   const renderNotification = (b) => {
     const status = compositeStatus(b);
-    if (status.kind === "confirmed") {
+    const metaKey =
+      status.kind === "confirmed"
+        ? "CONFIRMED"
+        : status.kind === "cancelled"
+        ? "CANCELLED"
+        : status.kind === "notconfirmed"
+        ? "NOTCONFIRMED"
+        : null;
+    const meta = metaKey
+      ? { ...STATUS_META[metaKey], label: status.label }
+      : null;
+    if (!meta) {
       return (
-        <span style={{ color: "#06a301", fontSize: "0.82rem", fontWeight: 600 }}>
+        <span className="text-muted" style={{ fontSize: "0.8rem" }}>
           {status.label}
-        </span>
-      );
-    }
-    if (status.kind === "cancelled") {
-      return (
-        <span style={{ color: "#b42318", fontSize: "0.8rem", fontWeight: 600 }}>
-          {status.label}
-        </span>
-      );
-    }
-    if (status.kind === "notconfirmed") {
-      return (
-        <span
-          className="d-inline-flex align-items-center gap-1"
-          style={{ color: "#dc3545", fontSize: "0.78rem", fontWeight: 600 }}
-        >
-          {status.label}
-          <FaExclamationCircle style={{ color: "#ff9800", fontSize: "15px" }} />
         </span>
       );
     }
     return (
-      <span className="text-muted" style={{ fontSize: "0.8rem" }}>
-        {status.label}
+      <span className="d-inline-flex align-items-center gap-1">
+        <StatusPill meta={meta} raw={status.label} />
+        {status.kind === "notconfirmed" && (
+          <FaExclamationCircle style={{ color: "#ff9800", fontSize: "15px" }} />
+        )}
       </span>
     );
   };
@@ -337,7 +400,7 @@ export default function StudentBookingList() {
   };
 
   return (
-    <div className="min-vh-100 bg-light d-flex flex-column">
+    <div className="min-vh-100 bg-light d-flex flex-column hbl-modern">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />

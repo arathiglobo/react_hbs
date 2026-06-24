@@ -227,9 +227,21 @@ export default function BookingDetailedView() {
   // cancellation (e.g. "ReConfirmed/Cancelled" / "Confirmed/Cancelled") so the
   // prior state isn't lost. Falls back to a plain "Cancelled" for rows
   // cancelled before this was captured (cancelledFromStatus null).
+  // "On Request" bookings are stamped CONFIRMED by the status engine so they
+  // can follow the reconfirm → ReConfirmed flow, but until they are actually
+  // reconfirmed they must DISPLAY as "On Request" (not "Confirmed"). This is a
+  // display-only override keyed off roomStatus — the underlying
+  // confirmationStatus / bookingStatus that drive the confirm & voucher flows
+  // are left untouched. Once reconfirmed the status becomes RECONFIRMED and
+  // this override no longer applies.
+  const isOnRequestRoom = /^on\s*request$/i.test(
+    String(booking?.roomStatus || "").trim(),
+  );
   const displayStatus =
     isCancelled && booking?.cancelledFromStatus
       ? `${booking.cancelledFromStatus}/Cancelled`
+      : isOnRequestRoom && normalizedStatus === "CONFIRMED"
+      ? "On Request"
       : booking?.confirmationStatus;
   // Agent Reference and Confirmation Number can only be SAVED once the
   // booking is confirmed-or-better; before that the booking is still
@@ -798,10 +810,6 @@ export default function BookingDetailedView() {
                           label="Booking Code"
                           value={booking.bookingCode}
                         />
-                        <InfoRow
-                          label="Reference No."
-                          value={booking.referenceNumber}
-                        />
                         <InfoRow label="Hotel Name" value={booking.hotelName} />
                         <InfoRow label="City" value={booking.city} />
                         <InfoRow label="Hotel Address" value={booking.address} />
@@ -999,7 +1007,6 @@ export default function BookingDetailedView() {
                                 <th>Room Category</th>
                                 <th>Meal Type</th>
                                 <th>Supplier Ref.</th>
-                                <th>Hotel Conf No.</th>
                                 <th>Adults</th>
                                 <th>Children</th>
                                 <th>Rate</th>
@@ -1011,7 +1018,6 @@ export default function BookingDetailedView() {
                                 <td>{room.roomCategory || "-"}</td>
                                 <td>{room.mealPlan || "-"}</td>
                                 <td>{booking.supplierReference || "-"}</td>
-                                <td>{booking.referenceNumber || "-"}</td>
                                 <td>{room.adults ?? "-"}</td>
                                 <td>{room.children ?? "0"}</td>
                                 <td>
