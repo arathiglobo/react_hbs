@@ -6,6 +6,7 @@ import axiosInstance from "../../../components/AxiosInstance";
 import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
+import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import { toast } from "react-hot-toast";
 import "../../../styles/OfflineSearch.css";
 
@@ -413,7 +414,10 @@ const OfflineSearch = () => {
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 offline-search-container">
+        <main className="flex-grow-1 offline-search-container hs-page">
+          {/* ── Search Card + Ads ── */}
+          <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
+            <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <Card className="search-card-premium animate-fade-in-up">
             <Card.Body className="p-2">
               <div className="mb-3">
@@ -810,6 +814,10 @@ const OfflineSearch = () => {
               )}
             </Card.Body>
           </Card>
+            </div>
+            {/* Ads carousel — city matches first, then all active ads */}
+            <AdvertisementCarousel />
+          </div>
         </main>
       </div>
     </div>

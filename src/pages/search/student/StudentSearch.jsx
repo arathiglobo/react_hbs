@@ -25,6 +25,7 @@ import AgentSelect from "../../../components/AgentSelect";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
+import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import "../../../styles/HotelSearch.css";
 
 // ─────────────────────────────────────────────
@@ -672,11 +673,14 @@ export default function StudentSearch() {
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4">
+        <main className="flex-grow-1 p-4 hs-page">
           {/* Heading + card shell matches /new-booking/senior-citizen
               (search-card-modern + h2 fw-semibold text-primary) so all
               the dedicated-flow search pages share one look. */}
-          <Card className="shadow-sm rounded-xl mb-4 search-card-modern bg-white">
+          {/* ── Search Card + Ads ── */}
+          <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
+            <div className="flex-grow-1" style={{ minWidth: 0 }}>
+          <Card className="shadow-sm rounded-xl h-100 search-card-modern bg-white">
             <Card.Body className="p-4">
         
 
@@ -996,6 +1000,13 @@ export default function StudentSearch() {
               </Row>
             </Card.Body>
           </Card>
+            </div>
+            {/* Ads carousel — city matches first, then all active ads */}
+            <AdvertisementCarousel
+              cityId={selectedDestination?.value}
+              cityName={selectedDestination?.label}
+            />
+          </div>
 
           <div className="mt-3" ref={resultsRef}>
             {isLoading && (

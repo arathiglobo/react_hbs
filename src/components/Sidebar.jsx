@@ -322,52 +322,52 @@ export default function Sidebar() {
       roles: ["admin", "agent", "staff"],
       children: [
         {
-          label: "Hotel Booking",
+          label: "Hotel Bookings",
           to: "/booking-details/hotel-booking-list",
         },
         // Dedicated 24-Hour Check-In list — same page wrapped with
         // force24HourOnly so only is24HourCheckin=true rows are shown.
         {
-          label: "24Hrs Booking List",
+          label: "24Hrs Bookings",
           to: "/booking-details/24hr-booking-list",
         },
         // Last Minute Booking list — Phase 4 entry
         {
-          label: "Last Minute Booking",
+          label: "Last Minute Bookings",
           to: "/booking-details/last-minute-booking-list",
         },
         {
-          label: "Long Stay Booking",
+          label: "Long Stay Bookings",
           to: "/booking-details/long-stay-booking-list",
         },
         {
-          label: "Day Stay Booking",
+          label: "Day Stay Bookings",
           to: "/booking-details/day-stay-booking-list",
         },
         {
-          label: "Custom Booking",
+          label: "Custom Bookings",
           to: "/booking-details/custom-booking-list",
         },
         {
           // Listings for the v2 Make-Your-Own-Package flow (separate
           // table tree, separate endpoints).
-          label: "Make Your Own Package",
+          label: "Make Your Own Packages",
           to: "/booking-details/make-your-own-package-v2-list",
         },
         {
-          label: "Package Booking",
+          label: "Package Bookings",
           to: "/booking-details/package-booking-list",
         },
         {
-          label: "Activity Booking",
+          label: "Tours and Activity Bookings",
           to: "/booking-details/activity-booking-list",
         },
         {
-          label: "Cab Booking",
+          label: "Transfer Bookings",
           to: "/booking-details/cab-booking-list",
         },
         {
-          label: "Scheffer Driver and Limousine Booking",
+          label: "Chauffeur Driver and Limousine Bookings",
           to: "/booking-details/scheffer-driver-booking-list",
         },
         // {
@@ -379,36 +379,36 @@ export default function Sidebar() {
         //   to: "/booking-details/quotation-list-list",
         // },
         {
-          label: "Offline Booking List",
+          label: "Offline Bookings",
           to: "/booking-details/offline-booking-list",
         },
         {
-          label: "Restaurant Booking",
+          label: "Restaurant Bookings",
           to: "/booking-details/restaurant-booking-list",
         },
         {
-          label: "Honeymoon Package",
+          label: "Honeymoon Packages",
           to: "/booking-details/honeymoon-booking-list",
         },
         // Meet & Space booking list — view + cancel from this page
         {
-          label: "Meet & Space Booking",
+          label: "Meet & Space Bookings",
           to: "/booking-details/meet-and-space-booking-list",
         },
         {
-          label: "Government Employee Booking",
+          label: "Government Employee Bookings",
           to: "/booking-details/gov-employee-booking-list",
         },
         {
-          label: "Ayurveda Booking",
+          label: "Ayurveda Bookings",
           to: "/booking-details/ayurveda-booking-list",
         },
         {
-          label: "Student Booking",
+          label: "Student Bookings",
           to: "/booking-details/student-booking-list",
         },
         {
-          label: "Senior Citizen Booking",
+          label: "Senior Citizen Bookings",
           to: "/booking-details/senior-citizen-booking-list",
         },
       ],

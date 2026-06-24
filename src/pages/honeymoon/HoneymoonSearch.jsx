@@ -30,6 +30,7 @@ import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import HoneymoonCard from "./HoneymoonCard";
+import AdvertisementCarousel from "../../components/AdvertisementCarousel";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -389,7 +390,7 @@ const HoneymoonSearch = () => {
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4">
+        <main className="flex-grow-1 p-4 hs-page">
           <Container fluid>
             <div className="mb-4">
               <h2 className="text-primary mb-1">
@@ -401,7 +402,10 @@ const HoneymoonSearch = () => {
               </p>
             </div>
 
-            <Card className="shadow-lg border-0 rounded-4 mb-4">
+            {/* ── Search Card + Ads ── */}
+            <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
+             <div className="flex-grow-1" style={{ minWidth: 0 }}>
+            <Card className="shadow-lg border-0 rounded-4 mb-4 h-100">
               <Card.Header className="bg-gradient-primary text-white border-0 rounded-top-4">
                 <h5 className="mb-0">
                   <FaSearch className="me-2" /> Search Criteria
@@ -617,6 +621,13 @@ const HoneymoonSearch = () => {
                 </Form>
               </Card.Body>
             </Card>
+             </div>
+             {/* Ads carousel — city matches first, then all active ads */}
+             <AdvertisementCarousel
+               cityId={form.destination?.value}
+               cityName={form.destination?.label}
+             />
+            </div>
 
             {loading && (
               <Card className="shadow-sm border-0 rounded-4 mb-3">

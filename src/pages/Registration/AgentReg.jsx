@@ -24,6 +24,31 @@ import {
   FaBan,
 } from "react-icons/fa";
 
+// Pull the exact, human-readable error out of an axios error so the toast
+// shows what the backend actually said (handles a plain-string body, the
+// common { message } / { error } shapes, a { errors: [...] } list, and a
+// field→message validation map) instead of a generic fallback.
+const getServerErrorMessage = (error, fallback = "Something went wrong") => {
+  const data = error?.response?.data;
+  if (typeof data === "string" && data.trim()) return data.trim();
+  if (data && typeof data === "object") {
+    if (data.message) return data.message;
+    if (data.error) return data.error;
+    if (Array.isArray(data.errors) && data.errors.length) {
+      return data.errors
+        .map((e) => (typeof e === "string" ? e : e?.defaultMessage || e?.message))
+        .filter(Boolean)
+        .join(", ");
+    }
+    // Spring-style field-validation map: { field: "message", ... }
+    const msgs = Object.values(data).filter(
+      (v) => typeof v === "string" && v.trim()
+    );
+    if (msgs.length) return msgs.join(", ");
+  }
+  return error?.message || fallback;
+};
+
 // SearchableSelect Component
 const SearchableSelect = ({
   options,
@@ -346,6 +371,23 @@ const AgentReg = () => {
   const [error, setError] = useState("");
   const [validationErrors, setValidationErrors] = useState({});
   const [gstinError, setGstinError] = useState("");
+  // Business Type — same fixed-option dropdown as /register; selecting
+  // "Others" reveals a free-text box (still bound to formData.businessType
+  // so submit/validation logic is unchanged).
+  const FIXED_BUSINESS_TYPES = [
+    "Tour Operator",
+    "Travel Agency",
+    "Event Company",
+    "Airline",
+  ];
+  const [businessTypeOther, setBusinessTypeOther] = useState(false);
+  // Debounced agent-email availability check — same endpoint/behaviour as
+  // /register (/api/agent/check-email against agent.personal_email). In
+  // edit mode the agent's own current email is excluded so it isn't
+  // wrongly flagged as a duplicate.
+  const emailCheckTimer = useRef(null);
+  const [emailExists, setEmailExists] = useState(false);
+  const [emailChecking, setEmailChecking] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -443,6 +485,7 @@ const AgentReg = () => {
 
   const openCreate = () => {
     setEditing(null);
+    setBusinessTypeOther(false);
     setFormData({
       dateOfBirth: "",
       companyName: "",
@@ -510,6 +553,12 @@ const AgentReg = () => {
 
       setEditing(data);
       setFormData(mapAgentToForm(data));
+      // A saved business type that isn't one of the fixed options means
+      // it was entered via "Others" — reopen the free-text box for it.
+      setBusinessTypeOther(
+        Boolean(data?.businessType) &&
+          !FIXED_BUSINESS_TYPES.includes(data.businessType)
+      );
       // Reset any prior server-search state so the country dropdown shows
       // the full list (and the sync effect can locate this agent's saved
       // country by id).
@@ -701,6 +750,7 @@ const AgentReg = () => {
     const errors = validateAgentForm(formData);
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors);
+      toast.error("Please fill all required fields");
       return;
     }
 
@@ -767,12 +817,9 @@ const AgentReg = () => {
     } catch (error) {
       console.error("Edit agent error:", error);
       console.error("Error details:", error.response?.data);
-      setError("Failed to update agent");
-      toast.error(
-        `Failed to update agent: ${
-          error.response?.data?.message || error.message
-        }`
-      );
+      const serverMsg = getServerErrorMessage(error, "Failed to update agent");
+      setError(serverMsg);
+      toast.error(serverMsg);
     } finally {
       setIsLoading(false);
     }
@@ -921,6 +968,36 @@ const AgentReg = () => {
     };
   }, [showApiDropdown]);
 
+  // Debounced email-availability check. Mirrors /register: only fires for
+  // well-formed addresses, hits /api/agent/check-email, and flags
+  // duplicates inline before submit. While editing, the agent's own
+  // current email is skipped so it isn't reported as a duplicate. A
+  // failed check never blocks the user (server still validates on save).
+  useEffect(() => {
+    const email = (formData.personalEmail || "").trim();
+    const ownEmail = (editing?.personalEmail || "").trim().toLowerCase();
+    if (emailCheckTimer.current) clearTimeout(emailCheckTimer.current);
+    if (
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+      email.toLowerCase() === ownEmail
+    ) {
+      setEmailExists(false);
+      setEmailChecking(false);
+      return undefined;
+    }
+    setEmailChecking(true);
+    emailCheckTimer.current = setTimeout(() => {
+      axiosInstance
+        .get("/api/agent/check-email", { params: { email } })
+        .then((res) => setEmailExists(Boolean(res.data?.exists)))
+        .catch(() => setEmailExists(false))
+        .finally(() => setEmailChecking(false));
+    }, 500);
+    return () => {
+      if (emailCheckTimer.current) clearTimeout(emailCheckTimer.current);
+    };
+  }, [formData.personalEmail, editing]);
+
 
   // Validation function
   const validateAgentForm = (data) => {
@@ -975,6 +1052,8 @@ const AgentReg = () => {
     const emailValue = getStringValue(data.personalEmail);
     if (emailValue && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue))
       newErrors.personalEmail = "Invalid email format";
+    else if (emailValue && emailExists)
+      newErrors.personalEmail = "An agent with this email already exists";
 
     const fmEmail = getStringValue(data.financeManagerEmail);
     if (fmEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fmEmail))
@@ -1025,7 +1104,10 @@ const AgentReg = () => {
       if (isRegistered && !gstInValue) {
         newErrors["agentGSTDetailsDTO.agentGstIn"] =
           "GSTIN is required for Registered agents";
-      } else if (gstInValue && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstInValue)) {
+      } else if (isRegistered && gstInValue && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(gstInValue)) {
+        // GSTIN format is only meaningful for Registered agents — an
+        // Unregistered agent has no GSTIN, so don't flag whatever sits
+        // in the (optional) field for them.
         newErrors["agentGSTDetailsDTO.agentGstIn"] = "Invalid GSTIN format";
       }
 
@@ -1048,6 +1130,7 @@ const AgentReg = () => {
     const errors = validateAgentForm(formData);
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors); // keep errors in state to show on UI
+      toast.error("Please fill all required fields");
       return;
     }
 
@@ -1108,12 +1191,9 @@ const AgentReg = () => {
     } catch (error) {
       console.error("Save agent error:", error);
       console.error("Error details:", error.response?.data);
-      setError("Sorry! Data not saved to db..");
-      toast.error(
-        `Failed to save agent data: ${
-          error.response?.data?.message || error.message
-        }`
-      );
+      const serverMsg = getServerErrorMessage(error, "Failed to save agent data");
+      setError(serverMsg);
+      toast.error(serverMsg);
     } finally {
       setIsLoading(false);
     }
@@ -1164,6 +1244,12 @@ const AgentReg = () => {
 
       setEditing(data);
       setFormData(mapAgentToForm(data));
+      // A saved business type that isn't one of the fixed options means
+      // it was entered via "Others" — reopen the free-text box for it.
+      setBusinessTypeOther(
+        Boolean(data?.businessType) &&
+          !FIXED_BUSINESS_TYPES.includes(data.businessType)
+      );
       // Same reset as openEdit — ensure the country dropdown carries the
       // full list so this agent's saved country resolves to a label.
       setCountrySearchTerm("");
@@ -2317,33 +2403,80 @@ const AgentReg = () => {
                       </Col>
                       <Col md={3}>
                         <Form.Group className="mb-3">
-                          <Form.Label>Business Type</Form.Label>
-                          <Form.Control
-                            value={formData.businessType}
-                            placeholder="Enter business name"
-                            isInvalid={!!validationErrors.businessType}
-                            {...getFormControlProps(
-                              "businessType",
-                              (e) => {
+                          <Form.Label>
+                            Business Type <span className="text-danger">*</span>
+                          </Form.Label>
+                          {/* Fixed-option dropdown; "Others" reveals a free-text
+                              input. The same `businessType` field is preserved so
+                              submit / validation logic is untouched. */}
+                          <Form.Select
+                            name="businessTypeSelect"
+                            value={
+                              businessTypeOther
+                                ? "Others"
+                                : FIXED_BUSINESS_TYPES.includes(
+                                    formData.businessType
+                                  )
+                                ? formData.businessType
+                                : ""
+                            }
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v === "Others") {
+                                setBusinessTypeOther(true);
+                                setFormData({ ...formData, businessType: "" });
+                              } else {
+                                setBusinessTypeOther(false);
+                                setFormData({ ...formData, businessType: v });
+                              }
+                              if (validationErrors.businessType) {
+                                setValidationErrors((prev) => ({
+                                  ...prev,
+                                  businessType: "",
+                                }));
+                              }
+                            }}
+                            isInvalid={
+                              !!validationErrors.businessType && !businessTypeOther
+                            }
+                            className={`form-input ${
+                              validationErrors.businessType && !businessTypeOther
+                                ? "is-invalid"
+                                : ""
+                            }`}
+                          >
+                            <option value="">Select business type</option>
+                            <option value="Tour Operator">Tour Operator</option>
+                            <option value="Travel Agency">Travel Agency</option>
+                            <option value="Event Company">Event Company</option>
+                            <option value="Airline">Airline</option>
+                            <option value="Others">Others</option>
+                          </Form.Select>
+                          {businessTypeOther && (
+                            <Form.Control
+                              type="text"
+                              name="businessType"
+                              value={formData.businessType}
+                              onChange={(e) => {
                                 setFormData({
                                   ...formData,
                                   businessType: e.target.value,
                                 });
-                                // Clear validation error when user starts typing
                                 if (validationErrors.businessType) {
-                                  setValidationErrors(prev => ({
+                                  setValidationErrors((prev) => ({
                                     ...prev,
-                                    businessType: ""
+                                    businessType: "",
                                   }));
                                 }
-                              },
-                              {
-                                className: `form-input ${
-                                  validationErrors.businessType ? "is-invalid" : ""
-                                }`,
-                              }
-                            )}
-                          />
+                              }}
+                              placeholder="Please specify your business type"
+                              className={`form-input mt-2 ${
+                                validationErrors.businessType ? "is-invalid" : ""
+                              }`}
+                              maxLength={30}
+                              isInvalid={!!validationErrors.businessType}
+                            />
+                          )}
                           {validationErrors.businessType && (
                             <Form.Control.Feedback type="invalid">
                               {validationErrors.businessType}
@@ -2544,6 +2677,29 @@ const AgentReg = () => {
                                   {validationErrors.personalEmail}
                                 </Form.Control.Feedback>
                               )}
+                              {/* Live availability hint (agent.personal_email). */}
+                              {!validationErrors.personalEmail && emailChecking && (
+                                <div className="text-muted small mt-1">
+                                  Checking availability…
+                                </div>
+                              )}
+                              {!validationErrors.personalEmail &&
+                                !emailChecking &&
+                                emailExists && (
+                                  <div className="text-danger small mt-1">
+                                    An agent with this email already exists.
+                                  </div>
+                                )}
+                              {!validationErrors.personalEmail &&
+                                !emailChecking &&
+                                !emailExists &&
+                                /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+                                  (formData.personalEmail || "").trim()
+                                ) && (
+                                  <div className="text-success small mt-1">
+                                    Email is available.
+                                  </div>
+                                )}
                             </Form.Group>
                           </Col>
                           <Col md={6}>

@@ -209,6 +209,16 @@ const PackageSearch = () => {
     if (pkg.rateType) params.set("searchRateType", pkg.rateType);
     params.set("searchCurrency", pkg.currencyCode || "AED");
 
+    // ADD NEW ITEM flow: PackageBookingDetailView navigates here with
+    // ?parentBookingCode=GPKG-... so the booking that gets created
+    // becomes a child of an existing primary booking. Forward it through
+    // verbatim so PackageBooking → PaxInformation can stamp the POST /book
+    // payload, and the backend writes "{parent}/{n}" for bookingCode.
+    const incomingParent = new URLSearchParams(window.location.search).get(
+      "parentBookingCode",
+    );
+    if (incomingParent) params.set("parentBookingCode", incomingParent);
+
     const url = `/new-booking/package-booking/${pkg.packageId}?${params.toString()}`;
     window.open(url, "_blank", "noopener,noreferrer");
   };

@@ -38,6 +38,7 @@ import AgentSelect from "../../../components/AgentSelect";
 import axiosInstance from "../../../components/AxiosInstance";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
+import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 
 const SPACE_TYPES = [
   "",
@@ -330,9 +331,11 @@ export default function MeetAndSpaceSearch() {
       <div className="d-flex flex-grow-1">
         <Sidebar />
 
-        <main className="flex-grow-1 p-4">
-          {/* ── Search Card (HotelSearch.jsx pattern) ── */}
-          <Card className="shadow-sm rounded-xl mb-4 search-card-modern bg-white">
+        <main className="flex-grow-1 p-4 hs-page">
+          {/* ── Search Card + Ads (HotelSearch.jsx pattern) ── */}
+          <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
+           <div className="flex-grow-1" style={{ minWidth: 0 }}>
+          <Card className="shadow-sm rounded-xl h-100 search-card-modern bg-white">
             <Card.Body className="p-4">
               <div className="mb-4 text-start">
                 <h2 className="fw-semibold text-primary mb-1">
@@ -688,6 +691,13 @@ export default function MeetAndSpaceSearch() {
               </Form>
             </Card.Body>
           </Card>
+           </div>
+            {/* Ads carousel — city matches first, then all active ads */}
+            <AdvertisementCarousel
+              cityId={selectedDestination?.value}
+              cityName={selectedDestination?.label}
+            />
+          </div>
 
           {/* ── Results ── */}
           {isLoading ? (

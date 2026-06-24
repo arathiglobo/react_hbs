@@ -13,6 +13,7 @@ import TopBar from "../../components/TopBar";
 import Select from "react-select";
 import axiosInstance from "../../components/AxiosInstance";
 import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
+import AdvertisementCarousel from "../../components/AdvertisementCarousel";
 import {
   FaSearch,
   FaGlobe,
@@ -701,8 +702,11 @@ export default function MakeUrOwnPackageV2() {
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4">
-          <Card className="shadow-sm rounded-xl mb-4" style={{ backgroundColor: '#ffffff' }}>
+        <main className="flex-grow-1 p-4 hs-page">
+          {/* ── Search Card + Ads ── */}
+          <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
+           <div className="flex-grow-1" style={{ minWidth: 0 }}>
+          <Card className="shadow-sm rounded-xl mb-4 h-100" style={{ backgroundColor: '#ffffff' }}>
             <Card.Body className="p-4">
               <div className="d-flex align-items-center mb-4">
                 <div className="me-3">
@@ -1065,6 +1069,13 @@ export default function MakeUrOwnPackageV2() {
               </Form>
             </Card.Body>
           </Card>
+           </div>
+           {/* Ads carousel — city matches first, then all active ads */}
+           <AdvertisementCarousel
+             cityId={itinerary?.[0]?.selectedDestination?.value}
+             cityName={itinerary?.[0]?.selectedDestination?.label}
+           />
+          </div>
 
           <Card className="shadow-sm rounded-xl">
             <Card.Body className="text-center text-muted py-5">

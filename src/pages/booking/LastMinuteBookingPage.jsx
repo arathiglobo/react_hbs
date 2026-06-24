@@ -15,6 +15,7 @@ import Select from "react-select";
 import AgentSelect from "../../components/AgentSelect";
 import axiosInstance from "../../components/AxiosInstance";
 import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
+import AdvertisementCarousel from "../../components/AdvertisementCarousel";
 import { FaSearch, FaStar, FaMapMarkerAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
@@ -511,9 +512,11 @@ export default function LastMinuteBookingPage() {
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4">
-          {/* ── Search Card ── */}
-          <Card className="shadow-sm rounded-xl mb-4 search-card-modern bg-white">
+        <main className="flex-grow-1 p-4 hs-page">
+          {/* ── Search Card + Ads ── */}
+          <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
+            <div className="flex-grow-1" style={{ minWidth: 0 }}>
+          <Card className="shadow-sm rounded-xl h-100 search-card-modern bg-white">
             <Card.Body className="p-4">
               <div className="mb-4">
                 <h2 className="fw-semibold text-primary mb-1">Last Minute Deals</h2>
@@ -766,6 +769,13 @@ export default function LastMinuteBookingPage() {
               </Form>
             </Card.Body>
           </Card>
+            </div>
+            {/* Ads carousel — city matches first, then all active ads */}
+            <AdvertisementCarousel
+              cityId={selectedDestination?.value}
+              cityName={selectedDestination?.label}
+            />
+          </div>
 
           {/* ── Progress Bar (mirrors HotelSearch.jsx) ── */}
           <SearchProgressBar active={searching} />
