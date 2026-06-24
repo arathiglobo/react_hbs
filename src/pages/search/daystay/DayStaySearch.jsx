@@ -711,7 +711,7 @@ export default function DayStaySearch() {
                     <Form.Label className="fw-semibold text-dark">
                       Rooms & Guests
                     </Form.Label>
-                    <div className="d-flex gap-2">
+                    <div className="d-flex flex-wrap gap-2">
                       <Button
                         variant="outline-primary"
                         className="flex-grow-1 text-start rooms-summary-btn-modern"
@@ -727,7 +727,7 @@ export default function DayStaySearch() {
                       </Button>
                       <Button
                         type="button"
-                        className="flex-shrink-0 btn-add-room-premium"
+                        className="flex-grow-1 justify-content-center btn-add-room-premium"
                         onClick={() => {
                           if (!roomsOpen) {
                             setRoomsOpen(true);
