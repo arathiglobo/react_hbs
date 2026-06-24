@@ -8,6 +8,7 @@ import "../styles/Login.css";
 import "../styles/LoginModern.css";
 import DashboardRedirections from "../components/DashboardRedirections";
 import axiosInstance from "../components/AxiosInstance";
+import { toast } from "react-hot-toast";
 
 const Login = () => {
   const [username, setUsername] = useState("");
@@ -141,13 +142,38 @@ const Login = () => {
     }
   };
 
-  const handleForgetPasswordSubmit = (e) => {
+  const [forgetSubmitting, setForgetSubmitting] = useState(false);
+
+  const handleForgetPasswordSubmit = async (e) => {
     e.preventDefault();
-    console.log("Forget Password:", { email: forgetEmail, username: forgetUsername });
-    const modal = document.getElementById("exampleModal");
-    if (modal) {
-      const bootstrapModal = window.bootstrap.Modal.getInstance(modal);
-      if (bootstrapModal) bootstrapModal.hide();
+    const email = forgetEmail.trim();
+    const username = forgetUsername.trim();
+    if (!email || !username) {
+      toast.error("Please enter both your email and username.");
+      return;
+    }
+    try {
+      setForgetSubmitting(true);
+      await axiosInstance.post("/auth/forgot-password", { email, username });
+      // The backend responds the same way whether or not the account
+      // exists (anti-enumeration), so the message is deliberately generic.
+      toast.success(
+        "If the email and username match an account, a new password has been emailed to you."
+      );
+      setForgetEmail("");
+      setForgetUsername("");
+      const modal = document.getElementById("exampleModal");
+      if (modal && window.bootstrap?.Modal) {
+        const bootstrapModal = window.bootstrap.Modal.getInstance(modal);
+        if (bootstrapModal) bootstrapModal.hide();
+      }
+    } catch (err) {
+      toast.error(
+        err?.response?.data?.message ||
+          "Could not process the request. Please try again."
+      );
+    } finally {
+      setForgetSubmitting(false);
     }
   };
 
@@ -392,7 +418,8 @@ const Login = () => {
             </div>
             <div className="modal-body">
               <p className="modal-description text-muted mb-3">
-                Enter your email and username to receive password reset instructions.
+                Enter the email and username on your account. We'll email a new
+                password to the address on file.
               </p>
               <form id="changePass" onSubmit={handleForgetPasswordSubmit} autoComplete="off">
                 <div className="mb-3">
@@ -425,8 +452,14 @@ const Login = () => {
                     required
                   />
                 </div>
-                <button type="submit" id="submit" className="btn w-100 lg-submit" style={{ marginTop: 4 }}>
-                  Send Reset Link
+                <button
+                  type="submit"
+                  id="submit"
+                  className="btn w-100 lg-submit"
+                  style={{ marginTop: 4 }}
+                  disabled={forgetSubmitting}
+                >
+                  {forgetSubmitting ? "Sending…" : "Send New Password"}
                 </button>
               </form>
             </div>

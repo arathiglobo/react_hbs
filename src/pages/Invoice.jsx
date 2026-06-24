@@ -14,7 +14,6 @@ import Topbar from "../components/TopBar";
 import axiosInstance from "../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import {
-  FaCalendarAlt,
   FaPrint,
   FaFileExcel,
   FaHotel,
@@ -338,48 +337,22 @@ export default function Invoice() {
                       <Col md={3}>
                         <Form.Group>
                           <Form.Label>From Date</Form.Label>
-                          <div className="position-relative">
-                            <Form.Control
-                              type="date"
-                              value={fromDate}
-                              onChange={(e) => setFromDate(e.target.value)}
-                              className="pe-5"
-                            />
-                            <FaCalendarAlt
-                              className="position-absolute"
-                              style={{
-                                right: "12px",
-                                top: "50%",
-                                transform: "translateY(-50%)",
-                                color: "#6c757d",
-                                pointerEvents: "none",
-                              }}
-                            />
-                          </div>
+                          <Form.Control
+                            type="date"
+                            value={fromDate}
+                            onChange={(e) => setFromDate(e.target.value)}
+                          />
                         </Form.Group>
                       </Col>
                       <Col md={3}>
                         <Form.Group>
                           <Form.Label>To Date</Form.Label>
-                          <div className="position-relative">
-                            <Form.Control
-                              type="date"
-                              value={toDate}
-                              onChange={(e) => setToDate(e.target.value)}
-                              min={fromDate || undefined}
-                              className="pe-5"
-                            />
-                            <FaCalendarAlt
-                              className="position-absolute"
-                              style={{
-                                right: "12px",
-                                top: "50%",
-                                transform: "translateY(-50%)",
-                                color: "#6c757d",
-                                pointerEvents: "none",
-                              }}
-                            />
-                          </div>
+                          <Form.Control
+                            type="date"
+                            value={toDate}
+                            onChange={(e) => setToDate(e.target.value)}
+                            min={fromDate || undefined}
+                          />
                         </Form.Group>
                       </Col>
                       {!isAgentRole && (
@@ -610,20 +583,6 @@ export default function Invoice() {
                                 fontWeight: "600",
                                 textTransform: "uppercase",
                                 color: "#495057",
-                                border: "1px solid #dee2e6",
-                                whiteSpace: "normal",
-                                lineHeight: 1.2,
-                                minWidth: "180px",
-                              }}
-                            >
-                              Reference Number
-                            </th>
-                            <th
-                              style={{
-                                padding: "0.45rem 0.6rem",
-                                fontWeight: "600",
-                                textTransform: "uppercase",
-                                color: "#495057",
                                 textAlign: "center",
                                 border: "1px solid #dee2e6",
                                 whiteSpace: "normal",
@@ -734,17 +693,6 @@ export default function Invoice() {
                                   >
                                   <span className="fw-bold text-dark">{formatBookingAmount(invoice)}</span>
                                   </td>
-                                  <td style={baseCellStyle}>
-                                    <code
-                                      className="bg-light px-2 py-1 rounded"
-                                      style={{
-                                        fontSize: "0.75rem",
-                                        color: "#495057",
-                                      }}
-                                    >
-                                      {invoice.confirmationCode || "-"}
-                                    </code>
-                                  </td>
                                   <td
                                     style={{
                                       ...baseCellStyle,
@@ -785,7 +733,7 @@ export default function Invoice() {
                                     }}
                                   >
                                     <td
-                                      colSpan={12}
+                                      colSpan={11}
                                       style={{
                                         ...baseCellStyle,
                                         padding: "0.75rem 1rem",

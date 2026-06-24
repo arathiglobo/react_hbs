@@ -234,7 +234,9 @@ export default function AgentAccounts() {
 
   const handleCurrency = (item) => {
     const agentId = item.agentId || item.id;
-    navigate(`/inhouse-accounts/agent-payment-history/${agentId}`);
+    // 3rd icon ($) is the Auto Generated Invoice — it was wrongly pointing at
+    // the payment-history route (same as the 2nd icon). Send it to its own page.
+    navigate(`/inhouse-accounts/agent-auto-generated-invoice/${agentId}`);
   };
 
   const calculateAvailable = (creditLimit, used) => {
