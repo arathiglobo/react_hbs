@@ -19,6 +19,7 @@ import { toast } from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
+import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 
 function LazyImage({ src, alt, className }) {
   const containerRef = useRef(null);
@@ -1337,7 +1338,7 @@ export const CabSearch = () => {
       <div className="d-flex flex-grow-1">
         <Sidebar />
 
-        <main className="flex-grow-1 p-4">
+        <main className="flex-grow-1 p-4 hs-page">
           <Card className="shadow-sm rounded-xl mb-4 border-0">
             <Card.Body>
               {/* 🔷 Header */}
@@ -1352,8 +1353,11 @@ export const CabSearch = () => {
                 </div>
               </div>
 
+              {/* ── Search Card + Ads ── */}
+              <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
+                <div className="flex-grow-1" style={{ minWidth: 0 }}>
               {/* 🔷 Search Card */}
-              <Card className="border-0 shadow-sm rounded-4 bg-white mb-4">
+              <Card className="border-0 shadow-sm rounded-4 bg-white h-100">
                 <Card.Body>
                   <Form onSubmit={handleTransferSearchSubmit}>
                     {/* ── Simplified Transfer search criteria ───────────────
@@ -2751,6 +2755,13 @@ export const CabSearch = () => {
                   </Form>
                 </Card.Body>
               </Card>
+                </div>
+                {/* Ads carousel — city matches first, then all active ads */}
+                <AdvertisementCarousel
+                  cityId={city?.value}
+                  cityName={city?.label}
+                />
+              </div>
 
               {/* Loading State */}
               {transferLoading && (

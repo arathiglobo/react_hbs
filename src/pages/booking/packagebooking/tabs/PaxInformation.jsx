@@ -326,7 +326,21 @@ const PaxInformation = ({
               : "Booking confirmed successfully!"),
         );
         setShowSummary(false);
-        navigate("/booking-details/package-booking-list");
+        // ADD NEW ITEM (sub-booking) flow: when a child of an existing
+        // primary booking was just created, jump straight to the parent's
+        // detail page so the user sees the newly-stamped "Related
+        // Sub-Bookings (N)" card without having to navigate manually.
+        // Root primary codes look like "GPKG-{id}" — extract the id.
+        // Falls back to the list page if the code can't be parsed or
+        // this was a normal (non-child) booking.
+        const parentMatch = parentBookingCode
+          ? String(parentBookingCode).match(/GPKG-(\d+)/)
+          : null;
+        if (parentMatch && parentMatch[1] && !editingBookingId) {
+          navigate(`/booking-details/package-booking/${parentMatch[1]}`);
+        } else {
+          navigate("/booking-details/package-booking-list");
+        }
       }
     } catch (error) {
       console.error("Booking submission error:", error);

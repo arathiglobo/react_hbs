@@ -8,6 +8,7 @@ import {
   Modal,
   Form,
   Spinner,
+  Container,
 } from "react-bootstrap";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
@@ -34,18 +35,67 @@ import {
  * the admin doesn't have to bounce back to the list to perform routine
  * follow-up actions on an agent they just opened.
  */
-const Row2 = ({ label, value }) => (
-  <Col md={6} className="mb-3">
-    <div className="text-muted small mb-1">{label}</div>
-    <div className="fw-semibold" style={{ minHeight: 22 }}>
-      {value === null || value === undefined || value === "" ? (
-        <span className="text-muted">—</span>
-      ) : (
-        String(value)
-      )}
+// ── Look-and-feel tokens, matched to PackageDetailedView so this page
+//    shares the same clean "details" styling (gray section header bars,
+//    compact label/value rows inside bordered cards). ──
+const SECTION_HEADER = {
+  backgroundColor: "#f0f0f0",
+  padding: "8px 14px",
+  fontWeight: 600,
+  fontSize: "0.9rem",
+  borderBottom: "1px solid #ddd",
+  display: "flex",
+  alignItems: "center",
+  gap: "6px",
+  color: "#333",
+};
+
+const INFO_LABEL = {
+  fontWeight: 600,
+  color: "#555",
+  fontSize: "0.82rem",
+  minWidth: "180px",
+  display: "inline-block",
+};
+
+const INFO_VALUE = { color: "#222", fontSize: "0.82rem" };
+
+const cardBox = {
+  border: "1px solid #ddd",
+  borderRadius: "4px",
+  marginBottom: "14px",
+  overflow: "hidden",
+  backgroundColor: "#fff",
+  boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+};
+
+// One label / value line. Renders a muted em-dash for empty values.
+const InfoRow = ({ label, value }) => {
+  const blank = value === null || value === undefined || value === "";
+  return (
+    <div style={{ marginBottom: "6px", display: "flex", alignItems: "flex-start" }}>
+      <span style={INFO_LABEL}>{label}</span>
+      <span style={{ ...INFO_VALUE, marginLeft: "8px" }}>
+        {blank ? <span style={{ color: "#9CA3AF" }}>—</span> : value}
+      </span>
     </div>
-  </Col>
+  );
+};
+
+// Section card with a gray header bar (PackageDetailedView pattern).
+const Section = ({ title, children }) => (
+  <div style={cardBox}>
+    <div style={SECTION_HEADER}>{title}</div>
+    <div style={{ padding: "12px 16px" }}>{children}</div>
+  </div>
 );
+
+// dd-MM-yyyy when the value is a valid date, else the raw string.
+const formatDob = (v) => {
+  if (!v) return "";
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString("en-GB");
+};
 
 const AgentView = () => {
   const { id } = useParams();
@@ -695,7 +745,8 @@ const AgentView = () => {
       <Topbar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4">
+        <main className="flex-grow-1 p-4" style={{ overflow: "auto" }}>
+          <Container fluid style={{ maxWidth: "1100px" }}>
           <div className="d-flex justify-content-between align-items-center mb-3">
             <div>
               <Button
@@ -808,144 +859,161 @@ const AgentView = () => {
             })()}
           </div>
 
-          <Card className="shadow-sm mb-3">
-            <Card.Header>Agent Details</Card.Header>
-            <Card.Body>
-              <Row>
-                <Row2 label="Company Name" value={agent.companyName} />
-                <Row2 label="Short Name" value={agent.shortName} />
-                <Row2 label="Business Type" value={agent.businessType} />
-                <Row2 label="Company Code" value={agent.companyCode} />
-                <Row2 label="Agent URL" value={agent.agentUrl} />
-                <Row2 label="First Name" value={agent.firstName} />
-                <Row2 label="Last Name" value={agent.lastName} />
-                <Row2
-                  label="Date of Birth"
+          <Section title="Agent Details">
+            <Row>
+              <Col md={6}>
+                <InfoRow label="Company Name" value={agent.companyName} />
+                <InfoRow label="Short Name" value={agent.shortName} />
+                <InfoRow label="Business Type" value={agent.businessType} />
+                <InfoRow
+                  label="Agent Category"
                   value={
-                    agent.dateOfBirth
-                      ? (() => {
-                          // Display as dd-MM-yyyy if it's a valid ISO date,
-                          // otherwise fall back to the raw string.
-                          const d = new Date(agent.dateOfBirth);
-                          return Number.isNaN(d.getTime())
-                            ? agent.dateOfBirth
-                            : d.toLocaleDateString("en-GB");
-                        })()
-                      : "—"
+                    agent.agentCategoryName ||
+                    agent.agentCategory?.categoryName ||
+                    agent.agentCategory?.name ||
+                    agent.agentCategoryId
                   }
                 />
-                <Row2 label="Status" value={agent.status} />
-              </Row>
-            </Card.Body>
-          </Card>
+                <InfoRow label="Company Code" value={agent.companyCode} />
+                <InfoRow label="Agent URL" value={agent.agentUrl} />
+              </Col>
+              <Col md={6}>
+                <InfoRow label="First Name" value={agent.firstName} />
+                <InfoRow label="Last Name" value={agent.lastName} />
+                <InfoRow label="Date of Birth" value={formatDob(agent.dateOfBirth)} />
+                <InfoRow label="Status" value={agent.status} />
+                <InfoRow label="Agent ID" value={agent.id} />
+              </Col>
+            </Row>
+          </Section>
 
-          <Card className="shadow-sm mb-3">
-            <Card.Header>Contact Details</Card.Header>
-            <Card.Body>
-              <Row>
-                <Row2 label="Email" value={agent.personalEmail} />
-                <Row2 label="Mobile Number" value={agent.mobileNumber} />
-                <Row2 label="Telephone Number" value={agent.telephoneNumber} />
-                <Row2 label="Zip Code" value={agent.zipCode} />
-                <Row2 label="Contact Person" value={agent.contactPerson} />
-                <Row2 label="Country" value={agent.countryName} />
-                <Row2 label="City" value={agent.provinceName} />
-                <Row2 label="Location" value={agent.placeName} />
-                <Col md={12} className="mb-3">
-                  <div className="text-muted small mb-1">Address</div>
-                  <div className="fw-semibold">
-                    {agent.address || (
-                      <span className="text-muted">—</span>
-                    )}
-                  </div>
-                </Col>
-              </Row>
-            </Card.Body>
-          </Card>
+          <Section title="Contact Details">
+            <Row>
+              <Col md={6}>
+                <InfoRow label="Email" value={agent.personalEmail} />
+                <InfoRow label="Mobile Number" value={agent.mobileNumber} />
+                <InfoRow label="Telephone Number" value={agent.telephoneNumber} />
+                <InfoRow label="Contact Person" value={agent.contactPerson} />
+                <InfoRow label="Zip Code" value={agent.zipCode} />
+              </Col>
+              <Col md={6}>
+                <InfoRow label="Country" value={agent.countryName} />
+                <InfoRow label="City / Province" value={agent.provinceName} />
+                <InfoRow label="Location" value={agent.placeName} />
+                <InfoRow label="Address" value={agent.address} />
+              </Col>
+            </Row>
+          </Section>
 
           {String(agent.countryId) === "1" && (
-            <Card className="shadow-sm mb-3">
-              <Card.Header>GST Information</Card.Header>
-              <Card.Body>
-                <Row>
-                  <Row2
+            <Section title="GST Information">
+              <Row>
+                <Col md={6}>
+                  <InfoRow
                     label="Agency Classification"
                     value={gst.agentClassification}
                   />
-                  <Row2 label="GSTIN" value={gst.agentGstIn} />
-                  <Row2
+                  <InfoRow label="GSTIN" value={gst.agentGstIn} />
+                  <InfoRow
                     label="Provisional GST Number"
                     value={gst.agentProvisionalGstno}
                   />
-                  <Row2
+                  <InfoRow
                     label="Correspondence Email"
                     value={gst.agentCorrespondmail}
                   />
-                  <Row2
+                </Col>
+                <Col md={6}>
+                  <InfoRow
                     label="GST Registration Status"
                     value={gst.agentRegisterstatus}
                   />
-                  <Row2 label="HSN/SAC Code" value={gst.agentHsncode} />
-                  <Row2 label="Agent Status" value={gst.agentStatus} />
-                </Row>
-              </Card.Body>
-            </Card>
+                  <InfoRow label="HSN/SAC Code" value={gst.agentHsncode} />
+                  <InfoRow label="Agent Status" value={gst.agentStatus} />
+                </Col>
+              </Row>
+            </Section>
           )}
 
-          <Card className="shadow-sm mb-3">
-            <Card.Header>Finance Manager & GM</Card.Header>
-            <Card.Body>
-              <h6 className="text-primary mb-3">Finance Manager</h6>
-              <Row>
-                <Row2 label="Name" value={agent.financeManagerName} />
-                <Row2
-                  label="Contact No"
-                  value={agent.financeManagerContactNo}
-                />
-                <Row2 label="Email" value={agent.financeManagerEmail} />
-              </Row>
-              <hr />
-              <h6 className="text-primary mb-3">GM</h6>
-              <Row>
-                <Row2 label="Name" value={agent.gmName} />
-                <Row2 label="Contact No" value={agent.gmContactNo} />
-                <Row2 label="Email" value={agent.gmEmail} />
-              </Row>
-            </Card.Body>
-          </Card>
+          <Section title="Finance Manager & GM">
+            <div
+              className="fw-semibold mb-2"
+              style={{ color: "#c0392b", fontSize: "0.85rem" }}
+            >
+              Finance Manager
+            </div>
+            <Row>
+              <Col md={6}>
+                <InfoRow label="Name" value={agent.financeManagerName} />
+                <InfoRow label="Contact No" value={agent.financeManagerContactNo} />
+              </Col>
+              <Col md={6}>
+                <InfoRow label="Email" value={agent.financeManagerEmail} />
+              </Col>
+            </Row>
+            <hr className="my-3" />
+            <div
+              className="fw-semibold mb-2"
+              style={{ color: "#c0392b", fontSize: "0.85rem" }}
+            >
+              General Manager
+            </div>
+            <Row>
+              <Col md={6}>
+                <InfoRow label="Name" value={agent.gmName} />
+                <InfoRow label="Contact No" value={agent.gmContactNo} />
+              </Col>
+              <Col md={6}>
+                <InfoRow label="Email" value={agent.gmEmail} />
+              </Col>
+            </Row>
+          </Section>
 
-          <Card className="shadow-sm mb-3">
-            <Card.Header>Incentive & Settings</Card.Header>
-            <Card.Body>
-              <Row>
-                <Row2
+          <Section title="Incentive & Settings">
+            <Row>
+              <Col md={6}>
+                <InfoRow
                   label="Preferred Incentive Claim Method"
                   value={agent.preferredClaimMethod}
                 />
-                <Row2 label="Markup" value={agent.markup} />
-                <Row2 label="Currency" value={agent.currencyCode || agent.currency} />
-              </Row>
-              {agent.preferredClaimMethod === "BANK_TRANSFER" && (
-                <>
-                  <hr />
-                  <h6 className="text-success mb-3">Bank Details</h6>
-                  <Row>
-                    <Row2
+                <InfoRow label="Markup" value={`${agent.markup} (${agent.markupType})`} />
+              </Col>
+              <Col md={6}>
+                <InfoRow
+                  label="Currency"
+                  value={agent.currencyCode || agent.currency}
+                />
+              </Col>
+            </Row>
+            {agent.preferredClaimMethod === "BANK_TRANSFER" && (
+              <>
+                <hr className="my-3" />
+                <div
+                  className="fw-semibold mb-2"
+                  style={{ color: "#16a34a", fontSize: "0.85rem" }}
+                >
+                  Bank Details
+                </div>
+                <Row>
+                  <Col md={6}>
+                    <InfoRow
                       label="Account Holder Name"
                       value={agent.bankAccountHolderName}
                     />
-                    <Row2 label="Bank Name" value={agent.bankName} />
-                    <Row2
+                    <InfoRow label="Bank Name" value={agent.bankName} />
+                    <InfoRow
                       label="Account Number"
                       value={agent.bankAccountNumber}
                     />
-                    <Row2 label="IFSC Code" value={agent.bankIfscCode} />
-                    <Row2 label="Branch Name" value={agent.bankBranchName} />
-                  </Row>
-                </>
-              )}
-            </Card.Body>
-          </Card>
+                  </Col>
+                  <Col md={6}>
+                    <InfoRow label="IFSC Code" value={agent.bankIfscCode} />
+                    <InfoRow label="Branch Name" value={agent.bankBranchName} />
+                  </Col>
+                </Row>
+              </>
+            )}
+          </Section>
 
           {/* ------------ Bottom action bar ----------------------- */}
           <Card className="shadow-sm">
@@ -979,6 +1047,7 @@ const AgentView = () => {
               </Button>
             </Card.Body>
           </Card>
+          </Container>
 
           {/* ---------------- Login Modal ---------------- */}
           <Modal
@@ -1097,9 +1166,16 @@ const AgentView = () => {
                         )}
                       </button>
                     </div>
-                    <Form.Control.Feedback type="invalid">
-                      {loginErrors.password}
-                    </Form.Control.Feedback>
+                    {/* Rendered as a plain block (not Form.Control.Feedback)
+                        because the input sits inside a wrapper div for the
+                        eye toggle, so Bootstrap's sibling rule would keep the
+                        feedback hidden — which previously swallowed the
+                        password-criteria message. */}
+                    {loginErrors.password && (
+                      <div className="text-danger small mt-1">
+                        {loginErrors.password}
+                      </div>
+                    )}
                   </Form.Group>
                   <Form.Group className="mb-3">
                     <Form.Label>Re-enter Password</Form.Label>
@@ -1133,9 +1209,11 @@ const AgentView = () => {
                         )}
                       </button>
                     </div>
-                    <Form.Control.Feedback type="invalid">
-                      {loginErrors.repassword}
-                    </Form.Control.Feedback>
+                    {loginErrors.repassword && (
+                      <div className="text-danger small mt-1">
+                        {loginErrors.repassword}
+                      </div>
+                    )}
                   </Form.Group>
                   <Form.Group className="mb-3">
                     <Form.Label>User Roles</Form.Label>

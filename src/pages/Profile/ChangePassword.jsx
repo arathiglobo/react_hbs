@@ -18,6 +18,20 @@ const ChangePassword = () => {
   const [serverError, setServerError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Show / hide toggles for each password field (eye icon).
+  const [showOld, setShowOld] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  // Small inline eye button shown inside each password field.
+  const eyeBtnStyle = {
+    border: "none",
+    background: "none",
+    color: "#6c757d",
+    padding: "0 12px",
+    zIndex: 5,
+  };
+
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setErrors({ ...errors, [e.target.name]: "" }); // clear error when typing
@@ -33,7 +47,11 @@ const ChangePassword = () => {
     if (!formData.newPassword.trim()) {
       formErrors.newPassword = "New password is required";
     } else if (formData.newPassword.length < 8) {
-      formErrors.newPassword = "New password must be at least 8 characters";
+      formErrors.newPassword = "Password must be at least 8 characters long";
+    } else if (!/(?=.*[A-Z])(?=.*[0-9])/.test(formData.newPassword)) {
+      // Same criteria as the agent-login password (registration/agent/view/:id)
+      formErrors.newPassword =
+        "Password must contain at least one uppercase letter and one number";
     }
     if (!formData.confirmPassword.trim()) {
       formErrors.confirmPassword = "Please confirm your new password";
@@ -117,49 +135,94 @@ const ChangePassword = () => {
               {/* Old Password */}
               <Form.Group className="mb-3" controlId="oldPassword">
                 <Form.Label>Old Password</Form.Label>
-                <Form.Control
-                  type="password"
-                  name="oldPassword"
-                  placeholder="Enter old password"
-                  value={formData.oldPassword}
-                  onChange={handleChange}
-                  isInvalid={!!errors.oldPassword}
-                />
-                <Form.Control.Feedback type="invalid">
-                  {errors.oldPassword}
-                </Form.Control.Feedback>
+                <div className="position-relative">
+                  <Form.Control
+                    type={showOld ? "text" : "password"}
+                    name="oldPassword"
+                    placeholder="Enter old password"
+                    value={formData.oldPassword}
+                    onChange={handleChange}
+                    isInvalid={!!errors.oldPassword}
+                    style={{ paddingRight: 40 }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
+                    style={eyeBtnStyle}
+                    onClick={() => setShowOld((s) => !s)}
+                    tabIndex={-1}
+                    aria-label={showOld ? "Hide password" : "Show password"}
+                  >
+                    <i className={showOld ? "fas fa-eye-slash" : "fas fa-eye"}></i>
+                  </button>
+                </div>
+                {errors.oldPassword && (
+                  <div className="text-danger small mt-1">
+                    {errors.oldPassword}
+                  </div>
+                )}
               </Form.Group>
 
               {/* New Password */}
               <Form.Group className="mb-3" controlId="newPassword">
                 <Form.Label>New Password</Form.Label>
-                <Form.Control
-                  type="password"
-                  name="newPassword"
-                  placeholder="Enter new password"
-                  value={formData.newPassword}
-                  onChange={handleChange}
-                  isInvalid={!!errors.newPassword}
-                />
-                <Form.Control.Feedback type="invalid">
-                  {errors.newPassword}
-                </Form.Control.Feedback>
+                <div className="position-relative">
+                  <Form.Control
+                    type={showNew ? "text" : "password"}
+                    name="newPassword"
+                    placeholder="Enter new password"
+                    value={formData.newPassword}
+                    onChange={handleChange}
+                    isInvalid={!!errors.newPassword}
+                    style={{ paddingRight: 40 }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
+                    style={eyeBtnStyle}
+                    onClick={() => setShowNew((s) => !s)}
+                    tabIndex={-1}
+                    aria-label={showNew ? "Hide password" : "Show password"}
+                  >
+                    <i className={showNew ? "fas fa-eye-slash" : "fas fa-eye"}></i>
+                  </button>
+                </div>
+                {errors.newPassword && (
+                  <div className="text-danger small mt-1">
+                    {errors.newPassword}
+                  </div>
+                )}
               </Form.Group>
 
               {/* Confirm Password */}
               <Form.Group className="mb-4" controlId="confirmPassword">
                 <Form.Label>Confirm Password</Form.Label>
-                <Form.Control
-                  type="password"
-                  name="confirmPassword"
-                  placeholder="Confirm new password"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  isInvalid={!!errors.confirmPassword}
-                />
-                <Form.Control.Feedback type="invalid">
-                  {errors.confirmPassword}
-                </Form.Control.Feedback>
+                <div className="position-relative">
+                  <Form.Control
+                    type={showConfirm ? "text" : "password"}
+                    name="confirmPassword"
+                    placeholder="Confirm new password"
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    isInvalid={!!errors.confirmPassword}
+                    style={{ paddingRight: 40 }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
+                    style={eyeBtnStyle}
+                    onClick={() => setShowConfirm((s) => !s)}
+                    tabIndex={-1}
+                    aria-label={showConfirm ? "Hide password" : "Show password"}
+                  >
+                    <i className={showConfirm ? "fas fa-eye-slash" : "fas fa-eye"}></i>
+                  </button>
+                </div>
+                {errors.confirmPassword && (
+                  <div className="text-danger small mt-1">
+                    {errors.confirmPassword}
+                  </div>
+                )}
               </Form.Group>
 
               <div className="d-grid">

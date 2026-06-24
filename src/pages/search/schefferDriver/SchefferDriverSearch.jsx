@@ -8,6 +8,7 @@ import { toast } from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
+import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 
 function LazyImage({ src, alt, className }) {
   const containerRef = useRef(null);
@@ -371,7 +372,7 @@ export const SchefferDriverSearch = () => {
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4">
+        <main className="flex-grow-1 p-4 hs-page">
           <Card className="shadow-sm rounded-xl mb-4 border-0">
             <Card.Body>
               <div className="mb-4">
@@ -384,7 +385,10 @@ export const SchefferDriverSearch = () => {
                 </p>
               </div>
 
-              <Card className="border-0 shadow-sm rounded-4 bg-white mb-4">
+              {/* ── Search Card + Ads ── */}
+              <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
+                <div className="flex-grow-1" style={{ minWidth: 0 }}>
+                  <Card className="border-0 shadow-sm rounded-4 bg-white mb-4">
                 <Card.Body>
                   <Form onSubmit={handleSearch}>
                     <Row className="g-3 mb-3">
@@ -728,6 +732,13 @@ export const SchefferDriverSearch = () => {
                   </Form>
                 </Card.Body>
               </Card>
+                </div>
+                {/* Ads carousel — city matches first, then all active ads */}
+                <AdvertisementCarousel
+                  cityId={city?.value}
+                  cityName={city?.label}
+                />
+              </div>
 
               {/* Results */}
               {loading && (

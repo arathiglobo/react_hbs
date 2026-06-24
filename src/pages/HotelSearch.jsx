@@ -1453,7 +1453,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                 <h2 className="fw-semibold text-primary mb-1">
                   {force24Hour
                     ? "24 Hour Check-In Booking"
-                    : "Find Your Perfect Stay Stay"}
+                    : "Find Your Perfect Stay"}
                 </h2>
                 <p className="text-muted">
                   {force24Hour

@@ -13,6 +13,7 @@ import { toast } from "react-hot-toast";
 const Login = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
   const [forgetEmail, setForgetEmail] = useState("");
   const [forgetUsername, setForgetUsername] = useState("");
@@ -356,14 +357,36 @@ const Login = () => {
               <label htmlFor="password">
                 <i className="fas fa-lock"></i> Password
               </label>
-              <input
-                id="password"
-                type="password"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
+              <div style={{ position: "relative" }}>
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  style={{ width: "100%", paddingRight: 40 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((s) => !s)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  style={{
+                    position: "absolute",
+                    top: "50%",
+                    right: 12,
+                    transform: "translateY(-50%)",
+                    border: "none",
+                    background: "none",
+                    color: "#6c757d",
+                    cursor: "pointer",
+                    padding: 0,
+                    lineHeight: 1,
+                  }}
+                >
+                  <i className={showPassword ? "fas fa-eye-slash" : "fas fa-eye"}></i>
+                </button>
+              </div>
             </div>
 
             {error && <div className="lg-error">{error}</div>}

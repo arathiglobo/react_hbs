@@ -310,34 +310,30 @@ export default function PackageBookingDetailView() {
   }, [bookingDetails?.packageId, rowStub?.packageId]);
 
 
-  // ── Amendment handler ──────────────────────────────────────────────
+  // ── ADD NEW ITEM handler ───────────────────────────────────────────
   // Mirrors the Hotel "ADD NEW ITEM" pattern in BookingDetailedView.jsx:
-  // we open the package booking page with a parentBookingCode query
-  // param. On submit the backend stamps a child code "{parent}/{n}" —
-  // e.g. amending GPKG-4 yields GPKG-4/1, GPKG-4/2, etc.
+  // navigate to the PACKAGE SEARCH page (not directly to a specific
+  // package's booking flow) with a parentBookingCode query param. The
+  // user picks any package; PackageSearch forwards parentBookingCode into
+  // the booking page; on submit the backend stamps a child code
+  // "{parent}/{n}" — e.g. GPKG-4 yields GPKG-4/1, GPKG-4/2, etc.
   //
-  // packageId is read from bookingDetails (the authoritative source from
-  // the detail fetch) before falling back to the row stub — rowStub from
-  // the list does not carry packageId, which is why the original
-  // "missing on booking row" toast was firing.
+  // Previously this jumped straight to /new-booking/package-booking/{id}
+  // which locked the user into re-booking the same package; the hotel
+  // flow opens a search so any item can be added.
   const handleEditClick = () => {
     const source = bookingDetails || rowStub || {};
-    const packageId = source.packageId;
-    if (!packageId) {
-      toast.error("Cannot amend — package id missing on booking row");
-      return;
-    }
     // Walk up to the original parent so amendments of amendments still
     // chain to the root code (e.g. amending GPKG-4/1 → GPKG-4/2, not
     // GPKG-4/1/1). Mirrors the Hotel pattern.
     const parent = source.parentBookingCode || source.confirmationCode;
-    const qs = parent ? `?parentBookingCode=${encodeURIComponent(parent)}` : "";
-    navigate(`/new-booking/package-booking/${packageId}${qs}`, {
-      state: {
-        agentId: source.agentId || null,
-        destinationCountryId: source.destinationCountryId || null,
-      },
-    });
+    if (!parent) {
+      toast.error("Cannot add new item — booking code missing");
+      return;
+    }
+    navigate(
+      `/new-booking/package-search?parentBookingCode=${encodeURIComponent(parent)}`,
+    );
   };
 
   // ── Cancel handlers ─────────────────────────────────────────────────
@@ -1224,71 +1220,125 @@ export default function PackageBookingDetailView() {
                   </div>
                 </div>
 
-                {/* Related Sub-Bookings — amendments of this primary booking.
+                {/* Related Sub-Bookings — children created via ADD NEW ITEM.
                     Mirrors the "Related Sub-Bookings" card in
-                    BookingDetailedView.jsx. The list comes from
-                    bookingDetails.subBookings populated server-side via
-                    findByParentBookingCodeOrderByChildBookingIndexAsc. */}
+                    BookingDetailedView.jsx (Hotel detail page). The list
+                    comes from bookingDetails.subBookings populated server-side
+                    via findByParentBookingCodeOrderByChildBookingIndexAsc. */}
                 {bookingDetails.subBookings &&
                   bookingDetails.subBookings.length > 0 && (
-                    <div className="border bg-white mb-3">
-                      <div
-                        className="px-3 py-2 border-bottom fw-semibold"
-                        style={{ backgroundColor: "#f1f3f5" }}
-                      >
-                        Related Sub-Bookings (
-                        {bookingDetails.subBookings.length})
+                    <div style={CARD_STYLE}>
+                      <div style={SECTION_HEADER}>
+                        Related Sub-Bookings ({bookingDetails.subBookings.length})
                       </div>
-                      <div className="p-3">
-                        {bookingDetails.subBookings.map((sub) => (
-                          <div
-                            key={sub.bookingId}
-                            className="border-top py-2 d-flex justify-content-between align-items-center flex-wrap gap-2"
-                          >
-                            <div>
-                              <span
+                      <div style={{ padding: "10px 16px" }}>
+                        {bookingDetails.subBookings.map((sub) => {
+                          const subCancelled = sub.isCancelled === true;
+                          const subStatusLabel = subCancelled
+                            ? "Cancelled"
+                            : "Confirmed";
+                          const subStatusColor = subCancelled
+                            ? "#dc2626"
+                            : "#16a34a";
+                          return (
+                            <div
+                              key={sub.bookingId}
+                              style={{
+                                borderTop: "1px solid #eee",
+                                padding: "10px 0",
+                              }}
+                            >
+                              <div
                                 style={{
-                                  color: "#6c5ce7",
-                                  fontWeight: 700,
-                                  fontSize: "0.9rem",
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  marginBottom: "6px",
                                 }}
                               >
-                                {sub.confirmationCode}
-                              </span>
-                              {sub.childBookingIndex != null && (
                                 <span
-                                  className="ms-2 text-muted small"
+                                  style={{
+                                    color: "#c0392b",
+                                    fontWeight: "700",
+                                    fontSize: "0.9rem",
+                                  }}
                                 >
-                                  (Amend #{sub.childBookingIndex})
+                                  {sub.confirmationCode || "-"}
+                                  {sub.childBookingIndex != null && (
+                                    <span
+                                      style={{
+                                        marginLeft: "8px",
+                                        color: "#888",
+                                        fontWeight: "500",
+                                        fontSize: "0.8rem",
+                                      }}
+                                    >
+                                      (Amend #{sub.childBookingIndex})
+                                    </span>
+                                  )}
                                 </span>
-                              )}
-                              <div
-                                className="text-muted small"
-                                style={{ marginTop: 2 }}
-                              >
-                                {sub.packageName || "-"} ·{" "}
-                                {formatDate(sub.travelDate)} ·{" "}
-                                {sub.contactName || "-"} · AED{" "}
-                                {parseFloat(
-                                  sub.totalPrice || 0
-                                ).toLocaleString()}
+                                <button
+                                  style={{
+                                    ...BUTTON_STYLE,
+                                    backgroundColor: "#555",
+                                  }}
+                                  onClick={() =>
+                                    navigate(
+                                      `/booking-details/package-booking/${sub.bookingId}`
+                                    )
+                                  }
+                                >
+                                  View
+                                </button>
                               </div>
+                              <Row>
+                                <Col md={6}>
+                                  <InfoRow
+                                    label="Package"
+                                    value={sub.packageName}
+                                  />
+                                  <InfoRow
+                                    label="Travel Date"
+                                    value={formatDate(sub.travelDate)}
+                                  />
+                                </Col>
+                                <Col md={6}>
+                                  <InfoRow
+                                    label="Contact"
+                                    value={sub.contactName}
+                                  />
+                                  <InfoRow
+                                    label="Total Price"
+                                    value={
+                                      sub.totalPrice != null
+                                        ? `AED ${parseFloat(
+                                            sub.totalPrice
+                                          ).toLocaleString("en-US", {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                          })}`
+                                        : "-"
+                                    }
+                                  />
+                                  <InfoRow
+                                    label="Status"
+                                    value={
+                                      <span
+                                        style={{
+                                          color: subStatusColor,
+                                          fontWeight: 700,
+                                          fontSize: "0.85rem",
+                                        }}
+                                      >
+                                        {subStatusLabel}
+                                      </span>
+                                    }
+                                  />
+                                </Col>
+                              </Row>
                             </div>
-                            <button
-                              style={{
-                                ...BUTTON_STYLE,
-                                backgroundColor: "#555",
-                              }}
-                              onClick={() =>
-                                navigate(
-                                  `/booking-details/package-booking/${sub.bookingId}`
-                                )
-                              }
-                            >
-                              View
-                            </button>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -1301,22 +1351,21 @@ export default function PackageBookingDetailView() {
                   className="d-flex gap-2 justify-content-start flex-wrap"
                   style={{ marginTop: "16px", marginBottom: "20px" }}
                 >
+                  {isCancellable && (
+                    <button
+                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
+                      onClick={handleEditClick}
+                      title="Add a new sub-booking under this booking"
+                    >
+                      ADD NEW ITEM
+                    </button>
+                  )}
                   <button
                     style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
                     onClick={() => window.print()}
                   >
                     PRINT PREVIEW
                   </button>
-                  {isCancellable && (
-                    <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                      onClick={handleEditClick}
-                      title="Amend booking"
-                    >
-                      <FaEdit style={{ marginRight: "6px" }} />
-                      AMEND
-                    </button>
-                  )}
                   {isCancellable && (
                     <button
                       style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}

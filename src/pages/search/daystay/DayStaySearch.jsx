@@ -15,6 +15,7 @@ import AgentSelect from "../../../components/AgentSelect";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
+import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import "../../../styles/HotelSearch.css";
 
 // ─────────────────────────────────────────────
@@ -470,7 +471,10 @@ export default function DayStaySearch() {
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4">
+        <main className="flex-grow-1 p-4 hs-page">
+          {/* ── Search Card + Ads ── */}
+          <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
+           <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <Card className="shadow-sm rounded-xl mb-4 search-card-modern bg-white">
             <Card.Body className="p-4">
               <div className="mb-4 text-start">
@@ -789,6 +793,13 @@ export default function DayStaySearch() {
               </Form>
             </Card.Body>
           </Card>
+           </div>
+           {/* Ads carousel — city matches first, then all active ads */}
+           <AdvertisementCarousel
+             cityId={selectedDestination?.value}
+             cityName={selectedDestination?.label}
+           />
+          </div>
 
           {!hasSearched && (
             <Card className="shadow-sm rounded-xl">

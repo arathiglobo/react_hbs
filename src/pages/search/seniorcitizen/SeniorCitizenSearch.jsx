@@ -31,6 +31,7 @@ import TopBar from "../../../components/TopBar";
 import Select from "react-select";
 import AgentSelect from "../../../components/AgentSelect";
 import axiosInstance from "../../../components/AxiosInstance";
+import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import { FaSearch, FaStar, FaUserClock } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import "../../../styles/HotelSearch.css";
@@ -822,8 +823,11 @@ export default function SeniorCitizenSearch() {
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4">
-          <Card className="shadow-sm rounded-xl mb-4 search-card-modern bg-white">
+        <main className="flex-grow-1 p-4 hs-page">
+          {/* ── Search Card + Ads ── */}
+          <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
+           <div className="flex-grow-1" style={{ minWidth: 0 }}>
+          <Card className="shadow-sm rounded-xl h-100 search-card-modern bg-white">
             <Card.Body className="p-4">
               <div className="mb-4 text-start">
                 <h2 className="fw-semibold text-primary mb-1 d-flex align-items-center">
@@ -1216,6 +1220,13 @@ export default function SeniorCitizenSearch() {
               </Form>
             </Card.Body>
           </Card>
+           </div>
+           {/* Ads carousel — city matches first, then all active ads */}
+           <AdvertisementCarousel
+             cityId={selectedDestination?.value}
+             cityName={selectedDestination?.label}
+           />
+          </div>
 
           {!hasSearched && !hasSearchResult && (
             <Card className="shadow-sm rounded-xl">
