@@ -786,8 +786,8 @@ export default function Advertisements() {
   const validateForm = () => {
     const errors = {};
     if (!form.title.trim()) errors.title = "Title is required";
-    if (!form.displayPosition)
-      errors.displayPosition = "Display position is required";
+    // Display Position is hidden from the form (backend treats it as
+    // optional), so it's no longer validated as required here.
     if (!form.countryId) errors.countryId = "Country is required";
     if (form.startDateTime && form.endDateTime) {
       if (
@@ -1107,29 +1107,7 @@ export default function Advertisements() {
                       {validationErrors.title}
                     </Form.Control.Feedback>
                   </Col>
-                  <Col md={6} className="mb-3">
-                    <Form.Label>
-                      Display Position <span className="text-danger">*</span>
-                    </Form.Label>
-                    <Form.Select
-                      value={form.displayPosition}
-                      disabled={ro}
-                      onChange={(e) =>
-                        setField("displayPosition", e.target.value)
-                      }
-                      isInvalid={!!validationErrors.displayPosition}
-                    >
-                      <option value="">Select position</option>
-                      {DISPLAY_POSITIONS.map((p) => (
-                        <option key={p} value={p}>
-                          {p}
-                        </option>
-                      ))}
-                    </Form.Select>
-                    <Form.Control.Feedback type="invalid">
-                      {validationErrors.displayPosition}
-                    </Form.Control.Feedback>
-                  </Col>
+                  {/* Display Position field hidden per requirement. */}
                 </Row>
 
                 <Form.Group className="mb-3">
@@ -1226,36 +1204,7 @@ export default function Advertisements() {
                 </Row>
 
                 <Row>
-                  <Col md={4} className="mb-3">
-                    <Form.Label>Priority</Form.Label>
-                    <Form.Select
-                      value={form.priority}
-                      disabled={ro}
-                      onChange={(e) => setField("priority", e.target.value)}
-                    >
-                      <option value="">Select priority</option>
-                      {PRIORITIES.map((p) => (
-                        <option key={p} value={p}>
-                          {p} {p === 3 ? "(shows first)" : ""}
-                        </option>
-                      ))}
-                    </Form.Select>
-                  </Col>
-                  <Col md={4} className="mb-3">
-                    <Form.Label>Device Type</Form.Label>
-                    <Form.Select
-                      value={form.deviceType}
-                      disabled={ro}
-                      onChange={(e) => setField("deviceType", e.target.value)}
-                    >
-                      <option value="">Select device</option>
-                      {DEVICE_TYPES.map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))}
-                    </Form.Select>
-                  </Col>
+                  {/* Priority and Device Type fields hidden per requirement. */}
                   <Col md={4} className="mb-3">
                     <Form.Label>Button Text</Form.Label>
                     <Form.Select
