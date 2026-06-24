@@ -73,8 +73,19 @@ export default function AgentsPaymentHistory() {
 
   const fetchAgentInfo = async () => {
     try {
-      const res = await axiosInstance.get(`/api/inhouseAgentAccounts`);
-      if (res.data) {
+      // The URL :id is the agentId. Resolve the agent's name from the same
+      // source the Agent Accounts list uses (/api/agent-credit-limit/agents,
+      // whose rows carry agentName + agentId) and pick the matching row.
+      // The previous call hit /api/inhouseAgentAccounts (the payment records
+      // endpoint) and stored the whole array in agentInfo, so agentInfo.agentName
+      // was always undefined → "Unknown Agent".
+      const res = await axiosInstance.get(`/api/agent-credit-limit/agents`);
+      if (Array.isArray(res.data)) {
+        const match = res.data.find(
+          (a) => String(a.agentId ?? a.id) === String(id)
+        );
+        setAgentInfo(match || null);
+      } else if (res.data) {
         setAgentInfo(res.data);
       }
     } catch (err) {
