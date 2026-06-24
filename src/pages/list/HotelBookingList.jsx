@@ -1,0 +1,3373 @@
+import React, { useEffect, useState, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Container,
+  Row,
+  Col,
+  Card,
+  Button,
+  Form,
+  Table,
+  Badge,
+  InputGroup,
+  Spinner,
+  Pagination,
+  Modal,
+} from "react-bootstrap";
+import {
+  FaSearch,
+  FaEye,
+  FaTrash,
+  FaInbox,
+  FaEnvelope,
+  FaPaperPlane,
+  FaExclamationCircle,
+  FaDownload,
+  FaUser,
+  FaUsers,
+} from "react-icons/fa";
+import Sidebar from "../../components/Sidebar";
+import TopBar from "../../components/TopBar";
+import axiosInstance from "../../components/AxiosInstance";
+import toast from "react-hot-toast";
+import "../../styles/HotelBookingListModern.css";
+
+const PER_PAGE_OPTIONS = [10, 25, 50, 100];
+// Column widths — soft hints for the auto-layout table. Cells will
+// flex if content requires more space; horizontal scroll only kicks
+// in at very narrow viewports because the wrapper has overflowX:auto.
+const COLUMN_WIDTHS = {
+  sn: "40px",
+  agentName: "90px",
+  customerName: "120px",
+  bookingCode: "95px",
+  referenceCode: "160px",
+  bookDate: "90px",
+  bookingDetails: "230px",
+  deadlineDate: "105px",
+  paymentMode: "110px",
+  notification: "100px",
+  action: "110px",
+};
+
+// Resolve a human-readable Payment Mode label from whatever shape the
+// backend sends. Most rows will have `paymentMode` directly; older
+// rows may only have a boolean (`creditLimitPayment` / `paidOnline`)
+// or a snake_case alias.
+const getPaymentModeLabel = (booking) => {
+  const raw =
+    booking?.paymentMode ||
+    booking?.payment_mode ||
+    booking?.paymentType ||
+    "";
+  const norm = String(raw).trim().toUpperCase();
+  if (
+    norm === "CREDIT" ||
+    norm === "CREDIT_LIMIT" ||
+    norm === "CREDIT LIMIT" ||
+    // CREDITLIMIT — the exact string HotelBookingPage sends when the
+    // agent's credit check passes (see confirmBooking).
+    norm === "CREDITLIMIT"
+  ) {
+    return "Credit Limit Payment";
+  }
+  if (norm === "ONLINE" || norm === "ONLINE_PAYMENT" || norm === "ONLINE PAYMENT") {
+    return "Online Payment";
+  }
+  if (norm) return raw; // unrecognised, show as-is
+
+  // Fallbacks for older row shapes.
+  if (booking?.creditLimitPayment === true) return "Credit Limit Payment";
+  if (booking?.paidOnline === true || booking?.onlinePayment === true) {
+    return "Online Payment";
+  }
+  return "-";
+};
+
+// Every customer/guest name on a booking. The backend now sends a
+// `guestNames` array (collected across all room bookings); fall back to
+// the single `primaryGuestName` for older payload shapes so the column
+// still renders something.
+const getGuestNames = (booking) => {
+  if (Array.isArray(booking?.guestNames) && booking.guestNames.length > 0) {
+    return booking.guestNames.filter((n) => String(n ?? "").trim());
+  }
+  return booking?.primaryGuestName ? [booking.primaryGuestName] : [];
+};
+
+const normalizeBoolean = (value, truthyMatchers = [], falsyMatchers = []) => {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (truthyMatchers.includes(normalized)) return true;
+    if (falsyMatchers.includes(normalized)) return false;
+  }
+  return false;
+};
+
+const isCancellationAllowed = (booking) => {
+  const refundStatus = booking?.refundStatus?.toLowerCase();
+  const isNonRefundable = refundStatus === "non-refundable";
+
+  console.log("isNonRefundable::", isNonRefundable);
+  //  Returns false when it's “Non-Refundable”.
+  // Returns true for “Flexi” or any other refundable type.
+  return !isNonRefundable;
+};
+
+// ── Props ────────────────────────────────────────────────────────────
+// `force24HourOnly` is the opt-in for the dedicated 24-Hour Booking
+// List menu (/booking-details/24hr-booking-list). When true the page
+// post-filters every fetched booking list to rows where
+// `is24HourCheckin === true`, and tweaks the heading. The regular
+// /booking-details/hotel-booking-list route renders this component
+// with no prop and therefore stays unchanged.
+const HotelBookingList = ({ force24HourOnly = false } = {}) => {
+  const navigate = useNavigate();
+  const [role, setRole] = useState(() => {
+    return localStorage.getItem("currentActiveRole")?.toLowerCase() || null;
+  });
+  const [userId, setUserId] = useState(() => {
+    const stored = localStorage.getItem("userId");
+    return stored && stored !== "null" ? stored : null;
+  });
+
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
+  const [pagination, setPagination] = useState({
+    all: { page: 1, perPage: 10 },
+    upcoming: { page: 1, perPage: 10 },
+    completed: { page: 1, perPage: 10 },
+    cancelled: { page: 1, perPage: 10 },
+    onrequest: { page: 1, perPage: 10 },
+    reconfirmed: { page: 1, perPage: 10 },
+    invoiced: { page: 1, perPage: 10 },
+  });
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
+  const [apiData, setApiData] = useState({
+    upcomingBookings: { content: [] },
+    completedBookings: { content: [] },
+    cancelledBookings: { content: [] },
+  });
+  const [onRequestData, setOnRequestData] = useState({
+    content: [],
+    totalElements: 0,
+    totalPages: 0,
+  });
+  const [reconfirmedData, setReconfirmedData] = useState({
+    content: [],
+    totalElements: 0,
+    totalPages: 0,
+  });
+  const [invoicedData, setInvoicedData] = useState({
+    content: [],
+    totalElements: 0,
+    totalPages: 0,
+  });
+  const [allData, setAllData] = useState({
+    content: [],
+    totalElements: 0,
+    totalPages: 0,
+  });
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [bookingDetails, setBookingDetails] = useState(null);
+  const [loadingBookingId, setLoadingBookingId] = useState(null);
+  const [showVoucherModal, setShowVoucherModal] = useState(false);
+  const [selectedVoucherType, setSelectedVoucherType] = useState("Request");
+  const [selectedBooking, setSelectedBooking] = useState(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [bookingToConfirm, setBookingToConfirm] = useState(null);
+  const [confirmingBooking, setConfirmingBooking] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [bookingToCancel, setBookingToCancel] = useState(null);
+  const [cancellingBooking, setCancellingBooking] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const [voucherDetails, setVoucherDetails] = useState(null);
+  const [loadingVoucherDetails, setLoadingVoucherDetails] = useState(false);
+  // Agent LPO captured inside the "Confirm Booking Status" modal.
+  // Required before the OK click can fire — saved on the booking's
+  // hotel_customer row (the column already exists there).
+  const [confirmAgentLpo, setConfirmAgentLpo] = useState("");
+  const [confirmAgentLpoError, setConfirmAgentLpoError] = useState("");
+  const [updatingConfirmationStatus, setUpdatingConfirmationStatus] =
+    useState(null);
+  const [showConfirmStatusModal, setShowConfirmStatusModal] = useState(false);
+  const [bookingToUpdateStatus, setBookingToUpdateStatus] = useState(null);
+  // "Customers (N)" modal — opened from the "+N more" badge on the
+  // Customer Name column to show every guest on a booking.
+  const [showCustomersModal, setShowCustomersModal] = useState(false);
+  const [customersModalBooking, setCustomersModalBooking] = useState(null);
+  const hasTimeFilter = Boolean(selectedMonth) && Boolean(selectedYear);
+  const statusOptions = useMemo(
+    () => [
+      { value: "all", label: "All" },
+      { value: "upcoming", label: "Upcoming" },
+      { value: "completed", label: "Completed" },
+      { value: "cancelled", label: "Cancelled" },
+      { value: "onrequest", label: "On Request" },
+      { value: "reconfirmed", label: "Reconfirmed" },
+      { value: "invoiced", label: "Invoiced" },
+    ],
+    [],
+  );
+
+  // Generate months
+  const months = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+
+  // Generate years (2020 to current year + 1)
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: currentYear - 2014 }, (_, i) => 2020 + i);
+
+  // Handle role sync if it's missing from localStorage initially
+  useEffect(() => {
+    const storedRole = localStorage.getItem("currentActiveRole")?.toLowerCase();
+    if (storedRole && storedRole !== role) {
+      setRole(storedRole);
+    } else if (!storedRole) {
+      // Fallback to userRole if currentActiveRole is missing
+      const userRoles = (localStorage.getItem("userRole") || "")
+        .toLowerCase()
+        .split(",");
+      if (userRoles.includes("agent")) setRole("agent");
+      else if (userRoles.includes("staff")) setRole("staff");
+      else if (userRoles.includes("admin")) setRole("admin");
+    }
+  }, [role]);
+
+  // Fetch userId if missing
+  useEffect(() => {
+    const fetchUserId = async () => {
+      // Don't fetch if we already have a valid userId
+      if (userId && userId !== "null") return;
+
+      const userName =
+        localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+      if (!userName) {
+        console.warn("No UserName found in storage, cannot fetch profile ID");
+        return;
+      }
+
+      try {
+        console.log(`Fetching profile for user: ${userName} to get ID`);
+        const response = await axiosInstance.get(
+          `/api/personalProfile/${userName}`,
+        );
+        if (response.data && response.data.id) {
+          const id = String(response.data.id);
+          console.log(`Successfully retrieved ID: ${id} for user: ${userName}`);
+          setUserId(id);
+          localStorage.setItem("userId", id);
+        } else {
+          console.warn(
+            "Profile fetch successful but no ID found in response",
+            response.data,
+          );
+        }
+      } catch (error) {
+        console.error("Error fetching user profile for ID:", error);
+      }
+    };
+
+    if (role === "agent" || role === "staff") {
+      fetchUserId();
+    }
+  }, [role, userId]);
+
+  // Fetch data from API
+  const fetchBookings = useCallback(async () => {
+    // SECURITY BLOCK:
+    // 1. If role is missing, we don't know what to fetch.
+    if (!role) {
+      console.log("Blocking fetchBookings: role is missing.");
+      return;
+    }
+
+    // 2. If we are an agent or staff but don't have the ID yet, do NOT call.
+    if (
+      (role === "agent" || role === "staff") &&
+      (!userId || userId === "null")
+    ) {
+      console.log(
+        "Blocking fetchBookings: role is " + role + " but userId is missing.",
+      );
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const params = {
+        upcomingPage: pagination.upcoming.page - 1,
+        upcomingSize: pagination.upcoming.perPage,
+        completedPage: pagination.completed.page - 1,
+        completedSize: pagination.completed.perPage,
+        cancelledPage: pagination.cancelled.page - 1,
+        cancelledSize: pagination.cancelled.perPage,
+      };
+
+      if (search) params.search = search;
+      if (selectedMonth) params.month = selectedMonth;
+      if (selectedYear) params.year = selectedYear;
+
+      // Role-based filtering
+      if (role === "agent" && userId) {
+        params.agentId = userId;
+      } else if (role === "staff" && userId) {
+        params.staffId = userId;
+      }
+
+      console.log("API Request -> /api/bookings/list with params:", params);
+
+      const response = await axiosInstance.get("/api/bookings/list", {
+        params,
+      });
+
+      setApiData({
+        upcomingBookings: response.data?.upcomingBookings || {
+          content: [],
+          totalElements: 0,
+          totalPages: 0,
+        },
+        completedBookings: response.data?.completedBookings || {
+          content: [],
+          totalElements: 0,
+          totalPages: 0,
+        },
+        cancelledBookings: response.data?.cancelledBookings || {
+          content: [],
+          totalElements: 0,
+          totalPages: 0,
+        },
+      });
+    } catch (err) {
+      console.error("Error fetching bookings:", err);
+      toast.error("Failed to load bookings");
+    } finally {
+      setLoading(false);
+    }
+  }, [pagination, search, selectedMonth, selectedYear, role, userId]);
+
+  // Fetch On Request bookings from dedicated endpoint
+  const fetchOnRequestBookings = useCallback(async () => {
+    if (!role) return;
+    if (
+      (role === "agent" || role === "staff") &&
+      (!userId || userId === "null")
+    )
+      return;
+    try {
+      setLoading(true);
+      const params = {
+        page: pagination.onrequest.page - 1,
+        size: pagination.onrequest.perPage,
+      };
+      if (selectedMonth) params.month = selectedMonth;
+      if (selectedYear) params.year = selectedYear;
+      if (role === "agent" && userId) params.agentId = userId;
+      else if (role === "staff" && userId) params.staffId = userId;
+      const response = await axiosInstance.get(
+        "/api/bookings/list/on-request",
+        { params },
+      );
+      if (response.data?.success) {
+        setOnRequestData(
+          response.data.bookings || {
+            content: [],
+            totalElements: 0,
+            totalPages: 0,
+          },
+        );
+      }
+    } catch (err) {
+      console.error("Error fetching on-request bookings:", err);
+      toast.error("Failed to load on-request bookings");
+    } finally {
+      setLoading(false);
+    }
+  }, [pagination.onrequest, selectedMonth, selectedYear, role, userId]);
+
+  // Fetch Reconfirmed bookings from dedicated endpoint
+  const fetchReconfirmedBookings = useCallback(async () => {
+    if (!role) return;
+    if (
+      (role === "agent" || role === "staff") &&
+      (!userId || userId === "null")
+    )
+      return;
+    try {
+      setLoading(true);
+      const params = {
+        page: pagination.reconfirmed.page - 1,
+        size: pagination.reconfirmed.perPage,
+      };
+      if (selectedMonth) params.month = selectedMonth;
+      if (selectedYear) params.year = selectedYear;
+      if (role === "agent" && userId) params.agentId = userId;
+      else if (role === "staff" && userId) params.staffId = userId;
+      const response = await axiosInstance.get(
+        "/api/bookings/list/reconfirmed",
+        { params },
+      );
+      if (response.data?.success) {
+        setReconfirmedData(
+          response.data.bookings || {
+            content: [],
+            totalElements: 0,
+            totalPages: 0,
+          },
+        );
+      }
+    } catch (err) {
+      console.error("Error fetching reconfirmed bookings:", err);
+      toast.error("Failed to load reconfirmed bookings");
+    } finally {
+      setLoading(false);
+    }
+  }, [pagination.reconfirmed, selectedMonth, selectedYear, role, userId]);
+
+  // Fetch Invoiced bookings from dedicated endpoint
+  const fetchInvoicedBookings = useCallback(async () => {
+    if (!role) return;
+    if (
+      (role === "agent" || role === "staff") &&
+      (!userId || userId === "null")
+    )
+      return;
+    try {
+      setLoading(true);
+      const params = {
+        page: pagination.invoiced.page - 1,
+        size: pagination.invoiced.perPage,
+      };
+      if (selectedMonth) params.month = selectedMonth;
+      if (selectedYear) params.year = selectedYear;
+      if (role === "agent" && userId) params.agentId = userId;
+      else if (role === "staff" && userId) params.staffId = userId;
+      const response = await axiosInstance.get("/api/bookings/list/invoiced", {
+        params,
+      });
+      if (response.data?.success) {
+        setInvoicedData(
+          response.data.bookings || {
+            content: [],
+            totalElements: 0,
+            totalPages: 0,
+          },
+        );
+      }
+    } catch (err) {
+      console.error("Error fetching invoiced bookings:", err);
+      toast.error("Failed to load invoiced bookings");
+    } finally {
+      setLoading(false);
+    }
+  }, [pagination.invoiced, selectedMonth, selectedYear, role, userId]);
+
+  // Fetch ALL bookings (every status) from dedicated endpoint
+  const fetchAllBookings = useCallback(async () => {
+    if (!role) return;
+    if (
+      (role === "agent" || role === "staff") &&
+      (!userId || userId === "null")
+    )
+      return;
+    try {
+      setLoading(true);
+      const params = {
+        page: pagination.all.page - 1,
+        size: pagination.all.perPage,
+      };
+      if (selectedMonth) params.month = selectedMonth;
+      if (selectedYear) params.year = selectedYear;
+      if (role === "agent" && userId) params.agentId = userId;
+      else if (role === "staff" && userId) params.staffId = userId;
+      const response = await axiosInstance.get("/api/bookings/list/all", {
+        params,
+      });
+      if (response.data?.success) {
+        setAllData(
+          response.data.bookings || {
+            content: [],
+            totalElements: 0,
+            totalPages: 0,
+          },
+        );
+      }
+    } catch (err) {
+      console.error("Error fetching all bookings:", err);
+      toast.error("Failed to load bookings");
+    } finally {
+      setLoading(false);
+    }
+  }, [pagination.all, selectedMonth, selectedYear, role, userId]);
+
+  // Fetch booking details
+  const fetchBookingDetails = async (bookingId) => {
+    try {
+      setLoadingBookingId(bookingId);
+      const response = await axiosInstance.get(
+        `/api/hotel-booking/details/${bookingId}`,
+      );
+      console.log("Booking Details Response:", response.data);
+
+      if (response.data && response.data.success) {
+        setBookingDetails(response.data);
+        setShowDetailsModal(true);
+      }
+    } catch (error) {
+      console.error("Error fetching booking details:", error);
+      alert("Failed to fetch booking details. Please try again.");
+    } finally {
+      setLoadingBookingId(null);
+    }
+  };
+
+  // Handle confirm booking click
+  const handleConfirmBookingClick = (booking) => {
+    setBookingToConfirm(booking);
+    setShowConfirmModal(true);
+  };
+
+  // Open the "Customers (N)" modal for a booking row.
+  const handleShowCustomers = (booking) => {
+    setCustomersModalBooking(booking);
+    setShowCustomersModal(true);
+  };
+
+  // Handle confirm status click - open modal
+  const handleConfirmStatusClick = (booking) => {
+    setBookingToUpdateStatus(booking);
+    // Start each open with a clean LPO field — even if the user
+    // typed something for a previous booking, we don't reuse it.
+    setConfirmAgentLpo("");
+    setConfirmAgentLpoError("");
+    setShowConfirmStatusModal(true);
+  };
+
+  // Update confirmation status
+  const updateConfirmationStatus = async () => {
+    if (!bookingToUpdateStatus) return;
+
+    // Agent LPO is required — show inline error, keep the modal open.
+    const lpoTrimmed = (confirmAgentLpo || "").trim();
+    if (!lpoTrimmed) {
+      setConfirmAgentLpoError("Agent LPO is required");
+      return;
+    }
+    setConfirmAgentLpoError("");
+
+    try {
+      setUpdatingConfirmationStatus(bookingToUpdateStatus.bookingId);
+      const response = await axiosInstance.patch(
+        `/api/booking-confirmation/${bookingToUpdateStatus.bookingId}/confirmation-status`,
+        {
+          confirmStatus: true,
+          // Forwarded to the backend so it can be persisted on the
+          // booking's hotel_customer row (column `agent_lpo` already
+          // exists). Backend should pick this up and update the
+          // associated HotelCustomer entity in the same transaction.
+          agentLpo: lpoTrimmed,
+        },
+      );
+
+      console.log("Confirmation Status Response:", response.data);
+      if (response.data && response.data.success) {
+        // Refresh bookings list to show updated status
+        await fetchBookings();
+        setShowConfirmStatusModal(false);
+        setBookingToUpdateStatus(null);
+        setConfirmAgentLpo("");
+        setConfirmAgentLpoError("");
+        toast.success(
+          response.data.message || "Confirmation status updated successfully!",
+        );
+      } else {
+        toast.error(
+          response.data?.message || "Failed to update confirmation status.",
+        );
+      }
+    } catch (error) {
+      console.error("Error updating confirmation status:", error);
+      toast.error(
+        error.response?.data?.message ||
+          "Failed to update confirmation status. Please try again.",
+      );
+    } finally {
+      setUpdatingConfirmationStatus(null);
+    }
+  };
+
+  // Confirm booking API call
+  const confirmBooking = async () => {
+    if (!bookingToConfirm) return;
+
+    try {
+      setConfirmingBooking(true);
+      const response = await axiosInstance.put(
+        `/api/hotel-booking/confirm/${bookingToConfirm.bookingId}`,
+      );
+
+      if (response.data && response.data.success) {
+        // Refresh bookings list
+        await fetchBookings();
+        setShowConfirmModal(false);
+        setBookingToConfirm(null);
+        alert("Booking confirmed successfully!");
+      } else {
+        alert(response.data?.message || "Failed to confirm booking.");
+      }
+    } catch (error) {
+      console.error("Error confirming booking:", error);
+      alert(
+        error.response?.data?.message ||
+          "Failed to confirm booking. Please try again.",
+      );
+    } finally {
+      setConfirmingBooking(false);
+    }
+  };
+
+  // Fetch voucher details
+  const fetchVoucherDetails = async (bookingId) => {
+    try {
+      setLoadingVoucherDetails(true);
+      setVoucherDetails(null);
+      const response = await axiosInstance.get(
+        `/api/hotel-booking/confirmation-voucher/${bookingId}`,
+      );
+
+      if (response.data && response.data.success) {
+        setVoucherDetails(response.data.voucherDetails);
+      } else {
+        toast.error(
+          response.data?.message || "Failed to load voucher details.",
+        );
+      }
+    } catch (error) {
+      console.error("Error fetching voucher details:", error);
+      toast.error(
+        error.response?.data?.message ||
+          "Failed to load voucher details. Please try again.",
+      );
+    } finally {
+      setLoadingVoucherDetails(false);
+    }
+  };
+
+  // Generate PDF (Request, Confirmation, or Voucher)
+  const handleGeneratePdf = async (type) => {
+    if (!selectedBooking) return;
+
+    try {
+      setGeneratingPdf(true);
+      setPdfUrl(null);
+      const response = await axiosInstance.get(
+        `/api/bookings/${selectedBooking.bookingId}/pdf`,
+        {
+          params: { type: type.toUpperCase() },
+        },
+      );
+
+      if (response.data && response.data.status === "SUCCESS") {
+        setPdfUrl(response.data.pdfUrl);
+        toast.success(
+          response.data.message || `${type} Generated successfully!`,
+        );
+      } else {
+        toast.error(response.data?.message || `Failed to generate ${type}.`);
+      }
+    } catch (error) {
+      console.error(`Error generating ${type}:`, error);
+      toast.error(
+        error.response?.data?.message ||
+          `Failed to generate ${type}. Please try again.`,
+      );
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  // Download PDF directly
+  const handleDownloadPdf = async (bookingId, type) => {
+    try {
+      setLoading(true);
+      const response = await axiosInstance.get(
+        `/api/bookings/${bookingId}/pdf`,
+        {
+          params: { type: type.toUpperCase() },
+        },
+      );
+
+      if (
+        response.data &&
+        response.data.status === "SUCCESS" &&
+        response.data.pdfUrl
+      ) {
+        // Trigger browser download
+        const link = document.createElement("a");
+        link.href = response.data.pdfUrl;
+        link.download = `Booking_${bookingId}_${type}.pdf`;
+        link.target = "_blank";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        toast.success(`${type} PDF download started!`);
+      } else {
+        toast.error(
+          response.data?.message || `Failed to generate ${type} PDF.`,
+        );
+      }
+    } catch (error) {
+      console.error(`Error downloading ${type} PDF:`, error);
+      toast.error(`Error downloading ${type} PDF.`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBookings();
+  }, [fetchBookings]);
+
+  useEffect(() => {
+    if (status === "all") fetchAllBookings();
+  }, [status, fetchAllBookings]);
+
+  useEffect(() => {
+    if (status === "onrequest") fetchOnRequestBookings();
+  }, [status, fetchOnRequestBookings]);
+
+  useEffect(() => {
+    if (status === "reconfirmed") fetchReconfirmedBookings();
+  }, [status, fetchReconfirmedBookings]);
+
+  useEffect(() => {
+    if (status === "invoiced") fetchInvoicedBookings();
+  }, [status, fetchInvoicedBookings]);
+
+  // Get bookings based on selected status
+  useEffect(() => {
+    let currentBookings = [];
+    let paginationMeta = { totalPages: 0, totalElements: 0 };
+
+    switch (status) {
+      case "all":
+        currentBookings = allData.content || [];
+        paginationMeta.totalPages = allData.totalPages || 0;
+        paginationMeta.totalElements = allData.totalElements || 0;
+        break;
+      case "upcoming":
+        currentBookings = apiData.upcomingBookings.content || [];
+        paginationMeta.totalPages = apiData.upcomingBookings.totalPages || 0;
+        paginationMeta.totalElements =
+          apiData.upcomingBookings.totalElements || 0;
+        break;
+      case "completed":
+        currentBookings = apiData.completedBookings.content || [];
+        paginationMeta.totalPages = apiData.completedBookings.totalPages || 0;
+        paginationMeta.totalElements =
+          apiData.completedBookings.totalElements || 0;
+        break;
+      case "cancelled":
+        currentBookings = apiData.cancelledBookings.content || [];
+        paginationMeta.totalPages = apiData.cancelledBookings.totalPages || 0;
+        paginationMeta.totalElements =
+          apiData.cancelledBookings.totalElements || 0;
+        break;
+      case "onrequest":
+        currentBookings = onRequestData.content || [];
+        paginationMeta.totalPages = onRequestData.totalPages || 0;
+        paginationMeta.totalElements = onRequestData.totalElements || 0;
+        break;
+      case "reconfirmed":
+        currentBookings = reconfirmedData.content || [];
+        paginationMeta.totalPages = reconfirmedData.totalPages || 0;
+        paginationMeta.totalElements = reconfirmedData.totalElements || 0;
+        break;
+      case "invoiced":
+        currentBookings = invoicedData.content || [];
+        paginationMeta.totalPages = invoicedData.totalPages || 0;
+        paginationMeta.totalElements = invoicedData.totalElements || 0;
+        break;
+      default:
+        currentBookings = [];
+    }
+
+    // 24-hour-only menu: drop rows where the flag isn't set. Adjust the
+    // visible totals to the filtered count so the empty-state and the
+    // pagination footer reflect what the user actually sees. Pagination
+    // stays server-side; this is a presentational filter only.
+    if (force24HourOnly) {
+      const filtered = (currentBookings || []).filter(
+        (b) => b && (b.is24HourCheckin || b.Is24HourCheckin)
+      );
+      setBookings(filtered);
+      setTotalPages(paginationMeta.totalPages || 0);
+      setTotalElements(filtered.length);
+    } else {
+      // Regular Hotel Bookings list: exclude 24-hour-checkin rows — those
+      // belong to the dedicated 24-Hour Booking List page. Presentational
+      // filter only (pagination stays server-side); totals reflect the
+      // filtered count so the footer/empty-state match what's shown.
+      const filtered = (currentBookings || []).filter(
+        (b) => !(b && (b.is24HourCheckin || b.Is24HourCheckin))
+      );
+      setBookings(filtered);
+      setTotalPages(paginationMeta.totalPages || 0);
+      setTotalElements(filtered.length);
+    }
+
+    setPagination((prev) => {
+      const currentState = prev[status];
+      const effectiveTotalPages = paginationMeta.totalPages || 1;
+      const clampedPage = Math.min(
+        currentState.page,
+        Math.max(effectiveTotalPages, 1),
+      );
+      if (clampedPage === currentState.page) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [status]: { ...currentState, page: clampedPage },
+      };
+    });
+  }, [status, apiData, onRequestData, reconfirmedData, invoicedData, allData]);
+
+  const resetAllPages = useCallback(() => {
+    setPagination((prev) => ({
+      all: { ...prev.all, page: 1 },
+      upcoming: { ...prev.upcoming, page: 1 },
+      completed: { ...prev.completed, page: 1 },
+      cancelled: { ...prev.cancelled, page: 1 },
+      onrequest: { ...prev.onrequest, page: 1 },
+      reconfirmed: { ...prev.reconfirmed, page: 1 },
+      invoiced: { ...prev.invoiced, page: 1 },
+    }));
+  }, []);
+
+  const handlePageChange = useCallback(
+    (nextPage) => {
+      setPagination((prev) => {
+        if (prev[status].page === nextPage) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [status]: { ...prev[status], page: nextPage },
+        };
+      });
+    },
+    [status],
+  );
+
+  const handlePageSizeChange = useCallback(
+    (nextSize) => {
+      setPagination((prev) => {
+        if (prev[status].perPage === nextSize && prev[status].page === 1) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [status]: { ...prev[status], perPage: nextSize, page: 1 },
+        };
+      });
+    },
+    [status],
+  );
+
+  const handleMonthChange = useCallback(
+    (value) => {
+      setSelectedMonth(value);
+      resetAllPages();
+    },
+    [resetAllPages],
+  );
+
+  const handleYearChange = useCallback(
+    (value) => {
+      setSelectedYear(value);
+      resetAllPages();
+    },
+    [resetAllPages],
+  );
+
+  // Filter bookings based on search term
+  const filteredBookings = useMemo(() => {
+    if (!search.trim()) return bookings;
+    const query = search.trim().toLowerCase();
+
+    const formatDate = (dateString) => {
+      if (!dateString) return "";
+      const normalized = String(dateString).includes("T") ? dateString : `${dateString}T00:00:00`;
+      const date = new Date(normalized);
+      if (isNaN(date.getTime())) return "";
+      const day = String(date.getDate()).padStart(2, "0");
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      return `${day}/${month}/${date.getFullYear()}`;
+    };
+
+    const formatDeadlineDate = (dateString) => {
+      if (!dateString) return "";
+      return dateString.split("T")[0];
+    };
+
+    return bookings.filter((booking) =>
+      [
+        booking.bookingCode, // GLBIN11
+        booking.agentName, // Agent Name
+        booking.primaryGuestName, // Customer Name
+        ...getGuestNames(booking), // any additional customer on the booking
+        booking.referenceNumber, // Reference Code
+        booking.hotelName, // Hotel Name
+        formatDate(booking.bookingDate), // 24/04/2025
+        // Stay dates — shown in the Booking Details column, so searching a
+        // check-in / check-out date (e.g. "26/06/2026") must match. Both the
+        // dd/mm/yyyy display form and the raw value are included.
+        formatDate(booking.checkInDate),
+        formatDate(booking.checkOutDate),
+        booking.checkInDate,
+        booking.checkOutDate,
+        formatDeadlineDate(booking.deadlineDate), // 2025-11-04
+        booking.confirmationStatus, // Confirmed / Not Confirmed
+      ]
+        .map((val) => String(val ?? "").toLowerCase())
+        .some((val) => val.includes(query)),
+    );
+  }, [bookings, search]);
+
+  const currentPaginationState = pagination[status] || { page: 1, perPage: 10 };
+  const currentPage = currentPaginationState.page;
+  const currentPerPage = currentPaginationState.perPage;
+  const totalEntries =
+    typeof totalElements === "number" && totalElements >= 0
+      ? totalElements
+      : bookings.length;
+  const hasResults = filteredBookings.length > 0;
+  const serialNumberBase = (currentPage - 1) * currentPerPage;
+  const displayStart = hasResults ? serialNumberBase + 1 : 0;
+  const displayEnd = hasResults
+    ? Math.min(serialNumberBase + filteredBookings.length, totalEntries)
+    : 0;
+  const safeTotalPages =
+    totalPages > 0
+      ? totalPages
+      : Math.max(1, Math.ceil((totalEntries || 0) / currentPerPage));
+
+  // Colour each "/"-separated segment of a confirmation status independently,
+  // mirroring the booking detail view's StatusBadge so the list and the detail
+  // page stay consistent: Confirmed / ReConfirmed → green, Cancelled → red,
+  // On Request → orange. A combined label like "Confirmed/Cancelled" therefore
+  // shows the confirmed part green and only the cancelled part red.
+  const statusSegColor = (part) => {
+    const p = (part || "").trim().replace(/\s+/g, "").toLowerCase();
+    if (p.startsWith("reconfirmed")) return "#06a301";
+    if (p.startsWith("confirmed")) return "#06a301";
+    if (p.startsWith("cancelled")) return "#dc3545";
+    if (p === "onrequest") return "#ff9800";
+    return "#6c757d";
+  };
+  const renderColoredStatus = (text) => {
+    const parts = String(text ?? "-").split("/");
+    return parts.map((part, i) => (
+      <React.Fragment key={i}>
+        {i > 0 && <span style={{ color: "#6c757d" }}>/</span>}
+        <span style={{ color: statusSegColor(part) }}>{part}</span>
+      </React.Fragment>
+    ));
+  };
+
+  const getStatusBadge = (s) => {
+    switch (s?.toLowerCase()) {
+      case "confirmed":
+      case "completed":
+        return "success";
+      case "cancelled":
+      case "cancelled":
+        return "danger";
+      case "pending":
+      case "upcoming":
+        return "warning";
+      case "reconfirmed":
+        return "success";
+      case "invoiced":
+        return "primary";
+      case "onrequest":
+        return "secondary";
+      default:
+        return "secondary";
+    }
+  };
+
+  const handleDeleteBooking = (booking) => {
+    setBookingToCancel(booking);
+    setCancellationReason("");
+    setShowCancelModal(true);
+  };
+
+  const cancelBooking = async () => {
+    if (!bookingToCancel) return;
+
+    try {
+      setCancellingBooking(true);
+      const params = cancellationReason.trim()
+        ? { reason: cancellationReason.trim() }
+        : undefined;
+
+      const response = await axiosInstance.delete(
+        `/api/hotel-booking/${bookingToCancel.bookingId}/cancel`,
+        { params },
+      );
+
+      if (
+        response.data &&
+        response.data.success &&
+        response.data.confirmationStatus === "Cancelled"
+      ) {
+        await fetchBookings();
+        setShowCancelModal(false);
+        setBookingToCancel(null);
+        setCancellationReason("");
+        // console.log("Booking cancelled successfully!");
+        toast.success(response.data.message);
+      } else {
+        // alert(response.data?.message || "Failed to cancel booking.");
+        toast.error(response.data.message);
+      }
+    } catch (error) {
+      console.error("Error cancelling booking:", error);
+    } finally {
+      setCancellingBooking(false);
+    }
+  };
+
+  return (
+    <div className="min-vh-100 bg-light d-flex flex-column hbl-modern">
+      <TopBar />
+      <div className="d-flex flex-grow-1">
+        <Sidebar />
+        <main
+          className="flex-grow-1 p-3"
+          style={{ width: "100%", overflow: "hidden" }}
+        >
+          <Container fluid className="px-0">
+            {/* Header: Title + Search (left) | Time Period (right) */}
+            <div className="d-flex justify-content-between align-items-end mb-3">
+              <div>
+                <h3 className="fw-bold text-dark mb-2">
+                  {force24HourOnly ? "24 Hour Check-In Bookings" : "Hotel Bookings"}
+                </h3>
+                <InputGroup style={{ height: "40px", width: "300px" }}>
+                  <InputGroup.Text
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      borderRight: "none",
+                      borderColor: "#dee2e6",
+                    }}
+                  >
+                    <FaSearch style={{ color: "#6c757d" }} />
+                  </InputGroup.Text>
+                  <Form.Control
+                    type="text"
+                    placeholder="Search here..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    style={{
+                      borderLeft: "none",
+                      fontSize: "0.85rem",
+                      borderColor: "#dee2e6",
+                      height: "40px",
+                    }}
+                  />
+                </InputGroup>
+              </div>
+              <Card
+                className="shadow-sm border-0"
+                style={{ borderRadius: "8px", minWidth: "260px" }}
+              >
+                <Card.Body className="p-3">
+                  <h6
+                    className="mb-2 fw-bold text-dark"
+                    style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                  >
+                    Time Period
+                  </h6>
+                  <Row className="g-2">
+                    <Col xs={6}>
+                      <Form.Select
+                        value={selectedMonth}
+                        onChange={(e) => handleMonthChange(e.target.value)}
+                        className="form-control"
+                        size="sm"
+                        style={{ fontSize: "0.82rem", height: "45px" }}
+                      >
+                        <option value="">Month</option>
+                        {months.map((month, index) => (
+                          <option key={month} value={index + 1}>
+                            {month.slice(0, 3)}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                    <Col xs={6}>
+                      <Form.Select
+                        value={selectedYear}
+                        onChange={(e) => handleYearChange(e.target.value)}
+                        className="form-control"
+                        size="sm"
+                        style={{ fontSize: "0.82rem", height: "45px" }}
+                      >
+                        <option value="">Year</option>
+                        {years.map((year) => (
+                          <option key={year} value={year}>
+                            {year}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                  </Row>
+                </Card.Body>
+              </Card>
+            </div>
+
+            {/* Filters Section */}
+            <Row className="mb-2 g-1">
+              <Col xs={12}>
+                <Card
+                  className="shadow-sm border-0 w-100"
+                  style={{ borderRadius: "8px" }}
+                >
+                  <Card.Body className="p-3">
+                    <h6
+                      className="mb-2 fw-bold text-dark"
+                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                    >
+                      Booking Type
+                    </h6>
+
+                    <Row className="g-2">
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <Form.Select
+                          value={status}
+                          onChange={(e) => {
+                            setStatus(e.target.value);
+                            resetAllPages();
+                          }}
+                          size="sm"
+                          aria-label="Booking type filter"
+                          style={{ fontSize: "0.85rem", height: "46px" }}
+                        >
+                          {statusOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </Form.Select>
+                      </Col>
+                    </Row>
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
+
+            {/* Table */}
+            <Card
+              className="shadow-sm border-0"
+              style={{ borderRadius: "8px", overflow: "hidden", width: "100%" }}
+            >
+              <Card.Body className="p-0" style={{ width: "100%" }}>
+                {loading ? (
+                  <div className="text-center p-5">
+                    <Spinner animation="border" variant="primary" />
+                    <p className="mt-2 text-muted">Loading bookings...</p>
+                  </div>
+                ) : (
+                  <div
+                    className="thin-scrollbar"
+                    style={{
+                      overflowX: "auto",
+                      width: "100%",
+                    }}
+                  >
+                    <Table
+                      hover
+                      size="sm"
+                      className="mb-0 align-middle table-bordered"
+                      style={{
+                        // Auto layout so the table fits the page width and
+                        // column widths flex to content. Falls back to a
+                        // horizontal scroll only on extremely narrow viewports.
+                        tableLayout: "auto",
+                        width: "100%",
+                        fontSize: "0.78rem",
+                        borderCollapse: "separate",
+                        borderSpacing: 0,
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      <thead
+                        style={{
+                          backgroundColor: "#f8f9fa",
+                          borderBottom: "2px solid #dee2e6",
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                          fontSize: "0.7rem",
+                          letterSpacing: "0.03em",
+                        }}
+                      >
+                        <tr>
+                          <th
+                            style={{
+                              padding: "0.45rem 0.6rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              color: "#495057",
+                              textAlign: "center",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "normal",
+                              lineHeight: 1.2,
+                              width: COLUMN_WIDTHS.sn,
+                            }}
+                          >
+                            S.N
+                          </th>
+                          {role === "admin" && (
+                            <th
+                              style={{
+                                padding: "0.45rem 0.6rem",
+                                fontWeight: "600",
+                                textTransform: "uppercase",
+                                color: "#495057",
+                                border: "1px solid #dee2e6",
+                                whiteSpace: "normal",
+                                lineHeight: 1.2,
+                                width: COLUMN_WIDTHS.agentName,
+                              }}
+                            >
+                              Agent Name
+                            </th>
+                          )}
+                          <th
+                            style={{
+                              padding: "0.45rem 0.6rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              color: "#495057",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "normal",
+                              lineHeight: 1.2,
+                              width: COLUMN_WIDTHS.customerName,
+                            }}
+                          >
+                            Customer Name
+                          </th>
+                          <th
+                            style={{
+                              padding: "0.45rem 0.6rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              color: "#495057",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "normal",
+                              lineHeight: 1.2,
+                              width: COLUMN_WIDTHS.bookingCode,
+                            }}
+                          >
+                            Booking Code
+                          </th>
+                          {/* Reference Code column hidden by request. */}
+                          <th
+                            style={{
+                              padding: "0.45rem 0.6rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              color: "#495057",
+                              textAlign: "center",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "normal",
+                              lineHeight: 1.2,
+                              width: COLUMN_WIDTHS.bookDate,
+                            }}
+                          >
+                            Book Date
+                          </th>
+                          <th
+                            style={{
+                              padding: "0.45rem 0.6rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              color: "#495057",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "normal",
+                              lineHeight: 1.2,
+                              width: COLUMN_WIDTHS.bookingDetails,
+                            }}
+                          >
+                            Booking Details
+                          </th>
+                          <th
+                            style={{
+                              padding: "0.45rem 0.6rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              color: "#495057",
+                              textAlign: "center",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "normal",
+                              lineHeight: 1.2,
+                              width: COLUMN_WIDTHS.deadlineDate,
+                            }}
+                          >
+                            Deadline Date
+                          </th>
+                          {/* New Payment Mode column — shows the
+                              method used at booking time (credit
+                              limit vs online payment). */}
+                          <th
+                            style={{
+                              padding: "0.45rem 0.6rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              color: "#495057",
+                              textAlign: "center",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "normal",
+                              lineHeight: 1.2,
+                              width: COLUMN_WIDTHS.paymentMode,
+                            }}
+                          >
+                            Payment Mode
+                          </th>
+                          <th
+                            style={{
+                              padding: "0.45rem 0.6rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              color: "#495057",
+                              textAlign: "center",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "normal",
+                              lineHeight: 1.2,
+                              width: COLUMN_WIDTHS.notification,
+                            }}
+                          >
+                            Notification
+                          </th>
+                          <th
+                            style={{
+                              padding: "0.45rem 0.6rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              color: "#495057",
+                              textAlign: "center",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "normal",
+                              lineHeight: 1.2,
+                              width: COLUMN_WIDTHS.action,
+                            }}
+                          >
+                            Action
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredBookings.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={10}
+                              className="text-center py-5 text-muted"
+                              style={{
+                                border: "1px solid #dee2e6",
+                                backgroundColor: "#ffffff",
+                              }}
+                            >
+                              <FaInbox
+                                style={{
+                                  fontSize: "2.5rem",
+                                  marginBottom: "10px",
+                                  color: "#adb5bd",
+                                }}
+                              />
+                              <p className="mt-2 mb-0 fs-5">
+                                No bookings found.
+                              </p>
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredBookings.map((b, i) => {
+                            // Format dates — handles both "YYYY-MM-DD" and "YYYY-MM-DDTHH:mm:ss"
+                            const formatDate = (dateString) => {
+                              if (!dateString) return "";
+                              const normalized = String(dateString).includes("T")
+                                ? dateString
+                                : `${dateString}T00:00:00`;
+                              const date = new Date(normalized);
+                              if (isNaN(date.getTime())) return "";
+                              const day = String(date.getDate()).padStart(2, "0");
+                              const month = String(date.getMonth() + 1).padStart(2, "0");
+                              return `${day}/${month}/${date.getFullYear()}`;
+                            };
+
+                            // Format deadlineDate to show only YYYY-MM-DD
+                            const formatDeadlineDate = (dateString) => {
+                              if (!dateString) return "-";
+                              return dateString.split("T")[0] || "-";
+                            };
+
+                            // Cells now wrap instead of truncating so the
+                            // Reference Code / Deadline Date / Payment Mode
+                            // badge / Notification / Booking Details (hotel
+                            // + dates) all render in full. Pair with the
+                            // wider COLUMN_WIDTHS above; the table's
+                            // minWidth ensures horizontal scroll on small
+                            // screens rather than column-squash.
+                            const baseCellStyle = {
+                              padding: "0.5rem 0.6rem",
+                              fontSize: "0.8rem",
+                              border: "1px solid #dee2e6",
+                              verticalAlign: "middle",
+                              whiteSpace: "normal",
+                              overflow: "visible",
+                              wordBreak: "break-word",
+                              lineHeight: 1.4,
+                            };
+
+                            return (
+                              <tr
+                                key={b.bookingId}
+                                style={{
+                                  backgroundColor:
+                                    i % 2 === 0 ? "#ffffff" : "#f8f9fa",
+                                  transition: "background-color 0.2s ease",
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    "#e7f3ff";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    i % 2 === 0 ? "#ffffff" : "#f8f9fa";
+                                }}
+                              >
+                                <td
+                                  className="text-muted fw-semibold"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    color: "#6c757d",
+                                    width: COLUMN_WIDTHS.sn,
+                                  }}
+                                >
+                                  {serialNumberBase + i + 1}
+                                </td>
+                                {role === "admin" && (
+                                  <td
+                                    style={{
+                                      ...baseCellStyle,
+                                      width: COLUMN_WIDTHS.agentName,
+                                    }}
+                                  >
+                                    <span className="fw-medium text-dark">
+                                      {b.agentName || "-"}
+                                    </span>
+                                  </td>
+                                )}
+                                {/* Customer Name — a booking can hold many
+                                    guests. Show the first prominently and
+                                    surface the rest behind a "+N more" badge
+                                    that opens the Customers modal. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.customerName,
+                                  }}
+                                >
+                                  {(() => {
+                                    const names = getGuestNames(b);
+                                    const first = names[0] || "-";
+                                    const extra = Math.max(0, names.length - 1);
+                                    return (
+                                      <div
+                                        className="d-flex align-items-center"
+                                        style={{
+                                          gap: "0.4rem",
+                                          flexWrap: "wrap",
+                                        }}
+                                      >
+                                        <span
+                                          className="d-inline-flex align-items-center"
+                                          style={{ gap: "0.3rem" }}
+                                        >
+                                          <FaUser
+                                            style={{
+                                              color: "#6c757d",
+                                              fontSize: "0.78rem",
+                                              flexShrink: 0,
+                                            }}
+                                          />
+                                          <span className="fw-medium text-dark">
+                                            {first}
+                                          </span>
+                                        </span>
+                                        {extra > 0 && (
+                                          <Badge
+                                            bg="light"
+                                            text="primary"
+                                            role="button"
+                                            tabIndex={0}
+                                            title="View all customers"
+                                            onClick={() =>
+                                              handleShowCustomers(b)
+                                            }
+                                            onKeyDown={(e) => {
+                                              if (
+                                                e.key === "Enter" ||
+                                                e.key === " "
+                                              ) {
+                                                e.preventDefault();
+                                                handleShowCustomers(b);
+                                              }
+                                            }}
+                                            style={{
+                                              cursor: "pointer",
+                                              border: "1px solid #cfe2ff",
+                                              fontWeight: 600,
+                                              fontSize: "0.7rem",
+                                            }}
+                                          >
+                                            +{extra} more
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.bookingCode,
+                                  }}
+                                >
+                                  <span className="fw-bold text-primary">
+                                    {b.bookingCode || "-"}
+                                  </span>
+                                </td>
+                                {/* Reference Code cell hidden by request. */}
+                                <td
+                                  className="text-muted"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.bookDate,
+                                  }}
+                                >
+                                  {formatDate(b.bookingDate) || "-"}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.bookingDetails,
+                                  }}
+                                >
+                                  <div
+                                    className="d-flex align-items-center"
+                                    style={{ gap: "0.35rem", flexWrap: "wrap" }}
+                                  >
+                                    <span
+                                      className="fw-semibold text-dark"
+                                      style={{ fontSize: "0.875rem" }}
+                                    >
+                                      {b.hotelName || "-"}
+                                    </span>
+                                    {b.is24HourCheckin && (
+                                      <span
+                                        className="badge bg-warning-subtle text-warning border border-warning-subtle"
+                                        style={{ fontSize: "0.65rem", padding: "2px 6px" }}
+                                        title="24-hour check-in booking"
+                                      >
+                                        24H
+                                      </span>
+                                    )}
+                                    {formatDate(b.checkInDate) &&
+                                      formatDate(b.checkOutDate) && (
+                                        <span
+                                          className="text-muted"
+                                          style={{ fontSize: "0.75rem" }}
+                                        >
+                                          ({formatDate(b.checkInDate)} -{" "}
+                                          {formatDate(b.checkOutDate)})
+                                        </span>
+                                      )}
+                                  </div>
+                                </td>
+                                <td
+                                  className="text-muted"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    fontFamily: "monospace",
+                                    width: COLUMN_WIDTHS.deadlineDate,
+                                  }}
+                                >
+                                  {formatDeadlineDate(b.deadlineDate)}
+                                </td>
+                                {/* Payment Mode cell — Credit Limit
+                                    Payment vs Online Payment, rendered
+                                    as plain black text (per spec — no
+                                    coloured badge). */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.paymentMode,
+                                  }}
+                                >
+                                  {(() => {
+                                    const label = getPaymentModeLabel(b);
+                                    if (label === "-") {
+                                      return (
+                                        <span className="text-muted">-</span>
+                                      );
+                                    }
+                                    return (
+                                      <span style={{ color: "#000" }}>
+                                        {label}
+                                      </span>
+                                    );
+                                  })()}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.notification,
+                                  }}
+                                >
+                                  {(() => {
+                                    const normalizedStatus = String(
+                                      b.confirmationStatus || "",
+                                    )
+                                      .replace(/\s+/g, "")
+                                      .toLowerCase();
+                                    const isConfirmed =
+                                      normalizedStatus === "confirmed";
+                                    const isReconfirmed =
+                                      normalizedStatus === "reconfirmed";
+                                    const isNotConfirmed =
+                                      normalizedStatus === "notconfirmed";
+                                    const showConfirmIcon = isNotConfirmed;
+
+                                    // "On Request" bookings are stamped
+                                    // CONFIRMED by the status engine so they can
+                                    // follow the reconfirm flow, but until they
+                                    // are actually reconfirmed they must DISPLAY
+                                    // as "On Request" (orange) — only genuinely
+                                    // confirmed bookings show "Confirmed". This
+                                    // is display-only; the underlying status that
+                                    // drives confirm/voucher flows is unchanged.
+                                    const isOnRequestRoom = /^on\s*request$/i.test(
+                                      String(b.roomStatus || "").trim(),
+                                    );
+                                    if (isOnRequestRoom && isConfirmed) {
+                                      return (
+                                        <span
+                                          style={{
+                                            color: "#e67e22",
+                                            padding: "0.32rem 0.6rem",
+                                            fontSize: "0.82rem",
+                                            fontWeight: "600",
+                                            borderRadius: "0.375rem",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: "0.35rem",
+                                          }}
+                                        >
+                                          On Request
+                                        </span>
+                                      );
+                                    }
+
+                                    if (isConfirmed) {
+                                      return (
+                                        <span
+                                          style={{
+                                            color: "#06a301",
+                                            padding: "0.32rem 0.6rem",
+                                            fontSize: "0.82rem",
+                                            fontWeight: "600",
+                                            borderRadius: "0.375rem",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: "0.35rem",
+                                          }}
+                                        >
+                                          Confirmed
+                                        </span>
+                                      );
+                                    }
+
+                                    if (isReconfirmed) {
+                                      return (
+                                        <span
+                                          style={{
+                                            color: "#06a301",
+                                            padding: "0.32rem 0.6rem",
+                                            fontSize: "0.82rem",
+                                            fontWeight: "600",
+                                            borderRadius: "0.375rem",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: "0.35rem",
+                                          }}
+                                        >
+                                          ReConfirmed
+                                        </span>
+                                      );
+                                    }
+
+                                    const label = isNotConfirmed
+                                      ? "Not Confirmed"
+                                      : b.confirmationStatus || "-";
+                                    const isUpdating =
+                                      updatingConfirmationStatus ===
+                                      b.bookingId;
+
+                                    return (
+                                      <div
+                                        className="d-inline-flex align-items-center justify-content-center gap-2 setConfirmed "
+                                        title="Click to confirm the booking."
+                                        style={{
+                                          padding: "0.32rem 0.6rem",
+                                          borderRadius: "0.375rem",
+                                          backgroundColor: "transparent",
+                                          color: isNotConfirmed
+                                            ? "#dc3545"
+                                            : "#6c757d",
+                                          fontSize: "0.72rem",
+                                          fontWeight: "600",
+                                          cursor: isUpdating
+                                            ? "not-allowed"
+                                            : "pointer",
+                                          transition: "all 0.2s ease",
+                                          opacity: isUpdating ? 0.6 : 1,
+                                        }}
+                                        // onClick={() => {
+                                        //   if (isNotConfirmed && !isUpdating) {
+                                        //      handleConfirmStatusClick(b);
+                                        //   } else if (!isUpdating) {
+                                        //      handleConfirmBookingClick(b);
+                                        //   }
+                                        // }}
+                                      >
+                                        {isUpdating ? (
+                                          <Spinner
+                                            animation="border"
+                                            size="sm"
+                                            style={{
+                                              width: "12px",
+                                              height: "12px",
+                                              borderWidth: "2px",
+                                            }}
+                                          />
+                                        ) : !isNotConfirmed ? (
+                                          // Cancelled / combined statuses get the
+                                          // same per-segment colouring as the
+                                          // detail view (Cancelled red, Confirmed
+                                          // green) instead of flat grey.
+                                          renderColoredStatus(label)
+                                        ) : (
+                                          <>
+                                            <span>{label}</span>
+                                            {showConfirmIcon && (
+                                              <FaExclamationCircle
+                                                style={{
+                                                  fontSize: "15px",
+                                                  color: "#ff9800",
+                                                  transition: "all 0.2s ease",
+                                                }}
+                                                title="Non-refundable booking. Click to confirm."
+                                                onMouseEnter={(e) => {
+                                                  e.currentTarget.style.color =
+                                                    "#f57c00";
+                                                  e.currentTarget.style.transform =
+                                                    "scale(1.15)";
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                  e.currentTarget.style.color =
+                                                    "#ff9800";
+                                                  e.currentTarget.style.transform =
+                                                    "scale(1)";
+                                                }}
+                                              />
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                </td>
+
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.action,
+                                  }}
+                                >
+                                  <div className="d-flex justify-content-center align-items-center">
+                                    {/* Single view action — opens the full
+                                        booking details page. Plain eye icon
+                                        per spec (no labelled button). */}
+                                    <FaEye
+                                      role="button"
+                                      tabIndex={0}
+                                      title="View full booking details"
+                                      style={{
+                                        fontSize: "18px",
+                                        color: "#007bff",
+                                        cursor: "pointer",
+                                      }}
+                                      onClick={() =>
+                                        navigate(
+                                          `/booking-details/hotel-booking/${b.bookingId}`,
+                                        )
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                          e.preventDefault();
+                                          navigate(
+                                            `/booking-details/hotel-booking/${b.bookingId}`,
+                                          );
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </Table>
+                  </div>
+                )}
+              </Card.Body>
+            </Card>
+
+            {/* Pagination */}
+            {!loading && filteredBookings.length > 0 && (
+              <Card
+                className="shadow-sm border-0 mt-3"
+                style={{ borderRadius: "8px" }}
+              >
+                <Card.Body className="py-3">
+                  <div className="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <div
+                      className="text-muted"
+                      style={{ fontSize: "0.875rem" }}
+                    >
+                      Showing {""}
+                      <span className="fw-semibold text-dark">
+                        {displayStart}
+                      </span>{" "}
+                      to {""}
+                      <span className="fw-semibold text-dark">
+                        {displayEnd}
+                      </span>{" "}
+                      of {""}
+                      <span className="fw-semibold text-dark">
+                        {totalEntries}
+                      </span>{" "}
+                      entries
+                    </div>
+                    <div className="d-flex align-items-center gap-2">
+                      <span
+                        className="text-muted"
+                        style={{ fontSize: "0.8rem" }}
+                      >
+                        Rows per page
+                      </span>
+                      <Form.Select
+                        size="sm"
+                        value={currentPerPage}
+                        onChange={(e) =>
+                          handlePageSizeChange(Number(e.target.value))
+                        }
+                        style={{ width: "auto", fontSize: "0.8rem" }}
+                      >
+                        {PER_PAGE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </div>
+                    <Pagination className="mb-0">
+                      <Pagination.Prev
+                        disabled={currentPage === 1}
+                        onClick={() =>
+                          currentPage > 1 && handlePageChange(currentPage - 1)
+                        }
+                        style={{
+                          cursor: currentPage === 1 ? "not-allowed" : "pointer",
+                          opacity: currentPage === 1 ? 0.5 : 1,
+                        }}
+                      />
+                      {Array.from(
+                        { length: safeTotalPages },
+                        (_, i) => i + 1,
+                      ).map((pageNumber) => (
+                        <Pagination.Item
+                          key={pageNumber}
+                          active={currentPage === pageNumber}
+                          onClick={() => handlePageChange(pageNumber)}
+                          style={{
+                            cursor: "pointer",
+                            minWidth: "38px",
+                            textAlign: "center",
+                          }}
+                        >
+                          {pageNumber}
+                        </Pagination.Item>
+                      ))}
+                      <Pagination.Next
+                        disabled={currentPage === safeTotalPages}
+                        onClick={() =>
+                          currentPage < safeTotalPages &&
+                          handlePageChange(currentPage + 1)
+                        }
+                        style={{
+                          cursor:
+                            currentPage === safeTotalPages
+                              ? "not-allowed"
+                              : "pointer",
+                          opacity: currentPage === safeTotalPages ? 0.5 : 1,
+                        }}
+                      />
+                    </Pagination>
+                  </div>
+                </Card.Body>
+              </Card>
+            )}
+
+            {/* Customers Modal — full guest list for a single booking */}
+            <Modal
+              show={showCustomersModal}
+              onHide={() => setShowCustomersModal(false)}
+              centered
+              size="sm"
+            >
+              <Modal.Header
+                closeButton
+                style={{ borderBottom: "2px solid #e9ecef" }}
+              >
+                <Modal.Title
+                  className="fw-bold d-flex align-items-center"
+                  style={{ fontSize: "1rem" }}
+                >
+                  <FaUsers className="me-2 text-primary" />
+                  <span>
+                    Customers ({getGuestNames(customersModalBooking).length})
+                  </span>
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                {customersModalBooking?.bookingCode && (
+                  <div
+                    className="text-muted mb-2"
+                    style={{ fontSize: "0.78rem" }}
+                  >
+                    Booking Code:{" "}
+                    <span className="fw-semibold text-primary">
+                      {customersModalBooking.bookingCode}
+                    </span>
+                  </div>
+                )}
+                <ul className="list-unstyled mb-0">
+                  {getGuestNames(customersModalBooking).map((name, idx) => (
+                    <li
+                      key={idx}
+                      className="d-flex align-items-center py-2"
+                      style={{
+                        gap: "0.5rem",
+                        borderBottom: "1px solid #f1f3f5",
+                      }}
+                    >
+                      <FaUser style={{ color: "#6c757d", flexShrink: 0 }} />
+                      <span className="fw-medium text-dark">{name}</span>
+                    </li>
+                  ))}
+                  {getGuestNames(customersModalBooking).length === 0 && (
+                    <li className="text-muted py-2">No customers found.</li>
+                  )}
+                </ul>
+              </Modal.Body>
+            </Modal>
+
+            {/* Booking Details Modal */}
+            <Modal
+              show={showDetailsModal}
+              onHide={() => setShowDetailsModal(false)}
+              size="lg"
+              centered
+              backdrop="static"
+              keyboard={false}
+            >
+              <Modal.Header
+                closeButton
+                style={{
+                  backgroundColor: "#fff",
+                  borderBottom: "2px solid #e9ecef",
+                }}
+              >
+                <Modal.Title className="fw-bold d-flex align-items-center">
+                  <FaEye className="me-2 text-primary" />
+                  <span>Booking Details</span>
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body style={{ padding: "1.5rem" }}>
+                {loadingBookingId !== null ? (
+                  <div className="text-center py-5">
+                    <Spinner animation="border" variant="primary" />
+                    <p className="mt-2 text-muted">
+                      Loading booking details...
+                    </p>
+                  </div>
+                ) : bookingDetails ? (
+                  <div>
+                    {/* Booking Header - Prominent */}
+                    <div className="mb-4 p-3 bg-light rounded border">
+                      <Row className="align-items-center">
+                        <Col md={8}>
+                          <div className="d-flex align-items-center gap-3 mb-2">
+                            <h5 className="mb-0 fw-bold text-dark">
+                              {bookingDetails.bookingHeader?.bookingCode ||
+                                "N/A"}
+                            </h5>
+                            <Badge
+                              // bg={
+                              //   bookingDetails.bookingHeader?.bookingStatus ===
+                              //   "UPCOMING"
+                              //     ? "warning"
+                              //     : bookingDetails.bookingHeader
+                              //         ?.bookingStatus === "COMPLETED"
+                              //     ? "success"
+                              //     : "danger"
+                              // }
+                              bg={
+                                bookingDetails.bookingHeader
+                                  ?.confirmationStatus === "Confirmed" ||
+                                bookingDetails.bookingHeader
+                                  ?.confirmationStatus === "ReConfirmed"
+                                  ? "success"
+                                  : "danger"
+                              }
+                              style={{
+                                fontSize: "0.75rem",
+                                padding: "0.4rem 0.8rem",
+                              }}
+                            >
+                              {bookingDetails.bookingHeader?.confirmationStatus
+                                ? bookingDetails.bookingHeader.confirmationStatus.toUpperCase()
+                                : "-"}
+                            </Badge>
+                          </div>
+                          <div className="text-muted small">
+                            <span className="me-3">
+                              <strong>Booking ID:</strong>{" "}
+                              {bookingDetails.bookingHeader?.bookingId || "-"}
+                            </span>
+                            <span>
+                              <strong>Reference:</strong>{" "}
+                              {bookingDetails.bookingHeader?.referenceNumber ||
+                                "-"}
+                            </span>
+                          </div>
+                        </Col>
+                        <Col md={4} className="text-end">
+                          <div className="text-muted small">
+                            <div>
+                              <strong>Booking Date:</strong>
+                            </div>
+                            <div>
+                              {bookingDetails.bookingHeader?.bookingDate
+                                ? new Date(
+                                    bookingDetails.bookingHeader.bookingDate,
+                                  ).toLocaleDateString("en-US", {
+                                    year: "numeric",
+                                    month: "short",
+                                    day: "numeric",
+                                  })
+                                : "-"}
+                            </div>
+                            {bookingDetails.bookingHeader?.deadlineDate && (
+                              <>
+                                <div className="mt-2">
+                                  <strong>Deadline:</strong>
+                                </div>
+                                <div>
+                                  {new Date(
+                                    bookingDetails.bookingHeader.deadlineDate,
+                                  ).toLocaleDateString("en-US", {
+                                    year: "numeric",
+                                    month: "short",
+                                    day: "numeric",
+                                  })}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </Col>
+                      </Row>
+                    </div>
+
+                    <Row>
+                      {/* Left Column */}
+                      <Col md={7}>
+                        {/* Guest Information */}
+                        <Card className="mb-3 border-0 shadow-sm">
+                          <Card.Header
+                            className="bg-light border-bottom fw-semibold"
+                            style={{
+                              fontSize: "0.9rem",
+                              padding: "0.75rem 1rem",
+                            }}
+                          >
+                            Guest Information
+                          </Card.Header>
+                          <Card.Body>
+                            <div className="mb-3">
+                              <div className="text-muted small mb-1">
+                                Guest Name
+                              </div>
+                              <div className="fw-semibold">
+                                {bookingDetails.guestInformation?.guestName ||
+                                  "-"}
+                              </div>
+                            </div>
+                            <Row>
+                              <Col md={6}>
+                                <div className="mb-3">
+                                  <div className="text-muted small mb-1">
+                                    Email
+                                  </div>
+                                  <div>
+                                    {bookingDetails.guestInformation?.email ||
+                                      "-"}
+                                  </div>
+                                </div>
+                              </Col>
+                              <Col md={6}>
+                                <div className="mb-3">
+                                  <div className="text-muted small mb-1">
+                                    Mobile Number
+                                  </div>
+                                  <div>
+                                    {bookingDetails.guestInformation
+                                      ?.mobileNumber || "-"}
+                                  </div>
+                                </div>
+                              </Col>
+                            </Row>
+                            <div>
+                              <div className="text-muted small mb-1">
+                                Nationality
+                              </div>
+                              <div>
+                                {bookingDetails.guestInformation
+                                  ?.nativeCountry || "-"}
+                              </div>
+                            </div>
+                          </Card.Body>
+                        </Card>
+                      </Col>
+
+                      {/* Right Column - Pricing Summary */}
+                      <Col md={5}>
+                        <Card
+                          className="border-0 shadow-sm"
+                          style={{ position: "sticky", top: "1rem" }}
+                        >
+                          <Card.Header
+                            className="bg-light border-bottom fw-semibold"
+                            style={{
+                              fontSize: "0.9rem",
+                              padding: "0.75rem 1rem",
+                            }}
+                          >
+                            Pricing Summary
+                          </Card.Header>
+                          <Card.Body>
+                            <div className="mb-3">
+                              <div className="d-flex justify-content-between mb-2">
+                                <span className="text-muted">Room Rate</span>
+                                <span className="fw-semibold">
+                                  {console.log(
+                                    "bookingDetails:::###::",
+                                    bookingDetails,
+                                  )}
+                                  {bookingDetails?.bookingDetails?.currency ||
+                                    ""}{" "}
+                                  {bookingDetails?.bookingDetails?.total
+                                    ? bookingDetails.bookingDetails.total.toFixed(
+                                        2,
+                                      )
+                                    : "0.00"}
+                                </span>
+                              </div>
+
+                              {/* {bookingDetails.bookingDetails?.taxDiscount !==
+                                0 && (
+                                <div className="d-flex justify-content-between mb-2">
+                                  <span className="text-muted">
+                                    {bookingDetails.bookingDetails.taxDiscount >
+                                    0
+                                      ? "Tax"
+                                      : "Discount"}
+                                  </span>
+                                  <span
+                                    className={
+                                      bookingDetails.bookingDetails
+                                        .taxDiscount > 0
+                                        ? "text-danger"
+                                        : "text-success"
+                                    }
+                                  >
+                                    {bookingDetails.bookingDetails.taxDiscount >
+                                    0
+                                      ? "+"
+                                      : "-"}{" "}
+                                    {bookingDetails.bookingDetails?.currency ||
+                                      "AED"}{" "}
+                                    {Math.abs(
+                                      bookingDetails.bookingDetails.taxDiscount
+                                    ).toFixed(2)}
+                                  </span>
+                                </div>
+                              )} */}
+                            </div>
+                            <hr className="my-3" />
+                            <div className="d-flex justify-content-between align-items-center p-3 bg-light rounded">
+                              <span className="fw-bold fs-5">Total Amount</span>
+                              <span className="text-success fw-bold fs-4">
+                                {bookingDetails.bookingDetails?.currency ||
+                                  "AED"}{" "}
+                                {bookingDetails.bookingDetails?.total?.toFixed(
+                                  2,
+                                ) || "0.00"}
+                              </span>
+                            </div>
+                          </Card.Body>
+                        </Card>
+                      </Col>
+                    </Row>
+
+                    {/* Reservation Details - Full Width */}
+                    <Card className="mb-3 border-0 shadow-sm">
+                      <Card.Header
+                        className="bg-light border-bottom fw-semibold"
+                        style={{ fontSize: "0.9rem", padding: "0.75rem 1rem" }}
+                      >
+                        Reservation Details
+                      </Card.Header>
+                      <Card.Body>
+                        <div className="mb-3">
+                          <div className="text-muted small mb-1">
+                            Hotel Name
+                          </div>
+                          <div className="fw-semibold">
+                            {bookingDetails.bookingDetails?.hotelName || "-"}
+                          </div>
+                        </div>
+                        <Row>
+                          <Col md={6}>
+                            <div className="mb-3">
+                              <div className="text-muted small mb-1">
+                                Check-In Date
+                              </div>
+                              <div>
+                                {bookingDetails.bookingDetails?.checkInDate ||
+                                  "-"}
+                              </div>
+                            </div>
+                          </Col>
+                          <Col md={6}>
+                            <div className="mb-3">
+                              <div className="text-muted small mb-1">
+                                Check-Out Date
+                              </div>
+                              <div>
+                                {bookingDetails.bookingDetails?.checkOutDate ||
+                                  "-"}
+                              </div>
+                            </div>
+                          </Col>
+                        </Row>
+                        <Row>
+                          <Col md={4}>
+                            <div className="mb-3">
+                              <div className="text-muted small mb-1">
+                                Duration
+                              </div>
+                              <div>
+                                {bookingDetails.bookingDetails
+                                  ?.numberOfNights || "0"}{" "}
+                                Night(s)
+                              </div>
+                            </div>
+                          </Col>
+                          <Col md={4}>
+                            <div className="mb-3">
+                              <div className="text-muted small mb-1">
+                                Number of Rooms
+                              </div>
+                              <div>
+                                {bookingDetails.bookingDetails?.numberOfRooms ||
+                                  "0"}
+                              </div>
+                            </div>
+                          </Col>
+                          <Col md={4}>
+                            <div className="mb-3">
+                              <div className="text-muted small mb-1">
+                                Total Guests
+                              </div>
+                              <div>
+                                {bookingDetails.bookingDetails
+                                  ?.numberOfAdults || "0"}{" "}
+                                Adults
+                                {bookingDetails.bookingDetails
+                                  ?.numberOfChildren > 0 &&
+                                  `, ${bookingDetails.bookingDetails.numberOfChildren} Children`}
+                              </div>
+                            </div>
+                          </Col>
+                        </Row>
+                      </Card.Body>
+                    </Card>
+
+                    {/* Rooms Information - Full Width */}
+                    {bookingDetails.bookingDetails?.rooms &&
+                      bookingDetails.bookingDetails.rooms.length > 0 && (
+                        <div className="p-4 bg-light rounded border">
+                          <div className="mb-3">
+                            <h6 className="fw-bold text-dark mb-3">
+                              Room Details
+                            </h6>
+                          </div>
+                          <div className="table-responsive">
+                            <Table bordered hover className="mb-0 bg-white">
+                              <thead className="table-light">
+                                <tr>
+                                  <th
+                                    style={{
+                                      fontSize: "0.85rem",
+                                      padding: "0.75rem",
+                                      fontWeight: "600",
+                                    }}
+                                  >
+                                    Room No
+                                  </th>
+                                  <th
+                                    style={{
+                                      fontSize: "0.85rem",
+                                      padding: "0.75rem",
+                                      fontWeight: "600",
+                                    }}
+                                  >
+                                    Room Category
+                                  </th>
+                                  <th
+                                    style={{
+                                      fontSize: "0.85rem",
+                                      padding: "0.75rem",
+                                      fontWeight: "600",
+                                    }}
+                                  >
+                                    Meal Plan
+                                  </th>
+                                  <th
+                                    style={{
+                                      fontSize: "0.85rem",
+                                      padding: "0.75rem",
+                                      fontWeight: "600",
+                                    }}
+                                  >
+                                    Adults
+                                  </th>
+                                  <th
+                                    style={{
+                                      fontSize: "0.85rem",
+                                      padding: "0.75rem",
+                                      fontWeight: "600",
+                                    }}
+                                  >
+                                    Children
+                                  </th>
+                                  <th
+                                    style={{
+                                      fontSize: "0.85rem",
+                                      padding: "0.75rem",
+                                      fontWeight: "600",
+                                      textAlign: "right",
+                                    }}
+                                  >
+                                    Rate
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {bookingDetails.bookingDetails.rooms.map(
+                                  (room, index) => (
+                                    <tr key={index}>
+                                      <td
+                                        style={{
+                                          padding: "0.75rem",
+                                          verticalAlign: "middle",
+                                        }}
+                                      >
+                                        <span className="fw-bold text-primary">
+                                          Room {room.roomNo || index + 1}
+                                        </span>
+                                      </td>
+                                      <td
+                                        style={{
+                                          padding: "0.75rem",
+                                          verticalAlign: "middle",
+                                        }}
+                                      >
+                                        {room.roomCategory || "-"}
+                                      </td>
+                                      <td
+                                        style={{
+                                          padding: "0.75rem",
+                                          verticalAlign: "middle",
+                                        }}
+                                      >
+                                        {room.mealPlan || "-"}
+                                      </td>
+                                      <td
+                                        style={{
+                                          padding: "0.75rem",
+                                          verticalAlign: "middle",
+                                          textAlign: "center",
+                                        }}
+                                      >
+                                        {room.adults || "0"}
+                                      </td>
+                                      <td
+                                        style={{
+                                          padding: "0.75rem",
+                                          verticalAlign: "middle",
+                                          textAlign: "center",
+                                        }}
+                                      >
+                                        {room.children || "0"}
+                                      </td>
+                                      <td
+                                        style={{
+                                          padding: "0.75rem",
+                                          verticalAlign: "middle",
+                                          textAlign: "right",
+                                        }}
+                                      >
+                                        {bookingDetails.bookingDetails
+                                          ?.currency || "AED"}{" "}
+                                        {room.rate?.toFixed(2) || "0.00"}
+                                      </td>
+                                    </tr>
+                                  ),
+                                )}
+                              </tbody>
+                            </Table>
+                          </div>
+                        </div>
+                      )}
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-muted">No booking details available.</p>
+                  </div>
+                )}
+              </Modal.Body>
+              <Modal.Footer
+                style={{
+                  backgroundColor: "#f8f9fa",
+                  borderTop: "1px solid #dee2e6",
+                }}
+              >
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowDetailsModal(false)}
+                >
+                  Close
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            {/* Request Confirmation Voucher Modal */}
+            <Modal
+              show={showVoucherModal}
+              onHide={() => {
+                setShowVoucherModal(false);
+                setSelectedBooking(null);
+                setSelectedVoucherType("Request");
+                setPdfUrl(null);
+                setVoucherDetails(null);
+              }}
+              size="xl"
+              centered
+              backdrop="static"
+              keyboard={false}
+            >
+              <Modal.Header
+                closeButton
+                style={{ backgroundColor: "#0d6efd", color: "#fff" }}
+              >
+                <Modal.Title className="fw-bold">
+                  Request Confirmation Voucher
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body style={{ padding: "1.5rem" }}>
+                {selectedBooking && (
+                  <>
+                    {/* Radio Buttons */}
+                    <div className="mb-4 d-flex gap-4">
+                      <Form.Check
+                        type="radio"
+                        id="voucher-request"
+                        name="voucherType"
+                        label="Request"
+                        checked={selectedVoucherType === "Request"}
+                        onChange={() => {
+                          setSelectedVoucherType("Request");
+                          setPdfUrl(null);
+                        }}
+                        className="fw-semibold"
+                      />
+                      <Form.Check
+                        type="radio"
+                        id="voucher-confirmation"
+                        name="voucherType"
+                        label="Confirmation"
+                        checked={selectedVoucherType === "Confirmation"}
+                        onChange={() => {
+                          setSelectedVoucherType("Confirmation");
+                          setPdfUrl(null);
+                        }}
+                        className="fw-semibold"
+                      />
+                      <Form.Check
+                        type="radio"
+                        id="voucher-voucher"
+                        name="voucherType"
+                        label="Voucher"
+                        checked={selectedVoucherType === "Voucher"}
+                        onChange={() => {
+                          setSelectedVoucherType("Voucher");
+                          setPdfUrl(null);
+                        }}
+                        className="fw-semibold"
+                      />
+                    </div>
+
+                    {/* PDF URL Display */}
+                    {/* {pdfUrl && selectedVoucherType === "Confirmation" && (
+                      <div
+                        className="mb-3 p-3"
+                        style={{
+                          backgroundColor: "#e7f3ff",
+                          borderRadius: "8px",
+                          border: "1px solid #b3d9ff",
+                        }}
+                      >
+                        <div className="d-flex align-items-center justify-content-between">
+                          <div>
+                            <strong style={{ color: "#0066cc" }}>
+                              PDF Generated Successfully:
+                            </strong>
+                            <div className="mt-2">
+                              <a
+                                href={pdfUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  color: "#0066cc",
+                                  textDecoration: "underline",
+                                  wordBreak: "break-all",
+                                }}
+                              >
+                                {pdfUrl}
+                              </a>
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline-primary"
+                            size="sm"
+                            onClick={() => window.open(pdfUrl, "_blank")}
+                          >
+                            Open PDF
+                          </Button>
+                        </div>
+                      </div>
+                    )} */}
+
+                    {pdfUrl && (
+                      <div
+                        className="mb-3"
+                        style={{
+                          border: "1px solid #dee2e6",
+                          borderRadius: "8px",
+                          overflow: "hidden",
+                          background: "#fff",
+                        }}
+                      >
+                        <div
+                          style={{
+                            padding: "8px 12px",
+                            background: "#f8f9fa",
+                            borderBottom: "1px solid #dee2e6",
+                            fontWeight: "600",
+                            fontSize: "14px",
+                          }}
+                        >
+                          {selectedVoucherType} PDF Preview
+                        </div>
+
+                        <iframe
+                          src={pdfUrl}
+                          title={`${selectedVoucherType} PDF`}
+                          width="100%"
+                          height="500px"
+                          style={{
+                            border: "none",
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    {/* Table */}
+                    <div className="table-responsive">
+                      <Table bordered hover className="mb-0">
+                        <thead className="table-light">
+                          <tr>
+                            <th
+                              style={{
+                                fontSize: "0.85rem",
+                                padding: "0.75rem",
+                                fontWeight: "600",
+                              }}
+                            >
+                              Hotel
+                            </th>
+                            <th
+                              style={{
+                                fontSize: "0.85rem",
+                                padding: "0.75rem",
+                                fontWeight: "600",
+                              }}
+                            >
+                              Confirmation Status
+                            </th>
+                            {selectedVoucherType === "Request" && (
+                              <>
+                                <th
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    padding: "0.75rem",
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  Booking code
+                                </th>
+                                <th
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    padding: "0.75rem",
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  Confirmation Reference
+                                </th>
+                                <th
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    padding: "0.75rem",
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  Price Reference
+                                </th>
+                              </>
+                            )}
+                            {selectedVoucherType === "Confirmation" && (
+                              <>
+                                <th
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    padding: "0.75rem",
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  Confirmation Reference
+                                </th>
+                                <th
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    padding: "0.75rem",
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  Supplier Reference
+                                </th>
+                              </>
+                            )}
+                            {selectedVoucherType === "Voucher" && (
+                              <>
+                                <th
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    padding: "0.75rem",
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  Confirmation Reference
+                                </th>
+                                <th
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    padding: "0.75rem",
+                                    fontWeight: "600",
+                                  }}
+                                >
+                                  Supplier Reference
+                                </th>
+                              </>
+                            )}
+                            <th
+                              style={{
+                                fontSize: "0.85rem",
+                                padding: "0.75rem",
+                                fontWeight: "600",
+                              }}
+                            >
+                              Check In
+                            </th>
+                            <th
+                              style={{
+                                fontSize: "0.85rem",
+                                padding: "0.75rem",
+                                fontWeight: "600",
+                              }}
+                            >
+                              Check Out
+                            </th>
+                            <th
+                              style={{
+                                fontSize: "0.85rem",
+                                padding: "0.75rem",
+                                fontWeight: "600",
+                              }}
+                            >
+                              Action
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {loadingVoucherDetails ? (
+                            <tr>
+                              <td
+                                colSpan={
+                                  selectedVoucherType === "Request"
+                                    ? 8
+                                    : selectedVoucherType === "Confirmation"
+                                      ? 7
+                                      : 7
+                                }
+                                style={{
+                                  padding: "2rem",
+                                  textAlign: "center",
+                                }}
+                              >
+                                <Spinner animation="border" size="sm" /> Loading
+                                voucher details...
+                              </td>
+                            </tr>
+                          ) : (
+                            <tr>
+                              <td
+                                style={{
+                                  padding: "0.75rem",
+                                  verticalAlign: "middle",
+                                }}
+                              >
+                                {voucherDetails?.hotelName ||
+                                  selectedBooking?.hotelName ||
+                                  "-"}
+                              </td>
+                              <td
+                                style={{
+                                  padding: "0.75rem",
+                                  verticalAlign: "middle",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    fontSize: "0.75rem",
+                                    padding: "0.4rem 0.6rem",
+                                    fontWeight: "500",
+                                    color: [
+                                      "Confirmed",
+                                      "ReConfirmed",
+                                    ].includes(
+                                      voucherDetails?.confirmationStatus,
+                                    )
+                                      ? "#28a745" // success green
+                                      : "#dc3545", // danger red
+                                    backgroundColor: [
+                                      "Confirmed",
+                                      "ReConfirmed",
+                                    ].includes(
+                                      voucherDetails?.confirmationStatus,
+                                    )
+                                      ? "#d4edda" // Light green
+                                      : "#f8d7da", // Light red
+                                    borderRadius: "0.375rem",
+                                    display: "inline-block",
+                                  }}
+                                >
+                                  {voucherDetails?.confirmationStatus ===
+                                  "Confirmed"
+                                    ? "CONFIRMED"
+                                    : voucherDetails?.confirmationStatus ===
+                                        "ReConfirmed"
+                                      ? "ReConfirmed"
+                                      : "NOT CONFIRMED"}
+                                </span>
+                              </td>
+
+                              {selectedVoucherType === "Request" && (
+                                <>
+                                  <td
+                                    style={{
+                                      padding: "0.75rem",
+                                      verticalAlign: "middle",
+                                    }}
+                                  >
+                                    {voucherDetails?.bookingCode ||
+                                      selectedBooking?.bookingCode ||
+                                      "-"}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: "0.75rem",
+                                      verticalAlign: "middle",
+                                    }}
+                                  >
+                                    {voucherDetails?.confirmationReference ||
+                                      selectedBooking?.referenceNumber ||
+                                      "null"}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: "0.75rem",
+                                      verticalAlign: "middle",
+                                    }}
+                                  >
+                                    {voucherDetails?.priceReference || "null"}
+                                  </td>
+                                </>
+                              )}
+                              {selectedVoucherType === "Confirmation" && (
+                                <>
+                                  <td
+                                    style={{
+                                      padding: "0.75rem",
+                                      verticalAlign: "middle",
+                                    }}
+                                  >
+                                    {voucherDetails?.confirmationReference ||
+                                      selectedBooking?.referenceNumber ||
+                                      "null"}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: "0.75rem",
+                                      verticalAlign: "middle",
+                                    }}
+                                  >
+                                    0
+                                  </td>
+                                </>
+                              )}
+                              {selectedVoucherType === "Voucher" && (
+                                <>
+                                  <td
+                                    style={{
+                                      padding: "0.75rem",
+                                      verticalAlign: "middle",
+                                    }}
+                                  >
+                                    {voucherDetails?.confirmationReference ||
+                                      selectedBooking?.referenceNumber ||
+                                      "null"}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: "0.75rem",
+                                      verticalAlign: "middle",
+                                    }}
+                                  >
+                                    0
+                                  </td>
+                                </>
+                              )}
+                              <td
+                                style={{
+                                  padding: "0.75rem",
+                                  verticalAlign: "middle",
+                                }}
+                              >
+                                {voucherDetails?.checkIn
+                                  ? new Date(
+                                      voucherDetails.checkIn,
+                                    ).toLocaleDateString("en-GB", {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                    })
+                                  : selectedBooking?.checkInDate
+                                    ? new Date(
+                                        selectedBooking.checkInDate,
+                                      ).toLocaleDateString("en-GB", {
+                                        day: "2-digit",
+                                        month: "short",
+                                        year: "numeric",
+                                      })
+                                    : "-"}
+                              </td>
+                              <td
+                                style={{
+                                  padding: "0.75rem",
+                                  verticalAlign: "middle",
+                                }}
+                              >
+                                {voucherDetails?.checkout
+                                  ? new Date(
+                                      voucherDetails.checkout,
+                                    ).toLocaleDateString("en-GB", {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                    })
+                                  : selectedBooking?.checkOutDate
+                                    ? new Date(
+                                        selectedBooking.checkOutDate,
+                                      ).toLocaleDateString("en-GB", {
+                                        day: "2-digit",
+                                        month: "short",
+                                        year: "numeric",
+                                      })
+                                    : "-"}
+                              </td>
+                              <td
+                                style={{
+                                  padding: "0.75rem",
+                                  verticalAlign: "middle",
+                                  textAlign: "center",
+                                }}
+                              >
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  style={{
+                                    width: "32px",
+                                    height: "32px",
+                                    padding: 0,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                  }}
+                                  title="Send"
+                                  onClick={() => {
+                                    // Check if booking is confirmed for Confirmation and Voucher
+                                    const isConfirmed =
+                                      voucherDetails?.confirmationStatus ===
+                                      "Confirmed";
+
+                                    if (
+                                      selectedVoucherType !== "Request" &&
+                                      !isConfirmed
+                                    ) {
+                                      toast.error(
+                                        `Confirm the booking then only ${selectedVoucherType} can be generated`,
+                                      );
+                                      return;
+                                    }
+
+                                    handleGeneratePdf(selectedVoucherType);
+                                  }}
+                                  disabled={generatingPdf}
+                                >
+                                  {generatingPdf ? (
+                                    <Spinner
+                                      animation="border"
+                                      size="sm"
+                                      style={{ width: "14px", height: "14px" }}
+                                    />
+                                  ) : (
+                                    <FaPaperPlane
+                                      style={{ fontSize: "14px" }}
+                                    />
+                                  )}
+                                </Button>
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </Table>
+                    </div>
+                  </>
+                )}
+              </Modal.Body>
+              <Modal.Footer
+                style={{
+                  backgroundColor: "#f8f9fa",
+                  borderTop: "1px solid #dee2e6",
+                }}
+              >
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setShowVoucherModal(false);
+                    setSelectedBooking(null);
+                    setSelectedVoucherType("Request");
+                    setPdfUrl(null);
+                    setVoucherDetails(null);
+                  }}
+                >
+                  <i className="bi bi-check-circle me-1"></i> Close
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            {/* Confirm Booking Modal */}
+            <Modal
+              show={showConfirmModal}
+              onHide={() => {
+                if (!confirmingBooking) {
+                  setShowConfirmModal(false);
+                  setBookingToConfirm(null);
+                }
+              }}
+              centered
+              backdrop="static"
+              keyboard={false}
+            >
+              <Modal.Header
+                closeButton={!confirmingBooking}
+                style={{
+                  backgroundColor: "#fff",
+                  borderBottom: "2px solid #e9ecef",
+                }}
+              >
+                <Modal.Title className="fw-bold d-flex align-items-center">
+                  <FaExclamationCircle className="me-2 text-warning" />
+                  <span>Confirm Booking</span>
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body style={{ padding: "1.5rem" }}>
+                <div className="text-center">
+                  <p className="fs-5 mb-3">
+                    Are you sure you want to confirm the booking?
+                  </p>
+                  {bookingToConfirm && (
+                    <div className="text-muted small mb-3">
+                      <div>
+                        <strong>Booking Code:</strong>{" "}
+                        {bookingToConfirm.bookingCode || "N/A"}
+                      </div>
+                      <div>
+                        <strong>Customer:</strong>{" "}
+                        {bookingToConfirm.primaryGuestName || "N/A"}
+                      </div>
+                      {bookingToConfirm.hotelName && (
+                        <div>
+                          <strong>Hotel:</strong> {bookingToConfirm.hotelName}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </Modal.Body>
+              <Modal.Footer
+                style={{
+                  backgroundColor: "#f8f9fa",
+                  borderTop: "1px solid #dee2e6",
+                }}
+              >
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setShowConfirmModal(false);
+                    setBookingToConfirm(null);
+                  }}
+                  disabled={confirmingBooking}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={confirmBooking}
+                  disabled={confirmingBooking}
+                >
+                  {confirmingBooking ? (
+                    <>
+                      <Spinner animation="border" size="sm" className="me-2" />
+                      Confirming...
+                    </>
+                  ) : (
+                    "OK"
+                  )}
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            {/* Confirm Status Modal */}
+            <Modal
+              show={showConfirmStatusModal}
+              onHide={() => {
+                if (!updatingConfirmationStatus) {
+                  setShowConfirmStatusModal(false);
+                  setBookingToUpdateStatus(null);
+                  setConfirmAgentLpo("");
+                  setConfirmAgentLpoError("");
+                }
+              }}
+              centered
+              backdrop="static"
+              keyboard={false}
+              size="md"
+            >
+              <Modal.Header
+                closeButton={!updatingConfirmationStatus}
+                style={{
+                  backgroundColor: "#fff",
+                  borderBottom: "2px solid #e9ecef",
+                }}
+              >
+                <Modal.Title className="fw-bold d-flex align-items-center">
+                  <FaExclamationCircle className="me-2 text-warning" />
+                  <span>Confirm Booking Status</span>
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body style={{ padding: "1.5rem" }}>
+                <div className="text-center">
+                  <p className="fs-6 mb-3">
+                    Are you sure you want to confirm this booking?
+                  </p>
+                  {bookingToUpdateStatus && (
+                    <div className="text-muted small mb-3">
+                      <div>
+                        <strong>Booking Code:</strong>{" "}
+                        {bookingToUpdateStatus.bookingCode || "N/A"}
+                      </div>
+                      <div>
+                        <strong>Customer:</strong>{" "}
+                        {bookingToUpdateStatus.primaryGuestName || "N/A"}
+                      </div>
+                      {bookingToUpdateStatus.hotelName && (
+                        <div>
+                          <strong>Hotel:</strong>{" "}
+                          {bookingToUpdateStatus.hotelName}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {/* Agent LPO — required before confirming. Backend
+                    persists it on the booking's hotel_customer row
+                    (column `agent_lpo` already exists there). */}
+                <Form.Group controlId="confirmAgentLpoInput" className="text-start">
+                  <Form.Label className="fw-semibold mb-1">
+                    Agent LPO <span className="text-danger">*</span>
+                  </Form.Label>
+                  <Form.Control
+                    type="text"
+                    placeholder="Enter Agent LPO"
+                    value={confirmAgentLpo}
+                    onChange={(e) => {
+                      setConfirmAgentLpo(e.target.value);
+                      if (confirmAgentLpoError && e.target.value.trim()) {
+                        setConfirmAgentLpoError("");
+                      }
+                    }}
+                    isInvalid={!!confirmAgentLpoError}
+                    disabled={!!updatingConfirmationStatus}
+                  />
+                  <Form.Control.Feedback type="invalid">
+                    {confirmAgentLpoError}
+                  </Form.Control.Feedback>
+                </Form.Group>
+              </Modal.Body>
+              <Modal.Footer
+                style={{
+                  backgroundColor: "#f8f9fa",
+                  borderTop: "1px solid #dee2e6",
+                }}
+              >
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setShowConfirmStatusModal(false);
+                    setBookingToUpdateStatus(null);
+                    setConfirmAgentLpo("");
+                    setConfirmAgentLpoError("");
+                  }}
+                  disabled={updatingConfirmationStatus}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={updateConfirmationStatus}
+                  disabled={updatingConfirmationStatus}
+                >
+                  {updatingConfirmationStatus ? (
+                    <>
+                      <Spinner animation="border" size="sm" className="me-2" />
+                      Confirming...
+                    </>
+                  ) : (
+                    "OK"
+                  )}
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            {/* Cancel Booking Modal */}
+            <Modal
+              show={showCancelModal}
+              onHide={() => {
+                if (!cancellingBooking) {
+                  setShowCancelModal(false);
+                  setBookingToCancel(null);
+                  setCancellationReason("");
+                }
+              }}
+              centered
+              backdrop="static"
+              keyboard={false}
+            >
+              <Modal.Header
+                closeButton={!cancellingBooking}
+                style={{
+                  backgroundColor: "#fff",
+                  borderBottom: "2px solid #e9ecef",
+                }}
+              >
+                <Modal.Title className="fw-bold d-flex align-items-center">
+                  <FaExclamationCircle className="me-2 text-danger" />
+                  <span>Cancel Booking</span>
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body style={{ padding: "1.5rem" }}>
+                <div className="text-center">
+                  <p className="fs-5 mb-3">
+                    Are you sure you want to cancel this booking?
+                  </p>
+                  {bookingToCancel && (
+                    <div className="text-muted small mb-3">
+                      <div>
+                        <strong>Booking Code:</strong>{" "}
+                        {bookingToCancel.bookingCode || "N/A"}
+                      </div>
+                      <div>
+                        <strong>Customer:</strong>{" "}
+                        {bookingToCancel.primaryGuestName || "N/A"}
+                      </div>
+                      {bookingToCancel.hotelName && (
+                        <div>
+                          <strong>Hotel:</strong> {bookingToCancel.hotelName}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <Form.Group controlId="cancellationReason">
+                    <Form.Label className="fw-semibold">
+                      Cancellation Reason{" "}
+                      <span className="text-muted">(optional)</span>
+                    </Form.Label>
+                    <Form.Control
+                      as="textarea"
+                      rows={3}
+                      placeholder="Add a reason for cancellation (optional)"
+                      value={cancellationReason}
+                      onChange={(e) => setCancellationReason(e.target.value)}
+                      disabled={cancellingBooking}
+                    />
+                  </Form.Group>
+                </div>
+              </Modal.Body>
+              <Modal.Footer
+                style={{
+                  backgroundColor: "#f8f9fa",
+                  borderTop: "1px solid #dee2e6",
+                }}
+              >
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setShowCancelModal(false);
+                    setBookingToCancel(null);
+                    setCancellationReason("");
+                  }}
+                  disabled={cancellingBooking}
+                >
+                  No
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={cancelBooking}
+                  disabled={cancellingBooking}
+                >
+                  {cancellingBooking ? (
+                    <>
+                      <Spinner animation="border" size="sm" className="me-2" />
+                      Cancelling...
+                    </>
+                  ) : (
+                    "Yes, Cancel"
+                  )}
+                </Button>
+              </Modal.Footer>
+            </Modal>
+          </Container>
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default HotelBookingList;

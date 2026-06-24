@@ -1,0 +1,203 @@
+/* ============================================================================
+   HOTEL BOOKING LIST · MODERN REDESIGN  (Globosoft red/white · Lexend)
+   100% CSS, scoped under .hbl-modern. No markup changes — visual only.
+   Everything keeps working: search, filters, pagination, row actions, modals.
+   ============================================================================ */
+
+.hbl-modern {
+  font-family: 'Lexend', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #FAFAF8 !important;
+  color: #15171C;
+}
+.hbl-modern main { padding: 24px 24px 40px !important; }
+@media (max-width: 640px) { .hbl-modern main { padding: 18px 14px 32px !important; } }
+
+/* ── Page heading ── */
+.hbl-modern h3 {
+  font-size: 1.6rem !important;
+  font-weight: 700 !important;
+  letter-spacing: -.03em;
+  color: #15171C !important;
+  margin-bottom: .9rem !important;
+}
+
+/* ── Search input ── */
+.hbl-modern .input-group {
+  height: 44px !important;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(17, 19, 24, .04);
+  transition: box-shadow .18s ease, border-color .18s ease;
+}
+.hbl-modern .input-group:focus-within {
+  box-shadow: 0 0 0 4px rgba(236, 11, 67, .12);
+}
+.hbl-modern .input-group .input-group-text {
+  background: #FFFFFF !important;
+  border: 1.5px solid #E5E5E1 !important;
+  border-right: 0 !important;
+  padding: 0 14px;
+}
+.hbl-modern .input-group .input-group-text svg {
+  color: #9A9A95 !important;
+  width: 14px;
+  height: 14px;
+}
+.hbl-modern .input-group .form-control {
+  border: 1.5px solid #E5E5E1 !important;
+  border-left: 0 !important;
+  background: #FFFFFF !important;
+  font-size: .92rem !important;
+  letter-spacing: -.006em;
+  height: 44px !important;
+  padding: .55rem .85rem !important;
+  color: #15171C !important;
+}
+.hbl-modern .input-group .form-control:focus {
+  border-color: #E5E5E1 !important;
+  box-shadow: none !important;
+}
+
+/* ── Header right card (Time Period / range) ── */
+.hbl-modern .card {
+  border: 1px solid #ECECE8 !important;
+  border-radius: 14px !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(17, 19, 24, .04), 0 10px 24px rgba(17, 19, 24, .04) !important;
+}
+.hbl-modern .card h6 {
+  letter-spacing: .06em !important;
+  text-transform: uppercase;
+  color: #8A8A85 !important;
+  font-size: .7rem !important;
+}
+
+/* ── Main table card surface ── */
+.hbl-modern table {
+  margin-bottom: 0 !important;
+  font-family: inherit;
+  font-size: .85rem;
+  background: #fff;
+}
+
+/* table head ─ uppercase micro-headings */
+.hbl-modern thead th {
+  background: #F6F6F4 !important;
+  color: #6B7280 !important;
+  font-size: .68rem !important;
+  font-weight: 700 !important;
+  letter-spacing: .08em !important;
+  text-transform: uppercase;
+  border: none !important;
+  border-bottom: 1px solid #ECECE8 !important;
+  padding: 12px 10px !important;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+/* tbody rows */
+.hbl-modern tbody td {
+  background: #fff;
+  border: none !important;
+  border-bottom: 1px solid #F2F2EE !important;
+  padding: 12px 10px !important;
+  vertical-align: middle !important;
+  font-size: .82rem;
+  color: #2A2E37;
+}
+.hbl-modern tbody tr {
+  transition: background-color .15s ease, transform .15s ease;
+}
+.hbl-modern tbody tr:hover td {
+  background: #FCFBFA !important;
+}
+.hbl-modern tbody tr:last-child td {
+  border-bottom: none !important;
+}
+
+/* ── Status badges ── */
+.hbl-modern .badge {
+  font-size: .68rem !important;
+  font-weight: 600 !important;
+  letter-spacing: .03em !important;
+  padding: .35em .7em !important;
+  border-radius: 99px !important;
+  text-transform: uppercase;
+}
+
+/* ── Action icons (row icons) — smoother targets ── */
+.hbl-modern tbody td svg {
+  transition: transform .15s ease, color .15s ease, opacity .15s ease;
+}
+.hbl-modern tbody td .text-primary { color: #EC0B43 !important; }
+.hbl-modern tbody td .text-info { color: #2F3E53 !important; }
+.hbl-modern tbody td svg:hover { transform: translateY(-2px); }
+
+/* ── Buttons ── */
+.hbl-modern .btn { border-radius: 11px !important; font-weight: 600 !important; letter-spacing: -.004em; }
+.hbl-modern .btn-primary { background: #EC0B43 !important; border-color: #EC0B43 !important; }
+.hbl-modern .btn-primary:hover { background: #C90939 !important; border-color: #C90939 !important; }
+.hbl-modern .btn-outline-primary { color: #EC0B43 !important; border-color: #EC0B43 !important; }
+.hbl-modern .btn-outline-primary:hover { background: #EC0B43 !important; color: #fff !important; }
+
+/* ── Pagination — refined chips ── */
+.hbl-modern .pagination { gap: 4px; }
+.hbl-modern .page-link {
+  border: 1px solid #ECECE8 !important;
+  border-radius: 10px !important;
+  color: #2A2E37 !important;
+  font-weight: 600;
+  font-size: .85rem;
+  padding: .35rem .7rem !important;
+  background: #fff !important;
+  transition: background .12s ease, color .12s ease, border-color .12s ease;
+}
+.hbl-modern .page-link:hover {
+  border-color: #EC0B43 !important;
+  color: #EC0B43 !important;
+  background: #FDE7ED !important;
+}
+.hbl-modern .page-item.active .page-link {
+  background: #EC0B43 !important;
+  border-color: #EC0B43 !important;
+  color: #fff !important;
+}
+.hbl-modern .page-item.disabled .page-link {
+  color: #C5C5BE !important;
+  background: #FAFAF8 !important;
+  border-color: #ECECE8 !important;
+}
+
+/* ── Empty / loading row ── */
+.hbl-modern .text-center.py-5 { padding: 48px 12px !important; color: #9A9A95; }
+
+/* ── Scrollbars on the inner table wrapper ── */
+.hbl-modern ::-webkit-scrollbar { height: 6px; width: 6px; }
+.hbl-modern ::-webkit-scrollbar-thumb { background: #E5E5E1; border-radius: 99px; }
+.hbl-modern ::-webkit-scrollbar-thumb:hover { background: #C5C5BE; }
+
+/* ── Filter card (filters card above the table) ── */
+.hbl-modern .card .form-select,
+.hbl-modern .card .form-control {
+  border-radius: 10px !important;
+  border: 1.5px solid #E5E5E1 !important;
+  background: #FAFAF8 !important;
+  font-size: .88rem !important;
+  letter-spacing: -.006em;
+}
+.hbl-modern .card .form-select:focus,
+.hbl-modern .card .form-control:focus {
+  border-color: #EC0B43 !important;
+  background: #fff !important;
+  box-shadow: 0 0 0 4px rgba(236, 11, 67, .12) !important;
+}
+.hbl-modern .card .form-label,
+.hbl-modern .card label {
+  font-size: .7rem !important;
+  font-weight: 600 !important;
+  letter-spacing: .06em !important;
+  text-transform: uppercase;
+  color: #8A8A85 !important;
+  margin-bottom: .35rem !important;
+}

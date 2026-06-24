@@ -1,0 +1,301 @@
+/* ============================================================================
+   LOGIN · MODERN SPLIT-SCREEN  (Globosoft red/white · Lexend)
+   Fills the viewport, no page scroll. Left brand panel + right sign-in card.
+   Self-contained under .lg-shell so it can't affect the rest of the app.
+   ============================================================================ */
+
+.lg-shell {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background: #ffffff;
+  font-family: 'Lexend', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #15171C;
+}
+
+/* ── Left · brand panel ──────────────────────────────────────────────────── */
+.lg-brand {
+  flex: 1 1 54%;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 40px 56px;
+  overflow: hidden;
+  background: linear-gradient(150deg, #EC0B43 0%, #C90939 58%, #A60730 100%);
+  color: #ffffff;
+}
+/* When the offer showcase is present, tighten the panel so the whole brand
+   column (logo → offer → hero → features → foot) still fits within 100vh on
+   a typical desktop viewport. The full-bleed offer image is taller than the
+   previous in-padding frame, so the gap shrinks too. */
+.lg-brand:has(.lg-offers) {
+    gap: 18px;
+    padding-top: 15px;
+    padding-bottom: 25px;
+}
+
+.lg-brand:has(.lg-offers) .lg-hero h1 {
+    font-size: 28px;
+    margin-bottom: 10px;
+    font-weight: 500;
+    line-height: 36px;
+}
+.lg-brand:has(.lg-offers) .lg-hero p { font-size: 14.5px; line-height: 1.55; }
+.lg-brand:has(.lg-offers) .lg-features { gap: 10px; }
+.lg-brand:has(.lg-offers) .lg-feature { font-size: 13.5px; }
+.lg-brand::before {
+  content: '';
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(620px 620px at 82% -12%, rgba(255, 255, 255, .14), transparent 60%),
+    radial-gradient(520px 520px at -12% 112%, rgba(255, 255, 255, .10), transparent 60%);
+}
+.lg-brand > * { position: relative; }
+
+.lg-brand-top { display: flex; align-items: center; gap: 14px; }
+.lg-logo {
+  width: 50px; height: 50px; border-radius: 13px;
+  background: #fff; object-fit: contain; padding: 4px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .18);
+}
+.lg-brand-name { font-size: 20px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.lg-brand-sub { font-size: 12.5px; opacity: .85; letter-spacing: .01em; margin-top: 2px; }
+
+/* Brand block placed inside the white sign-in card (above "Welcome back").
+   Needs dark text since it no longer sits on the red brand panel. */
+.lg-brand-top--card { margin-bottom: 22px; }
+.lg-brand-top--card .lg-brand-name { color: #15171C; }
+.lg-brand-top--card .lg-brand-sub { color: #6B7280; opacity: 1; }
+.lg-brand-top--card .lg-logo {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .12);
+  border: 1px solid rgba(0, 0, 0, .06);
+}
+
+.lg-hero { max-width: 540px; }
+.lg-hero h1 {
+  font-size: clamp(32px, 3.4vw, 50px);
+  font-weight: 700; line-height: 1.08; letter-spacing: -.04em; margin: 0 0 18px;
+}
+.lg-hero p {
+  font-size: 16px; line-height: 1.65; letter-spacing: -.01em; opacity: .92;
+  margin: 0; max-width: 47ch;
+}
+
+.lg-features { display: flex; flex-direction: column; gap: 16px; }
+.lg-feature { display: flex; align-items: center; gap: 14px; font-size: 14.5px; font-weight: 500; letter-spacing: -.005em; }
+.lg-feature i {
+  width: 38px; height: 38px; flex-shrink: 0;
+  display: grid; place-items: center; font-size: 15px;
+  background: rgba(255, 255, 255, .15); border: 1px solid rgba(255, 255, 255, .12); border-radius: 11px;
+}
+
+.lg-brand-foot { font-size: 12.5px; opacity: .72; letter-spacing: -.004em; }
+
+/* ── Offer images · promo showcase on the brand panel ────────────────────── */
+.lg-offers { display: flex; flex-direction: column; gap: 14px; }
+
+/* Heading row · OFFER pill + supporting copy */
+.lg-offers-head { display: flex; align-items: center; gap: 12px; }
+.lg-offer-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 11px; border-radius: 99px;
+  background: rgba(255, 255, 255, .96);
+  color: #C90939;
+  font-size: 11.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .14);
+}
+.lg-offer-pill i { font-size: 10.5px; }
+.lg-offers-title {
+  font-size: 13.5px; font-weight: 500; letter-spacing: -.006em; opacity: .92;
+}
+
+/* Image frame · 16:9 showcase, white card.
+   The image uses object-fit: contain so the FULL uploaded image is visible
+   without cropping — important for offer banners that often carry text or
+   logos near the edges. When the uploaded image isn't 16:9, the white frame
+   background naturally fills the letterbox area, giving a poster / card
+   feel that reads cleanly against the red brand panel. */
+.lg-offer-frame {
+  position: relative;
+  /* Full-bleed: break out of the brand panel's 56px horizontal padding so
+     the offer banner spans the entire panel width edge-to-edge, the way a
+     hero image normally does on a landing page. The OFFER pill / title
+     stay in the padded area above. */
+  width: calc(100% + 112px);
+  margin-left: -56px;
+  margin-right: -56px;
+  /* Taller banner ratio so the offer image gets more vertical room while
+     the full-bleed frame still spans the panel width. */
+  aspect-ratio: 20 / 9;
+  border-radius: 0;
+  overflow: hidden;
+  background: #ffffff;
+  border-top: 1px solid rgba(255, 255, 255, .2);
+  border-bottom: 1px solid rgba(255, 255, 255, .2);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, .22);
+}
+.lg-offer-img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  /* Fill the rectangle as a banner — the image crops to fit the frame
+     instead of being letter-boxed with white bars. Most offer creatives
+     have their key content centred, which `object-position: center` keeps
+     visible across most aspect ratios. */
+  object-fit: cover;
+  object-position: center;
+  opacity: 0;
+  transform: scale(1.02);
+  transition: opacity .55s ease, transform 6s ease;
+}
+.lg-offer-img.is-active { opacity: 1; transform: scale(1); }
+
+/* Bottom gradient shade for indicator + caption legibility */
+.lg-offer-shade {
+  position: absolute; inset: auto 0 0 0; height: 62%;
+  background: linear-gradient(to top, rgba(17, 19, 24, .82), rgba(17, 19, 24, 0));
+  pointer-events: none;
+}
+
+/* Details overlay · description + validity for OfferZone banners.
+   Sits bottom-left over the gradient shade; leaves room for the centred
+   dots below. Only rendered for slides that actually carry copy. */
+.lg-offer-caption {
+  position: absolute; left: 28px; right: 28px; bottom: 26px;
+  max-width: 78%;
+  color: #fff;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .55);
+  pointer-events: none;
+}
+.lg-offer-caption-title {
+  font-size: 16px; font-weight: 700; letter-spacing: -.01em;
+  margin-bottom: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lg-offer-caption-desc {
+  margin: 0 0 7px; font-size: 12.5px; line-height: 1.45; opacity: .96;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.lg-offer-caption-validity {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 10px; border-radius: 99px;
+  background: rgba(255, 255, 255, .16);
+  border: 1px solid rgba(255, 255, 255, .28);
+  backdrop-filter: blur(4px);
+  font-size: 11.5px; font-weight: 600; letter-spacing: .01em;
+}
+.lg-offer-caption-validity i { font-size: 10.5px; opacity: .9; }
+
+/* Indicator dots · overlaid bottom-centre */
+.lg-offer-dots {
+  position: absolute; left: 0; right: 0; bottom: 12px;
+  display: flex; justify-content: center; gap: 6px;
+}
+.lg-offer-dot {
+  width: 7px; height: 7px; padding: 0;
+  border: none; border-radius: 99px; cursor: pointer;
+  background: rgba(255, 255, 255, .55);
+  transition: background .2s ease, width .2s ease;
+}
+.lg-offer-dot.is-active { background: #ffffff; width: 22px; }
+
+/* Prev / next arrows · glass chips, only visible on hover */
+.lg-offer-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 34px; height: 34px; padding: 0;
+  display: grid; place-items: center;
+  border: 1px solid rgba(255, 255, 255, .35);
+  border-radius: 99px;
+  background: rgba(17, 19, 24, .35);
+  color: #fff; font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  backdrop-filter: blur(6px);
+  transition: opacity .18s ease, background .18s ease, transform .18s ease;
+}
+.lg-offer-nav:hover { background: rgba(17, 19, 24, .55); }
+.lg-offer-nav--prev { left: 12px; }
+.lg-offer-nav--next { right: 12px; }
+.lg-offer-frame:hover .lg-offer-nav { opacity: 1; }
+
+/* ── Right · sign-in card ────────────────────────────────────────────────── */
+.lg-main {
+  flex: 1 1 46%;
+  /* Anchor the card toward the top (instead of vertically centred) so the
+     logo + "Welcome back" sit higher up the panel. */
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 72px 36px 40px;
+  background: #ffffff;
+}
+.lg-card { width: 100%; max-width: 396px; }
+
+.lg-head { margin-bottom: 30px; }
+.lg-head h2 { font-size: 30px; font-weight: 700; letter-spacing: -.035em; line-height: 1.1; margin: 0 0 8px; color: #15171C; }
+.lg-head p { font-size: 15px; color: #6B7280; letter-spacing: -.01em; margin: 0; }
+
+.lg-field { margin-bottom: 18px; }
+.lg-field label {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 600; letter-spacing: -.004em; color: #3E3E3B; margin-bottom: 8px;
+}
+.lg-field label i { color: #EC0B43; font-size: 13px; }
+.lg-field input {
+  width: 100%; padding: 13px 15px; font-family: inherit;
+  border: 1.5px solid #E5E5E1; border-radius: 12px;
+  font-size: 15px; font-weight: 500; letter-spacing: -.006em;
+  color: #15171C; background: #FAFAF8;
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+.lg-field input::placeholder { color: #A8A8A3; font-weight: 400; }
+.lg-field input:focus {
+  outline: none; border-color: #EC0B43; background: #fff;
+  box-shadow: 0 0 0 4px rgba(236, 11, 67, .12);
+}
+
+.lg-error {
+  background: #FDECEF; color: #C90939; border: 1px solid #F8C9D5;
+  border-radius: 10px; padding: 11px 14px; font-size: 13.5px; text-align: center; margin-bottom: 16px;
+}
+
+.lg-submit {
+  width: 100%; margin-top: 6px; padding: 14px; font-family: inherit;
+  border: none; border-radius: 12px; cursor: pointer;
+  background: #EC0B43; color: #fff; font-size: 15px; font-weight: 600; letter-spacing: .005em;
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  box-shadow: 0 10px 26px rgba(236, 11, 67, .26);
+  transition: transform .16s cubic-bezier(.16, 1, .3, 1), background .16s ease, box-shadow .16s ease;
+}
+.lg-submit:hover { transform: translateY(-2px); background: #C90939; box-shadow: 0 16px 34px rgba(236, 11, 67, .34); }
+.lg-submit:active { transform: translateY(0); }
+
+.lg-links { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; }
+.lg-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: none; cursor: pointer; text-decoration: none; font-family: inherit;
+  color: #EC0B43; font-size: 13.5px; font-weight: 600; letter-spacing: -.004em;
+  padding: 6px 8px; border-radius: 8px; transition: background .15s ease, color .15s ease;
+}
+.lg-link:hover { background: rgba(236, 11, 67, .08); color: #C90939; }
+
+.lg-secure {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin-top: 28px; padding-top: 18px; border-top: 1px solid #EFEFEC;
+  color: #9CA3AF; font-size: 12.5px; letter-spacing: -.004em;
+}
+.lg-secure i { color: #1E9E6A; }
+
+/* ── Responsive · stack; brand becomes a compact banner ──────────────────── */
+@media (max-width: 900px) {
+  .lg-shell { flex-direction: column; }
+  .lg-brand { flex: none; gap: 22px; padding: 30px 30px 34px; }
+  .lg-hero p, .lg-features, .lg-offers, .lg-brand-foot { display: none; }
+  .lg-hero h1 { font-size: 27px; margin-bottom: 0; }
+  .lg-main { flex: 1; padding: 36px 24px; }
+}
+@media (max-width: 480px) {
+  .lg-brand { padding: 24px 22px 26px; }
+  .lg-main { padding: 30px 20px; }
+  .lg-head h2 { font-size: 26px; }
+}
