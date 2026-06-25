@@ -214,6 +214,13 @@ export const dashboardCss = `
 .btn-pink   { background: #ec4899; color: #fff; }
 .btn-purple { background: #8b5cf6; color: #fff; }
 
+/* On small screens, wrap the quick-action buttons onto multiple rows so every
+   button stays fully visible instead of being cut off in the scroll row. */
+@media (max-width: 640px) {
+  .qa-row { flex-wrap: wrap; overflow-x: visible; padding-bottom: 0; }
+  .qa-btn { flex: 1 1 auto; justify-content: center; }
+}
+
 /* ── KPI Grid — 3 columns × 2 rows ── */
 .kpi-grid {
   display: grid;
@@ -221,7 +228,7 @@ export const dashboardCss = `
   gap: 14px;
 }
 @media (max-width: 1050px) { .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 640px)  { .kpi-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px)  { .kpi-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* Skeleton loader */
 .kpi-skeleton {
@@ -246,6 +253,7 @@ export const dashboardCss = `
   flex-direction: column;
   gap: 2px;
   transition: box-shadow .2s, transform .2s;
+  min-width: 0;   /* allow the card to shrink within its grid track */
 }
 .kpi-card:hover {
   box-shadow: 0 4px 12px rgba(0,0,0,.09), 0 12px 28px rgba(0,0,0,.07);
@@ -364,7 +372,7 @@ export const dashboardCss = `
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
-@media (max-width: 860px) { .chart-grid { grid-template-columns: 1fr; } }
+@media (max-width: 860px) { .chart-grid { grid-template-columns: minmax(0, 1fr); } }
 
 .chart-card {
   background: #fff;
@@ -373,6 +381,10 @@ export const dashboardCss = `
   border: 1px solid rgba(0,0,0,.05);
   box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.05);
   transition: box-shadow .2s, transform .2s;
+  /* Grid/flex items default to min-width:auto, so a responsive chart canvas
+     would force this card wider than its column and overflow on narrow
+     screens. Allow it to shrink to the available track width instead. */
+  min-width: 0;
 }
 .chart-card:hover {
   box-shadow: 0 4px 12px rgba(0,0,0,.09), 0 12px 28px rgba(0,0,0,.07);

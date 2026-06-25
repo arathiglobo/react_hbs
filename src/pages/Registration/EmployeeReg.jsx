@@ -678,8 +678,13 @@ const EmployeeReg = () => {
 
     // Fetch existing login data for this employee
     try {
+      // Scope the check to the STAFF user type so entities of other types that
+      // share the same numeric id don't resolve to this employee's account.
+      const staffRole = rolesList.find((r) => r.roleName === "STAFF");
       const response = await axiosInstance.post(
-        `/auth/checkRegisteredUserExist/${item.employeeId}`
+        staffRole
+          ? `/auth/checkRegisteredUserExist/${item.employeeId}?userTypeId=${staffRole.id}`
+          : `/auth/checkRegisteredUserExist/${item.employeeId}`
       );
 
       if (response.data) {

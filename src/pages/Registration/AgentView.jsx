@@ -243,8 +243,13 @@ const AgentView = () => {
 
     setIsAlreadyRegistered(false);
     try {
+      // Scope the check to the AGENT user type so entities of other types that
+      // share the same numeric id don't resolve to this agent's account.
+      const agentRole = rolesList.find((r) => r.roleName === "AGENT");
       const response = await axiosInstance.post(
-        `/auth/checkRegisteredUserExist/${id}`
+        agentRole
+          ? `/auth/checkRegisteredUserExist/${id}?userTypeId=${agentRole.id}`
+          : `/auth/checkRegisteredUserExist/${id}`
       );
       if (response.data) {
         const userNameValue =

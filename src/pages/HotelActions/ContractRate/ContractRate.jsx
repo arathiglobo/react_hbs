@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   Card,
   Button,
@@ -23,6 +23,12 @@ import Swal from "sweetalert2";
 export default function ContractRate() {
   const { id } = useParams(); // hotelId
   const navigate = useNavigate();
+  // Reused by both /hotel-actions/* (admin) and /extranet/* (hotel login).
+  // Admin is the default branch, so its behavior is unchanged.
+  const { pathname } = useLocation();
+  const isExtranet = pathname.startsWith("/extranet");
+  const navBase = isExtranet ? "/extranet" : "/hotel-actions";
+  const backUrl = isExtranet ? "/extranetDashboard" : `/hotel-details/${id}`;
   const [rates, setRates] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -106,15 +112,15 @@ export default function ContractRate() {
   }, [search]);
 
   const handleCreate = () => {
-    navigate(`/hotel-actions/hotel/${id}/contract-rate/create`);
+    navigate(`${navBase}/hotel/${id}/contract-rate/create`);
   };
 
   const handleEdit = (rateId) => {
-    navigate(`/hotel-actions/hotel/${id}/contract-rate/${rateId}/edit`);
+    navigate(`${navBase}/hotel/${id}/contract-rate/${rateId}/edit`);
   };
 
   const handleCopy = (rateId) => {
-    navigate(`/hotel-actions/hotel/${id}/contract-rate/${rateId}/copy`);
+    navigate(`${navBase}/hotel/${id}/contract-rate/${rateId}/copy`);
   };
 
   const handleViewValidity = (validityData, rateCode) => {
@@ -128,7 +134,7 @@ export default function ContractRate() {
   // and strips the action buttons (no "+ Add" on Validity Periods,
   // no per-row "✖", no Update). Header carries only a Close button.
   const handleView = (rateId) =>
-    navigate(`/hotel-actions/hotel/${id}/contract-rate/${rateId}/view`);
+    navigate(`${navBase}/hotel/${id}/contract-rate/${rateId}/view`);
 
   // ✅ Handle status toggle
   const handleStatusToggle = (rate) => {
@@ -226,7 +232,7 @@ export default function ContractRate() {
           <div className="d-flex align-items-center gap-3 mb-3">
             <Button
               variant="outline-primary"
-              onClick={() => navigate(`/hotel-details/${id}`)}
+              onClick={() => navigate(backUrl)}
               className="d-flex align-items-center btn-sm gap-2"
             >
               <FaArrowLeft />

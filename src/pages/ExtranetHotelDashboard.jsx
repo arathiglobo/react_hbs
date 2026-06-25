@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { FaHotel, FaMapMarkerAlt, FaPhone, FaEnvelope, FaUser } from "react-icons/fa";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
 import axiosInstance from "../components/AxiosInstance";
@@ -24,6 +25,7 @@ const ExtranetHotelDashboard = () => {
   const [userId, setUserId] = useState(null);
   const [stats, setStats] = useState(defaultStats);
   const [loadingStats, setLoadingStats] = useState(true);
+  const [hotelInfo, setHotelInfo] = useState(null);
 
   // ✅ Fetch profile (for navigation links only)
   useEffect(() => {
@@ -46,6 +48,24 @@ const ExtranetHotelDashboard = () => {
 
     fetchProfile();
   }, []);
+
+  // ✅ Fetch this hotel's profile details (name / address / contact) once the
+  // logged-in hotel's id is resolved, so the dashboard identifies the hotel.
+  useEffect(() => {
+    if (!userId) return undefined;
+    let alive = true;
+    axiosInstance
+      .get(`/api/hotels/${userId}`)
+      .then((res) => {
+        if (alive) setHotelInfo(res.data);
+      })
+      .catch((error) => {
+        console.error("Error fetching hotel info:", error);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [userId]);
 
   // ✅ Fetch dashboard stats
   useEffect(() => {
@@ -90,8 +110,8 @@ const ExtranetHotelDashboard = () => {
       icon: "image",
       onClick: userId ? () => navigate(`/extranet/${userId}/gallery`) : undefined,
     },
-    { label: "My Bookings",  icon: "list",  onClick: () => navigate("/calendar") },
-    { label: "Availability", icon: "check", onClick: () => navigate("/hotelAvailability") },
+    { label: "My Bookings",  icon: "list",  onClick: () => navigate("/extranet/calendar") },
+   
   ];
 
   return (
@@ -106,6 +126,123 @@ const ExtranetHotelDashboard = () => {
             {/* Header — hotels carry a country relation, so the regional
                 clock displays the hotel's local time. */}
             <DashboardHeader title="Hotel Dashboard" />
+
+            {/* ── Hotel identity card — name / address / contact ── */}
+            {hotelInfo && (() => {
+              const contact =
+                Array.isArray(hotelInfo.contactDetails) &&
+                hotelInfo.contactDetails.length > 0
+                  ? hotelInfo.contactDetails[0]
+                  : null;
+              const locationBits = [
+                hotelInfo.address,
+                hotelInfo.stateName,
+                hotelInfo.placeName,
+              ]
+                .filter(Boolean)
+                .join(", ");
+              const phone = contact
+                ? contact.mobileNumber || contact.teleNumber
+                : null;
+              return (
+                <section>
+                  <div
+                    style={{
+                      background: "#fff",
+                      border: "1px solid #ECECE8",
+                      borderRadius: 16,
+                      padding: "18px 20px",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 18,
+                      alignItems: "center",
+                      boxShadow:
+                        "0 1px 3px rgba(17,19,24,.04), 0 8px 20px rgba(17,19,24,.045)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 52,
+                        height: 52,
+                        borderRadius: 13,
+                        background: "#FDE7ED",
+                        color: "#EC0B43",
+                        display: "grid",
+                        placeItems: "center",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <FaHotel size={22} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          letterSpacing: ".06em",
+                          textTransform: "uppercase",
+                          color: "#EC0B43",
+                          marginBottom: 2,
+                        }}
+                      >
+                        Welcome
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 20,
+                          fontWeight: 700,
+                          letterSpacing: "-.02em",
+                          color: "#15171C",
+                        }}
+                      >
+                        {hotelInfo.hotelName || "Hotel"}
+                      </div>
+                      {locationBits && (
+                        <div
+                          style={{
+                            fontSize: 13.5,
+                            color: "#6B7280",
+                            marginTop: 4,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 7,
+                          }}
+                        >
+                          <FaMapMarkerAlt color="#EC0B43" /> {locationBits}
+                        </div>
+                      )}
+                    </div>
+                    {contact && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 6,
+                          fontSize: 13,
+                          color: "#3E3E3B",
+                        }}
+                      >
+                        {contact.contactPerson && (
+                          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <FaUser color="#9A9A95" /> {contact.contactPerson}
+                          </span>
+                        )}
+                        {phone && (
+                          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <FaPhone color="#9A9A95" /> {phone}
+                          </span>
+                        )}
+                        {contact.personalEmail && (
+                          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <FaEnvelope color="#9A9A95" /> {contact.personalEmail}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              );
+            })()}
 
             {/* ── Quick Actions ── */}
             <QuickActions actions={actions} />

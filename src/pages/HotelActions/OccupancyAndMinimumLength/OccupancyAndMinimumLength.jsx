@@ -25,7 +25,7 @@ import {
   FaSignInAlt,
   FaArrowLeft,
 } from "react-icons/fa";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   ChevronUp,
   ChevronDown,
@@ -627,6 +627,10 @@ const DateTimeApplyPicker = ({
 const OccupancyAndMinimumLength = () => {
   const { id } = useParams(); // hotelId
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const isExtranet = pathname.startsWith("/extranet");
+  const navBase = isExtranet ? "/extranet" : "/hotel-actions";
+  const backUrl = isExtranet ? "/extranetDashboard" : `/hotel-details/${id}`;
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [itemsOcc, setItemsOcc] = useState([]);
@@ -1927,7 +1931,7 @@ const OccupancyAndMinimumLength = () => {
           <div className="d-flex align-items-center gap-3 mb-3">
             <Button
               variant="outline-primary"
-              onClick={() => navigate(`/hotel-details/${id}`)}
+              onClick={() => navigate(backUrl)}
               className="d-flex align-items-center btn-sm gap-2"
             >
               <FaArrowLeft />

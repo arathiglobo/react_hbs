@@ -133,6 +133,14 @@ const Login = () => {
       localStorage.setItem("userRole", roles);
       localStorage.setItem("UserName", loginedUserName);
 
+      // Fresh per-login id used to dedupe advertisement views (an ad is counted
+      // once per page per login session). A new login → new id → countable again.
+      const newAdSessionId =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `s-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+      localStorage.setItem("adSessionId", newAdSessionId);
+
       if (roles.length > 1) {
         navigate("/select-userRole", { state: { roles } });
       } else {

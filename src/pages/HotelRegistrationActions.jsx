@@ -443,20 +443,21 @@ const HotelRegistrationActions = () => {
         );
         console.log("Mail center check response:", mailCenterResponse.data);
 
-        // Handle both single object and array responses
-        let hasData = false;
-        if (
-          Array.isArray(mailCenterResponse.data) &&
-          mailCenterResponse.data.length > 0
-        ) {
-          hasData = true;
-        } else if (
-          mailCenterResponse.data &&
-          typeof mailCenterResponse.data === "object" &&
-          mailCenterResponse.data.id
-        ) {
-          hasData = true;
-        }
+        // NOTE: getMailCentre returns the hotel's contact details rows even
+        // when NO mail type has been assigned yet (each row just has an empty
+        // mailTyIds). So "array is non-empty" does NOT mean the mail center is
+        // configured. Only treat it as saved when at least one contact has an
+        // actual mail type (mailTyIds) — otherwise the Login Details gate would
+        // be unlocked before any mail type is set.
+        const records = Array.isArray(mailCenterResponse.data)
+          ? mailCenterResponse.data
+          : mailCenterResponse.data &&
+              typeof mailCenterResponse.data === "object"
+            ? [mailCenterResponse.data]
+            : [];
+        const hasData = records.some(
+          (r) => Array.isArray(r.mailTyIds) && r.mailTyIds.length > 0,
+        );
 
         if (hasData) {
           console.log("✅ Mail center data found - enabling login details");
@@ -819,7 +820,7 @@ const HotelRegistrationActions = () => {
       if (!isMailCenterSaved) {
         console.log("❌ Login Details clicked but mail center not saved");
         toast.error(
-          "Please add mail center first, then you can add login details",
+          "Please set up the Mail Center first — only then can you set login credentials.",
         );
         return;
       }
@@ -1100,7 +1101,12 @@ const HotelRegistrationActions = () => {
 
         console.log("📊 All mapped existing data:", existingData);
         setMailCenterData(existingData);
-        setIsMailCenterSaved(true);
+        // Only treat as saved when at least one contact actually has a mail
+        // type selected — contact rows alone don't count (see getMailCentre).
+        const hasMailType = existingData.some(
+          (it) => Array.isArray(it.mailType) && it.mailType.length > 0,
+        );
+        setIsMailCenterSaved(hasMailType);
       } else {
         // If no existing data, use the contact details from hotel data
         if (hotelData?.contactDetails) {
@@ -1143,9 +1149,18 @@ const HotelRegistrationActions = () => {
     setIsLoadingLoginData(true);
 
     try {
-      const response = await axiosInstance.post(
-        `/auth/checkRegisteredUserExist/${id}`,
+      // Scope the existence check to the EXTRANET user type — the same type
+      // the save flow (handleLoginSave) registers the hotel login under. The
+      // backend keys user_accounts by (user_id + user_type_id), and a hotel
+      // and an agent can share the same numeric id (e.g. both id 5). Without
+      // the type the check would return the agent's account for the hotel.
+      const extranetRole = rolesList.find(
+        (r) => r.roleName?.toUpperCase() === "EXTRANET",
       );
+      const checkUrl = extranetRole
+        ? `/auth/checkRegisteredUserExist/${id}?userTypeId=${extranetRole.id}`
+        : `/auth/checkRegisteredUserExist/${id}`;
+      const response = await axiosInstance.post(checkUrl);
       // console.log("Login check response for hotel ID", id, ":", response.data);
 
       // Scenario 1: API returns successful response with userName (existing user)
@@ -1764,7 +1779,7 @@ const HotelRegistrationActions = () => {
                               title={
                                 action.label === "Login Details" &&
                                 action.status === "disabled"
-                                  ? "Please add mail center first to enable login details"
+                                  ? "Set up the Mail Center first to enable login credentials"
                                   : action.label
                               }
                               style={{

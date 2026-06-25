@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams, useLocation } from "react-router-dom";
 import {
   Container,
   Row,
@@ -20,6 +20,10 @@ import { toast } from "react-hot-toast";
 export default function EditSpecialRates() {
   const navigate = useNavigate();
   const { id, editId } = useParams();
+    const { pathname } = useLocation();
+    const isExtranet = pathname.startsWith("/extranet");
+    const navBase = isExtranet ? "/extranet" : "/hotel-actions";
+    const backUrl = isExtranet ? "/extranetDashboard" : `/hotel-details/${id}`;
 
   // View mode — `?mode=view` makes the form read-only. Mirrors the
   // /occupancy-and-minimumlength view pattern.
@@ -582,7 +586,7 @@ export default function EditSpecialRates() {
 
       if (response.data) {
         toast.success("Special Rate Updated Successfully!");
-        navigate(`/hotel-actions/${id}/promotions`);
+        navigate(`${navBase}/${id}/promotions`);
       }
     } catch (error) {
       console.error("Update error:", error);

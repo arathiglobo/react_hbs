@@ -10,7 +10,7 @@ import {
   Spinner,
 } from "react-bootstrap";
 import { FaArrowLeft, FaPlus, FaTrash, FaSave, FaTimes } from "react-icons/fa";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams, useLocation } from "react-router-dom";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
@@ -21,6 +21,10 @@ import Select from "react-select";
 export default function EditDiscountPromotion() {
   const navigate = useNavigate();
   const { id, editId } = useParams(); // hotelId and promoId
+    const { pathname } = useLocation();
+    const isExtranet = pathname.startsWith("/extranet");
+    const navBase = isExtranet ? "/extranet" : "/hotel-actions";
+    const backUrl = isExtranet ? "/extranetDashboard" : `/hotel-details/${id}`;
   const promoId = editId;
 
   // View mode — `?mode=view` makes the form read-only. Mirrors the
@@ -387,7 +391,7 @@ export default function EditDiscountPromotion() {
 
       if (response.data) {
         toast.success("Discount Promotion Updated Successfully!");
-        navigate(`/hotel-actions/${id}/promotions`);
+        navigate(`${navBase}/${id}/promotions`);
       }
     } catch (error) {
       console.error("Update error:", error);

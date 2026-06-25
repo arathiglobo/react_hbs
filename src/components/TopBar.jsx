@@ -344,6 +344,8 @@ export default function TopBar() {
     localStorage.removeItem("userRole");
     localStorage.removeItem("UserName");
     localStorage.removeItem("currentActiveRole");
+    // End the ad-view session so the next login counts ad views fresh.
+    localStorage.removeItem("adSessionId");
 
     // Optionally redirect to login page
     window.location.href = "/";

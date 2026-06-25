@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   Container,
   Row,
@@ -23,6 +23,10 @@ import { toast } from "react-hot-toast";
 export default function EditContractRate() {
   const navigate = useNavigate();
   const { id, contractRateId } = useParams(); // id = hotelId, contractRateId = contract rate ID
+  const { pathname } = useLocation();
+  const isExtranet = pathname.startsWith("/extranet");
+  const navBase = isExtranet ? "/extranet" : "/hotel-actions";
+  const backUrl = isExtranet ? "/extranetDashboard" : `/hotel-details/${id}`;
 
   const [formData, setFormData] = useState({
     seasonId: "",
@@ -442,7 +446,7 @@ export default function EditContractRate() {
 
       if (res.status === 200 || res.status === 201) {
         toast.success("Contract Rate updated successfully!");
-        navigate(`/hotel-actions/${id}/contract-rate`);
+        navigate(`${navBase}/${id}/contract-rate`);
       }
     } catch (err) {
       console.error("❌ Update Error:", err);

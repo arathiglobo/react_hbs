@@ -1307,8 +1307,13 @@ const AgentReg = () => {
     setIsAlreadyRegistered(false);
     try {
      // console.log("Fetching existing login data for agent:", item.id);
+      // Scope the check to the AGENT user type so entities of other types that
+      // share the same numeric id don't resolve to this agent's account.
+      const agentRole = rolesList.find((r) => r.roleName === "AGENT");
       const response = await axiosInstance.post(
-        `/auth/checkRegisteredUserExist/${item.id}`
+        agentRole
+          ? `/auth/checkRegisteredUserExist/${item.id}?userTypeId=${agentRole.id}`
+          : `/auth/checkRegisteredUserExist/${item.id}`
       );
 
       if (response.data) {

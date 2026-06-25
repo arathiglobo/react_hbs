@@ -437,7 +437,14 @@ export default function SubAgent() {
     setShowRePassword(false);
 
     try {
-      const response = await axiosInstance.post(`/auth/checkRegisteredUserExist/${item.id}`);
+      // Scope the check to the AGENT user type so entities of other types that
+      // share the same numeric id don't resolve to this agent's account (the
+      // backend keys user_accounts by user_id + user_type_id).
+      const agentRole = rolesList.find((r) => r.roleName === "AGENT");
+      const checkUrl = agentRole
+        ? `/auth/checkRegisteredUserExist/${item.id}?userTypeId=${agentRole.id}`
+        : `/auth/checkRegisteredUserExist/${item.id}`;
+      const response = await axiosInstance.post(checkUrl);
       if (response.data) {
         let userNameValue = response.data.userName || response.data.username || "";
         // Strip the suffix if it exists to only show the prefix in the input

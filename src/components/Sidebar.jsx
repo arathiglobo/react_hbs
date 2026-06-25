@@ -368,7 +368,7 @@ export default function Sidebar() {
         },
         {
           label: "Chauffeur Driver and Limousine Bookings",
-          to: "/booking-details/scheffer-driver-booking-list",
+          to: "/booking-details/scheffer-driver-booking-list", 
         },
         // {
         //   label: "Complete Booking",
@@ -447,7 +447,8 @@ export default function Sidebar() {
     // },
     {
       label: "Calendar",
-      to: "/calendar",
+      // Extranet (hotel) users get their own hotel-scoped calendar page.
+      to: currentRole === "extranet" ? "/extranet/calendar" : "/calendar",
       roles: ["admin", "agent", "staff", "extranet"],
     },
     // {
@@ -570,6 +571,11 @@ export default function Sidebar() {
       roles: ["extranet"],
     },
     {
+      label: "Availability",
+      to: hotelId ? `/extranet/${hotelId}/hotel-availability` : "#",
+      roles: ["extranet"],
+    },
+    {
       label: "Contract Rate",
       to: hotelId ? `/extranet/${hotelId}/contract-rate` : "#",
       roles: ["extranet"],
@@ -581,7 +587,7 @@ export default function Sidebar() {
     },
     {
       label: "Policy",
-      to: hotelId ? `/extranet/${hotelId}/policy` : "#",
+      to: hotelId ? `/extranet/${hotelId}/hotel-policy` : "#",
       roles: ["extranet"],
     },
     {
@@ -787,7 +793,7 @@ export default function Sidebar() {
             return (
               <Nav.Item
                 key={item.label}
-                className={`nav-item-custom ${hasChildren || hasGroups ? "nav-item-has-children" : ""} ${item.label === "Report" || item.label === "Inhouse Accounts" ? "submenu-up" : ""} ${item.label === "Booking List" ? "submenu-center" : ""}`}
+                className={`nav-item-custom ${hasChildren || hasGroups ? "nav-item-has-children" : ""} ${item.label === "Report" || item.label === "Inhouse Accounts" || item.label === "Agent Incentive" || item.label === "Marketing" ? "submenu-up" : ""} ${item.label === "Booking List" ? "submenu-center" : ""}`}
               >
                 <Nav.Link
                   as={hasChildren || hasGroups ? "div" : Link}
@@ -1099,6 +1105,9 @@ function getIcon(label) {
 
     case "Policy":
       return <FaFileAlt {...iconProps} />;
+
+    case "Availability":
+      return <FaBullhorn {...iconProps} />;
 
     case "Gallery":
       return <FaImages {...iconProps} />;

@@ -286,16 +286,57 @@
 }
 .lg-secure i { color: #1E9E6A; }
 
-/* ── Responsive · stack; brand becomes a compact banner ──────────────────── */
+/* ── Responsive · stack; order = heading → form → promo block ────────────────
+   On mobile we flatten BOTH the brand panel and the hero with `display:
+   contents`, so the hero heading, hero description, offer showcase, features
+   and footer all become direct flex items of the shell. That lets us put just
+   the big "Manage hotel contracts…" HEADING at the very top (above the form),
+   then the white sign-in card, then a promo block below it (offer image +
+   description + features + footer). The red gradient moves onto the shell
+   because the brand panel no longer generates its own box. */
 @media (max-width: 900px) {
-  .lg-shell { flex-direction: column; }
-  .lg-brand { flex: none; gap: 22px; padding: 30px 30px 34px; }
-  .lg-hero p, .lg-features, .lg-offers, .lg-brand-foot { display: none; }
-  .lg-hero h1 { font-size: 27px; margin-bottom: 0; }
-  .lg-main { flex: 1; padding: 36px 24px; }
+  .lg-shell {
+    flex-direction: column;
+    background: linear-gradient(150deg, #EC0B43 0%, #C90939 58%, #A60730 100%);
+  }
+  .lg-brand { display: contents; }
+  .lg-hero  { display: contents; }
+
+  .lg-hero h1    { order: 1; padding: 30px 30px 0; font-size: 28px; }
+  .lg-main       { order: 2; flex: none; padding: 26px 24px 22px; background: #ffffff; }
+  .lg-offers     { order: 3; padding: 24px 30px 0; }
+  .lg-hero p     { order: 4; padding: 20px 30px 0; font-size: 14.5px; max-width: none; }
+  .lg-features   { order: 5; padding: 18px 30px 0; gap: 12px; }
+  .lg-brand-foot { order: 6; padding: 18px 30px 28px; }
+
+  /* The full-bleed offer frame breaks out by the showcase's 30px padding so it
+     spans edge-to-edge without overflowing. */
+  .lg-offer-frame {
+    width: calc(100% + 60px);
+    margin-left: -30px;
+    margin-right: -30px;
+    aspect-ratio: 16 / 9;
+  }
+  /* No hover on touch — keep the prev/next arrows always visible. */
+  .lg-offer-nav { opacity: 1; }
+  /* The banner is shorter on mobile, so the caption rises into the brighter
+     upper part of the image — extend the dark shade so the text stays legible. */
+  .lg-offer-shade { height: 80%; }
 }
 @media (max-width: 480px) {
-  .lg-brand { padding: 24px 22px 26px; }
-  .lg-main { padding: 30px 20px; }
+  .lg-hero h1    { padding: 26px 22px 0; font-size: 25px; }
+  .lg-main       { padding: 24px 20px 20px; }
+  .lg-offers     { padding: 20px 22px 0; }
+  .lg-hero p     { padding: 18px 22px 0; }
+  .lg-features   { padding: 16px 22px 0; }
+  .lg-brand-foot { padding: 16px 22px 24px; }
   .lg-head h2 { font-size: 26px; }
+
+  .lg-offer-frame {
+    width: calc(100% + 44px);
+    margin-left: -22px;
+    margin-right: -22px;
+  }
+  /* Caption can crowd a small banner — keep it readable. */
+  .lg-offer-caption { left: 18px; right: 18px; bottom: 20px; max-width: 88%; }
 }

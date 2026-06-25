@@ -399,6 +399,18 @@ export default function AdvertisementDetailedView() {
                   <div style={{ padding: "12px 16px" }}>
                     <Row className="text-center">
                       <Col>
+                        <div className="text-muted small">Views</div>
+                        <div className="fw-bold fs-5" style={{ color: "#EC0B43" }}>
+                          {ad.viewCount ?? 0}
+                        </div>
+                        <div
+                          className="text-muted"
+                          style={{ fontSize: "0.68rem" }}
+                        >
+                          per page / login
+                        </div>
+                      </Col>
+                      <Col>
                         <div className="text-muted small">Impressions</div>
                         <div className="fw-bold fs-5">
                           {ad.impressions ?? 0}

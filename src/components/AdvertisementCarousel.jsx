@@ -87,6 +87,9 @@ export default function AdvertisementCarousel({ cityId, cityName }) {
   const [preview, setPreview] = useState(null); // image URL shown large
   const [minimized, setMinimized] = useState(false);
   const impressedRef = useRef(new Set());
+  // Ads whose "view" we've already POSTed this mount (the backend further
+  // dedupes per login-session + page, so repeats are harmless no-ops).
+  const viewedRef = useRef(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -100,6 +103,7 @@ export default function AdvertisementCarousel({ cityId, cityName }) {
         setAds(Array.isArray(res.data) ? res.data : []);
         setIndex(0);
         impressedRef.current = new Set();
+        viewedRef.current = new Set();
       } catch (err) {
         if (!cancelled) setAds([]);
       }
@@ -138,9 +142,29 @@ export default function AdvertisementCarousel({ cityId, cityName }) {
       .catch(() => {});
   };
 
-  // Record an impression for whatever slide is currently shown.
+  // Record a "view": counted once per ad per (login session, page). The
+  // session id is minted on login; the page is the current route path. The
+  // backend enforces the once-per-(session,page) rule, so re-visiting the same
+  // page in the same login does not increase the count, but a fresh login does.
+  const recordView = (ad) => {
+    if (!ad || viewedRef.current.has(ad.advertisementId)) return;
+    const sessionId = localStorage.getItem("adSessionId");
+    if (!sessionId) return; // not logged in via the normal flow — skip
+    viewedRef.current.add(ad.advertisementId);
+    axiosInstance
+      .post(`/api/advertisement/${ad.advertisementId}/view`, {
+        sessionId,
+        pageKey: window.location.pathname,
+      })
+      .catch(() => {});
+  };
+
+  // Record an impression + a view for whatever slide is currently shown.
   useEffect(() => {
-    if (slides[index]) recordImpression(slides[index].ad);
+    if (slides[index]) {
+      recordImpression(slides[index].ad);
+      recordView(slides[index].ad);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, slides]);
 

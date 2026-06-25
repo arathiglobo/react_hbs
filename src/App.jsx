@@ -190,6 +190,7 @@ import UnMappingCity from "./pages/master/UnMappingCity";
 import SubLocation from "./pages/master/SubLocation";
 import Airport from "./pages/master/Airport";
 import ExtranetImgUpload from "./pages/extranet/ExtranetImgUpload";
+import ExtranetCalendar from "./pages/extranet/ExtranetCalendar";
 import ExtranetOccupancyAndMinimumLength from "./pages/extranet/ExtranetOccupancyAndMinimumLength";
 import ExtranetContractRate from "./pages/extranet/ExtranetContractRate";
 import { EditIcon } from "lucide-react";
@@ -691,29 +692,38 @@ export default function App() {
         <Route path="/advertisements" element={<PrivateRoute><Advertisements /></PrivateRoute>} />
         <Route path="/advertisements/view/:id" element={<PrivateRoute><AdvertisementDetailedView /></PrivateRoute>} />
 
-        {/* Extranet login */}
+        {/* Extranet login — REUSE the admin hotel-actions components so the
+            extranet pages mirror the admin pages exactly (same UI + logic).
+            Each component detects the "/extranet" path via useLocation and
+            adjusts only its Back button (→ /extranetDashboard) and its
+            create/edit/view links (→ /extranet/*). The admin "/hotel-actions/*"
+            routes and behavior are unchanged. Routes mirror the hotel-actions
+            URL shape with an "/extranet" prefix so the swap is 1:1. */}
+        <Route path="/extranet/calendar" element={<PrivateRoute><ExtranetCalendar /></PrivateRoute>} />
         <Route path="/extranet/:id/gallery" element={<PrivateRoute><ExtranetImgUpload /></PrivateRoute>} />
-        <Route path="/extranet/:id/occupancy-and-minimumlength" element={<PrivateRoute><ExtranetOccupancyAndMinimumLength /></PrivateRoute>} />
-       
-        <Route path="/extranet/:id/contract-rate" element={<PrivateRoute><ExtranetContractRate/></PrivateRoute>} />
-        <Route path="/extranet/:id/create-contract-rate" element={<PrivateRoute><ExtranetCreateContractRate/></PrivateRoute>} />
-        <Route path="/extranet/:id/edit-contract-rate/:editId" element={<PrivateRoute><EditExtranetContractRate/></PrivateRoute>} />
-       
-        <Route path="/extranet/:id/policy" element={<PrivateRoute><ExtranetPolicy/></PrivateRoute>} />
-        <Route path="/extranet/:id/policy-create" element={<PrivateRoute><ExtranetPolicyCreate/></PrivateRoute>} />
-        <Route path="/extranet/:id/policy-update/:editId" element={<PrivateRoute><ExtranetPolicyUpdate/></PrivateRoute>} />
-        
-        <Route path="/extranet/:id/promotions" element={<PrivateRoute><ExtranetPromotion/></PrivateRoute>} />
-        <Route path="/extranet/:id/promotions-special-rate-create" element={<PrivateRoute><ExtranetSpecialRates/></PrivateRoute>} />
-        <Route path="/extranet/:id/edit-special-rate/:editId" element={<PrivateRoute><  EditSpecialRateExtranet/></PrivateRoute>} />
 
-        <Route path="/extranet/:id/promotions-discount-create" element={<PrivateRoute><ExtranetDiscountPromotion/></PrivateRoute>} />
-        <Route path="/extranet/:id/edit-discount-promotion/:editId" element={<PrivateRoute><EditDiscountPromotionExtranet/></PrivateRoute>} />
+        <Route path="/extranet/:id/occupancy-and-minimumlength" element={<PrivateRoute><OccupancyAndMinimumLength /></PrivateRoute>} />
 
-        <Route path="/extranet/:id/promotions-staypay-create" element={<PrivateRoute><ExtranetStayPayPromotion/></PrivateRoute>} />
-        <Route path="/extranet/:id/edit-staypay-promotion/:editId" element={<PrivateRoute><EditStayPayPromotionExtranet/></PrivateRoute>} />
+        <Route path="/extranet/:id/contract-rate" element={<PrivateRoute><ContractRate /></PrivateRoute>} />
+        <Route path="/extranet/hotel/:id/contract-rate/create" element={<PrivateRoute><CreateContractRate /></PrivateRoute>} />
+        <Route path="/extranet/hotel/:id/contract-rate/:contractRateId/edit" element={<PrivateRoute><EditContractRate /></PrivateRoute>} />
+        <Route path="/extranet/hotel/:id/contract-rate/:contractRateId/view" element={<PrivateRoute><ViewContractRate /></PrivateRoute>} />
+        <Route path="/extranet/hotel/:id/contract-rate/:editId/copy" element={<PrivateRoute><CopyContractRate /></PrivateRoute>} />
 
-        
+        <Route path="/extranet/:id/promotions" element={<PrivateRoute><Promotion /></PrivateRoute>} />
+        <Route path="/extranet/:id/promotion/special-rate/save" element={<PrivateRoute><SpecialRates /></PrivateRoute>} />
+        <Route path="/extranet/:id/promotion/special-rate/edit/:editId" element={<PrivateRoute><EditSpecialRates /></PrivateRoute>} />
+        <Route path="/extranet/:id/promotion/staypay/save" element={<PrivateRoute><StayPayPromotion /></PrivateRoute>} />
+        <Route path="/extranet/:id/promotion/staypay/edit/:editId" element={<PrivateRoute><EditStayPayPromotion /></PrivateRoute>} />
+        <Route path="/extranet/:id/promotion/discount/save" element={<PrivateRoute><DiscountPromotion /></PrivateRoute>} />
+        <Route path="/extranet/:id/promotion/discount/edit/:editId" element={<PrivateRoute><EditDiscountPromotion /></PrivateRoute>} />
+
+        <Route path="/extranet/:id/hotel-policy" element={<PrivateRoute><Policy /></PrivateRoute>} />
+        <Route path="/extranet/:id/hotel-policy/create" element={<PrivateRoute><PolicyCreate /></PrivateRoute>} />
+        <Route path="/extranet/:id/hotel-policy/:editId/edit" element={<PrivateRoute><PolicyUpdate /></PrivateRoute>} />
+
+        <Route path="/extranet/:id/hotel-availability" element={<PrivateRoute><HotelAvailability /></PrivateRoute>} />
+
        
 
       </Routes>

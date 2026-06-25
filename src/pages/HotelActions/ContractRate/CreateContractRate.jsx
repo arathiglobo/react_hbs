@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   Container,
   Row,
@@ -23,6 +23,10 @@ import { toast } from "react-hot-toast";
 export default function CreateContractRate() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { pathname } = useLocation();
+  const isExtranet = pathname.startsWith("/extranet");
+  const navBase = isExtranet ? "/extranet" : "/hotel-actions";
+  const backUrl = isExtranet ? "/extranetDashboard" : `/hotel-details/${id}`;
 
   const [formData, setFormData] = useState({
     seasonId: "",
@@ -364,7 +368,7 @@ export default function CreateContractRate() {
 
       if (res.status === 200 || res.status === 201) {
         toast.success("Contract Rate saved successfully!");
-        navigate(`/hotel-actions/${id}/contract-rate`);
+        navigate(`${navBase}/${id}/contract-rate`);
       }
     } catch (err) {
 

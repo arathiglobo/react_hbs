@@ -10,7 +10,7 @@ import {
   Spinner,
 } from "react-bootstrap";
 import { FaArrowLeft, FaPlus, FaTrash, FaSave } from "react-icons/fa";
-import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams, useLocation } from "react-router-dom";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
@@ -21,6 +21,10 @@ import Select from "react-select";
 export default function EditStayPayPromotion() {
   const navigate = useNavigate();
   const { id, editId } = useParams();
+    const { pathname } = useLocation();
+    const isExtranet = pathname.startsWith("/extranet");
+    const navBase = isExtranet ? "/extranet" : "/hotel-actions";
+    const backUrl = isExtranet ? "/extranetDashboard" : `/hotel-details/${id}`;
 
   // View mode — `?mode=view` makes the form read-only. Mirrors the
   // /occupancy-and-minimumlength view pattern.
@@ -594,7 +598,7 @@ export default function EditStayPayPromotion() {
 
       if (response.data) {
         toast.success("Stay & Pay Promotion Updated Successfully!");
-        navigate(`/hotel-actions/${id}/promotions`);
+        navigate(`${navBase}/${id}/promotions`);
       }
     } catch (error) {
       console.error("Update error:", error);

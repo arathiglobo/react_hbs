@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   Container,
   Row,
@@ -20,6 +20,10 @@ import { toast } from "react-hot-toast";
 const PolicyCreate = () => {
   const { id } = useParams(); // hotelId
   const navigate = useNavigate();
+    const { pathname } = useLocation();
+    const isExtranet = pathname.startsWith("/extranet");
+    const navBase = isExtranet ? "/extranet" : "/hotel-actions";
+    const backUrl = isExtranet ? "/extranetDashboard" : `/hotel-details/${id}`;
 
   const [marketTypes, setMarketTypes] = useState([]);
   const [loadingMarkets, setLoadingMarkets] = useState(false);
@@ -184,7 +188,7 @@ const PolicyCreate = () => {
     try {
       await axiosInstance.post("/api/hotelPolicy/register", payload);
       toast.success("Policy created successfully!");
-      navigate(`/hotel-actions/${id}/hotel-policy`);
+      navigate(`${navBase}/${id}/hotel-policy`);
     } catch (error) {
       console.error("Save error:", error);
       toast.error("Failed to save policy.");
@@ -699,7 +703,7 @@ const PolicyCreate = () => {
                   <Button
                     variant="outline-danger"
                     className="px-4 rounded-pill"
-                    onClick={() => navigate(`/hotel-actions/${id}/hotel-policy/create`)}
+                    onClick={() => navigate(`${navBase}/${id}/hotel-policy/create`)}
                   >
                     Cancel
                   </Button>
