@@ -29,6 +29,40 @@ const BUTTON_STYLE = {
   whiteSpace: "nowrap",
 };
 
+// Purpose-based colour variants for the action buttons. They reuse the exact
+// BUTTON_STYLE shape (size / padding / radius / white text) so the design
+// system stays consistent — only the background colour changes, purely to
+// improve visual distinction. No behaviour, handler, or guard is affected.
+//   success → Confirm / Reconfirm      danger    → Cancel
+//   primary → Add / Edit / Update      info      → Voucher / Invoice docs
+//   neutral → View / Back / Resend     accent    → Notes / Remarks
+const BTN_SUCCESS = { ...BUTTON_STYLE, backgroundColor: "#16a34a" }; // Confirm
+const BTN_TEAL = { ...BUTTON_STYLE, backgroundColor: "#0d9488" }; // Reconfirm
+const BTN_DANGER = { ...BUTTON_STYLE, backgroundColor: "#dc2626" }; // Cancel
+const BTN_PRIMARY = { ...BUTTON_STYLE, backgroundColor: "#2563eb" }; // Add New Item
+const BTN_SKY = { ...BUTTON_STYLE, backgroundColor: "#3ba2e8" }; // Add Agent Reference
+const BTN_INDIGO = { ...BUTTON_STYLE, backgroundColor: "#6366f1" }; // Confirmation No.
+const BTN_INFO = { ...BUTTON_STYLE, backgroundColor: "#0891b2" }; // Voucher / Invoice
+const BTN_ORANGE = { ...BUTTON_STYLE, backgroundColor: "#f0922b" }; // Resend Mail
+const BTN_ACCENT = { ...BUTTON_STYLE, backgroundColor: "#7c3aed" }; // Booking Remark
+const BTN_NEUTRAL = { ...BUTTON_STYLE, backgroundColor: "#64748b" }; // View / Back / Notes
+
+// Booking types offered by "ADD NEW ITEM" (amendment / sub-booking). Each is
+// launched through its OWN existing create flow with ?parentBookingCode set —
+// no create logic is changed. Hotel & 24 Hour use the existing hotel
+// parent-child mechanism (they surface via booking.subBookings); the rest are
+// linked + displayed through the additive /api/booking-amendment-link feature.
+// Scope: room-stay family (Honeymoon & Ayurveda excluded — no detail page).
+const ADD_NEW_ITEM_TYPES = [
+  { key: "HOTEL", label: "Hotel Booking", route: "/new-booking/hotel" },
+  { key: "HOTEL_24HR", label: "24 Hour Check-In", route: "/new-booking/hotel-24hr" },
+  { key: "LONG_STAY", label: "Long Stay Booking", route: "/new-booking/long-stay" },
+  { key: "DAY_STAY", label: "Day Stay Check-In", route: "/new-booking/day-stay" },
+  { key: "GOV_EMPLOYEE", label: "Government Employee", route: "/new-booking/gov-employee" },
+  { key: "STUDENT", label: "Student Booking", route: "/new-booking/student" },
+  { key: "SENIOR_CITIZEN", label: "Senior Citizen Booking", route: "/new-booking/senior-citizen" },
+];
+
 const SECTION_HEADER = {
   backgroundColor: "#f0f0f0",
   padding: "7px 12px",
@@ -166,6 +200,12 @@ export default function BookingDetailedView() {
   const [remarkInput, setRemarkInput] = useState("");
   const [savingRemark, setSavingRemark] = useState(false);
 
+  // Notes — viewed and added in a modal on this page (replaces the separate
+  // /notes navigation). Uses the existing GET/POST endpoints unchanged.
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [noteInput, setNoteInput] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+
   // Resend Mail to Agent
   const [resendingMail, setResendingMail] = useState(false);
 
@@ -185,6 +225,16 @@ export default function BookingDetailedView() {
   // the page renders the PDF in an iframe instead of triggering a
   // download. Shape: { url: string, label: string, type: string }.
   const [pdfPreview, setPdfPreview] = useState(null);
+
+  // ── Add New Item (amendment) selection modal + cross-type sub-bookings ──
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [selectedAddItemType, setSelectedAddItemType] = useState(
+    ADD_NEW_ITEM_TYPES[0].key,
+  );
+  // Cross-type children recorded via /api/booking-amendment-link (Long Stay,
+  // Day Stay, Gov Employee, Student, Senior Citizen). Hotel/24hr children
+  // still come through booking.subBookings and are unaffected.
+  const [amendmentLinks, setAmendmentLinks] = useState([]);
 
   const fetchBooking = useCallback(() => {
     if (!id) return;
@@ -206,29 +256,56 @@ export default function BookingDetailedView() {
     fetchBooking();
   }, [fetchBooking]);
 
-  /* Fetch related notes the same way BookingNotesPage does, so the
-     detail view stays in sync with anything added on the /notes page.
-     Endpoint shape: { notes: [{ noteId, noteText, createdBy, createdAt }] }
-     Silently sets an empty list on failure so the rest of the page is
-     unaffected if the notes endpoint is unavailable. */
-  useEffect(() => {
-    let alive = true;
+  /* Fetch related notes. Endpoint shape:
+       { notes: [{ noteId, noteText, createdBy, createdAt }] }
+     Wrapped in a callable so the NOTES modal's save handler can refresh the
+     list inline. Silently sets an empty list on failure so the rest of the
+     page is unaffected if the notes endpoint is unavailable. */
+  const fetchBookingNotes = useCallback(() => {
     if (!id) return undefined;
     setNotesLoading(true);
-    axiosInstance
+    return axiosInstance
       .get(`/api/hotel-booking/${id}/notes`)
       .then((res) => {
-        if (!alive) return;
         if (res.data && res.data.success !== false) {
           setBookingNotes(Array.isArray(res.data.notes) ? res.data.notes : []);
         } else {
           setBookingNotes([]);
         }
       })
-      .catch(() => alive && setBookingNotes([]))
-      .finally(() => alive && setNotesLoading(false));
-    return () => { alive = false; };
+      .catch(() => setBookingNotes([]))
+      .finally(() => setNotesLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    fetchBookingNotes();
+  }, [fetchBookingNotes]);
+
+  /* Cross-type amendment children (Long Stay / Day Stay / Gov / Student /
+     Senior), keyed off the PRIMARY booking code — same value ADD NEW ITEM
+     uses as the parent. Read-only; failures leave the list empty so nothing
+     else on the page is affected. Hotel/24hr children are NOT fetched here;
+     they continue to render from booking.subBookings. */
+  const amendmentParentCode = booking?.parentBookingCode || booking?.bookingCode;
+  useEffect(() => {
+    let alive = true;
+    if (!amendmentParentCode) {
+      setAmendmentLinks([]);
+      return undefined;
+    }
+    axiosInstance
+      .get(
+        `/api/booking-amendment-link/parent/${encodeURIComponent(
+          amendmentParentCode,
+        )}`,
+      )
+      .then((res) => {
+        if (!alive) return;
+        setAmendmentLinks(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch(() => alive && setAmendmentLinks([]));
+    return () => { alive = false; };
+  }, [amendmentParentCode]);
 
   // ── Status helpers ─────────────────────────────────────────────────
   const normalizedStatus = String(booking?.confirmationStatus || "")
@@ -253,16 +330,35 @@ export default function BookingDetailedView() {
   const isOnRequestRoom = /^on\s*request$/i.test(
     String(booking?.roomStatus || "").trim(),
   );
+  // On Request two-step flow (backend-driven). An On Request booking moves
+  // through THREE display steps:
+  //   1. created        → engine CONFIRMED, onRequestConfirmed=false → "On Request"
+  //   2. after Confirm   → engine CONFIRMED, onRequestConfirmed=true  → "On Request / Confirmed"
+  //   3. after Reconfirm → engine RECONFIRMED                        → "On Request / Reconfirmed"
+  // The onRequestConfirmed flag (additive, On Request only) is what
+  // distinguishes step 1 from step 2 — both sit on engine CONFIRMED. It
+  // persists through cancellation so the cancelled label can preserve history.
+  const isOnRequestConfirmedStep =
+    isOnRequestRoom && Boolean(booking?.onRequestConfirmed);
+  const cancelledPrior = String(booking?.cancelledFromStatus || "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
   const displayStatus = isCancelled
     ? isOnRequestRoom
-      ? "On Request/Cancelled"
+      ? cancelledPrior === "RECONFIRMED"
+        ? "On Request/Reconfirmed/Cancelled"
+        : booking?.onRequestConfirmed
+        ? "On Request/Confirmed/Cancelled"
+        : "On Request/Cancelled"
       : booking?.cancelledFromStatus
       ? `${booking.cancelledFromStatus}/Cancelled`
       : booking?.confirmationStatus
-    : isOnRequestRoom && normalizedStatus === "CONFIRMED"
-    ? "On Request"
     : isOnRequestRoom && normalizedStatus === "RECONFIRMED"
     ? "On Request/Reconfirmed"
+    : isOnRequestRoom && normalizedStatus === "CONFIRMED"
+    ? isOnRequestConfirmedStep
+      ? "On Request/Confirmed"
+      : "On Request"
     : booking?.confirmationStatus;
   // Agent Reference and Confirmation Number can only be SAVED once the
   // booking is confirmed-or-better; before that the booking is still
@@ -278,8 +374,15 @@ export default function BookingDetailedView() {
   // available again once it is actually reconfirmed (RECONFIRMED) or for any
   // genuinely Confirmed/ReConfirmed booking. Display-only gate — no API/flow
   // change.
+  // "Pending" = the INITIAL On Request step only (before the first Confirm).
+  // This is the state that shows the CONFIRM button, hides Proforma docs, and
+  // locks Agent Reference / Confirmation No. Once Confirmed (onRequestConfirmed
+  // true) the booking behaves like a normal Confirmed booking: RECONFIRM button,
+  // Proforma available, fields unlocked.
   const isOnRequestPending =
-    isOnRequestRoom && normalizedStatus === "CONFIRMED";
+    isOnRequestRoom &&
+    normalizedStatus === "CONFIRMED" &&
+    !booking?.onRequestConfirmed;
   // Final Voucher / Invoice vs their Proforma equivalents, per the
   // client's confirm-booking flowchart:
   //   • CONFIRMED  → still tentative ("if not reconfirmed, auto-cancel on
@@ -538,6 +641,46 @@ export default function BookingDetailedView() {
     }
   };
 
+  // Notes — open the add-note modal (existing notes are already listed in the
+  // "Notes" card above; saving here refreshes that list inline).
+  const openNotesModal = () => {
+    setNoteInput("");
+    setShowNotesModal(true);
+  };
+
+  const saveNote = async () => {
+    const text = (noteInput || "").trim();
+    if (!text) {
+      toast.error("Note cannot be empty");
+      return;
+    }
+    try {
+      setSavingNote(true);
+      // Same endpoint + payload shape the standalone /notes page uses; nothing
+      // about how notes are stored/retrieved is changed.
+      const createdBy =
+        localStorage.getItem("UserName") ||
+        sessionStorage.getItem("UserName") ||
+        "unknown";
+      const res = await axiosInstance.post(
+        `/api/hotel-booking/${id}/notes`,
+        { noteText: text, createdBy },
+      );
+      if (res.data?.success) {
+        toast.success(res.data?.message || "Note saved");
+        setShowNotesModal(false);
+        setNoteInput("");
+        await fetchBookingNotes();
+      } else {
+        toast.error(res.data?.message || "Failed to save note");
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to save note");
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
   // Booking Remark (persisted as a booking note)
   const openRemarkModal = () => {
     setRemarkInput(booking?.remarks || "");
@@ -733,7 +876,7 @@ export default function BookingDetailedView() {
             {/* Back button */}
             <div className="mb-3">
               <button
-                style={{ ...BUTTON_STYLE, backgroundColor: "#555" }}
+                style={BTN_NEUTRAL}
                 onClick={() => navigate(-1)}
               >
                 ← Back
@@ -1228,10 +1371,7 @@ export default function BookingDetailedView() {
                                 )}
                               </span>
                               <button
-                                style={{
-                                  ...BUTTON_STYLE,
-                                  backgroundColor: "#555",
-                                }}
+                                style={BTN_NEUTRAL}
                                 onClick={() =>
                                   navigate(
                                     `/booking-details/hotel-booking/${sub.bookingId}`,
@@ -1303,6 +1443,105 @@ export default function BookingDetailedView() {
                           </div>
                         );
                       })}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Related Sub-Bookings of OTHER types (amendment links) ──
+                    Long Stay / Day Stay / Gov Employee / Student / Senior
+                    Citizen children, recorded via /api/booking-amendment-link.
+                    Each row is clickable to its own (live) detail page. */}
+                {amendmentLinks && amendmentLinks.length > 0 && (
+                  <div style={card}>
+                    <div style={SECTION_HEADER}>
+                      Related Sub-Bookings — Other Types ({amendmentLinks.length})
+                    </div>
+                    <div style={{ padding: "10px 16px" }}>
+                      {amendmentLinks.map((lnk) => (
+                        <div
+                          key={lnk.id}
+                          style={{
+                            borderTop: "1px solid #eee",
+                            padding: "10px 0",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                color: "#c0392b",
+                                fontWeight: "700",
+                                fontSize: "0.9rem",
+                              }}
+                            >
+                              {lnk.childBookingCode || "-"}
+                              <span
+                                style={{
+                                  marginLeft: "8px",
+                                  color: "#888",
+                                  fontWeight: "500",
+                                  fontSize: "0.8rem",
+                                }}
+                              >
+                                ({lnk.childTypeLabel || lnk.childType})
+                              </span>
+                            </span>
+                            {lnk.childDetailRoutePrefix && lnk.childBookingId != null && (
+                              <button
+                                style={BTN_NEUTRAL}
+                                onClick={() =>
+                                  navigate(
+                                    `${lnk.childDetailRoutePrefix}${lnk.childBookingId}`,
+                                  )
+                                }
+                              >
+                                View
+                              </button>
+                            )}
+                          </div>
+                          <Row>
+                            <Col md={6}>
+                              <InfoRow
+                                label="Booking Type"
+                                value={lnk.childTypeLabel || lnk.childType}
+                              />
+                              <InfoRow
+                                label="Reference No."
+                                value={lnk.childReferenceNumber}
+                              />
+                              <InfoRow label="Hotel" value={lnk.childHotelName} />
+                            </Col>
+                            <Col md={6}>
+                              <InfoRow
+                                label="Check-In"
+                                value={lnk.childCheckInDate}
+                              />
+                              <InfoRow
+                                label="Check-Out"
+                                value={lnk.childCheckOutDate}
+                              />
+                              <InfoRow
+                                label="Total Rate"
+                                value={
+                                  lnk.childTotalRate != null
+                                    ? Number(lnk.childTotalRate).toFixed(2)
+                                    : "-"
+                                }
+                              />
+                              <InfoRow
+                                label="Status"
+                                value={<StatusBadge status={lnk.childStatus} />}
+                              />
+                            </Col>
+                          </Row>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -1499,7 +1738,7 @@ export default function BookingDetailedView() {
                     {cancelledShowsFinalDocs ? (
                       <>
                         <button
-                          style={BUTTON_STYLE}
+                          style={BTN_INFO}
                           disabled={generatingPdfType === "VOUCHER"}
                           onClick={() => handleDownloadPdf("VOUCHER", "Voucher")}
                         >
@@ -1508,7 +1747,7 @@ export default function BookingDetailedView() {
                             : "VOUCHER"}
                         </button>
                         <button
-                          style={BUTTON_STYLE}
+                          style={BTN_INFO}
                           disabled={generatingPdfType === "COMPLETED"}
                           onClick={() =>
                             handleDownloadPdf("COMPLETED", "Invoice")
@@ -1522,7 +1761,7 @@ export default function BookingDetailedView() {
                     ) : (
                       <>
                         <button
-                          style={BUTTON_STYLE}
+                          style={BTN_INFO}
                           disabled={generatingPdfType === "PROFORMA_VOUCHER"}
                           onClick={() =>
                             handleDownloadPdf(
@@ -1536,7 +1775,7 @@ export default function BookingDetailedView() {
                             : "PROFORMA VOUCHER"}
                         </button>
                         <button
-                          style={BUTTON_STYLE}
+                          style={BTN_INFO}
                           disabled={generatingPdfType === "PROFORMA_INVOICE"}
                           onClick={() =>
                             handleDownloadPdf(
@@ -1553,7 +1792,7 @@ export default function BookingDetailedView() {
                     )}
 
                     <button
-                      style={BUTTON_STYLE}
+                      style={BTN_SKY}
                       onClick={() => {
                         if (!cancelledFromConfirmedOrLater) {
                           toast.error(
@@ -1569,7 +1808,7 @@ export default function BookingDetailedView() {
 
                     {!isAgentRole && (
                       <button
-                        style={BUTTON_STYLE}
+                        style={BTN_INDIGO}
                         onClick={() => {
                           if (!cancelledFromConfirmedOrLater) {
                             toast.error(
@@ -1585,7 +1824,7 @@ export default function BookingDetailedView() {
                     )}
 
                     <button
-                      style={BUTTON_STYLE}
+                      style={BTN_ORANGE}
                       onClick={resendMailToAgent}
                       disabled={resendingMail}
                     >
@@ -1593,17 +1832,15 @@ export default function BookingDetailedView() {
                     </button>
 
                     {!isAgentRole && (
-                      <button style={BUTTON_STYLE} onClick={openRemarkModal}>
+                      <button style={BTN_ACCENT} onClick={openRemarkModal}>
                         BOOKING REMARK
                       </button>
                     )}
 
                     {!isAgentRole && (
                       <button
-                        style={BUTTON_STYLE}
-                        onClick={() =>
-                          navigate(`/booking-details/hotel-booking/${id}/notes`)
-                        }
+                        style={BTN_NEUTRAL}
+                        onClick={openNotesModal}
                       >
                         NOTES
                       </button>
@@ -1620,15 +1857,10 @@ export default function BookingDetailedView() {
                     }}
                   >
                     <button
-                      style={BUTTON_STYLE}
+                      style={BTN_PRIMARY}
                       onClick={() => {
-                        const parent =
-                          booking.parentBookingCode || booking.bookingCode;
-                        navigate(
-                          `/new-booking/hotel?parentBookingCode=${encodeURIComponent(
-                            parent,
-                          )}`,
-                        );
+                        setSelectedAddItemType(ADD_NEW_ITEM_TYPES[0].key);
+                        setShowAddItemModal(true);
                       }}
                     >
                       ADD NEW ITEM
@@ -1636,21 +1868,30 @@ export default function BookingDetailedView() {
 
                     {/* {!isCancelled && isCancellationAllowed && ( */}
                     {!isCancelled && (
-                      <button style={BUTTON_STYLE} onClick={openCancelModal}>
+                      <button style={BTN_DANGER} onClick={openCancelModal}>
                         CANCEL
                       </button>
                     )}
 
                     {!showsFinalDocs && !isCancelled && (
-                      <button style={BUTTON_STYLE} onClick={openConfirmModal}>
-                        RECONFIRM
+                      <button
+                        style={isOnRequestPending ? BTN_SUCCESS : BTN_TEAL}
+                        onClick={openConfirmModal}
+                      >
+                        {/* An "On Request" booking hasn't been confirmed yet,
+                            so the first action is CONFIRM (not RECONFIRM). It
+                            reuses the exact same confirmation flow/modal. */}
+                        {isOnRequestPending ? "CONFIRM" : "RECONFIRM"}
                       </button>
                     )}
 
-                    {!showsFinalDocs && !isCancelled && (
+                    {/* Proforma Voucher / Invoice are not available while the
+                        booking is still "On Request" (not yet confirmed). They
+                        return for every other pre-final state, unchanged. */}
+                    {!showsFinalDocs && !isCancelled && !isOnRequestPending && (
                       <>
                         <button
-                          style={BUTTON_STYLE}
+                          style={BTN_INFO}
                           disabled={generatingPdfType === "PROFORMA_VOUCHER"}
                           onClick={() =>
                             handleDownloadPdf(
@@ -1664,7 +1905,7 @@ export default function BookingDetailedView() {
                             : "PROFORMA VOUCHER"}
                         </button>
                         <button
-                          style={BUTTON_STYLE}
+                          style={BTN_INFO}
                           disabled={generatingPdfType === "PROFORMA_INVOICE"}
                           onClick={() =>
                             handleDownloadPdf(
@@ -1683,7 +1924,7 @@ export default function BookingDetailedView() {
                     {showsFinalDocs && !isCancelled && (
                       <>
                         <button
-                          style={BUTTON_STYLE}
+                          style={BTN_INFO}
                           disabled={generatingPdfType === "VOUCHER"}
                           onClick={() =>
                             handleDownloadPdf("VOUCHER", "Voucher")
@@ -1694,7 +1935,7 @@ export default function BookingDetailedView() {
                             : "VOUCHER"}
                         </button>
                         <button
-                          style={BUTTON_STYLE}
+                          style={BTN_INFO}
                           disabled={generatingPdfType === "COMPLETED"}
                           onClick={() =>
                             handleDownloadPdf("COMPLETED", "Invoice")
@@ -1709,7 +1950,7 @@ export default function BookingDetailedView() {
 
                     {!isCancelled && (
                       <button
-                        style={BUTTON_STYLE}
+                        style={BTN_SKY}
                         onClick={() => {
                           // Show the button for every live booking so the
                           // operator can see the action exists, but block the
@@ -1732,7 +1973,7 @@ export default function BookingDetailedView() {
 
                     {!isCancelled && !isAgentRole && (
                       <button
-                        style={BUTTON_STYLE}
+                        style={BTN_INDIGO}
                         onClick={() => {
                           if (!isConfirmedOrLater || isOnRequestPending) {
                             toast.error(
@@ -1749,7 +1990,7 @@ export default function BookingDetailedView() {
 
                     {!isCancelled && (
                       <button
-                        style={BUTTON_STYLE}
+                        style={BTN_ORANGE}
                         onClick={resendMailToAgent}
                         disabled={resendingMail}
                       >
@@ -1758,17 +1999,15 @@ export default function BookingDetailedView() {
                     )}
 
                     {!isCancelled && !isAgentRole && (
-                      <button style={BUTTON_STYLE} onClick={openRemarkModal}>
+                      <button style={BTN_ACCENT} onClick={openRemarkModal}>
                         BOOKING REMARK
                       </button>
                     )}
 
                     {!isAgentRole && (
                       <button
-                        style={BUTTON_STYLE}
-                        onClick={() =>
-                          navigate(`/booking-details/hotel-booking/${id}/notes`)
-                        }
+                        style={BTN_NEUTRAL}
+                        onClick={openNotesModal}
                       >
                         NOTES
                       </button>
@@ -1787,6 +2026,70 @@ export default function BookingDetailedView() {
                 >
                   Booking Date : {formatDateTime(booking.bookingDate)}
                 </div>
+
+                {/* ── Add New Item (Amendment) booking-type picker ──────── */}
+                <Modal
+                  show={showAddItemModal}
+                  onHide={() => setShowAddItemModal(false)}
+                  centered
+                >
+                  <Modal.Header closeButton>
+                    <Modal.Title style={{ fontSize: "1.05rem" }}>
+                      Add New Item
+                    </Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body>
+                    <div style={{ marginBottom: "10px", color: "#555" }}>
+                      Select a booking type to add as a sub-booking of{" "}
+                      <strong>
+                        {booking?.parentBookingCode || booking?.bookingCode}
+                      </strong>
+                      .
+                    </div>
+                    <Form>
+                      {ADD_NEW_ITEM_TYPES.map((t) => (
+                        <Form.Check
+                          key={t.key}
+                          type="radio"
+                          name="addNewItemType"
+                          id={`add-item-${t.key}`}
+                          label={t.label}
+                          value={t.key}
+                          checked={selectedAddItemType === t.key}
+                          onChange={() => setSelectedAddItemType(t.key)}
+                          style={{ marginBottom: "6px" }}
+                        />
+                      ))}
+                    </Form>
+                  </Modal.Body>
+                  <Modal.Footer>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setShowAddItemModal(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={() => {
+                        const chosen = ADD_NEW_ITEM_TYPES.find(
+                          (t) => t.key === selectedAddItemType,
+                        );
+                        if (!chosen) return;
+                        const parent =
+                          booking.parentBookingCode || booking.bookingCode;
+                        setShowAddItemModal(false);
+                        navigate(
+                          `${chosen.route}?parentBookingCode=${encodeURIComponent(
+                            parent,
+                          )}`,
+                        );
+                      }}
+                    >
+                      Continue
+                    </Button>
+                  </Modal.Footer>
+                </Modal>
 
                 {/* ── Cancel Booking Modal (ported from HotelBookingList) ── */}
                 <Modal
@@ -1829,6 +2132,40 @@ export default function BookingDetailedView() {
                           </div>
                         )}
                       </div>
+                      {/* Informational only — booking value warning. Reuses the
+                          SAME total shown on the page (totalRate + Tourism
+                          Dirham, in the booking's display currency). Does not
+                          alter any cancellation logic. */}
+                      {booking.totalRate != null &&
+                        (() => {
+                          const baseTotal = Number(booking.totalRate) || 0;
+                          const td = Number(booking.tourismDirham) || 0;
+                          const grand = baseTotal + td;
+                          return (
+                            <div
+                              className="mb-3"
+                              style={{
+                                border: "1px solid #ffe69c",
+                                backgroundColor: "#fff3cd",
+                                color: "#664d03",
+                                borderRadius: "4px",
+                                padding: "10px 12px",
+                                fontSize: "0.9rem",
+                              }}
+                            >
+                              <FaExclamationCircle className="me-2 text-warning" />
+                              Total value of this booking is{" "}
+                              <strong>
+                                {currencyCode}{" "}
+                                {toDisplayAmount(grand).toFixed(2)}
+                              </strong>
+                              .
+                              <div className="fw-semibold mt-1">
+                                Do you still want to cancel it?
+                              </div>
+                            </div>
+                          );
+                        })()}
                       <Form.Group controlId="cancellationReason">
                         <Form.Label className="fw-semibold">
                           Cancellation Reason{" "}
@@ -1903,13 +2240,17 @@ export default function BookingDetailedView() {
                   >
                     <Modal.Title className="fw-bold d-flex align-items-center">
                       <FaExclamationCircle className="me-2 text-warning" />
-                      <span>Reconfirm Booking</span>
+                      <span>
+                        {isOnRequestPending ? "Confirm Booking" : "Reconfirm Booking"}
+                      </span>
                     </Modal.Title>
                   </Modal.Header>
                   <Modal.Body style={{ padding: "1.5rem" }}>
                     <div className="text-center">
                       <p className="fs-5 mb-3">
-                        Are you sure you want to reconfirm the booking?
+                        {isOnRequestPending
+                          ? "Are you sure you want to confirm the booking?"
+                          : "Are you sure you want to reconfirm the booking?"}
                       </p>
                       <div className="text-muted small mb-3">
                         <div>
@@ -1930,13 +2271,9 @@ export default function BookingDetailedView() {
                       borderTop: "1px solid #dee2e6",
                     }}
                   >
-                    <Button
-                      variant="danger"
-                      onClick={openRejectModal}
-                      disabled={confirmingBooking}
-                    >
-                      Reject
-                    </Button>
+                    {/* Reject action intentionally removed from the
+                        reconfirmation dialog. The Reject flow/modal itself is
+                        left intact for any other status flow that needs it. */}
                     <Button
                       variant="success"
                       onClick={confirmBooking}
@@ -2414,6 +2751,68 @@ export default function BookingDetailedView() {
                         </>
                       ) : (
                         "Save"
+                      )}
+                    </Button>
+                  </Modal.Footer>
+                </Modal>
+
+                {/* ── Notes Modal — add a new ad-hoc note inline. Existing
+                    notes are already listed in the Notes card above; this
+                    modal POSTs to the SAME endpoint the old /notes page
+                    used, then refreshes the list so the new note appears
+                    immediately. No flow/API change. */}
+                <Modal
+                  show={showNotesModal}
+                  onHide={() => {
+                    if (!savingNote) setShowNotesModal(false);
+                  }}
+                  centered
+                  backdrop="static"
+                  keyboard={false}
+                >
+                  <Modal.Header closeButton={!savingNote}>
+                    <Modal.Title style={{ fontSize: "1rem" }}>
+                      Add Note
+                    </Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold">Note</Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={5}
+                        placeholder="Type your note here. You can enter long paragraphs."
+                        value={noteInput}
+                        onChange={(e) => setNoteInput(e.target.value)}
+                        disabled={savingNote}
+                        style={{ resize: "vertical" }}
+                      />
+                    </Form.Group>
+                  </Modal.Body>
+                  <Modal.Footer>
+                    <Button
+                      variant="outline-secondary"
+                      onClick={() => setShowNotesModal(false)}
+                      disabled={savingNote}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="primary"
+                      onClick={saveNote}
+                      disabled={savingNote}
+                    >
+                      {savingNote ? (
+                        <>
+                          <Spinner
+                            animation="border"
+                            size="sm"
+                            className="me-2"
+                          />
+                          Saving...
+                        </>
+                      ) : (
+                        "OK"
                       )}
                     </Button>
                   </Modal.Footer>

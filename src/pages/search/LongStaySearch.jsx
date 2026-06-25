@@ -1657,6 +1657,13 @@ export default function LongStaySearch() {
                                             // user skipped the dropdown.
                                             employeeId:
                                               selectedEmployee?.value || null,
+                                            // "Add New Item" amendment flow —
+                                            // parent hotel booking code when
+                                            // launched from ADD NEW ITEM.
+                                            parentBookingCode:
+                                              new URLSearchParams(
+                                                window.location.search,
+                                              ).get("parentBookingCode") || null,
                                           };
                                           const meta = {
                                             hotelName: hotel.name,

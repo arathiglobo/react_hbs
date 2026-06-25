@@ -38,6 +38,19 @@ const BUTTON_STYLE = {
   cursor: "pointer",
 };
 
+// Purpose-based colour variants (same scheme as the hotel detail page). Reuse
+// the BUTTON_STYLE shape — only the background colour changes — to improve
+// visual distinction. No behaviour/handler/guard is affected.
+const BTN_TEAL = { ...BUTTON_STYLE, backgroundColor: "#0d9488" }; // Reconfirm
+const BTN_DANGER = { ...BUTTON_STYLE, backgroundColor: "#dc2626" }; // Cancel
+const BTN_PRIMARY = { ...BUTTON_STYLE, backgroundColor: "#2563eb" }; // Add New Item
+const BTN_SKY = { ...BUTTON_STYLE, backgroundColor: "#3ba2e8" }; // Add Agent Reference
+const BTN_INDIGO = { ...BUTTON_STYLE, backgroundColor: "#6366f1" }; // Confirmation No.
+const BTN_INFO = { ...BUTTON_STYLE, backgroundColor: "#0891b2" }; // Voucher / Invoice
+const BTN_ORANGE = { ...BUTTON_STYLE, backgroundColor: "#f0922b" }; // Resend Mail
+const BTN_ACCENT = { ...BUTTON_STYLE, backgroundColor: "#7c3aed" }; // Booking Remark
+const BTN_NEUTRAL = { ...BUTTON_STYLE, backgroundColor: "#64748b" }; // View / Back / Notes
+
 const SECTION_HEADER = {
   backgroundColor: "#f0f0f0",
   padding: "7px 12px",
@@ -485,7 +498,7 @@ export default function GovEmployeeBookingDetailView() {
           <Container fluid style={{ maxWidth: "1100px" }}>
             {/* Back button */}
             <div className="mb-3">
-              <button style={{ ...BUTTON_STYLE, backgroundColor: "#555" }} onClick={() => navigate(-1)}>
+              <button style={BTN_NEUTRAL} onClick={() => navigate(-1)}>
                 ← Back
               </button>
               <span
@@ -750,7 +763,7 @@ export default function GovEmployeeBookingDetailView() {
                       • ReConfirmed → Voucher / Invoice */}
                 <div style={{ marginBottom: "10px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   <button
-                    style={BUTTON_STYLE}
+                    style={BTN_PRIMARY}
                     onClick={() => {
                       const parent = booking.parentBookingCode || booking.bookingCode;
                       navigate(
@@ -761,26 +774,26 @@ export default function GovEmployeeBookingDetailView() {
                     ADD NEW ITEM
                   </button>
                   {!isCancelled && (
-                    <button style={BUTTON_STYLE} onClick={() => setShowCancelModal(true)}>
+                    <button style={BTN_DANGER} onClick={() => setShowCancelModal(true)}>
                       CANCEL
                     </button>
                   )}
                   {!showsFinalDocs && !isCancelled && (
-                    <button style={BUTTON_STYLE} onClick={() => setShowConfirmModal(true)}>
+                    <button style={BTN_TEAL} onClick={() => setShowConfirmModal(true)}>
                       RECONFIRM
                     </button>
                   )}
                   {!showsFinalDocs ? (
                     <>
                       <button
-                        style={BUTTON_STYLE}
+                        style={BTN_INFO}
                         disabled={generatingDocType === "PROFORMA_VOUCHER"}
                         onClick={() => handleDocument("PROFORMA_VOUCHER", "Proforma Voucher")}
                       >
                         {generatingDocType === "PROFORMA_VOUCHER" ? "GENERATING..." : "PROFORMA VOUCHER"}
                       </button>
                       <button
-                        style={BUTTON_STYLE}
+                        style={BTN_INFO}
                         disabled={generatingDocType === "PROFORMA_INVOICE"}
                         onClick={() => handleDocument("PROFORMA_INVOICE", "Proforma Invoice")}
                       >
@@ -790,14 +803,14 @@ export default function GovEmployeeBookingDetailView() {
                   ) : (
                     <>
                       <button
-                        style={BUTTON_STYLE}
+                        style={BTN_INFO}
                         disabled={generatingDocType === "VOUCHER"}
                         onClick={() => handleDocument("VOUCHER", "Voucher")}
                       >
                         {generatingDocType === "VOUCHER" ? "GENERATING..." : "VOUCHER"}
                       </button>
                       <button
-                        style={BUTTON_STYLE}
+                        style={BTN_INFO}
                         disabled={generatingDocType === "COMPLETED"}
                         onClick={() => handleDocument("COMPLETED", "Invoice")}
                       >
@@ -805,24 +818,24 @@ export default function GovEmployeeBookingDetailView() {
                       </button>
                     </>
                   )}
-                  <button style={BUTTON_STYLE} onClick={openAgentRefModal}>
+                  <button style={BTN_SKY} onClick={openAgentRefModal}>
                     ADD AGENT REFERENCE
                   </button>
                   {!isAgentRole && (
-                    <button style={BUTTON_STYLE} onClick={openConfirmationNoModal}>
+                    <button style={BTN_INDIGO} onClick={openConfirmationNoModal}>
                       CONFIRMATION NO.
                     </button>
                   )}
-                  <button style={BUTTON_STYLE} onClick={resendMailToAgent} disabled={resendingMail}>
+                  <button style={BTN_ORANGE} onClick={resendMailToAgent} disabled={resendingMail}>
                     {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
                   </button>
                   {!isAgentRole && (
-                    <button style={BUTTON_STYLE} onClick={openRemarkModal}>
+                    <button style={BTN_ACCENT} onClick={openRemarkModal}>
                       BOOKING REMARK
                     </button>
                   )}
                   {!isAgentRole && (
-                    <button style={BUTTON_STYLE} onClick={openNotesModal}>
+                    <button style={BTN_NEUTRAL} onClick={openNotesModal}>
                       NOTES
                     </button>
                   )}
@@ -855,6 +868,29 @@ export default function GovEmployeeBookingDetailView() {
             Are you sure you want to cancel this booking? Refundable bookings will have their agent
             credit restored.
           </p>
+          {/* Informational only — booking value warning. Reuses the same
+              money() helper used elsewhere on the page so the currency and
+              amount match. Does not alter any cancellation logic. */}
+          {booking?.totalRate != null && (
+            <div
+              className="mb-3"
+              style={{
+                border: "1px solid #ffe69c",
+                backgroundColor: "#fff3cd",
+                color: "#664d03",
+                borderRadius: "4px",
+                padding: "10px 12px",
+                fontSize: "0.9rem",
+              }}
+            >
+              <span className="me-2" aria-hidden="true">⚠</span>
+              Total value of this booking is{" "}
+              <strong>{money(booking.totalRate)}</strong>.
+              <div className="fw-semibold mt-1">
+                Do you still want to cancel it?
+              </div>
+            </div>
+          )}
           <Form.Group>
             <Form.Label>Cancellation Reason (optional)</Form.Label>
             <Form.Control

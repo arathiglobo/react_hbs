@@ -24,6 +24,7 @@ import {
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
+import { createAmendmentLink } from "../../../utils/amendmentLink";
 import { toast } from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
 
@@ -352,6 +353,32 @@ export default function DayStayBookingPage() {
       setShowSummary(false);
       sessionStorage.removeItem("dayStayBookingPayload");
       toast.success("Day Stay booking confirmed");
+      // "Add New Item" amendment flow: link to the parent hotel booking and
+      // return to its detail page; otherwise keep the normal list redirect.
+      // The create call above is unchanged.
+      if (payload.parentBookingCode) {
+        const parentId = await createAmendmentLink({
+          parentBookingCode: payload.parentBookingCode,
+          childType: "DAY_STAY",
+          childTypeLabel: "Day Stay",
+          childBookingId: res.data.id,
+          childBookingCode: res.data.bookingCode,
+          childDetailRoutePrefix: "/booking-details/day-stay-booking/",
+          childReferenceNumber: res.data.referenceNumber || res.data.bookingCode,
+          childStatus: res.data.confirmationStatus || res.data.status || "Confirmed",
+          childHotelName: payload.hotelName,
+          childCheckInDate: payload.checkInDate,
+          childCheckOutDate: payload.checkInDate,
+          childTotalRate: payload.totalAmount,
+          childGuestName: `${body.primaryGuest?.firstName || ""} ${
+            body.primaryGuest?.lastName || ""
+          }`.trim(),
+        });
+        if (parentId) {
+          navigate(`/booking-details/hotel-booking/${parentId}`);
+          return;
+        }
+      }
       setTimeout(
         () => navigate("/booking-details/day-stay-booking-list"),
         800

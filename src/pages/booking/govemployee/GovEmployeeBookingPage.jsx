@@ -50,6 +50,7 @@ import {
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
+import { createAmendmentLink } from "../../../utils/amendmentLink";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
 
@@ -526,6 +527,32 @@ const GovEmployeeBookingPage = () => {
       if (data?.success) {
         setShowConfirmModal(false);
         toast.success(`Booking ${data.bookingCode} created`);
+        // "Add New Item" amendment flow: link to the parent hotel booking and
+        // return to its detail page; otherwise keep the normal list redirect.
+        const parentBookingCode = bookingData?.payload?.parentBookingCode;
+        if (parentBookingCode) {
+          const parentId = await createAmendmentLink({
+            parentBookingCode,
+            childType: "GOV_EMPLOYEE",
+            childTypeLabel: "Government Employee",
+            childBookingId: data.bookingId,
+            childBookingCode: data.bookingCode,
+            childDetailRoutePrefix: "/booking-details/gov-employee-booking/",
+            childReferenceNumber: data.referenceNumber || data.bookingCode,
+            childStatus: data.confirmationStatus || data.status || "Confirmed",
+            childHotelName: pendingPayload.hotelName,
+            childCheckInDate: pendingPayload.checkInDate,
+            childCheckOutDate: pendingPayload.checkOutDate,
+            childTotalRate: pendingPayload.totalRateBeforeDiscount,
+            childGuestName: `${pendingPayload.primaryGuest?.firstName || ""} ${
+              pendingPayload.primaryGuest?.lastName || ""
+            }`.trim(),
+          });
+          if (parentId) {
+            navigate(`/booking-details/hotel-booking/${parentId}`);
+            return;
+          }
+        }
         navigate("/booking-details/gov-employee-booking-list");
       } else {
         toast.error(data?.message || "Booking failed");

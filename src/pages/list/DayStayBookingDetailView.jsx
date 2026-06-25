@@ -26,7 +26,7 @@
  * Only the presentation was reskinned; every Day Stay data field,
  * endpoint, handler and modal is preserved unchanged.
  */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   Container,
   Row,
@@ -65,6 +65,16 @@ const BUTTON_STYLE = {
   letterSpacing: "0.4px",
   whiteSpace: "nowrap",
 };
+
+// Purpose-based colour variants (same scheme as the hotel detail page). Reuse
+// the BUTTON_STYLE shape — only the background colour changes — to improve
+// visual distinction. No behaviour/handler/guard is affected.
+const BTN_TEAL = { ...BUTTON_STYLE, backgroundColor: "#0d9488" }; // Reconfirm
+const BTN_SKY = { ...BUTTON_STYLE, backgroundColor: "#3ba2e8" }; // Add Agent Reference
+const BTN_INDIGO = { ...BUTTON_STYLE, backgroundColor: "#6366f1" }; // Confirmation No.
+const BTN_ORANGE = { ...BUTTON_STYLE, backgroundColor: "#f0922b" }; // Resend Mail
+const BTN_ACCENT = { ...BUTTON_STYLE, backgroundColor: "#7c3aed" }; // Booking Remark
+const BTN_NEUTRAL = { ...BUTTON_STYLE, backgroundColor: "#64748b" }; // View / Back / Notes
 
 const SECTION_HEADER = {
   backgroundColor: "#f0f0f0",
@@ -214,6 +224,15 @@ export default function DayStayBookingDetailView() {
   const [showRemarkModal, setShowRemarkModal] = useState(false);
   const [remarkInput, setRemarkInput] = useState("");
   const [savingRemark, setSavingRemark] = useState(false);
+
+  // Notes — viewed and added in a modal on this page (replaces the separate
+  // /notes navigation). Backend shape: GET returns a bare array of rows
+  // ({ id, note, createdBy, createdDate }); POST body is { note, createdBy }.
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [noteInput, setNoteInput] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+  const [bookingNotes, setBookingNotes] = useState([]);
+  const [notesLoading, setNotesLoading] = useState(false);
 
   // Resend Mail to Agent
   const [resendingMail, setResendingMail] = useState(false);
@@ -445,6 +464,63 @@ export default function DayStayBookingDetailView() {
     }
   };
 
+  // ── Notes (modal-based; replaces the standalone /notes page link) ──
+  const fetchNotes = useCallback(() => {
+    if (!bookingId) return undefined;
+    setNotesLoading(true);
+    return axiosInstance
+      .get(`/api/day-stay-booking/${bookingId}/notes`)
+      .then((res) => {
+        // Endpoint returns a bare array of note rows.
+        setBookingNotes(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch(() => setBookingNotes([]))
+      .finally(() => setNotesLoading(false));
+  }, [bookingId]);
+
+  useEffect(() => {
+    fetchNotes();
+  }, [fetchNotes]);
+
+  const openNotesModal = () => {
+    setNoteInput("");
+    setShowNotesModal(true);
+  };
+
+  const saveNote = async () => {
+    const text = (noteInput || "").trim();
+    if (!text) {
+      toast.error("Note cannot be empty");
+      return;
+    }
+    try {
+      setSavingNote(true);
+      // SAME endpoint + payload shape the standalone /notes page uses
+      // (body field is `note`, not `noteText`). Nothing about how notes are
+      // stored is changed.
+      const createdBy =
+        localStorage.getItem("UserName") ||
+        sessionStorage.getItem("UserName") ||
+        "unknown";
+      const res = await axiosInstance.post(
+        `/api/day-stay-booking/${bookingId}/notes`,
+        { note: text, createdBy },
+      );
+      if (res.data && res.data.success !== false) {
+        toast.success("Note saved");
+        setShowNotesModal(false);
+        setNoteInput("");
+        await fetchNotes();
+      } else {
+        toast.error(res.data?.message || "Failed to save note");
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to save note");
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
   // ── Booking Remark ─────────────────────────────────────────────────
   const openRemarkModal = () => {
     setRemarkInput(selected?.remarks || "");
@@ -581,7 +657,7 @@ export default function DayStayBookingDetailView() {
             {/* ── Header: Back + title + booking code + status ────────── */}
             <div className="mb-3 d-flex align-items-center flex-wrap gap-2">
               <button
-                style={{ ...BUTTON_STYLE, backgroundColor: "#555" }}
+                style={BTN_NEUTRAL}
                 onClick={() => navigate(-1)}
               >
                 ← Back
@@ -821,6 +897,78 @@ export default function DayStayBookingDetailView() {
                   </div>
                 )}
 
+                {/* ── Related Notes (ad-hoc notes added via the NOTES modal) ──
+                    Same data shown in the modal, surfaced here on the page so
+                    notes are visible without opening the modal. Read-only;
+                    saves still happen through the existing modal flow. */}
+                <div style={card}>
+                  <div style={SECTION_HEADER}>
+                    Related Notes{" "}
+                    {bookingNotes.length > 0 && (
+                      <span
+                        style={{
+                          fontSize: "0.7rem",
+                          fontWeight: 600,
+                          color: "#EC0B43",
+                          background: "#FDE7ED",
+                          borderRadius: "99px",
+                          padding: "2px 9px",
+                          marginLeft: 6,
+                          letterSpacing: ".02em",
+                        }}
+                      >
+                        {bookingNotes.length}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    style={{
+                      padding: "10px 16px",
+                      fontSize: "0.83rem",
+                      color: "#333",
+                    }}
+                  >
+                    {notesLoading ? (
+                      <span className="text-muted">Loading notes…</span>
+                    ) : bookingNotes.length === 0 ? (
+                      <span className="text-muted">No notes yet.</span>
+                    ) : (
+                      bookingNotes.map((n) => (
+                        <div
+                          key={n.id}
+                          style={{
+                            borderLeft: "3px solid #EC0B43",
+                            background: "#FAFAF8",
+                            padding: "10px 12px",
+                            marginBottom: 8,
+                            borderRadius: 4,
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "0.72rem",
+                              color: "#777",
+                              marginBottom: 4,
+                              letterSpacing: ".01em",
+                            }}
+                          >
+                            {n.createdBy ? `${n.createdBy} • ` : ""}
+                            {n.createdDate ? formatDateTime(n.createdDate) : ""}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: "0.85rem",
+                              whiteSpace: "pre-wrap",
+                            }}
+                          >
+                            {n.note}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
                 {/* ── Action Buttons ──────────────────────────────────
                     All booking-level actions live here, reflowing on
                     small screens via flex-wrap. Day Stay's only PDF
@@ -839,7 +987,7 @@ export default function DayStayBookingDetailView() {
                   <button
                     style={{
                       ...BUTTON_STYLE,
-                      backgroundColor: isCancelled ? "#6c757d" : "#198754",
+                      backgroundColor: isCancelled ? "#6c757d" : "#0891b2",
                       cursor: isCancelled ? "not-allowed" : "pointer",
                       opacity: isCancelled ? 0.7 : 1,
                     }}
@@ -857,7 +1005,7 @@ export default function DayStayBookingDetailView() {
 
                   {!isCancelled && (
                     <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#dc3545" }}
+                      style={{ ...BUTTON_STYLE, backgroundColor: "#dc2626" }}
                       onClick={openCancel}
                       title="Cancel Booking"
                     >
@@ -867,13 +1015,13 @@ export default function DayStayBookingDetailView() {
                   )}
 
                   {!showsFinalDocs && !isCancelledStatus && (
-                    <button style={BUTTON_STYLE} onClick={openConfirmModal}>
+                    <button style={BTN_TEAL} onClick={openConfirmModal}>
                       RECONFIRM
                     </button>
                   )}
 
                   <button
-                    style={BUTTON_STYLE}
+                    style={BTN_SKY}
                     onClick={() => {
                       if (!isConfirmedOrLater) {
                         toast.error(
@@ -889,7 +1037,7 @@ export default function DayStayBookingDetailView() {
 
                   {!isAgentRole && (
                     <button
-                      style={BUTTON_STYLE}
+                      style={BTN_INDIGO}
                       onClick={() => {
                         if (!isConfirmedOrLater) {
                           toast.error(
@@ -905,7 +1053,7 @@ export default function DayStayBookingDetailView() {
                   )}
 
                   <button
-                    style={BUTTON_STYLE}
+                    style={BTN_ORANGE}
                     onClick={resendMailToAgent}
                     disabled={resendingMail}
                   >
@@ -913,19 +1061,15 @@ export default function DayStayBookingDetailView() {
                   </button>
 
                   {!isAgentRole && (
-                    <button style={BUTTON_STYLE} onClick={openRemarkModal}>
+                    <button style={BTN_ACCENT} onClick={openRemarkModal}>
                       BOOKING REMARK
                     </button>
                   )}
 
                   {!isAgentRole && (
                     <button
-                      style={BUTTON_STYLE}
-                      onClick={() =>
-                        navigate(
-                          `/booking-details/day-stay-booking/${bookingId}/notes`
-                        )
-                      }
+                      style={BTN_NEUTRAL}
+                      onClick={openNotesModal}
                     >
                       NOTES
                     </button>
@@ -1367,6 +1511,66 @@ export default function DayStayBookingDetailView() {
                     </Button>
                   </Modal.Footer>
                 </Modal>
+
+                {/* ── Notes Modal — list existing notes (read-only) and add a
+                    new one inline. POSTs to the SAME endpoint and payload
+                    shape the standalone /notes page uses; no flow change. */}
+                <Modal
+                  show={showNotesModal}
+                  onHide={() => {
+                    if (!savingNote) setShowNotesModal(false);
+                  }}
+                  centered
+                  backdrop="static"
+                  keyboard={false}
+                >
+                  <Modal.Header closeButton={!savingNote}>
+                    <Modal.Title style={{ fontSize: "1rem" }}>
+                      Add Note
+                    </Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold">Note</Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={5}
+                        placeholder="Type your note here. You can enter long paragraphs."
+                        value={noteInput}
+                        onChange={(e) => setNoteInput(e.target.value)}
+                        disabled={savingNote}
+                        style={{ resize: "vertical" }}
+                      />
+                    </Form.Group>
+                  </Modal.Body>
+                  <Modal.Footer>
+                    <Button
+                      variant="outline-secondary"
+                      onClick={() => setShowNotesModal(false)}
+                      disabled={savingNote}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="primary"
+                      onClick={saveNote}
+                      disabled={savingNote}
+                    >
+                      {savingNote ? (
+                        <>
+                          <Spinner
+                            animation="border"
+                            size="sm"
+                            className="me-2"
+                          />
+                          Saving...
+                        </>
+                      ) : (
+                        "OK"
+                      )}
+                    </Button>
+                  </Modal.Footer>
+                </Modal>
               </>
             )}
           </Container>
@@ -1394,6 +1598,31 @@ export default function DayStayBookingDetailView() {
         </Modal.Header>
         <Modal.Body style={{ padding: "1.5rem" }}>
           <p>Are you sure you want to cancel this Day Stay booking?</p>
+          {/* Informational only — booking value warning. Mirrors the Total
+              Amount shown on the page. Does not alter any cancellation logic. */}
+          {selected?.totalAmount != null && (
+            <div
+              className="mb-3"
+              style={{
+                border: "1px solid #ffe69c",
+                backgroundColor: "#fff3cd",
+                color: "#664d03",
+                borderRadius: "4px",
+                padding: "10px 12px",
+                fontSize: "0.9rem",
+              }}
+            >
+              <FaExclamationCircle className="me-2 text-warning" />
+              Total value of this booking is{" "}
+              <strong>
+                AED {Number(selected.totalAmount).toFixed(2)}
+              </strong>
+              .
+              <div className="fw-semibold mt-1">
+                Do you still want to cancel it?
+              </div>
+            </div>
+          )}
           <Form.Group controlId="dayStayCancellationReason">
             <Form.Label className="fw-semibold">
               Reason <span className="text-muted">(optional)</span>

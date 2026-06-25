@@ -616,6 +616,8 @@ export default function LongStayRoomList() {
         // Optional "Booking Done By Employee" carried from LongStaySearch.
         employeeId: draft.payload.employeeId || null,
         nationality: draft.payload.nationality || null,
+        // "Add New Item" amendment flow — parent hotel booking code.
+        parentBookingCode: draft.payload.parentBookingCode || null,
         rooms: draft.payload.rooms || [],
         contract,
         room,
@@ -689,6 +691,8 @@ export default function LongStayRoomList() {
           // Optional "Booking Done By Employee" carried from LongStaySearch.
           employeeId: draft.payload.employeeId || null,
           nationality: draft.payload.nationality || null,
+          // "Add New Item" amendment flow — parent hotel booking code.
+          parentBookingCode: draft.payload.parentBookingCode || null,
           rooms: draft.payload.rooms || [],
           // Backend takes ONE (contract, room) — primary slot wins.
           contract: primary.contract,

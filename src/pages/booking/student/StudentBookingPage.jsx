@@ -35,6 +35,7 @@ import {
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
+import { createAmendmentLink } from "../../../utils/amendmentLink";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
 
@@ -576,6 +577,33 @@ export default function StudentBookingPage() {
       if (data?.success) {
         setShowConfirmModal(false);
         toast.success(`Booking ${data.bookingCode} created successfully`);
+        // "Add New Item" amendment flow: when launched from a hotel booking's
+        // ADD NEW ITEM, link this child to that parent and return to the parent
+        // detail page. Otherwise keep the normal list redirect. Create call
+        // above is unchanged.
+        if (pendingPayload.parentBookingCode) {
+          const parentId = await createAmendmentLink({
+            parentBookingCode: pendingPayload.parentBookingCode,
+            childType: "STUDENT",
+            childTypeLabel: "Student",
+            childBookingId: data.bookingId,
+            childBookingCode: data.bookingCode,
+            childDetailRoutePrefix: "/booking-details/student-booking/",
+            childReferenceNumber: data.referenceNumber || data.bookingCode,
+            childStatus: data.confirmationStatus || data.status || "Confirmed",
+            childHotelName: pendingPayload.hotelName,
+            childCheckInDate: pendingPayload.checkInDate,
+            childCheckOutDate: pendingPayload.checkOutDate,
+            childTotalRate: pendingPayload.totalRateBeforeDiscount,
+            childGuestName: `${pendingPayload.primaryGuest?.firstName || ""} ${
+              pendingPayload.primaryGuest?.lastName || ""
+            }`.trim(),
+          });
+          if (parentId) {
+            navigate(`/booking-details/hotel-booking/${parentId}`);
+            return;
+          }
+        }
         navigate("/booking-details/student-booking-list");
       } else {
         toast.error(data?.message || "Booking failed");

@@ -14,7 +14,7 @@ import Select from "react-select";
 import AgentSelect from "../components/AgentSelect";
 import axiosInstance from "../components/AxiosInstance";
 import AdvertisementCarousel from "../components/AdvertisementCarousel";
-import { FaSearch, FaStar } from "react-icons/fa";
+import { FaSearch, FaStar, FaInfoCircle } from "react-icons/fa";
 import { useNavigate, useLocation } from "react-router-dom";
 import "../styles/HotelSearch.css";
 
@@ -206,6 +206,40 @@ function RoomGuestSelector({ value, onChange }) {
                 />
               </div>
             </div>
+
+            {/* Informational guidance only — shown ONLY when this room has
+                more than 2 children, so users planning that case understand
+                they may need an additional room. Does NOT validate or
+                restrict; the counter, child-age inputs, search payload, and
+                booking flow are all unchanged. */}
+            {room.children > 2 && (
+              <div
+                role="note"
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "8px",
+                  border: "1px solid #b6e0fe",
+                  backgroundColor: "#eaf6ff",
+                  color: "#084c8d",
+                  borderRadius: "4px",
+                  padding: "8px 10px",
+                  marginTop: "8px",
+                  fontSize: "0.78rem",
+                  lineHeight: 1.35,
+                }}
+              >
+                <FaInfoCircle
+                  style={{ marginTop: "2px", flexShrink: 0 }}
+                  aria-hidden="true"
+                />
+                <span>
+                  Most hotels allow up to <strong>2 children per room</strong>.
+                  If you have more than 2 children, you may need to book an
+                  additional room.
+                </span>
+              </div>
+            )}
 
             {room.children > 0 && (
               <div className="rgs-child-ages">

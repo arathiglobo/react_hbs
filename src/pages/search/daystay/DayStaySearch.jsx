@@ -1122,6 +1122,13 @@ export default function DayStaySearch() {
                                       children: totalChildren,
                                       childAges: flatChildAges,
                                       rooms: totalRooms,
+                                      // "Add New Item" amendment flow — parent
+                                      // hotel booking code when launched from
+                                      // ADD NEW ITEM.
+                                      parentBookingCode:
+                                        new URLSearchParams(
+                                          window.location.search,
+                                        ).get("parentBookingCode") || null,
                                     };
                                     sessionStorage.setItem(
                                       "dayStayRoomListPayload",

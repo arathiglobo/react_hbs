@@ -20,6 +20,7 @@ import {
   FaCheckCircle,
 } from "react-icons/fa";
 import axiosInstance from "../../components/AxiosInstance";
+import { createAmendmentLink } from "../../utils/amendmentLink";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
@@ -338,6 +339,30 @@ export default function LongStayBookingPage() {
       toast.success(`Booking confirmed: ${res.data.bookingCode}`);
       sessionStorage.removeItem("longStayBookingDraft");
       setShowConfirmModal(false);
+      // "Add New Item" amendment flow: link to the parent hotel booking and
+      // return to its detail page; otherwise keep the normal list redirect.
+      // The create call above is unchanged.
+      if (draft.parentBookingCode) {
+        const parentId = await createAmendmentLink({
+          parentBookingCode: draft.parentBookingCode,
+          childType: "LONG_STAY",
+          childTypeLabel: "Long Stay",
+          childBookingId: res.data.longStayBookingId,
+          childBookingCode: res.data.bookingCode,
+          childDetailRoutePrefix: "/booking-details/long-stay-booking/",
+          childReferenceNumber: res.data.referenceNumber || res.data.bookingCode,
+          childStatus: res.data.confirmationStatus || res.data.status || "Confirmed",
+          childHotelName: draft.hotelName,
+          childCheckInDate: draft.checkIn,
+          childCheckOutDate: draft.checkOut,
+          childTotalRate: quote?.totalAmount,
+          childGuestName: fullName,
+        });
+        if (parentId) {
+          navigate(`/booking-details/hotel-booking/${parentId}`);
+          return;
+        }
+      }
       navigate("/booking-details/long-stay-booking-list");
     } catch (err) {
       toast.error(`Booking failed: ${err.response?.data?.message || err.message}`);

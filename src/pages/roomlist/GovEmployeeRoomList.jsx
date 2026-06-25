@@ -328,7 +328,11 @@ const GovEmployeeRoomList = () => {
       // GovEmployeeSearch onto payload so GovEmployeeBookingPage can
       // include it in /api/gov-employee-booking/create. Reuses the
       // same payload-source pattern HotelBookingPage uses.
-      payload: { ...roomData.payload, employeeId: ctx.employeeId || null },
+      payload: {
+        ...roomData.payload,
+        employeeId: ctx.employeeId || null,
+        parentBookingCode: ctx.parentBookingCode || null,
+      },
       activePromotion,
       searchCtx: ctx,
     };
@@ -475,7 +479,11 @@ const GovEmployeeRoomList = () => {
           phone: hotelsdetail.hotelPhoneNumber,
         },
         // Same employeeId forwarding as the single-room flow above.
-        payload: { ...roomData.payload, employeeId: ctx.employeeId || null },
+        payload: {
+        ...roomData.payload,
+        employeeId: ctx.employeeId || null,
+        parentBookingCode: ctx.parentBookingCode || null,
+      },
         activePromotion,
         searchCtx: ctx,
       };

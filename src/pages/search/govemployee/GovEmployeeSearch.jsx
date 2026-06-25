@@ -722,6 +722,12 @@ export default function GovEmployeeSearch() {
       // Display currency chosen on the search page — flows through to the
       // room list / booking page / create payload. Rates stay AED.
       currency: displayCurrency,
+      // "Add New Item" amendment flow: when this search was launched from a
+      // hotel booking's ADD NEW ITEM (?parentBookingCode=GLBIN37), carry the
+      // parent code through so the booking page can link the child back to it.
+      parentBookingCode:
+        new URLSearchParams(window.location.search).get("parentBookingCode") ||
+        null,
     };
     try {
       localStorage.setItem("govEmployeeRoomListCtx", JSON.stringify(handoff));
