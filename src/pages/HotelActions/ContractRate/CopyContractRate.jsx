@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   Container,
   Row,
@@ -15,12 +15,16 @@ import {
 import { FaArrowLeft, FaSave } from "react-icons/fa";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
+import HotelTitleBadge from "../../../components/HotelTitleBadge";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 
 export default function CopyContractRate() {
   const navigate = useNavigate();
   const { id, rateId } = useParams();
+  // Reused under /hotel-actions (admin) and /extranet (hotel login).
+  const { pathname } = useLocation();
+  const isExtranet = pathname.startsWith("/extranet");
 
   const [formData, setFormData] = useState({
     seasonId: "",
@@ -272,7 +276,11 @@ export default function CopyContractRate() {
 
       if (res.status === 200) {
         toast.success("Contract Rate updated successfully!");
-        navigate(`/registration/hotel/${id}/contract-rate`);
+        navigate(
+          isExtranet
+            ? `/extranet/${id}/contract-rate`
+            : `/registration/hotel/${id}/contract-rate`,
+        );
       }
     } catch (err) {
       console.error("❌ Update Error:", err);
@@ -292,7 +300,7 @@ export default function CopyContractRate() {
               <Button variant="outline-secondary" onClick={() => navigate(-1)}>
                 <FaArrowLeft className="me-2" /> Back
               </Button>
-              <h4 className="fw-semibold text-dark mb-0">Edit Contract Rate</h4>
+              <h4 className="fw-semibold text-dark mb-0">Edit Contract Rate<HotelTitleBadge hotelId={id} className="ms-2" /></h4>
               <Button variant="success" onClick={handleSave}>
                 <FaSave className="me-1" /> Save
               </Button>

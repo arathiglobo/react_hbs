@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   Container,
   Table,
@@ -24,6 +24,10 @@ import Swal from "sweetalert2";
 const Promotion = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+    const { pathname } = useLocation();
+    const isExtranet = pathname.startsWith("/extranet");
+    const navBase = isExtranet ? "/extranet" : "/hotel-actions";
+    const backUrl = isExtranet ? "/extranetDashboard" : `/hotel-details/${id}`;
 
   const [promotions, setPromotions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -46,11 +50,11 @@ const Promotion = () => {
   const handleView = (promo) => {
     const type = (promo.promotionType || "").toLowerCase();
     if (type.includes("special")) {
-      navigate(`/hotel-actions/${id}/promotion/special-rate/edit/${promo.id}?mode=view`);
+      navigate(`${navBase}/${id}/promotion/special-rate/edit/${promo.id}?mode=view`);
     } else if (type.includes("discount")) {
-      navigate(`/hotel-actions/${id}/promotion/discount/edit/${promo.id}?mode=view`);
+      navigate(`${navBase}/${id}/promotion/discount/edit/${promo.id}?mode=view`);
     } else if (type.includes("staypay") || type.includes("stay pay")) {
-      navigate(`/hotel-actions/${id}/promotion/staypay/edit/${promo.id}?mode=view`);
+      navigate(`${navBase}/${id}/promotion/staypay/edit/${promo.id}?mode=view`);
     } else {
       toast.error("Unknown promotion type");
     }
@@ -250,13 +254,13 @@ const Promotion = () => {
     if (!formData.type) return toast.error("Please select a promotion type");
     switch (formData.type) {
       case "special-rates":
-        navigate(`/hotel-actions/${id}/promotion/special-rate/save`);
+        navigate(`${navBase}/${id}/promotion/special-rate/save`);
         break;
       case "discount-promotion":
-        navigate(`/hotel-actions/${id}/promotion/discount/save`);
+        navigate(`${navBase}/${id}/promotion/discount/save`);
         break;
       case "stay-pay-promotion":
-        navigate(`/hotel-actions/${id}/promotion/staypay/save`);
+        navigate(`${navBase}/${id}/promotion/staypay/save`);
         break;
       default:
         break;
@@ -283,7 +287,7 @@ const Promotion = () => {
               <div className="d-flex align-items-center gap-3 mb-3">
                 <Button
                   variant="outline-primary"
-                  onClick={() => navigate(`/hotel-details/${id}`)}
+                  onClick={() => navigate(backUrl)}
                   className="d-flex align-items-center btn-sm gap-2"
                 >
                   <FaArrowLeft />
@@ -404,18 +408,18 @@ const Promotion = () => {
                                 const type = promo.promotionType?.toLowerCase();
                                 if (type.includes("special")) {
                                   navigate(
-                                    `/hotel-actions/${id}/promotion/special-rate/edit/${promo.id}`
+                                    `${navBase}/${id}/promotion/special-rate/edit/${promo.id}`
                                   );
                                 } else if (type.includes("discount")) {
                                   navigate(
-                                   `/hotel-actions/${id}/promotion/discount/edit/${promo.id}`
+                                   `${navBase}/${id}/promotion/discount/edit/${promo.id}`
                                   );
                                 } else if (
                                   type.includes("staypay") ||
                                   type.includes("stay pay")
                                 ) {
                                   navigate(
-                                   `/hotel-actions/${id}/promotion/staypay/edit/${promo.id}`
+                                   `${navBase}/${id}/promotion/staypay/edit/${promo.id}`
                                   );
                                 } else {
                                   toast.error("Unknown promotion type");

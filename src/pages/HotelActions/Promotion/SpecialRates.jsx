@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   Container,
   Row,
@@ -21,6 +21,10 @@ import { toast } from "react-hot-toast";
 const SpecialRates = () => {
   const navigate = useNavigate();
   const { id } = useParams();
+    const { pathname } = useLocation();
+    const isExtranet = pathname.startsWith("/extranet");
+    const navBase = isExtranet ? "/extranet" : "/hotel-actions";
+    const backUrl = isExtranet ? "/extranetDashboard" : `/hotel-details/${id}`;
 
   const [loading, setLoading] = useState(false);
   const [rooms, setRooms] = useState([]);
@@ -413,7 +417,7 @@ const SpecialRates = () => {
 
       if (response.data) {
         toast.success("Special Rate Saved Successfully!");
-        navigate(`/hotel-actions/${id}/promotions`);
+        navigate(`${navBase}/${id}/promotions`);
       }
     } catch (error) {
       console.error("Save error:", error);

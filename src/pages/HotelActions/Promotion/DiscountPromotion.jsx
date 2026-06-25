@@ -10,7 +10,7 @@ import {
   Spinner,
 } from "react-bootstrap";
 import { FaArrowLeft, FaPlus, FaTrash, FaSave, FaTimes } from "react-icons/fa";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
@@ -21,6 +21,10 @@ import Select from "react-select";
 export default function DiscountPromotion() {
   const navigate = useNavigate();
   const { id } = useParams(); // hotelId
+    const { pathname } = useLocation();
+    const isExtranet = pathname.startsWith("/extranet");
+    const navBase = isExtranet ? "/extranet" : "/hotel-actions";
+    const backUrl = isExtranet ? "/extranetDashboard" : `/hotel-details/${id}`;
 
   const [loading, setLoading] = useState(false);
   const [rooms, setRooms] = useState([]);
@@ -386,7 +390,7 @@ export default function DiscountPromotion() {
 
       if (response.data) {
         toast.success("Discount Promotion Saved Successfully!");
-        navigate(`/hotel-actions/${id}/promotions`);
+        navigate(`${navBase}/${id}/promotions`);
       }
     } catch (error) {
       console.error("Save error:", error);

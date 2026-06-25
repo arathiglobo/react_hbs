@@ -376,7 +376,7 @@ export default function PackageBookingDetailView() {
     setIsLoadingVoucherPdf(true);
     try {
       const response = await axiosInstance.get(
-        `/api/v1/package-booking/generate-pdf/${bookingId}`
+        `/api/package-bookings/${bookingId}/pdf?type=VOUCHER`
       );
       if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
         setVoucherBlobUrl(response.data.pdfUrl);

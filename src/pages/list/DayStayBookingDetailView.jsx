@@ -507,7 +507,7 @@ export default function DayStayBookingDetailView() {
     setLoadingPdf(true);
     try {
       const res = await axiosInstance.get(
-        `/api/day-stay-booking/${bookingId}/voucher`
+        `/api/day-stay-bookings/${bookingId}/pdf?type=VOUCHER`
       );
       if (res.data?.status === "SUCCESS" && res.data?.pdfUrl) {
         setPdfUrl(res.data.pdfUrl);
@@ -836,10 +836,21 @@ export default function DayStayBookingDetailView() {
                     flexWrap: "wrap",
                   }}
                 >
+                {!isCancelled && (
+                    <button
+                      style={{ ...BUTTON_STYLE, backgroundColor: "#dc3545" }}
+                      onClick={openCancel}
+                      title="Cancel Booking"
+                    >
+                      <FaTrashAlt style={{ marginRight: "6px" }} />
+                      Cancel
+                    </button>
+                  )}
+
                   <button
                     style={{
                       ...BUTTON_STYLE,
-                      backgroundColor: isCancelled ? "#6c757d" : "#198754",
+                      backgroundColor: isCancelled ? "#6c757d" : "#dc3545",
                       cursor: isCancelled ? "not-allowed" : "pointer",
                       opacity: isCancelled ? 0.7 : 1,
                     }}
@@ -854,17 +865,6 @@ export default function DayStayBookingDetailView() {
                     <FaFileAlt style={{ marginRight: "6px" }} />
                     Voucher
                   </button>
-
-                  {!isCancelled && (
-                    <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#dc3545" }}
-                      onClick={openCancel}
-                      title="Cancel Booking"
-                    >
-                      <FaTrashAlt style={{ marginRight: "6px" }} />
-                      Cancel
-                    </button>
-                  )}
 
                   {!showsFinalDocs && !isCancelledStatus && (
                     <button style={BUTTON_STYLE} onClick={openConfirmModal}>

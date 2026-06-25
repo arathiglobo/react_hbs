@@ -250,7 +250,7 @@ export default function MakeYourOwnPackageV2BookingDetailView() {
     setLoadingPdf(true);
     try {
       const res = await axiosInstance.get(
-        `/api/makeYourOwnPackageV2/booking/${bookingId}/voucher`,
+        `/api/make-your-own-package-v2/${bookingId}/pdf?type=VOUCHER`,
       );
       if (res.data?.status === "SUCCESS" && res.data?.pdfUrl) {
         setPdfUrl(res.data.pdfUrl);

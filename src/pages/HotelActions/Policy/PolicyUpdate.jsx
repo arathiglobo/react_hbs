@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import {
   Container,
   Row,
@@ -20,6 +20,10 @@ const PolicyUpdate = () => {
   const { id, editId } = useParams(); // hotelId, policyId
   const policyId = editId;
   const navigate = useNavigate();
+    const { pathname } = useLocation();
+    const isExtranet = pathname.startsWith("/extranet");
+    const navBase = isExtranet ? "/extranet" : "/hotel-actions";
+    const backUrl = isExtranet ? "/extranetDashboard" : `/hotel-details/${id}`;
 
   // View mode — `?mode=view` makes the form read-only. Mirrors the
   // /occupancy-and-minimumlength view pattern.
@@ -130,7 +134,7 @@ const PolicyUpdate = () => {
 
       if (policyUpdateRes.data != null) {
         toast.success("Policy updated successfully!");
-        navigate(`/hotel-actions/${id}/hotel-policy`);
+        navigate(`${navBase}/${id}/hotel-policy`);
       }
 
     } catch (error) {

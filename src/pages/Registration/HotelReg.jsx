@@ -1569,7 +1569,19 @@ const handleAmenityChange = (e) => {
           setAvailableRoomTypes([]);
         }
         setValidationErrors({});
-        navigate("/registration/hotel");
+        // Extranet (hotel) users edit their OWN profile via this shared page —
+        // after a successful update send them back to their dashboard. Admin
+        // behavior is unchanged (still returns to the registration list).
+        const activeRole = (
+          localStorage.getItem("currentActiveRole") ||
+          localStorage.getItem("userRole") ||
+          ""
+        ).toLowerCase();
+        if (isEditMode && activeRole.includes("extranet")) {
+          navigate("/extranetDashboard");
+        } else {
+          navigate("/registration/hotel");
+        }
       }
     } catch (error) {
       console.error("Error submitting hotel:", error);

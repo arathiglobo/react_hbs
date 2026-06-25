@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   Card,
   Button,
@@ -24,6 +24,11 @@ import HotelTitleBadge from "../../../components/HotelTitleBadge";
 const HotelAvailability = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  // Reused under /hotel-actions (admin) and /extranet (hotel login). Admin is
+  // the default branch, so its Back target is unchanged.
+  const { pathname } = useLocation();
+  const isExtranet = pathname.startsWith("/extranet");
+  const backUrl = isExtranet ? "/extranetDashboard" : `/hotel-details/${id}`;
 
   // State for data
   const [items, setItems] = useState([]);
@@ -1471,7 +1476,7 @@ const HotelAvailability = () => {
           <div className="d-flex align-items-center gap-3 mb-3">
             <Button
               variant="outline-primary"
-              onClick={() => navigate(`/hotel-details/${id}`)}
+              onClick={() => navigate(backUrl)}
               className="d-flex align-items-center btn-sm gap-2"
             >
               <FaArrowLeft />

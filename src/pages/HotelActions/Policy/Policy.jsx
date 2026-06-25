@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   Container,
   Table,
@@ -24,6 +24,10 @@ import Swal from "sweetalert2";
 const Policy = () => {
   const { id } = useParams(); // Hotel ID
   const navigate = useNavigate();
+    const { pathname } = useLocation();
+    const isExtranet = pathname.startsWith("/extranet");
+    const navBase = isExtranet ? "/extranet" : "/hotel-actions";
+    const backUrl = isExtranet ? "/extranetDashboard" : `/hotel-details/${id}`;
 
   const [policies, setPolicies] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -39,7 +43,7 @@ const Policy = () => {
   // View — reuses the existing edit page in read-only mode. Mirrors the
   // /occupancy-and-minimumlength view pattern.
   const handleView = (policyId) =>
-    navigate(`/hotel-actions/${id}/hotel-policy/${policyId}/edit?mode=view`);
+    navigate(`${navBase}/${id}/hotel-policy/${policyId}/edit?mode=view`);
 
   // ✅ Fetch hotel policies with search and pagination
   const fetchPolicies = async (pageNum = 0, searchQuery = searchTerm) => {
@@ -189,7 +193,7 @@ const Policy = () => {
 
   // ✅ Navigate to Create Policy
   const handleCreate = () => {
-    navigate(`/hotel-actions/${id}/hotel-policy/create`);
+    navigate(`${navBase}/${id}/hotel-policy/create`);
   };
 
   // ✅ Handle page change
@@ -201,7 +205,7 @@ const Policy = () => {
 
   // ✅ Navigate to Edit
   const handleEdit = (policyId) =>
-     navigate(`/hotel-actions/${id}/hotel-policy/${policyId}/edit`);
+     navigate(`${navBase}/${id}/hotel-policy/${policyId}/edit`);
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -215,7 +219,7 @@ const Policy = () => {
               <div className="d-flex align-items-center gap-3">
                 <Button
                   variant="outline-primary"
-                  onClick={() => navigate(`/hotel-details/${id}`)}
+                  onClick={() => navigate(backUrl)}
                   className="d-flex align-items-center btn-sm gap-2"
                 >
                   <FaArrowLeft />

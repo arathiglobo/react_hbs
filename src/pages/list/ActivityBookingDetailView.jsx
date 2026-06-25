@@ -422,7 +422,7 @@ export default function ActivityBookingDetailView() {
     try {
       setGeneratingPdfType(type);
       const response = await axiosInstance.get(
-        `/api/tour-activity-booking/${id}/pdf`,
+        `/api/activity_booking/${id}/pdf`,
         { params: { type: type.toUpperCase() } },
       );
       if (

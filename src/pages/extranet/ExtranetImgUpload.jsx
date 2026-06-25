@@ -1,13 +1,31 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Container, Button, Row, Col, Spinner, Card } from "react-bootstrap";
-import { FaCloudUploadAlt, FaTrash, FaEye, FaSave } from "react-icons/fa";
+import { FaCloudUploadAlt, FaTrash, FaEye, FaSave, FaArrowLeft } from "react-icons/fa";
 import { toast } from "react-hot-toast";
+import { useNavigate } from "react-router-dom";
 import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
+import HotelTitleBadge from "../../components/HotelTitleBadge";
 import "../../styles/ExtranetImgUpload.css";
 
+// Uploaded images are stored on the backend with an ABSOLUTE filesystem path
+// (e.g. "D:/hbsImages/imageDir/123_photo.jpg") which a browser cannot load.
+// The same folder is served at "/images/**" (proxied to the backend in dev via
+// package.json "proxy"), so resolve any stored value to a loadable URL:
+//   - full http(s) URL  → use as-is
+//   - already "/images/" path → use as-is
+//   - absolute/relative fs path → take the file name and serve from /images/
+const resolveImgSrc = (path) => {
+  if (!path) return "";
+  if (/^https?:\/\//i.test(path)) return path;
+  if (path.startsWith("/images/")) return path;
+  const filename = path.split(/[\\/]/).pop();
+  return `/images/${filename}`;
+};
+
 const ExtranetImgUpload = () => {
+  const navigate = useNavigate();
   const [hotelId, setHotelId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
@@ -162,8 +180,19 @@ const ExtranetImgUpload = () => {
         <main className="flex-grow-1" style={{ minWidth: 0, overflowX: "hidden" }}>
         <Container fluid className="extranet-img-upload-container">
           <Card className="shadow-sm border-0 rounded-4 overflow-hidden mb-4">
-            <Card.Header className="bg-white border-bottom py-3">
-              <h4 className="fw-bold mb-0">Hotel Image Gallery</h4>
+            <Card.Header className="bg-white border-bottom py-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+              <div className="d-flex align-items-center gap-3 flex-wrap">
+                <h4 className="fw-bold mb-0">Hotel Image Gallery</h4>
+                {hotelId && <HotelTitleBadge hotelId={hotelId} />}
+              </div>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                className="d-flex align-items-center gap-2"
+                onClick={() => navigate("/extranetDashboard")}
+              >
+                <FaArrowLeft /> Back
+              </Button>
             </Card.Header>
             <Card.Body className="p-4">
               {/* Upload Zone */}
@@ -230,9 +259,9 @@ const ExtranetImgUpload = () => {
                     {uploadedImages.map((img, index) => (
                       <div key={index} className="gallery-item">
                         <div className="position-relative">
-                          <img 
-                            src={img.image1Path} 
-                            alt={`hotel-${index}`} 
+                          <img
+                            src={resolveImgSrc(img.image1Path)}
+                            alt={`hotel-${index}`}
                           />
                           <button 
                             className="remove-btn" 
