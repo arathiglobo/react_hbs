@@ -118,6 +118,19 @@ export default function BookingDetailedView() {
   const activeUserRole = localStorage.getItem("currentActiveRole");
   const isAdmin = String(activeUserRole || "").toUpperCase() === "ADMIN";
 
+  // Agent-role gate (UI visibility only). Some actions — Booking Remark,
+  // Notes, Confirmation No. — are internal/admin-facing and are hidden from
+  // Agent logins. currentActiveRole isn't set for single-role logins, so fall
+  // back to userRole (same convention as HotelSearch.jsx isAgentRole). This
+  // changes visibility only; no API/flow/permission behaviour is affected.
+  const activeRole = String(activeUserRole || "").trim().toUpperCase();
+  const storedRoles = String(
+    localStorage.getItem("userRole") || "",
+  ).toUpperCase();
+  const isAgentRole = activeRole
+    ? activeRole === "AGENT"
+    : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
+
   // ── Action-button modal / handler state (ported from HotelBookingList) ──
   // Cancel
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -228,21 +241,29 @@ export default function BookingDetailedView() {
   // prior state isn't lost. Falls back to a plain "Cancelled" for rows
   // cancelled before this was captured (cancelledFromStatus null).
   // "On Request" bookings are stamped CONFIRMED by the status engine so they
-  // can follow the reconfirm → ReConfirmed flow, but until they are actually
-  // reconfirmed they must DISPLAY as "On Request" (not "Confirmed"). This is a
+  // can follow the reconfirm → ReConfirmed flow, but they must DISPLAY their
+  // "On Request" origin rather than the engine's internal status. This is a
   // display-only override keyed off roomStatus — the underlying
   // confirmationStatus / bookingStatus that drive the confirm & voucher flows
-  // are left untouched. Once reconfirmed the status becomes RECONFIRMED and
-  // this override no longer applies.
+  // are left untouched. For an On Request booking we surface:
+  //   • still tentative (CONFIRMED)  → "On Request"
+  //   • reconfirmed   (RECONFIRMED)  → "On Request/Reconfirmed"
+  //   • cancelled     (CANCELLED)    → "On Request/Cancelled"
+  // Non-On-Request bookings are unaffected and keep their existing labels.
   const isOnRequestRoom = /^on\s*request$/i.test(
     String(booking?.roomStatus || "").trim(),
   );
-  const displayStatus =
-    isCancelled && booking?.cancelledFromStatus
+  const displayStatus = isCancelled
+    ? isOnRequestRoom
+      ? "On Request/Cancelled"
+      : booking?.cancelledFromStatus
       ? `${booking.cancelledFromStatus}/Cancelled`
-      : isOnRequestRoom && normalizedStatus === "CONFIRMED"
-      ? "On Request"
-      : booking?.confirmationStatus;
+      : booking?.confirmationStatus
+    : isOnRequestRoom && normalizedStatus === "CONFIRMED"
+    ? "On Request"
+    : isOnRequestRoom && normalizedStatus === "RECONFIRMED"
+    ? "On Request/Reconfirmed"
+    : booking?.confirmationStatus;
   // Agent Reference and Confirmation Number can only be SAVED once the
   // booking is confirmed-or-better; before that the booking is still
   // tentative and these fields don't apply yet.
@@ -250,6 +271,15 @@ export default function BookingDetailedView() {
     normalizedStatus === "CONFIRMED" ||
     normalizedStatus === "RECONFIRMED" ||
     normalizedStatus === "COMPLETED";
+  // A booking still in the pending "On Request" display state is NOT a real
+  // confirmation yet — the status engine only stamps it CONFIRMED so it can
+  // travel the reconfirm flow (see displayStatus above). Agent Reference and
+  // Confirmation No. must stay locked while it sits in this state; they become
+  // available again once it is actually reconfirmed (RECONFIRMED) or for any
+  // genuinely Confirmed/ReConfirmed booking. Display-only gate — no API/flow
+  // change.
+  const isOnRequestPending =
+    isOnRequestRoom && normalizedStatus === "CONFIRMED";
   // Final Voucher / Invoice vs their Proforma equivalents, per the
   // client's confirm-booking flowchart:
   //   • CONFIRMED  → still tentative ("if not reconfirmed, auto-cancel on
@@ -1537,20 +1567,22 @@ export default function BookingDetailedView() {
                       ADD AGENT REFERENCE
                     </button>
 
-                    <button
-                      style={BUTTON_STYLE}
-                      onClick={() => {
-                        if (!cancelledFromConfirmedOrLater) {
-                          toast.error(
-                            "Confirmation Number can only be added once the booking is Confirmed or ReConfirmed.",
-                          );
-                          return;
-                        }
-                        openConfirmationNoModal();
-                      }}
-                    >
-                      CONFIRMATION NO.
-                    </button>
+                    {!isAgentRole && (
+                      <button
+                        style={BUTTON_STYLE}
+                        onClick={() => {
+                          if (!cancelledFromConfirmedOrLater) {
+                            toast.error(
+                              "Confirmation Number can only be added once the booking is Confirmed or ReConfirmed.",
+                            );
+                            return;
+                          }
+                          openConfirmationNoModal();
+                        }}
+                      >
+                        CONFIRMATION NO.
+                      </button>
+                    )}
 
                     <button
                       style={BUTTON_STYLE}
@@ -1560,18 +1592,22 @@ export default function BookingDetailedView() {
                       {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
                     </button>
 
-                    <button style={BUTTON_STYLE} onClick={openRemarkModal}>
-                      BOOKING REMARK
-                    </button>
+                    {!isAgentRole && (
+                      <button style={BUTTON_STYLE} onClick={openRemarkModal}>
+                        BOOKING REMARK
+                      </button>
+                    )}
 
-                    <button
-                      style={BUTTON_STYLE}
-                      onClick={() =>
-                        navigate(`/booking-details/hotel-booking/${id}/notes`)
-                      }
-                    >
-                      NOTES
-                    </button>
+                    {!isAgentRole && (
+                      <button
+                        style={BUTTON_STYLE}
+                        onClick={() =>
+                          navigate(`/booking-details/hotel-booking/${id}/notes`)
+                        }
+                      >
+                        NOTES
+                      </button>
+                    )}
                   </div>
                 )}
                 {!isCancelled && (
@@ -1678,8 +1714,10 @@ export default function BookingDetailedView() {
                           // Show the button for every live booking so the
                           // operator can see the action exists, but block the
                           // modal from opening until the booking is at least
-                          // Confirmed (mirrors the backend J1 guard).
-                          if (!isConfirmedOrLater) {
+                          // Confirmed (mirrors the backend J1 guard). An
+                          // "On Request" booking is still pending, so keep it
+                          // locked until it is reconfirmed.
+                          if (!isConfirmedOrLater || isOnRequestPending) {
                             toast.error(
                               "Agent Reference can only be added once the booking is Confirmed or ReConfirmed.",
                             );
@@ -1692,11 +1730,11 @@ export default function BookingDetailedView() {
                       </button>
                     )}
 
-                    {!isCancelled && (
+                    {!isCancelled && !isAgentRole && (
                       <button
                         style={BUTTON_STYLE}
                         onClick={() => {
-                          if (!isConfirmedOrLater) {
+                          if (!isConfirmedOrLater || isOnRequestPending) {
                             toast.error(
                               "Confirmation Number can only be added once the booking is Confirmed or ReConfirmed.",
                             );
@@ -1719,20 +1757,22 @@ export default function BookingDetailedView() {
                       </button>
                     )}
 
-                    {!isCancelled && (
+                    {!isCancelled && !isAgentRole && (
                       <button style={BUTTON_STYLE} onClick={openRemarkModal}>
                         BOOKING REMARK
                       </button>
                     )}
 
-                    <button
-                      style={BUTTON_STYLE}
-                      onClick={() =>
-                        navigate(`/booking-details/hotel-booking/${id}/notes`)
-                      }
-                    >
-                      NOTES
-                    </button>
+                    {!isAgentRole && (
+                      <button
+                        style={BUTTON_STYLE}
+                        onClick={() =>
+                          navigate(`/booking-details/hotel-booking/${id}/notes`)
+                        }
+                      >
+                        NOTES
+                      </button>
+                    )}
                   </div>
                 )}
 

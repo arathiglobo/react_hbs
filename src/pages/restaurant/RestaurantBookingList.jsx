@@ -16,12 +16,15 @@ import {
   Spinner,
   Pagination,
   Container,
+  Row,
+  Col,
 } from "react-bootstrap";
-import { FaSearch, FaEye } from "react-icons/fa";
+import { FaSearch, FaEye, FaInbox } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
+import "../../styles/HotelBookingListModern.css";
 
 const BOOKING_STATUS_OPTIONS = [
   "Pending Approval",
@@ -185,7 +188,7 @@ const RestaurantBookingList = () => {
   };
 
   return (
-    <div className="min-vh-100 bg-light d-flex flex-column">
+    <div className="min-vh-100 bg-light d-flex flex-column hbl-modern">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
@@ -193,336 +196,494 @@ const RestaurantBookingList = () => {
           className="flex-grow-1 p-3"
           style={{ width: "100%", overflow: "hidden" }}
         >
-          <Container
-            fluid
-            style={{
-              maxWidth: "100%",
-              paddingLeft: "0.5rem",
-              paddingRight: "0.5rem",
-            }}
-          >
-            <div className="d-flex justify-content-between align-items-center mb-4">
-              <h5 className="mb-0 text-dark fw-semibold">Restaurant Bookings</h5>
+          <Container fluid className="px-0">
+            {/* Header: Title + Search (left) | Time Period (right) */}
+            <div className="d-flex justify-content-between align-items-end mb-3">
+              <div>
+                <h3 className="fw-bold text-dark mb-2">Restaurant Bookings</h3>
+                <InputGroup style={{ height: "40px", width: "300px" }}>
+                  <InputGroup.Text
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      borderRight: "none",
+                      borderColor: "#dee2e6",
+                    }}
+                  >
+                    <FaSearch style={{ color: "#6c757d" }} />
+                  </InputGroup.Text>
+                  <Form.Control
+                    type="text"
+                    placeholder="Search here..."
+                    value={search}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      setPage(1);
+                    }}
+                    style={{
+                      borderLeft: "none",
+                      fontSize: "0.85rem",
+                      borderColor: "#dee2e6",
+                      height: "40px",
+                    }}
+                  />
+                </InputGroup>
+              </div>
+              <Card
+                className="shadow-sm border-0"
+                style={{ borderRadius: "8px", minWidth: "260px" }}
+              >
+                <Card.Body className="p-3">
+                  <h6
+                    className="mb-2 fw-bold text-dark"
+                    style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                  >
+                    Time Period
+                  </h6>
+                  <Row className="g-2">
+                    <Col xs={6}>
+                      <Form.Select
+                        value={selectedMonth}
+                        onChange={(e) => {
+                          setSelectedMonth(e.target.value);
+                          setPage(1);
+                        }}
+                        className="form-control"
+                        size="sm"
+                        style={{ fontSize: "0.82rem", height: "45px" }}
+                      >
+                        <option value="">Month</option>
+                        {MONTHS.map((m, idx) => (
+                          <option key={m} value={idx + 1}>
+                            {m.slice(0, 3)}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                    <Col xs={6}>
+                      <Form.Select
+                        value={selectedYear}
+                        onChange={(e) => {
+                          setSelectedYear(e.target.value);
+                          setPage(1);
+                        }}
+                        className="form-control"
+                        size="sm"
+                        style={{ fontSize: "0.82rem", height: "45px" }}
+                      >
+                        <option value="">Year</option>
+                        {years.map((y) => (
+                          <option key={y} value={y}>
+                            {y}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                  </Row>
+                  {(selectedMonth || selectedYear) && (
+                    <button
+                      type="button"
+                      onClick={clearTimePeriod}
+                      className="btn btn-sm border-0 mt-2 p-0"
+                      style={{ fontSize: "0.72rem", color: "#6c757d" }}
+                      title="Clear time period"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </Card.Body>
+              </Card>
             </div>
 
-            <Card
-              className="border mb-3 shadow-sm"
-              style={{ borderRadius: "6px" }}
-            >
-              <Card.Header
-                className="d-flex justify-content-between align-items-center text-dark border-bottom py-2"
-                style={{
-                  borderRadius: "6px 6px 0 0",
-                  backgroundColor: "#f8f9fa",
-                  fontSize: "0.875rem",
-                  fontWeight: 600,
-                }}
-              >
-                <span>List of Bookings</span>
-              </Card.Header>
-              <Card.Body style={{ padding: "1.5rem 1rem 1rem" }}>
-                {/* Toolbar row 1: Booking-type pills + Time Period */}
-                <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                  <div className="d-inline-flex p-1 rounded" style={{ backgroundColor: "#f3f4f6" }}>
-                    {[
-                      { value: "upcoming", label: "Upcoming" },
-                      { value: "completed", label: "Completed" },
-                      { value: "cancelled", label: "Cancelled" },
-                    ].map((opt) => {
-                      const active = bookingType === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => {
-                            setBookingType(opt.value);
+            {/* Filters Section: Booking Type pills + Status select */}
+            <Row className="mb-2 g-1">
+              <Col xs={12}>
+                <Card
+                  className="shadow-sm border-0 w-100"
+                  style={{ borderRadius: "8px" }}
+                >
+                  <Card.Body className="p-3">
+                    <h6
+                      className="mb-2 fw-bold text-dark"
+                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                    >
+                      Booking Type
+                    </h6>
+
+                    <Row className="g-2 align-items-center">
+                      <Col xs="auto">
+                        <div
+                          className="d-inline-flex p-1 rounded"
+                          style={{ backgroundColor: "#f3f4f6" }}
+                        >
+                          {[
+                            { value: "upcoming", label: "Upcoming" },
+                            { value: "completed", label: "Completed" },
+                            { value: "cancelled", label: "Cancelled" },
+                          ].map((opt) => {
+                            const active = bookingType === opt.value;
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => {
+                                  setBookingType(opt.value);
+                                  setPage(1);
+                                }}
+                                className="border-0 px-3 py-1"
+                                style={{
+                                  backgroundColor: active
+                                    ? "#ffffff"
+                                    : "transparent",
+                                  color: active ? "#101828" : "#667085",
+                                  fontSize: "0.8rem",
+                                  fontWeight: active ? 600 : 500,
+                                  borderRadius: "6px",
+                                  boxShadow: active
+                                    ? "0 1px 2px rgba(16,24,40,0.08)"
+                                    : "none",
+                                  transition: "all 0.15s",
+                                }}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </Col>
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <Form.Select
+                          value={statusFilter}
+                          onChange={(e) => {
+                            setStatusFilter(e.target.value);
                             setPage(1);
                           }}
-                          className="border-0 px-3 py-1"
-                          style={{
-                            backgroundColor: active ? "#ffffff" : "transparent",
-                            color: active ? "#101828" : "#667085",
-                            fontSize: "0.78rem",
-                            fontWeight: active ? 600 : 500,
-                            borderRadius: "6px",
-                            boxShadow: active ? "0 1px 2px rgba(16,24,40,0.08)" : "none",
-                            transition: "all 0.15s",
-                          }}
+                          size="sm"
+                          aria-label="Booking status filter"
+                          style={{ fontSize: "0.85rem", height: "46px" }}
                         >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                          <option value="all">All Statuses</option>
+                          {BOOKING_STATUS_OPTIONS.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </Form.Select>
+                      </Col>
+                    </Row>
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
 
-                  <div className="d-flex align-items-center gap-2">
-                    <span
-                      className="text-uppercase text-muted fw-semibold"
-                      style={{ fontSize: "0.68rem", letterSpacing: "0.05em" }}
-                    >
-                      Time Period
-                    </span>
-                    <Form.Select
-                      size="sm"
-                      value={selectedMonth}
-                      onChange={(e) => {
-                        setSelectedMonth(e.target.value);
-                        setPage(1);
-                      }}
-                      style={{ width: "auto", fontSize: "0.8rem", minWidth: "100px" }}
-                    >
-                      <option value="">Month</option>
-                      {MONTHS.map((m, idx) => (
-                        <option key={m} value={idx + 1}>
-                          {m.slice(0, 3)}
-                        </option>
-                      ))}
-                    </Form.Select>
-                    <Form.Select
-                      size="sm"
-                      value={selectedYear}
-                      onChange={(e) => {
-                        setSelectedYear(e.target.value);
-                        setPage(1);
-                      }}
-                      style={{ width: "auto", fontSize: "0.8rem", minWidth: "90px" }}
-                    >
-                      <option value="">Year</option>
-                      {years.map((y) => (
-                        <option key={y} value={y}>
-                          {y}
-                        </option>
-                      ))}
-                    </Form.Select>
-                    {(selectedMonth || selectedYear) && (
-                      <button
-                        type="button"
-                        onClick={clearTimePeriod}
-                        className="btn btn-sm border-0"
-                        style={{
-                          fontSize: "0.72rem",
-                          color: "#667085",
-                          padding: "0.25rem 0.5rem",
-                        }}
-                        title="Clear time period"
-                      >
-                        Clear
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* Toolbar row 2: status select + page size + search */}
-                <div
-                  className="d-flex flex-wrap justify-content-end align-items-center gap-2"
-                  style={{ marginBottom: "1.5rem" }}
-                >
-                  <Form.Select
-                    size="sm"
-                    value={statusFilter}
-                    onChange={(e) => {
-                      setStatusFilter(e.target.value);
-                      setPage(1);
-                    }}
-                    style={{ width: "auto", fontSize: "0.8rem" }}
-                  >
-                    <option value="all">All Statuses</option>
-                    {BOOKING_STATUS_OPTIONS.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </Form.Select>
-                  <Form.Select
-                    value={size}
-                    onChange={(e) => {
-                      setSize(Number(e.target.value));
-                      setPage(1);
-                    }}
-                    size="sm"
-                    style={{ width: "auto", fontSize: "0.8rem" }}
-                  >
-                    {PER_PAGE_OPTIONS.map((n) => (
-                      <option key={n} value={n}>
-                        {n} / page
-                      </option>
-                    ))}
-                  </Form.Select>
-                  <InputGroup size="sm" style={{ width: "240px" }}>
-                    <InputGroup.Text
-                      style={{
-                        fontSize: "0.75rem",
-                        backgroundColor: "#ffffff",
-                        borderRight: "none",
-                        color: "#98a2b3",
-                      }}
-                    >
-                      <FaSearch />
-                    </InputGroup.Text>
-                    <Form.Control
-                      placeholder="Search bookings..."
-                      value={search}
-                      onChange={(e) => {
-                        setSearch(e.target.value);
-                        setPage(1);
-                      }}
-                      style={{ fontSize: "0.8rem", borderLeft: "none" }}
-                    />
-                  </InputGroup>
-                </div>
-
+            {/* Table */}
+            <Card
+              className="shadow-sm border-0"
+              style={{ borderRadius: "8px", overflow: "hidden", width: "100%" }}
+            >
+              <Card.Body className="p-0" style={{ width: "100%" }}>
                 {loading ? (
-                  <div className="text-center py-5">
+                  <div className="text-center p-5">
                     <Spinner animation="border" variant="primary" />
-                    <p className="mt-3 text-muted">Loading bookings...</p>
+                    <p className="mt-2 text-muted">Loading bookings...</p>
                   </div>
                 ) : (
-                  <>
-                    <div className="table-responsive saas-table-wrap">
-                      <Table hover className="mb-0 align-middle saas-table">
-                        <thead>
+                  <div
+                    className="thin-scrollbar"
+                    style={{ overflowX: "auto", width: "100%" }}
+                  >
+                    <Table
+                      hover
+                      size="sm"
+                      className="mb-0 align-middle table-bordered"
+                      style={{
+                        tableLayout: "auto",
+                        width: "100%",
+                        fontSize: "0.78rem",
+                        borderCollapse: "separate",
+                        borderSpacing: 0,
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      <thead
+                        style={{
+                          backgroundColor: "#f8f9fa",
+                          borderBottom: "2px solid #dee2e6",
+                          boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                          fontSize: "0.7rem",
+                          letterSpacing: "0.03em",
+                        }}
+                      >
+                        <tr>
+                          {[
+                            { key: "sn", label: "S.N", align: "center", width: "40px" },
+                            { key: "booking", label: "Booking", width: "120px" },
+                            { key: "restaurant", label: "Restaurant", width: "160px" },
+                            { key: "datetime", label: "Date / Time", width: "120px" },
+                            { key: "members", label: "Members", align: "center", width: "80px" },
+                            { key: "customer", label: "Customer", width: "150px" },
+                            { key: "status", label: "Status", align: "center", width: "130px" },
+                            { key: "action", label: "Action", align: "center", width: "80px" },
+                          ].map((col) => (
+                            <th
+                              key={col.key}
+                              style={{
+                                padding: "0.45rem 0.6rem",
+                                fontWeight: "600",
+                                textTransform: "uppercase",
+                                color: "#495057",
+                                textAlign: col.align || "left",
+                                border: "1px solid #dee2e6",
+                                whiteSpace: "normal",
+                                lineHeight: 1.2,
+                                width: col.width,
+                              }}
+                            >
+                              {col.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pageData.length === 0 ? (
                           <tr>
-                            <th style={{ width: "48px" }}>#</th>
-                            <th>Booking</th>
-                            <th>Restaurant</th>
-                            <th>Date / Time</th>
-                            <th className="text-center">Members</th>
-                            <th>Customer</th>
-                            <th>Status</th>
-                            <th className="text-center" style={{ width: "80px" }}>Action</th>
+                            <td
+                              colSpan={8}
+                              className="text-center py-5 text-muted"
+                              style={{
+                                border: "1px solid #dee2e6",
+                                backgroundColor: "#ffffff",
+                              }}
+                            >
+                              <FaInbox
+                                style={{
+                                  fontSize: "2.5rem",
+                                  marginBottom: "10px",
+                                  color: "#adb5bd",
+                                }}
+                              />
+                              <p className="mt-2 mb-0 fs-5">No bookings found.</p>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {pageData.length === 0 ? (
-                            <tr>
-                              <td colSpan={8} className="text-center py-5 text-muted">
-                                No bookings found
-                              </td>
-                            </tr>
-                          ) : (
-                            pageData.map((b, i) => {
-                              const sMeta = STATUS_META[b.bookingStatus];
-                              return (
-                                <tr key={b.id || i}>
-                                  <td className="text-muted">{(page - 1) * size + i + 1}</td>
-                                  <td>
-                                    <span className="fw-semibold text-dark">
-                                      {b.bookingNumber || "-"}
-                                    </span>
-                                  </td>
-                                  <td>{b.restaurantName || "-"}</td>
-                                  <td style={{ whiteSpace: "nowrap" }}>
-                                    <div>{fmtDate(b.bookingDate)}</div>
-                                    <div className="text-muted" style={{ fontSize: "0.7rem" }}>
-                                      {b.bookingTime || ""}
-                                    </div>
-                                  </td>
-                                  <td className="text-center">{b.memberCount ?? "-"}</td>
-                                  <td>
-                                    <div className="fw-medium text-dark">
-                                      {b.customerName || "-"}
-                                    </div>
-                                    <div className="text-muted" style={{ fontSize: "0.7rem" }}>
-                                      {b.mobile || ""}
-                                    </div>
-                                  </td>
-                                  <td>
-                                    <StatusPill meta={sMeta} raw={b.bookingStatus} />
-                                  </td>
-                                  <td className="text-center">
-                                    <button
-                                      type="button"
-                                      className="btn btn-sm border-0 p-1"
+                        ) : (
+                          pageData.map((b, i) => {
+                            const sMeta = STATUS_META[b.bookingStatus];
+                            const baseCellStyle = {
+                              padding: "0.5rem 0.6rem",
+                              fontSize: "0.8rem",
+                              border: "1px solid #dee2e6",
+                              verticalAlign: "middle",
+                              whiteSpace: "normal",
+                              overflow: "visible",
+                              wordBreak: "break-word",
+                              lineHeight: 1.4,
+                            };
+                            return (
+                              <tr
+                                key={b.id || i}
+                                style={{
+                                  backgroundColor:
+                                    i % 2 === 0 ? "#ffffff" : "#f8f9fa",
+                                  transition: "background-color 0.2s ease",
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    "#e7f3ff";
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.backgroundColor =
+                                    i % 2 === 0 ? "#ffffff" : "#f8f9fa";
+                                }}
+                              >
+                                <td
+                                  className="text-muted fw-semibold"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    color: "#6c757d",
+                                  }}
+                                >
+                                  {(page - 1) * size + i + 1}
+                                </td>
+                                <td style={baseCellStyle}>
+                                  <span className="fw-bold text-primary">
+                                    {b.bookingNumber || "-"}
+                                  </span>
+                                </td>
+                                <td style={baseCellStyle}>
+                                  <span className="fw-semibold text-dark">
+                                    {b.restaurantName || "-"}
+                                  </span>
+                                </td>
+                                <td style={{ ...baseCellStyle, whiteSpace: "nowrap" }}>
+                                  <div className="text-dark">
+                                    {fmtDate(b.bookingDate)}
+                                  </div>
+                                  <div
+                                    className="text-muted"
+                                    style={{ fontSize: "0.72rem" }}
+                                  >
+                                    {b.bookingTime || ""}
+                                  </div>
+                                </td>
+                                <td
+                                  style={{ ...baseCellStyle, textAlign: "center" }}
+                                >
+                                  {b.memberCount ?? "-"}
+                                </td>
+                                <td style={baseCellStyle}>
+                                  <div className="fw-medium text-dark">
+                                    {b.customerName || "-"}
+                                  </div>
+                                  <div
+                                    className="text-muted"
+                                    style={{ fontSize: "0.72rem" }}
+                                  >
+                                    {b.mobile || ""}
+                                  </div>
+                                </td>
+                                <td
+                                  style={{ ...baseCellStyle, textAlign: "center" }}
+                                >
+                                  <StatusPill meta={sMeta} raw={b.bookingStatus} />
+                                </td>
+                                <td
+                                  style={{ ...baseCellStyle, textAlign: "center" }}
+                                >
+                                  <div className="d-flex justify-content-center align-items-center">
+                                    <FaEye
+                                      role="button"
+                                      tabIndex={0}
+                                      title="View details"
                                       style={{
-                                        backgroundColor: "#eff6ff",
-                                        color: "#1d4ed8",
-                                        borderRadius: "6px",
+                                        fontSize: "18px",
+                                        color: "#007bff",
+                                        cursor: "pointer",
                                       }}
                                       onClick={() =>
                                         navigate(
                                           `/booking-details/restaurant-booking/${b.id}`,
                                         )
                                       }
-                                      title="View details"
-                                    >
-                                      <FaEye style={{ fontSize: "12px" }} />
-                                    </button>
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          )}
-                        </tbody>
-                      </Table>
-                    </div>
-
-                    <style>{`
-                      .saas-table-wrap { border: 1px solid #eaecf0; border-radius: 8px; overflow-x: auto; }
-                      .saas-table { font-size: 0.8rem; margin-bottom: 0; }
-                      .saas-table thead th {
-                        background-color: #f9fafb;
-                        color: #667085;
-                        font-size: 0.68rem;
-                        font-weight: 600;
-                        text-transform: uppercase;
-                        letter-spacing: 0.04em;
-                        border-bottom: 1px solid #eaecf0;
-                        border-top: none;
-                        padding: 0.65rem 0.75rem;
-                        white-space: nowrap;
-                      }
-                      .saas-table tbody td {
-                        padding: 0.65rem 0.75rem;
-                        border-top: 1px solid #f2f4f7;
-                        vertical-align: middle;
-                        color: #344054;
-                      }
-                      .saas-table tbody tr:first-child td { border-top: none; }
-                      .saas-table tbody tr:hover { background-color: #fafbfc; }
-                    `}</style>
-
-                    <div className="d-flex justify-content-between align-items-center mt-3">
-                      <div className="text-muted small">
-                        Showing {displayStart} to {displayEnd} of {filtered.length}{" "}
-                        entries
-                      </div>
-                      {totalPages > 1 && (
-                        <Pagination size="sm" className="mb-0">
-                          <Pagination.Prev
-                            disabled={page === 1}
-                            onClick={() => setPage(page - 1)}
-                          />
-                          {Array.from(
-                            { length: Math.min(5, totalPages) },
-                            (_, i) => {
-                              let pageNum;
-                              if (totalPages <= 5) pageNum = i + 1;
-                              else if (page <= 3) pageNum = i + 1;
-                              else if (page >= totalPages - 2)
-                                pageNum = totalPages - 4 + i;
-                              else pageNum = page - 2 + i;
-                              return (
-                                <Pagination.Item
-                                  key={pageNum}
-                                  active={page === pageNum}
-                                  onClick={() => setPage(pageNum)}
-                                >
-                                  {pageNum}
-                                </Pagination.Item>
-                              );
-                            },
-                          )}
-                          <Pagination.Next
-                            disabled={page === totalPages}
-                            onClick={() => setPage(page + 1)}
-                          />
-                        </Pagination>
-                      )}
-                    </div>
-                  </>
+                                      onKeyDown={(e) => {
+                                        if (
+                                          e.key === "Enter" ||
+                                          e.key === " "
+                                        ) {
+                                          e.preventDefault();
+                                          navigate(
+                                            `/booking-details/restaurant-booking/${b.id}`,
+                                          );
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </Table>
+                  </div>
                 )}
               </Card.Body>
             </Card>
+
+            {/* Pagination */}
+            {!loading && pageData.length > 0 && (
+              <Card
+                className="shadow-sm border-0 mt-3"
+                style={{ borderRadius: "8px" }}
+              >
+                <Card.Body className="py-3">
+                  <div className="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <div
+                      className="text-muted"
+                      style={{ fontSize: "0.875rem" }}
+                    >
+                      Showing{" "}
+                      <span className="fw-semibold text-dark">
+                        {displayStart}
+                      </span>{" "}
+                      to{" "}
+                      <span className="fw-semibold text-dark">{displayEnd}</span>{" "}
+                      of{" "}
+                      <span className="fw-semibold text-dark">
+                        {filtered.length}
+                      </span>{" "}
+                      entries
+                    </div>
+                    <div className="d-flex align-items-center gap-2">
+                      <span
+                        className="text-muted"
+                        style={{ fontSize: "0.8rem" }}
+                      >
+                        Rows per page
+                      </span>
+                      <Form.Select
+                        size="sm"
+                        value={size}
+                        onChange={(e) => {
+                          setSize(Number(e.target.value));
+                          setPage(1);
+                        }}
+                        style={{ width: "auto", fontSize: "0.8rem" }}
+                      >
+                        {PER_PAGE_OPTIONS.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </div>
+                    <Pagination className="mb-0">
+                      <Pagination.Prev
+                        disabled={page === 1}
+                        onClick={() => page > 1 && setPage(page - 1)}
+                        style={{
+                          cursor: page === 1 ? "not-allowed" : "pointer",
+                          opacity: page === 1 ? 0.5 : 1,
+                        }}
+                      />
+                      {Array.from(
+                        { length: Math.min(5, totalPages) },
+                        (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) pageNum = i + 1;
+                          else if (page <= 3) pageNum = i + 1;
+                          else if (page >= totalPages - 2)
+                            pageNum = totalPages - 4 + i;
+                          else pageNum = page - 2 + i;
+                          return (
+                            <Pagination.Item
+                              key={pageNum}
+                              active={page === pageNum}
+                              onClick={() => setPage(pageNum)}
+                              style={{
+                                cursor: "pointer",
+                                minWidth: "38px",
+                                textAlign: "center",
+                              }}
+                            >
+                              {pageNum}
+                            </Pagination.Item>
+                          );
+                        },
+                      )}
+                      <Pagination.Next
+                        disabled={page === totalPages}
+                        onClick={() => page < totalPages && setPage(page + 1)}
+                        style={{
+                          cursor:
+                            page === totalPages ? "not-allowed" : "pointer",
+                          opacity: page === totalPages ? 0.5 : 1,
+                        }}
+                      />
+                    </Pagination>
+                  </div>
+                </Card.Body>
+              </Card>
+            )}
           </Container>
         </main>
       </div>
