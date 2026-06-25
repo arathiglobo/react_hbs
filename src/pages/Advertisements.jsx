@@ -978,6 +978,7 @@ export default function Advertisements() {
                     <th>Country</th>
                     <th>City</th>
                     <th>Status</th>
+                    <th style={{ width: 90 }} title="Times seen across search pages (once per page per login)">Views</th>
                     <th style={{ width: 130 }}>Actions</th>
                   </tr>
                 </thead>
@@ -1000,6 +1001,7 @@ export default function Advertisements() {
                           {item.isActive ? "Active" : "Inactive"}
                         </Badge>
                       </td>
+                      <td className="fw-semibold">{item.viewCount ?? 0}</td>
                       <td>
                         <FaEye
                           className="text-secondary"
@@ -1016,7 +1018,7 @@ export default function Advertisements() {
                   ))}
                   {isLoading && (
                     <tr>
-                      <td colSpan={6} className="text-center text-muted py-4">
+                      <td colSpan={7} className="text-center text-muted py-4">
                         <div
                           className="spinner-border spinner-border-sm me-2"
                           role="status"
@@ -1029,7 +1031,7 @@ export default function Advertisements() {
                   )}
                   {items.length === 0 && !isLoading && (
                     <tr>
-                      <td colSpan={6} className="text-center text-muted py-4">
+                      <td colSpan={7} className="text-center text-muted py-4">
                         No advertisements found.
                       </td>
                     </tr>

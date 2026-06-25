@@ -219,6 +219,16 @@ export default function PackageBookingDetailView() {
   // Voucher modal state — keeps the same iframe + email-send shape as
   // the list page. We hold a same-origin blob URL so the iframe loads
   // even when the backend ships Content-Disposition: attachment.
+  // Invoice modal — mirrors the voucher modal exactly. Hits the
+  // /generate-invoice and /send-invoice endpoints on the package-booking
+  // controller; visual layout identical to the voucher modal so the
+  // operator gets the same iframe + email-send affordance.
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [invoiceEmail, setInvoiceEmail] = useState("");
+  const [isSendingInvoice, setIsSendingInvoice] = useState(false);
+  const [invoicePdfUrl, setInvoicePdfUrl] = useState("");
+  const [isLoadingInvoicePdf, setIsLoadingInvoicePdf] = useState(false);
+
   const [showVoucherModal, setShowVoucherModal] = useState(false);
   const [voucherEmail, setVoucherEmail] = useState("");
   const [isSendingVoucher, setIsSendingVoucher] = useState(false);
@@ -376,7 +386,7 @@ export default function PackageBookingDetailView() {
     setIsLoadingVoucherPdf(true);
     try {
       const response = await axiosInstance.get(
-        `/api/package-bookings/${bookingId}/pdf?type=VOUCHER`
+        `/api/v1/package-booking/generate-pdf/${bookingId}`
       );
       if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
         setVoucherBlobUrl(response.data.pdfUrl);
@@ -477,6 +487,116 @@ export default function PackageBookingDetailView() {
       toast.error(err.response?.data?.message || "Failed to send voucher");
     } finally {
       setIsSendingVoucher(false);
+    }
+  };
+
+  // ── Invoice handlers ───────────────────────────────────────────────
+  // Same flow as the voucher handlers but hits /generate-invoice and
+  // /send-invoice. Mirrors the hotel BookingDetailedView's INVOICE
+  // affordance — iframe preview + Download PDF + Send Email.
+  const loadInvoicePdf = async () => {
+    if (!bookingId) return;
+    setIsLoadingInvoicePdf(true);
+    try {
+      const response = await axiosInstance.get(
+        `/api/v1/package-booking/generate-invoice/${bookingId}`
+      );
+      if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
+        setInvoicePdfUrl(response.data.pdfUrl);
+      } else {
+        toast.error(response.data?.message || "Failed to load invoice PDF");
+      }
+    } catch (err) {
+      console.error("Invoice load failed:", err);
+      toast.error(
+        err.response?.data?.message || "Failed to load invoice PDF"
+      );
+    } finally {
+      setIsLoadingInvoicePdf(false);
+    }
+  };
+
+  const openInvoice = () => {
+    const seedEmail =
+      bookingDetails?.contactInfo?.email ||
+      rowStub?.contactEmail ||
+      rowStub?.email ||
+      "";
+    setInvoiceEmail(seedEmail);
+    setInvoicePdfUrl("");
+    setShowInvoiceModal(true);
+    loadInvoicePdf();
+  };
+
+  const closeInvoice = () => {
+    if (isSendingInvoice) return;
+    setShowInvoiceModal(false);
+    setInvoiceEmail("");
+    setInvoicePdfUrl("");
+  };
+
+  const handleDownloadInvoice = async () => {
+    if (!bookingId) {
+      toast.error("Booking ID not found");
+      return;
+    }
+    try {
+      let url = invoicePdfUrl;
+      if (!url) {
+        const response = await axiosInstance.get(
+          `/api/v1/package-booking/generate-invoice/${bookingId}`
+        );
+        if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
+          url = response.data.pdfUrl;
+          setInvoicePdfUrl(url);
+        } else {
+          toast.error(response.data?.message || "Failed to download invoice");
+          return;
+        }
+      }
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `PackageInvoice_${bookingId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err) {
+      console.error("Invoice download failed:", err);
+      toast.error("Failed to download invoice");
+    }
+  };
+
+  const handleSendInvoiceEmail = async () => {
+    if (!bookingId) {
+      toast.error("Booking ID not found");
+      return;
+    }
+    const trimmed = (invoiceEmail || "").trim();
+    if (!trimmed) {
+      toast.error("Please enter a recipient email");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+    try {
+      setIsSendingInvoice(true);
+      const res = await axiosInstance.post(
+        `/api/v1/package-booking/send-invoice/${bookingId}`,
+        { email: trimmed }
+      );
+      if (res.data?.status === "success") {
+        toast.success(res.data.message || "Invoice emailed");
+        closeInvoice();
+      } else {
+        toast.error(res.data?.message || "Failed to send invoice");
+      }
+    } catch (err) {
+      console.error("Invoice email failed:", err);
+      toast.error(err.response?.data?.message || "Failed to send invoice");
+    } finally {
+      setIsSendingInvoice(false);
     }
   };
 
@@ -1379,6 +1499,16 @@ export default function PackageBookingDetailView() {
                   {isCancellable && (
                     <button
                       style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
+                      onClick={openInvoice}
+                      title="Invoice"
+                    >
+                      <FaFileAlt style={{ marginRight: "6px" }} />
+                      INVOICE
+                    </button>
+                  )}
+                  {isCancellable && (
+                    <button
+                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
                       onClick={() => setShowCancelModal(true)}
                       title="Cancel booking"
                     >
@@ -1932,6 +2062,118 @@ export default function PackageBookingDetailView() {
             disabled={isSendingVoucher || !voucherEmail.trim()}
           >
             {isSendingVoucher ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-2" />
+                Sending...
+              </>
+            ) : (
+              <>
+                <FaEnvelope className="me-2" /> Send Email
+              </>
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Invoice Modal — iframe + email-send form ────────────────── */}
+      <Modal
+        show={showInvoiceModal}
+        onHide={closeInvoice}
+        centered
+        size="xl"
+        backdrop="static"
+        keyboard={!isSendingInvoice}
+      >
+        <Modal.Header
+          closeButton={!isSendingInvoice}
+          className="bg-dark text-white border-0"
+        >
+          <Modal.Title className="d-flex align-items-center gap-2">
+            <FaFileAlt className="text-success" />
+            <span className="fw-bold">Booking Invoice</span>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {bookingDetails && (
+            <div className="mb-3 d-flex justify-content-between align-items-start flex-wrap gap-2">
+              <div className="text-muted small">
+                <div className="fw-bold text-dark">
+                  {bookingDetails.confirmationCode}
+                </div>
+                <div>
+                  {bookingDetails.packageName || rowStub?.packageName}
+                </div>
+              </div>
+              <Button
+                variant="outline-primary"
+                size="sm"
+                onClick={handleDownloadInvoice}
+                disabled={isLoadingInvoicePdf}
+              >
+                <FaDownload className="me-2" /> Download PDF
+              </Button>
+            </div>
+          )}
+
+          <div
+            className="border rounded mb-3"
+            style={{ background: "#f8fafc", minHeight: "520px" }}
+          >
+            {isLoadingInvoicePdf && (
+              <div className="text-center text-muted py-5">
+                <Spinner animation="border" size="sm" className="me-2" />
+                Loading invoice PDF...
+              </div>
+            )}
+            {!isLoadingInvoicePdf && invoicePdfUrl && (
+              <iframe
+                src={invoicePdfUrl}
+                title="Package Booking Invoice"
+                style={{ width: "100%", height: "520px", border: "none" }}
+              />
+            )}
+            {!isLoadingInvoicePdf && !invoicePdfUrl && (
+              <div className="text-center text-muted py-5">
+                Invoice preview unavailable. Try Download or Send Email below.
+              </div>
+            )}
+          </div>
+
+          <Form.Group className="mb-2">
+            <Form.Label className="fw-semibold">
+              Send invoice by email
+            </Form.Label>
+            <InputGroup>
+              <InputGroup.Text>
+                <FaEnvelope />
+              </InputGroup.Text>
+              <Form.Control
+                type="email"
+                placeholder="recipient@example.com"
+                value={invoiceEmail}
+                onChange={(e) => setInvoiceEmail(e.target.value)}
+                disabled={isSendingInvoice}
+              />
+            </InputGroup>
+            <Form.Text className="text-muted">
+              The invoice PDF will be attached to the email.
+            </Form.Text>
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer className="border-0">
+          <Button
+            variant="secondary"
+            onClick={closeInvoice}
+            disabled={isSendingInvoice}
+          >
+            Close
+          </Button>
+          <Button
+            variant="success"
+            onClick={handleSendInvoiceEmail}
+            disabled={isSendingInvoice || !invoiceEmail.trim()}
+          >
+            {isSendingInvoice ? (
               <>
                 <Spinner animation="border" size="sm" className="me-2" />
                 Sending...
