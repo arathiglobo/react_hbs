@@ -7,6 +7,8 @@ import LineChart from '../components/LineChart';
 import BarChart from '../components/BarChart';
 import axiosInstance from '../components/AxiosInstance';
 import { Icon, formatNumber } from './dashboardSkin';
+import { Collapse } from 'react-bootstrap';
+import { FaChartLine, FaChevronDown } from 'react-icons/fa';
 import '../styles/AdminDashboardModern.css';
 
 /* ─── static demo data (charts) ─── */
@@ -105,6 +107,8 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const [stat, setStat] = useState(DEFAULT_DASHBOARD);
   const [loading, setLoading] = useState(true);
+  // Analytics charts are collapsed by default to save vertical space.
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -229,27 +233,53 @@ export default function AdminDashboard() {
             )}
           </section>
 
-          {/* ── Dashboard area · charts ── */}
+          {/* ── Dashboard area · charts (collapsible "Analytics") ── */}
           <section>
-            <p className="adm-section-label">Analytics</p>
-            <div className="adm-charts">
-              <div className="adm-card">
-                <div className="adm-card-head">
-                  <span className="adm-dot" style={{ background: '#EC0B43' }} />
-                  <h3 className="adm-card-title">Bookings over time</h3>
-                  <span className="adm-badge">Last 5 days</span>
+            {/* Prominent, full-width clickable accordion header. The whole bar
+                toggles the charts; the circular chevron flips on expand.
+                Collapsed by default to save space. */}
+            <button
+              type="button"
+              className="adm-analytics-toggle"
+              onClick={() => setAnalyticsOpen((o) => !o)}
+              aria-expanded={analyticsOpen}
+              aria-controls="adm-analytics-panel"
+            >
+              <span className="adm-acc-icon" aria-hidden="true">
+                <FaChartLine />
+              </span>
+              <span className="adm-acc-text">
+                <span className="adm-acc-title">Analytics</span>
+                <span className="adm-acc-sub">
+                  Bookings over time &amp; revenue trend
+                </span>
+              </span>
+              <span className="adm-acc-chev" aria-hidden="true">
+                <FaChevronDown />
+              </span>
+            </button>
+            <Collapse in={analyticsOpen}>
+              <div id="adm-analytics-panel" className="adm-analytics-panel">
+                <div className="adm-charts">
+                  <div className="adm-card">
+                    <div className="adm-card-head">
+                      <span className="adm-dot" style={{ background: '#EC0B43' }} />
+                      <h3 className="adm-card-title">Bookings over time</h3>
+                      <span className="adm-badge">Last 5 days</span>
+                    </div>
+                    <LineChart labels={bookingsLabels} data={bookingsData} />
+                  </div>
+                  <div className="adm-card">
+                    <div className="adm-card-head">
+                      <span className="adm-dot" style={{ background: '#2F3E53' }} />
+                      <h3 className="adm-card-title">Revenue trend</h3>
+                      <span className="adm-badge">Last 5 days</span>
+                    </div>
+                    <BarChart labels={bookingsLabels} data={revenueData} />
+                  </div>
                 </div>
-                <LineChart labels={bookingsLabels} data={bookingsData} />
               </div>
-              <div className="adm-card">
-                <div className="adm-card-head">
-                  <span className="adm-dot" style={{ background: '#2F3E53' }} />
-                  <h3 className="adm-card-title">Revenue trend</h3>
-                  <span className="adm-badge">Last 5 days</span>
-                </div>
-                <BarChart labels={bookingsLabels} data={revenueData} />
-              </div>
-            </div>
+            </Collapse>
           </section>
 
           {/* ── Listing section · agents table ── */}

@@ -34,8 +34,9 @@ export default function AgentsPaymentHistory() {
       console.log("Fetching payment history for agentId:", id); // Debug log
       const params = new URLSearchParams({
         page: pageNum.toString(),
-        limit: "10"
-        // agentId: id,
+        limit: "10",
+        // Filter to THIS agent's records (receives + credit additions).
+        agentId: id,
       });
       
       console.log("API URL:", `/api/inhouseAgentAccounts?${params.toString()}`); // Debug log
@@ -48,19 +49,20 @@ export default function AgentsPaymentHistory() {
         `/api/inhouseAgentAccounts?${params.toString()}`
       );
 
-      if (res.data && Array.isArray(res.data)) {
-        setItems(res.data);
-        if (res.data.length < 10) {
-          setTotalPages(pageNum + 1);
-        } else {
-          setTotalPages(Math.max(totalPages, pageNum + 2));
-        }
-        setPage(pageNum);
+      // The endpoint returns a plain array, but tolerate a paginated
+      // { content: [...] } shape too so the saved records always render.
+      const data = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.content)
+        ? res.data.content
+        : [];
+      setItems(data);
+      if (data.length < 10) {
+        setTotalPages(pageNum + 1);
       } else {
-        setItems([]);
-        setTotalPages(0);
-        setPage(0);
+        setTotalPages(Math.max(totalPages, pageNum + 2));
       }
+      setPage(pageNum);
     } catch (err) {
       toast.error("Failed to load payment history");
       setItems([]);
@@ -73,8 +75,19 @@ export default function AgentsPaymentHistory() {
 
   const fetchAgentInfo = async () => {
     try {
-      const res = await axiosInstance.get(`/api/inhouseAgentAccounts`);
-      if (res.data) {
+      // The URL :id is the agentId. Resolve the agent's name from the same
+      // source the Agent Accounts list uses (/api/agent-credit-limit/agents,
+      // whose rows carry agentName + agentId) and pick the matching row.
+      // The previous call hit /api/inhouseAgentAccounts (the payment records
+      // endpoint) and stored the whole array in agentInfo, so agentInfo.agentName
+      // was always undefined → "Unknown Agent".
+      const res = await axiosInstance.get(`/api/agent-credit-limit/agents`);
+      if (Array.isArray(res.data)) {
+        const match = res.data.find(
+          (a) => String(a.agentId ?? a.id) === String(id)
+        );
+        setAgentInfo(match || null);
+      } else if (res.data) {
         setAgentInfo(res.data);
       }
     } catch (err) {
@@ -118,10 +131,16 @@ export default function AgentsPaymentHistory() {
     if (!dateString) return "N/A";
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', {
+      if (Number.isNaN(date.getTime())) return "Invalid Date";
+      // dateOfReceive is a LocalDateTime on the backend, so it carries the
+      // time of the receive — show date AND time here.
+      return date.toLocaleString('en-US', {
         year: 'numeric',
         month: 'short',
-        day: 'numeric'
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
       });
     } catch (error) {
       return "Invalid Date";
@@ -211,7 +230,7 @@ export default function AgentsPaymentHistory() {
                 <thead>
                   <tr>
                     <th style={{ width: 100 }}>S/N</th>
-                    <th>Date</th>
+                    <th>Date &amp; Time</th>
                     <th>Amount</th>
                     <th>Payment Type</th>
                     <th>Remarks</th>

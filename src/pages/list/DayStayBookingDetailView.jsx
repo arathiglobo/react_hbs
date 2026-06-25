@@ -148,6 +148,20 @@ const StatusBadge = ({ status }) => {
 export default function DayStayBookingDetailView() {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
+  // Agent-role gate (UI visibility only) — hides internal/admin-facing actions
+  // (Booking Remark, Notes, Confirmation No.) for Agent logins.
+  // currentActiveRole isn't set for single-role logins, so fall back to
+  // userRole (same convention as HotelSearch.jsx). Visibility only — no
+  // API/flow/permission change.
+  const activeRole = String(localStorage.getItem("currentActiveRole") || "")
+    .trim()
+    .toUpperCase();
+  const storedRoles = String(
+    localStorage.getItem("userRole") || "",
+  ).toUpperCase();
+  const isAgentRole = activeRole
+    ? activeRole === "AGENT"
+    : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
   const location = useLocation();
   const rowStub = location.state?.booking || null;
   const bookingId = rowStub?.id || routeId;
@@ -873,20 +887,22 @@ export default function DayStayBookingDetailView() {
                     ADD AGENT REFERENCE
                   </button>
 
-                  <button
-                    style={BUTTON_STYLE}
-                    onClick={() => {
-                      if (!isConfirmedOrLater) {
-                        toast.error(
-                          "Confirmation Number can only be added once the booking is Confirmed or ReConfirmed."
-                        );
-                        return;
-                      }
-                      openConfirmationNoModal();
-                    }}
-                  >
-                    CONFIRMATION NO.
-                  </button>
+                  {!isAgentRole && (
+                    <button
+                      style={BUTTON_STYLE}
+                      onClick={() => {
+                        if (!isConfirmedOrLater) {
+                          toast.error(
+                            "Confirmation Number can only be added once the booking is Confirmed or ReConfirmed."
+                          );
+                          return;
+                        }
+                        openConfirmationNoModal();
+                      }}
+                    >
+                      CONFIRMATION NO.
+                    </button>
+                  )}
 
                   <button
                     style={BUTTON_STYLE}
@@ -896,20 +912,24 @@ export default function DayStayBookingDetailView() {
                     {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
                   </button>
 
-                  <button style={BUTTON_STYLE} onClick={openRemarkModal}>
-                    BOOKING REMARK
-                  </button>
+                  {!isAgentRole && (
+                    <button style={BUTTON_STYLE} onClick={openRemarkModal}>
+                      BOOKING REMARK
+                    </button>
+                  )}
 
-                  <button
-                    style={BUTTON_STYLE}
-                    onClick={() =>
-                      navigate(
-                        `/booking-details/day-stay-booking/${bookingId}/notes`
-                      )
-                    }
-                  >
-                    NOTES
-                  </button>
+                  {!isAgentRole && (
+                    <button
+                      style={BUTTON_STYLE}
+                      onClick={() =>
+                        navigate(
+                          `/booking-details/day-stay-booking/${bookingId}/notes`
+                        )
+                      }
+                    >
+                      NOTES
+                    </button>
+                  )}
                 </div>
 
                 {/* ── Booking Date footer ───────────────────────────── */}
