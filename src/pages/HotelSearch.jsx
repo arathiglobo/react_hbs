@@ -1541,7 +1541,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                             </span>
                           ) : agentBalance != null ? (
                             <span className="fw-semibold" style={{ color: "#dc3545" }}>
-                              Available Balance: {Number(agentBalance).toFixed(2)}
+                              Available Balance: {Number(agentBalance).toFixed(2)} AED
                             </span>
                           ) : (
                             <span className="text-muted">
