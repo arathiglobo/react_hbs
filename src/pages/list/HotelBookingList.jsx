@@ -33,6 +33,11 @@ import toast from "react-hot-toast";
 import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
+// When the user has an active client-side filter (search or Check-in Date),
+// each booking-status endpoint is hit with this size so the response contains
+// every matching record, not just the current server page. The client filter
+// then runs across the full set and the result is paginated locally.
+const SEARCH_ALL_PAGE_SIZE = 10000;
 // Column widths — soft hints for the auto-layout table. Cells will
 // flex if content requires more space; horizontal scroll only kicks
 // in at very narrow viewports because the wrapper has overflowX:auto.
@@ -138,6 +143,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
   const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const [checkInDateFilter, setCheckInDateFilter] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
   const [pagination, setPagination] = useState({
@@ -213,6 +219,13 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
   const [showCustomersModal, setShowCustomersModal] = useState(false);
   const [customersModalBooking, setCustomersModalBooking] = useState(null);
   const hasTimeFilter = Boolean(selectedMonth) && Boolean(selectedYear);
+  // True when any text/date-based client filter is in effect. In that mode
+  // we fetch the entire dataset for the active Booking Type and let the
+  // client-side filter run across everything, so a search isn't limited to
+  // the rows currently on screen.
+  const isClientFiltering = Boolean(
+    (search || "").trim() || (checkInDateFilter || "").trim(),
+  );
   const statusOptions = useMemo(
     () => [
       { value: "all", label: "All" },
@@ -325,16 +338,27 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
     try {
       setLoading(true);
 
-      const params = {
-        upcomingPage: pagination.upcoming.page - 1,
-        upcomingSize: pagination.upcoming.perPage,
-        completedPage: pagination.completed.page - 1,
-        completedSize: pagination.completed.perPage,
-        cancelledPage: pagination.cancelled.page - 1,
-        cancelledSize: pagination.cancelled.perPage,
-      };
+      // When a client-side filter is active, ask for every row in each
+      // bucket so the search runs across the full dataset instead of one
+      // page; otherwise honour the user's pagination state.
+      const params = isClientFiltering
+        ? {
+            upcomingPage: 0,
+            upcomingSize: SEARCH_ALL_PAGE_SIZE,
+            completedPage: 0,
+            completedSize: SEARCH_ALL_PAGE_SIZE,
+            cancelledPage: 0,
+            cancelledSize: SEARCH_ALL_PAGE_SIZE,
+          }
+        : {
+            upcomingPage: pagination.upcoming.page - 1,
+            upcomingSize: pagination.upcoming.perPage,
+            completedPage: pagination.completed.page - 1,
+            completedSize: pagination.completed.perPage,
+            cancelledPage: pagination.cancelled.page - 1,
+            cancelledSize: pagination.cancelled.perPage,
+          };
 
-      if (search) params.search = search;
       if (selectedMonth) params.month = selectedMonth;
       if (selectedYear) params.year = selectedYear;
       // 24-hour list page: filter at the source so pagination + totals
@@ -377,7 +401,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
     } finally {
       setLoading(false);
     }
-  }, [pagination, search, selectedMonth, selectedYear, role, userId, force24HourOnly]);
+  }, [pagination, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly]);
 
   // Fetch On Request bookings from dedicated endpoint
   const fetchOnRequestBookings = useCallback(async () => {
@@ -389,10 +413,12 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
       return;
     try {
       setLoading(true);
-      const params = {
-        page: pagination.onrequest.page - 1,
-        size: pagination.onrequest.perPage,
-      };
+      const params = isClientFiltering
+        ? { page: 0, size: SEARCH_ALL_PAGE_SIZE }
+        : {
+            page: pagination.onrequest.page - 1,
+            size: pagination.onrequest.perPage,
+          };
       if (selectedMonth) params.month = selectedMonth;
       if (selectedYear) params.year = selectedYear;
       if (role === "agent" && userId) params.agentId = userId;
@@ -418,7 +444,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.onrequest, selectedMonth, selectedYear, role, userId, force24HourOnly]);
+  }, [pagination.onrequest, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly]);
 
   // Fetch Reconfirmed bookings from dedicated endpoint
   const fetchReconfirmedBookings = useCallback(async () => {
@@ -430,10 +456,12 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
       return;
     try {
       setLoading(true);
-      const params = {
-        page: pagination.reconfirmed.page - 1,
-        size: pagination.reconfirmed.perPage,
-      };
+      const params = isClientFiltering
+        ? { page: 0, size: SEARCH_ALL_PAGE_SIZE }
+        : {
+            page: pagination.reconfirmed.page - 1,
+            size: pagination.reconfirmed.perPage,
+          };
       if (selectedMonth) params.month = selectedMonth;
       if (selectedYear) params.year = selectedYear;
       if (role === "agent" && userId) params.agentId = userId;
@@ -459,7 +487,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.reconfirmed, selectedMonth, selectedYear, role, userId, force24HourOnly]);
+  }, [pagination.reconfirmed, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly]);
 
   // Fetch Confirmed bookings (intermediate "Confirmed" status, not yet
   // Reconfirmed). Mirrors the on-request / reconfirmed pattern so the new
@@ -473,10 +501,12 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
       return;
     try {
       setLoading(true);
-      const params = {
-        page: pagination.confirmed.page - 1,
-        size: pagination.confirmed.perPage,
-      };
+      const params = isClientFiltering
+        ? { page: 0, size: SEARCH_ALL_PAGE_SIZE }
+        : {
+            page: pagination.confirmed.page - 1,
+            size: pagination.confirmed.perPage,
+          };
       if (selectedMonth) params.month = selectedMonth;
       if (selectedYear) params.year = selectedYear;
       if (role === "agent" && userId) params.agentId = userId;
@@ -501,7 +531,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.confirmed, selectedMonth, selectedYear, role, userId, force24HourOnly]);
+  }, [pagination.confirmed, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly]);
 
   // Fetch Invoiced bookings from dedicated endpoint
   const fetchInvoicedBookings = useCallback(async () => {
@@ -513,10 +543,12 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
       return;
     try {
       setLoading(true);
-      const params = {
-        page: pagination.invoiced.page - 1,
-        size: pagination.invoiced.perPage,
-      };
+      const params = isClientFiltering
+        ? { page: 0, size: SEARCH_ALL_PAGE_SIZE }
+        : {
+            page: pagination.invoiced.page - 1,
+            size: pagination.invoiced.perPage,
+          };
       if (selectedMonth) params.month = selectedMonth;
       if (selectedYear) params.year = selectedYear;
       if (role === "agent" && userId) params.agentId = userId;
@@ -541,7 +573,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.invoiced, selectedMonth, selectedYear, role, userId, force24HourOnly]);
+  }, [pagination.invoiced, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly]);
 
   // Fetch ALL bookings (every status) from dedicated endpoint
   const fetchAllBookings = useCallback(async () => {
@@ -553,10 +585,12 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
       return;
     try {
       setLoading(true);
-      const params = {
-        page: pagination.all.page - 1,
-        size: pagination.all.perPage,
-      };
+      const params = isClientFiltering
+        ? { page: 0, size: SEARCH_ALL_PAGE_SIZE }
+        : {
+            page: pagination.all.page - 1,
+            size: pagination.all.perPage,
+          };
       if (selectedMonth) params.month = selectedMonth;
       if (selectedYear) params.year = selectedYear;
       if (role === "agent" && userId) params.agentId = userId;
@@ -581,7 +615,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
     } finally {
       setLoading(false);
     }
-  }, [pagination.all, selectedMonth, selectedYear, role, userId, force24HourOnly]);
+  }, [pagination.all, isClientFiltering, selectedMonth, selectedYear, role, userId, force24HourOnly]);
 
   // Fetch booking details
   const fetchBookingDetails = async (bookingId) => {
@@ -985,10 +1019,10 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
     [resetAllPages],
   );
 
-  // Filter bookings based on search term
+  // Filter bookings based on search term and Check-in Date filter.
   const filteredBookings = useMemo(() => {
-    if (!search.trim()) return bookings;
     const query = search.trim().toLowerCase();
+    const checkInPick = (checkInDateFilter || "").trim(); // YYYY-MM-DD from <input type="date">
 
     const formatDate = (dateString) => {
       if (!dateString) return "";
@@ -1005,8 +1039,19 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
       return dateString.split("T")[0];
     };
 
-    return bookings.filter((booking) =>
-      [
+    // Normalise any booking-side date value to YYYY-MM-DD for an exact match
+    // against the <input type="date"> value.
+    const toIsoDay = (dateString) => {
+      if (!dateString) return "";
+      return String(dateString).split("T")[0].trim();
+    };
+
+    return bookings.filter((booking) => {
+      if (checkInPick && toIsoDay(booking.checkInDate) !== checkInPick) {
+        return false;
+      }
+      if (!query) return true;
+      return [
         booking.bookingCode, // GLBIN11
         booking.agentName, // Agent Name
         booking.primaryGuestName, // Customer Name
@@ -1025,25 +1070,36 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
         booking.confirmationStatus, // Confirmed / Not Confirmed
       ]
         .map((val) => String(val ?? "").toLowerCase())
-        .some((val) => val.includes(query)),
-    );
-  }, [bookings, search]);
+        .some((val) => val.includes(query));
+    });
+  }, [bookings, search, checkInDateFilter]);
 
   const currentPaginationState = pagination[status] || { page: 1, perPage: 10 };
   const currentPage = currentPaginationState.page;
   const currentPerPage = currentPaginationState.perPage;
-  const totalEntries =
-    typeof totalElements === "number" && totalElements >= 0
+  // When a client-side filter is active the entire dataset was fetched, so
+  // pagination and totals derive from the filtered set rather than the
+  // server-side meta (which reflects the full unfiltered count).
+  const filteredCount = filteredBookings.length;
+  const displayedBookings = useMemo(() => {
+    if (!isClientFiltering) return filteredBookings;
+    const start = (currentPage - 1) * currentPerPage;
+    return filteredBookings.slice(start, start + currentPerPage);
+  }, [filteredBookings, isClientFiltering, currentPage, currentPerPage]);
+  const totalEntries = isClientFiltering
+    ? filteredCount
+    : typeof totalElements === "number" && totalElements >= 0
       ? totalElements
       : bookings.length;
-  const hasResults = filteredBookings.length > 0;
+  const hasResults = displayedBookings.length > 0;
   const serialNumberBase = (currentPage - 1) * currentPerPage;
   const displayStart = hasResults ? serialNumberBase + 1 : 0;
   const displayEnd = hasResults
-    ? Math.min(serialNumberBase + filteredBookings.length, totalEntries)
+    ? Math.min(serialNumberBase + displayedBookings.length, totalEntries)
     : 0;
-  const safeTotalPages =
-    totalPages > 0
+  const safeTotalPages = isClientFiltering
+    ? Math.max(1, Math.ceil(filteredCount / currentPerPage))
+    : totalPages > 0
       ? totalPages
       : Math.max(1, Math.ceil((totalEntries || 0) / currentPerPage));
 
@@ -1164,7 +1220,13 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                     type="text"
                     placeholder="Search here..."
                     value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+                    onChange={(e) => {
+                      setSearch(e.target.value);
+                      // Reset to page 1 so the user always lands at the top
+                      // of the search result set (especially important when
+                      // the search expands the dataset client-side).
+                      resetAllPages();
+                    }}
                     style={{
                       borderLeft: "none",
                       fontSize: "0.85rem",
@@ -1231,15 +1293,14 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                   style={{ borderRadius: "8px" }}
                 >
                   <Card.Body className="p-3">
-                    <h6
-                      className="mb-2 fw-bold text-dark"
-                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
-                    >
-                      Booking Type
-                    </h6>
-
-                    <Row className="g-2">
+                    <Row className="g-2 align-items-end">
                       <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Booking Type
+                        </h6>
                         <Form.Select
                           value={status}
                           onChange={(e) => {
@@ -1256,6 +1317,25 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                             </option>
                           ))}
                         </Form.Select>
+                      </Col>
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Check-in Date
+                        </h6>
+                        <Form.Control
+                          type="date"
+                          value={checkInDateFilter}
+                          onChange={(e) => {
+                            setCheckInDateFilter(e.target.value);
+                            resetAllPages();
+                          }}
+                          size="sm"
+                          aria-label="Check-in date filter"
+                          style={{ fontSize: "0.85rem", height: "46px" }}
+                        />
                       </Col>
                     </Row>
                   </Card.Body>
@@ -1463,7 +1543,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredBookings.length === 0 ? (
+                        {displayedBookings.length === 0 ? (
                           <tr>
                             <td
                               colSpan={10}
@@ -1486,7 +1566,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                             </td>
                           </tr>
                         ) : (
-                          filteredBookings.map((b, i) => {
+                          displayedBookings.map((b, i) => {
                             // Format dates — handles both "YYYY-MM-DD" and "YYYY-MM-DDTHH:mm:ss"
                             const formatDate = (dateString) => {
                               if (!dateString) return "";
@@ -1947,7 +2027,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
             </Card>
 
             {/* Pagination */}
-            {!loading && filteredBookings.length > 0 && (
+            {!loading && displayedBookings.length > 0 && (
               <Card
                 className="shadow-sm border-0 mt-3"
                 style={{ borderRadius: "8px" }}

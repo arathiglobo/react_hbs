@@ -333,8 +333,8 @@ export default function BookingDetailedView() {
   // On Request two-step flow (backend-driven). An On Request booking moves
   // through THREE display steps:
   //   1. created        → engine CONFIRMED, onRequestConfirmed=false → "On Request"
-  //   2. after Confirm   → engine CONFIRMED, onRequestConfirmed=true  → "On Request / Confirmed"
-  //   3. after Reconfirm → engine RECONFIRMED                        → "On Request / Reconfirmed"
+  //   2. after Confirm   → engine CONFIRMED, onRequestConfirmed=true  → "On Request/Confirmed"
+  //   3. after Reconfirm → engine RECONFIRMED                        → "On Request/Confirmed/Reconfirmed"
   // The onRequestConfirmed flag (additive, On Request only) is what
   // distinguishes step 1 from step 2 — both sit on engine CONFIRMED. It
   // persists through cancellation so the cancelled label can preserve history.
@@ -346,7 +346,7 @@ export default function BookingDetailedView() {
   const displayStatus = isCancelled
     ? isOnRequestRoom
       ? cancelledPrior === "RECONFIRMED"
-        ? "On Request/Reconfirmed/Cancelled"
+        ? "On Request/Confirmed/Reconfirmed/Cancelled"
         : booking?.onRequestConfirmed
         ? "On Request/Confirmed/Cancelled"
         : "On Request/Cancelled"
@@ -354,7 +354,7 @@ export default function BookingDetailedView() {
       ? `${booking.cancelledFromStatus}/Cancelled`
       : booking?.confirmationStatus
     : isOnRequestRoom && normalizedStatus === "RECONFIRMED"
-    ? "On Request/Reconfirmed"
+    ? "On Request/Confirmed/Reconfirmed"
     : isOnRequestRoom && normalizedStatus === "CONFIRMED"
     ? isOnRequestConfirmedStep
       ? "On Request/Confirmed"
@@ -408,6 +408,20 @@ export default function BookingDetailedView() {
     priorStatus === "COMPLETED";
   // const isCancellationAllowed =
   //   String(booking?.refundStatus || "").toLowerCase() !== "non-refundable";
+
+  // Cancel button gate: cancellation isn't allowed once the stay has started.
+  // Compares the CURRENT date/time against the booking's Check-In Date. Falls
+  // back to false (allow cancel) if the date is missing/unparseable so the
+  // button keeps working as before for legacy/in-flight data.
+  const isPastCheckIn = (() => {
+    const raw = booking?.checkInDate;
+    if (!raw) return false;
+    const checkIn = new Date(
+      String(raw).includes("T") ? raw : `${raw}T00:00:00`,
+    );
+    if (isNaN(checkIn.getTime())) return false;
+    return new Date().getTime() > checkIn.getTime();
+  })();
 
   // ── Action handlers (ported from HotelBookingList.jsx) ─────────────
   // Cancel
@@ -1009,6 +1023,24 @@ export default function BookingDetailedView() {
                             booking.nights ? `${booking.nights} Nights` : "-"
                           }
                         />
+                        {/* Booking timeline (part 1) — Booking Date and Confirmed
+                            Date live on the LEFT column to balance the column
+                            heights and keep them close to the stay-date block
+                            above. Reconfirmed / Invoiced / Cancelled appear on
+                            the right column directly under Status. Each row is
+                            still gated on its backend value being present. */}
+                        {booking.bookingDate && (
+                          <InfoRow
+                            label="Booking Date"
+                            value={formatDateTime(booking.bookingDate)}
+                          />
+                        )}
+                        {booking.confirmedDate && (
+                          <InfoRow
+                            label="Confirmed Date"
+                            value={formatDateTime(booking.confirmedDate)}
+                          />
+                        )}
                       </Col>
                       <Col md={6}>
                         <InfoRow label="Agent" value={booking.agentName} />
@@ -1065,6 +1097,29 @@ export default function BookingDetailedView() {
                           label="Status"
                           value={<StatusBadge status={displayStatus} />}
                         />
+                        {/* Booking timeline (part 2) — Reconfirmed / Invoiced /
+                            Cancelled hang under Status here. Reconfirmed Date
+                            and Invoiced Date intentionally read from the same
+                            persisted column per spec. Each row is gated on its
+                            backend value being present. */}
+                        {booking.reconfirmedDate && (
+                          <InfoRow
+                            label="Reconfirmed Date"
+                            value={formatDateTime(booking.reconfirmedDate)}
+                          />
+                        )}
+                        {booking.reconfirmedDate && (
+                          <InfoRow
+                            label="Invoiced Date"
+                            value={formatDateTime(booking.reconfirmedDate)}
+                          />
+                        )}
+                        {booking.cancelledAt && (
+                          <InfoRow
+                            label="Cancelled Date"
+                            value={formatDateTime(booking.cancelledAt)}
+                          />
+                        )}
                       </Col>
                     </Row>
                   </div>
@@ -1734,18 +1789,11 @@ export default function BookingDetailedView() {
                     {/* Voucher / Invoice — final docs if the booking was
                         ReConfirmed/Completed before cancellation, otherwise the
                         Proforma equivalents (mirrors the live-booking logic but
-                        keyed off the pre-cancellation status). */}
+                        keyed off the pre-cancellation status). The final
+                        Voucher button is intentionally hidden once the booking
+                        is Cancelled — only the Invoice remains. */}
                     {cancelledShowsFinalDocs ? (
                       <>
-                        <button
-                          style={BTN_INFO}
-                          disabled={generatingPdfType === "VOUCHER"}
-                          onClick={() => handleDownloadPdf("VOUCHER", "Voucher")}
-                        >
-                          {generatingPdfType === "VOUCHER"
-                            ? "GENERATING..."
-                            : "VOUCHER"}
-                        </button>
                         <button
                           style={BTN_INFO}
                           disabled={generatingPdfType === "COMPLETED"}
@@ -1868,7 +1916,20 @@ export default function BookingDetailedView() {
 
                     {/* {!isCancelled && isCancellationAllowed && ( */}
                     {!isCancelled && (
-                      <button style={BTN_DANGER} onClick={openCancelModal}>
+                      <button
+                        style={{
+                          ...BTN_DANGER,
+                          opacity: isPastCheckIn ? 0.55 : 1,
+                          cursor: isPastCheckIn ? "not-allowed" : "pointer",
+                        }}
+                        onClick={openCancelModal}
+                        disabled={isPastCheckIn}
+                        title={
+                          isPastCheckIn
+                            ? "Cancellation is not allowed after the check-in date."
+                            : undefined
+                        }
+                      >
                         CANCEL
                       </button>
                     )}
@@ -2271,9 +2332,17 @@ export default function BookingDetailedView() {
                       borderTop: "1px solid #dee2e6",
                     }}
                   >
-                    {/* Reject action intentionally removed from the
-                        reconfirmation dialog. The Reject flow/modal itself is
-                        left intact for any other status flow that needs it. */}
+                    {/* Reject action shown only in the Confirm Booking (on-request)
+                        flow. The Reconfirm flow keeps the Reject button hidden. */}
+                    {isOnRequestPending && (
+                      <Button
+                        variant="outline-danger"
+                        onClick={openRejectModal}
+                        disabled={confirmingBooking}
+                      >
+                        Reject
+                      </Button>
+                    )}
                     <Button
                       variant="success"
                       onClick={confirmBooking}
@@ -2288,8 +2357,10 @@ export default function BookingDetailedView() {
                           />
                           Confirming...
                         </>
-                      ) : (
+                      ) : isOnRequestPending ? (
                         "Confirm"
+                      ) : (
+                        "Reconfirm"
                       )}
                     </Button>
                   </Modal.Footer>

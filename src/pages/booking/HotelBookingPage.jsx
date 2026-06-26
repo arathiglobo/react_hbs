@@ -1474,7 +1474,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                     <div className="hbp-action-bar mt-3 d-flex gap-2">
                       <Button
                         variant="outline-secondary"
-                        onClick={() => navigate(-1)}
+                        onClick={() => navigate("/room-list")}
                         className="flex-grow-1"
                       >
                         Back
@@ -1517,12 +1517,32 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                     </div>
                   ) : (
                     <>
-                      {/* Cancellation Policy */}
+                      {/* Cancellation Policy — the room's refundability takes
+                          precedence over the hotel-level policy. For a
+                          Non-Refundable rate the hotel policy is suppressed
+                          and we render a fixed "no refund" notice instead. */}
                       <section className="policy-section">
                         <h6 className="policy-section-title">
                           Cancellation Policy
                         </h6>
-                        {policyData?.policies?.cancellationPolicy?.length ? (
+                        {isNonRefundableRate ? (
+                          <div className="policy-item">
+                            <div
+                              className="policy-text fw-bold"
+                              style={{ color: "#dc2626" }}
+                            >
+                              Non-refundable
+                            </div>
+                            <div className="policy-text">
+                              No refund will be provided if this booking is
+                              cancelled.
+                            </div>
+                            <div className="policy-text">
+                              100% cancellation charges apply from the time of
+                              booking.
+                            </div>
+                          </div>
+                        ) : policyData?.policies?.cancellationPolicy?.length ? (
                           policyData.policies.cancellationPolicy.map(
                             (p, idx) => (
                               <div key={idx} className="policy-item">
@@ -1799,33 +1819,70 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                           );
                         })()}
 
-                        {/* Cancellation Deadline — only when one is computed
-                            (refundable rate + hotel maxCancellationNights
-                            resolved). Hidden for on-request / non-refundable
-                            flows where it doesn't apply. */}
-                        {cancellationDeadline && (
+                        {/* Cancellation block — for Non-Refundable rates the
+                            deadline doesn't apply at all, so we render a clear
+                            "no refund" notice instead. The rate's refundability
+                            takes precedence over the Hotel Cancellation Policy
+                            (also overridden in the Policies modal below). */}
+                        {isNonRefundableRate ? (
                           <Col xs={12}>
-                            <p className="mb-1">
-                              <strong>Cancellation Deadline:</strong>
-                              <br />
-                              <span className="text-dark">
-                                {cancellationDeadline.toLocaleDateString("en-GB", {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                })}
-                              </span>
-                              {isOutsideDeadline ? (
-                                <span className="badge bg-danger ms-2" style={{ fontSize: "0.7rem" }}>
-                                  Passed
-                                </span>
-                              ) : (
-                                <span className="badge bg-success ms-2" style={{ fontSize: "0.7rem" }}>
-                                  Refundable until this date
-                                </span>
-                              )}
-                            </p>
+                            <div
+                              className="p-2 rounded border"
+                              style={{
+                                borderColor: "#dc2626",
+                                background: "#fef2f2",
+                              }}
+                            >
+                              <p
+                                className="mb-1 fw-bold"
+                                style={{ color: "#dc2626" }}
+                              >
+                                Non-refundable
+                              </p>
+                              <p className="mb-1 text-dark small">
+                                No refund will be provided if this booking is
+                                cancelled.
+                              </p>
+                              <p className="mb-0 text-dark small">
+                                100% cancellation charges apply from the time of
+                                booking.
+                              </p>
+                            </div>
                           </Col>
+                        ) : (
+                          cancellationDeadline && (
+                            <Col xs={12}>
+                              <p className="mb-1">
+                                <strong>Cancellation Deadline:</strong>
+                                <br />
+                                <span className="text-dark">
+                                  {cancellationDeadline.toLocaleDateString(
+                                    "en-GB",
+                                    {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                    },
+                                  )}
+                                </span>
+                                {isOutsideDeadline ? (
+                                  <span
+                                    className="badge bg-danger ms-2"
+                                    style={{ fontSize: "0.7rem" }}
+                                  >
+                                    Passed
+                                  </span>
+                                ) : (
+                                  <span
+                                    className="badge bg-success ms-2"
+                                    style={{ fontSize: "0.7rem" }}
+                                  >
+                                    Refundable until this date
+                                  </span>
+                                )}
+                              </p>
+                            </Col>
+                          )
                         )}
 
                         {/* <Col xs={12}>
