@@ -129,6 +129,21 @@ const RestaurantSearch = () => {
   const [results, setResults] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [errors, setErrors] = useState({});
+  const resultsRef = useRef(null);
+
+  // After a fresh search, jump the viewport to the results so the operator
+  // sees them without having to scroll past the search card. Fires once the
+  // initial result set arrives (or the loading spinner appears, whichever
+  // comes first), so the operator always lands on the right region.
+  useEffect(() => {
+    if (!hasSearched) return;
+    const id = window.setTimeout(() => {
+      if (resultsRef.current) {
+        resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [hasSearched, loading, results.length]);
   /** Result layout — "grid" shows 3-up cards, "list" shows horizontal rows. */
   const [viewMode, setViewMode] = useState("grid");
   /** Cuisine-type filter selected from the left sidebar. Each entry is
@@ -599,7 +614,7 @@ const RestaurantSearch = () => {
                             <span className="text-muted">Loading available balance…</span>
                           ) : agentBalance != null ? (
                             <span className="fw-semibold" style={{ color: "#dc3545" }}>
-                              Available Balance: {Number(agentBalance).toFixed(2)}
+                              Available Balance: {Number(agentBalance).toFixed(2)} AED
                             </span>
                           ) : (
                             <span className="text-muted">Available balance unavailable</span>
@@ -609,7 +624,7 @@ const RestaurantSearch = () => {
                     </Col>
                     )}
 
-                    <Col lg={2} md={6}>
+                    <Col lg={4} md={6}>
                       <Form.Label className="fw-semibold text-dark">
                         <FaCalendarAlt className="me-1 text-primary" /> Booking Date *
                       </Form.Label>
@@ -629,7 +644,7 @@ const RestaurantSearch = () => {
                         cities/places and clears any prior City/Place pick.
                         Search-as-you-type hits /api/country?search=<term>
                         (debounced) so the dropdown stays responsive. */}
-                    <Col lg={3} md={6}>
+                    <Col lg={4} md={6}>
                       <Form.Label className="fw-semibold text-dark">
                         <FaMapMarkerAlt className="me-1 text-danger" /> Country *
                       </Form.Label>
@@ -721,7 +736,7 @@ const RestaurantSearch = () => {
                       )}
                     </Col>
 
-                    <Col lg={2} md={6}>
+                    <Col lg={4} md={6}>
                       <Form.Label className="fw-semibold text-dark">
                         <FaUserFriends className="me-1 text-success" /> Members *
                       </Form.Label>
@@ -768,13 +783,18 @@ const RestaurantSearch = () => {
               </Card.Body>
             </Card>
              </div>
-             {/* Ads carousel — city matches first, then all active ads */}
+             {/* Ads carousel — city matches first, then all active ads.
+                 The option's `value` is a prefixed string ("DESTINATION:42"
+                 / "PROVINCE:7") for the form payload; pass the raw numeric
+                 `id` to the ad endpoint so the backend can match cityId
+                 (and fall back to all active ads when there's no match). */}
              <AdvertisementCarousel
-               cityId={form.destination?.value}
+               cityId={form.destination?.id}
                cityName={form.destination?.label}
              />
             </div>
 
+            <div ref={resultsRef}>
             {/* Progress while searching */}
             {loading && (
               <Card className="shadow-sm border-0 rounded-4 mb-3">
@@ -970,6 +990,7 @@ const RestaurantSearch = () => {
                 </Col>
               </Row>
             )}
+            </div>
           </Container>
         </main>
       </div>

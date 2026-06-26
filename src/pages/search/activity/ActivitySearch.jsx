@@ -874,29 +874,25 @@ const ActivitySearch = () => {
 
        {!isAgentRole && (
       <Col md={4}>
-
-       <div style={{ minWidth: 260 }}>
-                  <Form.Label className="fw-semibold text-dark mb-1 small">
-                    Agent
-                  </Form.Label>
-                  <AgentSelect
-                    agents={agents}
-                    value={agent}
-                    isInvalid={!!searchErrors.agent}
-                    onChange={(v) => setAgent(v)}
-                  />
-                  <AgentBalanceDisplay agentId={agent} />
-                </div>
-                 {searchErrors.agent && (
+        <Form.Label className="fw-semibold">
+          Agent <span className="text-danger">*</span>
+        </Form.Label>
+        <AgentSelect
+          agents={agents}
+          value={agent}
+          isInvalid={!!searchErrors.agent}
+          onChange={(v) => setAgent(v)}
+        />
+        <AgentBalanceDisplay agentId={agent} />
+        {searchErrors.agent && (
           <div className="text-danger small mt-1">{searchErrors.agent}</div>
         )}
       </Col>
       )}
-      
+
       <Col md={4}>
         <Form.Label className="fw-semibold">
           Destinations <span className="text-danger">*</span>
-          <span className="text-muted small ms-2">(select one or more)</span>
         </Form.Label>
         <Select
           options={destinationOptions}

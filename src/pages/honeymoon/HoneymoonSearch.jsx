@@ -120,6 +120,21 @@ const HoneymoonSearch = () => {
   const [results, setResults] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [errors, setErrors] = useState({});
+  const resultsRef = useRef(null);
+
+  // After a fresh search, jump the viewport to the results so the operator
+  // sees them (or the loading progress) without having to scroll past the
+  // search card. Fires as soon as the search is submitted, then re-fires
+  // when results arrive so the final position lands on the result list.
+  useEffect(() => {
+    if (!hasSearched) return;
+    const id = window.setTimeout(() => {
+      if (resultsRef.current) {
+        resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [hasSearched, loading, results.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -414,7 +429,7 @@ const HoneymoonSearch = () => {
               <Card.Body className="p-4">
                 <Form onSubmit={handleSearch} noValidate>
                   <Row className="g-3">
-                    <Col lg={3} md={6}>
+                    <Col lg={4} md={6}>
                       <Form.Label className="fw-semibold">
                         <FaPlaneDeparture className="me-1 text-primary" /> Starting From *
                       </Form.Label>
@@ -443,7 +458,7 @@ const HoneymoonSearch = () => {
                       )}
                     </Col>
 
-                    <Col lg={3} md={6}>
+                    <Col lg={4} md={6}>
                       <Form.Label className="fw-semibold">
                         <FaMapMarkerAlt className="me-1 text-danger" /> Going To *
                       </Form.Label>
@@ -472,7 +487,7 @@ const HoneymoonSearch = () => {
                       )}
                     </Col>
 
-                    <Col lg={2} md={6}>
+                    <Col lg={4} md={6}>
                       <Form.Label className="fw-semibold">
                         <FaCalendarAlt className="me-1 text-primary" /> Start Date *
                       </Form.Label>
@@ -487,7 +502,7 @@ const HoneymoonSearch = () => {
                       <Form.Control.Feedback type="invalid">{errors.startingDate}</Form.Control.Feedback>
                     </Col>
 
-                    <Col lg={2} md={6}>
+                    <Col lg={4} md={6}>
                       <Form.Label className="fw-semibold">
                         <FaBed className="me-1 text-success" /> Rooms *
                       </Form.Label>
@@ -502,7 +517,7 @@ const HoneymoonSearch = () => {
                       <Form.Control.Feedback type="invalid">{errors.rooms}</Form.Control.Feedback>
                     </Col>
 
-                    <Col lg={2} md={6}>
+                    <Col lg={4} md={6}>
                       <Form.Label className="fw-semibold">
                         <FaUserFriends className="me-1 text-success" /> Adults *
                       </Form.Label>
@@ -517,7 +532,7 @@ const HoneymoonSearch = () => {
                       <Form.Control.Feedback type="invalid">{errors.adults}</Form.Control.Feedback>
                     </Col>
 
-                    <Col lg={2} md={6}>
+                    <Col lg={4} md={6}>
                       <Form.Label className="fw-semibold">
                         <FaChild className="me-1 text-warning" /> Children
                       </Form.Label>
@@ -568,7 +583,7 @@ const HoneymoonSearch = () => {
                     )}
 
                     {!isAgentRole && (
-                    <Col lg={6} md={6}>
+                    <Col lg={8} md={6}>
                       <Form.Label className="fw-semibold">
                         <FaUserTie className="me-1 text-info" /> Agent *
                       </Form.Label>
@@ -594,7 +609,7 @@ const HoneymoonSearch = () => {
                           ) : agentBalance != null ? (
                             <Badge bg="success" className="px-2 py-1">
                               <FaWallet className="me-1" />
-                              Available Balance: {Number(agentBalance).toFixed(2)}
+                              Available Balance: {Number(agentBalance).toFixed(2)} AED
                             </Badge>
                           ) : (
                             <Badge bg="secondary" className="px-2 py-1">
@@ -629,6 +644,7 @@ const HoneymoonSearch = () => {
              />
             </div>
 
+            <div ref={resultsRef}>
             {loading && (
               <Card className="shadow-sm border-0 rounded-4 mb-3">
                 <Card.Body className="text-center py-4">
@@ -674,6 +690,7 @@ const HoneymoonSearch = () => {
                 </Row>
               </>
             )}
+            </div>
           </Container>
         </main>
       </div>
