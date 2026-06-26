@@ -268,6 +268,20 @@ export default function LastMinuteBookingPage() {
   // ── results state ──
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState(null);
+  const resultsRef = useRef(null);
+
+  // After a fresh search, jump the viewport to the results so the operator
+  // sees them without having to scroll past the search card. Fires once
+  // when results transition from null → populated.
+  useEffect(() => {
+    if (!results) return;
+    const id = window.setTimeout(() => {
+      if (resultsRef.current) {
+        resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [results]);
 
   // ── load static dropdowns ─────────────────────────────────────────────────
   const loadCountries = async (search = "") => {
@@ -781,6 +795,7 @@ export default function LastMinuteBookingPage() {
           <SearchProgressBar active={searching} />
 
           {/* ── Results layout — left filter sidebar + right card grid ── */}
+          <div ref={resultsRef}>
           {searching ? (
             <Card className="shadow-sm rounded-xl mb-4">
               <Card.Body className="text-center py-4">
@@ -820,6 +835,7 @@ export default function LastMinuteBookingPage() {
               </Card.Body>
             </Card>
           )}
+          </div>
         </main>
       </div>
     </div>

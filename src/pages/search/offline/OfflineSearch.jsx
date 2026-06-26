@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, Form, Row, Col, Button, Spinner } from "react-bootstrap";
 import Select from "react-select";
@@ -142,6 +142,20 @@ const OfflineSearch = () => {
   const [savedInvoiceNo, setSavedInvoiceNo] = useState("");
   const [activeSupplier, setActiveSupplier] = useState("Hotel");
   const [supplierEntries, setSupplierEntries] = useState([]);
+  const resultsRef = useRef(null);
+
+  // After the form is submitted and the supplier section appears, jump the
+  // viewport down a bit so the operator sees the supplier tabs without
+  // having to scroll past the form.
+  useEffect(() => {
+    if (!mainBasicId) return;
+    const id = window.setTimeout(() => {
+      if (resultsRef.current) {
+        resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [mainBasicId]);
   const fetchNextInvoiceNumber = async () => {
     try {
       const response = await axiosInstance.get("/api/v1/offline-booking/next-invoice-number");
@@ -595,7 +609,7 @@ const OfflineSearch = () => {
                   
 
                   {/* Booking Done By */}
-                  <Col lg={3} md={6}>
+                  <Col lg={6} md={6}>
                     <Form.Group>
                       <Form.Label className="form-label-modern">Booking Done By</Form.Label>
                       <Select
@@ -613,7 +627,7 @@ const OfflineSearch = () => {
                   </Col>
 
                   {/* Currency */}
-                  <Col lg={3} md={6}>
+                  <Col lg={6} md={6}>
                     <Form.Group>
                       <Form.Label className="form-label-modern">Currency</Form.Label>
                       <Select
@@ -651,7 +665,7 @@ const OfflineSearch = () => {
 
               {/* Dynamic Supplier Section */}
               {mainBasicId && (
-                <div className="mt-3 pt-2 border-top animate-fade-in">
+                <div ref={resultsRef} className="mt-3 pt-2 border-top animate-fade-in">
                   <div className="supplier-tabs-container">
                     <Row>
                       <Col lg={2} md={3} className="border-end">

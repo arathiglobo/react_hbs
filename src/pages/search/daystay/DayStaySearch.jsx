@@ -531,7 +531,7 @@ export default function DayStaySearch() {
                               style={{ color: "#dc3545" }}
                             >
                               Available Balance:{" "}
-                              {Number(agentBalance).toFixed(2)}
+                              {Number(agentBalance).toFixed(2)} AED
                             </span>
                           ) : (
                             <span className="text-muted">

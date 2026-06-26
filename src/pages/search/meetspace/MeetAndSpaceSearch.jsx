@@ -176,6 +176,20 @@ export default function MeetAndSpaceSearch() {
   const [results, setResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const resultsRef = useRef(null);
+
+  // After a fresh search, jump the viewport to the results so the operator
+  // sees them without having to scroll past the search card. Fires once the
+  // first batch of spaces actually arrives.
+  useEffect(() => {
+    if (!hasSearched || results.length === 0) return;
+    const id = window.setTimeout(() => {
+      if (resultsRef.current) {
+        resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [hasSearched, results.length]);
 
   // ── load agent + nationality + popular-destinations lists once ──────
   useEffect(() => {
@@ -383,7 +397,7 @@ export default function MeetAndSpaceSearch() {
                               style={{ color: "#dc3545" }}
                             >
                               Available Balance:{" "}
-                              {Number(agentBalance).toFixed(2)}
+                              {Number(agentBalance).toFixed(2)} AED
                             </span>
                           ) : (
                             <span className="text-muted">
@@ -700,6 +714,7 @@ export default function MeetAndSpaceSearch() {
           </div>
 
           {/* ── Results ── */}
+          <div ref={resultsRef}>
           {isLoading ? (
             <div className="text-center py-5">
               <Spinner animation="border" />
@@ -803,6 +818,7 @@ export default function MeetAndSpaceSearch() {
               ))}
             </Row>
           )}
+          </div>
         </main>
       </div>
     </div>

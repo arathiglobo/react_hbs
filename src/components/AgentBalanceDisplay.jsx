@@ -50,7 +50,7 @@ const AgentBalanceDisplay = ({ agentId }) => {
         <span className="text-muted">Loading available balance…</span>
       ) : balance != null ? (
         <span className="fw-semibold" style={{ color: "#dc3545" }}>
-          Available Balance: {Number(balance).toFixed(2)}
+          Available Balance: {Number(balance).toFixed(2)} AED
         </span>
       ) : (
         <span className="text-muted">Available balance unavailable</span>

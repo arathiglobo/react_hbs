@@ -1070,6 +1070,19 @@ export default function HotelSearch({ force24Hour = false } = {}) {
     }
   }, [starRating, hotelType, channelType, sortBy]);
 
+  // After a fresh search, jump the viewport to the results so the operator
+  // sees them without having to scroll past the search card. Fires once the
+  // first batch of hotels actually arrives.
+  useEffect(() => {
+    if (!hasSearched || !isInitialResultsLoaded) return;
+    const id = window.setTimeout(() => {
+      if (resultsRef.current) {
+        resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [hasSearched, isInitialResultsLoaded]);
+
   const formatDate = (date) => date.toISOString().split("T")[0];
   const getTomorrow = (date = new Date()) => {
     const tomorrow = new Date(date);

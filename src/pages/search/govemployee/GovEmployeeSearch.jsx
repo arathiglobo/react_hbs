@@ -604,6 +604,23 @@ export default function GovEmployeeSearch() {
     return Object.keys(e).length === 0;
   };
 
+  // After a fresh search, jump the viewport to the results so the operator
+  // sees them without having to scroll past the search card. Fires only when
+  // results transition from empty → non-empty (handleSearchSubmit clears the
+  // list first, so this only fires once per search round-trip).
+  const prevResultsLenRef = useRef(0);
+  useEffect(() => {
+    const wasEmpty = prevResultsLenRef.current === 0;
+    prevResultsLenRef.current = results.length;
+    if (!wasEmpty || results.length === 0) return;
+    const id = window.setTimeout(() => {
+      if (resultsRef.current) {
+        resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [results.length]);
+
   // ── initiate search + poll for results ───────────────────────────
   const handleSearchSubmit = async (event) => {
     if (event && event.preventDefault) event.preventDefault();
@@ -809,7 +826,7 @@ export default function GovEmployeeSearch() {
                                 style={{ color: "#dc3545" }}
                               >
                                 Available Balance:{" "}
-                                {Number(agentBalance).toFixed(2)}
+                                {Number(agentBalance).toFixed(2)} AED
                               </span>
                             ) : (
                               <span className="text-muted">

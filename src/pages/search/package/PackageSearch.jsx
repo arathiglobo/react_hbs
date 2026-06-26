@@ -38,6 +38,20 @@ const PackageSearch = () => {
   const [hasSearched, setHasSearched] = useState(false);
   const [progress, setProgress] = useState(0);
   const progressRef = useRef(null);
+  const resultsRef = useRef(null);
+
+  // After a fresh search, jump the viewport to the results so the operator
+  // sees them without having to scroll past the search card. Fires once the
+  // first batch of packages actually arrives.
+  useEffect(() => {
+    if (!hasSearched || results.length === 0) return;
+    const id = window.setTimeout(() => {
+      if (resultsRef.current) {
+        resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }, 50);
+    return () => window.clearTimeout(id);
+  }, [hasSearched, results.length]);
   const navigate = useNavigate();
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState(null);
@@ -366,6 +380,7 @@ const PackageSearch = () => {
           )}
 
           {/* Results / Empty State */}
+          <div ref={resultsRef}>
           {!hasSearched ? (
             <Card className="empty-state-card mt-5 text-center py-5">
               <Card.Body>
@@ -488,6 +503,7 @@ const PackageSearch = () => {
               </Card.Body>
             </Card>
           )}
+          </div>
         </main>
       </div>
       {/* Package Detail Modal */}
