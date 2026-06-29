@@ -183,6 +183,8 @@ export default function AdvertisementCarousel({ cityId, cityName }) {
         show={show}
         onHide={close}
         centered
+        backdrop="static"
+        keyboard={false}
         dialogClassName="hs-ads-modal"
       >
         <Modal.Header closeButton className="py-2">
