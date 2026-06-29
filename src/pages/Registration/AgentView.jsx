@@ -216,10 +216,6 @@ const AgentView = () => {
     const nextLabel = goingInactive ? "Inactive" : "Active";
     Swal.fire({
       title: `Set ${agent?.companyName || "this agent"} to ${nextLabel}?`,
-      html: goingInactive
-        ? "The agent won't be able to log in or perform any operation " +
-          "(search, bookings, payments, extranet). All existing data stays intact."
-        : "The agent's access and all permissions will be restored immediately.",
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: goingInactive ? "#d33" : "#198754",
@@ -1009,6 +1005,8 @@ const AgentView = () => {
             </Row>
           </Section>
 
+          {/* Incentive & Settings — hidden by request (code retained). */}
+          {false && (
           <Section title="Incentive & Settings">
             <Row>
               <Col md={6}>
@@ -1054,6 +1052,7 @@ const AgentView = () => {
               </>
             )}
           </Section>
+          )}
 
           {/* ------------ Bottom action bar ----------------------- */}
           <Card className="shadow-sm">
