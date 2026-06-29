@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaHotel, FaCalendarAlt, FaUsers, FaUtensils } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
@@ -61,6 +61,13 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
 
   const [bookingData, setBookingData] = useState(null);
   const [agentAvailableBalance, setAgentAvailableBalance] = useState(null);
+  // Whether the selected agent has usable credit available right now.
+  // true = has available credit (availableCreditLimit > 0), false = "Cash
+  // Agent" — no usable credit (available 0/null, or no credit-limit row at
+  // all), null = unknown/not yet resolved or no agent. Drives the restricted
+  // Payment Type list for the Non-Refundable + Cash-Agent case (Card / Cash
+  // Deposit only).
+  const [agentHasAvailableCredit, setAgentHasAvailableCredit] = useState(null);
   // Hotel's max cancellation nights (MAX(noOfNights) across its live
   // cancellation policies) — fetched from the backend so the on-screen
   // deadline matches exactly what the booking-create flow stores and the
@@ -136,17 +143,32 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
     const aId = bookingData?.payload?.agentId;
     if (!aId) {
       setAgentAvailableBalance(null);
+      setAgentHasAvailableCredit(null);
       return;
     }
     let cancelled = false;
     axiosInstance
       .get(`/api/agent-credit-limit/agent/${aId}`)
       .then((res) => {
-        if (!cancelled)
+        if (!cancelled) {
           setAgentAvailableBalance(res?.data?.availableCreditLimit ?? null);
+          // Treat the agent as a "Cash Agent" when there is no usable credit
+          // available (available balance 0/null) — this covers both agents
+          // with no credit facility AND credit agents who've used up their
+          // balance. Only a positive available balance counts as a credit
+          // agent for the Payment Type rule.
+          const available = Number(res?.data?.availableCreditLimit ?? 0);
+          setAgentHasAvailableCredit(
+            Number.isFinite(available) && available > 0,
+          );
+        }
       })
       .catch(() => {
-        if (!cancelled) setAgentAvailableBalance(null);
+        if (!cancelled) {
+          setAgentAvailableBalance(null);
+          // 404 (no credit-limit row for the agent) → treat as a Cash Agent.
+          setAgentHasAvailableCredit(false);
+        }
       });
     return () => {
       cancelled = true;
@@ -242,6 +264,43 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
   const isNonRefundableRate =
     bookingData?.selectedRate?.nonRefundable === true ||
     bookingData?.selectedRate?.nonRefundable === "true";
+
+  // ── Payment Type availability ──────────────────────────────────────────
+  // A "Cash Agent" is one with no usable credit available — available balance
+  // 0/null, or no credit-limit row at all (agentHasAvailableCredit === false).
+  // This includes credit agents who have used up their balance. When the
+  // booking is Non-Refundable AND the agent is a Cash Agent, the Payment Type
+  // dropdown is restricted to Card / Cash Deposit only. Every other
+  // combination keeps the full, existing option set untouched.
+  const isCashAgent = agentHasAvailableCredit === false;
+  const restrictToCardCashDeposit = isNonRefundableRate && isCashAgent;
+  const paymentModeOptions = useMemo(
+    () =>
+      restrictToCardCashDeposit
+        ? [
+            { value: "CARD", label: "Card" },
+            { value: "CASH_DEPOSIT", label: "Cash Deposit" },
+          ]
+        : [
+            { value: "CREDITLIMIT", label: "Credit Limit" },
+            { value: "ONLINE", label: "Online" },
+            { value: "CASH", label: "Cash" },
+            { value: "CARD", label: "Card" },
+            { value: "BANK_TRANSFER", label: "Bank Transfer" },
+            { value: "CHEQUE", label: "Cheque" },
+          ],
+    [restrictToCardCashDeposit],
+  );
+
+  // Keep the selected Payment Type valid for the currently available options.
+  // When the option set changes (e.g. the restriction kicks in and removes
+  // Credit Limit), auto-select the first remaining option — which also
+  // satisfies "if only one valid option exists, select it by default".
+  useEffect(() => {
+    if (!paymentModeOptions.some((o) => o.value === paymentMode)) {
+      setPaymentMode(paymentModeOptions[0].value);
+    }
+  }, [paymentModeOptions, paymentMode]);
 
   // Client rule, compared against the CURRENT date (not check-in):
   //   • today ≤ deadline (deadline still UPCOMING) → SHOW the
@@ -1273,12 +1332,11 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                             value={paymentMode}
                             onChange={(e) => setPaymentMode(e.target.value)}
                           >
-                            <option value="CREDITLIMIT">Credit Limit</option>
-                            <option value="ONLINE">Online</option>
-                            <option value="CASH">Cash</option>
-                            <option value="CARD">Card</option>
-                            <option value="BANK_TRANSFER">Bank Transfer</option>
-                            <option value="CHEQUE">Cheque</option>
+                            {paymentModeOptions.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
                           </Form.Select>
                         </Form.Group>
                       </Col>
@@ -1723,7 +1781,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
 
                       <hr className="my-2" />
 
-                      <Row className="gy-2">
+                      <Row className="gy-1">
                         <Col xs={6}>
                           <p className="mb-1">
                             <strong>Check-In:</strong>
@@ -1939,7 +1997,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                         </Col>
                       </Row>
 
-                      <div className="mt-2 p-2 bg-white border rounded">
+                      <div className="mt-1 p-2 bg-white border rounded">
                         <h6 className="fw-bold mb-1">Rate Split</h6>
                         <div className="d-flex justify-content-between">
                           <span>Selling Price</span>
@@ -1960,7 +2018,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                         </div>
                       </div>
 
-                      <div className="mt-2 p-2 bg-white border rounded d-flex align-items-center">
+                      <div className="mt-1 p-2 bg-white border rounded d-flex align-items-center">
                         <span
                           className="me-2 d-inline-flex align-items-center justify-content-center"
                           style={{
@@ -1982,7 +2040,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                         </span>
                       </div>
 
-                      <div className="mt-2 text-center">
+                      <div className="mt-1 text-center">
                         <p className="text-muted small mb-0">
                           Please review the booking details carefully before
                           confirming.

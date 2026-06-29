@@ -17,12 +17,13 @@ import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import {
   FaEdit,
-  FaTrash,
   FaSignInAlt,
   FaCreditCard,
   FaBan,
   FaArrowLeft,
   FaKey,
+  FaToggleOn,
+  FaToggleOff,
 } from "react-icons/fa";
 
 /**
@@ -103,6 +104,8 @@ const AgentView = () => {
 
   const [agent, setAgent] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Active/Inactive toggle in-flight flag (disables the button while saving).
+  const [statusUpdating, setStatusUpdating] = useState(false);
   /* Lightbox state — when the user clicks the agent photo on the header,
      the full image is shown enlarged inside a clean Bootstrap Modal. */
   const [showPhotoModal, setShowPhotoModal] = useState(false);
@@ -197,26 +200,50 @@ const AgentView = () => {
     navigate(`/registration/agent?edit=${id}`);
   };
 
+  // Delete handler removed by design — agents are never deleted; access is
+  // managed via the Active/Inactive status toggle below.
+
   // ===================================================================
-  // Delete
+  // Active / Inactive toggle
+  // Flips the agent's access on/off (status + login account) without
+  // touching any booking / invoice / payment data. Confirms first.
   // ===================================================================
-  const handleDelete = () => {
+  const isAgentActive =
+    String(agent?.status || "").trim().toLowerCase() !== "inactive";
+
+  const handleToggleStatus = () => {
+    const goingInactive = isAgentActive; // currently active → will deactivate
+    const nextLabel = goingInactive ? "Inactive" : "Active";
     Swal.fire({
-      title: `Are you sure? You want to delete ${agent?.companyName || ""}`,
+      title: `Set ${agent?.companyName || "this agent"} to ${nextLabel}?`,
+      html: goingInactive
+        ? "The agent won't be able to log in or perform any operation " +
+          "(search, bookings, payments, extranet). All existing data stays intact."
+        : "The agent's access and all permissions will be restored immediately.",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#d33",
+      confirmButtonColor: goingInactive ? "#d33" : "#198754",
       cancelButtonColor: "#3085d6",
-      confirmButtonText: "Yes, delete it!",
+      confirmButtonText: `Yes, set ${nextLabel}`,
     }).then((result) => {
       if (!result.isConfirmed) return;
+      setStatusUpdating(true);
       axiosInstance
-        .delete(`/api/agent/${id}`)
-        .then(() => {
-          toast.success("Agent deleted successfully");
-          navigate("/registration/agent");
+        .patch(`/api/agent/${id}/status`, { active: !goingInactive })
+        .then((res) => {
+          toast.success(res.data?.message || `Agent set to ${nextLabel}`);
+          // Reflect the new status without a full reload, then refresh.
+          setAgent((prev) =>
+            prev ? { ...prev, status: res.data?.status || nextLabel } : prev
+          );
+          fetchAgent();
         })
-        .catch(() => toast.error("Sorry!! Agent not deleted"));
+        .catch((err) =>
+          toast.error(
+            err.response?.data?.message || "Failed to update agent status"
+          )
+        )
+        .finally(() => setStatusUpdating(false));
     });
   };
 
@@ -769,6 +796,14 @@ const AgentView = () => {
                     ({agent.shortName})
                   </span>
                 ) : null}
+                <span
+                  className={`badge ms-2 align-middle ${
+                    isAgentActive ? "bg-success" : "bg-secondary"
+                  }`}
+                  style={{ fontSize: "0.7rem", verticalAlign: "middle" }}
+                >
+                  {isAgentActive ? "Active" : "Inactive"}
+                </span>
               </h4>
             </div>
             {(() => {
@@ -1046,10 +1081,30 @@ const AgentView = () => {
                 <FaSignInAlt className="me-2" />
                 Login
               </Button>
-              <Button variant="danger" onClick={handleDelete}>
-                <FaTrash className="me-2" />
-                Delete
+              <Button
+                variant={isAgentActive ? "outline-danger" : "outline-success"}
+                onClick={handleToggleStatus}
+                disabled={statusUpdating}
+                title={
+                  isAgentActive
+                    ? "Deactivate this agent (blocks login and all operations)"
+                    : "Reactivate this agent (restores access)"
+                }
+              >
+                {isAgentActive ? (
+                  <>
+                    <FaToggleOff className="me-2" />
+                    {statusUpdating ? "Updating..." : "Set Inactive"}
+                  </>
+                ) : (
+                  <>
+                    <FaToggleOn className="me-2" />
+                    {statusUpdating ? "Updating..." : "Set Active"}
+                  </>
+                )}
               </Button>
+              {/* Delete removed by design — agents are never deleted; use the
+                  Active/Inactive status to manage agent access instead. */}
             </Card.Body>
           </Card>
           </Container>

@@ -95,7 +95,7 @@ const PackageSearch = () => {
   // ─────────────────────────────────────────────
   const fetchAgents = async () => {
     try {
-      const response = await axiosInstance.get("/api/agent");
+      const response = await axiosInstance.get("/api/agent?activeOnly=true");
       setAgents(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error("Error fetching agents:", error);

@@ -99,7 +99,7 @@ const MakePkgV3Form = () => {
 
     // Load agents
     axiosInstance
-      .get("/api/agent")
+      .get("/api/agent?activeOnly=true")
       .then((r) => setAgentList(Array.isArray(r.data) ? r.data : []))
       .catch(() => setAgentList([]));
 
