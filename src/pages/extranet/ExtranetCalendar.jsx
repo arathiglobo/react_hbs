@@ -219,12 +219,17 @@ export default function ExtranetCalendar() {
 
   // Small labelled field used across the modal cards.
   const Field = ({ icon, label, value }) => (
-    <div className="mb-3">
-      <div className="text-muted small mb-1 d-flex align-items-center gap-2">
+    <div className="mb-2">
+      <div
+        className="text-muted d-flex align-items-center gap-2"
+        style={{ fontSize: "0.72rem" }}
+      >
         {icon}
         {label}
       </div>
-      <div className="fw-semibold text-dark">{value || "-"}</div>
+      <div className="fw-semibold text-dark" style={{ fontSize: "0.9rem" }}>
+        {value || "-"}
+      </div>
     </div>
   );
 
@@ -389,7 +394,7 @@ export default function ExtranetCalendar() {
               </div>
             </Modal.Header>
 
-            <Modal.Body className="px-4 py-4 bg-light">
+            <Modal.Body className="px-4 py-3 bg-light">
               {loadingBookingDetails ? (
                 <div className="text-center py-5">
                   <Spinner animation="border" variant="primary" />
@@ -441,49 +446,62 @@ export default function ExtranetCalendar() {
                     </Col>
                   </Row>
 
-                  <Row className="g-3 mt-1">
+                  <Row className="g-3 mt-0">
                     {/* Guest */}
                     <Col md={7}>
                       <Card className="border-0 shadow-sm h-100">
-                        <Card.Header className="bg-white fw-semibold d-flex align-items-center gap-2">
+                        <Card.Header className="bg-white fw-semibold d-flex align-items-center gap-2 py-2">
                           <FaUser color="#EC0B43" /> Guest Information
                         </Card.Header>
-                        <Card.Body>
+                        <Card.Body className="py-3">
                           <Field
                             icon={<FaUser color="#9A9A95" />}
                             label="Guest Name"
                             value={guest?.guestName}
                           />
                           <Row>
-                            <Col md={6}>
+                            <Col xs={6}>
                               <Field
                                 icon={<FaEnvelope color="#9A9A95" />}
                                 label="Email"
                                 value={guest?.email}
                               />
                             </Col>
-                            <Col md={6}>
+                            <Col xs={6}>
                               <Field
                                 icon={<FaPhone color="#9A9A95" />}
                                 label="Mobile"
                                 value={guest?.mobileNumber}
                               />
                             </Col>
+                            <Col xs={6}>
+                              <Field
+                                icon={<FaGlobe color="#9A9A95" />}
+                                label="Nationality"
+                                value={guest?.nativeCountry}
+                              />
+                            </Col>
+                            <Col xs={6}>
+                              <Field
+                                icon={<FaUsers color="#9A9A95" />}
+                                label="Total Guests"
+                                value={`${details?.numberOfAdults || 0} Adult(s)${
+                                  details?.numberOfChildren > 0
+                                    ? `, ${details.numberOfChildren} Child(ren)`
+                                    : ""
+                                }`}
+                              />
+                            </Col>
                           </Row>
-                          <Field
-                            icon={<FaGlobe color="#9A9A95" />}
-                            label="Nationality"
-                            value={guest?.nativeCountry}
-                          />
-                          <Field
-                            icon={<FaUsers color="#9A9A95" />}
-                            label="Total Guests"
-                            value={`${details?.numberOfAdults || 0} Adult(s)${
-                              details?.numberOfChildren > 0
-                                ? `, ${details.numberOfChildren} Child(ren)`
-                                : ""
-                            }`}
-                          />
+                          {/* Hotel folded into the same card to avoid a sparse
+                              full-width "Reservation" card below. */}
+                          <div className="border-top pt-3 mt-1">
+                            <Field
+                              icon={<FaHotel color="#9A9A95" />}
+                              label="Hotel"
+                              value={details?.hotelName}
+                            />
+                          </div>
                         </Card.Body>
                       </Card>
                     </Col>
@@ -491,19 +509,31 @@ export default function ExtranetCalendar() {
                     {/* Pricing */}
                     <Col md={5}>
                       <Card className="border-0 shadow-sm h-100">
-                        <Card.Header className="bg-white fw-semibold">
+                        <Card.Header className="bg-white fw-semibold py-2">
                           Pricing Summary
                         </Card.Header>
-                        <Card.Body className="d-flex flex-column">
+                        <Card.Body className="py-3 d-flex flex-column">
                           <div className="d-flex justify-content-between mb-2">
                             <span className="text-muted">Room Rate</span>
                             <span className="fw-semibold">
-                              {details?.currency || ""}{" "}
+                              {details?.currency || "AED"}{" "}
                               {details?.total ? details.total.toFixed(2) : "0.00"}
                             </span>
                           </div>
+                          <div className="d-flex justify-content-between mb-2">
+                            <span className="text-muted">Nights</span>
+                            <span className="fw-semibold">
+                              {details?.numberOfNights ?? "0"}
+                            </span>
+                          </div>
+                          <div className="d-flex justify-content-between mb-2">
+                            <span className="text-muted">Rooms</span>
+                            <span className="fw-semibold">
+                              {details?.numberOfRooms ?? "0"}
+                            </span>
+                          </div>
                           <hr className="my-2" />
-                          <div className="mt-auto d-flex justify-content-between align-items-center p-3 rounded-3 bg-light">
+                          <div className="mt-auto d-flex justify-content-between align-items-center px-3 py-2 rounded-3 bg-light">
                             <span className="fw-bold">Total</span>
                             <span className="text-success fw-bold fs-5">
                               {details?.currency || "AED"}{" "}
@@ -514,20 +544,6 @@ export default function ExtranetCalendar() {
                       </Card>
                     </Col>
                   </Row>
-
-                  {/* Hotel */}
-                  <Card className="border-0 shadow-sm mt-3">
-                    <Card.Header className="bg-white fw-semibold d-flex align-items-center gap-2">
-                      <FaHotel color="#EC0B43" /> Reservation
-                    </Card.Header>
-                    <Card.Body>
-                      <Field
-                        icon={<FaHotel color="#9A9A95" />}
-                        label="Hotel"
-                        value={details?.hotelName}
-                      />
-                    </Card.Body>
-                  </Card>
 
                   {/* Rooms table */}
                   {details?.rooms && details.rooms.length > 0 && (

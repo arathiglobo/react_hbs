@@ -17,6 +17,8 @@ const Login = () => {
   const [error, setError] = useState(null);
   const [forgetEmail, setForgetEmail] = useState("");
   const [forgetUsername, setForgetUsername] = useState("");
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [selectedRole, setSelectedRole] = useState("Agent");
   // Promo carousel on the login brand panel. Two public sources feed it:
   //   1. OfferZone banners (/api/offerDetails) — shown FIRST, each carrying a
   //      description + validity dates overlaid on the banner image.
@@ -404,9 +406,13 @@ const Login = () => {
             </button>
 
             <div className="lg-links">
-              <Link to="/register" className="lg-link">
+              <button
+                type="button"
+                className="lg-link"
+                onClick={() => { setSelectedRole("Agent"); setShowRoleModal(true); }}
+              >
                 <i className="fas fa-user-plus"></i> Create Account
-              </Link>
+              </button>
               <button
                 type="button"
                 className="lg-link"
@@ -424,6 +430,83 @@ const Login = () => {
           </div>
         </div>
       </main>
+
+      {/* ── Role Selection Modal ── */}
+      {showRoleModal && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 1060,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+          onClick={() => setShowRoleModal(false)}
+        >
+          <div
+            style={{
+              background: "#fff", borderRadius: 12, padding: "32px 36px",
+              minWidth: 320, boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h5 style={{ marginBottom: 20, fontWeight: 700, color: "#1a1a2e" }}>
+              <i className="fas fa-user-circle me-2"></i>Create Account As
+            </h5>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 28 }}>
+              {["Agent", "Hotel"].map((role) => (
+                <label
+                  key={role}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 12,
+                    cursor: "pointer", padding: "10px 14px",
+                    border: `2px solid ${selectedRole === role ? "#c0392b" : "#e0e0e0"}`,
+                    borderRadius: 8,
+                    background: selectedRole === role ? "#fff5f5" : "#fafafa",
+                    fontWeight: selectedRole === role ? 600 : 400,
+                    color: "#1a1a2e",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="registerRole"
+                    value={role}
+                    checked={selectedRole === role}
+                    onChange={() => setSelectedRole(role)}
+                    style={{ accentColor: "#c0392b", width: 18, height: 18 }}
+                  />
+                  <i className={`fas ${role === "Agent" ? "fa-briefcase" : "fa-hotel"} me-1`}></i>
+                  {role}
+                </label>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                onClick={() => setShowRoleModal(false)}
+                style={{
+                  padding: "8px 22px", borderRadius: 7, border: "1px solid #ccc",
+                  background: "#fff", color: "#555", cursor: "pointer", fontWeight: 500,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRoleModal(false);
+                  navigate(selectedRole === "Hotel" ? "/hotel-register" : "/register");
+                }}
+                style={{
+                  padding: "8px 22px", borderRadius: 7, border: "none",
+                  background: "#c0392b", color: "#fff", cursor: "pointer", fontWeight: 600,
+                }}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Forgot Password Modal ── */}
       <div

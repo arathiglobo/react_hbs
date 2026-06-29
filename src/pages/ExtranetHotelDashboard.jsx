@@ -97,12 +97,44 @@ const ExtranetHotelDashboard = () => {
   }, []);
 
   // Quick Actions — "My Profile" stays disabled until the profile id loads.
+  // A self-registered hotel starts with a PARTIAL record (no currency/
+  // category/type/markup). Once it completes registration those are set, so
+  // we use them to decide which primary action to show:
+  //   • incomplete → "Complete Registration" (opens HotelReg edit mode)
+  //   • complete   → "View Actions" (opens the hotel-actions hub)
+  const isProfileComplete = Boolean(
+    hotelInfo &&
+      hotelInfo.hotelCurrencyId &&
+      hotelInfo.hotelCategoryId &&
+      hotelInfo.hotelTypeId &&
+      hotelInfo.markupTypeId
+  );
+
   const actions = [
+    isProfileComplete
+      ? {
+          label: "View Actions",
+          icon: "list",
+          onClick: userId
+            ? () => navigate(`/extranet/hotel-details/${userId}`)
+            : undefined,
+        }
+      : {
+          // Opens the full HotelReg form in edit mode for this hotel. The
+          // partial data saved at approval (name, address, region/country/
+          // state/place, contact) auto-loads, and the hotel fills in the
+          // rest (currency, category, rooms, bank, amenities…) and saves.
+          label: "Complete Registration",
+          icon: "check",
+          onClick: userId
+            ? () => navigate(`/extranet/registration/hotel/create/${userId}`)
+            : undefined,
+        },
     {
       label: "My Profile",
       icon: "user",
       onClick: userId
-        ? () => navigate(`/registration/hotel/create/${userId}`)
+        ? () => navigate(`/extranet/registration/hotel/create/${userId}`)
         : undefined,
     },
     {

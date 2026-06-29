@@ -2,7 +2,10 @@ import React from "react";
 import { Routes, Route, Link } from "react-router-dom";
 import Login from "./pages/Login";
 import SelectRole from "./pages/SelectRole";
-import Register from "./pages/Register"; 
+import Register from "./pages/Register";
+import HotelRegisterFromOut from "./pages/HotelRegisterFromOut";
+import HotelApproval from "./pages/HotelApproval";
+import HotelApprovalDetail from "./pages/HotelApprovalDetail";
 
 import Country from "./pages/master/Country";
 import Destination from "./pages/master/Destination";
@@ -302,6 +305,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/select-userRole" element={<SelectRole />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/hotel-register" element={<HotelRegisterFromOut />} />
         
        
      {/* Protected Routes */}
@@ -502,6 +506,10 @@ export default function App() {
         <Route path="/booking-details/package-booking/:id" element={<PrivateRoute><PackageBookingDetailView /></PrivateRoute>} />
         <Route path="/booking-details/offline-booking-list" element={<PrivateRoute><OfflineBookingList /></PrivateRoute>} />
         <Route path="/booking-details/offline-booking/:id" element={<PrivateRoute><OfflineBookingDetailView /></PrivateRoute>} />
+        {/* Hotel Approval — admin only */}
+        <Route path="/admin/hotel-approval" element={<PrivateRoute><HotelApproval /></PrivateRoute>} />
+        <Route path="/admin/hotel-approval/:id" element={<PrivateRoute><HotelApprovalDetail /></PrivateRoute>} />
+
         {/* Company Profile */}
         <Route path="/company-profile" element={<PrivateRoute><CompanyProfile /></PrivateRoute>} />
 
@@ -701,6 +709,14 @@ export default function App() {
             URL shape with an "/extranet" prefix so the swap is 1:1. */}
         <Route path="/extranet/calendar" element={<PrivateRoute><ExtranetCalendar /></PrivateRoute>} />
         <Route path="/extranet/:id/gallery" element={<PrivateRoute><ExtranetImgUpload /></PrivateRoute>} />
+
+        {/* Extranet-scoped hotel details hub + profile edit — same components
+            as the admin /hotel-details/:id and /registration/hotel/create/:id,
+            but under an /extranet URL so a logged-in hotel stays in its own
+            namespace. The components detect the /extranet path and keep their
+            internal links extranet-scoped. */}
+        <Route path="/extranet/hotel-details/:id" element={<PrivateRoute><HotelRegistrationActions /></PrivateRoute>} />
+        <Route path="/extranet/registration/hotel/create/:id" element={<PrivateRoute><HotelReg /></PrivateRoute>} />
 
         <Route path="/extranet/:id/occupancy-and-minimumlength" element={<PrivateRoute><OccupancyAndMinimumLength /></PrivateRoute>} />
 

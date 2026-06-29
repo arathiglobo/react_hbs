@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   Navbar,
   Container,
@@ -28,12 +28,26 @@ import {
   FaTicketAlt,
   FaChild,
   FaInfoCircle,
+  FaArrowLeft,
 } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
 import { toast } from "react-hot-toast";
 
 export default function TopBar() {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Show a "Back to Dashboard" shortcut for hotel-extranet logins on every
+  // page except the dashboard itself, so the hotel can always get back to
+  // /extranetDashboard (covers Calendar, Gallery, Contract Rate, Complete
+  // Registration, etc. in one place). Matches the exact EXTRANET role token —
+  // RESTAURANT_EXTRANET is intentionally excluded.
+  const roleTokens = (localStorage.getItem("userRole") || "")
+    .toUpperCase()
+    .split(",")
+    .map((s) => s.trim());
+  const isHotelExtranet = roleTokens.includes("EXTRANET");
+  const showExtranetBack =
+    isHotelExtranet && location.pathname !== "/extranetDashboard";
   const [showCartModal, setShowCartModal] = useState(false);
   const [cartItems, setCartItems] = useState([]);
   const [cartLoading, setCartLoading] = useState(false);
@@ -644,6 +658,17 @@ export default function TopBar() {
   <div className="logo-placeholder">GS</div>
   <span className="fw-semibold">Globosoft</span>
 </Navbar.Brand>
+        {showExtranetBack && (
+          <Button
+            variant="outline-light"
+            size="sm"
+            className="d-flex align-items-center gap-2 ms-2 fw-semibold"
+            onClick={() => navigate("/extranetDashboard")}
+            title="Back to Dashboard"
+          >
+            <FaArrowLeft /> <span className="d-none d-sm-inline">Back to Dashboard</span>
+          </Button>
+        )}
         <Nav className="ms-auto d-flex flex-row align-items-center gap-2 gap-md-3 flex-nowrap">
   {/* Cart Button — hidden in the v3 flow (no Redis cart there;
        selection is held in component state on /results) */}
