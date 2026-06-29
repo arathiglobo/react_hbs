@@ -235,6 +235,9 @@ const ActivitySearch = () => {
   const [tourResults, setTourResults] = useState([]);
   const [tourLoading, setTourLoading] = useState(false);
   const [hasTourSearched, setHasTourSearched] = useState(false);
+  // When results are on screen the big search form collapses into a sticky
+  // summary strip. Clicking "Modify Search" flips this true to re-expand it.
+  const [isEditingSearch, setIsEditingSearch] = useState(false);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState(null);
   // Index for the gallery thumbnail strip inside the details modal.
@@ -545,6 +548,7 @@ const ActivitySearch = () => {
 
     setTourLoading(true);
     setHasTourSearched(true);
+    setIsEditingSearch(false);
     setTourResults([]);
 
     try {
@@ -845,6 +849,10 @@ const ActivitySearch = () => {
   }),
 };
 
+  // Results are on screen once a search has run. Collapse the full form into
+  // the sticky summary strip then, unless the user chose to modify the search.
+  const collapseSearch = hasTourSearched && !isEditingSearch;
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
@@ -860,7 +868,41 @@ const ActivitySearch = () => {
                
               </div>
 
+              {/* ── Collapsed sticky search summary strip ──
+                  Shown once results are on screen. "Modify Search" re-expands
+                  the full form by flipping isEditingSearch. */}
+              {collapseSearch && (
+                <div className="hs-summary-bar">
+                  <div className="hs-summary-chips">
+                    {destinations[0]?.label && (
+                      <span className="hs-summary-chip hs-summary-chip-main">
+                        {destinations[0].label}
+                      </span>
+                    )}
+                    {tourDate && (
+                      <span className="hs-summary-chip">{tourDate}</span>
+                    )}
+                    <span className="hs-summary-chip">
+                      {tourAdults} adults
+                      {tourChildren ? `, ${tourChildren} child` : ""}
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    className="hs-summary-modify"
+                    onClick={() => {
+                      setIsEditingSearch(true);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                  >
+                    <FaSearch className="me-2" />
+                    Modify Search
+                  </Button>
+                </div>
+              )}
+
               {/* ── Search Card + Ads ── */}
+              {!collapseSearch && (
               <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
               <div className="flex-grow-1" style={{ minWidth: 0 }}>
               <Card className="border-0 shadow-sm rounded-4 bg-white mb-4">
@@ -1165,12 +1207,16 @@ const ActivitySearch = () => {
 </Card.Body>
               </Card>
               </div>
-              {/* Ads carousel — city matches first, then all active ads */}
-              <AdvertisementCarousel
-                cityId={destinations[0]?.value}
-                cityName={destinations[0]?.label}
-              />
+              {/* Ads carousel — only on first entry, before any search has run.
+                  Re-opening the form via "Modify Search" keeps it hidden. */}
+              {!hasTourSearched && (
+                <AdvertisementCarousel
+                  cityId={destinations[0]?.value}
+                  cityName={destinations[0]?.label}
+                />
+              )}
               </div>
+              )}
 
               {/* Loading State */}
               {tourLoading && (

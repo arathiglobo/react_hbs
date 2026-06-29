@@ -370,6 +370,9 @@ export default function GovEmployeeSearch() {
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState([]);
+  // When results are on screen the big search form collapses into a sticky
+  // summary strip. Clicking "Modify Search" flips this true to re-expand it.
+  const [isEditingSearch, setIsEditingSearch] = useState(false);
   const resultsRef = useRef(null);
 
   // Coerce option fields to strings — a country row with a null name
@@ -627,6 +630,7 @@ export default function GovEmployeeSearch() {
     if (!validate()) return;
     setIsLoading(true);
     setResults([]);
+    setIsEditingSearch(false);
     try {
       // Aggregate counts across all rooms so the existing backend
       // payload contract (single adults/children counts plus a
@@ -754,6 +758,9 @@ export default function GovEmployeeSearch() {
     window.open("/gov-employee-room-list", "_blank", "noopener");
   };
 
+  const hasResultsView = results.length > 0;
+  const collapseSearch = hasResultsView && !isEditingSearch;
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
@@ -761,6 +768,48 @@ export default function GovEmployeeSearch() {
         <Sidebar />
         <main className="flex-grow-1 p-4 hs-page">
           {/* ── Search Card + Ads ── */}
+          {collapseSearch && (
+            <div className="hs-summary-bar">
+              <div className="hs-summary-chips">
+                {selectedDestination?.label && (
+                  <span className="hs-summary-chip hs-summary-chip-main">
+                    {selectedDestination.label}
+                  </span>
+                )}
+                {checkIn && (
+                  <span className="hs-summary-chip">
+                    {checkIn}
+                    {checkOut ? ` → ${checkOut}` : ""}
+                  </span>
+                )}
+                {nights ? (
+                  <span className="hs-summary-chip">
+                    {nights} night{nights > 1 ? "s" : ""}
+                  </span>
+                ) : null}
+                <span className="hs-summary-chip">
+                  {rooms.reduce((a, r) => a + r.adults, 0)} adults
+                  {rooms.reduce((a, r) => a + r.children, 0)
+                    ? `, ${rooms.reduce((a, r) => a + r.children, 0)} child`
+                    : ""}{" "}
+                  · {rooms.length} room{rooms.length > 1 ? "s" : ""}
+                </span>
+              </div>
+              <Button
+                type="button"
+                className="hs-summary-modify"
+                onClick={() => {
+                  setIsEditingSearch(true);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              >
+                <FaSearch className="me-2" />
+                Modify Search
+              </Button>
+            </div>
+          )}
+
+          {!collapseSearch && (
           <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
            <div className="flex-grow-1" style={{ minWidth: 0 }}>
           {/* ── Search Card — mirrors HotelSearch.jsx's chrome ── */}
@@ -1108,11 +1157,14 @@ export default function GovEmployeeSearch() {
           </Card>
            </div>
            {/* Ads carousel — city matches first, then all active ads */}
+           {!hasResultsView && (
            <AdvertisementCarousel
              cityId={selectedDestination?.value}
              cityName={selectedDestination?.label}
            />
+           )}
           </div>
+          )}
 
           {/* ── Results + Filters ───────────────────────────────
               Mirrors HotelSearch.jsx's two-column layout: left

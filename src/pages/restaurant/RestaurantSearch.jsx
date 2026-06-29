@@ -128,6 +128,9 @@ const RestaurantSearch = () => {
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
+  // When results are on screen the big search form collapses into a sticky
+  // summary strip. Clicking "Modify Search" flips this true to re-expand it.
+  const [isEditingSearch, setIsEditingSearch] = useState(false);
   const [errors, setErrors] = useState({});
   const resultsRef = useRef(null);
 
@@ -412,6 +415,7 @@ const RestaurantSearch = () => {
   const runSearch = async (cuisines, { withProgress = false, captureOptions = false } = {}) => {
     setLoading(true);
     setHasSearched(true);
+    setIsEditingSearch(false);
     setResults([]);
 
     let interval = null;
@@ -551,6 +555,8 @@ const RestaurantSearch = () => {
     ? results.filter((r) => r?.isInsideHotel === true)
     : results;
 
+  const collapseSearch = hasSearched && !isEditingSearch;
+
   return (
     <div
       className="min-vh-100 bg-gradient-light d-flex flex-column"
@@ -574,6 +580,43 @@ const RestaurantSearch = () => {
             </div>
 
             {/* ── Search Card + Ads ── */}
+            {collapseSearch && (
+              <div className="hs-summary-bar">
+                <div className="hs-summary-chips">
+                  {form.destination?.label && (
+                    <span className="hs-summary-chip hs-summary-chip-main">
+                      <FaMapMarkerAlt className="me-1" />
+                      {form.destination.label}
+                    </span>
+                  )}
+                  {form.bookingDate && (
+                    <span className="hs-summary-chip">
+                      <FaCalendarAlt className="me-1" />
+                      {form.bookingDate}
+                    </span>
+                  )}
+                  {form.memberCount && (
+                    <span className="hs-summary-chip">
+                      <FaUserFriends className="me-1" />
+                      {form.memberCount} {Number(form.memberCount) === 1 ? "Member" : "Members"}
+                    </span>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  className="hs-summary-modify"
+                  onClick={() => {
+                    setIsEditingSearch(true);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                >
+                  <FaSearch className="me-2" />
+                  Modify Search
+                </Button>
+              </div>
+            )}
+
+            {!collapseSearch && (
             <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
              <div className="flex-grow-1" style={{ minWidth: 0 }}>
             {/* Search form card */}
@@ -788,11 +831,14 @@ const RestaurantSearch = () => {
                  / "PROVINCE:7") for the form payload; pass the raw numeric
                  `id` to the ad endpoint so the backend can match cityId
                  (and fall back to all active ads when there's no match). */}
+             {!hasSearched && (
              <AdvertisementCarousel
                cityId={form.destination?.id}
                cityName={form.destination?.label}
              />
+             )}
             </div>
+            )}
 
             <div ref={resultsRef}>
             {/* Progress while searching */}
