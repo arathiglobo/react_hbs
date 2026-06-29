@@ -1304,7 +1304,110 @@
 /* Search card + ads sit side by side and match heights on large screens */
 .hs-search-ads-row {
   align-items: stretch;
+  /* Smooth expand when the form (re)appears, e.g. on "Modify Search" */
+  transform-origin: top center;
+  animation: hsFormExpand .42s cubic-bezier(.22, .61, .36, 1) both;
+}
+@keyframes hsFormExpand {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hs-search-ads-row,
+  .hs-summary-bar {
+    animation: none;
+  }
 }
 .hs-search-ads-row > .flex-grow-1 > .search-card-modern {
   height: 100%;
+}
+
+/* ── Collapsed sticky search summary strip ──────────────────────────────
+   Replaces the full search form once results are on screen. Sticks just
+   below the (sticky, z-index 1030) TopBar. "Modify Search" re-expands. */
+.hs-summary-bar {
+  position: sticky;
+  top: 64px;                /* clears the sticky TopBar */
+  z-index: 1020;            /* above results, below TopBar */
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 0 0 16px;
+  padding: 10px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .08);
+  animation: hsSummarySlide .26s ease;
+}
+@keyframes hsSummarySlide {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.hs-summary-modify {
+  flex-shrink: 0;
+  order: 2;             /* sit after the chips */
+  margin-left: auto;    /* push to the far right */
+  display: inline-flex;
+  align-items: center;
+  font-weight: 600;
+  font-size: .9rem;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  background: var(--color-primary, #EC0B43);
+  box-shadow: 0 2px 8px rgba(236, 11, 67, .28);
+}
+.hs-summary-modify:hover,
+.hs-summary-modify:focus {
+  filter: brightness(.95);
+  color: #fff;
+  background: var(--color-primary, #EC0B43);
+}
+
+.hs-summary-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.hs-summary-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: .85rem;
+  font-weight: 500;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 5px 12px;
+  white-space: nowrap;
+}
+.hs-summary-chip-main {
+  color: #fff;
+  font-weight: 600;
+  background: var(--color-primary, #EC0B43);
+  border-color: transparent;
+}
+
+@media (max-width: 575.98px) {
+  .hs-summary-bar {
+    top: 56px;
+    padding: 10px 12px;
+    gap: 10px;
+  }
+  .hs-summary-modify {
+    width: 100%;
+    justify-content: center;
+  }
 }

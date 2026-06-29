@@ -268,6 +268,9 @@ export default function LastMinuteBookingPage() {
   // ── results state ──
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState(null);
+  // When results are on screen the big search form collapses into a sticky
+  // summary strip. Clicking "Modify Search" flips this true to re-expand it.
+  const [isEditingSearch, setIsEditingSearch] = useState(false);
   const resultsRef = useRef(null);
 
   // After a fresh search, jump the viewport to the results so the operator
@@ -479,6 +482,7 @@ export default function LastMinuteBookingPage() {
       return;
     }
     setErrors({});
+    setIsEditingSearch(false);
 
     const totalAdults = rooms.reduce((a, r) => a + (r.adults || 0), 0);
     const totalChildren = rooms.reduce((a, r) => a + (r.children || 0), 0);
@@ -521,13 +525,61 @@ export default function LastMinuteBookingPage() {
   };
 
   // ── render ────────────────────────────────────────────────────────────────
+  // Results are on screen while searching or once results land. Collapse the
+  // full form into the sticky summary strip then, unless the user is editing.
+  const hasResultsView = searching || !!results;
+  const collapseSearch = hasResultsView && !isEditingSearch;
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4 hs-page">
+          {/* ── Collapsed sticky search summary strip ──
+              Shown once results are on screen. "Modify Search" re-expands
+              the full form by flipping isEditingSearch. */}
+          {collapseSearch && (
+            <div className="hs-summary-bar">
+              <div className="hs-summary-chips">
+                {selectedDestination?.label && (
+                  <span className="hs-summary-chip hs-summary-chip-main">
+                    {selectedDestination.label}
+                  </span>
+                )}
+                {checkIn && (
+                  <span className="hs-summary-chip">
+                    {checkIn}
+                    {checkOut ? ` → ${checkOut}` : ""}
+                  </span>
+                )}
+                <span className="hs-summary-chip">
+                  {nights} night{nights > 1 ? "s" : ""}
+                </span>
+                <span className="hs-summary-chip">
+                  {rooms.reduce((a, r) => a + r.adults, 0)} adults
+                  {rooms.reduce((a, r) => a + r.children, 0)
+                    ? `, ${rooms.reduce((a, r) => a + r.children, 0)} child`
+                    : ""}{" "}
+                  · {rooms.length} room{rooms.length > 1 ? "s" : ""}
+                </span>
+              </div>
+              <Button
+                type="button"
+                className="hs-summary-modify"
+                onClick={() => {
+                  setIsEditingSearch(true);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              >
+                <FaSearch className="me-2" />
+                Modify Search
+              </Button>
+            </div>
+          )}
+
           {/* ── Search Card + Ads ── */}
+          {!collapseSearch && (
           <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
             <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <Card className="shadow-sm rounded-xl h-100 search-card-modern bg-white">
@@ -784,12 +836,16 @@ export default function LastMinuteBookingPage() {
             </Card.Body>
           </Card>
             </div>
-            {/* Ads carousel — city matches first, then all active ads */}
-            <AdvertisementCarousel
-              cityId={selectedDestination?.value}
-              cityName={selectedDestination?.label}
-            />
+            {/* Ads carousel — only on first entry, before any search has run.
+                Re-opening the form via "Modify Search" keeps it hidden. */}
+            {!hasResultsView && (
+              <AdvertisementCarousel
+                cityId={selectedDestination?.value}
+                cityName={selectedDestination?.label}
+              />
+            )}
           </div>
+          )}
 
           {/* ── Progress Bar (mirrors HotelSearch.jsx) ── */}
           <SearchProgressBar active={searching} />

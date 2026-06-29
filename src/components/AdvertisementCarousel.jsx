@@ -6,32 +6,71 @@ import axiosInstance from "./AxiosInstance";
 // Styles for the ad popup modal: a fixed-height letterboxed image with the
 // title / description / CTA below it. Auto-advances while the modal is open.
 const ADS_CSS = `
-.hs-ads-modal .modal-body { padding: 0; }
-.hs-ads-slide { display: flex; flex-direction: column; }
-.hs-ads-img {
-  flex: 0 0 auto; height: 360px; overflow: hidden;
-  cursor: pointer;
-  /* neutral letterbox background behind images whose aspect ratio doesn't
-     exactly match the box (so contain doesn't leave a transparent gap) */
-  background: #f6f6f4;
-  display: flex; align-items: center; justify-content: center;
+/* This popup is designed for a LIGHT header, but a global rule
+   (RoomList.css) forces every .modal-header to a red gradient with white
+   text — which hides the "Sponsored" title and clashes with the white nav
+   buttons. Scope the header back to a clean light bar for this modal only. */
+.hs-ads-modal .modal-header {
+  background: #fff; color: inherit;
+  border-bottom: 1px solid #E5E5E1; border-radius: 0;
 }
-/* contain (not cover) so the WHOLE ad image is always visible. */
-.hs-ads-img img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.hs-ads-modal .modal-header .btn-close { filter: none; opacity: .6; }
+.hs-ads-modal .modal-header .btn-close:hover { opacity: 1; }
+
+.hs-ads-modal { max-width: 600px; }
+.hs-ads-modal .modal-body { padding: 0; }
+
+/* Hero slide: the image is the full background; the text + button are overlaid
+   on a dark gradient scrim at the bottom — no empty white space below. */
+.hs-ads-slide { position: relative; height: 380px; overflow: hidden; }
+.hs-ads-img {
+  position: absolute; inset: 0; cursor: pointer; background: #f6f6f4;
+}
+.hs-ads-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .hs-ads-fallback {
-  min-height: 240px;
+  position: absolute; inset: 0;
   background: linear-gradient(135deg,#4f46e5,#7c3aed);
   display: flex; align-items: center; justify-content: center;
   color: #fff; font-weight: 600; text-align: center; padding: 12px;
 }
-.hs-ads-meta { padding: 16px 20px 4px; }
+.hs-ads-meta {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+  padding: 56px 24px 22px; color: #fff; pointer-events: none;
+  background: linear-gradient(to top,
+    rgba(0,0,0,.85) 0%, rgba(0,0,0,.55) 45%, rgba(0,0,0,0) 100%);
+}
+/* parent scrim is click-through (so the image stays clickable); re-enable
+   pointer events on the actual button. */
+.hs-ads-meta .btn { pointer-events: auto; }
+.hs-ads-title { font-size: 1.15rem; font-weight: 700; line-height: 1.25; }
+.hs-ads-desc { color: rgba(255,255,255,.88); font-size: .9rem; }
+
+/* Prev/next arrows overlaid on the image (vertically centered over it), the
+   conventional carousel pattern — instead of floating in the header. */
+.hs-ads-carousel { position: relative; }
 .hs-ads-nav {
-  border: 1px solid #E5E5E1; background: #fff; color: #EC0B43;
-  width: 28px; height: 28px; border-radius: 7px; cursor: pointer;
+  position: absolute; z-index: 5;
+  top: 42%; transform: translateY(-50%);
+  border: none; background: rgba(255, 255, 255, 0.92); color: #EC0B43;
+  width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
   transition: background .15s ease, color .15s ease;
 }
 .hs-ads-nav:hover { background: #EC0B43; color: #fff; }
+.hs-ads-nav.prev { left: 12px; }
+.hs-ads-nav.next { right: 12px; }
+
+/* Move the carousel dots to the top so they don't sit on the bottom text. */
+.hs-ads-modal .carousel-indicators { top: 10px; bottom: auto; margin-bottom: 0; }
+
+/* Compact footer — minimal white space around the OK button. */
+.hs-ads-modal .modal-footer { padding: 8px 14px; border-top: 1px solid #EEE; }
+
+@media (max-width: 575.98px) {
+  .hs-ads-slide { height: 300px; }
+  .hs-ads-meta { padding: 48px 18px 18px; }
+}
 `;
 
 /**
@@ -196,29 +235,30 @@ export default function AdvertisementCarousel({ cityId, cityName }) {
               </span>
             ) : null}
           </Modal.Title>
-          {hasMany && (
-            <div className="d-flex gap-1 align-items-center ms-auto me-2">
-              <button
-                type="button"
-                className="hs-ads-nav"
-                onClick={goPrev}
-                aria-label="Previous ad"
-              >
-                <FaChevronLeft size={12} />
-              </button>
-              <button
-                type="button"
-                className="hs-ads-nav"
-                onClick={goNext}
-                aria-label="Next ad"
-              >
-                <FaChevronRight size={12} />
-              </button>
-            </div>
-          )}
         </Modal.Header>
 
         <Modal.Body>
+          <div className="hs-ads-carousel">
+          {hasMany && (
+            <>
+              <button
+                type="button"
+                className="hs-ads-nav prev"
+                onClick={goPrev}
+                aria-label="Previous ad"
+              >
+                <FaChevronLeft size={14} />
+              </button>
+              <button
+                type="button"
+                className="hs-ads-nav next"
+                onClick={goNext}
+                aria-label="Next ad"
+              >
+                <FaChevronRight size={14} />
+              </button>
+            </>
+          )}
           <Carousel
             activeIndex={index}
             onSelect={(i) => setIndex(i)}
@@ -229,6 +269,24 @@ export default function AdvertisementCarousel({ cityId, cityName }) {
             {slides.map(({ ad, img }, i) => (
               <Carousel.Item key={`${ad.advertisementId}-${i}`}>
                 <div className="hs-ads-slide">
+                  <div className="hs-ads-meta">
+                    <div className="hs-ads-title">{ad.title}</div>
+                    {ad.description ? (
+                      <div className="hs-ads-desc mt-2">{ad.description}</div>
+                    ) : null}
+                    <div>
+                      <Button
+                        size="sm"
+                        className="mt-3 btn-indigo"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleClick(ad);
+                        }}
+                      >
+                        {ad.buttonText || "Learn More"}
+                      </Button>
+                    </div>
+                  </div>
                   {img ? (
                     <div
                       className="hs-ads-img"
@@ -246,28 +304,11 @@ export default function AdvertisementCarousel({ cityId, cityName }) {
                   ) : (
                     <div className="hs-ads-fallback">{ad.title}</div>
                   )}
-                  <div className="hs-ads-meta">
-                    <div className="fw-semibold text-dark">{ad.title}</div>
-                    {ad.description ? (
-                      <div className="text-muted small mt-1">
-                        {ad.description}
-                      </div>
-                    ) : null}
-                    <Button
-                      size="sm"
-                      className="mt-2 btn-indigo"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleClick(ad);
-                      }}
-                    >
-                      {ad.buttonText || "Learn More"}
-                    </Button>
-                  </div>
                 </div>
               </Carousel.Item>
             ))}
           </Carousel>
+          </div>
         </Modal.Body>
 
         <Modal.Footer className="py-2">

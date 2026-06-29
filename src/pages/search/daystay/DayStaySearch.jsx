@@ -235,6 +235,9 @@ export default function DayStaySearch() {
   const [isDestinationLoading, setIsDestinationLoading] = useState(false);
   const [isNationalityLoading, setIsNationalityLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  // When results are on screen the big search form collapses into a sticky
+  // summary strip. Clicking "Modify Search" flips this true to re-expand it.
+  const [isEditingSearch, setIsEditingSearch] = useState(false);
   const [results, setResults] = useState([]);
   const [clickedHotelIds, setClickedHotelIds] = useState([]);
   const resultsRef = useRef(null);
@@ -424,6 +427,7 @@ export default function DayStaySearch() {
 
     setIsLoading(true);
     setHasSearched(true);
+    setIsEditingSearch(false);
     setResults([]);
     try {
       // checkInTime / checkOutTime intentionally omitted — Day Stay
@@ -466,13 +470,54 @@ export default function DayStaySearch() {
 
   const today = new Date().toISOString().slice(0, 10);
 
+  // Results are on screen once a search has run. Collapse the full form into
+  // the sticky summary strip then, unless the user chose to modify the search.
+  const collapseSearch = hasSearched && !isEditingSearch;
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4 hs-page">
+          {/* ── Collapsed sticky search summary strip ──
+              Shown once results are on screen. "Modify Search" re-expands
+              the full form by flipping isEditingSearch. */}
+          {collapseSearch && (
+            <div className="hs-summary-bar">
+              <div className="hs-summary-chips">
+                {selectedDestination?.label && (
+                  <span className="hs-summary-chip hs-summary-chip-main">
+                    {selectedDestination.label}
+                  </span>
+                )}
+                {checkInDate && (
+                  <span className="hs-summary-chip">{checkInDate}</span>
+                )}
+                <span className="hs-summary-chip">
+                  {rooms.reduce((a, r) => a + r.adults, 0)} adults
+                  {rooms.reduce((a, r) => a + r.children, 0)
+                    ? `, ${rooms.reduce((a, r) => a + r.children, 0)} child`
+                    : ""}{" "}
+                  · {rooms.length} room{rooms.length > 1 ? "s" : ""}
+                </span>
+              </div>
+              <Button
+                type="button"
+                className="hs-summary-modify"
+                onClick={() => {
+                  setIsEditingSearch(true);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              >
+                <FaSearch className="me-2" />
+                Modify Search
+              </Button>
+            </div>
+          )}
+
           {/* ── Search Card + Ads ── */}
+          {!collapseSearch && (
           <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
            <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <Card className="shadow-sm rounded-xl mb-4 search-card-modern bg-white">
@@ -794,12 +839,16 @@ export default function DayStaySearch() {
             </Card.Body>
           </Card>
            </div>
-           {/* Ads carousel — city matches first, then all active ads */}
-           <AdvertisementCarousel
-             cityId={selectedDestination?.value}
-             cityName={selectedDestination?.label}
-           />
+           {/* Ads carousel — only on first entry, before any search has run.
+               Re-opening the form via "Modify Search" keeps it hidden. */}
+           {!hasSearched && (
+             <AdvertisementCarousel
+               cityId={selectedDestination?.value}
+               cityName={selectedDestination?.label}
+             />
+           )}
           </div>
+          )}
 
           {!hasSearched && (
             <Card className="shadow-sm rounded-xl">

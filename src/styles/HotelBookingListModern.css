@@ -201,3 +201,60 @@
   color: #8A8A85 !important;
   margin-bottom: .35rem !important;
 }
+
+/* ============================================================================
+   RESPONSIVE / MOBILE
+   The page is a dense data table. On tablet/phone the header (title + search
+   on the left, Time Period card on the right) stacks vertically and goes
+   full-width, and the table keeps a comfortable min-width so it scrolls
+   horizontally inside its wrapper instead of crushing every column.
+   ============================================================================ */
+@media (max-width: 768px) {
+  /* Header: stack the title/search block above the Time Period card */
+  .hbl-modern .hbl-header {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 1rem;
+  }
+  .hbl-modern .hbl-header-left {
+    width: 100%;
+  }
+  /* Search box drops its fixed 300px width and fills the row */
+  .hbl-modern .hbl-search {
+    width: 100% !important;
+  }
+  /* Time Period card spans full width instead of clinging to the right */
+  .hbl-modern .hbl-timecard {
+    min-width: 0 !important;
+    width: 100%;
+  }
+  .hbl-modern h3 {
+    font-size: 1.35rem !important;
+  }
+
+  /* Keep the table readable: let it overflow its wrapper and scroll
+     horizontally rather than wrapping columns into an unreadable squash. */
+  .hbl-modern .hbl-table {
+    min-width: 760px;
+  }
+
+  /* Pagination bar: center its three groups and let the page chips wrap */
+  .hbl-modern .hbl-pagination-bar {
+    justify-content: center !important;
+  }
+  .hbl-modern .hbl-pagination-bar .pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+/* Extra-small phones: tighten the Time Period selects and table min-width */
+@media (max-width: 480px) {
+  .hbl-modern .hbl-table {
+    min-width: 680px;
+  }
+  .hbl-modern .hbl-pagination-bar > .text-muted {
+    width: 100%;
+    text-align: center;
+  }
+}

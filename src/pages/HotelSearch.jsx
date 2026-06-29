@@ -501,6 +501,9 @@ export default function HotelSearch({ force24Hour = false } = {}) {
   const [finalHotelSearchTerm, setFinalHotelSearchTerm] = useState("");
   const [agents, setAgents] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
+  // When results are on screen the big search form collapses into a sticky
+  // summary strip. Clicking "Modify Search" flips this true to re-expand it.
+  const [isEditingSearch, setIsEditingSearch] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize] = useState(10);
@@ -1259,6 +1262,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
     setErrors({});
     setIsLoading(true);
     setHasSearched(true);
+    setIsEditingSearch(false);
     setHasSearchResult(false);
     setAllResults([]);
     setPollStatus("IDLE");
@@ -1465,6 +1469,10 @@ export default function HotelSearch({ force24Hour = false } = {}) {
 
   const showResultsDuringPolling = hasSearchResult || allResults.length > 0;
 
+  // Collapse the full search form into the sticky summary strip once results
+  // are on screen, unless the user explicitly chose to modify the search.
+  const collapseSearch = showResultsDuringPolling && !isEditingSearch;
+
   useEffect(() => {
     if (!searchId || !hasSearched) return;
     if (pollStatus === "IN_PROGRESS") return;
@@ -1491,7 +1499,50 @@ export default function HotelSearch({ force24Hour = false } = {}) {
         <Sidebar />
 
         <main className="flex-grow-1 p-4 hs-page">
+          {/* ── Collapsed sticky search summary strip ──
+              Shown once results are on screen. "Modify Search" re-expands
+              the full form by flipping isEditingSearch. */}
+          {collapseSearch && (
+            <div className="hs-summary-bar">
+              <Button
+                type="button"
+                className="hs-summary-modify"
+                onClick={() => {
+                  setIsEditingSearch(true);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              >
+                <FaSearch className="me-2" />
+                Modify Search
+              </Button>
+              <div className="hs-summary-chips">
+                {selectedDestination?.label && (
+                  <span className="hs-summary-chip hs-summary-chip-main">
+                    {selectedDestination.label}
+                  </span>
+                )}
+                {checkIn && (
+                  <span className="hs-summary-chip">
+                    {checkIn}
+                    {checkOut ? ` → ${checkOut}` : ""}
+                  </span>
+                )}
+                <span className="hs-summary-chip">
+                  {nights} night{nights > 1 ? "s" : ""}
+                </span>
+                <span className="hs-summary-chip">
+                  {rooms.reduce((a, r) => a + r.adults, 0)} adults
+                  {rooms.reduce((a, r) => a + r.children, 0)
+                    ? `, ${rooms.reduce((a, r) => a + r.children, 0)} child`
+                    : ""}{" "}
+                  · {rooms.length} room{rooms.length > 1 ? "s" : ""}
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* ── Search Card + Ads ── */}
+          {!collapseSearch && (
           <div className="d-flex gap-3 align-items-start mb-2 hs-search-ads-row">
            <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <Card className="shadow-sm rounded-xl search-card-modern bg-white h-100">
@@ -1925,12 +1976,16 @@ export default function HotelSearch({ force24Hour = false } = {}) {
             </Card.Body>
           </Card>
            </div>
-            {/* Ads carousel — city matches first, then all active ads */}
-            <AdvertisementCarousel
-              cityId={selectedDestination?.value}
-              cityName={selectedDestination?.label}
-            />
+            {/* Ads carousel — only on first entry, before any search has run.
+                Re-opening the form via "Modify Search" keeps it hidden. */}
+            {!hasSearched && (
+              <AdvertisementCarousel
+                cityId={selectedDestination?.value}
+                cityName={selectedDestination?.label}
+              />
+            )}
           </div>
+          )}
 
           {/* ── Progress Bar ── */}
           <SearchProgressBar

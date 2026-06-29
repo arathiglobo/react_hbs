@@ -21,6 +21,7 @@ import {
   Utensils,
   Trophy,
   Award,
+  BadgeCheck,
 } from "lucide-react";
 import { FaAd, FaBrain, FaBullhorn, FaBullseye, FaFileAlt, FaImages, FaRobot, FaTags, FaUser } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
@@ -1054,6 +1055,9 @@ function getIcon(label) {
 
     case "Company Profile":
       return <Building2 {...iconProps} />;
+
+    case "Hotel Approval":
+      return <BadgeCheck {...iconProps} />;
 
     case "Registration":
       return <ClipboardList {...iconProps} />;

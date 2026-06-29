@@ -263,7 +263,7 @@ const AyurvedaBookingList = () => {
                       );
                     })}
                   </div>
-                  <div className="d-flex align-items-center gap-2">
+                  <div className="d-flex align-items-center gap-2 hm-toolbar-right">
                     <Form.Select
                       size="sm"
                       value={filterType}
@@ -290,7 +290,7 @@ const AyurvedaBookingList = () => {
                         </option>
                       ))}
                     </Form.Select>
-                    <InputGroup size="sm" style={{ width: "240px" }}>
+                    <InputGroup size="sm" className="hm-search" style={{ width: "240px" }}>
                       <InputGroup.Text
                         style={{
                           fontSize: "0.75rem",
@@ -466,6 +466,14 @@ const AyurvedaBookingList = () => {
                       }
                       .saas-table tbody tr:first-child td { border-top: none; }
                       .saas-table tbody tr:hover { background-color: #fafbfc; }
+                      /* Mobile: keep the 11-column table readable by letting it
+                         scroll horizontally inside its wrapper instead of
+                         crushing columns, and let the search box fill the row. */
+                      @media (max-width: 768px) {
+                        .saas-table { min-width: 860px; }
+                        .hm-toolbar-right { width: 100%; }
+                        .hm-search { width: 100% !important; flex: 1 1 auto; }
+                      }
                     `}</style>
 
                     {/* Pagination */}
