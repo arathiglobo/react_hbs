@@ -16,10 +16,17 @@ export default function SubUser() {
     email: "",
     mobileNumber: "",
     address: "",
+    countryId: "",
+    provinceId: "",
+    placeId: "",
   });
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
+  // Master lookups for the Country → City dropdowns. ("City" maps to the
+  // province/state master — the place level isn't captured for sub-users.)
+  const [countries, setCountries] = useState([]);
+  const [provinces, setProvinces] = useState([]);
 
   const openCreate = () => {
     setEditing(null);
@@ -28,6 +35,9 @@ export default function SubUser() {
       email: "",
       mobileNumber: "",
       address: "",
+      countryId: "",
+      provinceId: "",
+      placeId: "",
     });
     setValidationErrors({});
     setShowModal(true);
@@ -40,6 +50,9 @@ export default function SubUser() {
       email: item.email || "",
       mobileNumber: item.mobileNumber || "",
       address: item.address || "",
+      countryId: item.countryId ? String(item.countryId) : "",
+      provinceId: item.provinceId ? String(item.provinceId) : "",
+      placeId: item.placeId ? String(item.placeId) : "",
     });
     setValidationErrors({});
     setShowModal(true);
@@ -84,11 +97,19 @@ export default function SubUser() {
 
     setIsLoading(true);
     try {
+      // Send numeric location ids (or null) so the backend can bind them to
+      // Long fields — empty selects must not be sent as "".
+      const payload = {
+        ...formData,
+        countryId: formData.countryId ? Number(formData.countryId) : null,
+        provinceId: formData.provinceId ? Number(formData.provinceId) : null,
+        placeId: formData.placeId ? Number(formData.placeId) : null,
+      };
       if (editing) {
-        await axiosInstance.put(`/api/sub-user/${editing.id}`, formData);
+        await axiosInstance.put(`/api/sub-user/${editing.id}`, payload);
         toast.success("Sub User Updated Successfully!");
       } else {
-        await axiosInstance.post("/api/sub-user", formData);
+        await axiosInstance.post("/api/sub-user", payload);
         toast.success("Sub User Created Successfully!");
       }
       fetchSubUsers();
@@ -132,6 +153,9 @@ export default function SubUser() {
       email: "",
       mobileNumber: "",
       address: "",
+      countryId: "",
+      provinceId: "",
+      placeId: "",
     });
     setValidationErrors({});
   };
@@ -139,6 +163,37 @@ export default function SubUser() {
   useEffect(() => {
     fetchSubUsers();
   }, []);
+
+  // ── Country → Province → City master loading (mirrors the agent forms) ──
+  const fetchCountries = async () => {
+    try {
+      const res = await axiosInstance.get("/api/country?page=0&limit=300&search=");
+      setCountries(res.data || []);
+    } catch (err) {
+      setCountries([]);
+    }
+  };
+
+  const fetchProvinces = async (countryId) => {
+    if (!countryId) {
+      setProvinces([]);
+      return;
+    }
+    try {
+      const res = await axiosInstance.get(`/api/province/getByCountryId/${countryId}`);
+      setProvinces(res.data || []);
+    } catch (err) {
+      setProvinces([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchCountries();
+  }, []);
+
+  useEffect(() => {
+    fetchProvinces(formData.countryId);
+  }, [formData.countryId]);
 
   const filteredItems = items.filter((item) =>
     item.agentName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -176,6 +231,8 @@ export default function SubUser() {
                     <th>Agent Name</th>
                     <th>Email</th>
                     <th>Mobile</th>
+                    <th>Country</th>
+                    <th>City</th>
                     <th>Address</th>
                     <th className="text-center">Actions</th>
                   </tr>
@@ -183,7 +240,7 @@ export default function SubUser() {
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={6} className="text-center py-5">
+                      <td colSpan={8} className="text-center py-5">
                         <div className="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
                         Loading...
                       </td>
@@ -195,6 +252,8 @@ export default function SubUser() {
                         <td className="fw-medium">{item.agentName}</td>
                         <td>{item.email}</td>
                         <td>{item.mobileNumber}</td>
+                        <td>{item.countryName || "—"}</td>
+                        <td>{item.provinceName || "—"}</td>
                         <td>{item.address}</td>
                         <td>
                           <div className="d-flex flex-wrap justify-content-center gap-2">
@@ -220,7 +279,7 @@ export default function SubUser() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={6} className="text-center py-5 text-muted">
+                      <td colSpan={8} className="text-center py-5 text-muted">
                         No sub users found.
                       </td>
                     </tr>
@@ -276,6 +335,48 @@ export default function SubUser() {
                         isInvalid={!!validationErrors.mobileNumber}
                       />
                       <Form.Control.Feedback type="invalid">{validationErrors.mobileNumber}</Form.Control.Feedback>
+                    </Form.Group>
+                  </div>
+                  <div className="col-md-6 mb-3">
+                    <Form.Group>
+                      <Form.Label className="small fw-bold">Country</Form.Label>
+                      <Form.Select
+                        value={formData.countryId}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            countryId: e.target.value,
+                            // Reset the dependent City selection when country changes.
+                            provinceId: "",
+                          })
+                        }
+                      >
+                        <option value="">Select country</option>
+                        {countries.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </div>
+                  <div className="col-md-6 mb-3">
+                    <Form.Group>
+                      <Form.Label className="small fw-bold">City</Form.Label>
+                      <Form.Select
+                        value={formData.provinceId}
+                        disabled={!formData.countryId}
+                        onChange={(e) =>
+                          setFormData({ ...formData, provinceId: e.target.value })
+                        }
+                      >
+                        <option value="">Select city</option>
+                        {provinces.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name || p.stateName}
+                          </option>
+                        ))}
+                      </Form.Select>
                     </Form.Group>
                   </div>
                   <div className="col-md-12 mb-3">

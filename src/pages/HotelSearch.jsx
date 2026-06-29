@@ -1680,7 +1680,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                           className="mt-1 small fw-semibold"
                           style={{ color: "#0f7a3a" }}
                         >
-                          The guest is a resident of the UAE.
+                          Select "United Arab Emirates" if guest resident of UAE
                         </div>
                       )}
                     </Form.Group>

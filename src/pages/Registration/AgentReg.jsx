@@ -3443,7 +3443,9 @@ const AgentReg = () => {
                       </Card.Body>
                     </Card>
 
-                    {/* Incentive Claim Preferences */}
+                    {/* Incentive Claim Preferences — hidden by request (code
+                        retained; field stays empty and is not validated). */}
+                    {false && (
                     <Card className="mb-3">
                       <Card.Header>Incentive Claim Preferences</Card.Header>
                       <Card.Body>
@@ -3695,6 +3697,7 @@ const AgentReg = () => {
                         )}
                       </Card.Body>
                     </Card>
+                    )}
                   </Col>
 
                   <Col md={4}>

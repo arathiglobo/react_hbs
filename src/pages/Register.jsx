@@ -1185,25 +1185,30 @@ const Register = () => {
                           </Col>
                         </Row>
 
-                        {/* ── Incentive Claim Preferences ── */}
-                        <h5 className="mt-4 mb-3" style={{ fontSize: "1rem", fontWeight: 600, color: "#3E3E3B", letterSpacing: "-0.01em" }}>Incentive Claim Preferences</h5>
-                        <Row className="g-3">
-                          <Col md={6}>
-                            <Form.Group>
-                              <Form.Label className="form-label">Preferred Incentive Claim Method</Form.Label>
-                              <Form.Select
-                                name="preferredClaimMethod"
-                                value={formData.preferredClaimMethod}
-                                onChange={handleChange}
-                                className="form-input"
-                              >
-                                <option value="">Select method</option>
-                                <option value="CREDIT_LIMIT">Add to Credit Limit</option>
-                                <option value="BANK_TRANSFER">Transfer to Bank Account</option>
-                              </Form.Select>
-                            </Form.Group>
-                          </Col>
-                        </Row>
+                        {/* ── Incentive Claim Preferences — hidden by request
+                             (code retained; field stays empty). ── */}
+                        {false && (
+                          <>
+                            <h5 className="mt-4 mb-3" style={{ fontSize: "1rem", fontWeight: 600, color: "#3E3E3B", letterSpacing: "-0.01em" }}>Incentive Claim Preferences</h5>
+                            <Row className="g-3">
+                              <Col md={6}>
+                                <Form.Group>
+                                  <Form.Label className="form-label">Preferred Incentive Claim Method</Form.Label>
+                                  <Form.Select
+                                    name="preferredClaimMethod"
+                                    value={formData.preferredClaimMethod}
+                                    onChange={handleChange}
+                                    className="form-input"
+                                  >
+                                    <option value="">Select method</option>
+                                    <option value="CREDIT_LIMIT">Add to Credit Limit</option>
+                                    <option value="BANK_TRANSFER">Transfer to Bank Account</option>
+                                  </Form.Select>
+                                </Form.Group>
+                              </Col>
+                            </Row>
+                          </>
+                        )}
                       </div>
 
                       {/* Step 5: GST Details (India only) */}

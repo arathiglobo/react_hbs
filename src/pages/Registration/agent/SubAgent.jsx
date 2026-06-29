@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useRef } from "react";
-import { Card, Button, Table, Modal, Form, Row, Col, Spinner } from "react-bootstrap";
+import { Card, Button, Table, Modal, Form, Row, Col, Spinner, InputGroup } from "react-bootstrap";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
-import { FaEdit, FaTrash, FaPlus, FaSearch, FaChevronDown, FaUndo, FaTimes, FaCheck, FaSignInAlt, FaCreditCard } from "react-icons/fa";
+import { FaEdit, FaTrash, FaPlus, FaSearch, FaChevronDown, FaUndo, FaTimes, FaCheck, FaSignInAlt, FaCreditCard, FaEye, FaEyeSlash } from "react-icons/fa";
 
 // Searchable Select Component for large lists
 const SearchableSelect = ({ label, name, value, options, onChange, placeholder, onSearch, isLoading, error, required }) => {
@@ -385,6 +385,34 @@ export default function SubAgent() {
     });
   };
 
+  // Toggle a sub-agent between Active / Inactive (status field only). Confirms
+  // first, then refreshes the list and shows a success message.
+  const handleToggleStatus = (item) => {
+    const isActive =
+      String(item.status || "").trim().toLowerCase() !== "inactive";
+    const nextLabel = isActive ? "Inactive" : "Active";
+    Swal.fire({
+      title: `Set ${item.companyName || "this sub agent"} to ${nextLabel}?`,
+      icon: "warning",
+      showCancelButton: true,
+      reverseButtons: true,
+      confirmButtonColor: isActive ? "#d33" : "#198754",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: `Yes, set ${nextLabel}`,
+    }).then(async (result) => {
+      if (!result.isConfirmed) return;
+      try {
+        await axiosInstance.patch(`/api/sub-agent/${item.id}/status`, {
+          active: !isActive,
+        });
+        toast.success(`Sub Agent set to ${nextLabel}`);
+        fetchSubAgents();
+      } catch (err) {
+        toast.error("Failed to update status");
+      }
+    });
+  };
+
   const handleOpen = async (item = null) => {
     if (item) {
       try {
@@ -678,13 +706,15 @@ export default function SubAgent() {
                     <th className="py-2 small">Company</th>
                     <th className="py-2 small">Name</th>
                     <th className="py-2 small">Contact</th>
+                    <th className="py-2 small">Country</th>
+                    <th className="py-2 small">City</th>
                     <th className="text-center py-2 small">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={5} className="text-center py-5">
+                      <td colSpan={7} className="text-center py-5">
                         <Spinner animation="border" variant="primary" size="sm" />
                       </td>
                     </tr>
@@ -695,6 +725,8 @@ export default function SubAgent() {
                         <td className="fw-bold text-primary">{item.companyName}</td>
                         <td>{item.firstName} {item.lastName}</td>
                         <td>{item.personalEmail}</td>
+                        <td>{item.countryName || "—"}</td>
+                        <td>{item.provinceName || "—"}</td>
                         <td className="text-center">
                           <div className="d-flex flex-wrap justify-content-center gap-2">
                             <Button
@@ -721,21 +753,45 @@ export default function SubAgent() {
                             >
                               <FaEdit /> Edit
                             </Button>
-                            <Button
-                              variant="outline-danger"
-                              size="sm"
-                              className="d-flex align-items-center gap-1"
-                              onClick={() => handleDelete(item.id)}
-                            >
-                              <FaTrash /> Delete
-                            </Button>
+                            {(() => {
+                              const isActive =
+                                String(item.status || "").trim().toLowerCase() !==
+                                "inactive";
+                              return (
+                                <Button
+                                  variant={isActive ? "success" : "secondary"}
+                                  size="sm"
+                                  className="d-flex align-items-center gap-1"
+                                  onClick={() => handleToggleStatus(item)}
+                                  title={
+                                    isActive
+                                      ? "Active — click to set Inactive"
+                                      : "Inactive — click to set Active"
+                                  }
+                                >
+                                  {isActive ? "Active" : "Inactive"}
+                                </Button>
+                              );
+                            })()}
+                            {/* Delete hidden by request — handler retained for
+                                future use; sub-agents are managed via status. */}
+                            {false && (
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                className="d-flex align-items-center gap-1"
+                                onClick={() => handleDelete(item.id)}
+                              >
+                                <FaTrash /> Delete
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={5} className="text-center py-5 text-muted small">No entries found</td>
+                      <td colSpan={7} className="text-center py-5 text-muted small">No entries found</td>
                     </tr>
                   )}
                 </tbody>
@@ -967,9 +1023,9 @@ export default function SubAgent() {
                           </Col>
                           <Col md={4}>
                              <Form.Group className="mb-3">
-                              <Form.Label className="form-label-custom"><span className="text-danger">* </span>Province</Form.Label>
-                              <Form.Select 
-                                name="provinceId" 
+                              <Form.Label className="form-label-custom"><span className="text-danger">* </span>City</Form.Label>
+                              <Form.Select
+                                name="provinceId"
                                 value={formData.provinceId} 
                                 onChange={handleChange} 
                                 isInvalid={!!validationErrors.provinceId}
@@ -983,9 +1039,9 @@ export default function SubAgent() {
                           </Col>
                           <Col md={4}>
                              <Form.Group className="mb-3">
-                              <Form.Label className="form-label-custom"><span className="text-danger">* </span>City</Form.Label>
-                              <Form.Select 
-                                name="placeId" 
+                              <Form.Label className="form-label-custom"><span className="text-danger">* </span>Location</Form.Label>
+                              <Form.Select
+                                name="placeId"
                                 value={formData.placeId} 
                                 onChange={handleChange} 
                                 isInvalid={!!validationErrors.placeId}
@@ -1124,13 +1180,47 @@ export default function SubAgent() {
                 </Form.Group>
                 <Form.Group className="mb-3">
                   <Form.Label>Password</Form.Label>
-                  <Form.Control type="password" name="login-password" value={loginFormData.password} onChange={handleLoginChange} isInvalid={!!loginErrors.password} />
-                  <Form.Control.Feedback type="invalid">{loginErrors.password}</Form.Control.Feedback>
+                  <InputGroup hasValidation>
+                    <Form.Control
+                      type={showPassword ? "text" : "password"}
+                      name="login-password"
+                      value={loginFormData.password}
+                      onChange={handleLoginChange}
+                      isInvalid={!!loginErrors.password}
+                    />
+                    <Button
+                      variant="outline-secondary"
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      title={showPassword ? "Hide password" : "Show password"}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <FaEyeSlash /> : <FaEye />}
+                    </Button>
+                    <Form.Control.Feedback type="invalid">{loginErrors.password}</Form.Control.Feedback>
+                  </InputGroup>
                 </Form.Group>
                 <Form.Group className="mb-3">
                   <Form.Label>Confirm Password</Form.Label>
-                  <Form.Control type="password" name="login-repassword" value={loginFormData.repassword} onChange={handleLoginChange} isInvalid={!!loginErrors.repassword} />
-                  <Form.Control.Feedback type="invalid">{loginErrors.repassword}</Form.Control.Feedback>
+                  <InputGroup hasValidation>
+                    <Form.Control
+                      type={showRePassword ? "text" : "password"}
+                      name="login-repassword"
+                      value={loginFormData.repassword}
+                      onChange={handleLoginChange}
+                      isInvalid={!!loginErrors.repassword}
+                    />
+                    <Button
+                      variant="outline-secondary"
+                      type="button"
+                      onClick={() => setShowRePassword((v) => !v)}
+                      title={showRePassword ? "Hide password" : "Show password"}
+                      aria-label={showRePassword ? "Hide password" : "Show password"}
+                    >
+                      {showRePassword ? <FaEyeSlash /> : <FaEye />}
+                    </Button>
+                    <Form.Control.Feedback type="invalid">{loginErrors.repassword}</Form.Control.Feedback>
+                  </InputGroup>
                 </Form.Group>
                 <Form.Group className="mb-3">
                   <Form.Label>User Roles</Form.Label>
