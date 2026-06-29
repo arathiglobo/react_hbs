@@ -46,8 +46,10 @@ export default function TopBar() {
     .split(",")
     .map((s) => s.trim());
   const isHotelExtranet = roleTokens.includes("EXTRANET");
+  // "Back to Dashboard" button hidden per request. Flip the leading `false`
+  // back to re-enable it for hotel-extranet logins off the dashboard.
   const showExtranetBack =
-    isHotelExtranet && location.pathname !== "/extranetDashboard";
+    false && isHotelExtranet && location.pathname !== "/extranetDashboard";
   const [showCartModal, setShowCartModal] = useState(false);
   const [cartItems, setCartItems] = useState([]);
   const [cartLoading, setCartLoading] = useState(false);

@@ -1,91 +1,101 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Carousel, Card, Button, Modal } from "react-bootstrap";
-import {
-  FaChevronLeft,
-  FaChevronRight,
-  FaMinus,
-  FaPlus,
-} from "react-icons/fa";
+import { Carousel, Button, Modal } from "react-bootstrap";
+import { FaChevronLeft, FaChevronRight } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
 
-// The ad sits in a flex row beside the search card. We give it its own fixed
-// height and align it to the top (align-self:flex-start) instead of letting it
-// stretch to the row height — otherwise expanding the "Rooms & Guests" panel
-// grows the search card, and the stretched ad grows (and its image distorts)
-// along with it. With a fixed height only the form grows; the ad stays put.
+// Styles for the ad popup modal: a fixed-height letterboxed image with the
+// title / description / CTA below it. Auto-advances while the modal is open.
 const ADS_CSS = `
-.hs-ads-panel { display: flex; align-self: flex-start; }
-.hs-ads-panel .card { display: flex; flex-direction: column; width: 100%; }
-.hs-ads-panel .card-body { display: flex; flex-direction: column; flex: 1 1 auto; }
-.hs-ads-panel .hs-ads-carousel { flex: 1 1 auto; display: flex; }
-.hs-ads-panel .hs-ads-carousel .carousel { width: 100%; }
-.hs-ads-panel .carousel-inner { height: 100%; }
-.hs-ads-panel .carousel-item { height: 100%; }
-.hs-ads-panel .carousel-item.active,
-.hs-ads-panel .carousel-item-next,
-.hs-ads-panel .carousel-item-prev {
-  display: flex !important;
-  flex-direction: column;
+/* This popup is designed for a LIGHT header, but a global rule
+   (RoomList.css) forces every .modal-header to a red gradient with white
+   text — which hides the "Sponsored" title and clashes with the white nav
+   buttons. Scope the header back to a clean light bar for this modal only. */
+.hs-ads-modal .modal-header {
+  background: #fff; color: inherit;
+  border-bottom: 1px solid #E5E5E1; border-radius: 0;
 }
-.hs-ads-slide { height: 100%; display: flex; flex-direction: column; }
+.hs-ads-modal .modal-header .btn-close { filter: none; opacity: .6; }
+.hs-ads-modal .modal-header .btn-close:hover { opacity: 1; }
+
+.hs-ads-modal { max-width: 600px; }
+.hs-ads-modal .modal-body { padding: 0; }
+
+/* Hero slide: the image is the full background; the text + button are overlaid
+   on a dark gradient scrim at the bottom — no empty white space below. */
+.hs-ads-slide { position: relative; height: 380px; overflow: hidden; }
 .hs-ads-img {
-  /* Fixed image height + auto panel height (see .hs-ads-panel): the panel
-     sizes to image + meta so the "Learn More" meta below is never clipped,
-     while align-self:flex-start keeps the ad from stretching with the form. */
-  flex: 0 0 auto; height: 340px; overflow: hidden; border-radius: 8px;
-  cursor: pointer;
-  /* neutral letterbox background behind images whose aspect ratio doesn't
-     exactly match the box (so contain doesn't leave a transparent gap) */
-  background: #f6f6f4;
-  display: flex; align-items: center; justify-content: center;
+  position: absolute; inset: 0; cursor: pointer; background: #f6f6f4;
 }
-/* contain (not cover) so the WHOLE ad image is always visible — cover was
-   cropping the top/bottom (or sides) of posters with different aspect ratios
-   as you moved between slides. */
-.hs-ads-img img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.hs-ads-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .hs-ads-fallback {
-  flex: 1 1 auto; min-height: 180px; border-radius: 8px;
+  position: absolute; inset: 0;
   background: linear-gradient(135deg,#4f46e5,#7c3aed);
   display: flex; align-items: center; justify-content: center;
   color: #fff; font-weight: 600; text-align: center; padding: 12px;
 }
-.hs-ads-meta { padding: 10px 4px 6px; }
+.hs-ads-meta {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+  padding: 56px 24px 22px; color: #fff; pointer-events: none;
+  background: linear-gradient(to top,
+    rgba(0,0,0,.85) 0%, rgba(0,0,0,.55) 45%, rgba(0,0,0,0) 100%);
+}
+/* parent scrim is click-through (so the image stays clickable); re-enable
+   pointer events on the actual button. */
+.hs-ads-meta .btn { pointer-events: auto; }
+.hs-ads-title { font-size: 1.15rem; font-weight: 700; line-height: 1.25; }
+.hs-ads-desc { color: rgba(255,255,255,.88); font-size: .9rem; }
+
+/* Prev/next arrows overlaid on the image (vertically centered over it), the
+   conventional carousel pattern — instead of floating in the header. */
+.hs-ads-carousel { position: relative; }
 .hs-ads-nav {
-  border: 1px solid #E5E5E1; background: #fff; color: #EC0B43;
-  width: 26px; height: 26px; border-radius: 7px; cursor: pointer;
+  position: absolute; z-index: 5;
+  top: 42%; transform: translateY(-50%);
+  border: none; background: rgba(255, 255, 255, 0.92); color: #EC0B43;
+  width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
   transition: background .15s ease, color .15s ease;
 }
 .hs-ads-nav:hover { background: #EC0B43; color: #fff; }
-/* Large image preview hugs the image (no big empty bars) */
-.hs-ads-preview { max-width: fit-content !important; }
-.hs-ads-preview .modal-content { width: auto; }
-.hs-ads-preview .modal-body img {
-  display: block; width: auto; height: auto;
-  max-width: 88vw; max-height: 82vh; margin: 0 auto;
+.hs-ads-nav.prev { left: 12px; }
+.hs-ads-nav.next { right: 12px; }
+
+/* Move the carousel dots to the top so they don't sit on the bottom text. */
+.hs-ads-modal .carousel-indicators { top: 10px; bottom: auto; margin-bottom: 0; }
+
+/* Compact footer — minimal white space around the OK button. */
+.hs-ads-modal .modal-footer { padding: 8px 14px; border-top: 1px solid #EEE; }
+
+@media (max-width: 575.98px) {
+  .hs-ads-slide { height: 300px; }
+  .hs-ads-meta { padding: 48px 18px 18px; }
 }
 `;
 
 /**
- * Ad carousel shown beside the hotel search criteria.
+ * Sponsored-ad popup, shown automatically on page load.
  *
  * Ads are fetched from /api/advertisement/active. When a city is selected
  * (cityId), the backend returns that city's ads first, then the remaining
  * active ads. Each ad may have several images, so the carousel shows one
  * slide per image (keeping ads — and the city-first order — together).
  *
- * The carousel is fully controlled here: a self-managed 3-second timer
- * auto-advances it, and the header arrows step prev/next. Each index change
- * (auto or manual) re-arms the timer.
+ * Behaviour: a centered modal opens once on first load (when ads are
+ * available) with a 3-second auto-advancing carousel. The prev/next arrows
+ * step manually. An OK button (and the close X) dismisses the popup.
  *
- * Impressions are recorded once per ad per mount; clicks are recorded when
- * an ad is clicked (and its target URL, if any, is opened).
+ * Impressions/views are recorded for whichever slide is visible while the
+ * popup is open; clicks are recorded when an ad is clicked (and its target
+ * URL, if any, is opened).
  */
 export default function AdvertisementCarousel({ cityId, cityName }) {
   const [ads, setAds] = useState([]);
   const [index, setIndex] = useState(0);
-  const [preview, setPreview] = useState(null); // image URL shown large
-  const [minimized, setMinimized] = useState(false);
+  // Popup visibility. Opens once automatically when ads first load (tracked by
+  // autoShownRef) so re-fetching on a city change doesn't keep reopening it.
+  const [show, setShow] = useState(false);
+  const autoShownRef = useRef(false);
   const impressedRef = useRef(new Set());
   // Ads whose "view" we've already POSTed this mount (the backend further
   // dedupes per login-session + page, so repeats are harmless no-ops).
@@ -134,6 +144,14 @@ export default function AdvertisementCarousel({ cityId, cityName }) {
     setIndex((i) => (slides.length === 0 ? 0 : i % slides.length));
   }, [slides.length]);
 
+  // Auto-open the popup the first time ads become available.
+  useEffect(() => {
+    if (slides.length > 0 && !autoShownRef.current) {
+      autoShownRef.current = true;
+      setShow(true);
+    }
+  }, [slides.length]);
+
   const recordImpression = (ad) => {
     if (!ad || impressedRef.current.has(ad.advertisementId)) return;
     impressedRef.current.add(ad.advertisementId);
@@ -159,24 +177,25 @@ export default function AdvertisementCarousel({ cityId, cityName }) {
       .catch(() => {});
   };
 
-  // Record an impression + a view for whatever slide is currently shown.
+  // Record an impression + a view for whatever slide is visible while the
+  // popup is open.
   useEffect(() => {
-    if (slides[index]) {
+    if (show && slides[index]) {
       recordImpression(slides[index].ad);
       recordView(slides[index].ad);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [index, slides]);
+  }, [index, slides, show]);
 
-  // Self-managed auto-advance. Re-arms on every index change (so manual
-  // prev/next also resets the 3-second countdown).
+  // Self-managed auto-advance while the popup is open. Re-arms on every index
+  // change (so manual prev/next also resets the 3-second countdown).
   useEffect(() => {
-    if (minimized || slides.length <= 1) return undefined;
+    if (!show || slides.length <= 1) return undefined;
     const t = setTimeout(() => {
       setIndex((i) => (i + 1) % slides.length);
     }, 3000);
     return () => clearTimeout(t);
-  }, [index, slides.length, minimized]);
+  }, [index, slides.length, show]);
 
   const goPrev = () =>
     setIndex((i) => (i - 1 + slides.length) % slides.length);
@@ -194,107 +213,71 @@ export default function AdvertisementCarousel({ cityId, cityName }) {
   if (slides.length === 0) return null;
 
   const hasMany = slides.length > 1;
+  const close = () => setShow(false);
 
   return (
-    <div
-      className="d-none d-lg-flex hs-ads-panel"
-      style={{ width: minimized ? "auto" : 300, flexShrink: 0 }}
-    >
+    <>
       <style>{ADS_CSS}</style>
-      <Card className="shadow-sm rounded-xl bg-white">
-        <Card.Header className="py-2 px-3 d-flex align-items-center justify-content-between gap-2">
-          <span className="fw-semibold text-primary text-nowrap">
-            Sponsored
-            {!minimized && cityName ? (
-              <span className="text-muted fw-normal small ms-1">
+      <Modal
+        show={show}
+        onHide={close}
+        centered
+        backdrop="static"
+        keyboard={false}
+        dialogClassName="hs-ads-modal"
+      >
+        <Modal.Header closeButton className="py-2">
+          <Modal.Title className="h6 mb-0 d-flex align-items-center gap-2">
+            <span className="fw-semibold text-primary">Sponsored</span>
+            {cityName ? (
+              <span className="text-muted fw-normal small">
                 · {cityName.split(",")[0]}
               </span>
             ) : null}
-          </span>
-          <div className="d-flex gap-1 align-items-center">
-            {/* Prev / next arrows above the image */}
-            {!minimized && hasMany && (
-              <>
-                <button
-                  type="button"
-                  className="hs-ads-nav"
-                  onClick={goPrev}
-                  aria-label="Previous ad"
-                >
-                  <FaChevronLeft size={12} />
-                </button>
-                <button
-                  type="button"
-                  className="hs-ads-nav"
-                  onClick={goNext}
-                  aria-label="Next ad"
-                >
-                  <FaChevronRight size={12} />
-                </button>
-              </>
-            )}
-            {/* Minimize / restore the ad panel */}
-            <button
-              type="button"
-              className="hs-ads-nav"
-              onClick={() => setMinimized((m) => !m)}
-              aria-label={minimized ? "Show ads" : "Minimize ads"}
-              title={minimized ? "Show ads" : "Minimize ads"}
-            >
-              {minimized ? <FaPlus size={11} /> : <FaMinus size={11} />}
-            </button>
-          </div>
-        </Card.Header>
-        {!minimized && (
-        <Card.Body className="p-2">
+          </Modal.Title>
+        </Modal.Header>
+
+        <Modal.Body>
           <div className="hs-ads-carousel">
-            <Carousel
-              activeIndex={index}
-              onSelect={(i) => setIndex(i)}
-              interval={null}
-              controls={false}
-              indicators={hasMany}
-            >
-              {slides.map(({ ad, img }, i) => (
-                <Carousel.Item key={`${ad.advertisementId}-${i}`}>
-                  <div className="hs-ads-slide">
-                    {img ? (
-                      <div
-                        className="hs-ads-img"
-                        title="Click to preview"
-                        onClick={() => setPreview(img)}
-                      >
-                        <img
-                          src={img}
-                          alt={ad.title}
-                          onError={(e) => {
-                            e.target.style.display = "none";
-                          }}
-                        />
-                      </div>
-                    ) : (
-                      <div className="hs-ads-fallback">{ad.title}</div>
-                    )}
-                    <div className="hs-ads-meta">
-                      <div className="fw-semibold text-dark text-truncate">
-                        {ad.title}
-                      </div>
-                      {ad.description ? (
-                        <div
-                          className="text-muted small"
-                          style={{
-                            display: "-webkit-box",
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: "vertical",
-                            overflow: "hidden",
-                          }}
-                        >
-                          {ad.description}
-                        </div>
-                      ) : null}
+          {hasMany && (
+            <>
+              <button
+                type="button"
+                className="hs-ads-nav prev"
+                onClick={goPrev}
+                aria-label="Previous ad"
+              >
+                <FaChevronLeft size={14} />
+              </button>
+              <button
+                type="button"
+                className="hs-ads-nav next"
+                onClick={goNext}
+                aria-label="Next ad"
+              >
+                <FaChevronRight size={14} />
+              </button>
+            </>
+          )}
+          <Carousel
+            activeIndex={index}
+            onSelect={(i) => setIndex(i)}
+            interval={null}
+            controls={false}
+            indicators={hasMany}
+          >
+            {slides.map(({ ad, img }, i) => (
+              <Carousel.Item key={`${ad.advertisementId}-${i}`}>
+                <div className="hs-ads-slide">
+                  <div className="hs-ads-meta">
+                    <div className="hs-ads-title">{ad.title}</div>
+                    {ad.description ? (
+                      <div className="hs-ads-desc mt-2">{ad.description}</div>
+                    ) : null}
+                    <div>
                       <Button
                         size="sm"
-                        className="mt-2 w-100 btn-indigo"
+                        className="mt-3 btn-indigo"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleClick(ad);
@@ -304,28 +287,36 @@ export default function AdvertisementCarousel({ cityId, cityName }) {
                       </Button>
                     </div>
                   </div>
-                </Carousel.Item>
-              ))}
-            </Carousel>
+                  {img ? (
+                    <div
+                      className="hs-ads-img"
+                      title="Click to open"
+                      onClick={() => handleClick(ad)}
+                    >
+                      <img
+                        src={img}
+                        alt={ad.title}
+                        onError={(e) => {
+                          e.target.style.display = "none";
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="hs-ads-fallback">{ad.title}</div>
+                  )}
+                </div>
+              </Carousel.Item>
+            ))}
+          </Carousel>
           </div>
-        </Card.Body>
-        )}
-      </Card>
-
-      {/* Large image preview with a close button */}
-      <Modal
-        show={!!preview}
-        onHide={() => setPreview(null)}
-        centered
-        dialogClassName="hs-ads-preview"
-      >
-        <Modal.Header closeButton className="py-2">
-          <Modal.Title className="h6 mb-0">Advertisement</Modal.Title>
-        </Modal.Header>
-        <Modal.Body className="p-0 text-center">
-          {preview && <img src={preview} alt="Advertisement preview" />}
         </Modal.Body>
+
+        <Modal.Footer className="py-2">
+          <Button variant="primary" onClick={close} className="px-4">
+            OK
+          </Button>
+        </Modal.Footer>
       </Modal>
-    </div>
+    </>
   );
 }

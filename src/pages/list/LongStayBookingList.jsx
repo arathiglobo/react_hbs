@@ -310,10 +310,10 @@ export default function LongStayBookingList() {
         >
           <Container fluid className="px-0">
             {/* Header: Title + Search (left) | Time Period (right) */}
-            <div className="d-flex justify-content-between align-items-end mb-3">
-              <div>
+            <div className="d-flex justify-content-between align-items-end mb-3 hbl-header">
+              <div className="hbl-header-left">
                 <h3 className="fw-bold text-dark mb-2">Long Stay Bookings</h3>
-                <InputGroup style={{ height: "40px", width: "300px" }}>
+                <InputGroup className="hbl-search" style={{ height: "40px", width: "300px" }}>
                   <InputGroup.Text
                     style={{
                       backgroundColor: "#f8f9fa",
@@ -338,7 +338,7 @@ export default function LongStayBookingList() {
                 </InputGroup>
               </div>
               <Card
-                className="shadow-sm border-0"
+                className="shadow-sm border-0 hbl-timecard"
                 style={{ borderRadius: "8px", minWidth: "260px" }}
               >
                 <Card.Body className="p-3">
@@ -441,7 +441,7 @@ export default function LongStayBookingList() {
                     <Table
                       hover
                       size="sm"
-                      className="mb-0 align-middle table-bordered"
+                      className="mb-0 align-middle table-bordered hbl-table"
                       style={{
                         tableLayout: "auto",
                         width: "100%",
@@ -821,7 +821,7 @@ export default function LongStayBookingList() {
                 style={{ borderRadius: "8px" }}
               >
                 <Card.Body className="py-3">
-                  <div className="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                  <div className="d-flex justify-content-between align-items-center flex-wrap gap-3 hbl-pagination-bar">
                     <div
                       className="text-muted"
                       style={{ fontSize: "0.875rem" }}

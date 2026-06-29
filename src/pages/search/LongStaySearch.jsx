@@ -315,6 +315,9 @@ export default function LongStaySearch() {
   const [finalHotelSearchTerm, setFinalHotelSearchTerm] = useState("");
   const [agents, setAgents] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
+  // When results are on screen the big search form collapses into a sticky
+  // summary strip. Clicking "Modify Search" flips this true to re-expand it.
+  const [isEditingSearch, setIsEditingSearch] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize] = useState(10);
@@ -826,6 +829,7 @@ export default function LongStaySearch() {
     setErrors({});
     setIsLoading(true);
     setHasSearched(true);
+    setIsEditingSearch(false);
     setHasSearchResult(false);
     setAllResults([]);
     setPollStatus("IDLE");
@@ -942,13 +946,63 @@ export default function LongStaySearch() {
     // eslint-disable-next-line
   }, [pageIndex, sortBy, starRating, channelType, finalHotelSearchTerm]);
 
+  // Results are on screen once a result lands. Collapse the full form into the
+  // sticky summary strip then, unless the user chose to modify the search.
+  const hasResultsView = hasSearchResult || allResults.length > 0;
+  const collapseSearch = hasResultsView && !isEditingSearch;
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4 hs-page">
+          {/* ── Collapsed sticky search summary strip ──
+              Shown once results are on screen. "Modify Search" re-expands
+              the full form by flipping isEditingSearch. */}
+          {collapseSearch && (
+            <div className="hs-summary-bar">
+              <div className="hs-summary-chips">
+                {selectedDestination?.label && (
+                  <span className="hs-summary-chip hs-summary-chip-main">
+                    {selectedDestination.label}
+                  </span>
+                )}
+                {checkIn && (
+                  <span className="hs-summary-chip">
+                    {checkIn}
+                    {checkOut ? ` → ${checkOut}` : ""}
+                  </span>
+                )}
+                {nights && (
+                  <span className="hs-summary-chip">
+                    {nights} night{Number(nights) > 1 ? "s" : ""}
+                  </span>
+                )}
+                <span className="hs-summary-chip">
+                  {rooms.reduce((a, r) => a + r.adults, 0)} adults
+                  {rooms.reduce((a, r) => a + r.children, 0)
+                    ? `, ${rooms.reduce((a, r) => a + r.children, 0)} child`
+                    : ""}{" "}
+                  · {rooms.length} room{rooms.length > 1 ? "s" : ""}
+                </span>
+              </div>
+              <Button
+                type="button"
+                className="hs-summary-modify"
+                onClick={() => {
+                  setIsEditingSearch(true);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              >
+                <FaSearch className="me-2" />
+                Modify Search
+              </Button>
+            </div>
+          )}
+
           {/* ── Search Card + Ads ── */}
+          {!collapseSearch && (
           <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
            <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <Card className="shadow-sm rounded-xl search-card-modern bg-white h-100">
@@ -1327,12 +1381,16 @@ export default function LongStaySearch() {
             </Card.Body>
           </Card>
            </div>
-            {/* Ads carousel — city matches first, then all active ads */}
-            <AdvertisementCarousel
-              cityId={selectedDestination?.value}
-              cityName={selectedDestination?.label}
-            />
+            {/* Ads carousel — only on first entry, before any search has run.
+                Re-opening the form via "Modify Search" keeps it hidden. */}
+            {!hasResultsView && (
+              <AdvertisementCarousel
+                cityId={selectedDestination?.value}
+                cityName={selectedDestination?.label}
+              />
+            )}
           </div>
+          )}
 
           <SearchProgressBar pollStatus={pollStatus} completedChannels={completedChannels} />
 
