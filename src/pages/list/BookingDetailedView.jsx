@@ -46,6 +46,7 @@ const BTN_INFO = { ...BUTTON_STYLE, backgroundColor: "#0891b2" }; // Voucher / I
 const BTN_ORANGE = { ...BUTTON_STYLE, backgroundColor: "#f0922b" }; // Resend Mail
 const BTN_ACCENT = { ...BUTTON_STYLE, backgroundColor: "#7c3aed" }; // Booking Remark
 const BTN_NEUTRAL = { ...BUTTON_STYLE, backgroundColor: "#64748b" }; // View / Back / Notes
+const BTN_HISTORY = { ...BUTTON_STYLE, backgroundColor: "#334155" }; // Booking History
 
 // Booking types offered by "ADD NEW ITEM" (amendment / sub-booking). Each is
 // launched through its OWN existing create flow with ?parentBookingCode set —
@@ -109,6 +110,17 @@ const formatDateTime = (dateStr) => {
   const min = String(d.getMinutes()).padStart(2, "0");
   const sec = String(d.getSeconds()).padStart(2, "0");
   return `${formatDate(dateStr)} ${hrs}:${min}:${sec}`;
+};
+
+// Time-only formatter (HH:MM:SS) for the History modal, which shows Date and
+// Time in separate columns. Returns "-" when the value is missing/unparseable.
+const formatTimeOnly = (dateStr) => {
+  const d = parseLocal(dateStr);
+  if (!d) return "-";
+  const hrs = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const sec = String(d.getSeconds()).padStart(2, "0");
+  return `${hrs}:${min}:${sec}`;
 };
 
 const StatusBadge = ({ status }) => {
@@ -205,6 +217,11 @@ export default function BookingDetailedView() {
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [noteInput, setNoteInput] = useState("");
   const [savingNote, setSavingNote] = useState(false);
+
+  // Booking History — read-only modal listing the lifecycle events that have
+  // actually occurred (Created / Confirmed / Reconfirmed / Cancelled). Derived
+  // entirely from the booking detail already loaded; no extra API call.
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   // Resend Mail to Agent
   const [resendingMail, setResendingMail] = useState(false);
@@ -870,6 +887,59 @@ export default function BookingDetailedView() {
   const currencyCode = isConvertedCurrency ? _dispCode : "AED";
   const currencyFactor = isConvertedCurrency ? _dispAmt / _aedTotal : 1;
   const toDisplayAmount = (aed) => (Number(aed) || 0) * currencyFactor;
+
+  // Booking lifecycle events for the History modal. Only events that have
+  // actually occurred are included — each row is gated on its timestamp being
+  // present, so e.g. a booking that was never reconfirmed/cancelled simply
+  // omits those rows. "Performed By" reads the per-action username the backend
+  // now records (createdBy / confirmedBy / reconfirmedBy / cancelledBy).
+  // Historical rows created before that capture have those fields null, so they
+  // fall back to "-" (Created additionally falls back to the creator label).
+  // Sorted chronologically.
+  const creatorLabel =
+    booking?.createdBy ||
+    booking?.employeeName ||
+    booking?.agentName ||
+    booking?.createdByRole ||
+    booking?.source ||
+    "-";
+  const bookingHistory = (() => {
+    if (!booking) return [];
+    const events = [];
+    if (booking.bookingDate) {
+      events.push({
+        action: "Booking Created",
+        at: booking.bookingDate,
+        by: creatorLabel,
+      });
+    }
+    if (booking.confirmedDate) {
+      events.push({
+        action: "Booking Confirmed",
+        at: booking.confirmedDate,
+        by: booking.confirmedBy || "-",
+      });
+    }
+    if (booking.reconfirmedDate) {
+      events.push({
+        action: "Booking Reconfirmed",
+        at: booking.reconfirmedDate,
+        by: booking.reconfirmedBy || "-",
+      });
+    }
+    if (booking.cancelledAt) {
+      events.push({
+        action: "Booking Cancelled",
+        at: booking.cancelledAt,
+        by: booking.cancelledBy || "-",
+      });
+    }
+    return events.sort((a, b) => {
+      const da = parseLocal(a.at)?.getTime() ?? 0;
+      const db = parseLocal(b.at)?.getTime() ?? 0;
+      return da - db;
+    });
+  })();
 
   const card = {
     border: "1px solid #ddd",
@@ -1893,6 +1963,13 @@ export default function BookingDetailedView() {
                         NOTES
                       </button>
                     )}
+
+                    <button
+                      style={BTN_HISTORY}
+                      onClick={() => setShowHistoryModal(true)}
+                    >
+                      HISTORY
+                    </button>
                   </div>
                 )}
                 {!isCancelled && (
@@ -2073,6 +2150,13 @@ export default function BookingDetailedView() {
                         NOTES
                       </button>
                     )}
+
+                    <button
+                      style={BTN_HISTORY}
+                      onClick={() => setShowHistoryModal(true)}
+                    >
+                      HISTORY
+                    </button>
                   </div>
                 )}
 
@@ -2148,6 +2232,71 @@ export default function BookingDetailedView() {
                       }}
                     >
                       Continue
+                    </Button>
+                  </Modal.Footer>
+                </Modal>
+
+                {/* ── Booking History Modal ─────────────────────────────
+                    Read-only timeline of the events that actually happened on
+                    this booking. Built from the booking detail already loaded
+                    (no extra API call) and only the events with a recorded
+                    timestamp are listed. Responsive table for small screens. */}
+                <Modal
+                  show={showHistoryModal}
+                  onHide={() => setShowHistoryModal(false)}
+                  centered
+                  size="lg"
+                  scrollable
+                >
+                  <Modal.Header closeButton>
+                    <Modal.Title style={{ fontSize: "1.05rem" }}>
+                      Booking History
+                      {booking?.bookingCode ? ` — ${booking.bookingCode}` : ""}
+                    </Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body>
+                    {bookingHistory.length === 0 ? (
+                      <div className="text-muted text-center py-3">
+                        No history available for this booking.
+                      </div>
+                    ) : (
+                      <Table
+                        responsive
+                        bordered
+                        hover
+                        size="sm"
+                        className="mb-0"
+                        style={{ fontSize: "0.85rem" }}
+                      >
+                        <thead style={{ backgroundColor: "#f0f0f0" }}>
+                          <tr>
+                            <th style={{ width: "60px" }}>S/N</th>
+                            <th>Action</th>
+                            <th>Performed By</th>
+                            <th>Date</th>
+                            <th>Time</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {bookingHistory.map((ev, idx) => (
+                            <tr key={`${ev.action}-${idx}`}>
+                              <td>{idx + 1}</td>
+                              <td>{ev.action}</td>
+                              <td>{ev.by || "-"}</td>
+                              <td>{formatDate(ev.at)}</td>
+                              <td>{formatTimeOnly(ev.at)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    )}
+                  </Modal.Body>
+                  <Modal.Footer>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setShowHistoryModal(false)}
+                    >
+                      Close
                     </Button>
                   </Modal.Footer>
                 </Modal>

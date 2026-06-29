@@ -8,6 +8,7 @@ import {
   Pagination,
   Row,
   Col,
+  Alert,
 } from "react-bootstrap";
 import { useNavigate, useLocation } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
@@ -15,6 +16,7 @@ import Topbar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
+import { formatDateDisplay } from "../../utils/dateUtils";
 import {
   FaEdit,
   FaTrash,
@@ -238,6 +240,12 @@ const AgentReg = () => {
       autoFocus: isViewMode ? false : additionalProps.autoFocus,
     };
   };
+
+  // Lock core company-registration fields once the agent already exists (edit
+  // view). `editing` is null on the Create form, so those fields stay fully
+  // editable there. Only the company identity / registration details are
+  // frozen — contact, address, user and other info remain editable.
+  const lockCompanyFields = Boolean(editing?.companyName);
   const [agentCategoryies, setAgentCategoryies] = useState([]);
   const [countries, setCountries] = useState([]);
   // Cached full record for the currently-selected country so the label keeps
@@ -2128,9 +2136,11 @@ const AgentReg = () => {
                   <tr>
                     <th style={{ width: 100 }}>S/N</th>
                     <th>Agent Name</th>
+                    <th style={{ width: 140 }}>Registered Date</th>
                     <th>Business Type</th>
                     <th>Country</th>
                     <th>City</th>
+                    <th style={{ width: 110 }}>Status</th>
                     <th style={{ width: 160 }}>Actions</th>
                   </tr>
                 </thead>
@@ -2139,9 +2149,18 @@ const AgentReg = () => {
                     <tr key={item.id}>
                       <td>{index + 1 + page * 10}</td>
                       <td>{item.companyName}</td>
+                      <td>{formatDateDisplay(item.registeredDate)}</td>
                       <td>{item.businessType}</td>
                       <td>{item.countryName || "—"}</td>
                       <td>{item.provinceName || "—"}</td>
+                      <td>
+                        {String(item.status || "").trim().toLowerCase() ===
+                        "inactive" ? (
+                          <span className="badge bg-danger">Inactive</span>
+                        ) : (
+                          <span className="badge bg-success">Active</span>
+                        )}
+                      </td>
                       <td>
                         {/* Only the View icon stays on the list — all
                             other actions (edit, credit, exclude, login,
@@ -2162,7 +2181,7 @@ const AgentReg = () => {
                   ))}
                   {isLoading && (
                     <tr>
-                      <td colSpan={4} className="text-center text-muted py-4">
+                      <td colSpan={8} className="text-center text-muted py-4">
                         <div
                           className="spinner-border spinner-border-sm me-2"
                           role="status"
@@ -2175,7 +2194,7 @@ const AgentReg = () => {
                   )}
                   {items.length === 0 && !isLoading && (
                     <tr>
-                      <td colSpan={4} className="text-center text-muted py-4">
+                      <td colSpan={8} className="text-center text-muted py-4">
                         No agents found.
                       </td>
                     </tr>
@@ -2234,6 +2253,21 @@ const AgentReg = () => {
                 <Card className="mb-3">
                   <Card.Header>Agent Details</Card.Header>
                   <Card.Body>
+                    {/* One-time registration notice — shown on the Create form
+                        only (hidden in edit/view, where these fields are already
+                        locked). UI-only; no logic/validation affected. */}
+                    {!editing && (
+                      <Alert variant="warning" className="d-flex mb-3">
+                        <span className="me-2 fw-bold" aria-hidden="true">
+                          ⚠
+                        </span>
+                        <span>
+                          <strong>Important:</strong> Please verify your company
+                          details before submitting, as they cannot be modified
+                          after registration.
+                        </span>
+                      </Alert>
+                    )}
                     <Row>
                       <Col md={3}>
                         <Form.Group className="mb-3">
@@ -2242,6 +2276,7 @@ const AgentReg = () => {
                             value={formData.companyName}
                             placeholder="Enter company name"
                             isInvalid={!!validationErrors.companyName}
+                            disabled={lockCompanyFields}
                             {...getFormControlProps(
                               "companyName",
                               (e) => {
@@ -2279,6 +2314,7 @@ const AgentReg = () => {
                             value={formData.shortName}
                             placeholder="Enter short name"
                             isInvalid={!!validationErrors.shortName}
+                            disabled={lockCompanyFields}
                             {...getFormControlProps(
                               "shortName",
                               (e) =>
@@ -2416,6 +2452,7 @@ const AgentReg = () => {
                               submit / validation logic is untouched. */}
                           <Form.Select
                             name="businessTypeSelect"
+                            disabled={lockCompanyFields}
                             value={
                               businessTypeOther
                                 ? "Others"
@@ -2461,6 +2498,7 @@ const AgentReg = () => {
                             <Form.Control
                               type="text"
                               name="businessType"
+                              disabled={lockCompanyFields}
                               value={formData.businessType}
                               onChange={(e) => {
                                 setFormData({
@@ -2494,7 +2532,7 @@ const AgentReg = () => {
                           <Form.Label>Company Type</Form.Label>
                           <Form.Select
                             value={formData.agentCategoryId}
-                            onChange={isViewMode ? undefined : (e) => {
+                            onChange={(isViewMode || lockCompanyFields) ? undefined : (e) => {
                               setFormData({
                                 ...formData,
                                 agentCategoryId: e.target.value,
@@ -2511,9 +2549,9 @@ const AgentReg = () => {
                               validationErrors.agentCategoryId
                                 ? "is-invalid"
                                 : ""
-                            } ${isViewMode ? "bg-light" : ""}`}
+                            } ${(isViewMode || lockCompanyFields) ? "bg-light" : ""}`}
                             isInvalid={!!validationErrors.agentCategoryId}
-                            disabled={isViewMode}
+                            disabled={isViewMode || lockCompanyFields}
                           >
                             <option value="">Select company type</option>
                             {agentCategoryies.map((agent) => (
@@ -2541,6 +2579,7 @@ const AgentReg = () => {
                             value={formData.companyCode}
                             placeholder="Enter company code"
                             isInvalid={!!validationErrors.companyCode}
+                            disabled={lockCompanyFields}
                             {...getFormControlProps(
                               "companyCode",
                               (e) =>
@@ -3017,7 +3056,7 @@ const AgentReg = () => {
                                     value={
                                       formData.agentGSTDetailsDTO.agentGstIn
                                     }
-                                    onChange={isViewMode ? undefined : handleGstinChange}
+                                    onChange={(isViewMode || lockCompanyFields) ? undefined : handleGstinChange}
                                     placeholder="Enter 15-digit GSTIN"
                                     className={`form-input ${
                                       validationErrors[
@@ -3025,7 +3064,7 @@ const AgentReg = () => {
                                       ] || gstinError
                                         ? "is-invalid"
                                         : ""
-                                    } ${isViewMode ? "bg-light" : ""}`}
+                                    } ${(isViewMode || lockCompanyFields) ? "bg-light" : ""}`}
                                     isInvalid={
                                       !!(
                                         validationErrors[
@@ -3035,6 +3074,7 @@ const AgentReg = () => {
                                     }
                                     maxLength={15}
                                     readOnly={isViewMode}
+                                    disabled={lockCompanyFields}
                                   />
                                   {(validationErrors[
                                     "agentGSTDetailsDTO.agentGstIn"

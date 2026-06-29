@@ -176,7 +176,7 @@ const OfflineSearch = () => {
   const fetchAgents = async (searchTerm = "") => {
     setIsLoadingAgents(true);
     try {
-      const response = await axiosInstance.get(`/api/agent?page=0&limit=100&search=${searchTerm}`);
+      const response = await axiosInstance.get(`/api/agent?page=0&limit=100&activeOnly=true&search=${searchTerm}`);
       const options = (response.data || []).map((agent) => ({
         value: agent.id,
         label: agent.companyName,

@@ -277,7 +277,7 @@ const AyurvedaSearch = () => {
   // search results can be priced with the agent's markup applied.
   useEffect(() => {
     axiosInstance
-      .get("/api/agent")
+      .get("/api/agent?activeOnly=true")
       .then((res) => {
         const list = Array.isArray(res.data) ? res.data : res.data?.content || [];
         setAgents(list);

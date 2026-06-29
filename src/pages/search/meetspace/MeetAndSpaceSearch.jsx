@@ -194,7 +194,7 @@ export default function MeetAndSpaceSearch() {
   // ── load agent + nationality + popular-destinations lists once ──────
   useEffect(() => {
     axiosInstance
-      .get("/api/agent")
+      .get("/api/agent?activeOnly=true")
       .then((res) => setAgents(Array.isArray(res.data) ? res.data : []))
       .catch(() => setAgents([]));
 

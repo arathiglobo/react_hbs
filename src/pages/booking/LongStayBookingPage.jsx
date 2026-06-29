@@ -146,7 +146,7 @@ export default function LongStayBookingPage() {
     setRooms(initialRooms);
 
     axiosInstance
-      .get("/api/agent")
+      .get("/api/agent?activeOnly=true")
       .then((res) => setAgents(res.data || []))
       .catch(() => {});
   }, [navigate]);

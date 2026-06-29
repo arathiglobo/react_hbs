@@ -1325,17 +1325,32 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                         >
                           Check-in Date
                         </h6>
-                        <Form.Control
-                          type="date"
-                          value={checkInDateFilter}
-                          onChange={(e) => {
-                            setCheckInDateFilter(e.target.value);
-                            resetAllPages();
-                          }}
-                          size="sm"
-                          aria-label="Check-in date filter"
-                          style={{ fontSize: "0.85rem", height: "46px" }}
-                        />
+                        <div className="d-flex gap-2">
+                          <Form.Control
+                            type="date"
+                            value={checkInDateFilter}
+                            onChange={(e) => {
+                              setCheckInDateFilter(e.target.value);
+                              resetAllPages();
+                            }}
+                            size="sm"
+                            aria-label="Check-in date filter"
+                            style={{ fontSize: "0.85rem", height: "46px" }}
+                          />
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            onClick={() => {
+                              setCheckInDateFilter("");
+                              resetAllPages();
+                            }}
+                            disabled={!checkInDateFilter}
+                            aria-label="Clear check-in date filter"
+                            style={{ fontSize: "0.85rem", height: "46px", whiteSpace: "nowrap" }}
+                          >
+                            Clear
+                          </Button>
+                        </div>
                       </Col>
                     </Row>
                   </Card.Body>

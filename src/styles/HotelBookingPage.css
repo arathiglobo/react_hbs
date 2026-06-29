@@ -472,3 +472,14 @@
   font-size: 0.85rem;
   color: #1f2937;
 }
+
+/* Confirm Your Booking modal — slightly wider than Bootstrap's default
+   (500px) so the order summary, rate split and policy sections have a bit
+   more breathing room. Scoped to the ≥576px breakpoint (same as Bootstrap's
+   own max-width rule) so smaller screens keep the responsive full-width
+   dialog untouched. */
+@media (min-width: 576px) {
+  .confirm-booking-modal {
+    max-width: 600px;
+  }
+}

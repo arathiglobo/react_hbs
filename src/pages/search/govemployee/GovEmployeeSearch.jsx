@@ -557,7 +557,7 @@ export default function GovEmployeeSearch() {
 
     (async () => {
       try {
-        const { data } = await axiosInstance.get("/api/agent");
+        const { data } = await axiosInstance.get("/api/agent?activeOnly=true");
         const list = Array.isArray(data) ? data : data?.content || [];
         setAgents(list);
       } catch (e) {

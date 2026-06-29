@@ -573,7 +573,7 @@ export default function HotelSearch() {
 
   const agentList = async () => {
     try {
-      const response = await axiosInstance.get("/api/agent");
+      const response = await axiosInstance.get("/api/agent?activeOnly=true");
       setAgents(response.data);
     } catch {
       setAgents([]);

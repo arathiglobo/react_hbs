@@ -197,19 +197,23 @@ export default function SubUser() {
                         <td>{item.mobileNumber}</td>
                         <td>{item.address}</td>
                         <td>
-                          <div className="d-flex justify-content-center gap-3">
-                            <FaEdit
-                              className="text-primary action-icon"
-                              style={{ cursor: "pointer", fontSize: "18px" }}
+                          <div className="d-flex flex-wrap justify-content-center gap-2">
+                            <Button
+                              variant="outline-primary"
+                              size="sm"
+                              className="d-flex align-items-center gap-1"
                               onClick={() => openEdit(item)}
-                              title="Edit"
-                            />
-                            <FaTrash
-                              className="text-danger action-icon"
-                              style={{ cursor: "pointer", fontSize: "18px" }}
+                            >
+                              <FaEdit /> Edit
+                            </Button>
+                            <Button
+                              variant="outline-danger"
+                              size="sm"
+                              className="d-flex align-items-center gap-1"
                               onClick={() => handleDelete(item)}
-                              title="Delete"
-                            />
+                            >
+                              <FaTrash /> Delete
+                            </Button>
                           </div>
                         </td>
                       </tr>

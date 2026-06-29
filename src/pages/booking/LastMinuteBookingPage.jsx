@@ -337,7 +337,7 @@ export default function LastMinuteBookingPage() {
 
   const loadAgents = async () => {
     try {
-      const res = await axiosInstance.get("/api/agent");
+      const res = await axiosInstance.get("/api/agent?activeOnly=true");
       setAgents(res.data || []);
     } catch {
       setAgents([]);

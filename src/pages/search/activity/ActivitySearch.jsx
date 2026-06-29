@@ -289,7 +289,7 @@ const ActivitySearch = () => {
 
   const loadAgents = async () => {
     try {
-      const res = await axiosInstance.get("/api/agent");
+      const res = await axiosInstance.get("/api/agent?activeOnly=true");
       setAgents(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error("Failed to load agents:", err);

@@ -419,7 +419,7 @@ export default function SeniorCitizenSearch() {
     countryList();
     (async () => {
       try {
-        const { data } = await axiosInstance.get("/api/agent");
+        const { data } = await axiosInstance.get("/api/agent?activeOnly=true");
         setAgents(Array.isArray(data) ? data : data?.content || []);
       } catch {
         setAgents([]);

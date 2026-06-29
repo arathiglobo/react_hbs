@@ -696,29 +696,39 @@ export default function SubAgent() {
                         <td>{item.firstName} {item.lastName}</td>
                         <td>{item.personalEmail}</td>
                         <td className="text-center">
-                          <div className="d-flex justify-content-center gap-2">
-                            <FaSignInAlt 
-                               className="text-primary cursor-pointer" 
-                               style={{ cursor: 'pointer' }} 
-                               onClick={() => handleLogin(item)} 
-                               title="Login Details"
-                            />
-                            <FaCreditCard 
-                               className="text-warning cursor-pointer" 
-                               style={{ cursor: 'pointer' }} 
-                               onClick={() => handleCreditLimit(item)} 
-                               title="Credit Details"
-                            />
-                            <FaEdit 
-                              className="text-success cursor-pointer" 
-                              style={{ cursor: 'pointer' }} 
-                              onClick={() => handleOpen(item)} 
-                            />
-                            <FaTrash 
-                              className="text-danger cursor-pointer" 
-                              style={{ cursor: 'pointer' }} 
-                              onClick={() => handleDelete(item.id)} 
-                            />
+                          <div className="d-flex flex-wrap justify-content-center gap-2">
+                            <Button
+                              variant="outline-primary"
+                              size="sm"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => handleLogin(item)}
+                            >
+                              <FaSignInAlt /> Login
+                            </Button>
+                            <Button
+                              variant="outline-warning"
+                              size="sm"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => handleCreditLimit(item)}
+                            >
+                              <FaCreditCard /> Credit
+                            </Button>
+                            <Button
+                              variant="outline-success"
+                              size="sm"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => handleOpen(item)}
+                            >
+                              <FaEdit /> Edit
+                            </Button>
+                            <Button
+                              variant="outline-danger"
+                              size="sm"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => handleDelete(item.id)}
+                            >
+                              <FaTrash /> Delete
+                            </Button>
                           </div>
                         </td>
                       </tr>

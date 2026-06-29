@@ -169,7 +169,7 @@ const RestaurantSearch = () => {
     (async () => {
       setAgentsLoading(true);
       try {
-        const res = await axiosInstance.get("/api/agent");
+        const res = await axiosInstance.get("/api/agent?activeOnly=true");
         if (!cancelled) setAgents(Array.isArray(res.data) ? res.data : []);
       } catch (e) {
         if (!cancelled) setAgents([]);

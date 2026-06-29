@@ -473,7 +473,7 @@ export default function MakeUrOwnPackageV2() {
 
   const agentList = async () => {
     try {
-      const response = await axiosInstance.get("/api/agent");
+      const response = await axiosInstance.get("/api/agent?activeOnly=true");
       setAgents(response.data);
     } catch (error) {
       console.log("error for agent axios list:", error);
