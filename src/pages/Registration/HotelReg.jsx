@@ -1585,8 +1585,18 @@ const handleAmenityChange = (e) => {
       }
     } catch (error) {
       console.error("Error submitting hotel:", error);
+      // Surface the backend's actual message when present (validation errors,
+      // server failures) instead of a generic fallback. Field-level errors
+      // come back under `errors`; a single message under `message`.
+      const data = error?.response?.data;
+      let serverMsg = data?.message;
+      if (!serverMsg && data?.errors && typeof data.errors === "object") {
+        serverMsg = Object.values(data.errors).join(", ");
+        setValidationErrors(data.errors);
+      }
       toast.error(
-        isEditMode ? "Failed to update hotel" : "Failed to register hotel"
+        serverMsg ||
+          (isEditMode ? "Failed to update hotel" : "Failed to register hotel")
       );
     } finally {
       setIsLoading(false);

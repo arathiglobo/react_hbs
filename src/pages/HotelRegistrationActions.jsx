@@ -14,7 +14,7 @@ import {
   OverlayTrigger,
   Tooltip,
 } from "react-bootstrap";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   FaArrowLeft,
   FaUser,
@@ -83,6 +83,14 @@ if (typeof document !== "undefined") {
 const HotelRegistrationActions = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  // When this hub is opened under /extranet/hotel-details/:id (hotel login),
+  // keep the action links inside the /extranet namespace. The hotel-action
+  // sub-pages that have an /extranet route share the SAME suffix shape, so
+  // only the prefix differs. Pages without an /extranet route fall back to
+  // the admin /hotel-actions path.
+  const isExtranet = location.pathname.startsWith("/extranet");
+  const actionsBase = isExtranet ? "/extranet" : "/hotel-actions";
   const [activeTab, setActiveTab] = useState("basic-details");
   const [hotelData, setHotelData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -862,15 +870,19 @@ const HotelRegistrationActions = () => {
     //    handleImageUploadClick();
     // }
     else if (actionLabel === "Occupancy & Minimum length") {
-      navigate(`/hotel-actions/${id}/occupancy-and-minimumlength`);
+      navigate(`${actionsBase}/${id}/occupancy-and-minimumlength`);
     } else if (actionLabel === "Hotel Edit") {
-      navigate(`/registration/hotel/create/${id}`);
+      navigate(
+        isExtranet
+          ? `/extranet/registration/hotel/create/${id}`
+          : `/registration/hotel/create/${id}`,
+      );
     } else if (actionLabel === "Compulsory Events") {
       navigate(`/registration/hotel/${id}/compulsory-events`);
     } else if (actionLabel === "Hotel Availability") {
-      navigate(`/hotel-actions/${id}/hotel-availability`);
+      navigate(`${actionsBase}/${id}/hotel-availability`);
     } else if (actionLabel === "Contract Rate") {
-      navigate(`/hotel-actions/${id}/contract-rate`);
+      navigate(`${actionsBase}/${id}/contract-rate`);
     } else if (actionLabel === "Last Minute Contract Rate") {
       // Last Minute Booking module — separate page, separate APIs
       navigate(`/hotel-actions/${id}/last-minute-contract-rate`);
@@ -899,9 +911,9 @@ const HotelRegistrationActions = () => {
       // and booking flow.
       navigate(`/hotel-actions/${id}/senior-citizen`);
     }else if (actionLabel === "Promotion") {
-      navigate(`/hotel-actions/${id}/promotions`);
+      navigate(`${actionsBase}/${id}/promotions`);
     } else if (actionLabel === "Policy") {
-      navigate(`/hotel-actions/${id}/hotel-policy`);
+      navigate(`${actionsBase}/${id}/hotel-policy`);
     } else if (actionLabel === "Validity Periods") {
       navigate(`/hotel-actions/${id}/validity-period-details`);
     } else if (actionLabel === "Book Hotel") {
@@ -1724,7 +1736,21 @@ const HotelRegistrationActions = () => {
                 <Button
                   variant="outline-primary"
                   className="back-button btn-sm d-flex align-items-center gap-2"
-                  onClick={() => navigate(`/registration/hotel`)}
+                  onClick={() => {
+                    // Extranet (hotel) logins manage their OWN hotel via this
+                    // page, so Back returns them to their dashboard. Admin
+                    // behavior is unchanged — back to the hotel list.
+                    const activeRole = (
+                      localStorage.getItem("currentActiveRole") ||
+                      localStorage.getItem("userRole") ||
+                      ""
+                    ).toLowerCase();
+                    if (activeRole.includes("extranet")) {
+                      navigate("/extranetDashboard");
+                    } else {
+                      navigate("/registration/hotel");
+                    }
+                  }}
                 >
                   <FaArrowLeft /> Back
                 </Button>

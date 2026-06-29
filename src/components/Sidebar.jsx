@@ -214,6 +214,12 @@ export default function Sidebar() {
       children: [],
     },
     {
+      label: "Hotel Approval",
+      to: "/admin/hotel-approval",
+      roles: ["admin"],
+      children: [],
+    },
+    {
       label: "Registration",
       roles: ["admin"],
       children: [
@@ -565,31 +571,31 @@ export default function Sidebar() {
 
 
     // {Extranet menus}
-    {
-      label: "Occupancy",
-      to: hotelId ? `/extranet/${hotelId}/occupancy-and-minimumlength` : "#",
-      roles: ["extranet"],
-    },
-    {
-      label: "Availability",
-      to: hotelId ? `/extranet/${hotelId}/hotel-availability` : "#",
-      roles: ["extranet"],
-    },
-    {
-      label: "Contract Rate",
-      to: hotelId ? `/extranet/${hotelId}/contract-rate` : "#",
-      roles: ["extranet"],
-    },
-    {
-      label: "Promotions",
-      to: hotelId ? `/extranet/${hotelId}/promotions` : "#",
-      roles: ["extranet"],
-    },
-    {
-      label: "Policy",
-      to: hotelId ? `/extranet/${hotelId}/hotel-policy` : "#",
-      roles: ["extranet"],
-    },
+    // {
+    //   label: "Occupancy",
+    //   to: hotelId ? `/extranet/${hotelId}/occupancy-and-minimumlength` : "#",
+    //   roles: ["extranet"],
+    // },
+    // {
+    //   label: "Availability",
+    //   to: hotelId ? `/extranet/${hotelId}/hotel-availability` : "#",
+    //   roles: ["extranet"],
+    // },
+    // {
+    //   label: "Contract Rate",
+    //   to: hotelId ? `/extranet/${hotelId}/contract-rate` : "#",
+    //   roles: ["extranet"],
+    // },
+    // {
+    //   label: "Promotions",
+    //   to: hotelId ? `/extranet/${hotelId}/promotions` : "#",
+    //   roles: ["extranet"],
+    // },
+    // {
+    //   label: "Policy",
+    //   to: hotelId ? `/extranet/${hotelId}/hotel-policy` : "#",
+    //   roles: ["extranet"],
+    // },
     {
       label: "Gallery",
       to: hotelId ? `/extranet/${hotelId}/gallery` : "#",
