@@ -144,6 +144,9 @@ const AgentView = () => {
     totalCreditLimit: "0",
     availableCreditLimit: "0",
     usedCreditLimit: "0",
+    // Payment Mode selected when adding/updating the credit limit. Mirrors the
+    // dropdown on inhouse-accounts/agent.
+    paymentMode: "",
   });
   const [creditLimitErrors, setCreditLimitErrors] = useState({
     addCreditLimit: "",
@@ -464,6 +467,7 @@ const AgentView = () => {
       totalCreditLimit: "0",
       availableCreditLimit: "0",
       usedCreditLimit: "0",
+      paymentMode: "",
     });
     setCreditLimitErrors({ addCreditLimit: "", remarks: "" });
 
@@ -482,6 +486,9 @@ const AgentView = () => {
           totalCreditLimit: creditData.totalCreditLimit || "0",
           availableCreditLimit: creditData.availableCreditLimit || "0",
           usedCreditLimit: creditData.usedCreditLimit || "0",
+          // Preserve the previously selected payment mode so it's visible
+          // when the modal reopens.
+          paymentMode: creditData.paymentMode || "",
         }));
       } else {
         setCreditRowExists(false);
@@ -507,6 +514,7 @@ const AgentView = () => {
       totalCreditLimit: "",
       availableCreditLimit: "",
       usedCreditLimit: "",
+      paymentMode: "",
     });
     setCreditLimitErrors({ addCreditLimit: "", remarks: "" });
   };
@@ -558,6 +566,7 @@ const AgentView = () => {
       setIsLoading(true);
       const addAmount = parseFloat(creditLimitFormData.addCreditLimit);
       let response;
+      const pm = creditLimitFormData.paymentMode || undefined;
       if (creditLimitType === "initial") {
         if (creditRowExists) {
           response = await axiosInstance.put(
@@ -567,13 +576,20 @@ const AgentView = () => {
               totalCreditLimit: addAmount,
               availableCreditLimit: 0,
               additionalCredit: addAmount,
+              paymentMode: pm,
             }
           );
         } else {
           response = await axiosInstance.post(
             "/api/agent-credit-limit/create",
             null,
-            { params: { agentId: Number(id), totalCreditLimit: addAmount } }
+            {
+              params: {
+                agentId: Number(id),
+                totalCreditLimit: addAmount,
+                ...(pm ? { paymentMode: pm } : {}),
+              },
+            }
           );
         }
       } else {
@@ -589,6 +605,7 @@ const AgentView = () => {
             remarks: creditLimitFormData.remarks,
             totalCreditLimit: currentTotal + addAmount,
             availableCreditLimit: currentAvailable,
+            paymentMode: pm,
           }
         );
       }
@@ -1441,7 +1458,7 @@ const AgentView = () => {
                 <hr className="my-3" />
                 {creditLimitType === "initial" ? (
                   <Row>
-                    <Col md={12}>
+                    <Col md={6}>
                       <Form.Group className="mb-3">
                         <Form.Label>
                           <span className="text-danger">*</span>Add Credit Limit
@@ -1459,6 +1476,21 @@ const AgentView = () => {
                         <Form.Control.Feedback type="invalid">
                           {creditLimitErrors.addCreditLimit}
                         </Form.Control.Feedback>
+                      </Form.Group>
+                    </Col>
+                    <Col md={6}>
+                      <Form.Group className="mb-3">
+                        <Form.Label>Payment Mode</Form.Label>
+                        <Form.Select
+                          name="paymentMode"
+                          value={creditLimitFormData.paymentMode}
+                          onChange={handleCreditLimitChange}
+                        >
+                          <option value="">SELECT</option>
+                          <option value="CASH">Cash</option>
+                          <option value="CREDIT_CARD">Credit Card</option>
+                          <option value="BANK_TRANSFER">Bank Transfer</option>
+                        </Form.Select>
                       </Form.Group>
                     </Col>
                   </Row>
@@ -1503,6 +1535,21 @@ const AgentView = () => {
                           <Form.Control.Feedback type="invalid">
                             {creditLimitErrors.remarks}
                           </Form.Control.Feedback>
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Payment Mode</Form.Label>
+                          <Form.Select
+                            name="paymentMode"
+                            value={creditLimitFormData.paymentMode}
+                            onChange={handleCreditLimitChange}
+                          >
+                            <option value="">SELECT</option>
+                            <option value="CASH">Cash</option>
+                            <option value="CREDIT_CARD">Credit Card</option>
+                            <option value="BANK_TRANSFER">Bank Transfer</option>
+                          </Form.Select>
                         </Form.Group>
                       </Col>
                     </Row>
