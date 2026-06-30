@@ -326,9 +326,13 @@ export default function SchefferDriverBookingDetailView() {
     setLoadingPdf(true);
     setPdfUrl(null);
     try {
-      const res = await axiosInstance.get(`${API_BASE}/${bookingId}/voucher`, {
+      const res = await axiosInstance.get(`api/scheffer_booking/${bookingId}/pdf`, {
         responseType: "blob",
+        // params: { type: type.toUpperCase() },
+        params: { type: "VOUCHER" },
       });
+
+    
       const blob = new Blob([res.data], { type: "application/pdf" });
       setPdfUrl(URL.createObjectURL(blob));
     } catch (e) {
@@ -1040,6 +1044,7 @@ export default function SchefferDriverBookingDetailView() {
                     <FaFileAlt style={{ marginRight: "6px" }} />
                     VOUCHER
                   </button>
+                       
 
                   {details.packageName && !isCancelled && (
                     <button

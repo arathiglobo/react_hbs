@@ -523,7 +523,7 @@ export default function CabBookingDetailView() {
     if (!bid) return;
     try {
       setVoucherLoadingId(bid);
-      const res = await axiosInstance.get(`/api/cab/${bid}/pdf`, {
+      const res = await axiosInstance.get(`/api/cab_booking/${bid}/pdf`, {
         params: { type: "VOUCHER" },
       });
       if (res.data && res.data.status === "SUCCESS" && res.data.pdfUrl) {

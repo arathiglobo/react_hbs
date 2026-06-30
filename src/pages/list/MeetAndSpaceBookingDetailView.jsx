@@ -116,7 +116,7 @@ export default function MeetAndSpaceBookingDetailView() {
     setVoucherPdfUrl("");
     try {
       const res = await axiosInstance.get(
-        `/api/meet-and-space/booking/${data.id}/voucher`,
+        `api/meet_and_space_booking/${data.id}/pdf?type=VOUCHER`,
       );
       if (res.data && res.data.status === "SUCCESS" && res.data.pdfUrl) {
         setVoucherPdfUrl(res.data.pdfUrl);
@@ -523,6 +523,14 @@ export default function MeetAndSpaceBookingDetailView() {
                     <FaEnvelope style={{ marginRight: "6px" }} />
                     Voucher
                   </button>
+                  {/* <button
+                    style={{ ...BUTTON_STYLE, backgroundColor: "#241987" }}
+                    onClick={openInvoice}
+                    title="Invoice"
+                  >
+                    <FaEnvelope style={{ marginRight: "6px" }} />
+                    Invoice
+                  </button> */}
                   {!isCancelled && (
                     <button
                       style={{ ...BUTTON_STYLE, backgroundColor: "#dc3545" }}
