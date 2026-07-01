@@ -745,7 +745,7 @@ export default function App() {
       </Routes>
 
       {/* AI booking copilot — self-hides outside booking-related routes */}
-      <CopilotWidget />
+      {/* <CopilotWidget /> */}
 
       {/* Toast container */}
       <Toaster
