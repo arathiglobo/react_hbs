@@ -279,7 +279,8 @@ const AgentReg = () => {
     address: "",
     markup: "",
     currency: "",
-    status: "",
+    // New agents are registered as Inactive by default (Status field hidden).
+    status: "Inactive",
     agentLogo: null,
     agentGSTDetailsDTO: {
       agentClassification: "",
@@ -515,7 +516,7 @@ const AgentReg = () => {
       address: "",
       markup: "",
       currency: "",
-      status: "",
+      status: "Inactive",
       agentLogo: null,
       // GST Details as nested object to match AgentGSTDetailsDTO
       agentGSTDetailsDTO: {
@@ -858,7 +859,7 @@ const AgentReg = () => {
       address: "",
       markup: "",
       currency: "",
-      status: "",
+      status: "Inactive",
       agentClassification: "",
       agentGstIn: "",
       agentProvisionalGstno: "",
@@ -1038,7 +1039,8 @@ const AgentReg = () => {
       newErrors.address = "Address is required";
     if (!data.markup) newErrors.markup = "Markup is required";
     if (!data.currency) newErrors.currency = "Currency is required";
-    if (!getStringValue(data.status)) newErrors.status = "Status is required";
+    // Status field is hidden and system-managed (new agents default to
+    // Inactive), so it is no longer a user-required field.
 
     // Finance Manager validations
     if (!getStringValue(data.financeManagerName))
@@ -3779,6 +3781,9 @@ const AgentReg = () => {
                             </Form.Control.Feedback>
                           )}
                         </Form.Group>
+                        {/* Status field hidden by request — system-managed
+                            (new agents default to Inactive). Code retained. */}
+                        {false && (
                         <Form.Group className="mb-3">
                           <Form.Label>Status</Form.Label>
                           <Form.Select
@@ -3811,6 +3816,7 @@ const AgentReg = () => {
                             </Form.Control.Feedback>
                           )}
                         </Form.Group>
+                        )}
                       </Card.Body>
                     </Card>
                   </Col>

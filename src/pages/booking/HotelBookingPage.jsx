@@ -800,14 +800,41 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
       );
 
       if (creditResponse.data === false) {
-        // ❌ Not enough credit — route the operator into the online-
-        // payment flow instead of a plain toast. Close the Order Summary
-        // modal and open the "online payment required" popup carrying the
-        // payable amount + Pay / Cancel actions.
-        setInsufficientAmount(requiredAmount);
-        setShowConfirmModal(false);
-        setShowInsufficientModal(true);
-        return; // stop here — handled by the online-payment popup
+        // ❌ Not enough credit. Three sub-paths bypass the online-payment
+        // popup; everything else falls through to it.
+        //
+        //   • Book Now & Voucher LATER → let the booking proceed normally.
+        //     The backend (InhouseHotelBookingService Case 5 →
+        //     "On Reconfirmation/ Credit Card") creates the booking in
+        //     Confirmed state WITHOUT touching the agent's credit, and the
+        //     deduction is deferred to the Reconfirm step
+        //     (BookingConfirmationServiceImpl CONFIRM action).
+        //
+        //   • On Request rate → the booking is created in "Not Confirmed"
+        //     state pending the supplier's response (REQUESTED in the
+        //     engine). No credit is touched at create-time on the BE, so
+        //     gating creation on online payment would block a perfectly
+        //     valid request flow. Per spec, On Request bookings always
+        //     proceed without the modal.
+        //
+        //   • Everything else (Voucher Now on Available rate, non-
+        //     refundable, no voucher choice shown) → existing behaviour:
+        //     open "Online Payment Required", Pay / Cancel, and suppress
+        //     the create call until payment completes.
+        const isVoucherLater =
+          bookingConfirmation === "Book Now & Voucher later";
+        const bypassPaymentModal = isVoucherLater || isOnRequestRate;
+        if (!bypassPaymentModal) {
+          setInsufficientAmount(requiredAmount);
+          setShowConfirmModal(false);
+          setShowInsufficientModal(true);
+          return; // stop here — handled by the online-payment popup
+        }
+        console.log(
+          isOnRequestRate
+            ? "ℹ️ Insufficient credit but On Request rate — proceeding with create; supplier response will gate downstream actions."
+            : "ℹ️ Insufficient credit but Voucher Later selected — proceeding with create; credit will be deducted at Reconfirm.",
+        );
       }
 
       // ✅ Step 2: Proceed to confirm booking
@@ -825,6 +852,12 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
       const bookingResponse = response.data;
       console.log("response:::", response);
       console.log("bookingResponse:::", bookingResponse);
+      // Accept the create result when the BE flagged it created OR when
+      // the status is one of the "booking exists now" labels the engine
+      // can stamp. Case 5 (no-credit + Voucher Later) lands on
+      // confirmationStatus="Confirmed" — already matched by the existing
+      // "CONFIRMED" check; "NOT CONFIRMED" covers the engine's Not
+      // Confirmed label used by other branches.
       if (
         bookingResponse &&
         bookingResponse.status &&
@@ -841,11 +874,35 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
         // otherwise.
         navigate(postBookingListRoute);
       } else {
-        toast.error("Booking submission failed. Please try again.");
+        // Surface the BE message so the operator can see WHY (e.g.
+        // "Credit limit error: …", "Invalid request: …"). Falling back
+        // to the generic "Please try again" when the BE returned an
+        // empty body / no message.
+        const beMsg =
+          (bookingResponse && bookingResponse.message) || null;
+        console.warn(
+          "Booking create returned non-success status:",
+          bookingResponse && bookingResponse.status,
+          "message:",
+          beMsg,
+        );
+        toast.error(beMsg || "Booking submission failed. Please try again.");
       }
     } catch (err) {
-      console.error("❌ Error in booking confirmation:", err);
-      toast.error("Booking submission failed. Please try again.");
+      // Network / non-2xx response. Pull the BE message out of the
+      // axios error body when present so the operator can see what
+      // actually failed instead of a generic "Please try again".
+      const beMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        null;
+      console.error(
+        "❌ Error in booking confirmation:",
+        err?.response?.status,
+        err?.response?.data,
+        err,
+      );
+      toast.error(beMsg || "Booking submission failed. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -966,6 +1023,22 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                             slot.roomCategory || selectedRate.roomCategory;
                           const slotMealPlan =
                             slot.mealPlan || selectedRate.mealPlan;
+                          // Per-slot refundability: matches isNonRefundableRate
+                          // (true | "true"). Anything else → refundable, so
+                          // we surface the deadline. Refund deadline itself
+                          // is hotel-wide (computed from maxCancellationNights
+                          // + check-in) so all refundable slots share it.
+                          const slotNonRefundable =
+                            slot.nonRefundable === true ||
+                            slot.nonRefundable === "true";
+                          const slotRefundDeadlineLabel =
+                            !slotNonRefundable && cancellationDeadline
+                              ? cancellationDeadline.toLocaleDateString("en-GB", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                })
+                              : null;
                           return (
                             <Accordion.Item
                               key={roomIndex}
@@ -986,6 +1059,14 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                                       <FaUtensils className="me-1" />
                                       {slotMealPlan}
                                     </Badge>
+                                  )}
+                                  {slotRefundDeadlineLabel && (
+                                    <span
+                                      className="ms-2 small fw-normal"
+                                      style={{ opacity: 0.9 }}
+                                    >
+                                      | Deadline: {slotRefundDeadlineLabel}
+                                    </span>
                                   )}
                                 </h6>
                               </Accordion.Header>
