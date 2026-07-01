@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  Button,
   Card,
   Table,
   Spinner,
@@ -29,17 +30,20 @@ import "../../styles/HotelBookingListModern.css";
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
 // Column-width hints kept in sync with HotelBookingList so the two
-// pages line up visually under the shared hbl-modern skin.
+// pages line up visually under the shared hbl-modern skin. Shared column
+// widths mirror Hotel's tokens verbatim; DayStay-only columns
+// (Rooms / Total / Status) are appended below.
 const COLUMN_WIDTHS = {
   sn: "40px",
-  customerName: "150px",
-  bookingCode: "100px",
-  bookDate: "95px",
-  bookingDetails: "240px",
+  agentName: "90px",
+  customerName: "120px",
+  bookingCode: "95px",
+  bookDate: "90px",
+  bookingDetails: "230px",
   rooms: "70px",
   total: "110px",
   status: "110px",
-  action: "70px",
+  action: "110px",
 };
 
 // Day-stay backends emit a mix of upper- and title-case status values
@@ -138,6 +142,26 @@ const trimTime = (t) => (t ? String(t).slice(0, 5) : "");
  */
 export default function DayStayBookingList() {
   const navigate = useNavigate();
+  // Role gate mirrors HotelBookingList — Agent Name column is admin-only.
+  // Reads currentActiveRole first (multi-role logins), then falls back to
+  // userRole (single-role logins).
+  const [role, setRole] = useState(() => {
+    return localStorage.getItem("currentActiveRole")?.toLowerCase() || null;
+  });
+  useEffect(() => {
+    const storedRole = localStorage.getItem("currentActiveRole")?.toLowerCase();
+    if (storedRole && storedRole !== role) {
+      setRole(storedRole);
+    } else if (!storedRole) {
+      const userRoles = (localStorage.getItem("userRole") || "")
+        .toLowerCase()
+        .split(",");
+      if (userRoles.includes("agent")) setRole("agent");
+      else if (userRoles.includes("staff")) setRole("staff");
+      else if (userRoles.includes("admin")) setRole("admin");
+    }
+  }, [role]);
+
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1); // 1-indexed to mirror HotelBookingList
@@ -156,6 +180,7 @@ export default function DayStayBookingList() {
   // Filters — mirror the Hotel Booking List.
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const [checkInDateFilter, setCheckInDateFilter] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
 
@@ -206,15 +231,25 @@ export default function DayStayBookingList() {
     fetchBookings();
   }, []);
 
-  // Apply search + status + time-period filters in one pass.
+  // Apply search + status + time-period + check-in-date filters in one pass.
   const filteredBookings = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const needle = search.trim().toLowerCase();
+    const checkInPick = (checkInDateFilter || "").trim(); // YYYY-MM-DD
     return (bookings || []).filter((b) => {
       const isCancelled = !!b.isCancelled || normStatus(b.status) === "cancelled";
       const refDate = b.checkInDate ? new Date(b.checkInDate) : null;
       if (refDate && !isNaN(refDate.getTime())) refDate.setHours(0, 0, 0, 0);
+
+      // Check-in Date picker — exact-day match against the booking's
+      // checkInDate. Mirrors HotelBookingList: rows without a check-in
+      // date are hidden while a pick is active.
+      if (checkInPick) {
+        const raw = String(b.checkInDate || "");
+        const rowDay = raw.includes("T") ? raw.slice(0, 10) : raw.slice(0, 10);
+        if (rowDay !== checkInPick) return false;
+      }
 
       if (status === "cancelled" && !isCancelled) return false;
       if (status === "upcoming") {
@@ -271,12 +306,12 @@ export default function DayStayBookingList() {
       }
       return true;
     });
-  }, [bookings, search, status, selectedMonth, selectedYear]);
+  }, [bookings, search, status, checkInDateFilter, selectedMonth, selectedYear]);
 
   // Reset to page 1 whenever a filter changes.
   useEffect(() => {
     setPage(1);
-  }, [search, status, selectedMonth, selectedYear, perPage]);
+  }, [search, status, checkInDateFilter, selectedMonth, selectedYear, perPage]);
 
   // Pagination derived from the filtered list (single client-side window).
   const totalEntries = filteredBookings.length;
@@ -401,7 +436,9 @@ export default function DayStayBookingList() {
               </Card>
             </div>
 
-            {/* Filters Section */}
+            {/* Filters Section — layout mirrors HotelBookingList so the two
+                pages line up: Booking Type on the left, Check-in Date picker
+                (with Clear button) on the right. */}
             <Row className="mb-2 g-1">
               <Col xs={12}>
                 <Card
@@ -409,14 +446,14 @@ export default function DayStayBookingList() {
                   style={{ borderRadius: "8px" }}
                 >
                   <Card.Body className="p-3">
-                    <h6
-                      className="mb-2 fw-bold text-dark"
-                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
-                    >
-                      Booking Type
-                    </h6>
-                    <Row className="g-2">
+                    <Row className="g-2 align-items-end">
                       <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Booking Type
+                        </h6>
                         <Form.Select
                           value={status}
                           onChange={(e) => setStatus(e.target.value)}
@@ -430,6 +467,34 @@ export default function DayStayBookingList() {
                             </option>
                           ))}
                         </Form.Select>
+                      </Col>
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Check-in Date
+                        </h6>
+                        <div className="d-flex gap-2">
+                          <Form.Control
+                            type="date"
+                            value={checkInDateFilter}
+                            onChange={(e) => setCheckInDateFilter(e.target.value)}
+                            size="sm"
+                            aria-label="Check-in date filter"
+                            style={{ fontSize: "0.85rem", height: "46px" }}
+                          />
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            onClick={() => setCheckInDateFilter("")}
+                            disabled={!checkInDateFilter}
+                            aria-label="Clear check-in date filter"
+                            style={{ fontSize: "0.85rem", height: "46px", whiteSpace: "nowrap" }}
+                          >
+                            Clear
+                          </Button>
+                        </div>
                       </Col>
                     </Row>
                   </Card.Body>
@@ -485,6 +550,16 @@ export default function DayStayBookingList() {
                           >
                             S.N
                           </th>
+                          {role === "admin" && (
+                            <th
+                              style={{
+                                ...baseHeaderStyle,
+                                width: COLUMN_WIDTHS.agentName,
+                              }}
+                            >
+                              Agent Name
+                            </th>
+                          )}
                           <th
                             style={{
                               ...baseHeaderStyle,
@@ -560,7 +635,7 @@ export default function DayStayBookingList() {
                         {pageBookings.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={9}
+                              colSpan={role === "admin" ? 10 : 9}
                               className="text-center py-5 text-muted"
                               style={{
                                 border: "1px solid #dee2e6",
@@ -617,6 +692,17 @@ export default function DayStayBookingList() {
                                 >
                                   {serialNumberBase + i + 1}
                                 </td>
+                                {role === "admin" && (
+                                  <td
+                                    style={{
+                                      ...baseCellStyle,
+                                      width: COLUMN_WIDTHS.agentName,
+                                    }}
+                                    className="fw-medium text-dark"
+                                  >
+                                    {b.agentName || b.agentCompanyName || "-"}
+                                  </td>
+                                )}
                                 <td
                                   style={{
                                     ...baseCellStyle,
