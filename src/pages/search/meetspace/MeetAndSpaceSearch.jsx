@@ -176,6 +176,9 @@ export default function MeetAndSpaceSearch() {
   const [results, setResults] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  // When results are on screen the big search form collapses into a sticky
+  // summary strip. Clicking "Modify Search" flips this true to re-expand it.
+  const [isEditingSearch, setIsEditingSearch] = useState(false);
   const resultsRef = useRef(null);
 
   // After a fresh search, jump the viewport to the results so the operator
@@ -285,6 +288,7 @@ export default function MeetAndSpaceSearch() {
     if (!validate()) return;
     setIsLoading(true);
     setHasSearched(true);
+    setIsEditingSearch(false);
     try {
       const res = await axiosInstance.post("/api/meet-and-space/search", {
         bookingDate,
@@ -339,6 +343,8 @@ export default function MeetAndSpaceSearch() {
     );
   };
 
+  const collapseSearch = hasSearched && !isEditingSearch;
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
@@ -347,6 +353,40 @@ export default function MeetAndSpaceSearch() {
 
         <main className="flex-grow-1 p-4 hs-page">
           {/* ── Search Card + Ads (HotelSearch.jsx pattern) ── */}
+          {collapseSearch && (
+            <div className="hs-summary-bar">
+              <div className="hs-summary-chips">
+                {selectedDestination?.label && (
+                  <span className="hs-summary-chip hs-summary-chip-main">
+                    <FaMapMarkerAlt className="me-2" />
+                    {selectedDestination.label}
+                  </span>
+                )}
+                {bookingDate && (
+                  <span className="hs-summary-chip">{bookingDate}</span>
+                )}
+                {attendees && (
+                  <span className="hs-summary-chip">
+                    <FaUsers className="me-2" />
+                    {attendees} pax
+                  </span>
+                )}
+              </div>
+              <Button
+                type="button"
+                className="hs-summary-modify"
+                onClick={() => {
+                  setIsEditingSearch(true);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              >
+                <FaSearch className="me-2" />
+                Modify Search
+              </Button>
+            </div>
+          )}
+
+          {!collapseSearch && (
           <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
            <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <Card className="shadow-sm rounded-xl h-100 search-card-modern bg-white">
@@ -707,11 +747,14 @@ export default function MeetAndSpaceSearch() {
           </Card>
            </div>
             {/* Ads carousel — city matches first, then all active ads */}
-            <AdvertisementCarousel
-              cityId={selectedDestination?.value}
-              cityName={selectedDestination?.label}
-            />
+            {!hasSearched && (
+              <AdvertisementCarousel
+                cityId={selectedDestination?.value}
+                cityName={selectedDestination?.label}
+              />
+            )}
           </div>
+          )}
 
           {/* ── Results ── */}
           <div ref={resultsRef}>

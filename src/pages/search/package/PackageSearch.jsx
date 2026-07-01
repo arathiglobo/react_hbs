@@ -36,6 +36,9 @@ const PackageSearch = () => {
   const [errors, setErrors] = useState({});
   const [results, setResults] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
+  // When results are on screen the big search form collapses into a sticky
+  // summary strip. Clicking "Modify Search" flips this true to re-expand it.
+  const [isEditingSearch, setIsEditingSearch] = useState(false);
   const [progress, setProgress] = useState(0);
   const progressRef = useRef(null);
   const resultsRef = useRef(null);
@@ -178,6 +181,7 @@ const PackageSearch = () => {
     setIsLoading(true);
     startProgress();
     setHasSearched(true);
+    setIsEditingSearch(false);
     setResults([]);
 
     try {
@@ -268,13 +272,50 @@ const PackageSearch = () => {
     }
   }, []);
 
+  // Results are on screen once a search has run. Collapse the full form into
+  // the sticky summary strip then, unless the user chose to modify the search.
+  const collapseSearch = hasSearched && !isEditingSearch;
+  const selectedAgentName = agents.find(
+    (a) => String(a.id) === String(agentId),
+  )?.companyName;
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 package-search-container">
-          <Card className="search-card-modern shadow-sm border-0">
+          {/* ── Collapsed sticky search summary strip ──
+              Shown once results are on screen. "Modify Search" re-expands
+              the full form by flipping isEditingSearch. */}
+          {collapseSearch && (
+            <div className="hs-summary-bar">
+              <div className="hs-summary-chips">
+                {selectedDestination?.label && (
+                  <span className="hs-summary-chip hs-summary-chip-main">
+                    {selectedDestination.label}
+                  </span>
+                )}
+                {selectedAgentName && (
+                  <span className="hs-summary-chip">{selectedAgentName}</span>
+                )}
+              </div>
+              <Button
+                type="button"
+                className="hs-summary-modify"
+                onClick={() => {
+                  setIsEditingSearch(true);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              >
+                <FaSearch className="me-2" />
+                Modify Search
+              </Button>
+            </div>
+          )}
+
+          {!collapseSearch && (
+          <Card className="search-card-modern shadow-sm border-0 hs-form-expand">
             <Card.Body>
               <div className="mb-4">
                 <h2 className="fw-bold text-primary mb-1">Package Search</h2>
@@ -368,6 +409,7 @@ const PackageSearch = () => {
               </Form>
             </Card.Body>
           </Card>
+          )}
 
           {/* Progress Bar */}
           {progress > 0 && (

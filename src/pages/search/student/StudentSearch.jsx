@@ -249,6 +249,9 @@ export default function StudentSearch() {
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState([]);
+  // When results are on screen the big search form collapses into a sticky
+  // summary strip. Clicking "Modify Search" flips this true to re-expand it.
+  const [isEditingSearch, setIsEditingSearch] = useState(false);
   const resultsRef = useRef(null);
 
   // ── Result-side filters (added per request; mirror GovEmployeeSearch) ──
@@ -573,6 +576,7 @@ export default function StudentSearch() {
     if (!validate()) return;
     setIsLoading(true);
     setResults([]);
+    setIsEditingSearch(false);
     try {
       const payload = {
         agentId: Number(agent),
@@ -685,6 +689,9 @@ export default function StudentSearch() {
     window.open("/student-room-list", "_blank", "noopener");
   };
 
+  const hasResultsView = results.length > 0;
+  const collapseSearch = hasResultsView && !isEditingSearch;
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
@@ -695,6 +702,48 @@ export default function StudentSearch() {
               (search-card-modern + h2 fw-semibold text-primary) so all
               the dedicated-flow search pages share one look. */}
           {/* ── Search Card + Ads ── */}
+          {collapseSearch && (
+            <div className="hs-summary-bar">
+              <div className="hs-summary-chips">
+                {selectedDestination?.label && (
+                  <span className="hs-summary-chip hs-summary-chip-main">
+                    {selectedDestination.label}
+                  </span>
+                )}
+                {checkIn && (
+                  <span className="hs-summary-chip">
+                    {checkIn}
+                    {checkOut ? ` → ${checkOut}` : ""}
+                  </span>
+                )}
+                {nights ? (
+                  <span className="hs-summary-chip">
+                    {nights} night{nights > 1 ? "s" : ""}
+                  </span>
+                ) : null}
+                <span className="hs-summary-chip">
+                  {rooms.reduce((a, r) => a + r.adults, 0)} adults
+                  {rooms.reduce((a, r) => a + r.children, 0)
+                    ? `, ${rooms.reduce((a, r) => a + r.children, 0)} child`
+                    : ""}{" "}
+                  · {rooms.length} room{rooms.length > 1 ? "s" : ""}
+                </span>
+              </div>
+              <Button
+                type="button"
+                className="hs-summary-modify"
+                onClick={() => {
+                  setIsEditingSearch(true);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              >
+                <FaSearch className="me-2" />
+                Modify Search
+              </Button>
+            </div>
+          )}
+
+          {!collapseSearch && (
           <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
             <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <Card className="shadow-sm rounded-xl h-100 search-card-modern bg-white">
@@ -1019,11 +1068,14 @@ export default function StudentSearch() {
           </Card>
             </div>
             {/* Ads carousel — city matches first, then all active ads */}
-            <AdvertisementCarousel
-              cityId={selectedDestination?.value}
-              cityName={selectedDestination?.label}
-            />
+            {!hasResultsView && (
+              <AdvertisementCarousel
+                cityId={selectedDestination?.value}
+                cityName={selectedDestination?.label}
+              />
+            )}
           </div>
+          )}
 
           <div className="mt-3" ref={resultsRef}>
             {isLoading && (

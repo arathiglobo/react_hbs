@@ -261,6 +261,9 @@ export default function SeniorCitizenSearch() {
   const [allResults, setAllResults] = useState([]);
   const [hasSearchResult, setHasSearchResult] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  // When results are on screen the big search form collapses into a sticky
+  // summary strip. Clicking "Modify Search" flips this true to re-expand it.
+  const [isEditingSearch, setIsEditingSearch] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [pollStatus, setPollStatus] = useState("IDLE");
   const [searchId, setSearchId] = useState(null);
@@ -645,6 +648,7 @@ export default function SeniorCitizenSearch() {
     setErrors({});
     setIsLoading(true);
     setHasSearched(true);
+    setIsEditingSearch(false);
     setHasSearchResult(false);
     setAllResults([]);
     setPollStatus("IN_PROGRESS");
@@ -831,6 +835,9 @@ export default function SeniorCitizenSearch() {
     window.open("/senior-citizen-room-list", "_blank", "noopener");
   };
 
+  const hasResultsView = hasSearchResult || allResults.length > 0;
+  const collapseSearch = hasResultsView && !isEditingSearch;
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
@@ -838,6 +845,48 @@ export default function SeniorCitizenSearch() {
         <Sidebar />
         <main className="flex-grow-1 p-4 hs-page">
           {/* ── Search Card + Ads ── */}
+          {collapseSearch && (
+            <div className="hs-summary-bar">
+              <div className="hs-summary-chips">
+                {selectedDestination?.label && (
+                  <span className="hs-summary-chip hs-summary-chip-main">
+                    {selectedDestination.label}
+                  </span>
+                )}
+                {checkIn && (
+                  <span className="hs-summary-chip">
+                    {checkIn}
+                    {checkOut ? ` → ${checkOut}` : ""}
+                  </span>
+                )}
+                {nights && (
+                  <span className="hs-summary-chip">
+                    {nights} night{Number(nights) > 1 ? "s" : ""}
+                  </span>
+                )}
+                <span className="hs-summary-chip">
+                  {rooms.reduce((a, r) => a + r.adults, 0)} adults
+                  {rooms.reduce((a, r) => a + r.children, 0)
+                    ? `, ${rooms.reduce((a, r) => a + r.children, 0)} child`
+                    : ""}{" "}
+                  · {rooms.length} room{rooms.length > 1 ? "s" : ""}
+                </span>
+              </div>
+              <Button
+                type="button"
+                className="hs-summary-modify"
+                onClick={() => {
+                  setIsEditingSearch(true);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              >
+                <FaSearch className="me-2" />
+                Modify Search
+              </Button>
+            </div>
+          )}
+
+          {!collapseSearch && (
           <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
            <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <Card className="shadow-sm rounded-xl h-100 search-card-modern bg-white">
@@ -1235,11 +1284,14 @@ export default function SeniorCitizenSearch() {
           </Card>
            </div>
            {/* Ads carousel — city matches first, then all active ads */}
+           {!hasResultsView && (
            <AdvertisementCarousel
              cityId={selectedDestination?.value}
              cityName={selectedDestination?.label}
            />
+           )}
           </div>
+          )}
 
           {!hasSearched && !hasSearchResult && (
             <Card className="shadow-sm rounded-xl">

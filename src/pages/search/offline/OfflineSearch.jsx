@@ -7,6 +7,7 @@ import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
+import { FaSearch } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import "../../../styles/OfflineSearch.css";
 
@@ -140,6 +141,9 @@ const OfflineSearch = () => {
   // Supplier Section State
   const [mainBasicId, setMainBasicId] = useState(null);
   const [savedInvoiceNo, setSavedInvoiceNo] = useState("");
+  // Once the basic booking is created the top criteria form collapses into a
+  // sticky summary strip. "Modify Search" flips this true to re-expand it.
+  const [isEditingSearch, setIsEditingSearch] = useState(false);
   const [activeSupplier, setActiveSupplier] = useState("Hotel");
   const [supplierEntries, setSupplierEntries] = useState([]);
   const resultsRef = useRef(null);
@@ -317,6 +321,7 @@ const OfflineSearch = () => {
         toast.success("basic supplier details added successfully");
         setMainBasicId(response.data); // Store the returned ID
         setSavedInvoiceNo(formData.invoiceNo); // Keep the invoice number used for this booking
+        setIsEditingSearch(false); // collapse the criteria form into the summary strip
         fetchNextInvoiceNumber(); // Get the next one for the next possible booking
         setErrors({});
       } else {
@@ -423,6 +428,11 @@ const OfflineSearch = () => {
     []
   );
 
+  // Once the basic booking record exists the criteria form collapses into the
+  // sticky summary strip (the supplier-entries panel below stays visible),
+  // unless the user chose to modify the criteria.
+  const collapseSearch = !!mainBasicId && !isEditingSearch;
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
@@ -434,6 +444,50 @@ const OfflineSearch = () => {
             <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <Card className="search-card-premium animate-fade-in-up">
             <Card.Body className="p-2">
+              {/* ── Collapsed sticky summary strip ──
+                  Shown once the basic booking exists. "Modify Search"
+                  re-expands the criteria form by flipping isEditingSearch. */}
+              {collapseSearch && (
+                <div className="hs-summary-bar">
+                  <div className="hs-summary-chips">
+                    {formData.customerName && (
+                      <span className="hs-summary-chip hs-summary-chip-main">
+                        {formData.customerName}
+                      </span>
+                    )}
+                    {formData.checkIn && (
+                      <span className="hs-summary-chip">
+                        {formData.checkIn}
+                        {formData.checkOut ? ` → ${formData.checkOut}` : ""}
+                      </span>
+                    )}
+                    <span className="hs-summary-chip">
+                      {rooms.reduce((a, r) => a + r.adults, 0)} adults
+                      {rooms.reduce((a, r) => a + r.children, 0)
+                        ? `, ${rooms.reduce((a, r) => a + r.children, 0)} child`
+                        : ""}{" "}
+                      · {rooms.length} room{rooms.length > 1 ? "s" : ""}
+                    </span>
+                    {savedInvoiceNo && (
+                      <span className="hs-summary-chip">Inv {savedInvoiceNo}</span>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    className="hs-summary-modify"
+                    onClick={() => {
+                      setIsEditingSearch(true);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                  >
+                    <FaSearch className="me-2" />
+                    Modify Search
+                  </Button>
+                </div>
+              )}
+
+              {!collapseSearch && (
+              <div className="hs-form-expand">
               <div className="mb-3">
                 <h3 className="card-title-modern">Offline Booking</h3>
                 <p className="text-muted small">Search and add criteria for offline bookings</p>
@@ -662,6 +716,8 @@ const OfflineSearch = () => {
                   </Button>
                 </div>
               </Form>
+              </div>
+              )}
 
               {/* Dynamic Supplier Section */}
               {mainBasicId && (
@@ -829,8 +885,9 @@ const OfflineSearch = () => {
             </Card.Body>
           </Card>
             </div>
-            {/* Ads carousel — city matches first, then all active ads */}
-            <AdvertisementCarousel />
+            {/* Ads carousel — only before the booking is created. Hidden once
+                the supplier-entries panel takes over the working area. */}
+            {!mainBasicId && <AdvertisementCarousel />}
           </div>
         </main>
       </div>

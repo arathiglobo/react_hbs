@@ -134,7 +134,7 @@ export default function OfflineBookingDetailView() {
     setPdfUrl("");
     try {
       const response = await axiosInstance.get(
-        `api/v1/offline-booking/${booking.supplierMainBasicId}/pdf`,
+        `api/offline_booking/${booking.supplierMainBasicId}/pdf`,
         { params: { type: type.toUpperCase() } },
       );
       if (response.data && response.data.status === "SUCCESS") {
@@ -394,6 +394,22 @@ export default function OfflineBookingDetailView() {
                     <FaPercent style={{ marginRight: "6px" }} />
                     Tax
                   </button>
+                   {/* <button
+                    style={{ ...BUTTON_STYLE, backgroundColor: "#6c757d" }}
+                    onClick={() => handlePdfClick("PROFORMA_INVOICE")} PROFORMA_INVOICE
+                    title="Proforma Invoice"
+                  >
+                    <FaPercent style={{ marginRight: "6px" }} />
+                    Proforma Invoice
+                  </button>
+                   <button
+                    style={{ ...BUTTON_STYLE, backgroundColor: "#6c757d" }}
+                    onClick={() => handlePdfClick("PROFORMA_VOUCHER")}
+                    title="Proforma Voucher"
+                  >
+                    <FaPercent style={{ marginRight: "6px" }} />
+                    Proforma Voucher
+                  </button> */}
                 </div>
               </>
             )}

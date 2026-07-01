@@ -119,6 +119,9 @@ const HoneymoonSearch = () => {
   const [progress, setProgress] = useState(0);
   const [results, setResults] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
+  // When results are on screen the big search form collapses into a sticky
+  // summary strip. Clicking "Modify Search" flips this true to re-expand it.
+  const [isEditingSearch, setIsEditingSearch] = useState(false);
   const [errors, setErrors] = useState({});
   const resultsRef = useRef(null);
 
@@ -258,6 +261,7 @@ const HoneymoonSearch = () => {
     }
     setLoading(true);
     setHasSearched(true);
+    setIsEditingSearch(false);
     setResults([]);
     setProgress(0);
 
@@ -400,6 +404,8 @@ const HoneymoonSearch = () => {
     menuPosition: "fixed",
   };
 
+  const collapseSearch = hasSearched && !isEditingSearch;
+
   return (
     <div className="min-vh-100 d-flex flex-column" style={{ background: "#f5f7fb" }}>
       <TopBar />
@@ -418,6 +424,42 @@ const HoneymoonSearch = () => {
             </div>
 
             {/* ── Search Card + Ads ── */}
+            {collapseSearch && (
+              <div className="hs-summary-bar">
+                <div className="hs-summary-chips">
+                  {form.destination?.label && (
+                    <span className="hs-summary-chip hs-summary-chip-main">
+                      <FaMapMarkerAlt className="me-1" />
+                      {form.destination.label}
+                    </span>
+                  )}
+                  {form.startingDate && (
+                    <span className="hs-summary-chip">
+                      <FaCalendarAlt className="me-1" />
+                      {form.startingDate}
+                    </span>
+                  )}
+                  <span className="hs-summary-chip">
+                    <FaUserFriends className="me-1" />
+                    {Number(form.adults) || 0} Adults
+                    {Number(form.children) > 0 ? `, ${Number(form.children)} Children` : ""}
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  className="hs-summary-modify"
+                  onClick={() => {
+                    setIsEditingSearch(true);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                >
+                  <FaSearch className="me-2" />
+                  Modify Search
+                </Button>
+              </div>
+            )}
+
+            {!collapseSearch && (
             <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
              <div className="flex-grow-1" style={{ minWidth: 0 }}>
             <Card className="shadow-lg border-0 rounded-4 mb-4 h-100">
@@ -638,11 +680,14 @@ const HoneymoonSearch = () => {
             </Card>
              </div>
              {/* Ads carousel — city matches first, then all active ads */}
+             {!hasSearched && (
              <AdvertisementCarousel
                cityId={form.destination?.value}
                cityName={form.destination?.label}
              />
+             )}
             </div>
+            )}
 
             <div ref={resultsRef}>
             {loading && (
