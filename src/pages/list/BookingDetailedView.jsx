@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   Container,
   Row,
@@ -54,6 +54,33 @@ const BTN_HISTORY = { ...BUTTON_STYLE, backgroundColor: "#334155" }; // Booking 
 // parent-child mechanism (they surface via booking.subBookings); the rest are
 // linked + displayed through the additive /api/booking-amendment-link feature.
 // Scope: room-stay family (Honeymoon & Ayurveda excluded — no detail page).
+// Substrings the BE writes on bookings whose credit deduction was
+// DEFERRED to Reconfirm. Three matrix cases set them at create:
+//   • Case 3: voucherGenerated = "On Reconfirmation"          (has credit + Voucher Later)
+//   • Case 5: voucherGenerated = "On Reconfirmation/ Credit Card" (no credit + Voucher Later)
+//   • Case 6: voucherGenerated = "Yes/On Credit Card"         (no credit + Voucher Now)
+//
+// Cases 1/2 use voucherGenerated="Yes" — credit was already deducted at
+// create, so they MUST NOT match here (we'd double-charge). The two
+// substrings below collectively identify the three deferred cases
+// without hitting Cases 1/2.
+const DEFERRED_CREDIT_VOUCHER_TOKENS = ["On Reconfirmation", "Credit Card"];
+
+const voucherIndicatesDeferredCredit = (vg) => {
+  if (!vg) return false;
+  const s = String(vg);
+  return DEFERRED_CREDIT_VOUCHER_TOKENS.some((t) => s.includes(t));
+};
+
+// Dummy online-payment gateways — mirrors HotelBookingPage so an operator
+// gets the same payment picker whether the deduction is settled at create
+// or at reconfirm time.
+const PAYMENT_GATEWAYS = [
+  { id: "razorpay", name: "Razorpay", desc: "Cards, UPI, Net Banking" },
+  { id: "stripe", name: "Stripe", desc: "International cards" },
+  { id: "payu", name: "PayU", desc: "Cards & wallets" },
+];
+
 const ADD_NEW_ITEM_TYPES = [
   { key: "HOTEL", label: "Hotel Booking", route: "/new-booking/hotel" },
   { key: "HOTEL_24HR", label: "24 Hour Check-In", route: "/new-booking/hotel-24hr" },
@@ -151,6 +178,7 @@ const StatusBadge = ({ status }) => {
 export default function BookingDetailedView() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
   /* Related notes (added via the dedicated /notes page).
@@ -242,6 +270,20 @@ export default function BookingDetailedView() {
   // the page renders the PDF in an iframe instead of triggering a
   // download. Shape: { url: string, label: string, type: string }.
   const [pdfPreview, setPdfPreview] = useState(null);
+
+  // ── Online Payment Required (deferred-credit Reconfirm) ──────────
+  // When a booking was created via the "no-credit + Voucher Later" path
+  // (BE Case 5, voucherGenerated = "On Reconfirmation/ Credit Card") and
+  // the agent STILL has no credit at Reconfirm time, we surface the same
+  // Online Payment Required modal + gateway picker that the create flow
+  // uses on HotelBookingPage. After payment the user is sent back here
+  // with location.state.resumeReconfirm = true and the reconfirm
+  // completes automatically. Scope: hotel detail Reconfirm only — no
+  // other action / booking type touched.
+  const [showInsufficientModal, setShowInsufficientModal] = useState(false);
+  const [insufficientAmount, setInsufficientAmount] = useState(0);
+  const [showGatewayModal, setShowGatewayModal] = useState(false);
+  const [selectedGateway, setSelectedGateway] = useState("");
 
   // ── Add New Item (amendment) selection modal + cross-type sub-bookings ──
   const [showAddItemModal, setShowAddItemModal] = useState(false);
@@ -480,7 +522,20 @@ export default function BookingDetailedView() {
   // Reconfirm
   const openConfirmModal = () => setShowConfirmModal(true);
 
-  const confirmBooking = async () => {
+  // Does the booking carry a "deferred credit" marker on voucherGenerated
+  // (Cases 3, 5, or 6 — see DEFERRED_CREDIT_VOUCHER_TOKENS above)? Only
+  // these need the Reconfirm-time deduction + Online Payment pre-check.
+  // Cases 1/2 (voucher = "Yes") were already deducted at create, so this
+  // returns false for them and the pre-check is skipped.
+  const isDeferredCreditBooking = voucherIndicatesDeferredCredit(
+    booking?.voucherGenerated,
+  );
+
+  // Actual reconfirm API call. Split out so the same call can be made
+  // from (a) the Reconfirm modal's Confirm button when credit is fine,
+  // and (b) the post-payment resume effect (after the operator pays
+  // through the gateway picker).
+  const runReconfirm = async () => {
     try {
       setConfirmingBooking(true);
       // RECONFIRM calls the same backend mutation that the existing
@@ -489,12 +544,8 @@ export default function BookingDetailedView() {
       // { confirmStatus: true }. The backend's
       // BookingConfirmationServiceImpl.updateConfirmationStatus sets
       // confirmationStatus = "ReConfirmed" and reconfirmation = true.
-      // AgentLPO is optional there ("skip customer update" branch), so
-      // we don't need to collect it for plain RECONFIRM — only the
-      // UPDATE BOOK STATUS modal asks for an LPO.
-      //
-      // The previous PUT /api/hotel-booking/confirm/{id} path has no
-      // controller binding and 404s, hence this switch.
+      // For deferred-credit bookings the BE also deducts the credit at
+      // this point (we've already gated it behind the FE pre-check below).
       const response = await axiosInstance.patch(
         `/api/booking-confirmation/${id}/confirmation-status`,
         { action: "CONFIRM", confirmStatus: true },
@@ -518,6 +569,78 @@ export default function BookingDetailedView() {
       setConfirmingBooking(false);
     }
   };
+
+  // Reconfirm modal's "Reconfirm" button handler.
+  //
+  // For deferred-credit bookings (Case 5 marker on voucherGenerated): first
+  // ask the BE whether the agent has enough credit RIGHT NOW. If not, swap
+  // the Reconfirm modal out for the Online Payment Required modal — the
+  // operator pays through the gateway picker, returns here via
+  // location.state.resumeReconfirm = true, and the resume effect fires
+  // runReconfirm to actually complete the reconfirmation.
+  //
+  // For every other booking (regular credit-deducted, non-refundable,
+  // on-request, etc.) credit isn't touched at Reconfirm time, so we skip
+  // the pre-check entirely and hit runReconfirm directly — preserves the
+  // existing flow unchanged.
+  const confirmBooking = async () => {
+    if (!isDeferredCreditBooking) {
+      await runReconfirm();
+      return;
+    }
+    const agentIdNum = booking?.agentId
+      ? Number(String(booking.agentId).trim())
+      : null;
+    const amount = Number(booking?.totalRate) || 0;
+    if (!agentIdNum || amount <= 0) {
+      // Missing data — fall back to the direct reconfirm; BE will log
+      // a warn and proceed without deduction (same as the legacy path).
+      await runReconfirm();
+      return;
+    }
+    try {
+      setConfirmingBooking(true);
+      const credit = await axiosInstance.get(
+        `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentIdNum}&requiredAmount=${amount}`,
+      );
+      if (credit.data === false) {
+        // Insufficient credit — route into the online-payment picker.
+        // Close the Reconfirm modal so the Insufficient modal owns the
+        // screen, and stamp the deferred amount so the gateway page has
+        // it to display / charge.
+        setInsufficientAmount(amount);
+        setShowConfirmModal(false);
+        setShowInsufficientModal(true);
+        return;
+      }
+      // Sufficient — proceed with the actual reconfirm. The BE will
+      // deduct the deferred credit as part of this same call.
+      await runReconfirm();
+    } catch (err) {
+      console.error("Error checking credit before reconfirm:", err);
+      // Fail open: if the credit-check call itself errors, fall through
+      // to the existing reconfirm path so we don't trap the user.
+      await runReconfirm();
+    } finally {
+      setConfirmingBooking(false);
+    }
+  };
+
+  // Post-payment resume. The gateway page (/payment/:id) navigates back
+  // here with state.resumeReconfirm = true once the operator finishes
+  // the dummy card-entry flow. We strip the flag from history (so a
+  // reload doesn't re-trigger), then fire runReconfirm to complete the
+  // reconfirmation. The credit-deduction at the BE will succeed because
+  // the gateway page (in production) would have topped up the agent's
+  // available credit before navigating back.
+  useEffect(() => {
+    if (!location.state?.resumeReconfirm) return;
+    if (!booking) return;
+    // Clear the flag so it doesn't fire again on remount.
+    navigate(location.pathname, { replace: true, state: {} });
+    runReconfirm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state?.resumeReconfirm, booking]);
 
   // Reject flow: Reconfirm popup → "Reject" → opens this modal
   const openRejectModal = () => {
@@ -1161,7 +1284,20 @@ export default function BookingDetailedView() {
                         />
                         <InfoRow
                           label="Voucher"
-                          value={booking.voucherGenerated}
+                          value={
+                            // Display-only tidy: surface
+                            // "On Reconfirmation/ Credit Card" as just
+                            // "On Reconfirmation" — operators don't need
+                            // the "/ Credit Card" trailer in the info
+                            // card. The persisted value stays unchanged
+                            // because both the FE deferred-credit
+                            // pre-check and the BE Reconfirm-time
+                            // deduction rely on it as a marker.
+                            booking.voucherGenerated ===
+                            "On Reconfirmation/ Credit Card"
+                              ? "On Reconfirmation"
+                              : booking.voucherGenerated
+                          }
                         />
                         <InfoRow
                           label="Status"
@@ -3042,6 +3178,121 @@ export default function BookingDetailedView() {
           </Container>
         </main>
       </div>
+
+      {/* ── Online Payment Required (deferred-credit Reconfirm) ──
+          Surfaced when the operator clicks Reconfirm on a Case-5
+          booking (voucherGenerated = "On Reconfirmation/ Credit Card")
+          and the agent still has no credit. Same shape as the create
+          flow's modal on HotelBookingPage so the operator gets a
+          consistent experience. */}
+      <Modal
+        show={showInsufficientModal}
+        onHide={() => setShowInsufficientModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Online Payment Required</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="text-center py-4">
+          <p className="mb-2 text-muted">
+            The agent's available credit is insufficient to reconfirm this
+            booking. You need to proceed with{" "}
+            <strong>online payment</strong>.
+          </p>
+          <div className="mt-3">
+            <div className="text-muted small">Payable amount</div>
+            <div className="fs-4 fw-bold text-dark">
+              AED {Number(insufficientAmount).toFixed(2)}
+            </div>
+          </div>
+        </Modal.Body>
+        <Modal.Footer className="justify-content-center border-0">
+          <Button
+            variant="danger"
+            onClick={() => setShowInsufficientModal(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="success"
+            onClick={() => {
+              setShowInsufficientModal(false);
+              setSelectedGateway("");
+              setShowGatewayModal(true);
+            }}
+          >
+            Pay
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Select Payment Gateway ──
+          Identical to the create-flow picker; on Proceed we hand off to
+          /payment/<id> and stamp returnTo so the gateway page can send
+          the operator back here with state.resumeReconfirm = true. */}
+      <Modal
+        show={showGatewayModal}
+        onHide={() => setShowGatewayModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Select Payment Gateway</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted small mb-3">
+            Choose a gateway to enter your card details.
+          </p>
+          {PAYMENT_GATEWAYS.map((g) => (
+            <Form.Check
+              key={g.id}
+              type="radio"
+              name="reconfirm-payment-gateway"
+              id={`reconfirm-gw-${g.id}`}
+              className="mb-2"
+              checked={selectedGateway === g.id}
+              onChange={() => setSelectedGateway(g.id)}
+              label={
+                <span>
+                  <span className="fw-semibold">{g.name}</span>
+                  <span className="text-muted small ms-2">{g.desc}</span>
+                </span>
+              }
+            />
+          ))}
+        </Modal.Body>
+        <Modal.Footer className="border-0">
+          <Button
+            variant="secondary"
+            onClick={() => setShowGatewayModal(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="success"
+            disabled={!selectedGateway}
+            onClick={() => {
+              const gw = PAYMENT_GATEWAYS.find(
+                (x) => x.id === selectedGateway,
+              );
+              setShowGatewayModal(false);
+              // Send the operator to the dummy gateway page. We pass
+              // returnTo so the gateway can navigate back to THIS detail
+              // page on completion, and resumeReconfirm so the resume
+              // effect at the top of this component fires runReconfirm.
+              navigate(`/payment/${selectedGateway}`, {
+                state: {
+                  amountLabel: `AED ${Number(insufficientAmount).toFixed(2)}`,
+                  gatewayName: gw ? gw.name : selectedGateway,
+                  returnTo: location.pathname,
+                  returnState: { resumeReconfirm: true },
+                },
+              });
+            }}
+          >
+            Proceed to Pay
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       {/*
         PDF Preview Modal — opens the Proforma Voucher / Proforma Invoice /

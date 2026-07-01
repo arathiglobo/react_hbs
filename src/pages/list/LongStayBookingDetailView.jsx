@@ -1,21 +1,24 @@
 /**
  * LongStayBookingDetailView.jsx
  *
- * Full-page detail view for a single Long Stay booking. Replaces the
- * modal-based "View" that used to live in LongStayBookingList. The
- * Voucher / Cancel row icons now sit at the bottom-left of this page as
- * buttons. All endpoints / behaviour are unchanged:
- *   - Detail fetch :  GET    /api/longStayBooking/{id}
- *   - Voucher PDF  :  GET    /api/longStayBooking/{id}/pdf?type=VOUCHER
- *                     → { status: "SUCCESS", pdfUrl }
- *                     The URL opens in a new tab (matches the list's
- *                     original behaviour — browser renders the PDF
- *                     inline and the user can save / print from there).
- *   - Cancel       :  POST   /api/longStayBooking/{id}/cancel
+ * Full-page detail view for a single Long Stay booking. Visual + behavioural
+ * parity with BookingDetailedView (hotel) so an operator gets the same
+ * action set / layout / modals on either booking type.
  *
- * The list row is forwarded via location.state.booking so the page has a
- * booking-code header even before the detail fetch resolves. On hard
- * refresh the route id alone drives the fetch.
+ * Backend endpoints (long-stay scoped) — unchanged:
+ *   - Detail               : GET    /api/longStayBooking/{id}
+ *   - PDF (proforma/final) : GET    /api/longStayBooking/{id}/pdf?type=...
+ *   - Cancel               : POST   /api/longStayBooking/{id}/cancel
+ *   - Reconfirm / Confirmation No.
+ *                          : PATCH  /api/longStayBooking/{id}/confirmation-status
+ *   - Agent Reference      : GET/POST /api/longStayBooking/{id}/agent-reference
+ *   - Remark               : POST   /api/longStayBooking/{id}/remark
+ *   - Resend mail          : POST   /api/longStayBooking/{id}/resend-mail
+ *   - Notes                : GET/POST /api/longStayBooking/{id}/notes
+ *   - Amendment links      : GET    /api/booking-amendment-link/parent/{code}
+ *
+ * Long-stay has no "On Request" flow, so the Reconfirm modal never shows
+ * Reject (Reject is hotel-side On-Request-Pending only).
  */
 import React, { useEffect, useState, useCallback } from "react";
 import {
@@ -36,9 +39,7 @@ import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import { toast } from "react-hot-toast";
 
-// ── Visual tokens copied from the Hotel Booking detail view so this
-//    page shares the same look (red action buttons, grey section
-//    headers, inline label/value rows and bordered cards). ──────────
+// ── Visual tokens copied from the Hotel Booking detail view ────────
 const BUTTON_STYLE = {
   backgroundColor: "#c0392b",
   color: "#fff",
@@ -52,17 +53,30 @@ const BUTTON_STYLE = {
   whiteSpace: "nowrap",
 };
 
-// Purpose-based colour variants (same scheme as the hotel detail page). They
-// reuse the BUTTON_STYLE shape — only the background colour changes — purely
-// to improve visual distinction. No behaviour/handler/guard is affected.
 const BTN_TEAL = { ...BUTTON_STYLE, backgroundColor: "#0d9488" }; // Reconfirm
 const BTN_DANGER = { ...BUTTON_STYLE, backgroundColor: "#dc2626" }; // Cancel
+const BTN_PRIMARY = { ...BUTTON_STYLE, backgroundColor: "#2563eb" }; // Add New Item
 const BTN_SKY = { ...BUTTON_STYLE, backgroundColor: "#3ba2e8" }; // Add Agent Reference
 const BTN_INDIGO = { ...BUTTON_STYLE, backgroundColor: "#6366f1" }; // Confirmation No.
 const BTN_INFO = { ...BUTTON_STYLE, backgroundColor: "#0891b2" }; // Voucher / Invoice
 const BTN_ORANGE = { ...BUTTON_STYLE, backgroundColor: "#f0922b" }; // Resend Mail
 const BTN_ACCENT = { ...BUTTON_STYLE, backgroundColor: "#7c3aed" }; // Booking Remark
 const BTN_NEUTRAL = { ...BUTTON_STYLE, backgroundColor: "#64748b" }; // View / Back / Notes
+const BTN_HISTORY = { ...BUTTON_STYLE, backgroundColor: "#334155" }; // Booking History
+
+// Same booking-type catalogue as the hotel view's ADD NEW ITEM modal so an
+// operator can attach cross-type sub-bookings under a long-stay parent too.
+// Each child is created via its OWN existing create flow with
+// ?parentBookingCode set, then surfaced via /api/booking-amendment-link.
+const ADD_NEW_ITEM_TYPES = [
+  { key: "HOTEL", label: "Hotel Booking", route: "/new-booking/hotel" },
+  { key: "HOTEL_24HR", label: "24 Hour Check-In", route: "/new-booking/hotel-24hr" },
+  { key: "LONG_STAY", label: "Long Stay Booking", route: "/new-booking/long-stay" },
+  { key: "DAY_STAY", label: "Day Stay Check-In", route: "/new-booking/day-stay" },
+  { key: "GOV_EMPLOYEE", label: "Government Employee", route: "/new-booking/gov-employee" },
+  { key: "STUDENT", label: "Student Booking", route: "/new-booking/student" },
+  { key: "SENIOR_CITIZEN", label: "Senior Citizen Booking", route: "/new-booking/senior-citizen" },
+];
 
 const SECTION_HEADER = {
   backgroundColor: "#f0f0f0",
@@ -97,9 +111,7 @@ const card = {
   boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
 };
 
-// Per-part coloured status pill — copied from the hotel view. A combined
-// label like "Confirmed/Cancelled" colours each word on its own:
-// Confirmed / ReConfirmed → green, Cancelled → red, On Request → orange.
+// Per-part coloured status pill — copied from the hotel view.
 const StatusBadge = ({ status }) => {
   const colorFor = (part) => {
     const p = (part || "").trim().toUpperCase();
@@ -121,7 +133,6 @@ const StatusBadge = ({ status }) => {
   );
 };
 
-// Inline label/value row matching the hotel view's InfoRow.
 function InfoRow({ label, value }) {
   return (
     <div
@@ -135,14 +146,32 @@ function InfoRow({ label, value }) {
   );
 }
 
+// Date/time helpers used by the History modal columns.
+const parseLocal = (str) => {
+  if (!str) return null;
+  const normalized = String(str).includes("T") ? str : `${str}T00:00:00`;
+  const d = new Date(normalized);
+  return isNaN(d.getTime()) ? null : d;
+};
+const formatDateOnly = (dateStr) => {
+  const d = parseLocal(dateStr);
+  if (!d) return "-";
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${day} ${d.toLocaleString("default", { month: "short" })} ${d.getFullYear()}`;
+};
+const formatTimeOnly = (dateStr) => {
+  const d = parseLocal(dateStr);
+  if (!d) return "-";
+  const hrs = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const sec = String(d.getSeconds()).padStart(2, "0");
+  return `${hrs}:${min}:${sec}`;
+};
+
 export default function LongStayBookingDetailView() {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
-  // Agent-role gate (UI visibility only) — hides internal/admin-facing actions
-  // (Booking Remark, Notes, Confirmation No.) for Agent logins.
-  // currentActiveRole isn't set for single-role logins, so fall back to
-  // userRole (same convention as HotelSearch.jsx). Visibility only — no
-  // API/flow/permission change.
+  // Agent-role gate (UI visibility only).
   const activeRole = String(localStorage.getItem("currentActiveRole") || "")
     .trim()
     .toUpperCase();
@@ -165,18 +194,11 @@ export default function LongStayBookingDetailView() {
   const [cancellingBooking, setCancellingBooking] = useState(false);
   const [cancellationReason, setCancellationReason] = useState("");
 
-  // Reconfirm (Confirm / Reject popup)
+  // Reconfirm — long stay has no On Request flow, so no Reject branch.
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmingBooking, setConfirmingBooking] = useState(false);
 
-  // Reject (follow-up modal from Reconfirm → Reject)
-  const [showRejectModal, setShowRejectModal] = useState(false);
-  const [rejectedBy, setRejectedBy] = useState("");
-  const [rejectedByError, setRejectedByError] = useState("");
-  const [rejectionRemarks, setRejectionRemarks] = useState("");
-  const [rejectingBooking, setRejectingBooking] = useState(false);
-
-  // Agent Reference (PATCH confirmation-status / POST agent-reference)
+  // Agent Reference
   const [showConfirmStatusModal, setShowConfirmStatusModal] = useState(false);
   const [confirmAgentLpo, setConfirmAgentLpo] = useState("");
   const [confirmAgentLpoError, setConfirmAgentLpoError] = useState("");
@@ -194,10 +216,7 @@ export default function LongStayBookingDetailView() {
   const [remarkInput, setRemarkInput] = useState("");
   const [savingRemark, setSavingRemark] = useState(false);
 
-  // Notes — viewed and added in a modal on this page (replaces the separate
-  // /notes navigation). Uses the existing GET/POST endpoints unchanged.
-  // Backend shape for this booking type: GET returns a bare array of rows
-  // ({ id, note, createdBy, createdDate }); POST body is { note, createdBy }.
+  // Notes
   const [showNotesModal, setShowNotesModal] = useState(false);
   const [noteInput, setNoteInput] = useState("");
   const [savingNote, setSavingNote] = useState(false);
@@ -208,9 +227,18 @@ export default function LongStayBookingDetailView() {
   const [resendingMail, setResendingMail] = useState(false);
 
   // PDF generation feedback + in-page preview (iframe modal).
-  // Shape: { url, label, type }.
   const [generatingPdfType, setGeneratingPdfType] = useState(null);
   const [pdfPreview, setPdfPreview] = useState(null);
+
+  // Booking History modal (read-only timeline).
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+  // ADD NEW ITEM (cross-type amendment) — picker + linked children list.
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [selectedAddItemType, setSelectedAddItemType] = useState(
+    ADD_NEW_ITEM_TYPES[0].key,
+  );
+  const [amendmentLinks, setAmendmentLinks] = useState([]);
 
   const fetchDetail = async () => {
     if (!bookingId) {
@@ -236,37 +264,95 @@ export default function LongStayBookingDetailView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingId]);
 
+  // Cross-type amendment children, keyed off this long-stay's bookingCode as
+  // the parent. Read-only; failures leave the list empty so nothing else on
+  // the page is affected.
+  const amendmentParentCode = detail?.bookingCode;
+  useEffect(() => {
+    let alive = true;
+    if (!amendmentParentCode) {
+      setAmendmentLinks([]);
+      return undefined;
+    }
+    axiosInstance
+      .get(
+        `/api/booking-amendment-link/parent/${encodeURIComponent(
+          amendmentParentCode,
+        )}`,
+      )
+      .then((res) => {
+        if (!alive) return;
+        setAmendmentLinks(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch(() => alive && setAmendmentLinks([]));
+    return () => { alive = false; };
+  }, [amendmentParentCode]);
+
   // ── Status helpers (mirror BookingDetailedView) ────────────────────
-  const normalizedStatus = String(detail?.confirmationStatus || "")
-    .replace(/\s+/g, "")
-    .toUpperCase();
+  // confirmationStatus drives the explicit lifecycle ("ReConfirmed" /
+  // "Rejected"), but a freshly created long-stay booking leaves it null and
+  // only sets bookingStatus = "CONFIRMED". So derive an effective status that
+  // falls back to bookingStatus — otherwise the Confirmed state would be
+  // treated as "no status" and Agent Reference / Confirmation No. would stay
+  // locked even though the booking is already Confirmed.
+  const rawConfStatus = String(detail?.confirmationStatus || "").trim();
+  const normalizedConf = rawConfStatus.replace(/\s+/g, "").toUpperCase();
   const isCancelled =
     detail?.bookingStatus === "CANCELLED" ||
     detail?.cancelStatus === true ||
-    normalizedStatus === "CANCELLED";
-  // Final docs (real Voucher / Invoice) once reconfirmed or completed;
-  // otherwise the Proforma equivalents. `reconfirmation` is the explicit
-  // boolean the backend sets alongside confirmationStatus = "ReConfirmed".
-  const showsFinalDocs =
-    detail?.reconfirmation === true ||
-    normalizedStatus === "RECONFIRMED" ||
-    normalizedStatus === "COMPLETED";
-  // Agent Reference / Confirmation No. can only be saved once the booking
-  // is Confirmed-or-better.
-  const isConfirmedOrLater =
-    normalizedStatus === "CONFIRMED" ||
-    normalizedStatus === "RECONFIRMED" ||
-    normalizedStatus === "COMPLETED" ||
-    detail?.reconfirmation === true;
+    normalizedConf === "CANCELLED";
+  const isReconfirmed =
+    detail?.reconfirmation === true || normalizedConf === "RECONFIRMED";
 
-  // Status label fed to the hotel-style StatusBadge. When cancelled,
-  // surface the prior status (e.g. "ReConfirmed/Cancelled") if known.
-  const displayStatus =
-    isCancelled && detail?.cancelledFromStatus
+  // Non-cancel status label. Long-stay bookings are always created CONFIRMED,
+  // so an unset confirmationStatus is treated as "Confirmed".
+  const baseStatusLabel = isReconfirmed
+    ? "ReConfirmed"
+    : rawConfStatus && normalizedConf !== "CANCELLED"
+    ? rawConfStatus // e.g. "Rejected"
+    : "Confirmed";
+
+  const showsFinalDocs =
+    isReconfirmed || normalizedConf === "COMPLETED";
+  // Confirmed-or-better unlocks Agent Reference / Confirmation No.
+  const isConfirmedOrLater =
+    isReconfirmed ||
+    baseStatusLabel.toUpperCase() === "CONFIRMED" ||
+    normalizedConf === "COMPLETED";
+
+  // Pre-cancellation doc / reference gating — read the persisted
+  // cancelledFromStatus when present, else the live flags.
+  const priorStatus = String(detail?.cancelledFromStatus || "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  const cancelledShowsFinalDocs =
+    priorStatus === "RECONFIRMED" || priorStatus === "COMPLETED" || isReconfirmed;
+  const cancelledFromConfirmedOrLater =
+    priorStatus === "CONFIRMED" ||
+    priorStatus === "RECONFIRMED" ||
+    priorStatus === "COMPLETED" ||
+    isConfirmedOrLater;
+
+  // Status label fed to the badge. When cancelled, surface the prior status so
+  // e.g. a confirmed booking shows "Confirmed/Cancelled" (not just
+  // "Cancelled"). cancelledFromStatus is persisted by the cancel flow; for
+  // older rows we reconstruct it (every long-stay starts Confirmed).
+  const displayStatus = isCancelled
+    ? detail?.cancelledFromStatus
       ? `${detail.cancelledFromStatus}/Cancelled`
-      : isCancelled
-      ? "Cancelled"
-      : detail?.confirmationStatus || detail?.bookingStatus;
+      : `${baseStatusLabel}/Cancelled`
+    : baseStatusLabel;
+
+  // Cancel button gate: cancellation isn't allowed once the stay has started.
+  const isPastCheckIn = (() => {
+    const raw = detail?.checkInDate;
+    if (!raw) return false;
+    const checkIn = new Date(
+      String(raw).includes("T") ? raw : `${raw}T00:00:00`,
+    );
+    if (isNaN(checkIn.getTime())) return false;
+    return new Date().getTime() > checkIn.getTime();
+  })();
 
   // ── Cancel ─────────────────────────────────────────────────────────
   const openCancelModal = () => {
@@ -297,7 +383,7 @@ export default function LongStayBookingDetailView() {
     }
   };
 
-  // ── Reconfirm ──────────────────────────────────────────────────────
+  // ── Reconfirm (no Reject — long stay has no On Request flow) ───────
   const openConfirmModal = () => setShowConfirmModal(true);
 
   const confirmBooking = async () => {
@@ -318,45 +404,6 @@ export default function LongStayBookingDetailView() {
       );
     } finally {
       setConfirmingBooking(false);
-    }
-  };
-
-  // ── Reject (Reconfirm popup → "Reject") ────────────────────────────
-  const openRejectModal = () => {
-    setShowConfirmModal(false);
-    setRejectedBy("");
-    setRejectedByError("");
-    setRejectionRemarks("");
-    setShowRejectModal(true);
-  };
-
-  const rejectBooking = async () => {
-    const rb = (rejectedBy || "").trim();
-    if (!rb) {
-      setRejectedByError("Rejected By is required");
-      return;
-    }
-    setRejectedByError("");
-    try {
-      setRejectingBooking(true);
-      await axiosInstance.patch(
-        `/api/longStayBooking/${bookingId}/confirmation-status`,
-        {
-          action: "REJECT",
-          rejectedBy: rb,
-          rejectionRemarks: (rejectionRemarks || "").trim() || null,
-        }
-      );
-      setShowRejectModal(false);
-      toast.success("Booking rejected.");
-      await fetchDetail();
-    } catch (error) {
-      toast.error(
-        error.response?.data?.message ||
-          "Failed to reject booking. Please try again."
-      );
-    } finally {
-      setRejectingBooking(false);
     }
   };
 
@@ -402,7 +449,7 @@ export default function LongStayBookingDetailView() {
     }
   };
 
-  // ── Confirmation Number (prefill from agent-reference, save via PATCH) ──
+  // ── Confirmation Number ────────────────────────────────────────────
   const openConfirmationNoModal = async () => {
     setConfirmationNoInput("");
     setConfirmationNoError("");
@@ -444,14 +491,13 @@ export default function LongStayBookingDetailView() {
     }
   };
 
-  // ── Notes (modal-based; replaces the standalone /notes page link) ──
+  // ── Notes ─────────────────────────────────────────────────────────
   const fetchNotes = useCallback(() => {
     if (!bookingId) return undefined;
     setNotesLoading(true);
     return axiosInstance
       .get(`/api/longStayBooking/${bookingId}/notes`)
       .then((res) => {
-        // Endpoint returns a bare array of note rows.
         setBookingNotes(Array.isArray(res.data) ? res.data : []);
       })
       .catch(() => setBookingNotes([]))
@@ -475,9 +521,6 @@ export default function LongStayBookingDetailView() {
     }
     try {
       setSavingNote(true);
-      // SAME endpoint + payload shape the standalone /notes page uses
-      // (body field is `note`, not `noteText`). Nothing about how notes are
-      // stored is changed.
       const createdBy =
         localStorage.getItem("UserName") ||
         sessionStorage.getItem("UserName") ||
@@ -549,9 +592,7 @@ export default function LongStayBookingDetailView() {
     }
   };
 
-  // ── PDF preview — shared gateway (Proforma / Final Voucher & Invoice) ──
-  // `type` matches the backend enum: VOUCHER | PROFORMA_VOUCHER |
-  // INVOICE | PROFORMA_INVOICE. Renders the PDF inside an iframe modal.
+  // ── PDF preview ────────────────────────────────────────────────────
   const handleDownloadPdf = async (type, label) => {
     if (!bookingId) return;
     try {
@@ -580,6 +621,64 @@ export default function LongStayBookingDetailView() {
     }
   };
 
+  // Booking lifecycle events for the History modal. Each row is gated on its
+  // backend timestamp being present and shows the per-action "Performed By"
+  // the backend now records (createdBy / confirmedBy / reconfirmedBy /
+  // cancelledBy). Created falls back to the employee/creator label; sorted
+  // chronologically — mirrors the hotel detail view.
+  const creatorLabel =
+    detail?.confirmedBy || detail?.employeeName || "-";
+  const bookingHistory = (() => {
+    if (!detail) return [];
+    const events = [];
+    if (detail.bookingDateTime) {
+      events.push({
+        action: "Booking Created",
+        at: detail.bookingDateTime,
+        by: creatorLabel,
+      });
+    }
+    if (detail.confirmedDate) {
+      events.push({
+        action: "Booking Confirmed",
+        at: detail.confirmedDate,
+        by: detail.confirmedBy || "-",
+      });
+    }
+    if (detail.reconfirmedDate) {
+      events.push({
+        action: "Booking Reconfirmed",
+        at: detail.reconfirmedDate,
+        by: detail.reconfirmedBy || "-",
+      });
+    }
+    if (detail.cancelledAt) {
+      events.push({
+        action: "Booking Cancelled",
+        at: detail.cancelledAt,
+        by: detail.cancelledBy || "-",
+      });
+    }
+    return events.sort((a, b) => {
+      const da = parseLocal(a.at)?.getTime() ?? 0;
+      const db = parseLocal(b.at)?.getTime() ?? 0;
+      return da - db;
+    });
+  })();
+
+  // Currency formatting helper used by the Cancel-modal warning + summary.
+  const currencyLabel = (amountAed) => {
+    if (amountAed == null) return "-";
+    if (
+      detail?.displayCurrencyCode &&
+      detail.displayCurrencyCode !== "AED" &&
+      Number(detail.displayAmount) > 0
+    ) {
+      return `${detail.displayCurrencyCode} ${Number(detail.displayAmount).toFixed(2)}`;
+    }
+    return `AED ${Number(amountAed).toFixed(2)}`;
+  };
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <Topbar />
@@ -587,9 +686,8 @@ export default function LongStayBookingDetailView() {
         <Sidebar />
         <main className="flex-grow-1 p-4" style={{ overflow: "auto" }}>
           <Container fluid style={{ maxWidth: "1100px" }}>
-            {/* Header — Back + title + booking code + status badge,
-                matching the hotel detail view. */}
-            <div className="mb-3 d-flex align-items-center flex-wrap gap-2">
+            {/* Back button — header layout matches the hotel view. */}
+            <div className="mb-3">
               <button
                 style={BTN_NEUTRAL}
                 onClick={() => navigate(-1)}
@@ -606,56 +704,30 @@ export default function LongStayBookingDetailView() {
               >
                 Booking Details
               </span>
-              {(detail?.bookingCode || rowStub?.bookingCode) && (
-                <span
-                  style={{
-                    marginLeft: "10px",
-                    fontWeight: "700",
-                    fontSize: "0.95rem",
-                    color: "#c0392b",
-                  }}
-                >
-                  {detail?.bookingCode || rowStub?.bookingCode}
-                </span>
-              )}
-              {detail && (
-                <span style={{ marginLeft: "10px" }}>
-                  <StatusBadge status={displayStatus} />
-                </span>
-              )}
             </div>
 
-            {detailLoading || !detail ? (
+            {detailLoading ? (
               <div className="text-center py-5">
-                <Spinner animation="border" />
-                <p className="mt-2 text-muted small">Loading details…</p>
+                <Spinner animation="border" style={{ color: "#c0392b" }} />
+                <p className="mt-3 text-muted">Loading booking details...</p>
+              </div>
+            ) : !detail ? (
+              <div className="text-center py-5 text-muted">
+                Booking not found.
               </div>
             ) : (
               <>
-                {/* Booking Info */}
+                {/* ── Booking Info ──────────────────────────────────── */}
                 <div style={card}>
                   <div style={SECTION_HEADER}>Booking Information</div>
                   <div style={{ padding: "12px 16px" }}>
                     <Row>
                       <Col md={6}>
-                        <InfoRow label="Booking Code" value={detail.bookingCode} />
                         <InfoRow
-                          label="Status"
-                          value={<StatusBadge status={displayStatus} />}
+                          label="Booking Code"
+                          value={detail.bookingCode}
                         />
-                        <InfoRow
-                          label="Cancel Status"
-                          value={
-                            detail.cancelStatus ? "Cancelled" : "Active"
-                          }
-                        />
-                        <InfoRow
-                          label="Booked On"
-                          value={formatDateTime(detail.bookingDateTime)}
-                        />
-                      </Col>
-                      <Col md={6}>
-                        <InfoRow label="Hotel" value={detail.hotelName} />
+                        <InfoRow label="Hotel Name" value={detail.hotelName} />
                         <InfoRow
                           label="Check-In"
                           value={formatDateTime(detail.checkInDate)}
@@ -665,25 +737,49 @@ export default function LongStayBookingDetailView() {
                           value={formatDateTime(detail.checkOutDate)}
                         />
                         <InfoRow
-                          label="Total Nights"
-                          value={detail.totalNights}
+                          label="No. of Nights"
+                          value={
+                            detail.totalNights
+                              ? `${detail.totalNights} Night${detail.totalNights !== 1 ? "s" : ""}`
+                              : "-"
+                          }
                         />
-                        {/* Optional "Booking Done By Employee" — only
-                            rendered when an employee was picked at
-                            search time. Backend resolves the name from
-                            the joined employee row. */}
+                        {detail.bookingDateTime && (
+                          <InfoRow
+                            label="Booking Date"
+                            value={formatDateTime(detail.bookingDateTime)}
+                          />
+                        )}
+                      </Col>
+                      <Col md={6}>
                         {detail.employeeName && (
                           <InfoRow
                             label="Booked By Employee"
                             value={detail.employeeName}
                           />
                         )}
+                        <InfoRow
+                          label="Agent Reference"
+                          value={detail.agentLpo}
+                        />
+                        <InfoRow
+                          label="Confirmation No."
+                          value={detail.confirmationNumber}
+                        />
+                        <InfoRow
+                          label="Cancel Status"
+                          value={detail.cancelStatus ? "Cancelled" : "Active"}
+                        />
+                        <InfoRow
+                          label="Status"
+                          value={<StatusBadge status={displayStatus} />}
+                        />
                       </Col>
                     </Row>
                   </div>
                 </div>
 
-                {/* Room & Rate Plan */}
+                {/* ── Room & Rate Plan ──────────────────────────────── */}
                 <div style={card}>
                   <div style={SECTION_HEADER}>Room &amp; Rate Plan</div>
                   <div style={{ padding: "12px 16px" }}>
@@ -724,7 +820,7 @@ export default function LongStayBookingDetailView() {
                   </div>
                 </div>
 
-                {/* Pricing */}
+                {/* ── Pricing ──────────────────────────────────────── */}
                 <div style={card}>
                   <div style={SECTION_HEADER}>Pricing</div>
                   <div style={{ padding: "12px 16px" }}>
@@ -746,20 +842,14 @@ export default function LongStayBookingDetailView() {
                         />
                         <InfoRow
                           label="Total Amount"
-                          value={
-                            detail.displayCurrencyCode &&
-                            detail.displayCurrencyCode !== "AED" &&
-                            Number(detail.displayAmount) > 0
-                              ? `${detail.displayCurrencyCode} ${Number(detail.displayAmount).toFixed(2)}`
-                              : detail.totalAmount
-                          }
+                          value={currencyLabel(detail.totalAmount)}
                         />
                       </Col>
                     </Row>
                   </div>
                 </div>
 
-                {/* Primary Guest */}
+                {/* ── Primary Guest ─────────────────────────────────── */}
                 <div style={card}>
                   <div style={SECTION_HEADER}>Primary Guest</div>
                   <div style={{ padding: "12px 16px" }}>
@@ -768,15 +858,15 @@ export default function LongStayBookingDetailView() {
                         <Col md={6}>
                           <InfoRow
                             label="Name"
-                            value={`${
-                              detail.primaryGuestDetails.salutation || ""
-                            } ${
-                              detail.primaryGuestDetails.firstName || ""
-                            } ${
-                              detail.primaryGuestDetails.middleName || ""
-                            } ${detail.primaryGuestDetails.lastName || ""}`
-                              .replace(/\s+/g, " ")
-                              .trim()}
+                            value={[
+                              detail.primaryGuestDetails.salutation,
+                              detail.primaryGuestDetails.firstName,
+                              detail.primaryGuestDetails.middleName,
+                              detail.primaryGuestDetails.lastName,
+                            ]
+                              .filter(Boolean)
+                              .join(" ")
+                              .trim() || "-"}
                           />
                           <InfoRow
                             label="Email"
@@ -829,7 +919,7 @@ export default function LongStayBookingDetailView() {
                   </div>
                 </div>
 
-                {/* Passengers */}
+                {/* ── Passengers ────────────────────────────────────── */}
                 {detail.rooms && detail.rooms.length > 0 && (
                   <div style={card}>
                     <div style={SECTION_HEADER}>Passengers</div>
@@ -881,29 +971,130 @@ export default function LongStayBookingDetailView() {
                   </div>
                 )}
 
-                {/* Remarks */}
-                {detail.remarks && (
+                {/* ── Related Sub-Bookings of OTHER types (amendment links) ──
+                    Hotel / 24Hr / Day Stay / Gov / Student / Senior Citizen
+                    children attached to this long-stay parent via
+                    /api/booking-amendment-link. */}
+                {amendmentLinks && amendmentLinks.length > 0 && (
                   <div style={card}>
-                    <div style={SECTION_HEADER}>Remarks</div>
-                    <div
-                      style={{
-                        padding: "10px 16px",
-                        fontSize: "0.83rem",
-                        color: "#333",
-                      }}
-                    >
-                      {detail.remarks}
+                    <div style={SECTION_HEADER}>
+                      Related Sub-Bookings — Other Types ({amendmentLinks.length})
+                    </div>
+                    <div style={{ padding: "10px 16px" }}>
+                      {amendmentLinks.map((lnk) => (
+                        <div
+                          key={lnk.id}
+                          style={{
+                            borderTop: "1px solid #eee",
+                            padding: "10px 0",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                color: "#c0392b",
+                                fontWeight: "700",
+                                fontSize: "0.9rem",
+                              }}
+                            >
+                              {lnk.childBookingCode || "-"}
+                              <span
+                                style={{
+                                  marginLeft: "8px",
+                                  color: "#888",
+                                  fontWeight: "500",
+                                  fontSize: "0.8rem",
+                                }}
+                              >
+                                ({lnk.childTypeLabel || lnk.childType})
+                              </span>
+                            </span>
+                            {lnk.childDetailRoutePrefix && lnk.childBookingId != null && (
+                              <button
+                                style={BTN_NEUTRAL}
+                                onClick={() =>
+                                  navigate(
+                                    `${lnk.childDetailRoutePrefix}${lnk.childBookingId}`,
+                                  )
+                                }
+                              >
+                                View
+                              </button>
+                            )}
+                          </div>
+                          <Row>
+                            <Col md={6}>
+                              <InfoRow
+                                label="Booking Type"
+                                value={lnk.childTypeLabel || lnk.childType}
+                              />
+                              <InfoRow
+                                label="Reference No."
+                                value={lnk.childReferenceNumber}
+                              />
+                              <InfoRow label="Hotel" value={lnk.childHotelName} />
+                            </Col>
+                            <Col md={6}>
+                              <InfoRow
+                                label="Check-In"
+                                value={lnk.childCheckInDate}
+                              />
+                              <InfoRow
+                                label="Check-Out"
+                                value={lnk.childCheckOutDate}
+                              />
+                              <InfoRow
+                                label="Total Rate"
+                                value={
+                                  lnk.childTotalRate != null
+                                    ? Number(lnk.childTotalRate).toFixed(2)
+                                    : "-"
+                                }
+                              />
+                              <InfoRow
+                                label="Status"
+                                value={<StatusBadge status={lnk.childStatus} />}
+                              />
+                            </Col>
+                          </Row>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
 
-                {/* ── Related Notes (ad-hoc notes added via the NOTES modal) ──
-                    Same data shown in the modal, surfaced here on the page so
-                    notes are visible without opening the modal. Read-only;
-                    saves still happen through the existing modal flow. */}
+                {/* ── Remarks ───────────────────────────────────────── */}
                 <div style={card}>
                   <div style={SECTION_HEADER}>
-                    Related Notes{" "}
+                    Remarks{" "}
+                    <span style={{ fontSize: "1rem", color: "#555" }}>⊟</span>
+                  </div>
+                  <div
+                    style={{
+                      padding: "10px 16px",
+                      fontSize: "0.83rem",
+                      color: "#333",
+                    }}
+                  >
+                    {detail.remarks ? (
+                      <p style={{ marginBottom: 0 }}>{detail.remarks}</p>
+                    ) : (
+                      <span className="text-muted">No remarks.</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Related Notes ─────────────────────────────────── */}
+                <div style={card}>
+                  <div style={SECTION_HEADER}>
+                    Notes{" "}
                     {bookingNotes.length > 0 && (
                       <span
                         style={{
@@ -970,142 +1161,288 @@ export default function LongStayBookingDetailView() {
                 </div>
 
                 {/* ── Action Buttons ──────────────────────────────────
-                    Ported from the hotel detail view. The PROFORMA vs
-                    FINAL doc pair flips off `showsFinalDocs`. Live-booking
-                    actions (Cancel / Reconfirm) are hidden once the
-                    booking is cancelled, while the doc + reference actions
-                    remain available. */}
-                <div
-                  style={{
-                    marginBottom: "10px",
-                    display: "flex",
-                    gap: "8px",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  {!isCancelled && (
-                    <button style={BTN_DANGER} onClick={openCancelModal}>
-                      CANCEL
-                    </button>
-                  )}
-
-                  {!showsFinalDocs && !isCancelled && (
-                    <button style={BTN_TEAL} onClick={openConfirmModal}>
-                      RECONFIRM
-                    </button>
-                  )}
-
-                  {!showsFinalDocs ? (
-                    <>
-                      <button
-                        style={BTN_INFO}
-                        disabled={generatingPdfType === "PROFORMA_VOUCHER"}
-                        onClick={() =>
-                          handleDownloadPdf(
-                            "PROFORMA_VOUCHER",
-                            "Proforma Voucher"
-                          )
-                        }
-                      >
-                        {generatingPdfType === "PROFORMA_VOUCHER"
-                          ? "GENERATING..."
-                          : "PROFORMA VOUCHER"}
-                      </button>
-                      <button
-                        style={BTN_INFO}
-                        disabled={generatingPdfType === "PROFORMA_INVOICE"}
-                        onClick={() =>
-                          handleDownloadPdf(
-                            "PROFORMA_INVOICE",
-                            "Proforma Invoice"
-                          )
-                        }
-                      >
-                        {generatingPdfType === "PROFORMA_INVOICE"
-                          ? "GENERATING..."
-                          : "PROFORMA INVOICE"}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        style={BTN_INFO}
-                        disabled={generatingPdfType === "VOUCHER"}
-                        onClick={() => handleDownloadPdf("VOUCHER", "Voucher")}
-                      >
-                        {generatingPdfType === "VOUCHER"
-                          ? "GENERATING..."
-                          : "VOUCHER"}
-                      </button>
+                    Cancelled and live bookings render different rows, same as
+                    the hotel detail view. Cancelled keeps the doc / agent-ref /
+                    confirmation-no. / resend / remark / notes / history set,
+                    but drops Add New Item / Cancel / Reconfirm. */}
+                {isCancelled && (
+                  <div
+                    style={{
+                      marginBottom: "10px",
+                      display: "flex",
+                      gap: "8px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    {cancelledShowsFinalDocs ? (
                       <button
                         style={BTN_INFO}
                         disabled={generatingPdfType === "INVOICE"}
-                        onClick={() => handleDownloadPdf("INVOICE", "Invoice")}
+                        onClick={() =>
+                          handleDownloadPdf("INVOICE", "Invoice")
+                        }
                       >
                         {generatingPdfType === "INVOICE"
                           ? "GENERATING..."
                           : "INVOICE"}
                       </button>
-                    </>
-                  )}
+                    ) : (
+                      <>
+                        <button
+                          style={BTN_INFO}
+                          disabled={generatingPdfType === "PROFORMA_VOUCHER"}
+                          onClick={() =>
+                            handleDownloadPdf(
+                              "PROFORMA_VOUCHER",
+                              "Proforma Voucher",
+                            )
+                          }
+                        >
+                          {generatingPdfType === "PROFORMA_VOUCHER"
+                            ? "GENERATING..."
+                            : "PROFORMA VOUCHER"}
+                        </button>
+                        <button
+                          style={BTN_INFO}
+                          disabled={generatingPdfType === "PROFORMA_INVOICE"}
+                          onClick={() =>
+                            handleDownloadPdf(
+                              "PROFORMA_INVOICE",
+                              "Proforma Invoice",
+                            )
+                          }
+                        >
+                          {generatingPdfType === "PROFORMA_INVOICE"
+                            ? "GENERATING..."
+                            : "PROFORMA INVOICE"}
+                        </button>
+                      </>
+                    )}
 
-                  <button
-                    style={BTN_SKY}
-                    onClick={() => {
-                      if (!isConfirmedOrLater) {
-                        toast.error(
-                          "Agent Reference can only be added once the booking is Confirmed or ReConfirmed."
-                        );
-                        return;
-                      }
-                      openConfirmStatusModal();
-                    }}
-                  >
-                    ADD AGENT REFERENCE
-                  </button>
-
-                  {!isAgentRole && (
                     <button
-                      style={BTN_INDIGO}
+                      style={BTN_SKY}
                       onClick={() => {
-                        if (!isConfirmedOrLater) {
+                        if (!cancelledFromConfirmedOrLater) {
                           toast.error(
-                            "Confirmation Number can only be added once the booking is Confirmed or ReConfirmed."
+                            "Agent Reference can only be added once the booking is Confirmed or ReConfirmed.",
                           );
                           return;
                         }
-                        openConfirmationNoModal();
+                        openConfirmStatusModal();
                       }}
                     >
-                      CONFIRMATION NO.
+                      ADD AGENT REFERENCE
                     </button>
-                  )}
 
-                  <button
-                    style={BTN_ORANGE}
-                    onClick={resendMailToAgent}
-                    disabled={resendingMail}
-                  >
-                    {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
-                  </button>
+                    {!isAgentRole && (
+                      <button
+                        style={BTN_INDIGO}
+                        onClick={() => {
+                          if (!cancelledFromConfirmedOrLater) {
+                            toast.error(
+                              "Confirmation Number can only be added once the booking is Confirmed or ReConfirmed.",
+                            );
+                            return;
+                          }
+                          openConfirmationNoModal();
+                        }}
+                      >
+                        CONFIRMATION NO.
+                      </button>
+                    )}
 
-                  {!isAgentRole && (
-                    <button style={BTN_ACCENT} onClick={openRemarkModal}>
-                      BOOKING REMARK
-                    </button>
-                  )}
-
-                  {!isAgentRole && (
                     <button
-                      style={BTN_NEUTRAL}
-                      onClick={openNotesModal}
+                      style={BTN_ORANGE}
+                      onClick={resendMailToAgent}
+                      disabled={resendingMail}
                     >
-                      NOTES
+                      {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
                     </button>
-                  )}
-                </div>
 
-                {/* ── Booking Date footer (matches the hotel view) ──── */}
+                    {!isAgentRole && (
+                      <button style={BTN_ACCENT} onClick={openRemarkModal}>
+                        BOOKING REMARK
+                      </button>
+                    )}
+
+                    {!isAgentRole && (
+                      <button
+                        style={BTN_NEUTRAL}
+                        onClick={openNotesModal}
+                      >
+                        NOTES
+                      </button>
+                    )}
+
+                    <button
+                      style={BTN_HISTORY}
+                      onClick={() => setShowHistoryModal(true)}
+                    >
+                      HISTORY
+                    </button>
+                  </div>
+                )}
+                {!isCancelled && (
+                  <div
+                    style={{
+                      marginBottom: "10px",
+                      display: "flex",
+                      gap: "8px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <button
+                      style={BTN_PRIMARY}
+                      onClick={() => {
+                        setSelectedAddItemType(ADD_NEW_ITEM_TYPES[0].key);
+                        setShowAddItemModal(true);
+                      }}
+                    >
+                      ADD NEW ITEM
+                    </button>
+
+                    <button
+                      style={{
+                        ...BTN_DANGER,
+                        opacity: isPastCheckIn ? 0.55 : 1,
+                        cursor: isPastCheckIn ? "not-allowed" : "pointer",
+                      }}
+                      onClick={openCancelModal}
+                      disabled={isPastCheckIn}
+                      title={
+                        isPastCheckIn
+                          ? "Cancellation is not allowed after the check-in date."
+                          : undefined
+                      }
+                    >
+                      CANCEL
+                    </button>
+
+                    {!showsFinalDocs && (
+                      <button style={BTN_TEAL} onClick={openConfirmModal}>
+                        RECONFIRM
+                      </button>
+                    )}
+
+                    {!showsFinalDocs ? (
+                      <>
+                        <button
+                          style={BTN_INFO}
+                          disabled={generatingPdfType === "PROFORMA_VOUCHER"}
+                          onClick={() =>
+                            handleDownloadPdf(
+                              "PROFORMA_VOUCHER",
+                              "Proforma Voucher",
+                            )
+                          }
+                        >
+                          {generatingPdfType === "PROFORMA_VOUCHER"
+                            ? "GENERATING..."
+                            : "PROFORMA VOUCHER"}
+                        </button>
+                        <button
+                          style={BTN_INFO}
+                          disabled={generatingPdfType === "PROFORMA_INVOICE"}
+                          onClick={() =>
+                            handleDownloadPdf(
+                              "PROFORMA_INVOICE",
+                              "Proforma Invoice",
+                            )
+                          }
+                        >
+                          {generatingPdfType === "PROFORMA_INVOICE"
+                            ? "GENERATING..."
+                            : "PROFORMA INVOICE"}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          style={BTN_INFO}
+                          disabled={generatingPdfType === "VOUCHER"}
+                          onClick={() => handleDownloadPdf("VOUCHER", "Voucher")}
+                        >
+                          {generatingPdfType === "VOUCHER"
+                            ? "GENERATING..."
+                            : "VOUCHER"}
+                        </button>
+                        <button
+                          style={BTN_INFO}
+                          disabled={generatingPdfType === "INVOICE"}
+                          onClick={() => handleDownloadPdf("INVOICE", "Invoice")}
+                        >
+                          {generatingPdfType === "INVOICE"
+                            ? "GENERATING..."
+                            : "INVOICE"}
+                        </button>
+                      </>
+                    )}
+
+                    <button
+                      style={BTN_SKY}
+                      onClick={() => {
+                        if (!isConfirmedOrLater) {
+                          toast.error(
+                            "Agent Reference can only be added once the booking is Confirmed or ReConfirmed.",
+                          );
+                          return;
+                        }
+                        openConfirmStatusModal();
+                      }}
+                    >
+                      ADD AGENT REFERENCE
+                    </button>
+
+                    {!isAgentRole && (
+                      <button
+                        style={BTN_INDIGO}
+                        onClick={() => {
+                          if (!isConfirmedOrLater) {
+                            toast.error(
+                              "Confirmation Number can only be added once the booking is Confirmed or ReConfirmed.",
+                            );
+                            return;
+                          }
+                          openConfirmationNoModal();
+                        }}
+                      >
+                        CONFIRMATION NO.
+                      </button>
+                    )}
+
+                    <button
+                      style={BTN_ORANGE}
+                      onClick={resendMailToAgent}
+                      disabled={resendingMail}
+                    >
+                      {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
+                    </button>
+
+                    {!isAgentRole && (
+                      <button style={BTN_ACCENT} onClick={openRemarkModal}>
+                        BOOKING REMARK
+                      </button>
+                    )}
+
+                    {!isAgentRole && (
+                      <button
+                        style={BTN_NEUTRAL}
+                        onClick={openNotesModal}
+                      >
+                        NOTES
+                      </button>
+                    )}
+
+                    <button
+                      style={BTN_HISTORY}
+                      onClick={() => setShowHistoryModal(true)}
+                    >
+                      HISTORY
+                    </button>
+                  </div>
+                )}
+
+                {/* ── Booking Date footer ───────────────────────────── */}
                 <div
                   style={{
                     textAlign: "right",
@@ -1116,6 +1453,128 @@ export default function LongStayBookingDetailView() {
                 >
                   Booking Date : {formatDateTime(detail.bookingDateTime)}
                 </div>
+
+                {/* ── Add New Item (Amendment) booking-type picker ──────── */}
+                <Modal
+                  show={showAddItemModal}
+                  onHide={() => setShowAddItemModal(false)}
+                  centered
+                >
+                  <Modal.Header closeButton>
+                    <Modal.Title style={{ fontSize: "1.05rem" }}>
+                      Add New Item
+                    </Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body>
+                    <div style={{ marginBottom: "10px", color: "#555" }}>
+                      Select a booking type to add as a sub-booking of{" "}
+                      <strong>{detail?.bookingCode}</strong>.
+                    </div>
+                    <Form>
+                      {ADD_NEW_ITEM_TYPES.map((t) => (
+                        <Form.Check
+                          key={t.key}
+                          type="radio"
+                          name="addNewItemType"
+                          id={`add-item-${t.key}`}
+                          label={t.label}
+                          value={t.key}
+                          checked={selectedAddItemType === t.key}
+                          onChange={() => setSelectedAddItemType(t.key)}
+                          style={{ marginBottom: "6px" }}
+                        />
+                      ))}
+                    </Form>
+                  </Modal.Body>
+                  <Modal.Footer>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setShowAddItemModal(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={() => {
+                        const chosen = ADD_NEW_ITEM_TYPES.find(
+                          (t) => t.key === selectedAddItemType,
+                        );
+                        if (!chosen) return;
+                        const parent = detail?.bookingCode;
+                        if (!parent) return;
+                        setShowAddItemModal(false);
+                        navigate(
+                          `${chosen.route}?parentBookingCode=${encodeURIComponent(
+                            parent,
+                          )}`,
+                        );
+                      }}
+                    >
+                      Continue
+                    </Button>
+                  </Modal.Footer>
+                </Modal>
+
+                {/* ── Booking History Modal ─────────────────────────── */}
+                <Modal
+                  show={showHistoryModal}
+                  onHide={() => setShowHistoryModal(false)}
+                  centered
+                  size="lg"
+                  scrollable
+                >
+                  <Modal.Header closeButton>
+                    <Modal.Title style={{ fontSize: "1.05rem" }}>
+                      Booking History
+                      {detail?.bookingCode ? ` — ${detail.bookingCode}` : ""}
+                    </Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body>
+                    {bookingHistory.length === 0 ? (
+                      <div className="text-muted text-center py-3">
+                        No history available for this booking.
+                      </div>
+                    ) : (
+                      <Table
+                        responsive
+                        bordered
+                        hover
+                        size="sm"
+                        className="mb-0"
+                        style={{ fontSize: "0.85rem" }}
+                      >
+                        <thead style={{ backgroundColor: "#f0f0f0" }}>
+                          <tr>
+                            <th style={{ width: "60px" }}>S/N</th>
+                            <th>Action</th>
+                            <th>Performed By</th>
+                            <th>Date</th>
+                            <th>Time</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {bookingHistory.map((ev, idx) => (
+                            <tr key={`${ev.action}-${idx}`}>
+                              <td>{idx + 1}</td>
+                              <td>{ev.action}</td>
+                              <td>{ev.by || "-"}</td>
+                              <td>{formatDateOnly(ev.at)}</td>
+                              <td>{formatTimeOnly(ev.at)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    )}
+                  </Modal.Body>
+                  <Modal.Footer>
+                    <Button
+                      variant="secondary"
+                      onClick={() => setShowHistoryModal(false)}
+                    >
+                      Close
+                    </Button>
+                  </Modal.Footer>
+                </Modal>
 
                 {/* ── Cancel Booking Modal ──────────────────────────── */}
                 <Modal
@@ -1147,21 +1606,21 @@ export default function LongStayBookingDetailView() {
                       <p className="fs-5 mb-3">
                         Are you sure you want to cancel this booking?
                       </p>
-                      <div className="text-muted small mb-3">
-                        <div>
-                          <strong>Booking Code:</strong>{" "}
-                          {detail.bookingCode || "N/A"}
+                      {(detail.bookingCode || detail.hotelName) && (
+                        <div className="text-muted small mb-3">
+                          {detail.bookingCode && (
+                            <div>
+                              <strong>Booking Code:</strong>{" "}
+                              {detail.bookingCode}
+                            </div>
+                          )}
+                          {detail.hotelName && (
+                            <div>
+                              <strong>Hotel:</strong> {detail.hotelName}
+                            </div>
+                          )}
                         </div>
-                        {detail.hotelName && (
-                          <div>
-                            <strong>Hotel:</strong> {detail.hotelName}
-                          </div>
-                        )}
-                      </div>
-                      {/* Informational only — booking value warning. Mirrors
-                          the Total Amount shown on the page (converted display
-                          currency when available, else AED). Does not alter
-                          any cancellation logic. */}
+                      )}
                       {detail.totalAmount != null && (
                         <div
                           className="mb-3"
@@ -1176,16 +1635,7 @@ export default function LongStayBookingDetailView() {
                         >
                           <FaExclamationCircle className="me-2 text-warning" />
                           Total value of this booking is{" "}
-                          <strong>
-                            {detail.displayCurrencyCode &&
-                            detail.displayCurrencyCode !== "AED" &&
-                            Number(detail.displayAmount) > 0
-                              ? `${detail.displayCurrencyCode} ${Number(
-                                  detail.displayAmount,
-                                ).toFixed(2)}`
-                              : `AED ${Number(detail.totalAmount).toFixed(2)}`}
-                          </strong>
-                          .
+                          <strong>{currencyLabel(detail.totalAmount)}</strong>.
                           <div className="fw-semibold mt-1">
                             Do you still want to cancel it?
                           </div>
@@ -1246,7 +1696,9 @@ export default function LongStayBookingDetailView() {
                   </Modal.Footer>
                 </Modal>
 
-                {/* ── Reconfirm Booking Modal ───────────────────────── */}
+                {/* ── Reconfirm Booking Modal ─────────────────────────
+                    No Reject branch — long-stay has no "On Request" flow.
+                    Reject is the hotel-side on-request-pending action only. */}
                 <Modal
                   show={showConfirmModal}
                   onHide={() => {
@@ -1273,17 +1725,21 @@ export default function LongStayBookingDetailView() {
                       <p className="fs-5 mb-3">
                         Are you sure you want to reconfirm the booking?
                       </p>
-                      <div className="text-muted small mb-3">
-                        <div>
-                          <strong>Booking Code:</strong>{" "}
-                          {detail.bookingCode || "N/A"}
+                      {(detail.bookingCode || detail.hotelName) && (
+                        <div className="text-muted small mb-3">
+                          {detail.bookingCode && (
+                            <div>
+                              <strong>Booking Code:</strong>{" "}
+                              {detail.bookingCode}
+                            </div>
+                          )}
+                          {detail.hotelName && (
+                            <div>
+                              <strong>Hotel:</strong> {detail.hotelName}
+                            </div>
+                          )}
                         </div>
-                        {detail.hotelName && (
-                          <div>
-                            <strong>Hotel:</strong> {detail.hotelName}
-                          </div>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </Modal.Body>
                   <Modal.Footer
@@ -1293,11 +1749,11 @@ export default function LongStayBookingDetailView() {
                     }}
                   >
                     <Button
-                      variant="danger"
-                      onClick={openRejectModal}
+                      variant="secondary"
+                      onClick={() => setShowConfirmModal(false)}
                       disabled={confirmingBooking}
                     >
-                      Reject
+                      Cancel
                     </Button>
                     <Button
                       variant="success"
@@ -1314,99 +1770,7 @@ export default function LongStayBookingDetailView() {
                           Confirming...
                         </>
                       ) : (
-                        "Confirm"
-                      )}
-                    </Button>
-                  </Modal.Footer>
-                </Modal>
-
-                {/* ── Reject Booking Modal ──────────────────────────── */}
-                <Modal
-                  show={showRejectModal}
-                  onHide={() => {
-                    if (!rejectingBooking) setShowRejectModal(false);
-                  }}
-                  centered
-                  backdrop="static"
-                  keyboard={false}
-                >
-                  <Modal.Header
-                    closeButton={!rejectingBooking}
-                    style={{
-                      backgroundColor: "#fff",
-                      borderBottom: "2px solid #e9ecef",
-                    }}
-                  >
-                    <Modal.Title className="fw-bold d-flex align-items-center">
-                      <FaExclamationCircle className="me-2 text-danger" />
-                      <span>Reject Booking</span>
-                    </Modal.Title>
-                  </Modal.Header>
-                  <Modal.Body style={{ padding: "1.5rem" }}>
-                    <Form.Group className="mb-3">
-                      <Form.Label className="fw-semibold">
-                        Rejected By <span className="text-danger">*</span>
-                      </Form.Label>
-                      <Form.Control
-                        type="text"
-                        value={rejectedBy}
-                        onChange={(e) => {
-                          setRejectedBy(e.target.value);
-                          if (rejectedByError) setRejectedByError("");
-                        }}
-                        isInvalid={!!rejectedByError}
-                        placeholder="Enter name"
-                        disabled={rejectingBooking}
-                        autoFocus
-                      />
-                      <Form.Control.Feedback type="invalid">
-                        {rejectedByError}
-                      </Form.Control.Feedback>
-                    </Form.Group>
-                    <Form.Group className="mb-2">
-                      <Form.Label className="fw-semibold">
-                        Remarks{" "}
-                        <span className="text-muted small">(optional)</span>
-                      </Form.Label>
-                      <Form.Control
-                        as="textarea"
-                        rows={3}
-                        value={rejectionRemarks}
-                        onChange={(e) => setRejectionRemarks(e.target.value)}
-                        placeholder="Reason for rejection"
-                        disabled={rejectingBooking}
-                      />
-                    </Form.Group>
-                  </Modal.Body>
-                  <Modal.Footer
-                    style={{
-                      backgroundColor: "#f8f9fa",
-                      borderTop: "1px solid #dee2e6",
-                    }}
-                  >
-                    <Button
-                      variant="secondary"
-                      onClick={() => setShowRejectModal(false)}
-                      disabled={rejectingBooking}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="danger"
-                      onClick={rejectBooking}
-                      disabled={rejectingBooking}
-                    >
-                      {rejectingBooking ? (
-                        <>
-                          <Spinner
-                            animation="border"
-                            size="sm"
-                            className="me-2"
-                          />
-                          Rejecting...
-                        </>
-                      ) : (
-                        "Reject Booking"
+                        "Reconfirm"
                       )}
                     </Button>
                   </Modal.Footer>
@@ -1444,17 +1808,21 @@ export default function LongStayBookingDetailView() {
                       <p className="fs-6 mb-3">
                         Are you sure you want to update the agent reference?
                       </p>
-                      <div className="text-muted small mb-3">
-                        <div>
-                          <strong>Booking Code:</strong>{" "}
-                          {detail.bookingCode || "N/A"}
+                      {(detail.bookingCode || detail.hotelName) && (
+                        <div className="text-muted small mb-3">
+                          {detail.bookingCode && (
+                            <div>
+                              <strong>Booking Code:</strong>{" "}
+                              {detail.bookingCode}
+                            </div>
+                          )}
+                          {detail.hotelName && (
+                            <div>
+                              <strong>Hotel:</strong> {detail.hotelName}
+                            </div>
+                          )}
                         </div>
-                        {detail.hotelName && (
-                          <div>
-                            <strong>Hotel:</strong> {detail.hotelName}
-                          </div>
-                        )}
-                      </div>
+                      )}
                     </div>
                     <Form.Group
                       controlId="confirmAgentLpoInput"
@@ -1545,17 +1913,21 @@ export default function LongStayBookingDetailView() {
                     </Modal.Title>
                   </Modal.Header>
                   <Modal.Body style={{ padding: "1.5rem" }}>
-                    <div className="text-muted small mb-3">
-                      <div>
-                        <strong>Booking Code:</strong>{" "}
-                        {detail.bookingCode || "N/A"}
+                    {(detail.bookingCode || detail.hotelName) && (
+                      <div className="text-muted small mb-3">
+                        {detail.bookingCode && (
+                          <div>
+                            <strong>Booking Code:</strong>{" "}
+                            {detail.bookingCode}
+                          </div>
+                        )}
+                        {detail.hotelName && (
+                          <div>
+                            <strong>Hotel:</strong> {detail.hotelName}
+                          </div>
+                        )}
                       </div>
-                      {detail.hotelName && (
-                        <div>
-                          <strong>Hotel:</strong> {detail.hotelName}
-                        </div>
-                      )}
-                    </div>
+                    )}
                     <Form.Group controlId="confirmationNoInput">
                       <Form.Label className="fw-semibold mb-1">
                         Confirmation Number{" "}
@@ -1687,9 +2059,7 @@ export default function LongStayBookingDetailView() {
                   </Modal.Footer>
                 </Modal>
 
-                {/* ── Notes Modal — list existing notes (read-only) and add a
-                    new one inline. POSTs to the SAME endpoint and payload
-                    shape the standalone /notes page uses; no flow change. */}
+                {/* ── Notes Modal ───────────────────────────────────── */}
                 <Modal
                   show={showNotesModal}
                   onHide={() => {
@@ -1753,11 +2123,7 @@ export default function LongStayBookingDetailView() {
         </main>
       </div>
 
-      {/* ── PDF Preview Modal ───────────────────────────────────────
-          Renders the Proforma/Final Voucher & Invoice PDF in an iframe
-          on this page (instead of a new tab). Rendered outside <main>
-          so it overlays the full viewport and survives a background
-          refetch. */}
+      {/* ── PDF Preview Modal ─────────────────────────────────────── */}
       <Modal
         show={!!pdfPreview}
         onHide={() => setPdfPreview(null)}

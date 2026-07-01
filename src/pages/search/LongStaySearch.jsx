@@ -85,6 +85,9 @@ function Counter({ value, min, max, onChange }) {
   );
 }
 
+// Maximum number of rooms allowed per booking (matches HotelSearch).
+const MAX_ROOMS = 9;
+
 // ─────────────────────────────────────────────
 // Room Guest Selector
 // ─────────────────────────────────────────────
@@ -101,7 +104,11 @@ function RoomGuestSelector({ value, onChange }) {
     setRooms(next);
     onChange && onChange(next);
   };
-  const addRoom = () => update([...rooms, { adults: 1, children: 0, childAges: [] }]);
+  const addRoom = () => {
+    // Enforce the per-booking room cap.
+    if (rooms.length >= MAX_ROOMS) return;
+    update([...rooms, { adults: 1, children: 0, childAges: [] }]);
+  };
   const removeRoom = (i) => update(rooms.filter((_, j) => j !== i));
   const setAdults = (i, a) =>
     update(rooms.map((r, j) => (j === i ? { ...r, adults: a } : r)));
@@ -182,10 +189,20 @@ function RoomGuestSelector({ value, onChange }) {
             )}
           </div>
         ))}
-        <button type="button" className="rgs-add-room-btn" onClick={addRoom}>
+        <button
+          type="button"
+          className="rgs-add-room-btn"
+          onClick={addRoom}
+          disabled={rooms.length >= MAX_ROOMS}
+        >
           <span className="rgs-add-icon">+</span>
           <span>Add Room</span>
         </button>
+        {rooms.length >= MAX_ROOMS && (
+          <div className="text-danger small mt-2">
+            A maximum of {MAX_ROOMS} rooms can be added per booking.
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1329,14 +1346,20 @@ export default function LongStaySearch() {
                       <Button
                         type="button"
                         className="flex-shrink-0 btn-add-room-premium"
+                        disabled={roomsOpen && rooms.length >= MAX_ROOMS}
                         onClick={() => {
                           if (!roomsOpen) {
                             setRoomsOpen(true);
                           } else {
-                            setRooms((prev) => [
-                              ...prev,
-                              { adults: 1, children: 0, childAges: [] },
-                            ]);
+                            // Never exceed the per-booking room cap.
+                            setRooms((prev) =>
+                              prev.length >= MAX_ROOMS
+                                ? prev
+                                : [
+                                    ...prev,
+                                    { adults: 1, children: 0, childAges: [] },
+                                  ]
+                            );
                           }
                         }}
                       >

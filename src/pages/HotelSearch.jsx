@@ -113,7 +113,7 @@ function Counter({ value, min, max, onChange }) {
 }
 
 // Maximum number of rooms allowed per booking.
-const MAX_ROOMS = 9;
+const MAX_ROOMS = 5;
 
 // ─────────────────────────────────────────────
 // Room Guest Selector
@@ -2117,7 +2117,11 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                           {/* Display currency — converts the shown rates from
                               AED into the chosen currency using the
                               master_currency multiplier. Display-only: it does
-                              not alter the search/booking payloads. */}
+                              not alter the search/booking payloads.
+                              For an AGENT login the field is locked to the
+                              agent's configured currency (auto-populated from
+                              /api/agent/{id} above); only Admin/SuperAdmin can
+                              switch it. */}
                           <Form.Group className="mb-2">
                             <Form.Label className="fw-semibold small">
                               Currency
@@ -2125,9 +2129,12 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                             <Select
                               options={currencyOptions}
                               value={selectedCurrency}
+                              isDisabled={isAgentRole}
                               onChange={(opt) => {
                                 // Operator override — stop auto-defaulting to
-                                // the agent's currency from here on.
+                                // the agent's currency from here on. Agents
+                                // can't reach this branch (isDisabled above),
+                                // so the touched-ref only flips for admins.
                                 currencyTouchedRef.current = true;
                                 setSelectedCurrency(opt);
                               }}

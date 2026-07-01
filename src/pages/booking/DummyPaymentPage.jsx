@@ -23,6 +23,20 @@ export default function DummyPaymentPage() {
   const gatewayName =
     location.state?.gatewayName || GATEWAY_LABELS[gateway] || gateway || "Gateway";
   const amountLabel = location.state?.amountLabel || "";
+  // Optional return-target. When the caller hands us an explicit path +
+  // state (e.g. BookingDetailedView's deferred-credit reconfirm flow
+  // passes returnTo + returnState.resumeReconfirm), we use it instead of
+  // navigate(-1) so the caller can react to the post-payment landing —
+  // navigate(-1) drops state, which would break the resume signal.
+  const returnTo = location.state?.returnTo || null;
+  const returnState = location.state?.returnState || null;
+  const goBack = () => {
+    if (returnTo) {
+      navigate(returnTo, { state: returnState || {} });
+    } else {
+      navigate(-1);
+    }
+  };
 
   const [card, setCard] = useState({
     name: "",
@@ -44,7 +58,7 @@ export default function DummyPaymentPage() {
     setTimeout(() => {
       setProcessing(false);
       toast.success(`Payment successful via ${gatewayName} (demo)`);
-      navigate(-1);
+      goBack();
     }, 1200);
   };
 
@@ -58,7 +72,7 @@ export default function DummyPaymentPage() {
             <Button
               variant="link"
               className="text-decoration-none mb-3 px-0"
-              onClick={() => navigate(-1)}
+              onClick={goBack}
             >
               <FaArrowLeft className="me-2" />
               Back

@@ -10,6 +10,7 @@ import {
   Alert,
   Accordion,
   Form,
+  Modal,
 } from "react-bootstrap";
 import { useAccordionButton } from "react-bootstrap/AccordionButton";
 import {
@@ -52,6 +53,27 @@ const formatPrice = (price) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
+
+// ── Cancellation-policy formatters — copied verbatim from
+//    LongStayBookingPage so the policy text shown inside each room card's
+//    "Cancellation Policies & Terms" modal reads identically to the
+//    booking-page pre-confirm modal. The contract's cancellationPolicy
+//    entries have the shape { chargeType, value, condition }.
+const formatChargeValue = (p) => {
+  if (p == null || p.value == null) return "—";
+  const t = (p.chargeType || "").toUpperCase();
+  if (t === "PERCENT") return `${p.value}%`;
+  if (t === "AMOUNT") return `AED ${p.value}`;
+  if (t === "NIGHTS") return `${p.value} night${p.value === 1 ? "" : "s"}`;
+  return String(p.value);
+};
+
+const formatCancellationPolicyLine = (p) => {
+  if (!p) return "";
+  const value = formatChargeValue(p);
+  const cond = (p.condition || "").trim();
+  return cond ? `${value} ${cond}` : value;
+};
 
 // Short "how it adds up" line for the room card. Shows the exact pieces
 // the backend used (months × monthly + remainder per cost type + extra
@@ -184,6 +206,7 @@ function RoomCardGrid({
   estPrice,
   exceedsCap,
   onBook,
+  onViewPolicies,
   extraAdults = 0,
   extraChildren = 0,
   isMultiRoom = false,
@@ -250,6 +273,24 @@ function RoomCardGrid({
             </div>
           </div>
 
+          {/* Cancellation Policies & Terms — opens the same policy content
+              the booking page shows pre-confirm, surfaced here on the room
+              card (mirrors /room-list). */}
+          {onViewPolicies && (
+            <Button
+              variant="link"
+              size="sm"
+              className="p-0 text-decoration-underline align-self-start"
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewPolicies(contract);
+              }}
+            >
+              <FaShieldAlt className="me-2" />
+              Cancellation Policies &amp; Terms &amp; Conditions
+            </Button>
+          )}
+
           {/* Book button (single-room) / per-room radio (multi-room) */}
           {isMultiRoom ? (
             <Form.Check
@@ -299,6 +340,7 @@ function RoomCardList({
   estPrice,
   exceedsCap,
   onBook,
+  onViewPolicies,
   extraAdults = 0,
   extraChildren = 0,
   isMultiRoom = false,
@@ -334,6 +376,21 @@ function RoomCardList({
             </Badge>
           )}
         </div>
+        {onViewPolicies && (
+          <Button
+            variant="link"
+            size="sm"
+            className="p-0 mt-1 text-decoration-underline"
+            style={{ fontSize: 12 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onViewPolicies(contract);
+            }}
+          >
+            <FaShieldAlt className="me-1" />
+            Cancellation Policies &amp; Terms
+          </Button>
+        )}
       </div>
 
       {/* Middle: how the total is computed (compact) */}
@@ -407,6 +464,17 @@ export default function LongStayRoomList() {
   const [error, setError] = useState(null);
   const [activeAccordion, setActiveAccordion] = useState("0");
   const [viewMode, setViewMode] = useState("grid"); // "grid" | "list"
+
+  // Cancellation Policies & Terms modal — opened from a per-room-card link.
+  // Read-only viewer; sources directly from the contract already loaded
+  // (cancellationPolicy / cancellationPolicyNotes / termsAndConditions), so
+  // no extra API call and the booking flow is untouched.
+  const [showPoliciesModal, setShowPoliciesModal] = useState(false);
+  const [policiesModalContract, setPoliciesModalContract] = useState(null);
+  const openPoliciesModal = (contract) => {
+    setPoliciesModalContract(contract || null);
+    setShowPoliciesModal(true);
+  };
 
   // ──────────────────────────────────────────────────────────────────────
   // Multi-room selection — mirrors RoomList.jsx.
@@ -1050,6 +1118,7 @@ export default function LongStayRoomList() {
                                   estPrice={estimateStayPrice(c, r)}
                                   exceedsCap={exceedsCap}
                                   onBook={handleBook}
+                                  onViewPolicies={openPoliciesModal}
                                   extraAdults={partyExtras.extraAdults}
                                   extraChildren={partyExtras.children}
                                   isMultiRoom={isMultiRoom}
@@ -1085,6 +1154,7 @@ export default function LongStayRoomList() {
                                   estPrice={estimateStayPrice(c, r)}
                                   exceedsCap={exceedsCap}
                                   onBook={handleBook}
+                                  onViewPolicies={openPoliciesModal}
                                   extraAdults={partyExtras.extraAdults}
                                   extraChildren={partyExtras.children}
                                   isMultiRoom={isMultiRoom}
@@ -1261,8 +1331,12 @@ export default function LongStayRoomList() {
               </Row>
             </div>
 
+            {/* ── Hotel Information ───────────────────────────────────
+                Per spec (mirrors /room-list): the cancellation policy +
+                terms now live exclusively in the per-room-card
+                "Cancellation Policies & Terms" modal, so the section under
+                the room list shows ONLY general Hotel Information here. */}
             <div className="mt-4">
-              {/* ── Policies ──────────────────────────────────────────── */}
               <Card
                 className="mb-4 shadow-sm"
                 style={{ overflow: "hidden", border: "1px solid #dbe3ef" }}
@@ -1285,53 +1359,21 @@ export default function LongStayRoomList() {
                       fontSize: "1.15rem",
                     }}
                   >
-                    <FaShieldAlt />
+                    <FaHotel />
                   </div>
                   <div>
                     <div
                       className="fw-bold"
                       style={{ fontSize: "1.1rem", lineHeight: 1.2 }}
                     >
-                      Booking Policies
+                      Hotel Information
                     </div>
                     <div className="small" style={{ opacity: 0.85 }}>
-                      Stay details &amp; important information
+                      General check-in &amp; stay details
                     </div>
                   </div>
                 </Card.Header>
                 <Card.Body className="p-4">
-                  {/* Additional Information — moved in from the dropped
-                      "Additional Information" card so all policy info
-                      lives in this single Booking Policies card. */}
-                  <div className="mb-3">
-                    <h6 className="text-info mb-2">
-                      <FaInfoCircle className="me-2" />
-                      Additional Information
-                    </h6>
-                    <ul className="mb-0 text-muted">
-                      <li>
-                        Long stay contracts typically require a refundable
-                        security deposit collected at check-in.
-                      </li>
-                      <li>
-                        Cleaning, utility, and resort fees may apply on top of
-                        the monthly / day rate per the contract.
-                      </li>
-                      <li>
-                        Extra adult / extra child rates apply only when the
-                        contract marks the room as having an extra bed.
-                      </li>
-                      <li>
-                        Photo identification may be required at check-in for
-                        incidental charges.
-                      </li>
-                    </ul>
-                  </div>
-
-                  <h6 className="text-secondary mb-2 pt-2 border-top">
-                    <FaHotel className="me-2" />
-                    Hotel Information
-                  </h6>
                   <Row className="g-3">
                     <Col md={6}>
                       <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
@@ -1365,7 +1407,7 @@ export default function LongStayRoomList() {
                           <FaTimesCircle className="text-danger me-1" />
                           Cancellation
                         </span>
-                        <span className="fw-semibold">See contract terms</span>
+                        <span className="fw-semibold">See room card terms</span>
                       </div>
                     </Col>
                   </Row>
@@ -1376,6 +1418,77 @@ export default function LongStayRoomList() {
           </div>
         </main>
       </div>
+
+      {/* ── Cancellation Policies & Terms Modal ─────────────────────────
+          Read-only viewer for the selected room card's contract. Shows the
+          same cancellation policy + terms the booking page surfaces in its
+          pre-confirm gate, sourced straight from the loaded contract. */}
+      <Modal
+        show={showPoliciesModal}
+        onHide={() => setShowPoliciesModal(false)}
+        size="lg"
+        centered
+        scrollable
+        aria-labelledby="ls-policies-terms-modal"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title id="ls-policies-terms-modal">
+            Cancellation Policies &amp; Terms &amp; Conditions
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ maxHeight: "70vh", overflowY: "auto" }}>
+          {policiesModalContract?.rateCode && (
+            <div className="text-muted small mb-3">
+              Contract: {policiesModalContract.rateCode}
+            </div>
+          )}
+
+          <h6 className="text-danger mb-2">
+            <FaTimesCircle className="me-2" />
+            Cancellation Policy
+          </h6>
+          {(policiesModalContract?.cancellationPolicy || []).length > 0 ? (
+            <ul className="mb-3 ps-3">
+              {policiesModalContract.cancellationPolicy.map((p, idx) => (
+                <li key={idx} className="mb-2" style={{ whiteSpace: "pre-line" }}>
+                  {formatCancellationPolicyLine(p)}
+                </li>
+              ))}
+            </ul>
+          ) : !policiesModalContract?.cancellationPolicyNotes ? (
+            <p className="text-muted mb-3">No cancellation policy configured.</p>
+          ) : null}
+          {policiesModalContract?.cancellationPolicyNotes && (
+            <p className="mb-3" style={{ whiteSpace: "pre-line" }}>
+              {policiesModalContract.cancellationPolicyNotes}
+            </p>
+          )}
+
+          <h6 className="text-secondary mb-2 pt-2 border-top">
+            <FaInfoCircle className="me-2" />
+            Terms &amp; Conditions
+          </h6>
+          {(policiesModalContract?.termsAndConditions || []).length > 0 ? (
+            <ul className="mb-0 ps-3">
+              {policiesModalContract.termsAndConditions.map((t, idx) => (
+                <li key={idx} className="mb-2" style={{ whiteSpace: "pre-line" }}>
+                  {t}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-muted mb-0">No terms &amp; conditions configured.</p>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setShowPoliciesModal(false)}
+          >
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

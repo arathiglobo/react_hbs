@@ -583,6 +583,27 @@ const Register = () => {
                             Company Information
                           </h3>
                           <p className="step-description">Tell us about your business</p>
+                          {/* Pre-submit notice — company fields are immutable
+                              post-registration, so we surface this at the top
+                              of the Company Information step. */}
+                          <div
+                            role="note"
+                            style={{
+                              marginTop: "10px",
+                              padding: "10px 14px",
+                              border: "1px solid #ffe69c",
+                              borderLeft: "4px solid #f0ad4e",
+                              backgroundColor: "#fff8e1",
+                              color: "#664d03",
+                              borderRadius: "4px",
+                              fontSize: "0.88rem",
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            <strong>Important:</strong> Please verify your
+                            company details before submitting, as they cannot
+                            be modified after registration.
+                          </div>
                         </div>
 
                         <Row className="g-3">

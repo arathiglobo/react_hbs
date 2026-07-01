@@ -117,6 +117,82 @@ const RoomList = ({ force24Hour = false } = {}) => {
     useState(false);
   const [pendingBookingFn, setPendingBookingFn] = useState(null);
 
+  // Cancellation Policies & Terms modal. Opened from a per-rate link beneath
+  // the truncated cancellation preview. Cancellation policies come straight
+  // from the existing room-search response (rate.cancellationPolicies, with
+  // a hotel-level fallback). Terms & Conditions are NOT in the search
+  // payload, so they're lazy-fetched the first time the modal is opened for
+  // a given hotel from the existing `/api/hotels/{hotelId}/terms-and-conditions`
+  // endpoint (same one HotelBookingPage uses) and cached per-hotel for the
+  // remainder of the page lifetime.
+  //
+  // The booking flow is completely untouched: this modal is purely a
+  // read-only viewer; no part of `handleBooking` / `handleProceedBooking` /
+  // sessionStorage `bookingData` reads from these states.
+  const [showPoliciesModal, setShowPoliciesModal] = useState(false);
+  const [policiesModalData, setPoliciesModalData] = useState({
+    cancellationPolicies: [],
+    termsAndConditions: [],
+    selectedRoomLabel: "",
+  });
+  const [termsCache, setTermsCache] = useState({}); // { [hotelId]: T&C[] }
+  const [loadingTerms, setLoadingTerms] = useState(false);
+
+  const openPoliciesModal = async (rate, hotelDetail) => {
+    const cancellation = Array.isArray(rate?.cancellationPolicies)
+      ? rate.cancellationPolicies
+      : Array.isArray(hotelDetail?.cancellationPolicies)
+        ? hotelDetail.cancellationPolicies
+        : [];
+    const label = [rate?.roomCategory, rate?.mealPlan]
+      .filter(Boolean)
+      .join(" • ");
+
+    // Use whichever T&C source we already have so the modal opens with
+    // content immediately when possible: rate-level → hotel-level → cache.
+    const inlineTerms = Array.isArray(rate?.termsAndConditions)
+      ? rate.termsAndConditions
+      : Array.isArray(hotelDetail?.termsAndConditions)
+        ? hotelDetail.termsAndConditions
+        : null;
+
+    const hotelId = hotelDetail?.hotelId;
+    const cached = hotelId != null ? termsCache[hotelId] : undefined;
+
+    setPoliciesModalData({
+      cancellationPolicies: cancellation,
+      termsAndConditions: inlineTerms || cached || [],
+      selectedRoomLabel: label,
+    });
+    setShowPoliciesModal(true);
+
+    // Only fetch when we don't already have terms from a richer source.
+    // Backend path variable is `Long hotelId`; skip non-numeric IDs (external
+    // APIs use opaque codes) to avoid a noisy 400.
+    if (inlineTerms || cached !== undefined) return;
+    if (hotelId == null || !/^\d+$/.test(String(hotelId))) {
+      setPoliciesModalData((prev) => ({ ...prev, termsAndConditions: [] }));
+      return;
+    }
+
+    setLoadingTerms(true);
+    try {
+      const res = await axiosInstance.get(
+        `/api/hotels/${hotelId}/terms-and-conditions`,
+      );
+      const terms = Array.isArray(res?.data) ? res.data : [];
+      setTermsCache((prev) => ({ ...prev, [hotelId]: terms }));
+      setPoliciesModalData((prev) => ({ ...prev, termsAndConditions: terms }));
+    } catch (err) {
+      console.error("T&C fetch failed:", err);
+      // Cache empty so we don't retry on every re-open of the modal.
+      setTermsCache((prev) => ({ ...prev, [hotelId]: [] }));
+      setPoliciesModalData((prev) => ({ ...prev, termsAndConditions: [] }));
+    } finally {
+      setLoadingTerms(false);
+    }
+  };
+
   // ──────────────────────────────────────────────────────────────────────
   // Multi-room selection (per-room slots).
   //
@@ -1390,15 +1466,20 @@ const RoomList = ({ force24Hour = false } = {}) => {
                                         {rate.contractLabel}
                                       </div>
 
-                                      {rate.cancellationPolicies?.length > 0 && (
-                                        <div className="feature-item">
-                                          <FaShieldAlt className="me-2 text-muted" />
-                                          {
-                                            rate.cancellationPolicies[0]
-                                              .policyText
-                                          }
-                                        </div>
-                                      )}
+                                      <div className="feature-item">
+                                        <Button
+                                          variant="link"
+                                          size="sm"
+                                          className="p-0 text-decoration-underline"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            openPoliciesModal(rate, hotel);
+                                          }}
+                                        >
+                                          <FaShieldAlt className="me-2" />
+                                          Cancellation Policies &amp; Terms &amp; Conditions
+                                        </Button>
+                                      </div>
                                     </div>
 
                                     {/* CTA — in single-room mode behaves
@@ -1489,21 +1570,20 @@ const RoomList = ({ force24Hour = false } = {}) => {
                                             {rate.contractLabel}
                                           </span>
                                         </div>
-                                        {rate.cancellationPolicies?.length >
-                                          0 && (
-                                          <div
-                                            className="feature-item d-flex align-items-center text-truncate"
-                                            style={{ maxWidth: "320px" }}
+                                        <div className="feature-item d-flex align-items-center">
+                                          <Button
+                                            variant="link"
+                                            size="sm"
+                                            className="p-0 text-decoration-underline"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              openPoliciesModal(rate, hotel);
+                                            }}
                                           >
-                                            <FaShieldAlt className="me-2 flex-shrink-0" />
-                                            <span className="text-truncate">
-                                              {
-                                                rate.cancellationPolicies[0]
-                                                  .policyText
-                                              }
-                                            </span>
-                                          </div>
-                                        )}
+                                            <FaShieldAlt className="me-2" />
+                                            Cancellation Policies &amp; Terms &amp; Conditions
+                                          </Button>
+                                        </div>
                                       </div>
                                     </div>
 
@@ -1738,10 +1818,12 @@ const RoomList = ({ force24Hour = false } = {}) => {
               </Row>
             </div>
 
-            {/* Policies Section — Cancellation, Amendment, Child, and
-                Additional Policy folded into a single card. The earlier
-                "Additional Information" card was removed; child policy
-                and the additional-policy fees now live here. */}
+            {/* Hotel Information Section — booking-policy details
+                (Cancellation, Amendment, Child, Additional Policies and
+                Terms & Conditions) intentionally NOT shown here; they live
+                exclusively in the per-rate "Cancellation Policies &
+                Terms & Conditions" modal so the same information isn't
+                duplicated in two places on the page. */}
             <div className="mt-4">
               <Card
                 className="mb-4 shadow-sm"
@@ -1765,224 +1847,45 @@ const RoomList = ({ force24Hour = false } = {}) => {
                       fontSize: "1.15rem",
                     }}
                   >
-                    <FaShieldAlt />
+                    <FaHotel />
                   </div>
                   <div>
                     <div
                       className="fw-bold"
                       style={{ fontSize: "1.1rem", lineHeight: 1.2 }}
                     >
-                      Booking Policies
+                      Hotel Information
                     </div>
                     <div className="small" style={{ opacity: 0.85 }}>
-                      Cancellation, amendment &amp; stay details
+                      General check-in &amp; stay details
                     </div>
                   </div>
                 </Card.Header>
                 <Card.Body className="p-4">
-                  {payload.apiId === 1 && policyList && policyList.policies ? (
-                    <div className="policies-dynamic">
-                      {/* Cancellation Policy */}
-                      {policyList.policies?.cancellationPolicy &&
-                        policyList.policies.cancellationPolicy.length > 0 && (
-                          <div className="mb-3">
-                            <h6 className="text-danger mb-2">
-                              <FaTimesCircle className="me-2" />
-                              Cancellation Policy
-                            </h6>
-                            {policyList.policies.cancellationPolicy.map(
-                              (policy, index) => {
-                                const validity = renderPolicyValidity(
-                                  policy.fromDate,
-                                  policy.toDate,
-                                );
-                                return (
-                                  <div key={index} className="policy-item mb-2">
-                                    <p className="text-muted mb-1">
-                                      {policy.policyText}
-                                    </p>
-                                    {validity && (
-                                      <small
-                                        className="text-muted"
-                                        style={{
-                                          fontWeight: "400",
-                                          fontSize: "0.99rem",
-                                        }}
-                                      >
-                                        {validity}
-                                      </small>
-                                    )}
-                                  </div>
-                                );
-                              },
-                            )}
-                          </div>
-                        )}
-
-                      {/* Amendment Policy */}
-                      {policyList.policies?.amendmentPolicy &&
-                        policyList.policies.amendmentPolicy.length > 0 && (
-                          <div className="mb-3">
-                            <h6 className="text-warning mb-2">
-                              <FaInfoCircle className="me-2" />
-                              Amendment Policy
-                            </h6>
-                            {policyList.policies.amendmentPolicy.map(
-                              (policy, index) => {
-                                const validity = renderPolicyValidity(
-                                  policy.fromDate,
-                                  policy.toDate,
-                                );
-                                return (
-                                  <div key={index} className="policy-item mb-2">
-                                    <p className="text-muted mb-1">
-                                      {policy.policyText}
-                                    </p>
-                                    {validity && (
-                                      <small
-                                        style={{
-                                          fontWeight: "400",
-                                          fontSize: "0.99rem",
-                                        }}
-                                        className="text-muted"
-                                      >
-                                        {validity}
-                                      </small>
-                                    )}
-                                  </div>
-                                );
-                              },
-                            )}
-                          </div>
-                        )}
-
-                      {/* Child Policy — moved in from the dropped
-                          "Additional Information" section. */}
-                      {policyList.policies?.childPolicy &&
-                        policyList.policies.childPolicy.length > 0 && (
-                          <div className="mb-3">
-                            <h6 className="text-primary mb-2">
-                              <FaUsers className="me-2" />
-                              Child Policy
-                            </h6>
-                            {policyList.policies.childPolicy.map(
-                              (policy, index) => (
-                                <p key={index} className="mb-2 text-muted">
-                                  {policy.policyText}
-                                </p>
-                              ),
-                            )}
-                          </div>
-                        )}
-
-                      {/* Additional Policy — fees stored on the policy
-                          row (no-show, early-departure, non-refundable).
-                          Suppress empty zero/null amounts so the section
-                          stays clean for hotels that don't configure any. */}
-                      {policyList.policies?.additionalPolicy && (() => {
-                        const ap = policyList.policies.additionalPolicy;
-                        const formatFee = (amt, type) => {
-                          if (amt === null || amt === undefined || Number(amt) === 0) return null;
-                          const suffix = String(type || "").toUpperCase() === "PERCENT" ? "%" : "";
-                          return `${amt}${suffix}`;
-                        };
-                        const noShow = formatFee(ap.noShowFee, ap.noShowFeeType);
-                        const earlyDep = formatFee(ap.earlyDepartureFee, ap.earlyDepartureFeeType);
-                        const nonRef = formatFee(ap.nonRefundableFee, ap.nonRefundableFeeType);
-                        if (!noShow && !earlyDep && !nonRef) return null;
-                        return (
-                          <div className="mb-3">
-                            <h6 className="text-info mb-2">
-                              <FaInfoCircle className="me-2" />
-                              Additional Policy
-                            </h6>
-                            {noShow && (
-                              <p className="mb-1 text-muted">
-                                <strong>No-Show Fee:</strong> {noShow}
-                              </p>
-                            )}
-                            {earlyDep && (
-                              <p className="mb-1 text-muted">
-                                <strong>Early Departure Fee:</strong> {earlyDep}
-                              </p>
-                            )}
-                            {nonRef && (
-                              <p className="mb-1 text-muted">
-                                <strong>Non-Refundable Fee:</strong> {nonRef}
-                              </p>
-                            )}
-                          </div>
-                        );
-                      })()}
-
-                      {/* General Policies */}
-                      <h6 className="text-secondary mb-2 pt-2 border-top">
-                        <FaHotel className="me-2" />
-                        Hotel Information
-                      </h6>
-                      <Row className="g-3">
-                        <Col md={6}>
-                          <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                            <span className="text-muted">Check-in</span>
-                            <span className="fw-semibold">After 14:00</span>
-                          </div>
-                          <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                            <span className="text-muted">Check-out</span>
-                            <span className="fw-semibold">Before 12:00</span>
-                          </div>
-                        </Col>
-                        <Col md={6}>
-                          <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                            <span className="text-muted">Deposit</span>
-                            <span className="fw-semibold">May be required</span>
-                          </div>
-                          <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                            <span className="text-muted">Additional Bed</span>
-                            <span className="fw-semibold">
-                              Subject to availability
-                            </span>
-                          </div>
-                        </Col>
-                      </Row>
-                    </div>
-                  ) : (
-                    <Row className="g-3">
-                      <Col md={6}>
-                        <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                          <span className="text-muted">Check-in</span>
-                          <span className="fw-semibold">After 14:00</span>
-                        </div>
-                        <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                          <span className="text-muted">Check-out</span>
-                          <span className="fw-semibold">Before 12:00</span>
-                        </div>
-                        <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                          <span className="text-muted">Children</span>
-                          <span className="fw-semibold">
-                            Policies vary by room
-                          </span>
-                        </div>
-                      </Col>
-                      <Col md={6}>
-                        <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                          <span className="text-muted">Deposit</span>
-                          <span className="fw-semibold">May be required</span>
-                        </div>
-                        <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                          <span className="text-muted">Additional Bed</span>
-                          <span className="fw-semibold">
-                            Subject to availability
-                          </span>
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <span className="text-muted">Cancellation</span>
-                          <span className="fw-semibold">
-                            See rate conditions
-                          </span>
-                        </div>
-                      </Col>
-                    </Row>
-                  )}
+                  <Row className="g-3">
+                    <Col md={6}>
+                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                        <span className="text-muted">Check-in</span>
+                        <span className="fw-semibold">After 14:00</span>
+                      </div>
+                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                        <span className="text-muted">Check-out</span>
+                        <span className="fw-semibold">Before 12:00</span>
+                      </div>
+                    </Col>
+                    <Col md={6}>
+                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                        <span className="text-muted">Deposit</span>
+                        <span className="fw-semibold">May be required</span>
+                      </div>
+                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                        <span className="text-muted">Additional Bed</span>
+                        <span className="fw-semibold">
+                          Subject to availability
+                        </span>
+                      </div>
+                    </Col>
+                  </Row>
                 </Card.Body>
               </Card>
             </div>
@@ -2121,6 +2024,186 @@ const RoomList = ({ force24Hour = false } = {}) => {
             }}
           >
             Confirm Booking
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Cancellation Policies & Terms & Conditions Modal — surfaces ALL
+          policies/terms attached to the picked rate (the rate card only
+          shows the first one as a preview). Sourced from the existing
+          search response (rate.cancellationPolicies / rate.termsAndConditions
+          with a hotel-level fallback) — no extra API call. Each section
+          falls back to an empty-state line when its list is empty. */}
+      <Modal
+        show={showPoliciesModal}
+        onHide={() => setShowPoliciesModal(false)}
+        size="lg"
+        centered
+        scrollable
+        aria-labelledby="policies-terms-modal"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title id="policies-terms-modal">
+            Cancellation Policies &amp; Terms &amp; Conditions
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ maxHeight: "70vh", overflowY: "auto" }}>
+          {policiesModalData.selectedRoomLabel && (
+            <div className="text-muted small mb-3">
+              {policiesModalData.selectedRoomLabel}
+            </div>
+          )}
+
+          <h6 className="text-danger mb-2">
+            <FaTimesCircle className="me-2" />
+            Cancellation Policies
+          </h6>
+          {policiesModalData.cancellationPolicies?.length > 0 ? (
+            <ul className="mb-4 ps-3">
+              {policiesModalData.cancellationPolicies.map((policy, idx) => {
+                const validity = renderPolicyValidity(
+                  policy?.fromDate,
+                  policy?.toDate,
+                );
+                return (
+                  <li key={idx} className="mb-2">
+                    <div style={{ whiteSpace: "pre-line" }}>
+                      {policy?.policyText || ""}
+                    </div>
+                    {validity && (
+                      <small className="text-muted">{validity}</small>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-muted mb-4">No cancellation policies available.</p>
+          )}
+
+          {/* Amendment / Child / Additional policy sections — only shown
+              when the inhouse policyList carries them (apiId === 1). These
+              used to live on the page as a separate "Booking Policies"
+              card and have been folded into this modal so the data isn't
+              duplicated outside the modal. */}
+          {payload?.apiId === 1 && policyList?.policies?.amendmentPolicy?.length > 0 && (
+            <>
+              <h6 className="text-warning mb-2 pt-2 border-top">
+                <FaInfoCircle className="me-2" />
+                Amendment Policies
+              </h6>
+              <ul className="mb-4 ps-3">
+                {policyList.policies.amendmentPolicy.map((policy, idx) => {
+                  const validity = renderPolicyValidity(
+                    policy?.fromDate,
+                    policy?.toDate,
+                  );
+                  return (
+                    <li key={idx} className="mb-2">
+                      <div style={{ whiteSpace: "pre-line" }}>
+                        {policy?.policyText || ""}
+                      </div>
+                      {validity && (
+                        <small className="text-muted">{validity}</small>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+
+          {payload?.apiId === 1 && policyList?.policies?.childPolicy?.length > 0 && (
+            <>
+              <h6 className="text-primary mb-2 pt-2 border-top">
+                <FaUsers className="me-2" />
+                Child Policy
+              </h6>
+              <ul className="mb-4 ps-3">
+                {policyList.policies.childPolicy.map((policy, idx) => (
+                  <li key={idx} className="mb-2" style={{ whiteSpace: "pre-line" }}>
+                    {policy?.policyText || ""}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          {payload?.apiId === 1 && policyList?.policies?.additionalPolicy && (() => {
+            const ap = policyList.policies.additionalPolicy;
+            const formatFee = (amt, type) => {
+              if (amt === null || amt === undefined || Number(amt) === 0) return null;
+              const suffix = String(type || "").toUpperCase() === "PERCENT" ? "%" : "";
+              return `${amt}${suffix}`;
+            };
+            const noShow = formatFee(ap.noShowFee, ap.noShowFeeType);
+            const earlyDep = formatFee(ap.earlyDepartureFee, ap.earlyDepartureFeeType);
+            const nonRef = formatFee(ap.nonRefundableFee, ap.nonRefundableFeeType);
+            if (!noShow && !earlyDep && !nonRef) return null;
+            return (
+              <>
+                <h6 className="text-info mb-2 pt-2 border-top">
+                  <FaInfoCircle className="me-2" />
+                  Additional Policy
+                </h6>
+                <ul className="mb-4 ps-3">
+                  {noShow && (
+                    <li className="mb-2">
+                      <strong>No-Show Fee:</strong> {noShow}
+                    </li>
+                  )}
+                  {earlyDep && (
+                    <li className="mb-2">
+                      <strong>Early Departure Fee:</strong> {earlyDep}
+                    </li>
+                  )}
+                  {nonRef && (
+                    <li className="mb-2">
+                      <strong>Non-Refundable Fee:</strong> {nonRef}
+                    </li>
+                  )}
+                </ul>
+              </>
+            );
+          })()}
+
+          <h6 className="text-secondary mb-2 pt-2 border-top">
+            <FaInfoCircle className="me-2" />
+            Terms &amp; Conditions
+          </h6>
+          {loadingTerms ? (
+            <div className="d-flex align-items-center text-muted mb-0">
+              <Spinner animation="border" size="sm" className="me-2" />
+              Loading terms &amp; conditions…
+            </div>
+          ) : policiesModalData.termsAndConditions?.length > 0 ? (
+            <ul className="mb-0 ps-3">
+              {policiesModalData.termsAndConditions.map((term, idx) => {
+                const text =
+                  typeof term === "string"
+                    ? term
+                    : term?.description ||
+                      term?.policyText ||
+                      term?.text ||
+                      "";
+                if (!text) return null;
+                return (
+                  <li key={idx} className="mb-2" style={{ whiteSpace: "pre-line" }}>
+                    {text}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-muted mb-0">No terms &amp; conditions available.</p>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setShowPoliciesModal(false)}
+          >
+            Close
           </Button>
         </Modal.Footer>
       </Modal>
