@@ -259,6 +259,13 @@ export default function DayStayBookingDetailView() {
   // Resend Mail to Agent
   const [resendingMail, setResendingMail] = useState(false);
 
+  // Amendment links — cross-supplier children recorded via
+  // /api/booking-amendment-link/parent/{code}. Fetched separately from
+  // the main booking detail so the Related Sub-Bookings card can render
+  // Long Stay / Day Stay / Gov / Student / Senior amendments alongside
+  // the same-type sub-bookings.
+  const [amendmentLinks, setAmendmentLinks] = useState([]);
+
   // Documents (Voucher / Proforma Voucher / Invoice / Proforma Invoice) —
   // typed PDF generator. The button row exposes 4 buttons; each calls
   // /api/day-stay-bookings/{id}/pdf?type=... The backend returns
@@ -307,6 +314,32 @@ export default function DayStayBookingDetailView() {
     fetchDetail();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingId]);
+
+  // Fetch cross-supplier amendment links once the booking code is known.
+  // The endpoint is keyed by the parent booking code (falls back to the
+  // booking's own code when this record isn't itself an amendment child).
+  const amendmentParentCode = selected?.parentBookingCode || selected?.bookingCode;
+  useEffect(() => {
+    let alive = true;
+    if (!amendmentParentCode) {
+      setAmendmentLinks([]);
+      return undefined;
+    }
+    axiosInstance
+      .get(
+        `/api/booking-amendment-link/parent/${encodeURIComponent(
+          amendmentParentCode,
+        )}`,
+      )
+      .then((res) => {
+        if (!alive) return;
+        setAmendmentLinks(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch(() => alive && setAmendmentLinks([]));
+    return () => {
+      alive = false;
+    };
+  }, [amendmentParentCode]);
 
   // ── Cancel ─────────────────────────────────────────────────────────
   const openCancel = () => {
@@ -1007,42 +1040,202 @@ export default function DayStayBookingDetailView() {
                   </div>
                 </div>
 
-                {/* ── Notes (Special Requests / Policy / Cancellation) ─── */}
-                {(selected.specialRequests?.length > 0 ||
-                  selected.cancellationPolicy?.length > 0 ||
-                  selected.isCancelled) && (
+                {/* ── Related Sub-Bookings of OTHER types (amendment links) ──
+                    Long Stay / Day Stay / Gov Employee / Student / Senior
+                    Citizen children, recorded via /api/booking-amendment-link.
+                    Each row is clickable to its own (live) detail page.
+                    Mirrors BookingDetailedView exactly. */}
+                {amendmentLinks && amendmentLinks.length > 0 && (
                   <div style={card}>
-                    <div style={SECTION_HEADER}>Notes</div>
-                    <div
-                      style={{
-                        padding: "10px 16px",
-                        fontSize: "0.83rem",
-                        color: "#333",
-                      }}
-                    >
-                      {selected.specialRequests?.length > 0 && (
-                        <p className="mb-1">
-                          <strong>Special Requests:</strong>{" "}
-                          {selected.specialRequests.join(", ")}
-                        </p>
-                      )}
-                      {selected.cancellationPolicy?.length > 0 && (
-                        <p className="mb-1">
-                          <strong>Cancellation Policy:</strong>{" "}
-                          {selected.cancellationPolicy.join(" / ")}
-                        </p>
-                      )}
-                      {selected.isCancelled && (
-                        <div className="alert alert-danger mt-2 mb-0 py-2 small">
-                          <strong>Cancelled at:</strong> {selected.cancelledAt}
-                          <br />
-                          <strong>Reason:</strong>{" "}
-                          {selected.cancellationReason || "—"}
+                    <div style={SECTION_HEADER}>
+                      Related Sub-Bookings — Other Types ({amendmentLinks.length})
+                    </div>
+                    <div style={{ padding: "10px 16px" }}>
+                      {amendmentLinks.map((lnk) => (
+                        <div
+                          key={lnk.id}
+                          style={{
+                            borderTop: "1px solid #eee",
+                            padding: "10px 0",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                color: "#c0392b",
+                                fontWeight: "700",
+                                fontSize: "0.9rem",
+                              }}
+                            >
+                              {lnk.childBookingCode || "-"}
+                              <span
+                                style={{
+                                  marginLeft: "8px",
+                                  color: "#888",
+                                  fontWeight: "500",
+                                  fontSize: "0.8rem",
+                                }}
+                              >
+                                ({lnk.childTypeLabel || lnk.childType})
+                              </span>
+                            </span>
+                            {lnk.childDetailRoutePrefix && lnk.childBookingId != null && (
+                              <button
+                                style={BTN_NEUTRAL}
+                                onClick={() =>
+                                  navigate(
+                                    `${lnk.childDetailRoutePrefix}${lnk.childBookingId}`,
+                                  )
+                                }
+                              >
+                                View
+                              </button>
+                            )}
+                          </div>
+                          <Row>
+                            <Col md={6}>
+                              <InfoRow
+                                label="Booking Type"
+                                value={lnk.childTypeLabel || lnk.childType}
+                              />
+                              <InfoRow
+                                label="Reference No."
+                                value={lnk.childReferenceNumber}
+                              />
+                              <InfoRow label="Hotel" value={lnk.childHotelName} />
+                            </Col>
+                            <Col md={6}>
+                              <InfoRow
+                                label="Check-In"
+                                value={lnk.childCheckInDate}
+                              />
+                              <InfoRow
+                                label="Check-Out"
+                                value={lnk.childCheckOutDate}
+                              />
+                              <InfoRow
+                                label="Total Rate"
+                                value={
+                                  lnk.childTotalRate != null
+                                    ? Number(lnk.childTotalRate).toFixed(2)
+                                    : "-"
+                                }
+                              />
+                              <InfoRow
+                                label="Status"
+                                value={<StatusBadge status={lnk.childStatus} />}
+                              />
+                            </Col>
+                          </Row>
                         </div>
-                      )}
+                      ))}
                     </div>
                   </div>
                 )}
+
+                {/* ── Cancellation Policy ───────────────────────────── */}
+                <div style={card}>
+                  <div style={SECTION_HEADER}>
+                    Cancellation Policy{" "}
+                    <span style={{ fontSize: "1rem", color: "#555" }}>⊟</span>
+                  </div>
+                  <div
+                    style={{
+                      padding: "10px 16px",
+                      fontSize: "0.83rem",
+                      color: "#333",
+                    }}
+                  >
+                    {selected.cancellationPolicy && selected.cancellationPolicy.length > 0 ? (
+                      selected.cancellationPolicy.map((p, i) => (
+                        <p key={i} style={{ marginBottom: "4px" }}>
+                          {p}
+                        </p>
+                      ))
+                    ) : (
+                      <span className="text-muted">
+                        No cancellation policy available.
+                      </span>
+                    )}
+                    {selected.isCancelled && (
+                      <div className="alert alert-danger mt-2 mb-0 py-2 small">
+                        <strong>Cancelled at:</strong>{" "}
+                        {selected.cancelledAt || "—"}
+                        <br />
+                        <strong>Reason:</strong>{" "}
+                        {selected.cancellationReason || "—"}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Remarks ───────────────────────────────────────── */}
+                <div style={card}>
+                  <div style={SECTION_HEADER}>
+                    Remarks{" "}
+                    <span style={{ fontSize: "1rem", color: "#555" }}>⊟</span>
+                  </div>
+                  <div
+                    style={{
+                      padding: "10px 16px",
+                      fontSize: "0.83rem",
+                      color: "#333",
+                    }}
+                  >
+                    {selected.remarks ? (
+                      <p style={{ marginBottom: 0 }}>{selected.remarks}</p>
+                    ) : (
+                      <span className="text-muted">No remarks.</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Special Requests ──────────────────────────────── */}
+                <div style={card}>
+                  <div style={SECTION_HEADER}>
+                    Special Request{" "}
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: "18px",
+                        height: "18px",
+                        borderRadius: "50%",
+                        border: "1.5px solid #555",
+                        fontSize: "0.75rem",
+                        fontWeight: "700",
+                        color: "#555",
+                      }}
+                    >
+                      +
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      padding: "10px 16px",
+                      fontSize: "0.83rem",
+                      color: "#333",
+                    }}
+                  >
+                    {selected.specialRequests && selected.specialRequests.length > 0 ? (
+                      <ul style={{ marginBottom: 0, paddingLeft: "18px" }}>
+                        {selected.specialRequests.map((r, i) => (
+                          <li key={i}>{r}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span className="text-muted">No special requests.</span>
+                    )}
+                  </div>
+                </div>
 
                 {/* ── Related Notes (ad-hoc notes added via the NOTES modal) ──
                     Same data shown in the modal, surfaced here on the page so

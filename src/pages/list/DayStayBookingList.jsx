@@ -30,9 +30,10 @@ import "../../styles/HotelBookingListModern.css";
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
 // Column-width hints kept in sync with HotelBookingList so the two
-// pages line up visually under the shared hbl-modern skin. Shared column
-// widths mirror Hotel's tokens verbatim; DayStay-only columns
-// (Rooms / Total / Status) are appended below.
+// pages line up visually under the shared hbl-modern skin. Full column
+// set now mirrors Hotel exactly: Agent Name / Customer Name / Booking
+// Code / Book Date / Booking Details / Deadline Date / Payment Mode /
+// Notification / Action.
 const COLUMN_WIDTHS = {
   sn: "40px",
   agentName: "90px",
@@ -40,25 +41,39 @@ const COLUMN_WIDTHS = {
   bookingCode: "95px",
   bookDate: "90px",
   bookingDetails: "230px",
-  rooms: "70px",
-  total: "110px",
-  status: "110px",
+  deadlineDate: "105px",
+  paymentMode: "110px",
+  notification: "100px",
   action: "110px",
 };
 
-// Day-stay backends emit a mix of upper- and title-case status values
-// (e.g. `status: "Confirmed"` while cancellations come through as
-// `isCancelled: true` and surface as the literal string "Cancelled").
-// Both casings are mapped so the pill renders identically either way.
-const STATUS_META = {
-  CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  Confirmed: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
-  Completed: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
-  PENDING:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  Pending:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
-  Cancelled: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+// Resolve a human-readable Payment Mode label from whatever shape the
+// backend sends. Copied verbatim from HotelBookingList so the two pages
+// render identical labels for the same underlying value.
+const getPaymentModeLabel = (booking) => {
+  const raw =
+    booking?.paymentMode ||
+    booking?.payment_mode ||
+    booking?.paymentType ||
+    "";
+  const norm = String(raw).trim().toUpperCase();
+  if (
+    norm === "CREDIT" ||
+    norm === "CREDIT_LIMIT" ||
+    norm === "CREDIT LIMIT" ||
+    norm === "CREDITLIMIT"
+  ) {
+    return "Credit Limit Payment";
+  }
+  if (norm === "ONLINE" || norm === "ONLINE_PAYMENT" || norm === "ONLINE PAYMENT") {
+    return "Online Payment";
+  }
+  if (norm) return raw;
+  if (booking?.creditLimitPayment === true) return "Credit Limit Payment";
+  if (booking?.paidOnline === true || booking?.onlinePayment === true) {
+    return "Online Payment";
+  }
+  return "-";
 };
 
 // Every customer/guest name on a day-stay booking. The list payload
@@ -86,36 +101,6 @@ const getGuestNames = (booking) => {
     if (n) names.push(n);
   }
   return names;
-};
-
-const StatusPill = ({ meta, raw }) => {
-  if (!meta) return <span className="text-muted">{raw || "-"}</span>;
-  return (
-    <span
-      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
-      style={{
-        backgroundColor: meta.bg,
-        color: meta.color,
-        fontSize: "0.7rem",
-        fontWeight: 600,
-        lineHeight: 1,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {meta.dot && (
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            backgroundColor: meta.dot,
-            display: "inline-block",
-          }}
-        />
-      )}
-      {meta.label}
-    </span>
-  );
 };
 
 // "dd/mm/yyyy" — same shape HotelBookingList uses in the table cells.
@@ -583,7 +568,7 @@ export default function DayStayBookingList() {
                               width: COLUMN_WIDTHS.bookDate,
                             }}
                           >
-                            Stay Date
+                            Book Date
                           </th>
                           <th
                             style={{
@@ -597,28 +582,28 @@ export default function DayStayBookingList() {
                             style={{
                               ...baseHeaderStyle,
                               textAlign: "center",
-                              width: COLUMN_WIDTHS.rooms,
+                              width: COLUMN_WIDTHS.deadlineDate,
                             }}
                           >
-                            Rooms
-                          </th>
-                          <th
-                            style={{
-                              ...baseHeaderStyle,
-                              textAlign: "right",
-                              width: COLUMN_WIDTHS.total,
-                            }}
-                          >
-                            Total
+                            Deadline Date
                           </th>
                           <th
                             style={{
                               ...baseHeaderStyle,
                               textAlign: "center",
-                              width: COLUMN_WIDTHS.status,
+                              width: COLUMN_WIDTHS.paymentMode,
                             }}
                           >
-                            Status
+                            Payment Mode
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.notification,
+                            }}
+                          >
+                            Notification
                           </th>
                           <th
                             style={{
@@ -656,10 +641,12 @@ export default function DayStayBookingList() {
                           </tr>
                         ) : (
                           pageBookings.map((b, i) => {
+                            // Notification pill sources: `confirmationStatus`
+                            // first (matches Hotel exactly), then falls back to
+                            // legacy `status`; `isCancelled` overrides both.
                             const statusText = b.isCancelled
                               ? "Cancelled"
-                              : (b.status || "");
-                            const sMeta = STATUS_META[statusText];
+                              : (b.confirmationStatus || b.status || "");
                             const timeRange =
                               trimTime(b.checkInTime) && trimTime(b.checkOutTime)
                                 ? `${trimTime(b.checkInTime)} – ${trimTime(b.checkOutTime)}`
@@ -787,7 +774,11 @@ export default function DayStayBookingList() {
                                     width: COLUMN_WIDTHS.bookDate,
                                   }}
                                 >
-                                  {formatShortDate(b.checkInDate) || "-"}
+                                  {/* Book Date — when the booking record
+                                      was created. Falls back to createdAt
+                                      when bookingDate isn't populated on
+                                      older rows. */}
+                                  {formatShortDate(b.bookingDate || b.createdAt) || "-"}
                                 </td>
                                 <td
                                   style={{
@@ -824,33 +815,87 @@ export default function DayStayBookingList() {
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     fontFamily: "monospace",
-                                    width: COLUMN_WIDTHS.rooms,
+                                    width: COLUMN_WIDTHS.deadlineDate,
                                   }}
                                 >
-                                  {b.noOfRooms ?? 1}
-                                </td>
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    textAlign: "right",
-                                    width: COLUMN_WIDTHS.total,
-                                    whiteSpace: "nowrap",
-                                  }}
-                                >
-                                  <span className="fw-semibold text-dark">
-                                    {b.totalAmount != null
-                                      ? `AED ${Number(b.totalAmount).toFixed(2)}`
-                                      : "-"}
-                                  </span>
+                                  {/* Deadline Date — day-only ISO fragment. */}
+                                  {b.deadlineDate
+                                    ? String(b.deadlineDate).split("T")[0]
+                                    : "-"}
                                 </td>
                                 <td
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "center",
-                                    width: COLUMN_WIDTHS.status,
+                                    width: COLUMN_WIDTHS.paymentMode,
                                   }}
                                 >
-                                  <StatusPill meta={sMeta} raw={statusText} />
+                                  {(() => {
+                                    const label = getPaymentModeLabel(b);
+                                    if (label === "-") {
+                                      return (
+                                        <span className="text-muted">-</span>
+                                      );
+                                    }
+                                    return (
+                                      <span style={{ color: "#000" }}>
+                                        {label}
+                                      </span>
+                                    );
+                                  })()}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.notification,
+                                  }}
+                                >
+                                  {/* Notification — mirrors HotelBookingList's
+                                      per-row status pill (Confirmed / ReConfirmed
+                                      green, On Request orange, Not Confirmed
+                                      red, Cancelled red). Read-only here —
+                                      the click-to-confirm affordance is on the
+                                      detail view. */}
+                                  {(() => {
+                                    const raw = statusText || "-";
+                                    const norm = String(raw)
+                                      .replace(/\s+/g, "")
+                                      .toLowerCase();
+                                    const isConfirmed = norm === "confirmed";
+                                    const isReconfirmed = norm === "reconfirmed";
+                                    const isCancelled = norm === "cancelled";
+                                    const isOnRequestRoom = /^on\s*request$/i.test(
+                                      String(b.roomStatus || "").trim(),
+                                    );
+                                    const pill = (color, text) => (
+                                      <span
+                                        style={{
+                                          color,
+                                          padding: "0.32rem 0.6rem",
+                                          fontSize: "0.82rem",
+                                          fontWeight: "600",
+                                          borderRadius: "0.375rem",
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: "0.35rem",
+                                        }}
+                                      >
+                                        {text}
+                                      </span>
+                                    );
+                                    if (isOnRequestRoom && isConfirmed) {
+                                      return pill("#e67e22", "On Request");
+                                    }
+                                    if (isConfirmed) return pill("#06a301", "Confirmed");
+                                    if (isReconfirmed) return pill("#06a301", "ReConfirmed");
+                                    if (isCancelled) return pill("#dc3545", "Cancelled");
+                                    return (
+                                      <span className="text-muted" style={{ fontSize: "0.82rem" }}>
+                                        {raw}
+                                      </span>
+                                    );
+                                  })()}
                                 </td>
                                 <td
                                   style={{
