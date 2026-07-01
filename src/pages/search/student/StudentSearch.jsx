@@ -18,7 +18,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Card, Button, Row, Col, Form, Spinner } from "react-bootstrap";
-import { FaSearch, FaStar, FaGraduationCap, FaUserClock } from "react-icons/fa";
+import { FaSearch, FaStar, FaGraduationCap } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import Select from "react-select";
 import AgentSelect from "../../../components/AgentSelect";
@@ -62,6 +62,9 @@ function Counter({ value, min, max, onChange }) {
 // used before. Aggregate totals are derived in the page component for
 // the existing search payload + handoff payload.
 // ─────────────────────────────────────────────
+// Maximum number of rooms allowed per booking (matches HotelSearch).
+const MAX_ROOMS = 5;
+
 function RoomGuestSelector({ value, onChange }) {
   const [rooms, setRooms] = useState(value);
 
@@ -75,8 +78,10 @@ function RoomGuestSelector({ value, onChange }) {
     setRooms(next);
     onChange && onChange(next);
   };
-  const addRoom = () =>
+  const addRoom = () => {
+    if (rooms.length >= MAX_ROOMS) return;
     update([...rooms, { adults: 1, children: 0, childAges: [] }]);
+  };
   const removeRoom = (i) => update(rooms.filter((_, j) => j !== i));
   const setAdults = (i, a) =>
     update(rooms.map((r, j) => (j === i ? { ...r, adults: a } : r)));
@@ -178,10 +183,20 @@ function RoomGuestSelector({ value, onChange }) {
             )}
           </div>
         ))}
-        <button type="button" className="rgs-add-room-btn" onClick={addRoom}>
+        <button
+          type="button"
+          className="rgs-add-room-btn"
+          onClick={addRoom}
+          disabled={rooms.length >= MAX_ROOMS}
+        >
           <span className="rgs-add-icon">+</span>
           <span>Add Room</span>
         </button>
+        {rooms.length >= MAX_ROOMS && (
+          <div className="text-danger small mt-2">
+            A maximum of {MAX_ROOMS} rooms can be added per booking.
+          </div>
+        )}
       </div>
     </div>
   );
@@ -752,7 +767,6 @@ export default function StudentSearch() {
 
               <div className="mb-4 text-start">
                 <h2 className="fw-semibold text-primary mb-1 d-flex align-items-center">
-                  <FaUserClock className="me-2" />
                   <div>
                     <div style={{ fontSize: "1rem", fontWeight: "400" }}>
                       Find Your Perfect Stay for
@@ -1008,14 +1022,16 @@ export default function StudentSearch() {
                     <Button
                       type="button"
                       className="flex-shrink-0 btn-add-room-premium"
+                      disabled={roomsOpen && rooms.length >= MAX_ROOMS}
                       onClick={() => {
                         if (!roomsOpen) {
                           setRoomsOpen(true);
                         } else {
-                          setRooms((prev) => [
-                            ...prev,
-                            { adults: 1, children: 0, childAges: [] },
-                          ]);
+                          setRooms((prev) =>
+                            prev.length >= MAX_ROOMS
+                              ? prev
+                              : [...prev, { adults: 1, children: 0, childAges: [] }]
+                          );
                         }
                       }}
                     >
@@ -1116,35 +1132,42 @@ export default function StudentSearch() {
                           onChange={(e) => setHotelSearchTerm(e.target.value)}
                         />
 
-                        {/* Currency — converts the AED rates shown below. */}
-                        <Form.Group className="mb-2">
-                          <Form.Label className="fw-semibold small">
-                            Currency
-                          </Form.Label>
-                          <Select
-                            options={currencyOptions}
-                            value={selectedCurrency}
-                            onChange={(opt) => {
-                              currencyTouchedRef.current = true;
-                              setSelectedCurrency(opt);
-                            }}
-                            placeholder="Select currency"
-                            isSearchable
-                            menuPortalTarget={document.body}
-                            styles={{
-                              control: (base) => ({
-                                ...base,
-                                minHeight: "36px",
-                                background: "#ffffff",
-                                color: "#000000",
-                              }),
-                              menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                              menu: (base) => ({ ...base, zIndex: 9999 }),
-                            }}
-                          />
-                        </Form.Group>
+                        {/* Currency — converts the AED rates shown below.
+                            Hidden for AGENT logins (their currency is
+                            auto-locked to the agent's configured currency
+                            upstream). */}
+                        {!isAgentRole && (
+                          <>
+                            <Form.Group className="mb-2">
+                              <Form.Label className="fw-semibold small">
+                                Currency
+                              </Form.Label>
+                              <Select
+                                options={currencyOptions}
+                                value={selectedCurrency}
+                                onChange={(opt) => {
+                                  currencyTouchedRef.current = true;
+                                  setSelectedCurrency(opt);
+                                }}
+                                placeholder="Select currency"
+                                isSearchable
+                                menuPortalTarget={document.body}
+                                styles={{
+                                  control: (base) => ({
+                                    ...base,
+                                    minHeight: "36px",
+                                    background: "#ffffff",
+                                    color: "#000000",
+                                  }),
+                                  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                                  menu: (base) => ({ ...base, zIndex: 9999 }),
+                                }}
+                              />
+                            </Form.Group>
 
-                        <hr />
+                            <hr />
+                          </>
+                        )}
 
                         <Form.Group className="mb-2">
                           <Form.Label className="fw-semibold small">

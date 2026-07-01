@@ -32,7 +32,7 @@ import Select from "react-select";
 import AgentSelect from "../../../components/AgentSelect";
 import axiosInstance from "../../../components/AxiosInstance";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
-import { FaSearch, FaStar, FaUserClock } from "react-icons/fa";
+import { FaSearch, FaStar } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import "../../../styles/HotelSearch.css";
 
@@ -60,6 +60,9 @@ function Counter({ value, min, max, onChange }) {
   );
 }
 
+// Maximum number of rooms allowed per booking (matches HotelSearch).
+const MAX_ROOMS = 5;
+
 function RoomGuestSelector({ value, onChange }) {
   const [rooms, setRooms] = useState(value);
 
@@ -73,11 +76,13 @@ function RoomGuestSelector({ value, onChange }) {
     setRooms(next);
     onChange && onChange(next);
   };
-  const addRoom = () =>
+  const addRoom = () => {
+    if (rooms.length >= MAX_ROOMS) return;
     update([
       ...rooms,
       { adults: 1, children: 0, childAges: [], adultAges: [65] },
     ]);
+  };
   const removeRoom = (index) => update(rooms.filter((_, i) => i !== index));
   const setAdults = (index, adults) =>
     update(
@@ -893,7 +898,6 @@ export default function SeniorCitizenSearch() {
             <Card.Body className="p-4">
               <div className="mb-4 text-start">
                 <h2 className="fw-semibold text-primary mb-1 d-flex align-items-center">
-                  <FaUserClock className="me-2" />
                   <div>
                     <div style={{ fontSize: "1rem", fontWeight: "400" }}>
                       Find Your Perfect Stay for
@@ -1331,33 +1335,40 @@ export default function SeniorCitizenSearch() {
                           value={hotelSearchTerm}
                           onChange={(e) => setHotelSearchTerm(e.target.value)}
                         />
-                        {/* Currency — converts the AED rates shown below. */}
-                        <Form.Group className="mb-2">
-                          <Form.Label className="fw-semibold small">
-                            Currency
-                          </Form.Label>
-                          <Select
-                            options={currencyOptions}
-                            value={selectedCurrency}
-                            onChange={(opt) => {
-                              currencyTouchedRef.current = true;
-                              setSelectedCurrency(opt);
-                            }}
-                            placeholder="Select currency"
-                            isSearchable
-                            menuPortalTarget={document.body}
-                            styles={{
-                              control: (base) => ({
-                                ...base,
-                                minHeight: "36px",
-                                background: "#fff",
-                              }),
-                              menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                              menu: (base) => ({ ...base, zIndex: 9999 }),
-                            }}
-                          />
-                        </Form.Group>
-                        <hr />
+                        {/* Currency — converts the AED rates shown below.
+                            Hidden for AGENT logins (their currency is
+                            auto-locked to the agent's configured currency
+                            upstream). */}
+                        {!isAgentRole && (
+                          <>
+                            <Form.Group className="mb-2">
+                              <Form.Label className="fw-semibold small">
+                                Currency
+                              </Form.Label>
+                              <Select
+                                options={currencyOptions}
+                                value={selectedCurrency}
+                                onChange={(opt) => {
+                                  currencyTouchedRef.current = true;
+                                  setSelectedCurrency(opt);
+                                }}
+                                placeholder="Select currency"
+                                isSearchable
+                                menuPortalTarget={document.body}
+                                styles={{
+                                  control: (base) => ({
+                                    ...base,
+                                    minHeight: "36px",
+                                    background: "#fff",
+                                  }),
+                                  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                                  menu: (base) => ({ ...base, zIndex: 9999 }),
+                                }}
+                              />
+                            </Form.Group>
+                            <hr />
+                          </>
+                        )}
                         <Form.Group className="mb-2">
                           <Form.Label className="fw-semibold small">
                             Hotel Type

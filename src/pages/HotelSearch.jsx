@@ -2118,53 +2118,54 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                               AED into the chosen currency using the
                               master_currency multiplier. Display-only: it does
                               not alter the search/booking payloads.
-                              For an AGENT login the field is locked to the
-                              agent's configured currency (auto-populated from
-                              /api/agent/{id} above); only Admin/SuperAdmin can
-                              switch it. */}
-                          <Form.Group className="mb-2">
-                            <Form.Label className="fw-semibold small">
-                              Currency
-                            </Form.Label>
-                            <Select
-                              options={currencyOptions}
-                              value={selectedCurrency}
-                              isDisabled={isAgentRole}
-                              onChange={(opt) => {
-                                // Operator override — stop auto-defaulting to
-                                // the agent's currency from here on. Agents
-                                // can't reach this branch (isDisabled above),
-                                // so the touched-ref only flips for admins.
-                                currencyTouchedRef.current = true;
-                                setSelectedCurrency(opt);
-                              }}
-                              placeholder="Select currency"
-                              isSearchable
-                              // Server-side search: the backend filters the
-                              // list by the `search` param, so we disable
-                              // react-select's own client filtering to avoid
-                              // double-filtering the returned options.
-                              filterOption={() => true}
-                              onInputChange={(value, { action }) => {
-                                if (action === "input-change")
-                                  debouncedCurrencySearch(value);
-                              }}
-                              className="modern-select-sm"
-                              menuPortalTarget={document.body}
-                              styles={{
-                                control: (base) => ({
-                                  ...base,
-                                  minHeight: "36px",
-                                  background: "#ffffff",
-                                  color: "#000000",
-                                }),
-                                menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                                menu: (base) => ({ ...base, zIndex: 9999 }),
-                              }}
-                            />
-                          </Form.Group>
+                              For an AGENT login the field is hidden entirely
+                              and locked to the agent's configured currency
+                              (auto-populated from /api/agent/{id} above); only
+                              Admin/SuperAdmin see and can switch it. */}
+                          {!isAgentRole && (
+                            <>
+                              <Form.Group className="mb-2">
+                                <Form.Label className="fw-semibold small">
+                                  Currency
+                                </Form.Label>
+                                <Select
+                                  options={currencyOptions}
+                                  value={selectedCurrency}
+                                  onChange={(opt) => {
+                                    // Operator override — stop auto-defaulting
+                                    // to the agent's currency from here on.
+                                    currencyTouchedRef.current = true;
+                                    setSelectedCurrency(opt);
+                                  }}
+                                  placeholder="Select currency"
+                                  isSearchable
+                                  // Server-side search: the backend filters the
+                                  // list by the `search` param, so we disable
+                                  // react-select's own client filtering to avoid
+                                  // double-filtering the returned options.
+                                  filterOption={() => true}
+                                  onInputChange={(value, { action }) => {
+                                    if (action === "input-change")
+                                      debouncedCurrencySearch(value);
+                                  }}
+                                  className="modern-select-sm"
+                                  menuPortalTarget={document.body}
+                                  styles={{
+                                    control: (base) => ({
+                                      ...base,
+                                      minHeight: "36px",
+                                      background: "#ffffff",
+                                      color: "#000000",
+                                    }),
+                                    menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                                    menu: (base) => ({ ...base, zIndex: 9999 }),
+                                  }}
+                                />
+                              </Form.Group>
 
-                          <hr />
+                              <hr />
+                            </>
+                          )}
 
                           <Form.Group className="mb-2">
                             <Form.Label className="fw-semibold small">
