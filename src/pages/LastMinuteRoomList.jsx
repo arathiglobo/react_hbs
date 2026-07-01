@@ -10,6 +10,7 @@ import {
   Alert,
   Accordion,
   Form,
+  Modal,
 } from "react-bootstrap";
 import { useAccordionButton } from "react-bootstrap/AccordionButton";
 import {
@@ -175,6 +176,18 @@ export default function LastMinuteRoomList() {
   const [error, setError] = useState(null);
   const [activeAccordion, setActiveAccordion] = useState(null);
   const [viewMode, setViewMode] = useState("grid");
+
+  // Cancellation Policies & Terms modal — mirrors RoomList.jsx. Opens from a
+  // per-rate link inside each room card. Last-minute rates have STATIC
+  // policies (non-refundable + amendment/child boilerplate) — no policyList
+  // fetch, no T&C fetch — so the modal just renders the same text that used
+  // to sit in the bottom "Booking Policies" card, per-rate.
+  const [showPoliciesModal, setShowPoliciesModal] = useState(false);
+  const [selectedRateForPolicies, setSelectedRateForPolicies] = useState(null);
+  const openPoliciesModal = (rate) => {
+    setSelectedRateForPolicies(rate || null);
+    setShowPoliciesModal(true);
+  };
 
   // ──────────────────────────────────────────────────────────────────────
   // Multi-room selection — mirrors RoomList.jsx.
@@ -415,7 +428,17 @@ export default function LastMinuteRoomList() {
         <Sidebar />
         <main className="content-wrapper flex-grow-1" style={{ minWidth: 0, overflowX: "hidden" }}>
           <div className="container-fluid" style={{ paddingTop: "10px" }}>
-            <div className="d-flex justify-content-end mb-2">
+            {/* Top toolbar: Back to Search + agent balance — mirrors
+                RoomList.jsx so the flow shares the same header polish. */}
+            <div className="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
+              <Button
+                variant="outline-primary"
+                size="sm"
+                onClick={() => navigate("/new-booking/last-minute-booking")}
+                className="back-to-search-btn"
+              >
+                ← Back to Search
+              </Button>
               <AgentBalanceDisplay agentId={payload?.searchContext?.agent} />
             </div>
             {/* ── Hotel Header ────────────────────────────────────────── */}
@@ -474,15 +497,8 @@ export default function LastMinuteRoomList() {
                             </small>
                           </div>
                         </div>
-                        <div className="mt-3">
-                          <Button
-                            variant="outline-primary"
-                            size="sm"
-                            onClick={() => navigate(-1)}
-                          >
-                            Back to Search
-                          </Button>
-                        </div>
+                        {/* Back-to-Search button now lives in the top
+                            toolbar above this card — matches RoomList. */}
                       </div>
                     </div>
                   </Col>
@@ -589,7 +605,15 @@ export default function LastMinuteRoomList() {
                               >
                                 <Card className="rate-card h-100 shadow-sm">
                                   {viewMode === "grid" ? (
-                                    <Card.Body className="p-3 pb-2 d-flex flex-column gap-2">
+                                    <Card.Body className="p-2 pb-0 d-flex flex-column gap-2">
+                                      {/* Header row mirrors RoomList.jsx:
+                                          only TWO top-level children in
+                                          the d-flex justify-content-between
+                                          (left column: meal plan + status
+                                          badge stacked; right: refund badge).
+                                          Room type name moved to its own
+                                          line below so the row doesn't get
+                                          squeezed. */}
                                       <div className="rate-header d-flex justify-content-between align-items-start">
                                         <div>
                                           <div className="d-flex align-items-center gap-2">
@@ -599,14 +623,18 @@ export default function LastMinuteRoomList() {
                                                 `Meal Plan #${rate.mealPlanId}`}
                                             </span>
                                           </div>
-                                          <div className="mt-1 small text-muted">
-                                            {rate.roomTypeName ||
-                                              `Type #${rate.roomTypeId}`}
+                                          <div className="mt-1">
+                                            {getRoomStatusBadge(rate.roomStatus)}
                                           </div>
                                         </div>
                                         {getRefundBadge(rate, results.checkInDate)}
-                                        {getRoomStatusBadge(rate.roomStatus)}
                                       </div>
+                                      {(rate.roomTypeName || rate.roomTypeId) && (
+                                        <div className="small text-muted">
+                                          {rate.roomTypeName ||
+                                            `Type #${rate.roomTypeId}`}
+                                        </div>
+                                      )}
 
                                       <div className="rate-pricing text-center py-2">
                                         <div className="current-price">
@@ -632,9 +660,22 @@ export default function LastMinuteRoomList() {
                                           <FaInfoCircle className="me-2 text-muted" />
                                           {rate.rateCode || "Last Minute"}
                                         </div>
+                                        {/* Cancellation Policies & T&C —
+                                            open modal on click. Mirrors
+                                            RoomList.jsx. */}
                                         <div className="feature-item">
-                                          <FaShieldAlt className="me-2 text-muted" />
-                                          Last-minute rates are typically non-refundable.
+                                          <Button
+                                            variant="link"
+                                            size="sm"
+                                            className="p-0 text-decoration-underline"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              openPoliciesModal(rate);
+                                            }}
+                                          >
+                                            <FaShieldAlt className="me-2" />
+                                            Cancellation Policies &amp; Terms &amp; Conditions
+                                          </Button>
                                         </div>
                                         {rate.adultRate != null &&
                                           Number(rate.adultRate) > 0 && (
@@ -695,19 +736,28 @@ export default function LastMinuteRoomList() {
                                       )}
                                     </Card.Body>
                                   ) : (
-                                    <Card.Body className="p-3 py-2 d-flex flex-row justify-content-between align-items-center gap-3">
-                                      <div className="d-flex flex-column flex-grow-1">
-                                        <div className="d-flex align-items-center gap-3 mb-2">
-                                          <div className="d-flex align-items-center gap-2">
+                                    // List-mode row — mirrors RoomList.jsx.
+                                    <Card.Body className="p-3 py-2 d-flex flex-row align-items-center gap-3 flex-wrap flex-md-nowrap">
+                                      <div
+                                        className="d-flex flex-column flex-grow-1"
+                                        style={{ minWidth: 0 }}
+                                      >
+                                        <div className="d-flex align-items-center flex-wrap gap-2 mb-2">
+                                          <div
+                                            className="d-flex align-items-center gap-2 flex-shrink-0"
+                                            style={{ whiteSpace: "nowrap", minWidth: "200px" }}
+                                          >
                                             {getMealPlanIcon(rate.mealPlanName)}
-                                            <span className="fw-semibold">
+                                            <span className="fw-semibold text-truncate">
                                               {rate.mealPlanName ||
                                                 `Meal Plan #${rate.mealPlanId}`}
                                             </span>
                                           </div>
-                                          {getRefundBadge(rate, results.checkInDate)}
-                                        {getRoomStatusBadge(rate.roomStatus)}
-                                          <small className="text-muted">
+                                          <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                                            {getRefundBadge(rate, results.checkInDate)}
+                                            {getRoomStatusBadge(rate.roomStatus)}
+                                          </div>
+                                          <small className="text-muted text-truncate">
                                             {rate.roomTypeName ||
                                               `Type #${rate.roomTypeId}`}
                                           </small>
@@ -717,13 +767,31 @@ export default function LastMinuteRoomList() {
                                             <FaInfoCircle className="me-2" />
                                             {rate.rateCode || "Last Minute"}
                                           </div>
-                                          <div className="feature-item d-flex align-items-center text-truncate" style={{ maxWidth: "350px" }}>
-                                            <FaShieldAlt className="me-2" />
-                                            Non-refundable
+                                          <div className="feature-item d-flex align-items-center">
+                                            <Button
+                                              variant="link"
+                                              size="sm"
+                                              className="p-0 text-decoration-underline"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                openPoliciesModal(rate);
+                                              }}
+                                            >
+                                              <FaShieldAlt className="me-2" />
+                                              Cancellation Policies &amp; Terms &amp; Conditions
+                                            </Button>
                                           </div>
                                         </div>
                                       </div>
-                                      <div className="text-end px-4 border-start border-end" style={{ minWidth: "220px" }}>
+                                      <div
+                                        className="text-end px-3 border-start border-end flex-shrink-0"
+                                        style={{ minWidth: "220px" }}
+                                      >
+                                        {rate.normalContractRate != null && (
+                                          <div className="text-decoration-line-through text-muted small">
+                                            {formatPrice(rate.normalContractRate)}
+                                          </div>
+                                        )}
                                         <div className="fs-5 fw-bold text-primary">
                                           {formatPrice(applyMarkup(rate.lastMinuteRate, rate.markup))}
                                         </div>
@@ -747,7 +815,7 @@ export default function LastMinuteRoomList() {
                                           </div>
                                         )}
                                       </div>
-                                      <div className="ps-2">
+                                      <div className="flex-shrink-0">
                                         {isMultiRoom ? (
                                           <Form.Check
                                             type="radio"
@@ -771,7 +839,7 @@ export default function LastMinuteRoomList() {
                                         ) : (
                                           <Button
                                             variant="primary"
-                                            className="book-now-btn px-4 py-2"
+                                            className="book-now-btn px-3 py-2"
                                             onClick={() =>
                                               handleBookRate(rate, hotel, results)
                                             }
@@ -945,8 +1013,12 @@ export default function LastMinuteRoomList() {
               </Row>
             </div>
 
+            {/* Hotel Information — cancellation / amendment / child
+                policy sections have moved into the per-rate
+                "Cancellation Policies & Terms & Conditions" modal
+                (opens from each room card). Only stay-desk facts stay
+                on the page. Mirrors /room-list. */}
             <div className="mt-4">
-              {/* ── Policies ──────────────────────────────────────────── */}
               <Card
                 className="mb-4 shadow-sm"
                 style={{ overflow: "hidden", border: "1px solid #dbe3ef" }}
@@ -969,76 +1041,21 @@ export default function LastMinuteRoomList() {
                       fontSize: "1.15rem",
                     }}
                   >
-                    <FaShieldAlt />
+                    <FaHotel />
                   </div>
                   <div>
                     <div
                       className="fw-bold"
                       style={{ fontSize: "1.1rem", lineHeight: 1.2 }}
                     >
-                      Booking Policies
+                      Hotel Information
                     </div>
                     <div className="small" style={{ opacity: 0.85 }}>
-                      Cancellation, amendment &amp; stay details
+                      Stay desk &amp; general details
                     </div>
                   </div>
                 </Card.Header>
                 <Card.Body className="p-4">
-                  <div className="mb-3">
-                    <h6 className="text-danger mb-2">
-                      <FaTimesCircle className="me-2" />
-                      Cancellation Policy
-                    </h6>
-                    <p className="text-muted mb-1">
-                      Last-minute bookings are non-refundable once confirmed.
-                      Cancellations or no-shows will be charged 100% of the
-                      total booking value.
-                    </p>
-                  </div>
-
-                  <div className="mb-3">
-                    <h6 className="text-warning mb-2">
-                      <FaInfoCircle className="me-2" />
-                      Amendment Policy
-                    </h6>
-                    <p className="text-muted mb-1">
-                      Date or guest-name amendments are subject to availability
-                      and may be charged at the rate difference plus an
-                      administrative fee.
-                    </p>
-                  </div>
-
-                  {/* Child Policy — moved in from the dropped
-                      "Additional Information" card so all policy info
-                      lives in this single Booking Policies card. */}
-                  <div className="mb-3">
-                    <h6 className="text-primary mb-2">
-                      <FaUsers className="me-2" />
-                      Child Policy
-                    </h6>
-                    <ul className="mb-0 text-muted">
-                      <li>
-                        Last-minute rates may have stricter cancellation rules
-                        than the regular contract rate.
-                      </li>
-                      <li>
-                        Mandatory gala dinner fees may apply on certain dates.
-                      </li>
-                      <li>
-                        Additional taxes or resort fees may be collected at the
-                        property during check-in.
-                      </li>
-                      <li>
-                        Photo identification and a deposit may be required at
-                        check-in for incidental charges.
-                      </li>
-                    </ul>
-                  </div>
-
-                  <h6 className="text-secondary mb-2 pt-2 border-top">
-                    <FaHotel className="me-2" />
-                    Hotel Information
-                  </h6>
                   <Row className="g-3">
                     <Col md={6}>
                       <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
@@ -1048,6 +1065,10 @@ export default function LastMinuteRoomList() {
                       <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
                         <span className="text-muted">Check-out</span>
                         <span className="fw-semibold">Before 12:00</span>
+                      </div>
+                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                        <span className="text-muted">Children</span>
+                        <span className="fw-semibold">Policies vary by room</span>
                       </div>
                     </Col>
                     <Col md={6}>
@@ -1059,6 +1080,10 @@ export default function LastMinuteRoomList() {
                         <span className="text-muted">Additional Bed</span>
                         <span className="fw-semibold">Subject to availability</span>
                       </div>
+                      <div className="d-flex justify-content-between">
+                        <span className="text-muted">Cancellation</span>
+                        <span className="fw-semibold">See rate conditions</span>
+                      </div>
                     </Col>
                   </Row>
                 </Card.Body>
@@ -1067,6 +1092,95 @@ export default function LastMinuteRoomList() {
           </div>
         </main>
       </div>
+
+      {/* Cancellation Policies & Terms & Conditions Modal — Last Minute
+          rates share the same static non-refundable / amendment / child
+          policies (they're a fixed-rate product), so this modal just
+          renders the same text that used to live in the bottom
+          "Booking Policies" card, per rate. Mirrors RoomList.jsx. */}
+      <Modal
+        show={showPoliciesModal}
+        onHide={() => setShowPoliciesModal(false)}
+        size="lg"
+        centered
+        scrollable
+        aria-labelledby="lm-policies-terms-modal"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title id="lm-policies-terms-modal">
+            Cancellation Policies &amp; Terms &amp; Conditions
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ maxHeight: "70vh", overflowY: "auto" }}>
+          {selectedRateForPolicies && (
+            <div className="text-muted small mb-3">
+              {(selectedRateForPolicies.rateCode || "Last Minute")}
+              {selectedRateForPolicies.mealPlanName
+                ? ` • ${selectedRateForPolicies.mealPlanName}`
+                : ""}
+            </div>
+          )}
+
+          <h6 className="text-danger mb-2">
+            <FaTimesCircle className="me-2" />
+            Cancellation Policy
+          </h6>
+          <p className="text-muted mb-4">
+            Last-minute bookings are non-refundable once confirmed.
+            Cancellations or no-shows will be charged 100% of the total
+            booking value.
+          </p>
+
+          <h6 className="text-warning mb-2 pt-2 border-top">
+            <FaInfoCircle className="me-2" />
+            Amendment Policy
+          </h6>
+          <p className="text-muted mb-4">
+            Date or guest-name amendments are subject to availability and
+            may be charged at the rate difference plus an administrative
+            fee.
+          </p>
+
+          <h6 className="text-primary mb-2 pt-2 border-top">
+            <FaUsers className="me-2" />
+            Child Policy &amp; Additional Notes
+          </h6>
+          <ul className="mb-4 text-muted ps-3">
+            <li>
+              Last-minute rates may have stricter cancellation rules than
+              the regular contract rate.
+            </li>
+            <li>Mandatory gala dinner fees may apply on certain dates.</li>
+            <li>
+              Additional taxes or resort fees may be collected at the
+              property during check-in.
+            </li>
+            <li>
+              Photo identification and a deposit may be required at
+              check-in for incidental charges.
+            </li>
+          </ul>
+
+          <h6 className="text-secondary mb-2 pt-2 border-top">
+            <FaInfoCircle className="me-2" />
+            Terms &amp; Conditions
+          </h6>
+          <p className="text-muted mb-0">
+            Rates are quoted in AED and are subject to availability until
+            confirmed. Prices include applicable taxes unless stated
+            otherwise. All bookings are governed by the property's own
+            terms &amp; conditions and check-in requirements.
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setShowPoliciesModal(false)}
+          >
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

@@ -220,6 +220,25 @@ export default function SeniorCitizenBookingPage() {
   const isNonRefundableRate =
     bookingData?.selectedRate?.nonRefundable === true ||
     bookingData?.selectedRate?.nonRefundable === "true";
+  // Cancellation deadline for display — end of the check-in day, mirrors
+  // how the create payload stores deadlineDate (`${checkInDate}T23:59:59`).
+  // Powers the "Refundable until this date" / "Passed" badge on the
+  // confirm modal.
+  const cancellationDeadline = (() => {
+    const cinRaw = bookingData?.payload?.checkInDate;
+    if (!cinRaw) return null;
+    const cin = new Date(cinRaw);
+    if (isNaN(cin.getTime())) return null;
+    const deadline = new Date(cin);
+    deadline.setHours(0, 0, 0, 0);
+    return deadline;
+  })();
+  const isOutsideDeadline = (() => {
+    if (!cancellationDeadline) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today > cancellationDeadline;
+  })();
   // Offer the Voucher Now / Voucher Later choice only for refundable,
   // Available rates. On-request / non-refundable rates skip the choice.
   const showVoucherChoice = !isOnRequestRate && !isNonRefundableRate;
@@ -764,16 +783,17 @@ export default function SeniorCitizenBookingPage() {
                       <Col md={6}>
                         <Form.Group>
                           <Form.Label className="fw-semibold mb-1">Mode</Form.Label>
+                          {/* Only Credit Limit / Cash / Card are exposed
+                              per business decision. Online, Bank Transfer,
+                              and Cheque enums stay valid on the backend but
+                              are hidden here. Mirrors HotelBookingPage. */}
                           <Form.Select
                             value={paymentMode}
                             onChange={(e) => setPaymentMode(e.target.value)}
                           >
                             <option value="CREDITLIMIT">Credit Limit</option>
-                            <option value="ONLINE">Online</option>
                             <option value="CASH">Cash</option>
                             <option value="CARD">Card</option>
-                            <option value="BANK_TRANSFER">Bank Transfer</option>
-                            <option value="CHEQUE">Cheque</option>
                           </Form.Select>
                         </Form.Group>
                       </Col>
@@ -1044,7 +1064,8 @@ export default function SeniorCitizenBookingPage() {
               {/* ── Step 2 — Order Summary modal ──────────────────────── */}
               <Modal show={showConfirmModal}
                      onHide={() => setShowConfirmModal(false)}
-                     centered backdrop="static" size="md">
+                     centered backdrop="static" size="lg"
+                     dialogClassName="confirm-booking-modal">
                 <Modal.Header closeButton className="bg-primary text-white py-2"
                               style={{ borderBottom: "none" }}>
                   <Modal.Title className="fw-semibold d-flex align-items-center">
@@ -1093,17 +1114,6 @@ export default function SeniorCitizenBookingPage() {
                             <strong>Nights:</strong> {pendingPayload.nights}
                           </p>
                         </Col>
-                        <Col xs={12}>
-                          <p className="mb-1">
-                            <strong>Deadline Date:</strong>{" "}
-                            <span style={{ color: "#dc3545", fontWeight: 600 }}>
-                              {pendingPayload.deadlineDate
-                                ? pendingPayload.deadlineDate.replace("T", " ")
-                                : "-"}
-                            </span>
-                          </p>
-                        </Col>
-
                         {/* Room category + meal plan per booked room — mirrors
                             the booking summary. */}
                         {(pendingPayload.rooms || []).map((rm, i) => (
@@ -1150,6 +1160,74 @@ export default function SeniorCitizenBookingPage() {
                               : ""}
                           </p>
                         </Col>
+
+                        {/* Cancellation block — mirrors HotelBookingPage's
+                            confirm modal placement (after Lead Passenger,
+                            before Rate Split). Non-refundable → clear "no
+                            refund" notice. Refundable + deadline → the
+                            free-cancellation deadline with a green
+                            "Refundable until this date" badge, or a red
+                            "Passed" badge if already crossed. */}
+                        {isNonRefundableRate ? (
+                          <Col xs={12}>
+                            <div
+                              className="p-2 rounded border"
+                              style={{
+                                borderColor: "#dc2626",
+                                background: "#fef2f2",
+                              }}
+                            >
+                              <p
+                                className="mb-1 fw-bold"
+                                style={{ color: "#dc2626" }}
+                              >
+                                Non-refundable
+                              </p>
+                              <p className="mb-1 text-dark small">
+                                No refund will be provided if this booking
+                                is cancelled.
+                              </p>
+                              <p className="mb-0 text-dark small">
+                                100% cancellation charges apply from the
+                                time of booking.
+                              </p>
+                            </div>
+                          </Col>
+                        ) : (
+                          cancellationDeadline && (
+                            <Col xs={12}>
+                              <p className="mb-1">
+                                <strong>Cancellation Deadline:</strong>
+                                <br />
+                                <span className="text-dark">
+                                  {cancellationDeadline.toLocaleDateString(
+                                    "en-GB",
+                                    {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                    },
+                                  )}
+                                </span>
+                                {isOutsideDeadline ? (
+                                  <span
+                                    className="badge bg-danger ms-2"
+                                    style={{ fontSize: "0.7rem" }}
+                                  >
+                                    Passed
+                                  </span>
+                                ) : (
+                                  <span
+                                    className="badge bg-success ms-2"
+                                    style={{ fontSize: "0.7rem" }}
+                                  >
+                                    Refundable until this date
+                                  </span>
+                                )}
+                              </p>
+                            </Col>
+                          )
+                        )}
                       </Row>
 
                       <div className="mt-2 p-2 bg-white border rounded">

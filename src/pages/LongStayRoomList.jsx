@@ -214,11 +214,45 @@ function RoomCardGrid({
   isSelected = false,
   onSelect,
 }) {
+  // Highlight only the card chosen for THIS room slot. Other slots' picks
+  // must not tint this list. Matches RoomList.jsx multi-room UX.
+  const isSelectedForThisSlot = isMultiRoom && isSelected;
   return (
     <Col lg={6} xl={4} className="mb-3">
-      <Card className="rate-card h-100 shadow-sm">
-        <Card.Body className="p-3 d-flex flex-column gap-2">
-          {/* Header */}
+      <Card
+        className={`rate-card h-100 shadow-sm${isSelectedForThisSlot ? " rate-card-selected" : ""}`}
+        style={
+          isSelectedForThisSlot
+            ? {
+                borderColor: "#198754",
+                borderWidth: "2px",
+                backgroundColor: "#e8f5ec",
+                position: "relative",
+              }
+            : undefined
+        }
+      >
+        {isSelectedForThisSlot && (
+          <span
+            style={{
+              position: "absolute",
+              top: "6px",
+              right: "6px",
+              backgroundColor: "#198754",
+              color: "#fff",
+              fontSize: "0.7rem",
+              fontWeight: 700,
+              padding: "2px 6px",
+              borderRadius: "4px",
+              zIndex: 1,
+            }}
+          >
+            ✓ Selected
+          </span>
+        )}
+        <Card.Body className="p-2 pb-0 d-flex flex-column gap-2">
+          {/* Header — mirrors RoomList: only two top-level children in
+              the d-flex row so long category names don't get squeezed. */}
           <div className="rate-header d-flex justify-content-between align-items-start">
             <div>
               <h6 className="mb-1">
@@ -348,11 +382,38 @@ function RoomCardList({
   isSelected = false,
   onSelect,
 }) {
+  // Highlight only the row chosen for THIS room slot — same pattern as
+  // the grid card so both view modes share the multi-room UX.
+  const isSelectedForThisSlot = isMultiRoom && isSelected;
   return (
     <div
-      className="d-flex align-items-center gap-3 p-3 mb-2 bg-white border rounded"
-      style={{ flexWrap: "wrap" }}
+      className="d-flex align-items-center gap-3 p-3 mb-2 border rounded"
+      style={{
+        flexWrap: "wrap",
+        backgroundColor: isSelectedForThisSlot ? "#e8f5ec" : "#fff",
+        borderColor: isSelectedForThisSlot ? "#198754" : undefined,
+        borderWidth: isSelectedForThisSlot ? 2 : 1,
+        position: "relative",
+      }}
     >
+      {isSelectedForThisSlot && (
+        <span
+          style={{
+            position: "absolute",
+            top: "6px",
+            right: "6px",
+            backgroundColor: "#198754",
+            color: "#fff",
+            fontSize: "0.7rem",
+            fontWeight: 700,
+            padding: "2px 6px",
+            borderRadius: "4px",
+            zIndex: 1,
+          }}
+        >
+          ✓ Selected
+        </span>
+      )}
       {/* Left: name & attributes */}
       <div style={{ minWidth: 160, flex: "1 1 160px" }}>
         <div className="fw-semibold small">
@@ -838,7 +899,17 @@ export default function LongStayRoomList() {
         <Sidebar />
         <main className="content-wrapper flex-grow-1" style={{ minWidth: 0, overflowX: "hidden" }}>
           <div className="container-fluid" style={{ paddingTop: "10px" }}>
-            <div className="d-flex justify-content-end mb-2">
+            {/* Top toolbar: Back to Search + agent balance — mirrors
+                RoomList.jsx so the flow shares the same header polish. */}
+            <div className="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
+              <Button
+                variant="outline-primary"
+                size="sm"
+                onClick={() => navigate("/new-booking/long-stay")}
+                className="back-to-search-btn"
+              >
+                ← Back to Search
+              </Button>
               <AgentBalanceDisplay agentId={draft?.payload?.agentId} />
             </div>
 
@@ -901,15 +972,8 @@ export default function LongStayRoomList() {
                             </small>
                           </div>
                         </div>
-                        <div className="mt-3">
-                          <Button
-                            variant="outline-primary"
-                            size="sm"
-                            onClick={() => navigate(-1)}
-                          >
-                            Back to Search
-                          </Button>
-                        </div>
+                        {/* Back-to-Search button now lives in the top
+                            toolbar above this card — matches RoomList. */}
                       </div>
                     </div>
                   </Col>
@@ -1042,6 +1106,25 @@ export default function LongStayRoomList() {
                         const p = estimateStayPrice(c, r);
                         return acc === null || p < acc ? p : acc;
                       }, null) ?? 0;
+                    // Room-name title for the accordion header — mirrors
+                    // RoomList.jsx's h5 ({category.roomCategory}). LongStay
+                    // groups by contract, so pull the unique room-category
+                    // names from the visible rooms and join them. Falls back
+                    // to a generic label if the data isn't there.
+                    const roomNameTitle =
+                      Array.from(
+                        new Set(
+                          (visibleRooms.length ? visibleRooms : c.rooms || [])
+                            .map(
+                              (r) =>
+                                r.roomCategoryName ||
+                                (r.hotelRoomCategoryId
+                                  ? `Category #${r.hotelRoomCategoryId}`
+                                  : ""),
+                            )
+                            .filter(Boolean),
+                        ),
+                      ).join(", ") || "Long-stay rooms";
 
                     return (
                       <Accordion.Item
@@ -1049,30 +1132,36 @@ export default function LongStayRoomList() {
                         eventKey={eventKey}
                         className="room-category-item mb-2"
                       >
+                        {/* Header — arranged like RoomList.jsx: clean h5
+                            room-name title on top, single small description
+                            line below (badge + validity + stay cap), price /
+                            toggle stack on the right. Rate code is
+                            intentionally NOT surfaced here — it stays
+                            available inside the room cards / booking flow. */}
                         <Accordion.Header
                           as="div"
                           className="room-category-header"
                         >
                           <div className="d-flex justify-content-between align-items-center w-100 flex-wrap gap-2">
                             <div className="room-category-info">
-                              <h5 className="mb-1 d-flex align-items-center gap-2 flex-wrap">
-                                <span>{c.rateCode}</span>
+                              <h5 className="mb-1">{roomNameTitle}</h5>
+                              <div className="mb-0 text-muted small d-flex align-items-center flex-wrap gap-2">
                                 {costTypeBadge(c.additionalCostType)}
-                              </h5>
-                              <p className="mb-0 text-muted small">
-                                <FaCalendarAlt className="me-1" />
-                                Validity: <strong>{c.validityFrom}</strong> →{" "}
-                                <strong>{c.validityTo}</strong>
-                                {c.maxBookingDays ? (
-                                  <>
-                                    {" "}
-                                    · Max stay:{" "}
-                                    <strong>{c.maxBookingDays}</strong> nights
-                                  </>
-                                ) : (
-                                  " · No stay cap"
-                                )}
-                              </p>
+                                <span>
+                                  <FaCalendarAlt className="me-1" />
+                                  Validity: <strong>{c.validityFrom}</strong> →{" "}
+                                  <strong>{c.validityTo}</strong>
+                                  {c.maxBookingDays ? (
+                                    <>
+                                      {" "}
+                                      · Max stay:{" "}
+                                      <strong>{c.maxBookingDays}</strong> nights
+                                    </>
+                                  ) : (
+                                    " · No stay cap"
+                                  )}
+                                </span>
+                              </div>
                             </div>
 
                             <div className="d-flex align-items-center gap-3">
