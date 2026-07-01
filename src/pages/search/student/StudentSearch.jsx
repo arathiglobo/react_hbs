@@ -593,8 +593,12 @@ export default function StudentSearch() {
     setResults([]);
     setIsEditingSearch(false);
     try {
+      // For AGENT logins the agent dropdown is hidden and `agent` stays "";
+      // fall back to the resolved selfAgentId so the backend receives a valid
+      // filter and returns the agent's contracted hotels instead of nothing.
+      const effectiveAgentId = isAgentRole ? selfAgentId : agent;
       const payload = {
-        agentId: Number(agent),
+        agentId: Number(effectiveAgentId),
         checkIn,
         checkOut,
         destinationCityId: selectedDestination.value,
@@ -629,7 +633,7 @@ export default function StudentSearch() {
         try {
           const { data: r } = await axiosInstance.get(
             `/api/student-hotel-search/results/${searchId}` +
-              `?agentId=${agent}&page=0&size=50&checkInDate=${checkIn}`,
+              `?agentId=${effectiveAgentId}&page=0&size=50&checkInDate=${checkIn}`,
           );
           setResults(r?.result || []);
           if (r?.finalStatus === "COMPLETED" || attempts >= 10) {
@@ -682,7 +686,10 @@ export default function StudentSearch() {
       noOfRooms: totalRooms,
       adults: totalAdults,
       children: totalChildren,
-      agentId: agent,
+      // For agent logins the dropdown is hidden and `agent` stays "";
+      // fall back to selfAgentId so the room-list / booking flow gets a
+      // valid agent id.
+      agentId: (isAgentRole ? selfAgentId : agent) || "",
       // Optional "Booking Done By Employee" selection.
       employeeId: selectedEmployee?.value || null,
       // "Add New Item" flow: when this search was opened from a booking's

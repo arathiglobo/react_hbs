@@ -654,8 +654,12 @@ export default function GovEmployeeSearch() {
       const totalAdults = rooms.reduce((s, r) => s + (r.adults || 0), 0);
       const totalChildren = rooms.reduce((s, r) => s + (r.children || 0), 0);
 
+      // For AGENT logins the agent dropdown is hidden and `agent` stays "";
+      // fall back to the resolved selfAgentId so the backend receives a valid
+      // filter and returns the agent's contracted hotels instead of nothing.
+      const effectiveAgentId = isAgentRole ? selfAgentId : agent;
       const payload = {
-        agentId: Number(agent) || undefined,
+        agentId: Number(effectiveAgentId) || undefined,
         checkIn,
         checkOut,
         destinationCityId: selectedDestination.value,
@@ -692,7 +696,7 @@ export default function GovEmployeeSearch() {
         try {
           const { data: r } = await axiosInstance.get(
             `/api/gov-employee-hotel-search/results/${searchId}` +
-              `?agentId=${agent}&page=0&size=50&checkInDate=${checkIn}`,
+              `?agentId=${effectiveAgentId}&page=0&size=50&checkInDate=${checkIn}`,
           );
           setResults(r?.result || []);
           if (r?.finalStatus === "COMPLETED" || attempts >= 10) {
@@ -751,7 +755,10 @@ export default function GovEmployeeSearch() {
       adults: firstRoom.adults,
       children: firstRoom.children,
       roomConfigurations: rooms,
-      agentId: agent,
+      // For agent logins the dropdown is hidden and `agent` stays "";
+      // fall back to selfAgentId so the room-list / booking flow gets a
+      // valid agent id.
+      agentId: (isAgentRole ? selfAgentId : agent) || "",
       // Optional "Booking Done By Employee" selection — null when
       // the user skipped the dropdown.
       employeeId: selectedEmployee?.value || null,
