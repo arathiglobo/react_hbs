@@ -52,6 +52,9 @@ function Counter({ value, min, max, onChange }) {
 // before. Aggregate totals are derived in the page component for the
 // existing search payload + price-row display.
 // ─────────────────────────────────────────────
+// Maximum number of rooms allowed per booking (matches HotelSearch).
+const MAX_ROOMS = 5;
+
 function RoomGuestSelector({ value, onChange }) {
   const [rooms, setRooms] = useState(value);
 
@@ -65,7 +68,10 @@ function RoomGuestSelector({ value, onChange }) {
     setRooms(next);
     onChange && onChange(next);
   };
-  const addRoom = () => update([...rooms, { adults: 1, children: 0, childAges: [] }]);
+  const addRoom = () => {
+    if (rooms.length >= MAX_ROOMS) return;
+    update([...rooms, { adults: 1, children: 0, childAges: [] }]);
+  };
   const removeRoom = (i) => update(rooms.filter((_, j) => j !== i));
   const setAdults = (i, a) =>
     update(rooms.map((r, j) => (j === i ? { ...r, adults: a } : r)));
@@ -146,10 +152,20 @@ function RoomGuestSelector({ value, onChange }) {
             )}
           </div>
         ))}
-        <button type="button" className="rgs-add-room-btn" onClick={addRoom}>
+        <button
+          type="button"
+          className="rgs-add-room-btn"
+          onClick={addRoom}
+          disabled={rooms.length >= MAX_ROOMS}
+        >
           <span className="rgs-add-icon">+</span>
           <span>Add Room</span>
         </button>
+        {rooms.length >= MAX_ROOMS && (
+          <div className="text-danger small mt-2">
+            A maximum of {MAX_ROOMS} rooms can be added per booking.
+          </div>
+        )}
       </div>
     </div>
   );
@@ -773,14 +789,16 @@ export default function DayStaySearch() {
                       <Button
                         type="button"
                         className="flex-grow-1 justify-content-center btn-add-room-premium"
+                        disabled={roomsOpen && rooms.length >= MAX_ROOMS}
                         onClick={() => {
                           if (!roomsOpen) {
                             setRoomsOpen(true);
                           } else {
-                            setRooms((prev) => [
-                              ...prev,
-                              { adults: 1, children: 0, childAges: [] },
-                            ]);
+                            setRooms((prev) =>
+                              prev.length >= MAX_ROOMS
+                                ? prev
+                                : [...prev, { adults: 1, children: 0, childAges: [] }]
+                            );
                           }
                         }}
                       >

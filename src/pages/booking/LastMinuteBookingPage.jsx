@@ -93,6 +93,9 @@ function Counter({ value, min, max, onChange }) {
   );
 }
 
+// Maximum number of rooms allowed per booking (matches HotelSearch).
+const MAX_ROOMS = 5;
+
 function RoomGuestSelector({ value, onChange }) {
   const [rooms, setRooms] = useState(value);
 
@@ -103,7 +106,10 @@ function RoomGuestSelector({ value, onChange }) {
   }, [value]);
 
   const update = (next) => { setRooms(next); onChange?.(next); };
-  const addRoom = () => update([...rooms, { adults: 1, children: 0, childAges: [] }]);
+  const addRoom = () => {
+    if (rooms.length >= MAX_ROOMS) return;
+    update([...rooms, { adults: 1, children: 0, childAges: [] }]);
+  };
   const removeRoom = (i) => update(rooms.filter((_, idx) => idx !== i));
   const setAdults = (i, adults) => update(rooms.map((r, idx) => idx === i ? { ...r, adults } : r));
   const setChildren = (i, children) =>
@@ -166,10 +172,20 @@ function RoomGuestSelector({ value, onChange }) {
             )}
           </div>
         ))}
-        <button type="button" className="rgs-add-room-btn" onClick={addRoom}>
+        <button
+          type="button"
+          className="rgs-add-room-btn"
+          onClick={addRoom}
+          disabled={rooms.length >= MAX_ROOMS}
+        >
           <span className="rgs-add-icon">+</span>
           <span>Add Room</span>
         </button>
+        {rooms.length >= MAX_ROOMS && (
+          <div className="text-danger small mt-2">
+            A maximum of {MAX_ROOMS} rooms can be added per booking.
+          </div>
+        )}
       </div>
     </div>
   );
@@ -790,14 +806,16 @@ export default function LastMinuteBookingPage() {
                       <Button
                         type="button"
                         className="flex-shrink-0 btn-add-room-premium"
+                        disabled={roomsOpen && rooms.length >= MAX_ROOMS}
                         onClick={() => {
                           if (!roomsOpen) {
                             setRoomsOpen(true);
                           } else {
-                            setRooms((prev) => [
-                              ...prev,
-                              { adults: 1, children: 0, childAges: [] },
-                            ]);
+                            setRooms((prev) =>
+                              prev.length >= MAX_ROOMS
+                                ? prev
+                                : [...prev, { adults: 1, children: 0, childAges: [] }]
+                            );
                           }
                         }}
                       >
@@ -862,6 +880,7 @@ export default function LastMinuteBookingPage() {
           ) : results ? (
             <ResultsWithFilters
               results={results}
+              isAgentRole={isAgentRole}
               currencyOptions={currencyOptions}
               selectedCurrency={selectedCurrency}
               onCurrencyChange={(opt) => {
@@ -934,6 +953,7 @@ const PAGE_SIZE = 10;
 function ResultsWithFilters({
   results,
   searchContext,
+  isAgentRole = false,
   currencyOptions = [],
   selectedCurrency = null,
   onCurrencyChange,
@@ -1048,31 +1068,37 @@ function ResultsWithFilters({
                   onChange={(e) => { setHotelSearchTerm(e.target.value); setPageIndex(0); }}
                 />
 
-                {/* Currency — converts the AED rates shown below. */}
-                <Form.Group className="mb-2">
-                  <Form.Label className="fw-semibold small">Currency</Form.Label>
-                  <Select
-                    options={currencyOptions}
-                    value={selectedCurrency}
-                    onChange={(opt) => onCurrencyChange && onCurrencyChange(opt)}
-                    placeholder="Select currency"
-                    isSearchable
-                    className="modern-select-sm"
-                    menuPortalTarget={document.body}
-                    styles={{
-                      control: (base) => ({
-                        ...base,
-                        minHeight: "36px",
-                        background: "#ffffff",
-                        color: "#000000",
-                      }),
-                      menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                      menu: (base) => ({ ...base, zIndex: 9999 }),
-                    }}
-                  />
-                </Form.Group>
+                {/* Currency — converts the AED rates shown below.
+                    Hidden for AGENT logins (their currency is auto-locked
+                    to the agent's configured currency upstream). */}
+                {!isAgentRole && (
+                  <>
+                    <Form.Group className="mb-2">
+                      <Form.Label className="fw-semibold small">Currency</Form.Label>
+                      <Select
+                        options={currencyOptions}
+                        value={selectedCurrency}
+                        onChange={(opt) => onCurrencyChange && onCurrencyChange(opt)}
+                        placeholder="Select currency"
+                        isSearchable
+                        className="modern-select-sm"
+                        menuPortalTarget={document.body}
+                        styles={{
+                          control: (base) => ({
+                            ...base,
+                            minHeight: "36px",
+                            background: "#ffffff",
+                            color: "#000000",
+                          }),
+                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          menu: (base) => ({ ...base, zIndex: 9999 }),
+                        }}
+                      />
+                    </Form.Group>
 
-                <hr />
+                    <hr />
+                  </>
+                )}
 
                 {/* Hotel type */}
                 <Form.Group className="mb-2">

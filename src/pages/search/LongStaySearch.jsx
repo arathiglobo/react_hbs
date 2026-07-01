@@ -86,7 +86,7 @@ function Counter({ value, min, max, onChange }) {
 }
 
 // Maximum number of rooms allowed per booking (matches HotelSearch).
-const MAX_ROOMS = 9;
+const MAX_ROOMS = 5;
 
 // ─────────────────────────────────────────────
 // Room Guest Selector
@@ -1451,34 +1451,41 @@ export default function LongStaySearch() {
                               debouncedSetFinalTerm(val);
                             }}
                           />
-                          {/* Currency — converts the AED rates shown below. */}
-                          <Form.Group className="mb-2">
-                            <Form.Label className="fw-semibold small">Currency</Form.Label>
-                            <Select
-                              options={currencyOptions}
-                              value={selectedCurrency}
-                              onChange={(opt) => {
-                                currencyTouchedRef.current = true;
-                                setSelectedCurrency(opt);
-                              }}
-                              placeholder="Select currency"
-                              isSearchable
-                              className="modern-select-sm"
-                              menuPortalTarget={document.body}
-                              styles={{
-                                control: (base) => ({
-                                  ...base,
-                                  minHeight: "36px",
-                                  background: "#ffffff",
-                                  color: "#000000",
-                                }),
-                                menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                                menu: (base) => ({ ...base, zIndex: 9999 }),
-                              }}
-                            />
-                          </Form.Group>
+                          {/* Currency — converts the AED rates shown below.
+                              Hidden for AGENT logins (their currency is
+                              auto-locked to the agent's configured
+                              currency upstream). */}
+                          {!isAgentRole && (
+                            <>
+                              <Form.Group className="mb-2">
+                                <Form.Label className="fw-semibold small">Currency</Form.Label>
+                                <Select
+                                  options={currencyOptions}
+                                  value={selectedCurrency}
+                                  onChange={(opt) => {
+                                    currencyTouchedRef.current = true;
+                                    setSelectedCurrency(opt);
+                                  }}
+                                  placeholder="Select currency"
+                                  isSearchable
+                                  className="modern-select-sm"
+                                  menuPortalTarget={document.body}
+                                  styles={{
+                                    control: (base) => ({
+                                      ...base,
+                                      minHeight: "36px",
+                                      background: "#ffffff",
+                                      color: "#000000",
+                                    }),
+                                    menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                                    menu: (base) => ({ ...base, zIndex: 9999 }),
+                                  }}
+                                />
+                              </Form.Group>
 
-                          <hr />
+                              <hr />
+                            </>
+                          )}
 
                           <Form.Group className="mb-2">
                             <Form.Label className="fw-semibold small">Hotel Type</Form.Label>
