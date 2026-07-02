@@ -945,6 +945,14 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
 
     setPagination((prev) => {
       const currentState = prev[status];
+      // When a client-side filter is active, the server was called with
+      // page=0, size=10000 so paginationMeta.totalPages is 1 regardless
+      // of the filtered result size. Clamping against it here would snap
+      // the page back to 1 on every re-fetch, breaking Next/prev during
+      // search. Client-side pagination is bounded by the filtered set
+      // (see safeTotalPages / displayedBookings) and resetAllPages()
+      // already fires whenever the search or filter inputs change.
+      if (isClientFiltering) return prev;
       const effectiveTotalPages = paginationMeta.totalPages || 1;
       const clampedPage = Math.min(
         currentState.page,
@@ -958,7 +966,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
         [status]: { ...currentState, page: clampedPage },
       };
     });
-  }, [status, apiData, onRequestData, reconfirmedData, confirmedData, invoicedData, allData]);
+  }, [status, apiData, onRequestData, reconfirmedData, confirmedData, invoicedData, allData, isClientFiltering]);
 
   const resetAllPages = useCallback(() => {
     setPagination((prev) => ({
@@ -2100,23 +2108,41 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                           opacity: currentPage === 1 ? 0.5 : 1,
                         }}
                       />
-                      {Array.from(
-                        { length: safeTotalPages },
-                        (_, i) => i + 1,
-                      ).map((pageNumber) => (
-                        <Pagination.Item
-                          key={pageNumber}
-                          active={currentPage === pageNumber}
-                          onClick={() => handlePageChange(pageNumber)}
-                          style={{
-                            cursor: "pointer",
-                            minWidth: "38px",
-                            textAlign: "center",
-                          }}
-                        >
-                          {pageNumber}
-                        </Pagination.Item>
-                      ))}
+                      {(() => {
+                        // Sliding window: show at most 5 page tabs at a time,
+                        // centered on the current page. Prev/Next behavior is
+                        // unchanged and continues to move one page at a time,
+                        // shifting the window as needed (e.g. 1..5, 2..6, ...).
+                        const windowSize = 5;
+                        const startPage = Math.max(
+                          1,
+                          Math.min(
+                            currentPage - Math.floor(windowSize / 2),
+                            safeTotalPages - windowSize + 1,
+                          ),
+                        );
+                        const endPage = Math.min(
+                          safeTotalPages,
+                          startPage + windowSize - 1,
+                        );
+                        return Array.from(
+                          { length: endPage - startPage + 1 },
+                          (_, i) => startPage + i,
+                        ).map((pageNumber) => (
+                          <Pagination.Item
+                            key={pageNumber}
+                            active={currentPage === pageNumber}
+                            onClick={() => handlePageChange(pageNumber)}
+                            style={{
+                              cursor: "pointer",
+                              minWidth: "38px",
+                              textAlign: "center",
+                            }}
+                          >
+                            {pageNumber}
+                          </Pagination.Item>
+                        ));
+                      })()}
                       <Pagination.Next
                         disabled={currentPage === safeTotalPages}
                         onClick={() =>
