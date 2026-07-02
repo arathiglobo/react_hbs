@@ -177,7 +177,10 @@ body{
   font-weight: 300;
 }
 
-/* Open submenu upwards */
+/* Open submenu upwards — bottom anchored to the top of the parent
+   button so the panel grows above the item. Use only for items that
+   have room above them (Report / Inhouse Accounts / Agent Incentive /
+   Marketing sit low enough in the sidebar). */
 .nav-item-has-children.submenu-up .submenu {
 top: auto;
   bottom: 100%;

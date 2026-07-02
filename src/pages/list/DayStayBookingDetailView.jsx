@@ -352,10 +352,12 @@ export default function DayStayBookingDetailView() {
     setCancelling(true);
     try {
       const trimmed = (cancelReason || "").trim();
+      // Send JSON body so Spring picks the JSON converter — a null body
+      // makes axios send application/x-www-form-urlencoded which the
+      // @RequestBody Map<String,Object> handler rejects with 415.
       await axiosInstance.post(
         `/api/day-stay-booking/${bookingId}/cancel`,
-        null,
-        { params: trimmed ? { reason: trimmed } : undefined }
+        { reason: trimmed || null },
       );
       toast.success("Booking cancelled");
       setShowCancel(false);
@@ -388,12 +390,14 @@ export default function DayStayBookingDetailView() {
     selected?.reconfirmation === true ||
     String(selected?.status || "").toUpperCase() === "CONFIRMED";
 
-  // On-Request flow mirror (degrades gracefully — day-stay backend does
-  // not currently expose roomStatus="On Request" or onRequestConfirmed,
-  // so both flags evaluate false and the page behaves exactly as before).
+  // On-Request flow mirror (degrades gracefully — when the backend does
+  // not populate roomStatus="On Request" or onRequestConfirmed both flags
+  // evaluate false and the page behaves as a standard booking).
   const isOnRequestRoom = /^on\s*request$/i.test(
     String(selected?.roomStatus || "").trim(),
   );
+  const isOnRequestConfirmedStep =
+    isOnRequestRoom && Boolean(selected?.onRequestConfirmed);
   const isOnRequestPending =
     isOnRequestRoom &&
     normalizedStatus === "CONFIRMED" &&
@@ -401,8 +405,7 @@ export default function DayStayBookingDetailView() {
 
   // For a cancelled booking the doc variant (final vs proforma) and whether
   // Agent Reference / Confirmation No. can be added are governed by the
-  // status the booking held BEFORE cancellation. Day-stay backend may not
-  // expose cancelledFromStatus; missing values keep these branches inert.
+  // status the booking held BEFORE cancellation.
   const priorStatus = String(selected?.cancelledFromStatus || "")
     .replace(/\s+/g, "")
     .toUpperCase();
@@ -426,14 +429,47 @@ export default function DayStayBookingDetailView() {
     return new Date().getTime() > checkIn.getTime();
   })();
 
-  // Display status for the StatusBadge — surface the raw confirmation/
-  // status the booking carries; "Cancelled" wins when the booking is in
-  // a cancelled state.
-  const displayStatus = isCancelledStatus
-    ? "Cancelled"
-    : selected?.confirmationStatus ||
-      selected?.status ||
-      (selected?.reconfirmation ? "ReConfirmed" : "-");
+  // Display status — chains the lifecycle stages the booking has actually
+  // been through so the badge reads like a history breadcrumb. Uses the
+  // backend-stamped timestamps (confirmedAt / reconfirmedAt / cancelledAt)
+  // so the chain grows one segment at a time as the operator acts:
+  //   • Confirmed booking                → "Confirmed"
+  //   • Confirmed → Reconfirmed          → "Confirmed/Reconfirmed"
+  //   • Confirmed → Reconfirmed → Cancel → "Confirmed/Reconfirmed/Cancelled"
+  //   • Cancelled from Confirmed         → "Confirmed/Cancelled"
+  //   • On-Request created               → "On Request"
+  //   • On-Request → Confirm             → "On Request/Confirmed"
+  //   • On-Request → Confirm → Reconfirm → "On Request/Confirmed/Reconfirmed"
+  //   • On-Request → cancelled at any    → adds "/Cancelled" to the chain
+  //   • Rejected                         → "Rejected" (terminal)
+  const displayStatus = (() => {
+    if (normalizedStatus === "REJECTED") return "Rejected";
+    const parts = [];
+    const wasConfirmed =
+      !!selected?.confirmedAt ||
+      normalizedStatus === "CONFIRMED" ||
+      normalizedStatus === "RECONFIRMED";
+    const wasReconfirmed =
+      !!selected?.reconfirmedAt ||
+      selected?.reconfirmation === true ||
+      normalizedStatus === "RECONFIRMED";
+    if (isOnRequestRoom) {
+      parts.push("On Request");
+      if (isOnRequestConfirmedStep || wasConfirmed) parts.push("Confirmed");
+    } else if (wasConfirmed) {
+      parts.push("Confirmed");
+    }
+    if (wasReconfirmed) parts.push("Reconfirmed");
+    if (isCancelledStatus) parts.push("Cancelled");
+    if (parts.length === 0) {
+      return (
+        selected?.confirmationStatus ||
+        selected?.status ||
+        (selected?.reconfirmation ? "ReConfirmed" : "-")
+      );
+    }
+    return parts.join("/");
+  })();
 
   // ── Reconfirm ──────────────────────────────────────────────────────
   const openConfirmModal = () => setShowConfirmModal(true);
@@ -882,7 +918,17 @@ export default function DayStayBookingDetailView() {
               </div>
             ) : (
               <>
-                {/* ── Booking Information ─────────────────────────────── */}
+                {/* ── Booking Information ───────────────────────────────
+                    Mirrors BookingDetailedView's Booking-Information block:
+                    Booking Code / Hotel / Address / Star Rating / Date /
+                    Window / Nights / Booking Date / Confirmed Date on the
+                    left; Agent / Booked-By-Employee / Agent Ref /
+                    Confirmation No. / Deadline / Refund Status / Total /
+                    Status / Reconfirmed Date / Cancelled Date on the right.
+                    Rows that carry no value fall back to "-" via InfoRow;
+                    lifecycle-timestamp rows (Reconfirmed/Cancelled) are
+                    conditionally rendered so they only appear once the
+                    action has taken place. */}
                 <div style={card}>
                   <div style={SECTION_HEADER}>Booking Information</div>
                   <div style={{ padding: "12px 16px" }}>
@@ -894,6 +940,14 @@ export default function DayStayBookingDetailView() {
                         />
                         <InfoRow label="Hotel Name" value={selected.hotelName} />
                         <InfoRow label="Address" value={selected.address} />
+                        <InfoRow
+                          label="Star Rating"
+                          value={
+                            selected.starRating
+                              ? `${selected.starRating} Star`
+                              : "-"
+                          }
+                        />
                         <InfoRow
                           label="Date"
                           value={
@@ -908,19 +962,72 @@ export default function DayStayBookingDetailView() {
                             (selected.checkOutTime || "").slice(0, 5) || "-"
                           }`}
                         />
+                        <InfoRow
+                          label="No. of Nights"
+                          value={
+                            selected.nights
+                              ? `${selected.nights} Night${
+                                  selected.nights === 1 ? "" : "s"
+                                }`
+                              : "1 Night"
+                          }
+                        />
+                        {selected.createdAt && (
+                          <InfoRow
+                            label="Booking Date"
+                            value={formatDateTime(selected.createdAt)}
+                          />
+                        )}
+                        {selected.confirmedAt && (
+                          <InfoRow
+                            label="Confirmed Date"
+                            value={formatDateTime(selected.confirmedAt)}
+                          />
+                        )}
                       </Col>
                       <Col md={6}>
-                        <InfoRow label="Agent" value={selected.agentId} />
-                        {/* Optional "Booking Done By Employee" — rendered
-                            only when an employee was selected at search
-                            time. Backend resolves the name from the
-                            joined employee row. */}
+                        <InfoRow
+                          label="Agent"
+                          value={selected.agentName || selected.agentId}
+                        />
                         {selected.employeeName && (
                           <InfoRow
                             label="Booked By Employee"
                             value={selected.employeeName}
                           />
                         )}
+                        <InfoRow
+                          label="Agent Reference"
+                          value={selected.agentLpo}
+                        />
+                        <InfoRow
+                          label="Confirmation No."
+                          value={selected.confirmationNumber}
+                        />
+                        <InfoRow
+                          label="Deadline Date"
+                          value={
+                            selected.deadlineDate ? (
+                              <span
+                                style={{ color: "#dc2626", fontWeight: 600 }}
+                              >
+                                {String(selected.deadlineDate).replace("T", " ")}
+                              </span>
+                            ) : (
+                              "-"
+                            )
+                          }
+                        />
+                        <InfoRow
+                          label="Refund Status"
+                          value={
+                            (selected.rooms || []).some(
+                              (r) => r?.nonRefundable === true,
+                            )
+                              ? "Non-Refundable"
+                              : "Refundable"
+                          }
+                        />
                         <InfoRow
                           label="Total"
                           value={
@@ -933,6 +1040,18 @@ export default function DayStayBookingDetailView() {
                           label="Status"
                           value={<StatusBadge status={displayStatus} />}
                         />
+                        {selected.reconfirmedAt && (
+                          <InfoRow
+                            label="Reconfirmed Date"
+                            value={formatDateTime(selected.reconfirmedAt)}
+                          />
+                        )}
+                        {selected.cancelledAt && (
+                          <InfoRow
+                            label="Cancelled Date"
+                            value={formatDateTime(selected.cancelledAt)}
+                          />
+                        )}
                       </Col>
                     </Row>
                   </div>
@@ -1156,7 +1275,7 @@ export default function DayStayBookingDetailView() {
                     {selected.cancellationPolicy && selected.cancellationPolicy.length > 0 ? (
                       selected.cancellationPolicy.map((p, i) => (
                         <p key={i} style={{ marginBottom: "4px" }}>
-                          {p}
+                          {typeof p === "string" ? p : p?.policyText || ""}
                         </p>
                       ))
                     ) : (

@@ -150,7 +150,13 @@ export default function DayStayBookingPage() {
 
   // ── Booking-flow derivation ────────────────────────────────────────
   const isOnRequestRate = payload?.rateRow?.roomStatus === "On Request";
-  const isNonRefundableRate = payload?.rateRow?.refundable === false;
+  // /api/day-stay-contract/rooms-search sends `nonRefundable` on the rate
+  // row (RateOptionResponse). Fall back to `!refundable` for the
+  // client-side transform path in DayStayRoomList.
+  const isNonRefundableRate =
+    payload?.rateRow?.nonRefundable === true ||
+    (payload?.rateRow?.nonRefundable === undefined &&
+      payload?.rateRow?.refundable === false);
   // Cancellation deadline computed EXACTLY like the backend stores it:
   //   deadline = checkInDate − maxCancellationNights, at midnight.
   // Null until maxCancellationNights resolves or when there's no check-in
@@ -1838,9 +1844,10 @@ export default function DayStayBookingPage() {
                           );
                         })()}
 
-                        {/* Cancellation block — non-refundable notice or
-                            "day-stay window" note (there is no
-                            deadline concept). */}
+                        {/* Cancellation block — non-refundable notice for
+                            non-refundable rates, otherwise the computed
+                            cancellation-deadline row (mirrors
+                            HotelBookingPage's Confirm modal). */}
                         {isNonRefundableRate ? (
                           <Col xs={12}>
                             <div
@@ -1867,18 +1874,39 @@ export default function DayStayBookingPage() {
                             </div>
                           </Col>
                         ) : (
-                          <Col xs={12}>
-                            <p className="mb-1">
-                              <strong>Cancellation Policy:</strong>
-                              <br />
-                              <span className="text-dark small">
-                                Refundability follows the day-stay
-                                contract's cancellation policy — see the
-                                Policies &amp; Terms modal for the full
-                                text.
-                              </span>
-                            </p>
-                          </Col>
+                          cancellationDeadline && (
+                            <Col xs={12}>
+                              <p className="mb-1">
+                                <strong>Cancellation Deadline:</strong>
+                                <br />
+                                <span className="text-dark">
+                                  {cancellationDeadline.toLocaleDateString(
+                                    "en-GB",
+                                    {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                    },
+                                  )}
+                                </span>
+                                {isOutsideDeadline ? (
+                                  <span
+                                    className="badge bg-danger ms-2"
+                                    style={{ fontSize: "0.7rem" }}
+                                  >
+                                    Passed
+                                  </span>
+                                ) : (
+                                  <span
+                                    className="badge bg-success ms-2"
+                                    style={{ fontSize: "0.7rem" }}
+                                  >
+                                    Refundable until this date
+                                  </span>
+                                )}
+                              </p>
+                            </Col>
+                          )
                         )}
 
                         <Col xs={12}>
