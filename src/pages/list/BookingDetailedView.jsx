@@ -418,6 +418,14 @@ export default function BookingDetailedView() {
     ? isOnRequestConfirmedStep
       ? "On Request/Confirmed"
       : "On Request"
+    : // On Request bookings that were rejected via the Reject button —
+      // surface the origin in the compound label ("On Request/Rejected")
+      // instead of a bare "Rejected", mirroring the "Confirmed/Reconfirmed"
+      // pattern used for the confirm flow. Display-only — the backend's
+      // Reject flow (confirmationStatus="Rejected", engine sync, HotelCustomer
+      // reject metadata) is untouched.
+      isOnRequestRoom && normalizedStatus === "REJECTED"
+    ? "On Request/Rejected"
     : booking?.confirmationStatus;
   // Agent Reference and Confirmation Number can only be SAVED once the
   // booking is confirmed-or-better; before that the booking is still
