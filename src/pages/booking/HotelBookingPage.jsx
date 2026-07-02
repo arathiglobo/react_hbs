@@ -69,6 +69,9 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
   // Payment Type list for the Non-Refundable + Cash-Agent case (Card / Cash
   // Deposit only).
   const [agentHasAvailableCredit, setAgentHasAvailableCredit] = useState(null);
+  // Per-agent "Card" payment-mode gate, toggled from AgentView. When
+  // false the Card option is filtered out of the payment-mode dropdown.
+  const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
   // Hotel's max cancellation nights (MAX(noOfNights) across its live
   // cancellation policies) — fetched from the backend so the on-screen
   // deadline matches exactly what the booking-create flow stores and the
@@ -113,6 +116,11 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
   const [showInsufficientModal, setShowInsufficientModal] = useState(false);
   const [showGatewayModal, setShowGatewayModal] = useState(false);
   const [insufficientAmount, setInsufficientAmount] = useState(0);
+  // Block-booking modal shown when the agent is short on credit AND the
+  // AgentView "Allow Card payment mode" toggle is off — the agent has no
+  // path to complete the booking and must be turned away rather than
+  // pushed into the online-payment flow they can't use.
+  const [showNoPaymentPathModal, setShowNoPaymentPathModal] = useState(false);
   const [selectedGateway, setSelectedGateway] = useState("");
   const [tourismDirhams, setTourismDirhams] = useState("0");
   const [remarks, setRemarks] = useState("");
@@ -170,6 +178,31 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
           // 404 (no credit-limit row for the agent) → treat as a Cash Agent.
           setAgentHasAvailableCredit(false);
         }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingData]);
+
+  // Fetch the per-agent "Card" payment-mode gate. Falls back to false
+  // when the agent id is missing or the request fails, so a network hiccup
+  // never silently exposes Card.
+  useEffect(() => {
+    const aId = bookingData?.payload?.agentId;
+    if (!aId) {
+      setAgentCardPaymentEnabled(false);
+      return;
+    }
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/agent/${aId}`)
+      .then((res) => {
+        if (!cancelled) {
+          setAgentCardPaymentEnabled(!!res?.data?.cardPaymentEnabled);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAgentCardPaymentEnabled(false);
       });
     return () => {
       cancelled = true;
@@ -280,23 +313,28 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
   // decision — the enums stay valid on the backend, they're just not
   // selectable here. Restricted mode (non-refundable rate + no-credit agent)
   // collapses to Card since Credit Limit isn't usable then.
-  const paymentModeOptions = useMemo(
-    () =>
-      restrictToCardCashDeposit
-        ? [{ value: "CARD", label: "Card" }]
-        : [
-            { value: "CREDITLIMIT", label: "Credit Limit" },
-            { value: "CASH", label: "Cash" },
-            { value: "CARD", label: "Card" },
-          ],
-    [restrictToCardCashDeposit],
-  );
+  const paymentModeOptions = useMemo(() => {
+    const base = restrictToCardCashDeposit
+      ? [{ value: "CARD", label: "Card" }]
+      : [
+          { value: "CREDITLIMIT", label: "Credit Limit" },
+          { value: "CASH", label: "Cash" },
+          { value: "CARD", label: "Card" },
+        ];
+    // Per-agent gate — the Card option is only exposed when the
+    // AgentView "Enable Card payment mode" checkbox is on for this
+    // agent (see agent.cardPaymentEnabled).
+    return agentCardPaymentEnabled
+      ? base
+      : base.filter((o) => o.value !== "CARD");
+  }, [restrictToCardCashDeposit, agentCardPaymentEnabled]);
 
   // Keep the selected Payment Type valid for the currently available options.
   // When the option set changes (e.g. the restriction kicks in and removes
   // Credit Limit), auto-select the first remaining option — which also
   // satisfies "if only one valid option exists, select it by default".
   useEffect(() => {
+    if (paymentModeOptions.length === 0) return;
     if (!paymentModeOptions.some((o) => o.value === paymentMode)) {
       setPaymentMode(paymentModeOptions[0].value);
     }
@@ -904,6 +942,14 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
         if (!bypassPaymentModal) {
           setInsufficientAmount(requiredAmount);
           setShowConfirmModal(false);
+          // Card disabled at the agent level → there's no viable payment
+          // path (no credit AND no card). Block the booking with a
+          // dedicated "sorry" modal instead of the online-payment popup
+          // the agent can't use anyway.
+          if (!agentCardPaymentEnabled) {
+            setShowNoPaymentPathModal(true);
+            return;
+          }
           setShowInsufficientModal(true);
           return; // stop here — handled by the online-payment popup
         }
@@ -2235,6 +2281,48 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                         <i className="bi bi-check-circle me-1"></i> Confirm
                       </>
                     )}
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* ── Insufficient credit + card disabled → block booking ──
+                  Shown when the agent has no available credit AND the
+                  AgentView "Allow Card payment mode" toggle is off. There
+                  is no payment path open to this agent, so the booking is
+                  turned away with a courteous message. */}
+              <Modal
+                show={showNoPaymentPathModal}
+                onHide={() => setShowNoPaymentPathModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Booking Cannot Be Completed</Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="text-center py-4">
+                  <p className="mb-2 text-dark">
+                    Sorry — this booking can't be completed because the
+                    agent has no available credit and{" "}
+                    <strong>Card payment is not enabled</strong> for this
+                    account.
+                  </p>
+                  <p className="mb-0 text-muted small">
+                    Please top up the agent's credit limit, or ask an
+                    administrator to enable Card payment on the agent's
+                    profile, then try again.
+                  </p>
+                  <div className="mt-3">
+                    <div className="text-muted small">Payable amount</div>
+                    <div className="fs-4 fw-bold text-dark">
+                      {formatPrice(insufficientAmount)}
+                    </div>
+                  </div>
+                </Modal.Body>
+                <Modal.Footer className="justify-content-center border-0">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowNoPaymentPathModal(false)}
+                  >
+                    OK
                   </Button>
                 </Modal.Footer>
               </Modal>

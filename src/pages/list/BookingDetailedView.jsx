@@ -284,6 +284,14 @@ export default function BookingDetailedView() {
   const [insufficientAmount, setInsufficientAmount] = useState(0);
   const [showGatewayModal, setShowGatewayModal] = useState(false);
   const [selectedGateway, setSelectedGateway] = useState("");
+  // Per-agent "Card" payment-mode gate (mirrors the AgentView checkbox).
+  // Fetched on mount so the deferred-credit Reconfirm flow can block
+  // agents who have neither credit nor card enabled — see confirmBooking.
+  const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
+  // Block-reconfirm modal shown when the deferred-credit Reconfirm hits
+  // insufficient credit AND the agent has Card payment disabled — same
+  // "no viable payment path" idea as HotelBookingPage's create flow.
+  const [showNoPaymentPathModal, setShowNoPaymentPathModal] = useState(false);
 
   // ── Add New Item (amendment) selection modal + cross-type sub-bookings ──
   const [showAddItemModal, setShowAddItemModal] = useState(false);
@@ -608,9 +616,19 @@ export default function BookingDetailedView() {
     }
     try {
       setConfirmingBooking(true);
-      const credit = await axiosInstance.get(
-        `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentIdNum}&requiredAmount=${amount}`,
-      );
+      // Fetch the agent's card-payment flag alongside the credit check so
+      // an insufficient-credit result can be routed straight to the block
+      // modal when Card payment isn't enabled for this agent.
+      const [credit, agentResp] = await Promise.all([
+        axiosInstance.get(
+          `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentIdNum}&requiredAmount=${amount}`,
+        ),
+        axiosInstance
+          .get(`/api/agent/${agentIdNum}`)
+          .catch(() => ({ data: { cardPaymentEnabled: false } })),
+      ]);
+      const cardEnabled = !!agentResp?.data?.cardPaymentEnabled;
+      setAgentCardPaymentEnabled(cardEnabled);
       if (credit.data === false) {
         // Insufficient credit — route into the online-payment picker.
         // Close the Reconfirm modal so the Insufficient modal owns the
@@ -618,6 +636,14 @@ export default function BookingDetailedView() {
         // it to display / charge.
         setInsufficientAmount(amount);
         setShowConfirmModal(false);
+        // Card disabled at the agent level → no viable payment path,
+        // block the reconfirm with a dedicated "sorry" modal instead of
+        // pushing the operator into an online-payment flow they can't
+        // complete.
+        if (!cardEnabled) {
+          setShowNoPaymentPathModal(true);
+          return;
+        }
         setShowInsufficientModal(true);
         return;
       }
@@ -3186,6 +3212,48 @@ export default function BookingDetailedView() {
           </Container>
         </main>
       </div>
+
+      {/* ── Booking Cannot Be Completed (Reconfirm) ──
+          Deferred-credit Reconfirm + agent has no credit AND Card
+          payment is disabled → the operator has no path to complete
+          this action. Blocks the reconfirm with a courteous message
+          instead of pushing them into an online-payment flow they
+          can't use. Same shape as HotelBookingPage's create-flow
+          block modal so the experience stays consistent. */}
+      <Modal
+        show={showNoPaymentPathModal}
+        onHide={() => setShowNoPaymentPathModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Booking Cannot Be Completed</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="text-center py-4">
+          <p className="mb-2 text-dark">
+            Sorry — this booking can't be completed because the agent has
+            no available credit and{" "}
+            <strong>Card payment is not enabled</strong> for this account.
+          </p>
+          <p className="mb-0 text-muted small">
+            Please top up the agent's credit limit, or ask an administrator
+            to enable Card payment on the agent's profile, then try again.
+          </p>
+          <div className="mt-3">
+            <div className="text-muted small">Payable amount</div>
+            <div className="fs-4 fw-bold text-dark">
+              AED {Number(insufficientAmount).toFixed(2)}
+            </div>
+          </div>
+        </Modal.Body>
+        <Modal.Footer className="justify-content-center border-0">
+          <Button
+            variant="secondary"
+            onClick={() => setShowNoPaymentPathModal(false)}
+          >
+            OK
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       {/* ── Online Payment Required (deferred-credit Reconfirm) ──
           Surfaced when the operator clicks Reconfirm on a Case-5
