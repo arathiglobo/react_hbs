@@ -31,6 +31,7 @@ import {
   Alert,
   Form,
   Modal,
+  useAccordionButton,
 } from "react-bootstrap";
 import {
   FaBed,
@@ -72,6 +73,24 @@ const renderPolicyValidity = (fromDate, toDate) => {
   if (!from && !to) return null;
   return `Valid: ${from || "N/A"} - ${to || "N/A"}`;
 };
+
+// Toggle button for the room-category accordion header. Mirrors the
+// AccordionToggleButton in RoomList.jsx so both flows share the same
+// "View / Hide Details" affordance instead of a bare chevron icon.
+function AccordionToggleButton({ eventKey, isActive }) {
+  const decoratedOnClick = useAccordionButton(eventKey);
+  return (
+    <Button
+      variant="outline-primary"
+      size="sm"
+      onClick={decoratedOnClick}
+      className="d-flex align-items-center gap-1"
+    >
+      {isActive ? "Hide Details/Book" : "View Details/Book"}
+      {isActive ? <FaChevronUp /> : <FaChevronDown />}
+    </Button>
+  );
+}
 
 const GovEmployeeRoomList = () => {
   const location = useLocation();
@@ -118,6 +137,66 @@ const GovEmployeeRoomList = () => {
   // in the DB.
   // ──────────────────────────────────────────────────────────────────────
   const [selectedRooms, setSelectedRooms] = useState([]);
+
+  // Cancellation Policies & Terms modal — mirrors RoomList.jsx. Opens from a
+  // per-rate link inside each room card. Cancellation policies come from the
+  // search response (rate.cancellationPolicies with a hotel-level fallback).
+  // Terms & Conditions are NOT in the search payload — lazy-fetched once per
+  // hotel from /api/hotels/{id}/terms-and-conditions and cached.
+  const [showPoliciesModal, setShowPoliciesModal] = useState(false);
+  const [policiesModalData, setPoliciesModalData] = useState({
+    cancellationPolicies: [],
+    termsAndConditions: [],
+    selectedRoomLabel: "",
+  });
+  const [termsCache, setTermsCache] = useState({}); // { [hotelId]: T&C[] }
+  const [loadingTerms, setLoadingTerms] = useState(false);
+
+  const openPoliciesModal = async (rate, hotelDetail) => {
+    const cancellation = Array.isArray(rate?.cancellationPolicies)
+      ? rate.cancellationPolicies
+      : Array.isArray(hotelDetail?.cancellationPolicies)
+        ? hotelDetail.cancellationPolicies
+        : [];
+    const label = [rate?.roomCategory, rate?.mealPlan]
+      .filter(Boolean)
+      .join(" • ");
+    const inlineTerms = Array.isArray(rate?.termsAndConditions)
+      ? rate.termsAndConditions
+      : Array.isArray(hotelDetail?.termsAndConditions)
+        ? hotelDetail.termsAndConditions
+        : null;
+    const hotelId = hotelDetail?.hotelId;
+    const cached = hotelId != null ? termsCache[hotelId] : undefined;
+
+    setPoliciesModalData({
+      cancellationPolicies: cancellation,
+      termsAndConditions: inlineTerms || cached || [],
+      selectedRoomLabel: label,
+    });
+    setShowPoliciesModal(true);
+
+    if (inlineTerms || cached !== undefined) return;
+    if (hotelId == null || !/^\d+$/.test(String(hotelId))) {
+      setPoliciesModalData((prev) => ({ ...prev, termsAndConditions: [] }));
+      return;
+    }
+    setLoadingTerms(true);
+    try {
+      const res = await axiosInstance.get(
+        `/api/hotels/${hotelId}/terms-and-conditions`,
+      );
+      const terms = Array.isArray(res?.data) ? res.data : [];
+      setTermsCache((prev) => ({ ...prev, [hotelId]: terms }));
+      setPoliciesModalData((prev) => ({ ...prev, termsAndConditions: terms }));
+    } catch (err) {
+      console.error("T&C fetch failed:", err);
+      setTermsCache((prev) => ({ ...prev, [hotelId]: [] }));
+      setPoliciesModalData((prev) => ({ ...prev, termsAndConditions: [] }));
+    } finally {
+      setLoadingTerms(false);
+    }
+  };
 
   // Insufficient-credit warning modal (mirrors RoomList.jsx). On "OK, continue"
   // we resume the deferred booking flow via `pendingBookingFn`.
@@ -539,15 +618,27 @@ const GovEmployeeRoomList = () => {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="content-wrapper flex-grow-1" style={{ minWidth: 0, overflowX: "hidden" }}>
-          <div className="container-fluid" style={{ paddingTop: 10 }}>
-            {/* Agent balance — top right */}
-            {agentBalance != null && (
-              <div className="d-flex justify-content-end mb-2" style={{ fontSize: "0.95rem" }}>
-                <span className="fw-bold" style={{ color: "#dc3545" }}>
+          <div className="container-fluid" style={{ paddingTop: "10px" }}>
+            {/* Top toolbar: Back to Search + agent balance — mirrors
+                RoomList.jsx so the flow shares the same header polish. */}
+            <div className="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
+              <Button
+                variant="outline-primary"
+                size="sm"
+                onClick={() => navigate("/new-booking/gov-employee")}
+                className="back-to-search-btn"
+              >
+                ← Back to Search
+              </Button>
+              {agentBalance != null && (
+                <span
+                  className="fw-bold"
+                  style={{ color: "#dc3545", fontSize: "0.95rem" }}
+                >
                   Available Balance: {Number(agentBalance).toFixed(2)}
                 </span>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* Hotel Header */}
             <Card className="hotel-header-card mb-4">
@@ -575,11 +666,8 @@ const GovEmployeeRoomList = () => {
                         {hotel.hotelPhoneNumber && (
                           <p className="mb-0 text-muted small">{hotel.hotelPhoneNumber}</p>
                         )}
-                        <div className="mt-3">
-                          <Button variant="outline-primary" size="sm" onClick={() => navigate(-1)}>
-                            Back to Search
-                          </Button>
-                        </div>
+                        {/* Back-to-Search button now lives in the top
+                            toolbar above this card — matches RoomList. */}
                       </div>
                     </div>
                   </Col>
@@ -669,6 +757,9 @@ const GovEmployeeRoomList = () => {
 
                   return (
                     <Accordion.Item key={eventKey} eventKey={eventKey} className="room-category-item">
+                      {/* Header is NOT clickable — expand happens via the
+                          AccordionToggleButton on the right, matching
+                          RoomList.jsx. */}
                       <Accordion.Header as="div" className="room-category-header">
                         <div className="d-flex justify-content-between align-items-center w-100">
                           <div className="room-category-info">
@@ -683,11 +774,10 @@ const GovEmployeeRoomList = () => {
                                 {filteredRates.length !== 1 ? "s" : ""} available
                               </div>
                             </div>
-                            {activeAccordion === eventKey ? (
-                              <FaChevronUp className="text-muted" />
-                            ) : (
-                              <FaChevronDown className="text-muted" />
-                            )}
+                            <AccordionToggleButton
+                              eventKey={eventKey}
+                              isActive={activeAccordion === eventKey}
+                            />
                           </div>
                         </div>
                       </Accordion.Header>
@@ -697,103 +787,242 @@ const GovEmployeeRoomList = () => {
                           {filteredRates.map((rate, rateIndex) => {
                             const base = Number(rate.roomRateBasedOnRoomCount ?? rate.totalRate ?? rate.rate ?? 0);
                             const after = applyDiscount(base);
+                            // Highlight only the card chosen for THIS slot.
+                            // Other slots' picks must not tint this list.
+                            // Matches RoomList.jsx multi-room UX.
+                            const isSelectedForThisSlot = isMultiRoom &&
+                              selectedRooms[roomSlotIndex]?.selectedRate === rate;
+                            const slotBase = isMultiRoom
+                              ? Number(rate.totalRate ?? rate.rate ?? 0)
+                              : base;
+                            const slotAfter = applyDiscount(slotBase);
                             return (
                               <Col key={rateIndex}
                                    lg={viewMode === "grid" ? 6 : 12}
                                    xl={viewMode === "grid" ? 4 : 12}
                                    className="mb-2">
-                                <Card className="rate-card h-100 shadow-sm">
-                                  <Card.Body className="p-3 pb-2 d-flex flex-column gap-2">
-                                    <div className="rate-header d-flex justify-content-between align-items-start">
-                                      <div>
-                                        <div className="d-flex align-items-center gap-2">
-                                          {getMealPlanIcon(rate.mealPlan)}
-                                          <span className="fw-semibold small">{rate.mealPlan}</span>
+                                <Card
+                                  className={`rate-card h-100 shadow-sm${isSelectedForThisSlot ? " rate-card-selected" : ""}`}
+                                  style={
+                                    isSelectedForThisSlot
+                                      ? {
+                                          borderColor: "#198754",
+                                          borderWidth: "2px",
+                                          backgroundColor: "#e8f5ec",
+                                          position: "relative",
+                                        }
+                                      : undefined
+                                  }
+                                >
+                                  {isSelectedForThisSlot && (
+                                    <span
+                                      style={{
+                                        position: "absolute",
+                                        top: "6px",
+                                        right: "6px",
+                                        backgroundColor: "#198754",
+                                        color: "#fff",
+                                        fontSize: "0.7rem",
+                                        fontWeight: 700,
+                                        padding: "2px 6px",
+                                        borderRadius: "4px",
+                                        zIndex: 1,
+                                      }}
+                                    >
+                                      ✓ Selected
+                                    </span>
+                                  )}
+                                  {viewMode === "grid" ? (
+                                    <Card.Body className="p-2 pb-0 d-flex flex-column gap-2">
+                                      <div className="rate-header d-flex justify-content-between align-items-start">
+                                        <div>
+                                          <div className="d-flex align-items-center gap-2">
+                                            {getMealPlanIcon(rate.mealPlan)}
+                                            <span className="fw-semibold small">{rate.mealPlan}</span>
+                                          </div>
+                                          <div className="mt-1">
+                                            {getRoomStatusBadge(rate.roomStatus)}
+                                          </div>
                                         </div>
-                                      </div>
-                                      <div className="d-flex align-items-center gap-2">
-                                        {getRoomStatusBadge(rate.roomStatus)}
                                         {getRefundStatusBadge(rate.nonRefundable)}
                                       </div>
-                                    </div>
 
-                                    {/* Price block with strike-through standard + green discounted.
-                                        Single-room: big price = per-room × N rooms with the
-                                        "× N rooms" subtitle.
-                                        Multi-room: each slot is ONE room so the big price
-                                        collapses to the per-room rate and the "× N rooms"
-                                        subtitle drops. */}
-                                    <div className="rate-pricing text-center py-2">
-                                      {(() => {
-                                        const slotBase = isMultiRoom
-                                          ? Number(rate.totalRate ?? rate.rate ?? 0)
-                                          : base;
-                                        const slotAfter = applyDiscount(slotBase);
-                                        return (
-                                          <>
-                                            {activePromotion && slotBase !== slotAfter && (
-                                              <div className="original-price text-decoration-line-through text-muted">
-                                                {formatPrice(slotBase)}
-                                              </div>
-                                            )}
-                                            <div className="current-price text-success">
-                                              {formatPrice(slotAfter)}
+                                      <div className="rate-pricing text-center py-2">
+                                        {activePromotion && slotBase !== slotAfter && (
+                                          <div className="original-price text-decoration-line-through text-muted">
+                                            {formatPrice(slotBase)}
+                                          </div>
+                                        )}
+                                        <div className="current-price text-success">
+                                          {formatPrice(slotAfter)}
+                                        </div>
+                                        {!isMultiRoom && (
+                                          <div className="indivial-price-per-room-noofroom">
+                                            <div className="text-muted small">
+                                              {formatPrice(rate.totalRate || 0)} × {rate.numberOfRooms || 1} rooms
                                             </div>
-                                          </>
-                                        );
-                                      })()}
-                                      {!isMultiRoom && (
-                                        <div className="text-muted small">
-                                          {formatPrice(rate.totalRate || 0)} × {rate.numberOfRooms || 1} rooms
-                                        </div>
-                                      )}
-                                      <div className="price-per-night small text-muted">per night</div>
-                                    </div>
-
-                                    <div className="rate-features small">
-                                      <div className="feature-item">
-                                        <FaInfoCircle className="me-2 text-muted" />
-                                        {rate.contractLabel}
+                                          </div>
+                                        )}
+                                        <div className="price-per-night small text-muted">per night</div>
                                       </div>
-                                      {rate.cancellationPolicies?.length > 0 && (
-                                        <div className="feature-item">
-                                          <FaShieldAlt className="me-2 text-muted" />
-                                          {rate.cancellationPolicies[0].policyText}
-                                        </div>
-                                      )}
-                                    </div>
 
-                                    {/* Single-room: legacy CTA.
-                                        Multi-room: radio bound to the
-                                        active slot. */}
-                                    {isMultiRoom ? (
-                                      <Form.Check
-                                        type="radio"
-                                        id={`ge-rate-radio-${roomSlotIndex}-${index}-${rateIndex}`}
-                                        name={`ge-rate-radio-room-${roomSlotIndex}`}
-                                        className="w-100 mt-1 mb-1"
-                                        label={
-                                          selectedRooms[roomSlotIndex]
-                                            ?.selectedRate === rate
-                                            ? `Selected for Room ${roomSlotIndex + 1}`
-                                            : `Select for Room ${roomSlotIndex + 1}`
-                                        }
-                                        checked={
-                                          selectedRooms[roomSlotIndex]
-                                            ?.selectedRate === rate
-                                        }
-                                        onChange={() =>
-                                          handleRateSelect(roomSlotIndex, category, rate)
-                                        }
-                                      />
-                                    ) : (
-                                      <Button variant="primary" className="w-100 book-now-btn mt-1 mb-1"
-                                              onClick={() => handleBooking(category, rate)}>
-                                        <FaMoneyBillWave className="me-2" />
-                                        Select & Continue
-                                      </Button>
-                                    )}
-                                  </Card.Body>
+                                      <div className="rate-features small">
+                                        <div className="feature-item">
+                                          <FaInfoCircle className="me-2 text-muted" />
+                                          {rate.contractLabel}
+                                        </div>
+                                        {/* Cancellation Policies & T&C —
+                                            open modal on click. Mirrors
+                                            RoomList.jsx. */}
+                                        <div className="feature-item">
+                                          <Button
+                                            variant="link"
+                                            size="sm"
+                                            className="p-0 text-decoration-underline"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              openPoliciesModal(rate, hotel);
+                                            }}
+                                          >
+                                            <FaShieldAlt className="me-2" />
+                                            Cancellation Policies &amp; Terms &amp; Conditions
+                                          </Button>
+                                        </div>
+                                      </div>
+
+                                      {isMultiRoom ? (
+                                        <Form.Check
+                                          type="radio"
+                                          id={`ge-rate-radio-grid-${roomSlotIndex}-${index}-${rateIndex}`}
+                                          name={`ge-rate-radio-grid-room-${roomSlotIndex}`}
+                                          className="w-100 mt-1 mb-1"
+                                          label={
+                                            selectedRooms[roomSlotIndex]
+                                              ?.selectedRate === rate
+                                              ? `Selected for Room ${roomSlotIndex + 1}`
+                                              : `Select for Room ${roomSlotIndex + 1}`
+                                          }
+                                          checked={
+                                            selectedRooms[roomSlotIndex]
+                                              ?.selectedRate === rate
+                                          }
+                                          onChange={() =>
+                                            handleRateSelect(roomSlotIndex, category, rate)
+                                          }
+                                        />
+                                      ) : (
+                                        <Button
+                                          variant="primary"
+                                          className="w-100 book-now-btn mt-1 mb-1"
+                                          onClick={() => handleBooking(category, rate)}
+                                        >
+                                          <FaMoneyBillWave className="me-2" />
+                                          View Details / Select
+                                        </Button>
+                                      )}
+                                    </Card.Body>
+                                  ) : (
+                                    // List-mode row — mirrors RoomList.jsx layout.
+                                    <Card.Body className="p-3 py-2 d-flex flex-row align-items-center gap-3 flex-wrap flex-md-nowrap">
+                                      <div
+                                        className="d-flex flex-column flex-grow-1"
+                                        style={{ minWidth: 0 }}
+                                      >
+                                        <div className="d-flex align-items-center flex-wrap gap-2 mb-2">
+                                          <div
+                                            className="d-flex align-items-center gap-2 flex-shrink-0"
+                                            style={{ whiteSpace: "nowrap", minWidth: "200px" }}
+                                          >
+                                            {getMealPlanIcon(rate.mealPlan)}
+                                            <span className="fw-semibold text-truncate">
+                                              {rate.mealPlan}
+                                            </span>
+                                          </div>
+                                          <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                                            {getRefundStatusBadge(rate.nonRefundable)}
+                                            {getRoomStatusBadge(rate.roomStatus)}
+                                          </div>
+                                        </div>
+                                        <div
+                                          className="rate-features small text-muted d-flex flex-wrap gap-3"
+                                          style={{ minWidth: 0 }}
+                                        >
+                                          <div className="feature-item d-flex align-items-center text-truncate">
+                                            <FaInfoCircle className="me-2 flex-shrink-0" />
+                                            <span className="text-truncate">{rate.contractLabel}</span>
+                                          </div>
+                                          <div className="feature-item d-flex align-items-center">
+                                            <Button
+                                              variant="link"
+                                              size="sm"
+                                              className="p-0 text-decoration-underline"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                openPoliciesModal(rate, hotel);
+                                              }}
+                                            >
+                                              <FaShieldAlt className="me-2" />
+                                              Cancellation Policies &amp; Terms &amp; Conditions
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <div
+                                        className="text-end px-3 border-start border-end flex-shrink-0"
+                                        style={{ minWidth: "150px" }}
+                                      >
+                                        {activePromotion && slotBase !== slotAfter && (
+                                          <div className="text-decoration-line-through text-muted small">
+                                            {formatPrice(slotBase)}
+                                          </div>
+                                        )}
+                                        <div className="fs-5 fw-bold text-primary">
+                                          {formatPrice(slotAfter)}
+                                        </div>
+                                        {!isMultiRoom && (
+                                          <div className="text-muted small">
+                                            {formatPrice(rate.totalRate || 0)} × {rate.numberOfRooms || 1} rooms
+                                          </div>
+                                        )}
+                                        <div className="small text-muted">per night</div>
+                                      </div>
+
+                                      <div className="flex-shrink-0">
+                                        {isMultiRoom ? (
+                                          <Form.Check
+                                            type="radio"
+                                            id={`ge-rate-radio-list-${roomSlotIndex}-${index}-${rateIndex}`}
+                                            name={`ge-rate-radio-list-room-${roomSlotIndex}`}
+                                            label={
+                                              selectedRooms[roomSlotIndex]
+                                                ?.selectedRate === rate
+                                                ? `Selected for Room ${roomSlotIndex + 1}`
+                                                : `Select for Room ${roomSlotIndex + 1}`
+                                            }
+                                            checked={
+                                              selectedRooms[roomSlotIndex]
+                                                ?.selectedRate === rate
+                                            }
+                                            onChange={() =>
+                                              handleRateSelect(roomSlotIndex, category, rate)
+                                            }
+                                            style={{ whiteSpace: "nowrap" }}
+                                          />
+                                        ) : (
+                                          <Button
+                                            variant="primary"
+                                            className="book-now-btn px-3 py-2"
+                                            onClick={() => handleBooking(category, rate)}
+                                            style={{ whiteSpace: "nowrap" }}
+                                          >
+                                            <FaMoneyBillWave className="me-2" />
+                                            View Details
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </Card.Body>
+                                  )}
                                 </Card>
                               </Col>
                             );
@@ -955,10 +1184,11 @@ const GovEmployeeRoomList = () => {
               </Row>
             </div>
 
-            {/* Policies Section — Cancellation, Amendment, Child, and
-                Additional Policy in a single card. Dynamic in-house
-                policies (apiId === 1) fall back to static stay details
-                otherwise. Mirrors /room-list. */}
+            {/* Hotel Information — cancellation / amendment / child /
+                additional policies live in the per-rate "Cancellation
+                Policies & Terms & Conditions" modal (opens from each
+                room card). Only stay-desk facts stay on the page.
+                Mirrors /room-list. */}
             <div className="mt-4">
               <Card
                 className="mb-4 shadow-sm"
@@ -982,246 +1212,245 @@ const GovEmployeeRoomList = () => {
                       fontSize: "1.15rem",
                     }}
                   >
-                    <FaShieldAlt />
+                    <FaHotel />
                   </div>
                   <div>
                     <div
                       className="fw-bold"
                       style={{ fontSize: "1.1rem", lineHeight: 1.2 }}
                     >
-                      Booking Policies
+                      Hotel Information
                     </div>
                     <div className="small" style={{ opacity: 0.85 }}>
-                      Cancellation, amendment &amp; stay details
+                      Stay desk &amp; general details
                     </div>
                   </div>
                 </Card.Header>
                 <Card.Body className="p-4">
-                  {roomData?.payload?.apiId === 1 &&
-                  policyList &&
-                  policyList.policies ? (
-                    <div className="policies-dynamic">
-                      {/* Cancellation Policy */}
-                      {policyList.policies?.cancellationPolicy &&
-                        policyList.policies.cancellationPolicy.length > 0 && (
-                          <div className="mb-3">
-                            <h6 className="text-danger mb-2">
-                              <FaTimesCircle className="me-2" />
-                              Cancellation Policy
-                            </h6>
-                            {policyList.policies.cancellationPolicy.map(
-                              (policy, index) => {
-                                const validity = renderPolicyValidity(
-                                  policy.fromDate,
-                                  policy.toDate,
-                                );
-                                return (
-                                  <div key={index} className="policy-item mb-2">
-                                    <p className="text-muted mb-1">
-                                      {policy.policyText}
-                                    </p>
-                                    {validity && (
-                                      <small
-                                        className="text-muted"
-                                        style={{
-                                          fontWeight: "400",
-                                          fontSize: "0.99rem",
-                                        }}
-                                      >
-                                        {validity}
-                                      </small>
-                                    )}
-                                  </div>
-                                );
-                              },
-                            )}
-                          </div>
-                        )}
-
-                      {/* Amendment Policy */}
-                      {policyList.policies?.amendmentPolicy &&
-                        policyList.policies.amendmentPolicy.length > 0 && (
-                          <div className="mb-3">
-                            <h6 className="text-warning mb-2">
-                              <FaInfoCircle className="me-2" />
-                              Amendment Policy
-                            </h6>
-                            {policyList.policies.amendmentPolicy.map(
-                              (policy, index) => {
-                                const validity = renderPolicyValidity(
-                                  policy.fromDate,
-                                  policy.toDate,
-                                );
-                                return (
-                                  <div key={index} className="policy-item mb-2">
-                                    <p className="text-muted mb-1">
-                                      {policy.policyText}
-                                    </p>
-                                    {validity && (
-                                      <small
-                                        style={{
-                                          fontWeight: "400",
-                                          fontSize: "0.99rem",
-                                        }}
-                                        className="text-muted"
-                                      >
-                                        {validity}
-                                      </small>
-                                    )}
-                                  </div>
-                                );
-                              },
-                            )}
-                          </div>
-                        )}
-
-                      {/* Child Policy */}
-                      {policyList.policies?.childPolicy &&
-                        policyList.policies.childPolicy.length > 0 && (
-                          <div className="mb-3">
-                            <h6 className="text-primary mb-2">
-                              <FaUsers className="me-2" />
-                              Child Policy
-                            </h6>
-                            {policyList.policies.childPolicy.map(
-                              (policy, index) => (
-                                <p key={index} className="mb-2 text-muted">
-                                  {policy.policyText}
-                                </p>
-                              ),
-                            )}
-                          </div>
-                        )}
-
-                      {/* Additional Policy — fees stored on the policy
-                          row (no-show, early-departure, non-refundable).
-                          Suppress empty zero/null amounts. */}
-                      {policyList.policies?.additionalPolicy &&
-                        (() => {
-                          const ap = policyList.policies.additionalPolicy;
-                          const formatFee = (amt, type) => {
-                            if (
-                              amt === null ||
-                              amt === undefined ||
-                              Number(amt) === 0
-                            )
-                              return null;
-                            const suffix =
-                              String(type || "").toUpperCase() === "PERCENT"
-                                ? "%"
-                                : "";
-                            return `${amt}${suffix}`;
-                          };
-                          const noShow = formatFee(ap.noShowFee, ap.noShowFeeType);
-                          const earlyDep = formatFee(
-                            ap.earlyDepartureFee,
-                            ap.earlyDepartureFeeType,
-                          );
-                          const nonRef = formatFee(
-                            ap.nonRefundableFee,
-                            ap.nonRefundableFeeType,
-                          );
-                          if (!noShow && !earlyDep && !nonRef) return null;
-                          return (
-                            <div className="mb-3">
-                              <h6 className="text-info mb-2">
-                                <FaInfoCircle className="me-2" />
-                                Additional Policy
-                              </h6>
-                              {noShow && (
-                                <p className="mb-1 text-muted">
-                                  <strong>No-Show Fee:</strong> {noShow}
-                                </p>
-                              )}
-                              {earlyDep && (
-                                <p className="mb-1 text-muted">
-                                  <strong>Early Departure Fee:</strong>{" "}
-                                  {earlyDep}
-                                </p>
-                              )}
-                              {nonRef && (
-                                <p className="mb-1 text-muted">
-                                  <strong>Non-Refundable Fee:</strong> {nonRef}
-                                </p>
-                              )}
-                            </div>
-                          );
-                        })()}
-
-                      {/* General Policies */}
-                      <h6 className="text-secondary mb-2 pt-2 border-top">
-                        <FaHotel className="me-2" />
-                        Hotel Information
-                      </h6>
-                      <Row className="g-3">
-                        <Col md={6}>
-                          <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                            <span className="text-muted">Check-in</span>
-                            <span className="fw-semibold">After 14:00</span>
-                          </div>
-                          <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                            <span className="text-muted">Check-out</span>
-                            <span className="fw-semibold">Before 12:00</span>
-                          </div>
-                        </Col>
-                        <Col md={6}>
-                          <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                            <span className="text-muted">Deposit</span>
-                            <span className="fw-semibold">May be required</span>
-                          </div>
-                          <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                            <span className="text-muted">Additional Bed</span>
-                            <span className="fw-semibold">
-                              Subject to availability
-                            </span>
-                          </div>
-                        </Col>
-                      </Row>
-                    </div>
-                  ) : (
-                    <Row className="g-3">
-                      <Col md={6}>
-                        <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                          <span className="text-muted">Check-in</span>
-                          <span className="fw-semibold">After 14:00</span>
-                        </div>
-                        <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                          <span className="text-muted">Check-out</span>
-                          <span className="fw-semibold">Before 12:00</span>
-                        </div>
-                        <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                          <span className="text-muted">Children</span>
-                          <span className="fw-semibold">
-                            Policies vary by room
-                          </span>
-                        </div>
-                      </Col>
-                      <Col md={6}>
-                        <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                          <span className="text-muted">Deposit</span>
-                          <span className="fw-semibold">May be required</span>
-                        </div>
-                        <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
-                          <span className="text-muted">Additional Bed</span>
-                          <span className="fw-semibold">
-                            Subject to availability
-                          </span>
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <span className="text-muted">Cancellation</span>
-                          <span className="fw-semibold">
-                            See rate conditions
-                          </span>
-                        </div>
-                      </Col>
-                    </Row>
-                  )}
+                  <Row className="g-3">
+                    <Col md={6}>
+                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                        <span className="text-muted">Check-in</span>
+                        <span className="fw-semibold">After 14:00</span>
+                      </div>
+                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                        <span className="text-muted">Check-out</span>
+                        <span className="fw-semibold">Before 12:00</span>
+                      </div>
+                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                        <span className="text-muted">Children</span>
+                        <span className="fw-semibold">
+                          Policies vary by room
+                        </span>
+                      </div>
+                    </Col>
+                    <Col md={6}>
+                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                        <span className="text-muted">Deposit</span>
+                        <span className="fw-semibold">May be required</span>
+                      </div>
+                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                        <span className="text-muted">Additional Bed</span>
+                        <span className="fw-semibold">
+                          Subject to availability
+                        </span>
+                      </div>
+                      <div className="d-flex justify-content-between">
+                        <span className="text-muted">Cancellation</span>
+                        <span className="fw-semibold">
+                          See rate conditions
+                        </span>
+                      </div>
+                    </Col>
+                  </Row>
                 </Card.Body>
               </Card>
             </div>
           </div>
         </main>
       </div>
+
+      {/* Cancellation Policies & Terms & Conditions Modal — surfaces ALL
+          policies + T&C for the picked rate (the card only previews the
+          link). Cancellation policies come from the search response.
+          Terms & Conditions are lazy-fetched from
+          /api/hotels/{hotelId}/terms-and-conditions and cached. Amendment /
+          Child / Additional policy sections show when the inhouse policyList
+          carries them (apiId === 1). Mirrors RoomList.jsx. */}
+      <Modal
+        show={showPoliciesModal}
+        onHide={() => setShowPoliciesModal(false)}
+        size="lg"
+        centered
+        scrollable
+        aria-labelledby="ge-policies-terms-modal"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title id="ge-policies-terms-modal">
+            Cancellation Policies &amp; Terms &amp; Conditions
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ maxHeight: "70vh", overflowY: "auto" }}>
+          {policiesModalData.selectedRoomLabel && (
+            <div className="text-muted small mb-3">
+              {policiesModalData.selectedRoomLabel}
+            </div>
+          )}
+
+          <h6 className="text-danger mb-2">
+            <FaTimesCircle className="me-2" />
+            Cancellation Policies
+          </h6>
+          {policiesModalData.cancellationPolicies?.length > 0 ? (
+            <ul className="mb-4 ps-3">
+              {policiesModalData.cancellationPolicies.map((policy, idx) => {
+                const validity = renderPolicyValidity(
+                  policy?.fromDate,
+                  policy?.toDate,
+                );
+                return (
+                  <li key={idx} className="mb-2">
+                    <div style={{ whiteSpace: "pre-line" }}>
+                      {policy?.policyText || ""}
+                    </div>
+                    {validity && (
+                      <small className="text-muted">{validity}</small>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-muted mb-4">No cancellation policies available.</p>
+          )}
+
+          {roomData?.payload?.apiId === 1 &&
+            policyList?.policies?.amendmentPolicy?.length > 0 && (
+              <>
+                <h6 className="text-warning mb-2 pt-2 border-top">
+                  <FaInfoCircle className="me-2" />
+                  Amendment Policies
+                </h6>
+                <ul className="mb-4 ps-3">
+                  {policyList.policies.amendmentPolicy.map((policy, idx) => {
+                    const validity = renderPolicyValidity(
+                      policy?.fromDate,
+                      policy?.toDate,
+                    );
+                    return (
+                      <li key={idx} className="mb-2">
+                        <div style={{ whiteSpace: "pre-line" }}>
+                          {policy?.policyText || ""}
+                        </div>
+                        {validity && (
+                          <small className="text-muted">{validity}</small>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            )}
+
+          {roomData?.payload?.apiId === 1 &&
+            policyList?.policies?.childPolicy?.length > 0 && (
+              <>
+                <h6 className="text-primary mb-2 pt-2 border-top">
+                  <FaUsers className="me-2" />
+                  Child Policy
+                </h6>
+                <ul className="mb-4 ps-3">
+                  {policyList.policies.childPolicy.map((policy, idx) => (
+                    <li key={idx} className="mb-2" style={{ whiteSpace: "pre-line" }}>
+                      {policy?.policyText || ""}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+
+          {roomData?.payload?.apiId === 1 &&
+            policyList?.policies?.additionalPolicy &&
+            (() => {
+              const ap = policyList.policies.additionalPolicy;
+              const formatFee = (amt, type) => {
+                if (amt === null || amt === undefined || Number(amt) === 0)
+                  return null;
+                const suffix =
+                  String(type || "").toUpperCase() === "PERCENT" ? "%" : "";
+                return `${amt}${suffix}`;
+              };
+              const noShow = formatFee(ap.noShowFee, ap.noShowFeeType);
+              const earlyDep = formatFee(ap.earlyDepartureFee, ap.earlyDepartureFeeType);
+              const nonRef = formatFee(ap.nonRefundableFee, ap.nonRefundableFeeType);
+              if (!noShow && !earlyDep && !nonRef) return null;
+              return (
+                <>
+                  <h6 className="text-info mb-2 pt-2 border-top">
+                    <FaInfoCircle className="me-2" />
+                    Additional Policy
+                  </h6>
+                  <ul className="mb-4 ps-3">
+                    {noShow && (
+                      <li className="mb-2">
+                        <strong>No-Show Fee:</strong> {noShow}
+                      </li>
+                    )}
+                    {earlyDep && (
+                      <li className="mb-2">
+                        <strong>Early Departure Fee:</strong> {earlyDep}
+                      </li>
+                    )}
+                    {nonRef && (
+                      <li className="mb-2">
+                        <strong>Non-Refundable Fee:</strong> {nonRef}
+                      </li>
+                    )}
+                  </ul>
+                </>
+              );
+            })()}
+
+          <h6 className="text-secondary mb-2 pt-2 border-top">
+            <FaInfoCircle className="me-2" />
+            Terms &amp; Conditions
+          </h6>
+          {loadingTerms ? (
+            <div className="d-flex align-items-center text-muted mb-0">
+              <Spinner animation="border" size="sm" className="me-2" />
+              Loading terms &amp; conditions…
+            </div>
+          ) : policiesModalData.termsAndConditions?.length > 0 ? (
+            <ul className="mb-0 ps-3">
+              {policiesModalData.termsAndConditions.map((term, idx) => {
+                const text =
+                  typeof term === "string"
+                    ? term
+                    : term?.description ||
+                      term?.policyText ||
+                      term?.text ||
+                      "";
+                if (!text) return null;
+                return (
+                  <li key={idx} className="mb-2" style={{ whiteSpace: "pre-line" }}>
+                    {text}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-muted mb-0">No terms &amp; conditions available.</p>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setShowPoliciesModal(false)}
+          >
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       {/* Insufficient Credit Modal — informational gate (mirrors RoomList.jsx). */}
       <Modal

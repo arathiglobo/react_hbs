@@ -100,6 +100,15 @@ export default function LongStayBookingPage() {
   // default CREDITLIMIT keeps the legacy behaviour (credit debit happens
   // regardless of the chosen mode).
   const [paymentMode, setPaymentMode] = useState("CREDITLIMIT");
+
+  // ── Voucher-choice + booking-flow status (mirrors HotelBookingPage) ──
+  // Refundable rate + a cancellation policy on the contract → surface the
+  // "Book Now & Voucher Now" / "Book Now & Voucher Later" choice above the
+  // Confirm Booking button. Non-refundable rates and rates with no policy
+  // skip the choice and are treated as "voucher now" → RECONFIRMED.
+  const [bookingConfirmation, setBookingConfirmation] = useState("Book & Voucher");
+  const [voucherChoiceMade, setVoucherChoiceMade] = useState(false);
+  const [voucherChoiceError, setVoucherChoiceError] = useState(false);
   const [quote, setQuote] = useState(null);
   const [quoteError, setQuoteError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -186,6 +195,70 @@ export default function LongStayBookingPage() {
     fetchQuote();
   }, [draft, rooms, agentId]);
 
+  // ────────────────────────────────────────────────────────────────
+  // Booking-flow derivation — mirrors HotelBookingPage's confirm-booking
+  // flowchart. Long-stay data model doesn't carry a maxCancellationNights
+  // number, so the cancellation deadline is derived from the contract's
+  // structured cancellationPolicy tiers: if any policy row is configured
+  // for the contract, we treat the check-in date as the free-cancellation
+  // cutoff (any earlier tiered rules already inform the operator via the
+  // Policies modal). Non-refundable rooms and rooms whose contract has no
+  // policy tiers skip the choice entirely and resolve to RECONFIRMED —
+  // exactly like the hotel flow's "no deadline applies" branch.
+  // ────────────────────────────────────────────────────────────────
+  const isRefundableRate = draft?.room?.refundable === true;
+  const hasCancellationPolicy = Array.isArray(
+    draft?.contract?.cancellationPolicy,
+  ) && draft.contract.cancellationPolicy.length > 0;
+  const cancellationDeadline = (() => {
+    if (!isRefundableRate || !hasCancellationPolicy) return null;
+    const cinRaw = draft?.checkIn;
+    if (!cinRaw) return null;
+    const cin = new Date(cinRaw);
+    if (isNaN(cin.getTime())) return null;
+    const deadline = new Date(cin);
+    deadline.setHours(0, 0, 0, 0);
+    return deadline;
+  })();
+  const isOutsideDeadline = (() => {
+    if (!cancellationDeadline) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today > cancellationDeadline;
+  })();
+  // Only shown for Refundable rates whose deadline hasn't passed.
+  // Non-refundable / past-deadline skip the choice.
+  const showVoucherChoice =
+    isRefundableRate && !!cancellationDeadline && !isOutsideDeadline;
+  // Resolved status that will travel to the backend on
+  // payload.bookingFlowStatus. Same rules as HotelBookingPage:
+  //   • Non-refundable       → RECONFIRMED
+  //   • Deadline already past → RECONFIRMED (force Voucher Now)
+  //   • Within deadline       → respect the radio pick
+  //       - "Book Now & Voucher later" → CONFIRMED
+  //       - otherwise                  → RECONFIRMED
+  const resolvedBookingFlowStatus = (() => {
+    if (!isRefundableRate) return "RECONFIRMED";
+    if (isOutsideDeadline) return "RECONFIRMED";
+    return bookingConfirmation === "Book Now & Voucher later"
+      ? "CONFIRMED"
+      : "RECONFIRMED";
+  })();
+  // Reset bookingConfirmation to the default whenever "Voucher Later" no
+  // longer applies (non-refundable draft, or we've crossed the deadline).
+  // Same guard as HotelBookingPage so a stale pick can't leak into the
+  // create payload.
+  useEffect(() => {
+    if (!draft) return;
+    if (!showVoucherChoice && bookingConfirmation !== "Book & Voucher") {
+      setBookingConfirmation("Book & Voucher");
+    }
+    if (!showVoucherChoice && voucherChoiceMade) {
+      setVoucherChoiceMade(false);
+      setVoucherChoiceError(false);
+    }
+  }, [draft, bookingConfirmation, showVoucherChoice, voucherChoiceMade]);
+
   const handleGuestChange = (rIdx, gIdx, field, value) => {
     setRooms((prev) => {
       const updated = [...prev];
@@ -234,6 +307,14 @@ export default function LongStayBookingPage() {
     }
     if (!quote || quoteError) {
       toast.error("Price quote not ready — please wait or retry");
+      return;
+    }
+    // Voucher-choice gate — mirrors HotelBookingPage. When the Voucher
+    // Now / Later choice is shown, the user must pick one explicitly
+    // before we can proceed to the policies / confirm modal.
+    if (showVoucherChoice && !voucherChoiceMade) {
+      setVoucherChoiceError(true);
+      toast.error("Please select a booking option to continue.");
       return;
     }
     // If the contract has any cancellation rules / notes / T&C, gate
@@ -294,6 +375,22 @@ export default function LongStayBookingPage() {
         remarks: remarks || null,
         // Payment mode chosen below — stored on the booking (display-only).
         paymentMode,
+        // Booking-flow status + voucher choice — mirrors HotelBookingPage.
+        // The backend can trust these directly instead of re-deriving from
+        // (refundable, deadlineDate, bookingConfirmation).
+        bookingConfirmation: bookingConfirmation || "Book & Voucher",
+        bookingFlowStatus: resolvedBookingFlowStatus,
+        isBookandVoucher: isRefundableRate
+          ? bookingConfirmation === "Book & Voucher"
+          : false,
+        isOutsideDeadline,
+        deadlineDate: cancellationDeadline
+          ? `${cancellationDeadline.getFullYear()}-${String(
+              cancellationDeadline.getMonth() + 1,
+            ).padStart(2, "0")}-${String(
+              cancellationDeadline.getDate(),
+            ).padStart(2, "0")}T00:00:00`
+          : null,
         tourismDirham:
           tourismDirham !== "" && !isNaN(Number(tourismDirham))
             ? Number(tourismDirham)
@@ -712,16 +809,17 @@ export default function LongStayBookingPage() {
                           <Form.Label className="fw-semibold mb-1">
                             Mode
                           </Form.Label>
+                          {/* Only Credit Limit / Cash / Card are exposed
+                              per business decision. Online, Bank Transfer,
+                              and Cheque enums stay valid on the backend but
+                              are hidden here. Mirrors HotelBookingPage. */}
                           <Form.Select
                             value={paymentMode}
                             onChange={(e) => setPaymentMode(e.target.value)}
                           >
                             <option value="CREDITLIMIT">Credit Limit</option>
-                            <option value="ONLINE">Online</option>
                             <option value="CASH">Cash</option>
                             <option value="CARD">Card</option>
-                            <option value="BANK_TRANSFER">Bank Transfer</option>
-                            <option value="CHEQUE">Cheque</option>
                           </Form.Select>
                         </Form.Group>
                       </Col>
@@ -941,6 +1039,65 @@ export default function LongStayBookingPage() {
                       </Card.Body>
                     </Card>
 
+                    {/* Voucher-choice card — mirrors HotelBookingPage.
+                        Shown only when the rate is refundable AND the
+                        contract has a cancellation policy AND the
+                        deadline hasn't passed. Non-refundable / past-
+                        deadline flows skip it and resolve to
+                        RECONFIRMED automatically. */}
+                    {showVoucherChoice && (
+                      <Card className="shadow-sm rounded-3 border-0 mt-3">
+                        <Card.Body className="p-3">
+                          <Form.Group className="mb-0">
+                            <Form.Label className="mb-2 fw-semibold">
+                              Are you sure to continue booking?
+                            </Form.Label>
+                            <div className="d-flex flex-column gap-2 mt-1">
+                              <Form.Check
+                                type="radio"
+                                id="ls-book-voucher"
+                                name="lsBookingConfirmation"
+                                label="Book Now & Voucher Now "
+                                value="Book & Voucher"
+                                checked={
+                                  voucherChoiceMade &&
+                                  bookingConfirmation === "Book & Voucher"
+                                }
+                                onChange={(e) => {
+                                  setBookingConfirmation(e.target.value);
+                                  setVoucherChoiceMade(true);
+                                  setVoucherChoiceError(false);
+                                }}
+                                className="mb-0"
+                              />
+                              <Form.Check
+                                type="radio"
+                                id="ls-book-now-voucher-later"
+                                name="lsBookingConfirmation"
+                                label="Book Now & Voucher Later"
+                                value="Book Now & Voucher later"
+                                checked={
+                                  voucherChoiceMade &&
+                                  bookingConfirmation ===
+                                    "Book Now & Voucher later"
+                                }
+                                onChange={(e) => {
+                                  setBookingConfirmation(e.target.value);
+                                  setVoucherChoiceMade(true);
+                                  setVoucherChoiceError(false);
+                                }}
+                              />
+                            </div>
+                            {voucherChoiceError && (
+                              <div className="text-danger small mt-2">
+                                Please select a booking option to continue.
+                              </div>
+                            )}
+                          </Form.Group>
+                        </Card.Body>
+                      </Card>
+                    )}
+
                     <div className="hbp-action-bar mt-3 d-flex gap-2">
                       <Button
                         variant="outline-secondary"
@@ -1071,7 +1228,8 @@ export default function LongStayBookingPage() {
                 onHide={() => !submitting && setShowConfirmModal(false)}
                 centered
                 backdrop="static"
-                size="md"
+                size="lg"
+                dialogClassName="confirm-booking-modal"
               >
                 {/*
                   Unified confirmation modal — structure copied from
@@ -1178,6 +1336,73 @@ export default function LongStayBookingPage() {
                             </React.Fragment>
                           ));
                         })()}
+
+                        {/* Cancellation block — mirrors HotelBookingPage's
+                            confirm modal. Non-refundable → clear "no refund"
+                            notice (red). Refundable + deadline → the free-
+                            cancellation deadline with a green "Refundable
+                            until this date" badge, or a red "Passed" badge
+                            if already crossed. */}
+                        {!isRefundableRate ? (
+                          <Col xs={12}>
+                            <div
+                              className="p-2 rounded border mt-2"
+                              style={{
+                                borderColor: "#dc2626",
+                                background: "#fef2f2",
+                              }}
+                            >
+                              <p
+                                className="mb-1 fw-bold"
+                                style={{ color: "#dc2626" }}
+                              >
+                                Non-refundable
+                              </p>
+                              <p className="mb-1 text-dark small">
+                                No refund will be provided if this booking is
+                                cancelled.
+                              </p>
+                              <p className="mb-0 text-dark small">
+                                100% cancellation charges apply from the time
+                                of booking.
+                              </p>
+                            </div>
+                          </Col>
+                        ) : (
+                          cancellationDeadline && (
+                            <Col xs={12}>
+                              <p className="mb-1 mt-2">
+                                <strong>Cancellation Deadline:</strong>
+                                <br />
+                                <span className="text-dark">
+                                  {cancellationDeadline.toLocaleDateString(
+                                    "en-GB",
+                                    {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                    },
+                                  )}
+                                </span>
+                                {isOutsideDeadline ? (
+                                  <span
+                                    className="badge bg-danger ms-2"
+                                    style={{ fontSize: "0.7rem" }}
+                                  >
+                                    Passed
+                                  </span>
+                                ) : (
+                                  <span
+                                    className="badge bg-success ms-2"
+                                    style={{ fontSize: "0.7rem" }}
+                                  >
+                                    Refundable until this date
+                                  </span>
+                                )}
+                              </p>
+                            </Col>
+                          )
+                        )}
 
                         <Col xs={12}>
                           <div className="p-2 rounded bg-white border mt-2 d-flex justify-content-between align-items-center">

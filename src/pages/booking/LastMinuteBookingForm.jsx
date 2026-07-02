@@ -164,6 +164,10 @@ export default function LastMinuteBookingForm() {
 
   const [remarks, setRemarks] = useState("");
   const [specialRequests, setSpecialRequests] = useState([]);
+  // Payment Mode — defaults to Credit Limit; rides on the create payload
+  // (same field as HotelBookingPage / StudentBookingPage). Only Credit
+  // Limit / Cash / Card are exposed per business decision.
+  const [paymentMode, setPaymentMode] = useState("CREDITLIMIT");
   const [bookingConfirmation, setBookingConfirmation] = useState("Book & Voucher");
   const [tourismDirham, setTourismDirham] = useState("");
 
@@ -261,6 +265,25 @@ export default function LastMinuteBookingForm() {
     String(ctx?.room?.roomStatus || "").replace(/\s+/g, "").toLowerCase() ===
     "onrequest";
   const showVoucherChoice = !isNonRefundableRoom && !isOnRequestRoom;
+  // Cancellation deadline for the confirm-modal display badge — end of
+  // the check-in day (matches how the other flows format their deadline).
+  // Powers the "Refundable until this date" / "Passed" badge on refundable
+  // last-minute rates. Non-refundable rooms show the red notice instead.
+  const cancellationDeadline = (() => {
+    const cinRaw = ctx?.checkInDate;
+    if (!cinRaw) return null;
+    const cin = new Date(cinRaw);
+    if (isNaN(cin.getTime())) return null;
+    const deadline = new Date(cin);
+    deadline.setHours(0, 0, 0, 0);
+    return deadline;
+  })();
+  const isOutsideDeadline = (() => {
+    if (!cancellationDeadline) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today > cancellationDeadline;
+  })();
   // The voucher-choice flag sent to the backend: forced for the auto cases,
   // otherwise driven by the selected radio.
   const isBookAndVoucherNow = isNonRefundableRoom
@@ -535,6 +558,9 @@ export default function LastMinuteBookingForm() {
       // + the rate's refundable flag.
       isBookandVoucher: isBookAndVoucherNow,
       roomStatus: ctx?.room?.roomStatus || null,
+      // Payment mode chosen on this page — same field name as the other
+      // booking flows send. Backend accepts the same enum values.
+      paymentMode,
     };
 
     try {
@@ -845,6 +871,30 @@ export default function LastMinuteBookingForm() {
                           />
                         ))}
                       </div>
+                    </Form.Group>
+                  </Col>
+                </Row>
+              </Card>
+
+              {/* ── Payment Mode ──
+                  Mirrors HotelBookingPage / StudentBookingPage /
+                  SeniorCitizenBookingPage. Rides on the create payload as
+                  `paymentMode`. Only Credit Limit / Cash / Card are exposed
+                  per business decision. */}
+              <Card className="p-4 mb-2 shadow-sm border-0">
+                <h5 className="mb-3 fw-bold">Payment Mode</h5>
+                <Row className="g-3">
+                  <Col md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold mb-1">Mode</Form.Label>
+                      <Form.Select
+                        value={paymentMode}
+                        onChange={(e) => setPaymentMode(e.target.value)}
+                      >
+                        <option value="CREDITLIMIT">Credit Limit</option>
+                        <option value="CASH">Cash</option>
+                        <option value="CARD">Card</option>
+                      </Form.Select>
                     </Form.Group>
                   </Col>
                 </Row>
@@ -1179,7 +1229,8 @@ export default function LastMinuteBookingForm() {
           onHide={() => !submitting && setShowSummaryModal(false)}
           centered
           backdrop="static"
-          size="md"
+          size="lg"
+          dialogClassName="confirm-booking-modal"
         >
           <Modal.Header
             closeButton={!submitting}
@@ -1300,6 +1351,72 @@ export default function LastMinuteBookingForm() {
                       {specialRequests.join(", ")}
                     </p>
                   </Col>
+                )}
+
+                {/* Cancellation block — mirrors HotelBookingPage's confirm
+                    modal placement (after Lead Passenger, before Selling
+                    Price / Rate Split). Non-refundable → clear "no refund"
+                    notice. Refundable + deadline → the free-cancellation
+                    deadline with a green "Refundable until this date"
+                    badge, or a red "Passed" badge if already crossed.
+                    Last-minute rates are typically non-refundable so the
+                    red box is the common path. */}
+                {isNonRefundableRoom ? (
+                  <Col xs={12}>
+                    <div
+                      className="p-2 rounded border"
+                      style={{
+                        borderColor: "#dc2626",
+                        background: "#fef2f2",
+                      }}
+                    >
+                      <p
+                        className="mb-1 fw-bold"
+                        style={{ color: "#dc2626" }}
+                      >
+                        Non-refundable
+                      </p>
+                      <p className="mb-1 text-dark small">
+                        No refund will be provided if this booking is
+                        cancelled.
+                      </p>
+                      <p className="mb-0 text-dark small">
+                        100% cancellation charges apply from the time of
+                        booking.
+                      </p>
+                    </div>
+                  </Col>
+                ) : (
+                  cancellationDeadline && (
+                    <Col xs={12}>
+                      <p className="mb-1">
+                        <strong>Cancellation Deadline:</strong>
+                        <br />
+                        <span className="text-dark">
+                          {cancellationDeadline.toLocaleDateString("en-GB", {
+                            day: "2-digit",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </span>
+                        {isOutsideDeadline ? (
+                          <span
+                            className="badge bg-danger ms-2"
+                            style={{ fontSize: "0.7rem" }}
+                          >
+                            Passed
+                          </span>
+                        ) : (
+                          <span
+                            className="badge bg-success ms-2"
+                            style={{ fontSize: "0.7rem" }}
+                          >
+                            Refundable until this date
+                          </span>
+                        )}
+                      </p>
+                    </Col>
+                  )
                 )}
 
                 <Col xs={12}>

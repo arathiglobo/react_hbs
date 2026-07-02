@@ -274,20 +274,19 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
   // combination keeps the full, existing option set untouched.
   const isCashAgent = agentHasAvailableCredit === false;
   const restrictToCardCashDeposit = isNonRefundableRate && isCashAgent;
+  // Only Credit Limit / Cash / Card are exposed in the UI. Online, Bank
+  // Transfer, Cheque, and Cash Deposit are intentionally hidden per business
+  // decision — the enums stay valid on the backend, they're just not
+  // selectable here. Restricted mode (non-refundable rate + no-credit agent)
+  // collapses to Card since Credit Limit isn't usable then.
   const paymentModeOptions = useMemo(
     () =>
       restrictToCardCashDeposit
-        ? [
-            { value: "CARD", label: "Card" },
-            { value: "CASH_DEPOSIT", label: "Cash Deposit" },
-          ]
+        ? [{ value: "CARD", label: "Card" }]
         : [
             { value: "CREDITLIMIT", label: "Credit Limit" },
-            { value: "ONLINE", label: "Online" },
             { value: "CASH", label: "Cash" },
             { value: "CARD", label: "Card" },
-            { value: "BANK_TRANSFER", label: "Bank Transfer" },
-            { value: "CHEQUE", label: "Cheque" },
           ],
     [restrictToCardCashDeposit],
   );

@@ -111,6 +111,10 @@ const GovEmployeeBookingPage = () => {
   // and is read straight into the create payload below.
   const [remarks, setRemarks] = useState("");
   const [specialRequests, setSpecialRequests] = useState([]);
+  // Payment Mode — defaults to Credit Limit; rides on the create payload
+  // (same field as StudentBookingPage / SeniorCitizenBookingPage). Only
+  // Credit Limit / Cash / Card are exposed per business decision.
+  const [paymentMode, setPaymentMode] = useState("CREDITLIMIT");
 
   // ── Government employee verification block ──────────────────────
   const [verificationMethod, setVerificationMethod] = useState(METHOD_CODE);
@@ -127,6 +131,15 @@ const GovEmployeeBookingPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
+
+  // ── Voucher-choice + booking-flow status (mirrors HotelBookingPage) ──
+  // Refundable + Available rate with a still-upcoming deadline → surface
+  // the "Book Now & Voucher Now" / "Book Now & Voucher Later" choice
+  // above the Confirm Booking button. Non-refundable / on-request / past-
+  // deadline flows skip the choice and resolve to Reconfirmed.
+  const [bookingConfirmation, setBookingConfirmation] = useState("Book & Voucher");
+  const [voucherChoiceMade, setVoucherChoiceMade] = useState(false);
+  const [voucherChoiceError, setVoucherChoiceError] = useState(false);
 
   // ── Policy + T&C consent flow (mirrors HotelBookingPage) ────────
   const [showPolicyModal, setShowPolicyModal] = useState(false);
@@ -279,6 +292,69 @@ const GovEmployeeBookingPage = () => {
     })}`;
   };
 
+  // ────────────────────────────────────────────────────────────────
+  // Booking-flow derivation — mirrors HotelBookingPage's confirm-booking
+  // flowchart. Gov-employee stores the workflow state in
+  // `confirmationStatus` ("Confirmed" / "ReConfirmed") rather than the
+  // uppercase BookingStatus enum, so the resolved strings we send match
+  // that title-case convention. The deadline is the check-in date
+  // (end-of-day, matching how the page has always stored it in
+  // `deadlineDate`) — no separate maxCancellationNights lookup needed.
+  // ────────────────────────────────────────────────────────────────
+  const isOnRequestRate =
+    bookingData?.selectedRate?.roomStatus === "On Request";
+  const isNonRefundableRate =
+    bookingData?.selectedRate?.nonRefundable === true ||
+    bookingData?.selectedRate?.nonRefundable === "true";
+  const cancellationDeadline = (() => {
+    const cinRaw = bookingData?.payload?.checkInDate;
+    if (!cinRaw) return null;
+    const cin = new Date(cinRaw);
+    if (isNaN(cin.getTime())) return null;
+    const deadline = new Date(cin);
+    deadline.setHours(0, 0, 0, 0);
+    return deadline;
+  })();
+  const isOutsideDeadline = (() => {
+    if (!cancellationDeadline) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today > cancellationDeadline;
+  })();
+  // Only Available + refundable rates whose deadline is still upcoming
+  // get the choice. Every other case skips the card and resolves to
+  // ReConfirmed automatically.
+  const showVoucherChoice =
+    !isOnRequestRate &&
+    !isNonRefundableRate &&
+    !!cancellationDeadline &&
+    !isOutsideDeadline;
+  // Resolved confirmationStatus that travels to the backend.
+  //   • Non-refundable        → ReConfirmed
+  //   • Deadline already past → ReConfirmed (force Voucher Now)
+  //   • Within deadline       → respect the radio pick
+  //       - "Book Now & Voucher later" → Confirmed
+  //       - otherwise                  → ReConfirmed
+  const resolvedConfirmationStatus = (() => {
+    if (isNonRefundableRate) return "ReConfirmed";
+    if (isOutsideDeadline) return "ReConfirmed";
+    return bookingConfirmation === "Book Now & Voucher later"
+      ? "Confirmed"
+      : "ReConfirmed";
+  })();
+  // Reset the choice whenever it no longer applies (guard against stale
+  // picks bleeding into the payload).
+  useEffect(() => {
+    if (!bookingData?.selectedRate) return;
+    if (!showVoucherChoice && bookingConfirmation !== "Book & Voucher") {
+      setBookingConfirmation("Book & Voucher");
+    }
+    if (!showVoucherChoice && voucherChoiceMade) {
+      setVoucherChoiceMade(false);
+      setVoucherChoiceError(false);
+    }
+  }, [bookingData, bookingConfirmation, showVoucherChoice, voucherChoiceMade]);
+
   // ── Validation ─────────────────────────────────────────────────
   // Per spec: the Confirm Booking button is always enabled — pressing
   // it runs validation and surfaces missing-field errors inline so the
@@ -330,6 +406,14 @@ const GovEmployeeBookingPage = () => {
     if (hasErrors) {
       setValidationErrors(errors);
       toast.error("Please complete the highlighted fields");
+      return;
+    }
+    // Voucher-choice gate — mirrors HotelBookingPage. When the Voucher
+    // Now / Later choice is shown, the user must pick one explicitly
+    // before we can proceed to the policies / confirm modal.
+    if (showVoucherChoice && !voucherChoiceMade) {
+      setVoucherChoiceError(true);
+      toast.error("Please select a booking option to continue.");
       return;
     }
     setValidationErrors({});
@@ -481,6 +565,16 @@ const GovEmployeeBookingPage = () => {
       rooms: allRooms,
       remarks,
       specialRequests,
+      paymentMode,
+      // ── Booking-flow status inputs (mirror HotelBookingPage) ──
+      // The frontend has already decided the target confirmationStatus
+      // based on refundability + deadline + Voucher choice. Backend
+      // trusts these directly instead of re-deriving them.
+      bookingConfirmation: bookingConfirmation || "Book & Voucher",
+      confirmationStatus: resolvedConfirmationStatus,
+      isBookandVoucher:
+        !isNonRefundableRate && bookingConfirmation === "Book & Voucher",
+      isOutsideDeadline,
       source: "WEB",
       createdByRole: activeUserRole || "agent",
       verificationMethod,
@@ -968,6 +1062,29 @@ const GovEmployeeBookingPage = () => {
                     </div>
                   </Card>
 
+                  {/* Payment Mode — mirrors HotelBookingPage /
+                      StudentBookingPage / SeniorCitizenBookingPage. Rides
+                      on the create payload. Only Credit Limit / Cash /
+                      Card are exposed per business decision. */}
+                  <Card className="p-3 mb-2 shadow-sm border-0">
+                    <h6 className="mb-2 fw-bold text-primary">Payment Mode</h6>
+                    <Row className="g-3">
+                      <Col md={6}>
+                        <Form.Group>
+                          <Form.Label className="fw-semibold mb-1">Mode</Form.Label>
+                          <Form.Select
+                            value={paymentMode}
+                            onChange={(e) => setPaymentMode(e.target.value)}
+                          >
+                            <option value="CREDITLIMIT">Credit Limit</option>
+                            <option value="CASH">Cash</option>
+                            <option value="CARD">Card</option>
+                          </Form.Select>
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                  </Card>
+
                   {/* "Booking Done By Employee" was moved into the
                       GovEmployeeSearch criteria (optional). The chosen
                       employeeId now rides on bookingData.payload and is
@@ -1137,6 +1254,64 @@ const GovEmployeeBookingPage = () => {
                       </Card.Body>
                     </Card>
 
+                    {/* Voucher-choice card — mirrors HotelBookingPage.
+                        Shown only when the rate is Available + refundable
+                        AND the deadline hasn't passed. Non-refundable /
+                        on-request / past-deadline flows skip it and
+                        resolve to ReConfirmed automatically. */}
+                    {showVoucherChoice && (
+                      <Card className="shadow-sm rounded-3 border-0 mt-3">
+                        <Card.Body className="p-3">
+                          <Form.Group className="mb-0">
+                            <Form.Label className="mb-2 fw-semibold">
+                              Are you sure to continue booking?
+                            </Form.Label>
+                            <div className="d-flex flex-column gap-2 mt-1">
+                              <Form.Check
+                                type="radio"
+                                id="ge-book-voucher"
+                                name="geBookingConfirmation"
+                                label="Book Now & Voucher Now "
+                                value="Book & Voucher"
+                                checked={
+                                  voucherChoiceMade &&
+                                  bookingConfirmation === "Book & Voucher"
+                                }
+                                onChange={(e) => {
+                                  setBookingConfirmation(e.target.value);
+                                  setVoucherChoiceMade(true);
+                                  setVoucherChoiceError(false);
+                                }}
+                                className="mb-0"
+                              />
+                              <Form.Check
+                                type="radio"
+                                id="ge-book-now-voucher-later"
+                                name="geBookingConfirmation"
+                                label="Book Now & Voucher Later"
+                                value="Book Now & Voucher later"
+                                checked={
+                                  voucherChoiceMade &&
+                                  bookingConfirmation ===
+                                    "Book Now & Voucher later"
+                                }
+                                onChange={(e) => {
+                                  setBookingConfirmation(e.target.value);
+                                  setVoucherChoiceMade(true);
+                                  setVoucherChoiceError(false);
+                                }}
+                              />
+                            </div>
+                            {voucherChoiceError && (
+                              <div className="text-danger small mt-2">
+                                Please select a booking option to continue.
+                              </div>
+                            )}
+                          </Form.Group>
+                        </Card.Body>
+                      </Card>
+                    )}
+
                     <div className="hbp-action-bar mt-2 d-flex gap-2">
                       <Button
                         variant="outline-secondary"
@@ -1300,6 +1475,8 @@ const GovEmployeeBookingPage = () => {
                 onHide={() => !isSubmitting && setShowConfirmModal(false)}
                 centered
                 backdrop="static"
+                size="lg"
+                dialogClassName="confirm-booking-modal"
               >
                 <Modal.Header
                   closeButton={!isSubmitting}
@@ -1357,17 +1534,6 @@ const GovEmployeeBookingPage = () => {
                             <strong>Nights:</strong> {pendingPayload.nights}
                           </p>
                         </Col>
-                        <Col xs={12}>
-                          <p className="mb-1">
-                            <strong>Deadline Date:</strong>{" "}
-                            <span style={{ color: "#dc3545", fontWeight: 600 }}>
-                              {pendingPayload.deadlineDate
-                                ? formatDateTime(pendingPayload.deadlineDate)
-                                : "-"}
-                            </span>
-                          </p>
-                        </Col>
-
                         {/* Room category + meal plan per booked room — mirrors
                             the booking summary. */}
                         {(pendingPayload.rooms || []).map((rm, i) => (
@@ -1419,6 +1585,74 @@ const GovEmployeeBookingPage = () => {
                                 })`}
                           </p>
                         </Col>
+
+                        {/* Cancellation block — mirrors HotelBookingPage's
+                            confirm modal placement (after Lead Passenger,
+                            before Rate Split). Non-refundable → clear "no
+                            refund" notice. Refundable + deadline → the
+                            free-cancellation deadline with a green
+                            "Refundable until this date" badge, or a red
+                            "Passed" badge if already crossed. */}
+                        {isNonRefundableRate ? (
+                          <Col xs={12}>
+                            <div
+                              className="p-2 rounded border"
+                              style={{
+                                borderColor: "#dc2626",
+                                background: "#fef2f2",
+                              }}
+                            >
+                              <p
+                                className="mb-1 fw-bold"
+                                style={{ color: "#dc2626" }}
+                              >
+                                Non-refundable
+                              </p>
+                              <p className="mb-1 text-dark small">
+                                No refund will be provided if this booking
+                                is cancelled.
+                              </p>
+                              <p className="mb-0 text-dark small">
+                                100% cancellation charges apply from the
+                                time of booking.
+                              </p>
+                            </div>
+                          </Col>
+                        ) : (
+                          cancellationDeadline && (
+                            <Col xs={12}>
+                              <p className="mb-1">
+                                <strong>Cancellation Deadline:</strong>
+                                <br />
+                                <span className="text-dark">
+                                  {cancellationDeadline.toLocaleDateString(
+                                    "en-GB",
+                                    {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                    },
+                                  )}
+                                </span>
+                                {isOutsideDeadline ? (
+                                  <span
+                                    className="badge bg-danger ms-2"
+                                    style={{ fontSize: "0.7rem" }}
+                                  >
+                                    Passed
+                                  </span>
+                                ) : (
+                                  <span
+                                    className="badge bg-success ms-2"
+                                    style={{ fontSize: "0.7rem" }}
+                                  >
+                                    Refundable until this date
+                                  </span>
+                                )}
+                              </p>
+                            </Col>
+                          )
+                        )}
                       </Row>
 
                       <div className="mt-2 p-2 bg-white border rounded">

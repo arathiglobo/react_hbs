@@ -1505,25 +1505,33 @@ export default function LongStaySearch() {
                               ))}
                             </div>
                           </Form.Group>
-                          <hr />
-                          <Form.Group>
-                            <Form.Label className="fw-semibold small">Channel</Form.Label>
-                            <div className="filter-checkbox-list">
-                              {channelTypeOptions.map((item) => (
-                                <Form.Check
-                                  key={item.value}
-                                  type="checkbox"
-                                  id={`channel-${item.value}`}
-                                  label={item.label}
-                                  checked={channelType.some((c) => c.value === item.value)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) setChannelType([...channelType, item]);
-                                    else setChannelType(channelType.filter((c) => c.value !== item.value));
-                                  }}
-                                />
-                              ))}
-                            </div>
-                          </Form.Group>
+                          {/* Channel — supplier/channel checkbox filter.
+                              Hidden for AGENT logins (agents book only
+                              through their contracted channel and the
+                              backend already scopes results). */}
+                          {!isAgentRole && (
+                            <>
+                              <hr />
+                              <Form.Group>
+                                <Form.Label className="fw-semibold small">Channel</Form.Label>
+                                <div className="filter-checkbox-list">
+                                  {channelTypeOptions.map((item) => (
+                                    <Form.Check
+                                      key={item.value}
+                                      type="checkbox"
+                                      id={`channel-${item.value}`}
+                                      label={item.label}
+                                      checked={channelType.some((c) => c.value === item.value)}
+                                      onChange={(e) => {
+                                        if (e.target.checked) setChannelType([...channelType, item]);
+                                        else setChannelType(channelType.filter((c) => c.value !== item.value));
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                              </Form.Group>
+                            </>
+                          )}
                         </Card.Body>
                       </Card>
                     </div>
