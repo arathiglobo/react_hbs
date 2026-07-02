@@ -1497,7 +1497,7 @@ export default function DayStaySearch() {
                                   "Address Not Available"}
                               </p>
 
-                              {cats.length > 0 && (
+                              {/* {cats.length > 0 && (
                                 <div className="mb-2">
                                   <small className="text-muted me-2">
                                     Categories:
@@ -1514,7 +1514,7 @@ export default function DayStaySearch() {
                                     </Badge>
                                   ))}
                                 </div>
-                              )}
+                              )} */}
 
                               {/* Badge row — same wrapper Hotel uses so the
                                   Rate-Available signal, Day Stay Window

@@ -799,12 +799,22 @@ export default function DayStayBookingList() {
                                     >
                                       {b.hotelName || "-"}
                                     </span>
+                                    {formatShortDate(b.checkInDate) &&
+                                      formatShortDate(b.checkOutDate) && (
+                                        <span
+                                          className="text-muted"
+                                          style={{ fontSize: "0.75rem" }}
+                                        >
+                                          ({formatShortDate(b.checkInDate)} -{" "}
+                                          {formatShortDate(b.checkOutDate)})
+                                        </span>
+                                      )}
                                     {timeRange && (
                                       <span
                                         className="text-muted"
                                         style={{ fontSize: "0.75rem" }}
                                       >
-                                        ({timeRange})
+                                        {timeRange}
                                       </span>
                                     )}
                                   </div>

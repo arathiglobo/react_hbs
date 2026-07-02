@@ -20,6 +20,7 @@ import {
   FaBed, FaUtensils, FaStar, FaMapMarkerAlt, FaCalendarAlt, FaUsers,
   FaInfoCircle, FaCheckCircle, FaTimesCircle, FaHotel, FaMoneyBillWave,
   FaShieldAlt, FaGlobe, FaUserClock, FaChevronUp, FaChevronDown,
+  FaPhone,
 } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
@@ -691,6 +692,24 @@ export default function SeniorCitizenRoomList() {
                           <FaMapMarkerAlt className="text-muted me-2" />
                           {hotel.hotelAddress}
                         </p>
+                          <p className="mb-0">
+                                                    <FaPhone className="text-muted me-2" />
+                                                    {hotel.hotelPhoneNumber}
+                                                  </p>
+                                                  <div className="mt-2">
+                                                    <small className="text-muted">
+                                                      <strong>Please note:</strong>{" "}
+                                                      <p className="someproperties">
+                                                        {" "}
+                                                        Some properties may collect additional charges
+                                                        such as city tax, resort fees, or security
+                                                        deposits during check-in. Policies such as
+                                                        check-in time, child accommodation, and
+                                                        cancellation rules can vary by room and
+                                                        provider.
+                                                      </p>
+                                                    </small>
+                                                  </div>
                         {/* Back-to-Search button now lives in the top
                             toolbar above this card — matches RoomList. */}
                       </div>

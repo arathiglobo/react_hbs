@@ -141,11 +141,18 @@ export default function DayStayRoomList() {
   const [policyList, setPolicyList] = useState(null);
 
   // Shared Room-Type + Refund-Policy filters (same UX as /room-list).
-  // Day-stay rate rows carry `refundable` (boolean) + `mealPlan`.
+  // /api/day-stay-contract/rooms-search returns rate rows carrying
+  // `nonRefundable` (boolean) — the standard RateOptionResponse field
+  // set from the contract's is_refundable flag (see
+  // DayStayContractServiceImpl.searchRooms). Fall back to `!refundable`
+  // for the client-side transform path used before the search endpoint
+  // populated hotels.
   const filters = useRoomFilters();
   const rateVisible = (r) =>
     filters.rateMatches({
-      isNonRefundable: r.refundable === false,
+      isNonRefundable:
+        r.nonRefundable === true ||
+        (r.nonRefundable === undefined && r.refundable === false),
       mealPlan: r.mealPlan,
     });
 
@@ -706,6 +713,15 @@ export default function DayStayRoomList() {
           background: #eef3ff;
           color: #0d6efd;
         }
+        /* Inset the accordion body so it renders slightly narrower than
+           the header — visual affordance that the body is a child of
+           the header row. */
+        .room-category-item .room-rates-section {
+          margin: 0 14px 12px;
+          padding: 0.75rem 1rem;
+          background: #ffffff;
+          border-radius: 0 0 8px 8px;
+        }
       `}</style>
       <TopBar />
       <div className="d-flex flex-grow-1">
@@ -1078,13 +1094,15 @@ export default function DayStayRoomList() {
                                                 )}
                                               </div>
                                             </div>
-                                            {rate.refundable ? (
-                                              <Badge bg="success">
-                                                Flexible
-                                              </Badge>
-                                            ) : (
+                                            {rate.nonRefundable === true ||
+                                            (rate.nonRefundable === undefined &&
+                                              rate.refundable === false) ? (
                                               <Badge bg="danger">
                                                 Non-Refundable
+                                              </Badge>
+                                            ) : (
+                                              <Badge bg="success">
+                                                Flexible
                                               </Badge>
                                             )}
                                           </div>
@@ -1175,13 +1193,16 @@ export default function DayStayRoomList() {
                                                 </span>
                                               </div>
                                               <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                                                {rate.refundable ? (
-                                                  <Badge bg="success">
-                                                    Flexible
-                                                  </Badge>
-                                                ) : (
+                                                {rate.nonRefundable === true ||
+                                                (rate.nonRefundable ===
+                                                  undefined &&
+                                                  rate.refundable === false) ? (
                                                   <Badge bg="danger">
                                                     Non-Refundable
+                                                  </Badge>
+                                                ) : (
+                                                  <Badge bg="success">
+                                                    Flexible
                                                   </Badge>
                                                 )}
                                                 {rate.roomStatus ===
