@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { FaHotel, FaCalendarAlt, FaUsers, FaUtensils } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -55,6 +55,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
     ? "/booking-details/24hr-booking-list"
     : "/booking-details/hotel-booking-list";
   const navigate = useNavigate();
+  const location = useLocation();
 
   let activeUserRole = localStorage.getItem("currentActiveRole");
   console.log("currentActiveRole::", activeUserRole);
@@ -373,6 +374,83 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
       setRooms(initialRooms);
     }
   }, []);
+
+  // Post-payment resume. DummyPaymentPage lands us back here with
+  // location.state.resumeCreate = true once the operator finishes the dummy
+  // gateway flow. React state (rooms / pendingPayload) is lost across the
+  // detour, so the resume rebuilds the create call from the payload we
+  // persisted to sessionStorage under "hbpPendingCreatePayload" just before
+  // navigating away. On success we go to the Hotel Booking List (per client
+  // requirement) rather than the booking detail page, and the row will
+  // surface as ReConfirmed because the backend's BookingStatusEngine puts
+  // typical online-payment bookings on the RECONFIRMED engine status (the
+  // list / detail views format that engine value via formatFlowStatus).
+  //
+  // Guards:
+  //   • The flag is stripped from history immediately so a reload / back
+  //     doesn't re-fire the create.
+  //   • sessionStorage is cleared right after read so a stray landing on
+  //     this URL with a stale flag can't replay an old payload.
+  //   • The credit-check step in confirmBooking() is intentionally skipped
+  //     — the operator has already paid via the gateway. Everything else
+  //     mirrors the existing success path (same endpoint, same status
+  //     checks, same toast).
+  useEffect(() => {
+    if (!location.state?.resumeCreate) return;
+    const stored = sessionStorage.getItem("hbpPendingCreatePayload");
+    // Strip the flag from history right away so remounts / reloads don't
+    // re-trigger. Do it before the async work so a fast re-render can't
+    // race the effect.
+    navigate(location.pathname, { replace: true, state: {} });
+    if (!stored) return;
+    sessionStorage.removeItem("hbpPendingCreatePayload");
+    let payload;
+    try {
+      payload = JSON.parse(stored);
+    } catch (e) {
+      console.error("Malformed persisted create payload", e);
+      return;
+    }
+    (async () => {
+      try {
+        setIsSubmitting(true);
+        const response = await axiosInstance.post(
+          "/api/hotel-booking/create",
+          payload,
+        );
+        const bookingResponse = response.data;
+        if (
+          bookingResponse &&
+          bookingResponse.status &&
+          (bookingResponse.status.toUpperCase() === "CONFIRMED" ||
+            bookingResponse.status.toUpperCase() === "NOT CONFIRMED") &&
+          bookingResponse.bookingId != 0
+        ) {
+          toast.success(
+            bookingResponse.message || "Booking created after payment.",
+          );
+          setShowConfirmModal(false);
+          navigate(postBookingListRoute);
+        } else {
+          const beMsg =
+            (bookingResponse && bookingResponse.message) || null;
+          toast.error(
+            beMsg || "Booking submission failed. Please try again.",
+          );
+        }
+      } catch (err) {
+        const beMsg =
+          err?.response?.data?.message ||
+          err?.response?.data?.error ||
+          null;
+        console.error("Error finalising booking after payment:", err);
+        toast.error(beMsg || "Booking submission failed. Please try again.");
+      } finally {
+        setIsSubmitting(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state?.resumeCreate]);
 
   const handleGuestChange = (roomIndex, guestIndex, field, value) => {
     setRooms((prevRooms) => {
@@ -2256,10 +2334,39 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                         (x) => x.id === selectedGateway,
                       );
                       setShowGatewayModal(false);
+                      // Persist the payload the resume flow will replay.
+                      // React state (rooms, pendingPayload, ...) is lost when
+                      // the user navigates away to /payment and back, so the
+                      // resume effect below rebuilds the create call purely
+                      // from sessionStorage. paymentMode is flipped to
+                      // "ONLINE" so the Booking List can label the row
+                      // correctly (mirrors the comment further up in this
+                      // file — the online-payment branch sends "ONLINE").
+                      try {
+                        sessionStorage.setItem(
+                          "hbpPendingCreatePayload",
+                          JSON.stringify({
+                            ...pendingPayload,
+                            paymentMode: "ONLINE",
+                          }),
+                        );
+                      } catch (e) {
+                        console.error(
+                          "Could not persist pending create payload",
+                          e,
+                        );
+                      }
                       navigate(`/payment/${selectedGateway}`, {
                         state: {
                           amountLabel: formatPrice(insufficientAmount),
                           gatewayName: gw ? gw.name : selectedGateway,
+                          // After payment, land back on this same booking
+                          // page with resumeCreate=true — the effect below
+                          // fires the create call using the persisted
+                          // payload, then navigates to the hotel booking
+                          // list on success (per client requirement).
+                          returnTo: location.pathname,
+                          returnState: { resumeCreate: true },
                         },
                       });
                     }}

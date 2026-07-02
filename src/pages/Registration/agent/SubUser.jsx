@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Card, Button, Table, Modal, Form, Pagination } from "react-bootstrap";
+import { Badge, Card, Button, Table, Modal, Form, Pagination } from "react-bootstrap";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
@@ -11,7 +11,11 @@ export default function SubUser() {
   const [items, setItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [formData, setFormData] = useState({
+  // Default sub-user shape. Markup config mirrors the sub-agent form
+  // (SubAgent.jsx: markup / currency / status with status defaulting to
+  // "Active"). Existing sub-users load without markup data — the API returns
+  // nulls, which the edit-preload block converts to empty selects.
+  const initialFormState = {
     agentName: "",
     email: "",
     mobileNumber: "",
@@ -19,7 +23,11 @@ export default function SubUser() {
     countryId: "",
     provinceId: "",
     placeId: "",
-  });
+    markup: "",
+    currency: "",
+    status: "Active",
+  };
+  const [formData, setFormData] = useState(initialFormState);
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
@@ -27,18 +35,14 @@ export default function SubUser() {
   // province/state master — the place level isn't captured for sub-users.)
   const [countries, setCountries] = useState([]);
   const [provinces, setProvinces] = useState([]);
+  // Markup Type + Currency master lists — loaded from the same endpoints the
+  // sub-agent form uses so both flows show identical options.
+  const [markupTypes, setMarkupTypes] = useState([]);
+  const [currencies, setCurrencies] = useState([]);
 
   const openCreate = () => {
     setEditing(null);
-    setFormData({
-      agentName: "",
-      email: "",
-      mobileNumber: "",
-      address: "",
-      countryId: "",
-      provinceId: "",
-      placeId: "",
-    });
+    setFormData(initialFormState);
     setValidationErrors({});
     setShowModal(true);
   };
@@ -46,6 +50,7 @@ export default function SubUser() {
   const openEdit = (item) => {
     setEditing(item);
     setFormData({
+      ...initialFormState,
       agentName: item.agentName || "",
       email: item.email || "",
       mobileNumber: item.mobileNumber || "",
@@ -53,6 +58,13 @@ export default function SubUser() {
       countryId: item.countryId ? String(item.countryId) : "",
       provinceId: item.provinceId ? String(item.provinceId) : "",
       placeId: item.placeId ? String(item.placeId) : "",
+      // Markup preload — coerce ids to strings so the <Form.Select> value
+      // matches the option value (which is also a string via option.value).
+      // Legacy rows without markup data leave the selects empty; the Status
+      // select falls back to "Active" via initialFormState.
+      markup: item.markup ? String(item.markup) : "",
+      currency: item.currency ? String(item.currency) : "",
+      status: item.status || "Active",
     });
     setValidationErrors({});
     setShowModal(true);
@@ -68,6 +80,10 @@ export default function SubUser() {
     }
     if (!formData.mobileNumber.trim()) errors.mobileNumber = "Mobile Number is required";
     if (!formData.address.trim()) errors.address = "Address is required";
+    // Markup config — mirrors sub-agent validation
+    // (SubAgent.jsx: markup + status required, currency optional).
+    if (!formData.markup) errors.markup = "Markup Type is required";
+    if (!formData.status) errors.status = "Status is required";
     return errors;
   };
 
@@ -98,12 +114,16 @@ export default function SubUser() {
     setIsLoading(true);
     try {
       // Send numeric location ids (or null) so the backend can bind them to
-      // Long fields — empty selects must not be sent as "".
+      // Long fields — empty selects must not be sent as "". Same rule
+      // applies to markup (Long on the DTO) and currency (Integer), mirroring
+      // the sub-agent payload in SubAgent.jsx.
       const payload = {
         ...formData,
         countryId: formData.countryId ? Number(formData.countryId) : null,
         provinceId: formData.provinceId ? Number(formData.provinceId) : null,
         placeId: formData.placeId ? Number(formData.placeId) : null,
+        markup: formData.markup ? Number(formData.markup) : null,
+        currency: formData.currency ? Number(formData.currency) : null,
       };
       if (editing) {
         await axiosInstance.put(`/api/sub-user/${editing.id}`, payload);
@@ -148,15 +168,7 @@ export default function SubUser() {
   const closeModal = () => {
     setShowModal(false);
     setEditing(null);
-    setFormData({
-      agentName: "",
-      email: "",
-      mobileNumber: "",
-      address: "",
-      countryId: "",
-      provinceId: "",
-      placeId: "",
-    });
+    setFormData(initialFormState);
     setValidationErrors({});
   };
 
@@ -187,8 +199,27 @@ export default function SubUser() {
     }
   };
 
+  // Load Markup Type + Currency master lists on mount. Endpoints match the
+  // sub-agent form (SubAgent.jsx fetchInitialMasterData) so both flows show
+  // the same options. Failures leave the lists empty rather than blocking
+  // the form.
+  const fetchMarkupMasterData = async () => {
+    try {
+      const [markupRes, currRes] = await Promise.all([
+        axiosInstance.get("/api/markupType"),
+        axiosInstance.get("/api/currency"),
+      ]);
+      setMarkupTypes(Array.isArray(markupRes.data) ? markupRes.data : []);
+      setCurrencies(Array.isArray(currRes.data) ? currRes.data : []);
+    } catch (err) {
+      setMarkupTypes([]);
+      setCurrencies([]);
+    }
+  };
+
   useEffect(() => {
     fetchCountries();
+    fetchMarkupMasterData();
   }, []);
 
   useEffect(() => {
@@ -234,13 +265,14 @@ export default function SubUser() {
                     <th>Country</th>
                     <th>City</th>
                     <th>Address</th>
+                    <th className="text-center">Status</th>
                     <th className="text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={8} className="text-center py-5">
+                      <td colSpan={9} className="text-center py-5">
                         <div className="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
                         Loading...
                       </td>
@@ -255,6 +287,26 @@ export default function SubUser() {
                         <td>{item.countryName || "—"}</td>
                         <td>{item.provinceName || "—"}</td>
                         <td>{item.address}</td>
+                        {/* Status pill — mirrors the sub-agent convention:
+                            anything other than a case-insensitive "inactive"
+                            is treated as Active. Legacy rows created before
+                            the status column existed (status == null) render
+                            as Active. */}
+                        <td className="text-center">
+                          {(() => {
+                            const isActive =
+                              String(item.status || "").trim().toLowerCase() !==
+                              "inactive";
+                            return (
+                              <Badge
+                                bg={isActive ? "success" : "secondary"}
+                                style={{ fontWeight: 600 }}
+                              >
+                                {isActive ? "Active" : "Inactive"}
+                              </Badge>
+                            );
+                          })()}
+                        </td>
                         <td>
                           <div className="d-flex flex-wrap justify-content-center gap-2">
                             <Button
@@ -279,7 +331,7 @@ export default function SubUser() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={8} className="text-center py-5 text-muted">
+                      <td colSpan={9} className="text-center py-5 text-muted">
                         No sub users found.
                       </td>
                     </tr>
@@ -391,6 +443,76 @@ export default function SubUser() {
                         isInvalid={!!validationErrors.address}
                       />
                       <Form.Control.Feedback type="invalid">{validationErrors.address}</Form.Control.Feedback>
+                    </Form.Group>
+                  </div>
+                  {/* ── Markup configuration ─────────────────────────────
+                      Mirrors the Settings block on the sub-agent form
+                      (Markup Type required, Currency optional, Status
+                      required). Options come from the same master
+                      endpoints (/api/markupType, /api/currency). */}
+                  <div className="col-md-4 mb-3">
+                    <Form.Group>
+                      <Form.Label className="small fw-bold">
+                        <span className="text-danger">* </span>Markup Type
+                      </Form.Label>
+                      <Form.Select
+                        value={formData.markup}
+                        onChange={(e) =>
+                          setFormData({ ...formData, markup: e.target.value })
+                        }
+                        isInvalid={!!validationErrors.markup}
+                      >
+                        <option value="">SELECT</option>
+                        {markupTypes.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </Form.Select>
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors.markup}
+                      </Form.Control.Feedback>
+                    </Form.Group>
+                  </div>
+                  <div className="col-md-4 mb-3">
+                    <Form.Group>
+                      <Form.Label className="small fw-bold">Currency</Form.Label>
+                      <Form.Select
+                        value={formData.currency}
+                        onChange={(e) =>
+                          setFormData({ ...formData, currency: e.target.value })
+                        }
+                      >
+                        <option value="">SELECT</option>
+                        {currencies.map((c) => (
+                          <option
+                            key={c.currencyId || c.id}
+                            value={c.currencyId || c.id}
+                          >
+                            {(c.code || c.currencyCode)} - {(c.name || c.currencyName)}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </Form.Group>
+                  </div>
+                  <div className="col-md-4 mb-3">
+                    <Form.Group>
+                      <Form.Label className="small fw-bold">
+                        <span className="text-danger">* </span>Status
+                      </Form.Label>
+                      <Form.Select
+                        value={formData.status}
+                        onChange={(e) =>
+                          setFormData({ ...formData, status: e.target.value })
+                        }
+                        isInvalid={!!validationErrors.status}
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                      </Form.Select>
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors.status}
+                      </Form.Control.Feedback>
                     </Form.Group>
                   </div>
                 </div>

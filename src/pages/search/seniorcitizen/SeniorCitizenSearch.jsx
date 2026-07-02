@@ -1536,10 +1536,19 @@ export default function SeniorCitizenSearch() {
                                       />
                                     ))}
                                   </div>
-                                  <div className="small text-muted mt-1">
-                                    Channel:{" "}
-                                    {(hotel.apiType || "INHOUSE").toUpperCase()}
-                                  </div>
+                                  {/* Channel line hidden for AGENT logins —
+                                      agents only book through their contracted
+                                      channel, and the sidebar Channel filter is
+                                      already hidden for them above (see the
+                                      !isAgentRole guard on the Channel Form
+                                      Group), so surfacing it on each result
+                                      card is out of scope for the agent. */}
+                                  {!isAgentRole && (
+                                    <div className="small text-muted mt-1">
+                                      Channel:{" "}
+                                      {(hotel.apiType || "INHOUSE").toUpperCase()}
+                                    </div>
+                                  )}
                                 </Col>
                                 <Col md={2}>
                                   <div className="text-muted small">
