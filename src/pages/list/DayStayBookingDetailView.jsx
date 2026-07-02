@@ -40,8 +40,6 @@ import {
 } from "react-bootstrap";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import {
-  FaFileAlt,
-  FaTrashAlt,
   FaEnvelope,
   FaPaperPlane,
   FaDownload,
@@ -69,12 +67,30 @@ const BUTTON_STYLE = {
 // Purpose-based colour variants (same scheme as the hotel detail page). Reuse
 // the BUTTON_STYLE shape — only the background colour changes — to improve
 // visual distinction. No behaviour/handler/guard is affected.
+const BTN_SUCCESS = { ...BUTTON_STYLE, backgroundColor: "#16a34a" }; // Confirm (on-request first-confirm)
 const BTN_TEAL = { ...BUTTON_STYLE, backgroundColor: "#0d9488" }; // Reconfirm
+const BTN_DANGER = { ...BUTTON_STYLE, backgroundColor: "#dc2626" }; // Cancel
+const BTN_PRIMARY = { ...BUTTON_STYLE, backgroundColor: "#2563eb" }; // Add New Item
 const BTN_SKY = { ...BUTTON_STYLE, backgroundColor: "#3ba2e8" }; // Add Agent Reference
 const BTN_INDIGO = { ...BUTTON_STYLE, backgroundColor: "#6366f1" }; // Confirmation No.
+const BTN_INFO = { ...BUTTON_STYLE, backgroundColor: "#0891b2" }; // Voucher / Invoice
 const BTN_ORANGE = { ...BUTTON_STYLE, backgroundColor: "#f0922b" }; // Resend Mail
 const BTN_ACCENT = { ...BUTTON_STYLE, backgroundColor: "#7c3aed" }; // Booking Remark
 const BTN_NEUTRAL = { ...BUTTON_STYLE, backgroundColor: "#64748b" }; // View / Back / Notes
+const BTN_HISTORY = { ...BUTTON_STYLE, backgroundColor: "#334155" }; // Booking History
+
+// Cross-supplier amendment picker — mirrors the parent BookingDetailedView.
+// Selecting one navigates to that flow's create form pre-filled with the
+// current booking code as the parent reference.
+const ADD_NEW_ITEM_TYPES = [
+  { key: "HOTEL", label: "Hotel Booking", route: "/new-booking/hotel" },
+  { key: "HOTEL_24HR", label: "24 Hour Check-In", route: "/new-booking/hotel-24hr" },
+  { key: "LONG_STAY", label: "Long Stay Booking", route: "/new-booking/long-stay" },
+  { key: "DAY_STAY", label: "Day Stay Check-In", route: "/new-booking/day-stay" },
+  { key: "GOV_EMPLOYEE", label: "Government Employee", route: "/new-booking/gov-employee" },
+  { key: "STUDENT", label: "Student Booking", route: "/new-booking/student" },
+  { key: "SENIOR_CITIZEN", label: "Senior Citizen Booking", route: "/new-booking/senior-citizen" },
+];
 
 const SECTION_HEADER = {
   backgroundColor: "#f0f0f0",
@@ -131,6 +147,16 @@ const formatDateTime = (dateStr) => {
   const sec = String(d.getSeconds()).padStart(2, "0");
   return `${formatDate(dateStr)} ${hrs}:${min}:${sec}`;
 };
+// Time-only (HH:MM:SS) — used by the History modal which shows Date / Time
+// in separate columns. Returns "-" when the value is missing/unparseable.
+const formatTimeOnly = (dateStr) => {
+  const d = parseLocal(dateStr);
+  if (!d) return "-";
+  const hrs = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const sec = String(d.getSeconds()).padStart(2, "0");
+  return `${hrs}:${min}:${sec}`;
+};
 
 // StatusBadge — colour each status word on its own (Confirmed/ReConfirmed
 // green, Cancelled red, On Request orange). Copied from the Hotel view.
@@ -158,6 +184,11 @@ const StatusBadge = ({ status }) => {
 export default function DayStayBookingDetailView() {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
+  // Role gate for admin-only actions — currently gates the "Send Email"
+  // affordance inside the PDF preview modal. Matches HotelBookingPage's
+  // convention.
+  const activeUserRole = localStorage.getItem("currentActiveRole");
+  const isAdmin = String(activeUserRole || "").toUpperCase() === "ADMIN";
   // Agent-role gate (UI visibility only) — hides internal/admin-facing actions
   // (Booking Remark, Notes, Confirmation No.) for Agent logins.
   // currentActiveRole isn't set for single-role logins, so fall back to
@@ -185,15 +216,6 @@ export default function DayStayBookingDetailView() {
   const [showCancel, setShowCancel] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
-
-  // Voucher modal — iframe preview of the returned PDF + send-email form.
-  // Same shape as MakeYourOwnPackageV2BookingDetailView.
-  const [showVoucher, setShowVoucher] = useState(false);
-  const [pdfUrl, setPdfUrl] = useState("");
-  const [loadingPdf, setLoadingPdf] = useState(false);
-  const [email, setEmail] = useState("");
-  const [emailError, setEmailError] = useState("");
-  const [sendingMail, setSendingMail] = useState(false);
 
   // ── Action-button modal / handler state (mirror LongStayBookingDetailView) ──
   // Reconfirm (Confirm / Reject popup)
@@ -237,6 +259,38 @@ export default function DayStayBookingDetailView() {
   // Resend Mail to Agent
   const [resendingMail, setResendingMail] = useState(false);
 
+  // Amendment links — cross-supplier children recorded via
+  // /api/booking-amendment-link/parent/{code}. Fetched separately from
+  // the main booking detail so the Related Sub-Bookings card can render
+  // Long Stay / Day Stay / Gov / Student / Senior amendments alongside
+  // the same-type sub-bookings.
+  const [amendmentLinks, setAmendmentLinks] = useState([]);
+
+  // Documents (Voucher / Proforma Voucher / Invoice / Proforma Invoice) —
+  // typed PDF generator. The button row exposes 4 buttons; each calls
+  // /api/day-stay-bookings/{id}/pdf?type=... The backend returns
+  // { status, message, pdfUrl } and we render that in an iframe modal.
+  const [generatingPdfType, setGeneratingPdfType] = useState(null);
+  const [pdfPreview, setPdfPreview] = useState(null);
+
+  // History modal — pure derivation from loaded booking, no API.
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+  // Add New Item picker — cross-supplier amendment.
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [selectedAddItemType, setSelectedAddItemType] = useState(
+    ADD_NEW_ITEM_TYPES[0].key,
+  );
+
+  // Send Document Email modal — admin-only.
+  const [showSendEmailModal, setShowSendEmailModal] = useState(false);
+  const [sendEmailDocType, setSendEmailDocType] = useState(null);
+  const [sendEmailDocLabel, setSendEmailDocLabel] = useState("");
+  const [sendEmailRecipient, setSendEmailRecipient] = useState("");
+  const [sendEmailNote, setSendEmailNote] = useState("");
+  const [sendEmailError, setSendEmailError] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
+
   const fetchDetail = async () => {
     if (!bookingId) {
       toast.error("Booking id missing");
@@ -260,6 +314,32 @@ export default function DayStayBookingDetailView() {
     fetchDetail();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingId]);
+
+  // Fetch cross-supplier amendment links once the booking code is known.
+  // The endpoint is keyed by the parent booking code (falls back to the
+  // booking's own code when this record isn't itself an amendment child).
+  const amendmentParentCode = selected?.parentBookingCode || selected?.bookingCode;
+  useEffect(() => {
+    let alive = true;
+    if (!amendmentParentCode) {
+      setAmendmentLinks([]);
+      return undefined;
+    }
+    axiosInstance
+      .get(
+        `/api/booking-amendment-link/parent/${encodeURIComponent(
+          amendmentParentCode,
+        )}`,
+      )
+      .then((res) => {
+        if (!alive) return;
+        setAmendmentLinks(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch(() => alive && setAmendmentLinks([]));
+    return () => {
+      alive = false;
+    };
+  }, [amendmentParentCode]);
 
   // ── Cancel ─────────────────────────────────────────────────────────
   const openCancel = () => {
@@ -307,6 +387,44 @@ export default function DayStayBookingDetailView() {
     normalizedStatus === "COMPLETED" ||
     selected?.reconfirmation === true ||
     String(selected?.status || "").toUpperCase() === "CONFIRMED";
+
+  // On-Request flow mirror (degrades gracefully — day-stay backend does
+  // not currently expose roomStatus="On Request" or onRequestConfirmed,
+  // so both flags evaluate false and the page behaves exactly as before).
+  const isOnRequestRoom = /^on\s*request$/i.test(
+    String(selected?.roomStatus || "").trim(),
+  );
+  const isOnRequestPending =
+    isOnRequestRoom &&
+    normalizedStatus === "CONFIRMED" &&
+    !selected?.onRequestConfirmed;
+
+  // For a cancelled booking the doc variant (final vs proforma) and whether
+  // Agent Reference / Confirmation No. can be added are governed by the
+  // status the booking held BEFORE cancellation. Day-stay backend may not
+  // expose cancelledFromStatus; missing values keep these branches inert.
+  const priorStatus = String(selected?.cancelledFromStatus || "")
+    .replace(/\s+/g, "")
+    .toUpperCase();
+  const cancelledShowsFinalDocs =
+    priorStatus === "RECONFIRMED" || priorStatus === "COMPLETED";
+  const cancelledFromConfirmedOrLater =
+    priorStatus === "CONFIRMED" ||
+    priorStatus === "RECONFIRMED" ||
+    priorStatus === "COMPLETED";
+
+  // Cancel button gate: cancellation isn't allowed once the stay has
+  // started. Falls back to false (allow cancel) if the date is missing or
+  // unparseable.
+  const isPastCheckIn = (() => {
+    const raw = selected?.checkInDate;
+    if (!raw) return false;
+    const checkIn = new Date(
+      String(raw).includes("T") ? raw : `${raw}T00:00:00`,
+    );
+    if (isNaN(checkIn.getTime())) return false;
+    return new Date().getTime() > checkIn.getTime();
+  })();
 
   // Display status for the StatusBadge — surface the raw confirmation/
   // status the booking carries; "Cancelled" wins when the booking is in
@@ -552,6 +670,137 @@ export default function DayStayBookingDetailView() {
   };
 
   // ── Resend Mail to Agent ───────────────────────────────────────────
+  // Typed document — backs Voucher / Proforma Voucher / Invoice /
+  // Proforma Invoice via GET /api/day-stay-bookings/:id/pdf?type=…
+  // The backend persists the PDF and returns { status, message, pdfUrl };
+  // we render that URL inside an <iframe> modal on this page.
+  const handleDocument = async (type, label) => {
+    if (!bookingId) return;
+    try {
+      setGeneratingPdfType(type);
+      const res = await axiosInstance.get(
+        `/api/day-stay-bookings/${bookingId}/pdf`,
+        { params: { type } },
+      );
+      if (res.data && res.data.status === "SUCCESS" && res.data.pdfUrl) {
+        setPdfPreview({
+          url: res.data.pdfUrl,
+          label: label || type,
+          type: String(type).toUpperCase(),
+        });
+      } else {
+        toast.error(res.data?.message || `Failed to generate ${label || "document"}`);
+      }
+    } catch (e) {
+      toast.error(
+        e.response?.data?.message || `Failed to generate ${label || "document"}`,
+      );
+    } finally {
+      setGeneratingPdfType(null);
+    }
+  };
+
+  // Send a typed PDF to a custom recipient (admin-only). Triggered from
+  // the PDF preview modal's "Send Email" button. Posts to /send-pdf-email
+  // (same endpoint the existing voucher modal uses) with { email, pdfUrl,
+  // bookingId }.
+  const openSendEmailModal = (docType, label) => {
+    setSendEmailDocType(docType);
+    setSendEmailDocLabel(label);
+    setSendEmailRecipient("");
+    setSendEmailNote("");
+    setSendEmailError("");
+    setShowSendEmailModal(true);
+  };
+
+  const sendDocumentEmail = async () => {
+    const recipient = (sendEmailRecipient || "").trim();
+    if (!recipient) {
+      setSendEmailError("Recipient email is required");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) {
+      setSendEmailError("Enter a valid email address");
+      return;
+    }
+    setSendEmailError("");
+    try {
+      setSendingEmail(true);
+      const res = await axiosInstance.post(
+        "/api/day-stay-booking/send-pdf-email",
+        {
+          email: recipient,
+          pdfUrl: pdfPreview?.url || "",
+          bookingId,
+          docType: sendEmailDocType,
+          note: sendEmailNote || null,
+        },
+      );
+      if (res.data?.status === "SUCCESS" || res.data?.success !== false) {
+        toast.success(res.data?.message || `${sendEmailDocLabel || "Document"} emailed`);
+        setShowSendEmailModal(false);
+      } else {
+        toast.error(res.data?.message || "Failed to send document");
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.message || "Failed to send document");
+    } finally {
+      setSendingEmail(false);
+    }
+  };
+
+  // Booking lifecycle events for the History modal. Pure derivation from
+  // the loaded booking — no API call. Rows are gated on the timestamp
+  // being present. Historical rows from before per-action user capture
+  // fall back to "-" (Created additionally falls back to the creator
+  // label). Sorted chronologically.
+  const creatorLabel =
+    selected?.createdBy ||
+    selected?.employeeName ||
+    selected?.agentName ||
+    selected?.createdByRole ||
+    selected?.source ||
+    "-";
+  const bookingHistory = (() => {
+    if (!selected) return [];
+    const events = [];
+    const createdTs = selected.createdAt || selected.bookingDate;
+    if (createdTs) {
+      events.push({
+        action: "Booking Created",
+        at: createdTs,
+        by: creatorLabel,
+      });
+    }
+    if (selected.confirmedDate) {
+      events.push({
+        action: "Booking Confirmed",
+        at: selected.confirmedDate,
+        by: selected.confirmedBy || "-",
+      });
+    }
+    if (selected.reconfirmedDate) {
+      events.push({
+        action: "Booking Reconfirmed",
+        at: selected.reconfirmedDate,
+        by: selected.reconfirmedBy || "-",
+      });
+    }
+    const cancelTs = selected.cancelledAt || selected.cancelledDate;
+    if (cancelTs) {
+      events.push({
+        action: "Booking Cancelled",
+        at: cancelTs,
+        by: selected.cancelledBy || "-",
+      });
+    }
+    return events.sort((a, b) => {
+      const ta = parseLocal(a.at)?.getTime() ?? 0;
+      const tb = parseLocal(b.at)?.getTime() ?? 0;
+      return ta - tb;
+    });
+  })();
+
   const resendMailToAgent = async () => {
     try {
       setResendingMail(true);
@@ -566,75 +815,6 @@ export default function DayStayBookingDetailView() {
       );
     } finally {
       setResendingMail(false);
-    }
-  };
-
-  // ── Voucher ────────────────────────────────────────────────────────
-  // Click → backend returns { status, message, pdfUrl }. We open the
-  // modal with the iframe loading the returned URL, plus a recipient
-  // email field that posts to /send-pdf-email (mirrors the MYOP v2
-  // pattern). Errors surface as toasts and the modal stays closed.
-  const handleVoucher = async () => {
-    if (!bookingId) return;
-    setEmail("");
-    setEmailError("");
-    setPdfUrl("");
-    setShowVoucher(true);
-    setLoadingPdf(true);
-    try {
-      const res = await axiosInstance.get(
-        `/api/day-stay-booking/${bookingId}/voucher`
-      );
-      if (res.data?.status === "SUCCESS" && res.data?.pdfUrl) {
-        setPdfUrl(res.data.pdfUrl);
-      } else {
-        toast.error(res.data?.message || "Failed to generate voucher");
-        setShowVoucher(false);
-      }
-    } catch (err) {
-      toast.error(
-        err?.response?.data?.message || "Failed to generate voucher"
-      );
-      setShowVoucher(false);
-    } finally {
-      setLoadingPdf(false);
-    }
-  };
-
-  const closeVoucher = () => {
-    setShowVoucher(false);
-    setPdfUrl("");
-    setEmail("");
-    setEmailError("");
-  };
-
-  const handleSendMail = async () => {
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setEmailError("Enter a valid email address");
-      return;
-    }
-    setEmailError("");
-    setSendingMail(true);
-    try {
-      const res = await axiosInstance.post(
-        "/api/day-stay-booking/send-pdf-email",
-        {
-          email,
-          pdfUrl,
-          bookingId,
-        }
-      );
-      if (res.data?.status === "SUCCESS") {
-        toast.success("Voucher emailed to " + email);
-        setEmail("");
-      } else {
-        toast.error(res.data?.message || "Failed to send email");
-      }
-    } catch (e) {
-      console.error("send mail error", e);
-      toast.error("Failed to send email");
-    } finally {
-      setSendingMail(false);
     }
   };
 
@@ -860,42 +1040,202 @@ export default function DayStayBookingDetailView() {
                   </div>
                 </div>
 
-                {/* ── Notes (Special Requests / Policy / Cancellation) ─── */}
-                {(selected.specialRequests?.length > 0 ||
-                  selected.cancellationPolicy?.length > 0 ||
-                  selected.isCancelled) && (
+                {/* ── Related Sub-Bookings of OTHER types (amendment links) ──
+                    Long Stay / Day Stay / Gov Employee / Student / Senior
+                    Citizen children, recorded via /api/booking-amendment-link.
+                    Each row is clickable to its own (live) detail page.
+                    Mirrors BookingDetailedView exactly. */}
+                {amendmentLinks && amendmentLinks.length > 0 && (
                   <div style={card}>
-                    <div style={SECTION_HEADER}>Notes</div>
-                    <div
-                      style={{
-                        padding: "10px 16px",
-                        fontSize: "0.83rem",
-                        color: "#333",
-                      }}
-                    >
-                      {selected.specialRequests?.length > 0 && (
-                        <p className="mb-1">
-                          <strong>Special Requests:</strong>{" "}
-                          {selected.specialRequests.join(", ")}
-                        </p>
-                      )}
-                      {selected.cancellationPolicy?.length > 0 && (
-                        <p className="mb-1">
-                          <strong>Cancellation Policy:</strong>{" "}
-                          {selected.cancellationPolicy.join(" / ")}
-                        </p>
-                      )}
-                      {selected.isCancelled && (
-                        <div className="alert alert-danger mt-2 mb-0 py-2 small">
-                          <strong>Cancelled at:</strong> {selected.cancelledAt}
-                          <br />
-                          <strong>Reason:</strong>{" "}
-                          {selected.cancellationReason || "—"}
+                    <div style={SECTION_HEADER}>
+                      Related Sub-Bookings — Other Types ({amendmentLinks.length})
+                    </div>
+                    <div style={{ padding: "10px 16px" }}>
+                      {amendmentLinks.map((lnk) => (
+                        <div
+                          key={lnk.id}
+                          style={{
+                            borderTop: "1px solid #eee",
+                            padding: "10px 0",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                color: "#c0392b",
+                                fontWeight: "700",
+                                fontSize: "0.9rem",
+                              }}
+                            >
+                              {lnk.childBookingCode || "-"}
+                              <span
+                                style={{
+                                  marginLeft: "8px",
+                                  color: "#888",
+                                  fontWeight: "500",
+                                  fontSize: "0.8rem",
+                                }}
+                              >
+                                ({lnk.childTypeLabel || lnk.childType})
+                              </span>
+                            </span>
+                            {lnk.childDetailRoutePrefix && lnk.childBookingId != null && (
+                              <button
+                                style={BTN_NEUTRAL}
+                                onClick={() =>
+                                  navigate(
+                                    `${lnk.childDetailRoutePrefix}${lnk.childBookingId}`,
+                                  )
+                                }
+                              >
+                                View
+                              </button>
+                            )}
+                          </div>
+                          <Row>
+                            <Col md={6}>
+                              <InfoRow
+                                label="Booking Type"
+                                value={lnk.childTypeLabel || lnk.childType}
+                              />
+                              <InfoRow
+                                label="Reference No."
+                                value={lnk.childReferenceNumber}
+                              />
+                              <InfoRow label="Hotel" value={lnk.childHotelName} />
+                            </Col>
+                            <Col md={6}>
+                              <InfoRow
+                                label="Check-In"
+                                value={lnk.childCheckInDate}
+                              />
+                              <InfoRow
+                                label="Check-Out"
+                                value={lnk.childCheckOutDate}
+                              />
+                              <InfoRow
+                                label="Total Rate"
+                                value={
+                                  lnk.childTotalRate != null
+                                    ? Number(lnk.childTotalRate).toFixed(2)
+                                    : "-"
+                                }
+                              />
+                              <InfoRow
+                                label="Status"
+                                value={<StatusBadge status={lnk.childStatus} />}
+                              />
+                            </Col>
+                          </Row>
                         </div>
-                      )}
+                      ))}
                     </div>
                   </div>
                 )}
+
+                {/* ── Cancellation Policy ───────────────────────────── */}
+                <div style={card}>
+                  <div style={SECTION_HEADER}>
+                    Cancellation Policy{" "}
+                    <span style={{ fontSize: "1rem", color: "#555" }}>⊟</span>
+                  </div>
+                  <div
+                    style={{
+                      padding: "10px 16px",
+                      fontSize: "0.83rem",
+                      color: "#333",
+                    }}
+                  >
+                    {selected.cancellationPolicy && selected.cancellationPolicy.length > 0 ? (
+                      selected.cancellationPolicy.map((p, i) => (
+                        <p key={i} style={{ marginBottom: "4px" }}>
+                          {p}
+                        </p>
+                      ))
+                    ) : (
+                      <span className="text-muted">
+                        No cancellation policy available.
+                      </span>
+                    )}
+                    {selected.isCancelled && (
+                      <div className="alert alert-danger mt-2 mb-0 py-2 small">
+                        <strong>Cancelled at:</strong>{" "}
+                        {selected.cancelledAt || "—"}
+                        <br />
+                        <strong>Reason:</strong>{" "}
+                        {selected.cancellationReason || "—"}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Remarks ───────────────────────────────────────── */}
+                <div style={card}>
+                  <div style={SECTION_HEADER}>
+                    Remarks{" "}
+                    <span style={{ fontSize: "1rem", color: "#555" }}>⊟</span>
+                  </div>
+                  <div
+                    style={{
+                      padding: "10px 16px",
+                      fontSize: "0.83rem",
+                      color: "#333",
+                    }}
+                  >
+                    {selected.remarks ? (
+                      <p style={{ marginBottom: 0 }}>{selected.remarks}</p>
+                    ) : (
+                      <span className="text-muted">No remarks.</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Special Requests ──────────────────────────────── */}
+                <div style={card}>
+                  <div style={SECTION_HEADER}>
+                    Special Request{" "}
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: "18px",
+                        height: "18px",
+                        borderRadius: "50%",
+                        border: "1.5px solid #555",
+                        fontSize: "0.75rem",
+                        fontWeight: "700",
+                        color: "#555",
+                      }}
+                    >
+                      +
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      padding: "10px 16px",
+                      fontSize: "0.83rem",
+                      color: "#333",
+                    }}
+                  >
+                    {selected.specialRequests && selected.specialRequests.length > 0 ? (
+                      <ul style={{ marginBottom: 0, paddingLeft: "18px" }}>
+                        {selected.specialRequests.map((r, i) => (
+                          <li key={i}>{r}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span className="text-muted">No special requests.</span>
+                    )}
+                  </div>
+                </div>
 
                 {/* ── Related Notes (ad-hoc notes added via the NOTES modal) ──
                     Same data shown in the modal, surfaced here on the page so
@@ -970,12 +1310,12 @@ export default function DayStayBookingDetailView() {
                 </div>
 
                 {/* ── Action Buttons ──────────────────────────────────
-                    All booking-level actions live here, reflowing on
-                    small screens via flex-wrap. Day Stay's only PDF
-                    endpoint is the single /voucher route handled by the
-                    green Voucher button — there is no PROFORMA/INVOICE
-                    multi-type PDF endpoint, so those four buttons are
-                    intentionally omitted. */}
+                    Mirrors BookingDetailedView's layout: live bookings get
+                    the CONFIRM/RECONFIRM split (driven by isOnRequestPending),
+                    Proforma vs final docs (driven by showsFinalDocs), and
+                    Agent Reference / Confirmation No. guards. Cancelled
+                    bookings drop CANCEL and CONFIRM/RECONFIRM but keep
+                    every applicable read-only / docs action. */}
                 <div
                   style={{
                     marginBottom: "10px",
@@ -985,63 +1325,200 @@ export default function DayStayBookingDetailView() {
                   }}
                 >
                   <button
-                    style={{
-                      ...BUTTON_STYLE,
-                      backgroundColor: isCancelled ? "#6c757d" : "#0891b2",
-                      cursor: isCancelled ? "not-allowed" : "pointer",
-                      opacity: isCancelled ? 0.7 : 1,
+                    style={BTN_PRIMARY}
+                    onClick={() => {
+                      setSelectedAddItemType(ADD_NEW_ITEM_TYPES[0].key);
+                      setShowAddItemModal(true);
                     }}
-                    onClick={isCancelled ? undefined : handleVoucher}
-                    disabled={isCancelled}
-                    title={
-                      isCancelled
-                        ? "Cancelled bookings have no voucher"
-                        : "Voucher"
-                    }
                   >
-                    <FaFileAlt style={{ marginRight: "6px" }} />
-                    Voucher
+                    ADD NEW ITEM
                   </button>
 
                   {!isCancelled && (
                     <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#dc2626" }}
+                      style={{
+                        ...BTN_DANGER,
+                        opacity: isPastCheckIn ? 0.55 : 1,
+                        cursor: isPastCheckIn ? "not-allowed" : "pointer",
+                      }}
                       onClick={openCancel}
-                      title="Cancel Booking"
+                      disabled={isPastCheckIn}
+                      title={
+                        isPastCheckIn
+                          ? "Cancellation is not allowed after the check-in date."
+                          : "Cancel Booking"
+                      }
                     >
-                      <FaTrashAlt style={{ marginRight: "6px" }} />
-                      Cancel
+                      CANCEL
                     </button>
                   )}
 
                   {!showsFinalDocs && !isCancelledStatus && (
-                    <button style={BTN_TEAL} onClick={openConfirmModal}>
-                      RECONFIRM
+                    <button
+                      style={{
+                        ...(isOnRequestPending ? BTN_SUCCESS : BTN_TEAL),
+                        opacity: isPastCheckIn ? 0.55 : 1,
+                        cursor: isPastCheckIn ? "not-allowed" : "pointer",
+                      }}
+                      onClick={openConfirmModal}
+                      disabled={isPastCheckIn}
+                      title={
+                        isPastCheckIn
+                          ? (isOnRequestPending
+                              ? "Confirmation is not allowed after the check-in date."
+                              : "Reconfirmation is not allowed after the check-in date.")
+                          : undefined
+                      }
+                    >
+                      {/* An On-Request booking hasn't been confirmed yet, so
+                          the first action is CONFIRM. Once confirmed it
+                          behaves like a normal Confirmed booking →
+                          RECONFIRM. */}
+                      {isOnRequestPending ? "CONFIRM" : "RECONFIRM"}
                     </button>
                   )}
 
-                  <button
-                    style={BTN_SKY}
-                    onClick={() => {
-                      if (!isConfirmedOrLater) {
-                        toast.error(
-                          "Agent Reference can only be added once the booking is Confirmed or ReConfirmed."
-                        );
-                        return;
-                      }
-                      openConfirmStatusModal();
-                    }}
-                  >
-                    ADD AGENT REFERENCE
-                  </button>
+                  {/* Proforma Voucher / Invoice — pre-finalised state, and
+                      not available while On-Request is still pending. */}
+                  {!isCancelled && !showsFinalDocs && !isOnRequestPending && (
+                    <>
+                      <button
+                        style={BTN_INFO}
+                        disabled={generatingPdfType === "PROFORMA_VOUCHER"}
+                        onClick={() => handleDocument("PROFORMA_VOUCHER", "Proforma Voucher")}
+                      >
+                        {generatingPdfType === "PROFORMA_VOUCHER" ? "GENERATING..." : "PROFORMA VOUCHER"}
+                      </button>
+                      <button
+                        style={BTN_INFO}
+                        disabled={generatingPdfType === "PROFORMA_INVOICE"}
+                        onClick={() => handleDocument("PROFORMA_INVOICE", "Proforma Invoice")}
+                      >
+                        {generatingPdfType === "PROFORMA_INVOICE" ? "GENERATING..." : "PROFORMA INVOICE"}
+                      </button>
+                    </>
+                  )}
 
-                  {!isAgentRole && (
+                  {/* Final Voucher / Invoice — finalised state. */}
+                  {!isCancelled && showsFinalDocs && (
+                    <>
+                      <button
+                        style={BTN_INFO}
+                        disabled={generatingPdfType === "VOUCHER"}
+                        onClick={() => handleDocument("VOUCHER", "Voucher")}
+                      >
+                        {generatingPdfType === "VOUCHER" ? "GENERATING..." : "VOUCHER"}
+                      </button>
+                      <button
+                        style={BTN_INFO}
+                        disabled={generatingPdfType === "INVOICE"}
+                        onClick={() => handleDocument("INVOICE", "Invoice")}
+                      >
+                        {generatingPdfType === "INVOICE" ? "GENERATING..." : "INVOICE"}
+                      </button>
+                    </>
+                  )}
+
+                  {/* Cancelled booking docs: pick the final or proforma pair
+                      based on the pre-cancellation status. */}
+                  {isCancelled && cancelledShowsFinalDocs && (
+                    <>
+                      <button
+                        style={BTN_INFO}
+                        disabled={generatingPdfType === "VOUCHER"}
+                        onClick={() => handleDocument("VOUCHER", "Voucher")}
+                      >
+                        {generatingPdfType === "VOUCHER" ? "GENERATING..." : "VOUCHER"}
+                      </button>
+                      <button
+                        style={BTN_INFO}
+                        disabled={generatingPdfType === "INVOICE"}
+                        onClick={() => handleDocument("INVOICE", "Invoice")}
+                      >
+                        {generatingPdfType === "INVOICE" ? "GENERATING..." : "INVOICE"}
+                      </button>
+                    </>
+                  )}
+                  {isCancelled && !cancelledShowsFinalDocs && (
+                    <>
+                      <button
+                        style={BTN_INFO}
+                        disabled={generatingPdfType === "PROFORMA_VOUCHER"}
+                        onClick={() => handleDocument("PROFORMA_VOUCHER", "Proforma Voucher")}
+                      >
+                        {generatingPdfType === "PROFORMA_VOUCHER" ? "GENERATING..." : "PROFORMA VOUCHER"}
+                      </button>
+                      <button
+                        style={BTN_INFO}
+                        disabled={generatingPdfType === "PROFORMA_INVOICE"}
+                        onClick={() => handleDocument("PROFORMA_INVOICE", "Proforma Invoice")}
+                      >
+                        {generatingPdfType === "PROFORMA_INVOICE" ? "GENERATING..." : "PROFORMA INVOICE"}
+                      </button>
+                    </>
+                  )}
+
+                  {/* Add Agent Reference — guarded both for live (must be
+                      Confirmed or later, not On-Request) and cancelled
+                      (must have been Confirmed-or-later before cancel). */}
+                  {!isCancelled && (
+                    <button
+                      style={BTN_SKY}
+                      onClick={() => {
+                        if (!isConfirmedOrLater || isOnRequestPending) {
+                          toast.error(
+                            "Agent Reference can only be added once the booking is Confirmed or ReConfirmed."
+                          );
+                          return;
+                        }
+                        openConfirmStatusModal();
+                      }}
+                    >
+                      ADD AGENT REFERENCE
+                    </button>
+                  )}
+                  {isCancelled && (
+                    <button
+                      style={BTN_SKY}
+                      onClick={() => {
+                        if (!cancelledFromConfirmedOrLater) {
+                          toast.error(
+                            "Agent Reference can only be added on bookings that were Confirmed before cancellation."
+                          );
+                          return;
+                        }
+                        openConfirmStatusModal();
+                      }}
+                    >
+                      ADD AGENT REFERENCE
+                    </button>
+                  )}
+
+                  {/* Confirmation No. — hidden from agents; same guard
+                      pattern as Agent Reference. */}
+                  {!isCancelled && !isAgentRole && (
                     <button
                       style={BTN_INDIGO}
                       onClick={() => {
-                        if (!isConfirmedOrLater) {
+                        if (!isConfirmedOrLater || isOnRequestPending) {
                           toast.error(
                             "Confirmation Number can only be added once the booking is Confirmed or ReConfirmed."
+                          );
+                          return;
+                        }
+                        openConfirmationNoModal();
+                      }}
+                    >
+                      CONFIRMATION NO.
+                    </button>
+                  )}
+                  {isCancelled && !isAgentRole && (
+                    <button
+                      style={BTN_INDIGO}
+                      onClick={() => {
+                        if (!cancelledFromConfirmedOrLater) {
+                          toast.error(
+                            "Confirmation Number can only be added on bookings that were Confirmed before cancellation."
                           );
                           return;
                         }
@@ -1074,6 +1551,13 @@ export default function DayStayBookingDetailView() {
                       NOTES
                     </button>
                   )}
+
+                  <button
+                    style={BTN_HISTORY}
+                    onClick={() => setShowHistoryModal(true)}
+                  >
+                    HISTORY
+                  </button>
                 </div>
 
                 {/* ── Booking Date footer ───────────────────────────── */}
@@ -1110,13 +1594,15 @@ export default function DayStayBookingDetailView() {
                   >
                     <Modal.Title className="fw-bold d-flex align-items-center">
                       <FaExclamationCircle className="me-2 text-warning" />
-                      <span>Reconfirm Booking</span>
+                      <span>{isOnRequestPending ? "Confirm Booking" : "Reconfirm Booking"}</span>
                     </Modal.Title>
                   </Modal.Header>
                   <Modal.Body style={{ padding: "1.5rem" }}>
                     <div className="text-center">
                       <p className="fs-5 mb-3">
-                        Are you sure you want to reconfirm the booking?
+                        {isOnRequestPending
+                          ? "Approve this On-Request booking and confirm it now?"
+                          : "Are you sure you want to reconfirm the booking?"}
                       </p>
                       <div className="text-muted small mb-3">
                         <div>
@@ -1137,13 +1623,18 @@ export default function DayStayBookingDetailView() {
                       borderTop: "1px solid #dee2e6",
                     }}
                   >
-                    <Button
-                      variant="danger"
-                      onClick={openRejectModal}
-                      disabled={confirmingBooking}
-                    >
-                      Reject
-                    </Button>
+                    {/* Reject is only meaningful while the booking is still
+                        On-Request pending. It cancels the booking with a
+                        "rejected by …" reason. */}
+                    {isOnRequestPending && (
+                      <Button
+                        variant="danger"
+                        onClick={openRejectModal}
+                        disabled={confirmingBooking}
+                      >
+                        Reject
+                      </Button>
+                    )}
                     <Button
                       variant="success"
                       onClick={confirmBooking}
@@ -1156,10 +1647,10 @@ export default function DayStayBookingDetailView() {
                             size="sm"
                             className="me-2"
                           />
-                          Confirming...
+                          {isOnRequestPending ? "Confirming..." : "Reconfirming..."}
                         </>
                       ) : (
-                        "Confirm"
+                        isOnRequestPending ? "Confirm" : "Reconfirm"
                       )}
                     </Button>
                   </Modal.Footer>
@@ -1662,96 +2153,277 @@ export default function DayStayBookingDetailView() {
         </Modal.Footer>
       </Modal>
 
-      {/* ── Voucher / PDF modal — iframe + send-email
-          (same shape as MakeYourOwnPackageV2BookingDetailView) ───────── */}
+      {/* ── PDF Preview Modal ───────────────────────────────────────────
+          Renders Voucher / Proforma Voucher / Invoice / Proforma Invoice
+          inside an <iframe> using the pdfUrl returned by
+          /api/day-stay-bookings/:id/pdf. Mirrors the pattern used in
+          BookingDetailedView.jsx and the sibling gov-employee / student /
+          senior-citizen views. */}
       <Modal
-        show={showVoucher}
-        onHide={closeVoucher}
+        show={!!pdfPreview}
+        onHide={() => setPdfPreview(null)}
         size="xl"
         centered
-        scrollable
         backdrop="static"
+        keyboard
       >
-        <Modal.Header closeButton style={{ fontSize: "1rem" }}>
+        <Modal.Header closeButton>
           <Modal.Title style={{ fontSize: "1rem", fontWeight: 700 }}>
-            Voucher{selected?.bookingCode ? ` — ${selected.bookingCode}` : ""}
+            {pdfPreview?.label || "Document"}
+            {selected?.bookingCode ? ` — ${selected.bookingCode}` : ""}
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body className="p-0" style={{ height: "80vh" }}>
-          {loadingPdf ? (
-            <div className="h-100 d-flex flex-column align-items-center justify-content-center">
-              <Spinner animation="border" style={{ color: "#c0392b" }} />
-              <p className="mt-2 text-muted">Generating Voucher…</p>
-            </div>
-          ) : pdfUrl ? (
+        <Modal.Body style={{ padding: 0, height: "80vh" }}>
+          {pdfPreview?.url ? (
             <iframe
-              key={pdfUrl}
-              src={`${pdfUrl}#toolbar=0`}
-              width="100%"
-              height="100%"
-              title="Voucher PDF"
-              style={{ border: "none", display: "block" }}
+              key={pdfPreview.url}
+              src={pdfPreview.url}
+              title={pdfPreview.label || "PDF preview"}
+              style={{
+                width: "100%",
+                height: "100%",
+                border: "none",
+                display: "block",
+              }}
             />
           ) : (
-            <div className="h-100 d-flex align-items-center justify-content-center">
-              <p className="text-danger">Failed to load PDF.</p>
-            </div>
+            <div className="text-center text-muted py-5">No PDF loaded.</div>
           )}
         </Modal.Body>
-        <div className="p-3 border-top bg-light">
-          <Row className="g-2 align-items-center">
-            <Col md={8}>
-              <InputGroup>
-                <InputGroup.Text>
-                  <FaEnvelope />
-                </InputGroup.Text>
-                <Form.Control
-                  type="email"
-                  placeholder="recipient@example.com"
-                  value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (emailError) setEmailError("");
-                  }}
-                  isInvalid={!!emailError}
-                />
+        <Modal.Footer>
+          {pdfPreview?.url && (
+            <>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() =>
+                  window.open(pdfPreview.url, "_blank", "noopener,noreferrer")
+                }
+              >
+                <FaDownload className="me-1" /> Open in new tab
+              </Button>
+              <Button
+                variant="outline-primary"
+                size="sm"
+                as="a"
+                href={pdfPreview.url}
+                download={`DayStay_${bookingId}_${pdfPreview.type || "document"}.pdf`}
+              >
+                Download
+              </Button>
+              {/* Send Email — admin-only. Agents see download / new-tab
+                  but cannot dispatch documents by email from this UI. */}
+              {isAdmin && (
                 <Button
                   variant="primary"
-                  onClick={handleSendMail}
-                  disabled={sendingMail || !pdfUrl}
-                >
-                  {sendingMail ? (
-                    <>
-                      <Spinner size="sm" animation="border" className="me-1" />
-                      Sending…
-                    </>
-                  ) : (
-                    <>
-                      <FaPaperPlane className="me-1" /> Send Mail
-                    </>
-                  )}
-                </Button>
-              </InputGroup>
-              {emailError && (
-                <div className="text-danger small mt-1">{emailError}</div>
-              )}
-            </Col>
-            <Col md={4} className="text-end">
-              {pdfUrl && (
-                <Button
-                  variant="outline-primary"
                   size="sm"
-                  onClick={() => window.open(pdfUrl, "_blank")}
+                  onClick={() => {
+                    const labelToDocType = {
+                      Voucher: "VOUCHER",
+                      "Proforma Voucher": "PROFORMA_VOUCHER",
+                      Invoice: "INVOICE",
+                      "Proforma Invoice": "PROFORMA_INVOICE",
+                    };
+                    const dt =
+                      labelToDocType[pdfPreview.label] ||
+                      (pdfPreview.type === "PROFORMA_VOUCHER"
+                        ? "PROFORMA_VOUCHER"
+                        : pdfPreview.type === "PROFORMA_INVOICE"
+                          ? "PROFORMA_INVOICE"
+                          : pdfPreview.type === "COMPLETED"
+                            ? "INVOICE"
+                            : pdfPreview.type || "VOUCHER");
+                    openSendEmailModal(dt, pdfPreview.label || "Document");
+                  }}
                 >
-                  <FaDownload className="me-1" /> Download
+                  <FaPaperPlane className="me-1" /> Send Email
                 </Button>
               )}
-            </Col>
-          </Row>
-        </div>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={closeVoucher}>
+            </>
+          )}
+          <Button variant="secondary" size="sm" onClick={() => setPdfPreview(null)}>
             Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Add New Item picker ────────────────────────────────────────
+          Cross-supplier amendment picker. Selecting one navigates to that
+          flow's create form, pre-filled with the current booking code as
+          the parent reference. */}
+      <Modal
+        show={showAddItemModal}
+        onHide={() => setShowAddItemModal(false)}
+        centered
+        backdrop="static"
+        keyboard
+      >
+        <Modal.Header closeButton>
+          <Modal.Title style={{ fontSize: "1rem" }}>Add New Item</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted small mb-3">
+            Pick the booking type to amend onto{" "}
+            <strong>{selected?.bookingCode || "-"}</strong>.
+          </p>
+          {ADD_NEW_ITEM_TYPES.map((t) => (
+            <Form.Check
+              key={t.key}
+              type="radio"
+              id={`add-item-${t.key}`}
+              name="addItemType"
+              label={t.label}
+              value={t.key}
+              checked={selectedAddItemType === t.key}
+              onChange={(e) => setSelectedAddItemType(e.target.value)}
+              className="mb-2"
+            />
+          ))}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setShowAddItemModal(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              const chosen = ADD_NEW_ITEM_TYPES.find(
+                (t) => t.key === selectedAddItemType,
+              );
+              if (!chosen) return;
+              const parent = selected?.parentBookingCode || selected?.bookingCode || "";
+              setShowAddItemModal(false);
+              navigate(
+                `${chosen.route}?parentBookingCode=${encodeURIComponent(parent)}`,
+              );
+            }}
+          >
+            Continue
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Booking History ────────────────────────────────────────────
+          Pure derivation from the loaded booking (no API). Rows are
+          gated on the timestamp being present. */}
+      <Modal
+        show={showHistoryModal}
+        onHide={() => setShowHistoryModal(false)}
+        centered
+        size="lg"
+        backdrop="static"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title style={{ fontSize: "1rem" }}>
+            Booking History
+            {selected?.bookingCode ? ` — ${selected.bookingCode}` : ""}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {bookingHistory.length === 0 ? (
+            <div className="text-center text-muted py-3">
+              No history available for this booking.
+            </div>
+          ) : (
+            <Table bordered size="sm" style={{ fontSize: "0.82rem", marginBottom: 0 }}>
+              <thead style={{ backgroundColor: "#f8f9fa" }}>
+                <tr>
+                  <th style={{ width: "50px" }}>S/N</th>
+                  <th>Action</th>
+                  <th>Performed By</th>
+                  <th>Date</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bookingHistory.map((evt, idx) => (
+                  <tr key={`${evt.action}-${idx}`}>
+                    <td>{idx + 1}</td>
+                    <td>{evt.action}</td>
+                    <td>{evt.by || "-"}</td>
+                    <td>{formatDate(evt.at)}</td>
+                    <td>{formatTimeOnly(evt.at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowHistoryModal(false)}>
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Send Document Email ──────────────────────────────────────── */}
+      <Modal
+        show={showSendEmailModal}
+        onHide={() => setShowSendEmailModal(false)}
+        centered
+        backdrop="static"
+        keyboard={false}
+      >
+        <Modal.Header closeButton>
+          <Modal.Title style={{ fontSize: "1rem" }}>
+            Send {sendEmailDocLabel || "Document"} by Email
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted small mb-3">
+            The system will email the{" "}
+            <strong>{sendEmailDocLabel || "document"}</strong> for{" "}
+            <strong>{selected?.bookingCode || "-"}</strong> to the recipient
+            below.
+          </p>
+          <Form.Group className="mb-3">
+            <Form.Label>Recipient Email *</Form.Label>
+            <InputGroup>
+              <InputGroup.Text>
+                <FaEnvelope />
+              </InputGroup.Text>
+              <Form.Control
+                type="email"
+                placeholder="name@example.com"
+                value={sendEmailRecipient}
+                onChange={(e) => {
+                  setSendEmailRecipient(e.target.value);
+                  if (sendEmailError) setSendEmailError("");
+                }}
+                isInvalid={!!sendEmailError}
+                disabled={sendingEmail}
+              />
+            </InputGroup>
+            {sendEmailError && (
+              <div className="text-danger small mt-1">{sendEmailError}</div>
+            )}
+          </Form.Group>
+          <Form.Group>
+            <Form.Label>Note (optional)</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={3}
+              placeholder="Add a short message included in the email body"
+              value={sendEmailNote}
+              onChange={(e) => setSendEmailNote(e.target.value)}
+              disabled={sendingEmail}
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={() => setShowSendEmailModal(false)} disabled={sendingEmail}>
+            Close
+          </Button>
+          <Button variant="primary" onClick={sendDocumentEmail} disabled={sendingEmail}>
+            {sendingEmail ? (
+              <>
+                <Spinner size="sm" animation="border" className="me-1" /> Sending…
+              </>
+            ) : (
+              <>
+                <FaPaperPlane className="me-1" /> Send
+              </>
+            )}
           </Button>
         </Modal.Footer>
       </Modal>

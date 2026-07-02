@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  Button,
   Card,
   Table,
   Spinner,
@@ -29,32 +30,50 @@ import "../../styles/HotelBookingListModern.css";
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
 // Column-width hints kept in sync with HotelBookingList so the two
-// pages line up visually under the shared hbl-modern skin.
+// pages line up visually under the shared hbl-modern skin. Full column
+// set now mirrors Hotel exactly: Agent Name / Customer Name / Booking
+// Code / Book Date / Booking Details / Deadline Date / Payment Mode /
+// Notification / Action.
 const COLUMN_WIDTHS = {
   sn: "40px",
-  customerName: "150px",
-  bookingCode: "100px",
-  bookDate: "95px",
-  bookingDetails: "240px",
-  rooms: "70px",
-  total: "110px",
-  status: "110px",
-  action: "70px",
+  agentName: "90px",
+  customerName: "120px",
+  bookingCode: "95px",
+  bookDate: "90px",
+  bookingDetails: "230px",
+  deadlineDate: "105px",
+  paymentMode: "110px",
+  notification: "100px",
+  action: "110px",
 };
 
-// Day-stay backends emit a mix of upper- and title-case status values
-// (e.g. `status: "Confirmed"` while cancellations come through as
-// `isCancelled: true` and surface as the literal string "Cancelled").
-// Both casings are mapped so the pill renders identically either way.
-const STATUS_META = {
-  CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  Confirmed: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
-  Completed: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
-  PENDING:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  Pending:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
-  Cancelled: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+// Resolve a human-readable Payment Mode label from whatever shape the
+// backend sends. Copied verbatim from HotelBookingList so the two pages
+// render identical labels for the same underlying value.
+const getPaymentModeLabel = (booking) => {
+  const raw =
+    booking?.paymentMode ||
+    booking?.payment_mode ||
+    booking?.paymentType ||
+    "";
+  const norm = String(raw).trim().toUpperCase();
+  if (
+    norm === "CREDIT" ||
+    norm === "CREDIT_LIMIT" ||
+    norm === "CREDIT LIMIT" ||
+    norm === "CREDITLIMIT"
+  ) {
+    return "Credit Limit Payment";
+  }
+  if (norm === "ONLINE" || norm === "ONLINE_PAYMENT" || norm === "ONLINE PAYMENT") {
+    return "Online Payment";
+  }
+  if (norm) return raw;
+  if (booking?.creditLimitPayment === true) return "Credit Limit Payment";
+  if (booking?.paidOnline === true || booking?.onlinePayment === true) {
+    return "Online Payment";
+  }
+  return "-";
 };
 
 // Every customer/guest name on a day-stay booking. The list payload
@@ -84,36 +103,6 @@ const getGuestNames = (booking) => {
   return names;
 };
 
-const StatusPill = ({ meta, raw }) => {
-  if (!meta) return <span className="text-muted">{raw || "-"}</span>;
-  return (
-    <span
-      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
-      style={{
-        backgroundColor: meta.bg,
-        color: meta.color,
-        fontSize: "0.7rem",
-        fontWeight: 600,
-        lineHeight: 1,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {meta.dot && (
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            backgroundColor: meta.dot,
-            display: "inline-block",
-          }}
-        />
-      )}
-      {meta.label}
-    </span>
-  );
-};
-
 // "dd/mm/yyyy" — same shape HotelBookingList uses in the table cells.
 const formatShortDate = (dateString) => {
   if (!dateString) return "";
@@ -138,6 +127,26 @@ const trimTime = (t) => (t ? String(t).slice(0, 5) : "");
  */
 export default function DayStayBookingList() {
   const navigate = useNavigate();
+  // Role gate mirrors HotelBookingList — Agent Name column is admin-only.
+  // Reads currentActiveRole first (multi-role logins), then falls back to
+  // userRole (single-role logins).
+  const [role, setRole] = useState(() => {
+    return localStorage.getItem("currentActiveRole")?.toLowerCase() || null;
+  });
+  useEffect(() => {
+    const storedRole = localStorage.getItem("currentActiveRole")?.toLowerCase();
+    if (storedRole && storedRole !== role) {
+      setRole(storedRole);
+    } else if (!storedRole) {
+      const userRoles = (localStorage.getItem("userRole") || "")
+        .toLowerCase()
+        .split(",");
+      if (userRoles.includes("agent")) setRole("agent");
+      else if (userRoles.includes("staff")) setRole("staff");
+      else if (userRoles.includes("admin")) setRole("admin");
+    }
+  }, [role]);
+
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1); // 1-indexed to mirror HotelBookingList
@@ -156,6 +165,7 @@ export default function DayStayBookingList() {
   // Filters — mirror the Hotel Booking List.
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  const [checkInDateFilter, setCheckInDateFilter] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
 
@@ -206,15 +216,25 @@ export default function DayStayBookingList() {
     fetchBookings();
   }, []);
 
-  // Apply search + status + time-period filters in one pass.
+  // Apply search + status + time-period + check-in-date filters in one pass.
   const filteredBookings = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const needle = search.trim().toLowerCase();
+    const checkInPick = (checkInDateFilter || "").trim(); // YYYY-MM-DD
     return (bookings || []).filter((b) => {
       const isCancelled = !!b.isCancelled || normStatus(b.status) === "cancelled";
       const refDate = b.checkInDate ? new Date(b.checkInDate) : null;
       if (refDate && !isNaN(refDate.getTime())) refDate.setHours(0, 0, 0, 0);
+
+      // Check-in Date picker — exact-day match against the booking's
+      // checkInDate. Mirrors HotelBookingList: rows without a check-in
+      // date are hidden while a pick is active.
+      if (checkInPick) {
+        const raw = String(b.checkInDate || "");
+        const rowDay = raw.includes("T") ? raw.slice(0, 10) : raw.slice(0, 10);
+        if (rowDay !== checkInPick) return false;
+      }
 
       if (status === "cancelled" && !isCancelled) return false;
       if (status === "upcoming") {
@@ -271,12 +291,12 @@ export default function DayStayBookingList() {
       }
       return true;
     });
-  }, [bookings, search, status, selectedMonth, selectedYear]);
+  }, [bookings, search, status, checkInDateFilter, selectedMonth, selectedYear]);
 
   // Reset to page 1 whenever a filter changes.
   useEffect(() => {
     setPage(1);
-  }, [search, status, selectedMonth, selectedYear, perPage]);
+  }, [search, status, checkInDateFilter, selectedMonth, selectedYear, perPage]);
 
   // Pagination derived from the filtered list (single client-side window).
   const totalEntries = filteredBookings.length;
@@ -401,7 +421,9 @@ export default function DayStayBookingList() {
               </Card>
             </div>
 
-            {/* Filters Section */}
+            {/* Filters Section — layout mirrors HotelBookingList so the two
+                pages line up: Booking Type on the left, Check-in Date picker
+                (with Clear button) on the right. */}
             <Row className="mb-2 g-1">
               <Col xs={12}>
                 <Card
@@ -409,14 +431,14 @@ export default function DayStayBookingList() {
                   style={{ borderRadius: "8px" }}
                 >
                   <Card.Body className="p-3">
-                    <h6
-                      className="mb-2 fw-bold text-dark"
-                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
-                    >
-                      Booking Type
-                    </h6>
-                    <Row className="g-2">
+                    <Row className="g-2 align-items-end">
                       <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Booking Type
+                        </h6>
                         <Form.Select
                           value={status}
                           onChange={(e) => setStatus(e.target.value)}
@@ -430,6 +452,34 @@ export default function DayStayBookingList() {
                             </option>
                           ))}
                         </Form.Select>
+                      </Col>
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Check-in Date
+                        </h6>
+                        <div className="d-flex gap-2">
+                          <Form.Control
+                            type="date"
+                            value={checkInDateFilter}
+                            onChange={(e) => setCheckInDateFilter(e.target.value)}
+                            size="sm"
+                            aria-label="Check-in date filter"
+                            style={{ fontSize: "0.85rem", height: "46px" }}
+                          />
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            onClick={() => setCheckInDateFilter("")}
+                            disabled={!checkInDateFilter}
+                            aria-label="Clear check-in date filter"
+                            style={{ fontSize: "0.85rem", height: "46px", whiteSpace: "nowrap" }}
+                          >
+                            Clear
+                          </Button>
+                        </div>
                       </Col>
                     </Row>
                   </Card.Body>
@@ -485,6 +535,16 @@ export default function DayStayBookingList() {
                           >
                             S.N
                           </th>
+                          {role === "admin" && (
+                            <th
+                              style={{
+                                ...baseHeaderStyle,
+                                width: COLUMN_WIDTHS.agentName,
+                              }}
+                            >
+                              Agent Name
+                            </th>
+                          )}
                           <th
                             style={{
                               ...baseHeaderStyle,
@@ -508,7 +568,7 @@ export default function DayStayBookingList() {
                               width: COLUMN_WIDTHS.bookDate,
                             }}
                           >
-                            Stay Date
+                            Book Date
                           </th>
                           <th
                             style={{
@@ -522,28 +582,28 @@ export default function DayStayBookingList() {
                             style={{
                               ...baseHeaderStyle,
                               textAlign: "center",
-                              width: COLUMN_WIDTHS.rooms,
+                              width: COLUMN_WIDTHS.deadlineDate,
                             }}
                           >
-                            Rooms
-                          </th>
-                          <th
-                            style={{
-                              ...baseHeaderStyle,
-                              textAlign: "right",
-                              width: COLUMN_WIDTHS.total,
-                            }}
-                          >
-                            Total
+                            Deadline Date
                           </th>
                           <th
                             style={{
                               ...baseHeaderStyle,
                               textAlign: "center",
-                              width: COLUMN_WIDTHS.status,
+                              width: COLUMN_WIDTHS.paymentMode,
                             }}
                           >
-                            Status
+                            Payment Mode
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.notification,
+                            }}
+                          >
+                            Notification
                           </th>
                           <th
                             style={{
@@ -560,7 +620,7 @@ export default function DayStayBookingList() {
                         {pageBookings.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={9}
+                              colSpan={role === "admin" ? 10 : 9}
                               className="text-center py-5 text-muted"
                               style={{
                                 border: "1px solid #dee2e6",
@@ -581,10 +641,12 @@ export default function DayStayBookingList() {
                           </tr>
                         ) : (
                           pageBookings.map((b, i) => {
+                            // Notification pill sources: `confirmationStatus`
+                            // first (matches Hotel exactly), then falls back to
+                            // legacy `status`; `isCancelled` overrides both.
                             const statusText = b.isCancelled
                               ? "Cancelled"
-                              : (b.status || "");
-                            const sMeta = STATUS_META[statusText];
+                              : (b.confirmationStatus || b.status || "");
                             const timeRange =
                               trimTime(b.checkInTime) && trimTime(b.checkOutTime)
                                 ? `${trimTime(b.checkInTime)} – ${trimTime(b.checkOutTime)}`
@@ -617,6 +679,17 @@ export default function DayStayBookingList() {
                                 >
                                   {serialNumberBase + i + 1}
                                 </td>
+                                {role === "admin" && (
+                                  <td
+                                    style={{
+                                      ...baseCellStyle,
+                                      width: COLUMN_WIDTHS.agentName,
+                                    }}
+                                    className="fw-medium text-dark"
+                                  >
+                                    {b.agentName || b.agentCompanyName || "-"}
+                                  </td>
+                                )}
                                 <td
                                   style={{
                                     ...baseCellStyle,
@@ -701,7 +774,11 @@ export default function DayStayBookingList() {
                                     width: COLUMN_WIDTHS.bookDate,
                                   }}
                                 >
-                                  {formatShortDate(b.checkInDate) || "-"}
+                                  {/* Book Date — when the booking record
+                                      was created. Falls back to createdAt
+                                      when bookingDate isn't populated on
+                                      older rows. */}
+                                  {formatShortDate(b.bookingDate || b.createdAt) || "-"}
                                 </td>
                                 <td
                                   style={{
@@ -738,33 +815,87 @@ export default function DayStayBookingList() {
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     fontFamily: "monospace",
-                                    width: COLUMN_WIDTHS.rooms,
+                                    width: COLUMN_WIDTHS.deadlineDate,
                                   }}
                                 >
-                                  {b.noOfRooms ?? 1}
-                                </td>
-                                <td
-                                  style={{
-                                    ...baseCellStyle,
-                                    textAlign: "right",
-                                    width: COLUMN_WIDTHS.total,
-                                    whiteSpace: "nowrap",
-                                  }}
-                                >
-                                  <span className="fw-semibold text-dark">
-                                    {b.totalAmount != null
-                                      ? `AED ${Number(b.totalAmount).toFixed(2)}`
-                                      : "-"}
-                                  </span>
+                                  {/* Deadline Date — day-only ISO fragment. */}
+                                  {b.deadlineDate
+                                    ? String(b.deadlineDate).split("T")[0]
+                                    : "-"}
                                 </td>
                                 <td
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "center",
-                                    width: COLUMN_WIDTHS.status,
+                                    width: COLUMN_WIDTHS.paymentMode,
                                   }}
                                 >
-                                  <StatusPill meta={sMeta} raw={statusText} />
+                                  {(() => {
+                                    const label = getPaymentModeLabel(b);
+                                    if (label === "-") {
+                                      return (
+                                        <span className="text-muted">-</span>
+                                      );
+                                    }
+                                    return (
+                                      <span style={{ color: "#000" }}>
+                                        {label}
+                                      </span>
+                                    );
+                                  })()}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.notification,
+                                  }}
+                                >
+                                  {/* Notification — mirrors HotelBookingList's
+                                      per-row status pill (Confirmed / ReConfirmed
+                                      green, On Request orange, Not Confirmed
+                                      red, Cancelled red). Read-only here —
+                                      the click-to-confirm affordance is on the
+                                      detail view. */}
+                                  {(() => {
+                                    const raw = statusText || "-";
+                                    const norm = String(raw)
+                                      .replace(/\s+/g, "")
+                                      .toLowerCase();
+                                    const isConfirmed = norm === "confirmed";
+                                    const isReconfirmed = norm === "reconfirmed";
+                                    const isCancelled = norm === "cancelled";
+                                    const isOnRequestRoom = /^on\s*request$/i.test(
+                                      String(b.roomStatus || "").trim(),
+                                    );
+                                    const pill = (color, text) => (
+                                      <span
+                                        style={{
+                                          color,
+                                          padding: "0.32rem 0.6rem",
+                                          fontSize: "0.82rem",
+                                          fontWeight: "600",
+                                          borderRadius: "0.375rem",
+                                          display: "inline-flex",
+                                          alignItems: "center",
+                                          gap: "0.35rem",
+                                        }}
+                                      >
+                                        {text}
+                                      </span>
+                                    );
+                                    if (isOnRequestRoom && isConfirmed) {
+                                      return pill("#e67e22", "On Request");
+                                    }
+                                    if (isConfirmed) return pill("#06a301", "Confirmed");
+                                    if (isReconfirmed) return pill("#06a301", "ReConfirmed");
+                                    if (isCancelled) return pill("#dc3545", "Cancelled");
+                                    return (
+                                      <span className="text-muted" style={{ fontSize: "0.82rem" }}>
+                                        {raw}
+                                      </span>
+                                    );
+                                  })()}
                                 </td>
                                 <td
                                   style={{

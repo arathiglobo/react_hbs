@@ -5,12 +5,12 @@ import {
   Button,
   Row,
   Col,
-  Table,
   Badge,
   Spinner,
   Accordion,
   Modal,
   Alert,
+  useAccordionButton,
 } from "react-bootstrap";
 import {
   FaArrowLeft,
@@ -26,13 +26,47 @@ import {
   FaUtensils,
   FaCoffee,
   FaCheckCircle,
+  FaShieldAlt,
+  FaInfoCircle,
+  FaTimesCircle,
+  FaChevronDown,
+  FaChevronUp,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import RoomFilters from "../../components/roomlist/RoomFilters";
 import useRoomFilters from "../../hooks/useRoomFilters";
+import { formatFlexibleDate } from "../../utils/dateUtils";
 import "../../styles/RoomList.css";
+
+// Format a policy validity window (Valid: from - to). Copied verbatim
+// from RoomList so day-stay policies render identically.
+const renderPolicyValidity = (fromDate, toDate) => {
+  const from = formatFlexibleDate(fromDate);
+  const to = formatFlexibleDate(toDate);
+  if (!from && !to) return null;
+  return `Valid: ${from || "N/A"} - ${to || "N/A"}`;
+};
+
+// Accordion toggle button — matches RoomList.AccordionToggleButton
+// line-for-line. Sits in the room-category header and toggles the
+// body open/closed. `isActive` is passed in from the parent so the
+// label + chevron reflect the current open state.
+function AccordionToggleButton({ eventKey, isActive }) {
+  const decoratedOnClick = useAccordionButton(eventKey);
+  return (
+    <Button
+      variant="outline-primary"
+      size="sm"
+      onClick={decoratedOnClick}
+      className="d-flex align-items-center gap-1"
+    >
+      {isActive ? "Hide Details/Book" : "View Details/Book"}
+      {isActive ? <FaChevronUp /> : <FaChevronDown />}
+    </Button>
+  );
+}
 
 /**
  * DayStayRoomList — mirrors the structure of /room-list (RoomList.jsx).
@@ -51,16 +85,60 @@ export default function DayStayRoomList() {
   const [payload, setPayload] = useState(null);
   // Primary contract — the one the user clicked on (for window cap calc).
   const [contract, setContract] = useState(null);
-  // All contracts for the same hotel that matched the search (each window
-  // is rendered as its own section in the list).
+  // All contracts for the same hotel that matched the search — kept
+  // separately from the search-response data so the T&C modal + window
+  // helpers can read contract-level fields.
   const [contracts, setContracts] = useState([]);
+  // Backend's /rooms-search response. Same shape as
+  // /api/hotel-rooms/search so hotels[0].roomCategories/availableRates
+  // renders identically to RoomList.
+  const [searchRoomData, setSearchRoomData] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Which category is open per-contract. Keyed by contract.id (falls
+  // back to the visible index when the id is missing) so opening a
+  // category in one window doesn't collapse the picks in another. Each
+  // contract defaults to key "0" — the first category expanded — which
+  // matches RoomList's initial open state.
+  // Hotel-level room-categories accordion state — mirrors RoomList's
+  // single `activeAccordion` (the entire hotel has ONE open category
+  // at a time, not one per contract window).
   const [activeAccordion, setActiveAccordion] = useState("0");
   const [showSelectedModal, setShowSelectedModal] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
   const [agentBalance, setAgentBalance] = useState(null);
   // Grid / list view toggle — same pattern as RoomList.jsx
   const [viewMode, setViewMode] = useState("list");
+
+  // Display currency + AED→display conversion factor. Rates stay AED
+  // everywhere in the payload; formatPrice is display-only. Carried
+  // over from the search page via sessionStorage; defaults to AED ×1
+  // when absent.
+  const [displayCurrency, setDisplayCurrency] = useState({ code: "AED", factor: 1 });
+
+  // Insufficient Credit gate — soft modal (does NOT block the booking;
+  // clicking OK re-runs the deferred proceedToBooking with
+  // skipCreditCheck=true so the user lands on the booking page and can
+  // pay online). Mirrors RoomList's pendingBookingFn pattern.
+  const [showInsufficientCreditModal, setShowInsufficientCreditModal] = useState(false);
+  const [pendingBookingFn, setPendingBookingFn] = useState(null);
+
+  // Cancellation Policies & Terms modal — lazy-loads T&C per hotelId
+  // through /api/hotels/{hotelId}/terms-and-conditions with a per-hotel
+  // in-memory cache so reopening is instant.
+  const [showPoliciesModal, setShowPoliciesModal] = useState(false);
+  const [policiesModalData, setPoliciesModalData] = useState({
+    dayStayCancellation: [],
+    dayStayTerms: [],
+    hotelTerms: [],
+    selectedRoomLabel: "",
+  });
+  const [termsCache, setTermsCache] = useState({});
+  const [loadingTerms, setLoadingTerms] = useState(false);
+
+  // Inhouse-only Amendment / Child / Additional policy list surfaced in
+  // the Cancellation Policies modal (apiId === 1). Falls back to null
+  // for non-inhouse contracts.
+  const [policyList, setPolicyList] = useState(null);
 
   // Shared Room-Type + Refund-Policy filters (same UX as /room-list).
   // Day-stay rate rows carry `refundable` (boolean) + `mealPlan`.
@@ -80,8 +158,23 @@ export default function DayStayRoomList() {
     try {
       const p = JSON.parse(raw);
       setPayload(p);
-      // Fetch every contract id passed from search so the user can see all
-      // windows offered by the hotel.
+      // Apply the display currency chosen on the search page (defaults
+      // to AED ×1 when absent). Rates themselves stay AED — see
+      // formatPrice.
+      if (p.currency) {
+        setDisplayCurrency({
+          code: p.currency.code || "AED",
+          factor:
+            Number(p.currency.factor) > 0 ? Number(p.currency.factor) : 1,
+        });
+      }
+      // Call the DayStay counterpart to /api/hotel-rooms/search — the
+      // backend returns the same response shape RoomList consumes:
+      //   { success, hotels:[HotelResponse{roomCategories:[…]}],
+      //     meta, payload, contracts }
+      // Fetching a single endpoint gives us the ready-made `hotels`
+      // structure instead of transforming per-contract payloads on the
+      // client.
       const ids =
         (p.allContractIds && p.allContractIds.length > 0
           ? p.allContractIds
@@ -92,20 +185,39 @@ export default function DayStayRoomList() {
         setLoading(false);
         return;
       }
-      Promise.all(
-        ids.map((id) =>
-          axiosInstance
-            .get(`/api/day-stay-contract/${id}`)
-            .then((r) => r.data)
-            .catch(() => null)
-        )
-      )
-        .then((rows) => {
-          const ok = rows.filter(Boolean);
-          setContracts(ok);
+      axiosInstance
+        .post("/api/day-stay-contract/rooms-search", {
+          hotelId: p.hotelId,
+          hotelName: p.hotelName,
+          hotelAddress: p.hotelAddress,
+          starRating: p.starRating,
+          contractIds: ids,
+          adults: p.adults,
+          children: p.children,
+          rooms: p.rooms,
+          checkInDate: p.checkInDate,
+          basePctRate: p.basePctRate,
+          nationality: p.nationalityLabel || p.nationality,
+        })
+        .then((res) => {
+          const data = res?.data || {};
+          // Store the raw response so downstream code can iterate
+          // roomData.hotels[0].roomCategories the same way RoomList
+          // reads hotels[0].roomCategories.
+          setSearchRoomData(data);
+          // Contract objects are echoed back for the T&C modal /
+          // window-cap helper (day-stay-specific fields the search
+          // response doesn't otherwise carry).
+          const echoed = Array.isArray(data.contracts) ? data.contracts : [];
+          setContracts(echoed);
           setContract(
-            ok.find((c) => c?.id === p.contractId) || ok[0] || null
+            echoed.find((c) => c?.id === p.contractId) || echoed[0] || null,
           );
+        })
+        .catch(() => {
+          setSearchRoomData(null);
+          setContracts([]);
+          setContract(null);
         })
         .finally(() => setLoading(false));
     } catch {
@@ -134,6 +246,12 @@ export default function DayStayRoomList() {
     };
   }, [payload]);
 
+  // Hotel-level policies (amendment / child / additional) come from
+  // /api/hotels/{hotelId}/policies. Cached here per-hotel; the fetch is
+  // kicked off by openPoliciesModal on first open so the network call
+  // is guaranteed to fire on the click.
+  const [policiesCache, setPoliciesCache] = useState({});
+
   const adjustedCheckOut = useMemo(() => {
     if (!payload || !contract) return payload?.checkOutTime || "";
     if (!payload.checkOutTime) return contract.checkInEndTime;
@@ -142,61 +260,152 @@ export default function DayStayRoomList() {
       : payload.checkOutTime;
   }, [payload, contract]);
 
-  // Build category list for any one contract — used inside each window section.
-  const buildCategories = (c) => {
-    if (!c) return [];
-    const rooms = c.roomRates || c.rooms || [];
-    if (rooms.length === 0) {
-      return [
-        {
-          name: "Day Stay Standard",
-          rates: [
-            {
-              key: "base",
-              roomTypeName: "Standard Room",
-              mealPlan: "Room Only",
-              dayStayRate: c.dayStayRate,
-              refundable: true,
-            },
-          ],
-        },
-      ];
+  // ── /api/hotel-rooms/search response-shape adapter ────────────────────
+  // The DayStay pipeline calls /api/day-stay-contract/{id}, which
+  // returns a contract-centric payload. RoomList consumes a
+  // hotel-centric shape:
+  //   { hotels: [{ hotelId, hotelName, roomCategories: [
+  //       { roomCategory, baseRoomType, availableRates: [rate...] }
+  //     ] }], meta, payload }
+  // This memo flattens every contract's room rows into that shape so
+  // downstream code reads exactly the fields RoomList reads —
+  // `rate.totalRate`, `rate.roomRateBasedOnRoomCount`, `rate.mealPlan`,
+  // `rate.roomCategory`, `rate.contractLabel`, `rate.nonRefundable`,
+  // `rate.roomStatus`, etc. Backend day-stay-specific fields
+  // (availabilityType, hasOccupancy, hasAvailability, contract policies)
+  // are carried through unchanged for the modal + gate logic.
+  const roomData = useMemo(() => {
+    // Prefer the backend response — that is the /api/hotel-rooms/search
+    // canonical shape and requires no client transform. Fall through to
+    // the derived transform (below) only when the endpoint hasn't
+    // populated the standard structure yet.
+    if (
+      searchRoomData &&
+      Array.isArray(searchRoomData.hotels) &&
+      searchRoomData.hotels.length > 0
+    ) {
+      return searchRoomData;
     }
-    const byCat = new Map();
-    rooms.forEach((r, i) => {
-      // Only surface rate rows the user actually configured. Skip placeholder
-      // rows where neither the room rate nor the extras carry any value.
-      const rate = Number(r.rate ?? r.dayStayRate ?? 0);
-      const adultRate = Number(r.adultRate || 0);
-      const childRate = Number(r.childRate || 0);
-      if (rate <= 0 && adultRate <= 0 && childRate <= 0) return;
+    if (!payload || contracts.length === 0) return null;
 
-      const cat = r.roomCategoryName || "Day Stay Rooms";
-      if (!byCat.has(cat)) byCat.set(cat, []);
-      byCat.get(cat).push({
-        key: r.id || `${cat}-${i}`,
-        // Backend now returns the actual hotel-configured names. Fall back
-        // sensibly when older rows have nulls.
-        roomTypeName: r.roomTypeName || r.mealType || "Standard",
-        occupancyTypeName: r.occupancyTypeName || "—",
-        mealPlan: r.mealType || r.roomTypeName || "Room Only",
-        dayStayRate: rate || c.dayStayRate,
-        adultRate: r.adultRate,
-        childRate: r.childRate,
-        meal: r.meal,
-        refundable: r.refundable,
-        roomCategoryName: cat,
-        contractId: c.id,
-        termsAndConditions: Array.isArray(c.termsAndConditions)
-          ? c.termsAndConditions.filter(Boolean)
-          : [],
-        cancellationPolicies: Array.isArray(c.cancellationPolicies)
-          ? c.cancellationPolicies.filter(Boolean)
-          : [],
+    const adultsN = Number(payload.adults || 1);
+    const childrenN = Number(payload.children || 0);
+    const numberOfRooms = Number(payload.rooms) || 1;
+    const pct = Number(payload.basePctRate || 0);
+
+    // Flatten every contract's rate rows into one array of "availableRate"
+    // objects in RoomList's canonical shape.
+    const allRates = [];
+    contracts.forEach((c) => {
+      const winStart = (c.checkInStartTime || "").slice(0, 5);
+      const winEnd = (c.checkInEndTime || "").slice(0, 5);
+      const contractLabel =
+        winStart && winEnd
+          ? `Window: ${winStart} – ${winEnd}`
+          : c.rateCode || "";
+      const rows = c.roomRates || c.rooms || [];
+      rows.forEach((r) => {
+        // Skip placeholder rows with no economic value.
+        const base = Number(r.rate ?? r.dayStayRate ?? 0);
+        const aRate = Number(r.adultRate || 0);
+        const cRate = Number(r.childRate || 0);
+        if (base <= 0 && aRate <= 0 && cRate <= 0) return;
+        // Occupancy gate — matches the earlier client filter behaviour.
+        if (r.hasOccupancy === false) return;
+
+        // Day-stay pricing: base + extra-adult × adultRate + children ×
+        // childRate, then × (1 + markup%).
+        const extras = Math.max(0, adultsN - 1) * aRate + childrenN * cRate;
+        const totalRate = +((base + extras) * (1 + pct / 100)).toFixed(2);
+        const roomRateBasedOnRoomCount = +(totalRate * numberOfRooms).toFixed(2);
+
+        allRates.push({
+          // RoomList canonical fields
+          contractLabel,
+          mealPlan: r.mealPlan || r.mealType || "Room Only",
+          roomCategory: r.roomCategoryName || "Day Stay Rooms",
+          // Day-stay callers (proceedToBooking, confirm modal) also read
+          // roomCategoryName — keep it populated so both shapes work
+          // whether the rate came from the client transform or the
+          // /api/day-stay-contract/rooms-search response.
+          roomCategoryName: r.roomCategoryName || "Day Stay Rooms",
+          baseRoomType: r.roomTypeName || "Standard Room",
+          nonRefundable: !r.refundable,
+          roomStatus: r.hasAvailability === false ? "On Request" : "Available",
+          totalRate,
+          rate: totalRate,
+          roomRateBasedOnRoomCount,
+          numberOfRooms,
+          // Day-stay carry-through (booking payload, availability chip,
+          // cancellation modal)
+          adultRate: r.adultRate,
+          childRate: r.childRate,
+          refundable: r.refundable,
+          occupancyTypeName: r.occupancyTypeName,
+          roomTypeName: r.roomTypeName,
+          availabilityType: r.availabilityType,
+          noOfRoomsAvailable: r.noOfRoomsAvailable,
+          hasOccupancy: r.hasOccupancy,
+          hasAvailability: r.hasAvailability,
+          contractId: c.id,
+          checkInStartTime: c.checkInStartTime,
+          checkInEndTime: c.checkInEndTime,
+          cancellationPolicies: Array.isArray(c.cancellationPolicies)
+            ? c.cancellationPolicies.filter(Boolean)
+            : [],
+          termsAndConditions: Array.isArray(c.termsAndConditions)
+            ? c.termsAndConditions.filter(Boolean)
+            : [],
+          // Legacy day-stay reads (used by computeFinalRate/booking payload)
+          key: r.id || `${c.id}-${r.hotelRoomCategoryId}-${r.occupancyTypeId}`,
+          dayStayRate: base,
+        });
       });
     });
-    return Array.from(byCat.entries()).map(([name, rates]) => ({ name, rates }));
-  };
+
+    // Group flat rates by roomCategory → RoomList's roomCategories array.
+    const byCat = new Map();
+    allRates.forEach((r) => {
+      if (!byCat.has(r.roomCategory)) byCat.set(r.roomCategory, []);
+      byCat.get(r.roomCategory).push(r);
+    });
+    const roomCategories = Array.from(byCat.entries()).map(([name, rates]) => ({
+      roomCategory: name,
+      baseRoomType: rates[0]?.baseRoomType || "",
+      // Sort ascending by finalized per-room rate (RoomList uses totalRate).
+      availableRates: rates
+        .slice()
+        .sort((a, b) => (a.totalRate || 0) - (b.totalRate || 0)),
+    }));
+
+    const primary = contract || contracts[0] || null;
+
+    return {
+      success: true,
+      hotels: [
+        {
+          hotelId: payload.hotelId,
+          hotelName: payload.hotelName,
+          hotelAddress: payload.hotelAddress,
+          starRating: primary?.starRating || 0,
+          propertyType: "Day Stay",
+          checkInDate: payload.checkInDate,
+          // Day stays are single-day; check-out is on the same date.
+          checkOutDate: payload.checkInDate,
+          checkInStartTime: primary?.checkInStartTime,
+          checkInEndTime: primary?.checkInEndTime,
+          numberOfRooms,
+          guestBreakdown: `${adultsN} Adult${adultsN > 1 ? "s" : ""}${
+            childrenN ? `, ${childrenN} Child${childrenN > 1 ? "ren" : ""}` : ""
+          }`,
+          nationality: payload.nationality || "",
+          roomCategories,
+        },
+      ],
+      meta: {},
+      payload,
+    };
+  }, [searchRoomData, contracts, contract, payload]);
 
   const renderStars = (count) =>
     Array.from({ length: Math.max(0, Number(count) || 0) }).map((_, i) => (
@@ -223,6 +432,23 @@ export default function DayStayRoomList() {
     return +(r * (Number(payload?.rooms) || 1)).toFixed(2);
   };
 
+  // Prefer the canonical RoomList-shape fields when the rate came
+  // through the /api/day-stay-contract/rooms-search response (already
+  // priced by the backend), and fall back to the day-stay client
+  // formula for rates built by the local adapter. Both branches must
+  // yield the same display so the JSX doesn't have to care which path
+  // populated `roomData.hotels[0].roomCategories`.
+  const displayPerRoomRate = (row) => {
+    const canonical = Number(row?.rate ?? row?.totalRate ?? 0);
+    if (canonical > 0) return canonical;
+    return computeFinalRate(row) ?? 0;
+  };
+  const displayTotal = (row) => {
+    const canonical = Number(row?.roomRateBasedOnRoomCount ?? 0);
+    if (canonical > 0) return canonical;
+    return computeRoomsTotal(row) ?? 0;
+  };
+
   const getMealPlanIcon = (mp = "") => {
     const m = (mp || "").toLowerCase();
     if (m.includes("breakfast")) return <FaCoffee className="text-primary me-1" />;
@@ -232,22 +458,186 @@ export default function DayStayRoomList() {
     return <FaBed className="text-muted me-1" />;
   };
 
+  // On-Request vs Available badge — copied from RoomList so day-stay
+  // rate rows carry the same signal (rates that came back with
+  // roomStatus === "On Request" need supplier approval before they can
+  // be confirmed).
+  const getRoomStatusBadge = (roomStatus) => {
+    switch (roomStatus) {
+      case "On Request":
+        return (
+          <small>
+            This room can be booked{" "}
+            <Badge
+              bg="warning"
+              text="dark"
+              className="px-2 py-1 ms-1 fw-bold border border-warning shadow-sm"
+            >
+              On Request
+            </Badge>
+          </small>
+        );
+      case "Available":
+        return (
+          <small>
+            <span style={{ color: "#198754", fontWeight: "700" }}>
+              Available
+            </span>
+          </small>
+        );
+      default:
+        return <small>This room is Available </small>;
+    }
+  };
+
+  // Prefix the display currency code manually — master currency codes
+  // aren't guaranteed to be valid ISO 4217, so Intl currency style
+  // isn't safe. Rates arrive in AED; the factor scales them here.
+  const formatPrice = (price) => {
+    const converted = (Number(price) || 0) * (displayCurrency.factor || 1);
+    return `${displayCurrency.code || "AED"} ${converted.toLocaleString(
+      undefined,
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+    )}`;
+  };
+
+  // Credit-gate check — soft: returns false when the balance hasn't
+  // loaded, so operators without a live credit context still get
+  // through. Server-side check at confirm-booking time is the
+  // authoritative gate. Mirrors RoomList's isInsufficientBalance.
+  const isInsufficientBalance = (requiredAmount) => {
+    if (agentBalance == null) return false;
+    const required = Number(requiredAmount) || 0;
+    const available = Number(agentBalance) || 0;
+    return required > available;
+  };
+
+  // Open the Cancellation Policies & Terms modal. Every relevant
+  // endpoint is dispatched here so the network activity is visibly tied
+  // to the user click:
+  //   1) /api/hotels/{hotelId}/policies         — Amendment / Child / Additional
+  //   2) /api/hotels/{hotelId}/terms-and-conditions — hotel-wide T&C
+  // Both responses are cached per-hotelId so re-opens are instant.
+  //
+  // The modal also carries the DAY-STAY-specific policies that come
+  // embedded in /api/day-stay-contract/{id} (rate.cancellationPolicies
+  // and rate.termsAndConditions are List<String>). Those render in
+  // dedicated "Day Stay Cancellation Policies" and "Day Stay Terms &
+  // Conditions" sections so they're clearly distinguishable from the
+  // hotel-wide items.
+  const openPoliciesModal = async (rate) => {
+    const label = [rate?.roomCategoryName, rate?.mealPlan]
+      .filter(Boolean)
+      .join(" • ");
+
+    // Contract-level (day-stay specific). The DTO ships these as
+    // List<String>; the modal handles both string and object shapes.
+    const dayStayCancellation = Array.isArray(rate?.cancellationPolicies)
+      ? rate.cancellationPolicies
+      : [];
+    const dayStayTerms = Array.isArray(rate?.termsAndConditions)
+      ? rate.termsAndConditions
+      : [];
+
+    const hotelId = payload?.hotelId;
+    const cachedTerms = hotelId != null ? termsCache[hotelId] : undefined;
+    const cachedPolicies = hotelId != null ? policiesCache[hotelId] : undefined;
+
+    // Seed the modal immediately with what we already have.
+    setPoliciesModalData({
+      dayStayCancellation,
+      dayStayTerms,
+      hotelTerms: cachedTerms || [],
+      selectedRoomLabel: label,
+    });
+    if (cachedPolicies !== undefined) setPolicyList(cachedPolicies);
+    else setPolicyList(null);
+    setShowPoliciesModal(true);
+
+    // Bail out of network work when the hotel id is missing / opaque —
+    // day-stay contracts have a numeric id, but be defensive.
+    const canFetch =
+      hotelId != null && /^\d+$/.test(String(hotelId));
+
+    // ─── Hotel policies (Amendment / Child / Additional) ───────────
+    if (canFetch && cachedPolicies === undefined) {
+      try {
+        const res = await axiosInstance.get(
+          `/api/hotels/${hotelId}/policies`,
+        );
+        const data = res?.data || null;
+        setPoliciesCache((prev) => ({ ...prev, [hotelId]: data }));
+        setPolicyList(data);
+      } catch (err) {
+        console.error("Hotel policies fetch failed:", err);
+        setPoliciesCache((prev) => ({ ...prev, [hotelId]: null }));
+        setPolicyList(null);
+      }
+    }
+
+    // ─── Hotel-wide Terms & Conditions ────────────────────────────
+    if (!canFetch) {
+      setPoliciesModalData((prev) => ({ ...prev, hotelTerms: [] }));
+      return;
+    }
+    if (cachedTerms !== undefined) return; // already served from cache
+    setLoadingTerms(true);
+    try {
+      const res = await axiosInstance.get(
+        `/api/hotels/${hotelId}/terms-and-conditions`,
+      );
+      const terms = Array.isArray(res?.data) ? res.data : [];
+      setTermsCache((prev) => ({ ...prev, [hotelId]: terms }));
+      setPoliciesModalData((prev) => ({ ...prev, hotelTerms: terms }));
+    } catch (err) {
+      console.error("T&C fetch failed:", err);
+      setTermsCache((prev) => ({ ...prev, [hotelId]: [] }));
+      setPoliciesModalData((prev) => ({ ...prev, hotelTerms: [] }));
+    } finally {
+      setLoadingTerms(false);
+    }
+  };
+
   const openBookConfirm = (row) => {
     setSelectedRow(row);
     setShowSelectedModal(true);
   };
 
-  const proceedToBooking = () => {
+  const proceedToBooking = (skipCreditCheck = false) => {
     if (!selectedRow || !payload) return;
-    const totalAmount = computeRoomsTotal(selectedRow) ?? 0;
-    const perRoomFinal = computeFinalRate(selectedRow) ?? 0;
+    // Prefer canonical rate fields (populated by both the client
+    // adapter and the backend /rooms-search response) so the booking
+    // page receives a real price regardless of which shape the rate
+    // came from. computeRoomsTotal/computeFinalRate still act as the
+    // fallback for adapter-built rates that only carry `dayStayRate`.
+    const totalAmount = displayTotal(selectedRow);
+    const perRoomFinal = displayPerRoomRate(selectedRow);
+
+    // Credit gate — soft. Raise the informational modal and defer the
+    // actual navigation until the user clicks OK, at which point we
+    // re-enter with skipCreditCheck=true and complete the flow (the
+    // booking page then handles online payment).
+    if (!skipCreditCheck && isInsufficientBalance(totalAmount)) {
+      setShowSelectedModal(false);
+      setPendingBookingFn(() => () => proceedToBooking(true));
+      setShowInsufficientCreditModal(true);
+      return;
+    }
     const bookingPayload = {
       ...payload,
       contractId: selectedRow.contractId || payload.contractId,
       // Keep contract window times; adjustedCheckOut already caps to window end.
       checkOutTime: adjustedCheckOut,
-      roomCategory: selectedRow.roomCategoryName,
-      roomType: selectedRow.roomTypeName,
+      // The rate row can come from EITHER shape: the day-stay client
+      // transform (which emits both `roomCategoryName` AND `roomCategory`)
+      // OR the backend /api/day-stay-contract/rooms-search response
+      // (RoomList canonical: `roomCategory` + `baseRoomType`, no
+      // *Name mirrors). Read whichever is populated so the booking
+      // payload is stable regardless of source.
+      roomCategory:
+        selectedRow.roomCategoryName || selectedRow.roomCategory || "",
+      roomType:
+        selectedRow.roomTypeName || selectedRow.baseRoomType || "",
       occupancyTypeName: selectedRow.occupancyTypeName,
       mealPlan: selectedRow.mealPlan,
       rateRow: selectedRow,
@@ -375,7 +765,7 @@ export default function DayStayRoomList() {
                           <Button
                             variant="outline-primary"
                             size="sm"
-                            onClick={() => navigate(-1)}
+                            onClick={() => navigate("/new-booking/day-stay")}
                           >
                             <FaArrowLeft className="me-1" /> Back to Search
                           </Button>
@@ -523,267 +913,468 @@ export default function DayStayRoomList() {
                   <RoomFilters filters={filters} />
                 </Col>
                 <Col lg={9} md={8}>
-              {contracts.map((c, ci) => {
-                const winStart = (c.checkInStartTime || "").slice(0, 5);
-                const winEnd = (c.checkInEndTime || "").slice(0, 5);
-                // Apply Room-Type / Refund-Policy filters: keep only matching
-                // rates, then drop any category that ends up empty. If the whole
-                // window has no matching rates, skip rendering it.
-                const catList = buildCategories(c)
-                  .map((cat) => ({
-                    ...cat,
-                    rates: (cat.rates || []).filter(rateVisible),
+              {/* Hotel-level room categories — mirrors RoomList.jsx's
+                  `hotel.roomCategories.map(...)` pattern. Every rate for
+                  the hotel is grouped under its canonical category in
+                  a single Accordion (NOT split per contract window),
+                  so all rooms for a hotel show together — matching the
+                  RoomList behaviour where a hotel with 3 room categories
+                  renders all 3 side-by-side. Each rate still carries
+                  its window info via `rate.contractLabel` and gets a
+                  per-rate window chip inside the card. */}
+              {(() => {
+                const hotel = roomData?.hotels?.[0];
+                const categories = hotel?.roomCategories || [];
+                const filteredCategories = categories
+                  .map((category) => ({
+                    ...category,
+                    availableRates: (category.availableRates || []).filter(
+                      rateVisible,
+                    ),
                   }))
-                  .filter((cat) => cat.rates.length > 0);
-                if (catList.length === 0) return null;
-                return (
-              <div key={c.id || ci} className="mb-4">
-                <div
-                  className="d-flex justify-content-between align-items-center mb-2 px-3 py-2"
-                  style={{
-                    background: "#f0f4ff",
-                    borderRadius: "8px",
-                    borderLeft: "4px solid #0d6efd",
-                  }}
-                >
-                  <div className="fw-semibold text-primary">
-                    <FaClock className="me-2" />
-                    Window: {winStart} – {winEnd}
-                  </div>
-                  <small className="text-muted">
-                    {c.rateCode ? `Rate Code: ${c.rateCode}` : ""}
-                  </small>
-                </div>
-              <Accordion
-                defaultActiveKey="0"
-              >
-                {catList.map((category, index) => {
-                  const eventKey = index.toString();
+                  .filter(
+                    (category) => (category.availableRates || []).length > 0,
+                  );
+                if (filteredCategories.length === 0) {
                   return (
-                    <Accordion.Item
-                      key={eventKey}
-                      eventKey={eventKey}
-                      className="room-category-item"
-                    >
-                      {/* Default Accordion.Header renders as a <button>
-                          which keeps Bootstrap's built-in chevron. We just
-                          slim it down with inline padding overrides. */}
-                      <Accordion.Header className="day-stay-cat-header">
-                        <div
-                          className="d-flex justify-content-between align-items-center w-100 pe-3"
-                          style={{ paddingTop: 0, paddingBottom: 0 }}
+                    <Alert variant="info" className="mb-0">
+                      No rates match the selected filters.
+                    </Alert>
+                  );
+                }
+                return (
+                  <Accordion
+                    activeKey={activeAccordion}
+                    onSelect={(key) => setActiveAccordion(key)}
+                  >
+                    {filteredCategories.map((category, index) => {
+                      const eventKey = index.toString();
+                      const isActive = activeAccordion === eventKey;
+                      const filteredRates = category.availableRates || [];
+                      // Cheapest visible rate for the header "From" price —
+                      // mirrors RoomList's `Math.min(...rate.rate)` pattern.
+                      // displayPerRoomRate prefers canonical fields but
+                      // falls back to computeFinalRate for adapter-built
+                      // rates that only carry `dayStayRate`.
+                      const cheapestRate = filteredRates.reduce((min, r) => {
+                        const v = displayPerRoomRate(r);
+                        if (!v || v <= 0) return min;
+                        return min == null || v < min ? v : min;
+                      }, null);
+                      return (
+                        <Accordion.Item
+                          key={eventKey}
+                          eventKey={eventKey}
+                          className="room-category-item"
                         >
-                          <div>
-                            <div
-                              className="fw-semibold"
-                              style={{ fontSize: "0.95rem" }}
-                            >
-                              {category.name}
+                          {/* Header is NOT clickable — mirrors RoomList's
+                              "header ≠ toggle" pattern. The right-side
+                              AccordionToggleButton is the only affordance
+                              that opens the body, exactly like RoomList. */}
+                          <Accordion.Header
+                            as="div"
+                            className="room-category-header"
+                          >
+                            <div className="d-flex justify-content-between align-items-center w-100">
+                              <div className="room-category-info">
+                                <h5 className="mb-1">
+                                  {category.roomCategory ||
+                                    category.name ||
+                                    "Day Stay Rooms"}
+                                </h5>
+                                <p className="mb-0 text-muted small">
+                                  {category.baseRoomType ||
+                                    filteredRates[0]?.roomTypeName ||
+                                    filteredRates[0]?.baseRoomType ||
+                                    ""}
+                                </p>
+                              </div>
+                              <div className="d-flex align-items-center gap-3">
+                                <div className="room-category-price text-end">
+                                  <div className="price-range">
+                                    From{" "}
+                                    {cheapestRate != null
+                                      ? formatPrice(cheapestRate)
+                                      : "—"}
+                                  </div>
+                                  <div className="rates-count small text-muted">
+                                    {filteredRates.length} rate
+                                    {filteredRates.length !== 1 ? "s" : ""}{" "}
+                                    available
+                                  </div>
+                                </div>
+                                <AccordionToggleButton
+                                  eventKey={eventKey}
+                                  isActive={isActive}
+                                />
+                              </div>
                             </div>
-                            <small className="text-muted">
-                              {category.rates.length} rate
-                              {category.rates.length > 1 ? "s" : ""}{" "}
-                              available
-                            </small>
-                          </div>
-                          <div className="d-flex align-items-center gap-2">
-                            <FaClock className="text-primary" />
-                            <span
-                              className="fw-semibold"
-                              style={{ fontSize: "0.9rem" }}
-                            >
-                              {winStart} – {winEnd}
-                            </span>
-                          </div>
-                        </div>
-                      </Accordion.Header>
-                      <Accordion.Body className="p-0">
-                        {viewMode === "list" ? (
-                          <Table responsive bordered hover className="mb-0">
-                            <thead className="table-light">
-                              <tr>
-                                <th>Occupancy</th>
-                                <th>Room Type</th>
-                                <th>Meal Plan</th>
-                                <th>Refund Policy</th>
-                                <th>Extra Bed</th>
-                                <th className="text-end">
-                                  Rate (per room)
-                                </th>
-                                <th className="text-end">Total</th>
-                                <th style={{ width: 110 }}></th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {category.rates.map((rate) => {
-                                const finalRate = computeFinalRate(rate);
-                                const total = computeRoomsTotal(rate);
-                                const pct = Number(payload.basePctRate || 0);
+                          </Accordion.Header>
+                          {/* Body arrangement mirrors RoomList exactly —
+                              same Row of rate-cards for both viewModes.
+                              Grid → 2 per row on lg, 3 per row on xl.
+                              List → single column of horizontal cards. */}
+                          <Accordion.Body className="room-rates-section">
+                            <Row>
+                              {filteredRates.map((rate, rateIndex) => {
+                                const finalRate = displayPerRoomRate(rate);
+                                const total = displayTotal(rate);
+                                const roomStatusLabel =
+                                  rate.roomStatus || "Available";
+                                const roomStatusColor =
+                                  roomStatusLabel === "On Request"
+                                    ? "#e67e22"
+                                    : roomStatusLabel === "Available"
+                                      ? "#198754"
+                                      : "#6c757d";
+                                const roomStatusNode = (
+                                  <span
+                                    style={{
+                                      color: roomStatusColor,
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    {roomStatusLabel}
+                                  </span>
+                                );
+                                // Per-rate check-in window chip — the
+                                // rate carries its origin contract's
+                                // window via `contractLabel` /
+                                // `checkInStartTime` / `checkInEndTime`
+                                // so each card shows which window it
+                                // came from, even though all rates for
+                                // the hotel are now in one accordion.
+                                const winStart = (
+                                  rate.checkInStartTime || ""
+                                ).slice(0, 5);
+                                const winEnd = (
+                                  rate.checkInEndTime || ""
+                                ).slice(0, 5);
+                                const windowLabel =
+                                  winStart && winEnd
+                                    ? `Window: ${winStart} – ${winEnd}`
+                                    : rate.contractLabel || "";
                                 return (
-                                  <tr key={rate.key}>
-                                    <td>
-                                      <FaUsers className="text-muted me-1" />
-                                      {rate.occupancyTypeName}
-                                    </td>
-                                    <td>
-                                      <FaBed className="text-muted me-2" />
-                                      {rate.roomTypeName}
-                                    </td>
-                                    <td>
-                                      {getMealPlanIcon(rate.mealPlan)}
-                                      {rate.mealPlan}
-                                    </td>
-                                    <td>
-                                      {rate.refundable ? (
-                                        <Badge bg="success">Refundable</Badge>
-                                      ) : (
-                                        <Badge bg="danger">
-                                          Non-Refundable
-                                        </Badge>
-                                      )}
-                                    </td>
-                                    <td>
-                                      {Number(rate.adultRate || 0) > 0 ||
-                                      Number(rate.childRate || 0) > 0 ? (
-                                        <small>
-                                          Adult: AED{" "}
-                                          {Number(
-                                            rate.adultRate || 0
-                                          ).toFixed(0)}{" "}
-                                          / Child: AED{" "}
-                                          {Number(
-                                            rate.childRate || 0
-                                          ).toFixed(0)}
-                                        </small>
-                                      ) : (
-                                        <span className="text-muted small">
-                                          —
-                                        </span>
-                                      )}
-                                    </td>
-                                    <td className="text-end">
-                                      {finalRate != null ? (
-                                        <>
-                                          <strong>
-                                            AED{" "}
-                                            {finalRate.toLocaleString()}
-                                          </strong>
-                                          {pct > 0 && (
+                                  <Col
+                                    key={rate.key || rateIndex}
+                                    lg={viewMode === "grid" ? 6 : 12}
+                                    xl={viewMode === "grid" ? 4 : 12}
+                                    className="mb-2"
+                                  >
+                                    <Card className="rate-card h-100 shadow-sm">
+                                      {viewMode === "grid" ? (
+                                        <Card.Body className="p-2 pb-0 d-flex flex-column gap-2">
+                                          <div className="rate-header d-flex justify-content-between align-items-start">
                                             <div>
-                                              <small className="text-muted">
-                                                incl. {pct}%
-                                              </small>
+                                              <div className="d-flex align-items-center gap-2">
+                                                {getMealPlanIcon(rate.mealPlan)}
+                                                <span className="fw-semibold small">
+                                                  {rate.mealPlan}
+                                                </span>
+                                              </div>
+                                              <div className="mt-1">
+                                                {getRoomStatusBadge(
+                                                  rate.roomStatus,
+                                                )}
+                                              </div>
                                             </div>
-                                          )}
-                                        </>
+                                            {rate.refundable ? (
+                                              <Badge bg="success">
+                                                Flexible
+                                              </Badge>
+                                            ) : (
+                                              <Badge bg="danger">
+                                                Non-Refundable
+                                              </Badge>
+                                            )}
+                                          </div>
+
+                                          <div className="rate-pricing text-center py-2">
+                                            <div className="current-price">
+                                              {total > 0
+                                                ? formatPrice(total)
+                                                : "—"}
+                                            </div>
+                                            {finalRate > 0 && (
+                                              <div className="indivial-price-per-room-noofroom">
+                                                <div className="text-muted small">
+                                                  {formatPrice(finalRate)} ×{" "}
+                                                  {payload.rooms || 1} room
+                                                  {(payload.rooms || 1) > 1
+                                                    ? "s"
+                                                    : ""}
+                                                </div>
+                                              </div>
+                                            )}
+                                            <div className="price-per-night small text-muted">
+                                              per stay
+                                            </div>
+                                          </div>
+
+                                          <div className="rate-features small">
+                                            {windowLabel && (
+                                              <div className="feature-item">
+                                                <FaClock className="me-2 text-muted" />
+                                                {windowLabel}
+                                              </div>
+                                            )}
+                                            <div className="feature-item">
+                                              <FaInfoCircle className="me-2 text-muted" />
+                                              Availability: {roomStatusNode}
+                                            </div>
+                                            <div className="feature-item">
+                                              <FaBed className="me-2 text-muted" />
+                                              {rate.roomTypeName ||
+                                                rate.baseRoomType}
+                                            </div>
+                                            <div className="feature-item">
+                                              <Button
+                                                variant="link"
+                                                size="sm"
+                                                className="p-0 text-decoration-underline"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  openPoliciesModal(rate);
+                                                }}
+                                              >
+                                                <FaShieldAlt className="me-2" />
+                                                Cancellation Policies &amp;
+                                                Terms &amp; Conditions
+                                              </Button>
+                                            </div>
+                                          </div>
+
+                                          <Button
+                                            variant="primary"
+                                            className="w-100 book-now-btn mt-1 mb-1"
+                                            onClick={() =>
+                                              openBookConfirm(rate)
+                                            }
+                                          >
+                                            <FaCheckCircle className="me-2" />
+                                            View Details / Select
+                                          </Button>
+                                        </Card.Body>
                                       ) : (
-                                        <span className="text-muted">—</span>
+                                        <Card.Body className="p-3 py-2 d-flex flex-row align-items-center gap-3 flex-wrap flex-md-nowrap">
+                                          <div
+                                            className="d-flex flex-column flex-grow-1"
+                                            style={{ minWidth: 0 }}
+                                          >
+                                            <div className="d-flex align-items-center flex-wrap gap-2 mb-2">
+                                              <div
+                                                className="d-flex align-items-center gap-2 flex-shrink-0"
+                                                style={{
+                                                  whiteSpace: "nowrap",
+                                                  minWidth: "200px",
+                                                }}
+                                              >
+                                                {getMealPlanIcon(rate.mealPlan)}
+                                                <span className="fw-semibold text-truncate">
+                                                  {rate.mealPlan}
+                                                </span>
+                                              </div>
+                                              <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                                                {rate.refundable ? (
+                                                  <Badge bg="success">
+                                                    Flexible
+                                                  </Badge>
+                                                ) : (
+                                                  <Badge bg="danger">
+                                                    Non-Refundable
+                                                  </Badge>
+                                                )}
+                                                {rate.roomStatus ===
+                                                "On Request" ? (
+                                                  <Badge
+                                                    bg="warning"
+                                                    text="dark"
+                                                    className="px-2 py-1 fw-bold border border-warning"
+                                                  >
+                                                    On Request
+                                                  </Badge>
+                                                ) : (
+                                                  <Badge bg="success">
+                                                    Available
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                            </div>
+                                            <div
+                                              className="rate-features small text-muted d-flex flex-wrap gap-3"
+                                              style={{ minWidth: 0 }}
+                                            >
+                                              {windowLabel && (
+                                                <div className="feature-item d-flex align-items-center text-truncate">
+                                                  <FaClock className="me-2 flex-shrink-0" />
+                                                  <span className="text-truncate">
+                                                    {windowLabel}
+                                                  </span>
+                                                </div>
+                                              )}
+                                              <div className="feature-item d-flex align-items-center text-truncate">
+                                                <FaInfoCircle className="me-2 flex-shrink-0" />
+                                                <span className="text-truncate">
+                                                  Availability:{" "}
+                                                  {roomStatusNode}
+                                                </span>
+                                              </div>
+                                              <div className="feature-item d-flex align-items-center text-truncate">
+                                                <FaBed className="me-2 flex-shrink-0" />
+                                                <span className="text-truncate">
+                                                  {rate.roomTypeName ||
+                                                    rate.baseRoomType}
+                                                </span>
+                                              </div>
+                                              <div className="feature-item d-flex align-items-center">
+                                                <Button
+                                                  variant="link"
+                                                  size="sm"
+                                                  className="p-0 text-decoration-underline"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    openPoliciesModal(rate);
+                                                  }}
+                                                >
+                                                  <FaShieldAlt className="me-2" />
+                                                  Cancellation Policies &amp;
+                                                  Terms &amp; Conditions
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          </div>
+                                          <div
+                                            className="text-end px-3 border-start border-end flex-shrink-0"
+                                            style={{ minWidth: "150px" }}
+                                          >
+                                            <div className="fs-5 fw-bold text-primary">
+                                              {total > 0
+                                                ? formatPrice(total)
+                                                : "—"}
+                                            </div>
+                                            {finalRate > 0 && (
+                                              <div className="text-muted small">
+                                                {formatPrice(finalRate)} ×{" "}
+                                                {payload.rooms || 1} room
+                                                {(payload.rooms || 1) > 1
+                                                  ? "s"
+                                                  : ""}
+                                              </div>
+                                            )}
+                                            <div className="small text-muted">
+                                              per stay
+                                            </div>
+                                          </div>
+                                          <div className="flex-shrink-0">
+                                            <Button
+                                              variant="primary"
+                                              className="book-now-btn px-3 py-2"
+                                              onClick={() =>
+                                                openBookConfirm(rate)
+                                              }
+                                              style={{ whiteSpace: "nowrap" }}
+                                            >
+                                              <FaCheckCircle className="me-2" />
+                                              View Details
+                                            </Button>
+                                          </div>
+                                        </Card.Body>
                                       )}
-                                    </td>
-                                    <td className="text-end fw-bold text-success">
-                                      {total != null
-                                        ? `AED ${total.toLocaleString()}`
-                                        : "—"}
-                                    </td>
-                                    <td>
-                                      <Button
-                                        size="sm"
-                                        variant="primary"
-                                        onClick={() => openBookConfirm(rate)}
-                                      >
-                                        Book
-                                      </Button>
-                                    </td>
-                                  </tr>
+                                    </Card>
+                                  </Col>
                                 );
                               })}
-                            </tbody>
-                          </Table>
-                        ) : (
-                          <Row className="g-3 p-3">
-                            {category.rates.map((rate) => {
-                              const finalRate = computeFinalRate(rate);
-                              const total = computeRoomsTotal(rate);
-                              return (
-                                <Col md={4} key={rate.key}>
-                                  <Card className="h-100 shadow-sm">
-                                    <Card.Body>
-                                      <div className="d-flex justify-content-between mb-2">
-                                        <Badge bg="info">
-                                          <FaUsers className="me-1" />
-                                          {rate.occupancyTypeName}
-                                        </Badge>
-                                        {rate.refundable ? (
-                                          <Badge bg="success">
-                                            Refundable
-                                          </Badge>
-                                        ) : (
-                                          <Badge bg="danger">
-                                            Non-Refundable
-                                          </Badge>
-                                        )}
-                                      </div>
-                                      <h6 className="mb-2">
-                                        <FaBed className="text-muted me-1" />
-                                        {rate.roomTypeName}
-                                      </h6>
-                                      <div className="text-muted small mb-3">
-                                        {getMealPlanIcon(rate.mealPlan)}
-                                        {rate.mealPlan}
-                                      </div>
-                                      <div className="d-flex justify-content-between border-top pt-2">
-                                        <small className="text-muted">
-                                          Per room
-                                        </small>
-                                        <strong>
-                                          {finalRate != null
-                                            ? `AED ${finalRate.toLocaleString()}`
-                                            : "—"}
-                                        </strong>
-                                      </div>
-                                      <div className="d-flex justify-content-between">
-                                        <small className="text-muted">
-                                          Total ({payload.rooms || 1} room
-                                          {(payload.rooms || 1) > 1 ? "s" : ""})
-                                        </small>
-                                        <span className="fw-bold text-success">
-                                          {total != null
-                                            ? `AED ${total.toLocaleString()}`
-                                            : "—"}
-                                        </span>
-                                      </div>
-                                      <Button
-                                        variant="primary"
-                                        size="sm"
-                                        className="w-100 mt-3"
-                                        onClick={() => openBookConfirm(rate)}
-                                      >
-                                        Book
-                                      </Button>
-                                    </Card.Body>
-                                  </Card>
-                                </Col>
-                              );
-                            })}
-                          </Row>
-                        )}
-                      </Accordion.Body>
-                    </Accordion.Item>
-                  );
-                })}
-              </Accordion>
-              </div>
+                            </Row>
+                          </Accordion.Body>
+                        </Accordion.Item>
+                      );
+                    })}
+                  </Accordion>
                 );
-              })}
-                {contracts.every((c) =>
-                  buildCategories(c).every(
-                    (cat) => (cat.rates || []).filter(rateVisible).length === 0,
-                  ),
-                ) && (
-                  <Alert variant="info" className="mb-0">
-                    No rates match the selected filters.
-                  </Alert>
-                )}
+              })()}
+
+            {/* ── Hotel Information / General check-in & stay details ──
+                Mirrors RoomList's section verbatim, adapted for the
+                day-stay window. Booking-policy details (Cancellation /
+                Amendment / Child / Additional / Terms & Conditions)
+                intentionally NOT shown here — they live exclusively in
+                the per-rate "Cancellation Policies & Terms" modal so
+                the same information isn't duplicated in two places. */}
+            <div className="mt-4">
+              <Card
+                className="mb-4 shadow-sm"
+                style={{ overflow: "hidden", border: "1px solid #dbe3ef" }}
+              >
+                <Card.Header
+                  className="d-flex align-items-center gap-3 py-3"
+                  style={{
+                    background:
+                      "linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%)",
+                    color: "#fff",
+                    border: "none",
+                  }}
+                >
+                  <div
+                    className="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0"
+                    style={{
+                      width: 40,
+                      height: 40,
+                      backgroundColor: "rgba(255,255,255,.18)",
+                      fontSize: "1.15rem",
+                    }}
+                  >
+                    <FaHotel />
+                  </div>
+                  <div>
+                    <div
+                      className="fw-bold"
+                      style={{ fontSize: "1.1rem", lineHeight: 1.2 }}
+                    >
+                      Hotel Information
+                    </div>
+                    <div className="small" style={{ opacity: 0.85 }}>
+                      General check-in &amp; stay details
+                    </div>
+                  </div>
+                </Card.Header>
+                <Card.Body className="p-4">
+                  <Row className="g-3">
+                    <Col md={6}>
+                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                        <span className="text-muted">Check-in Window</span>
+                        <span className="fw-semibold">
+                          {contract?.checkInStartTime
+                            ? String(contract.checkInStartTime).slice(0, 5)
+                            : "—"}{" "}
+                          –{" "}
+                          {contract?.checkInEndTime
+                            ? String(contract.checkInEndTime).slice(0, 5)
+                            : "—"}
+                        </span>
+                      </div>
+                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                        <span className="text-muted">Check-out</span>
+                        <span className="fw-semibold">
+                          By {adjustedCheckOut || "—"} (window cap)
+                        </span>
+                      </div>
+                    </Col>
+                    <Col md={6}>
+                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                        <span className="text-muted">Deposit</span>
+                        <span className="fw-semibold">May be required</span>
+                      </div>
+                      <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
+                        <span className="text-muted">Additional Bed</span>
+                        <span className="fw-semibold">
+                          Subject to availability
+                        </span>
+                      </div>
+                    </Col>
+                  </Row>
+                </Card.Body>
+              </Card>
+            </div>
                 </Col>
               </Row>
             </div>
@@ -805,8 +1396,12 @@ export default function DayStayRoomList() {
         <Modal.Body>
           {selectedRow && (
             <>
-              <h5 className="mb-2">{selectedRow.roomCategoryName}</h5>
-              <p className="text-muted mb-2">{selectedRow.roomTypeName}</p>
+              <h5 className="mb-2">
+                {selectedRow.roomCategoryName || selectedRow.roomCategory}
+              </h5>
+              <p className="text-muted mb-2">
+                {selectedRow.roomTypeName || selectedRow.baseRoomType}
+              </p>
               <div className="d-flex align-items-center gap-2 mb-2">
                 {getMealPlanIcon(selectedRow.mealPlan)}
                 <span className="fw-semibold">{selectedRow.mealPlan}</span>
@@ -823,10 +1418,7 @@ export default function DayStayRoomList() {
               <div className="border-top pt-2">
                 <div className="d-flex justify-content-between">
                   <span>Day Stay Rate (per room)</span>
-                  <strong>
-                    AED{" "}
-                    {(computeFinalRate(selectedRow) ?? 0).toFixed(2)}
-                  </strong>
+                  <strong>{formatPrice(displayPerRoomRate(selectedRow))}</strong>
                 </div>
                 <div className="d-flex justify-content-between text-muted small">
                   <span>
@@ -842,9 +1434,7 @@ export default function DayStayRoomList() {
                 </div>
                 <div className="d-flex justify-content-between fs-5 fw-bold text-success mt-2">
                   <span>Total</span>
-                  <span>
-                    AED {(computeRoomsTotal(selectedRow) ?? 0).toFixed(2)}
-                  </span>
+                  <span>{formatPrice(displayTotal(selectedRow))}</span>
                 </div>
               </div>
               <p className="text-muted small mt-3 mb-0">
@@ -861,8 +1451,285 @@ export default function DayStayRoomList() {
           >
             Cancel
           </Button>
-          <Button variant="success" onClick={proceedToBooking}>
+          <Button variant="success" onClick={() => proceedToBooking()}>
             Proceed to Booking
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Insufficient Credit Modal — informational gate. Does NOT block
+          the booking; clicking OK re-runs the deferred proceedToBooking
+          with skipCreditCheck=true so the user lands on the booking page
+          and can complete payment online. Mirrors RoomList verbatim. */}
+      <Modal
+        show={showInsufficientCreditModal}
+        onHide={() => {
+          setShowInsufficientCreditModal(false);
+          setPendingBookingFn(null);
+        }}
+        centered
+        backdrop="static"
+        keyboard={false}
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Insufficient Credit Limit</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="mb-2">
+            Your available credit limit is not enough to cover this booking.
+          </p>
+          <p className="mb-0 text-muted small">
+            You can still continue — please choose{" "}
+            <strong>online payment</strong> on the booking page to complete
+            this reservation.
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setShowInsufficientCreditModal(false);
+              setPendingBookingFn(null);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              const fn = pendingBookingFn;
+              setShowInsufficientCreditModal(false);
+              setPendingBookingFn(null);
+              if (typeof fn === "function") fn();
+            }}
+          >
+            OK, continue
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Cancellation Policies & Terms Modal — rich modal mirroring
+          RoomList's. Sections: Cancellation Policies (from rate row),
+          Amendment / Child / Additional (inhouse policyList, apiId=1),
+          and Terms & Conditions (lazy-fetched + cached per hotelId). */}
+      <Modal
+        show={showPoliciesModal}
+        onHide={() => setShowPoliciesModal(false)}
+        size="lg"
+        centered
+        scrollable
+        aria-labelledby="daystay-policies-terms-modal"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title id="daystay-policies-terms-modal">
+            Cancellation Policies &amp; Terms &amp; Conditions
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ maxHeight: "70vh", overflowY: "auto" }}>
+          {policiesModalData.selectedRoomLabel && (
+            <div className="text-muted small mb-3">
+              {policiesModalData.selectedRoomLabel}
+            </div>
+          )}
+
+          {/* Day-stay-specific cancellation policies come embedded in
+              the contract response (/api/day-stay-contract/{id}) as
+              List<String> — render as-is; when the row happens to be an
+              object we still pull the text out. */}
+          <h6 className="text-danger mb-2">
+            <FaTimesCircle className="me-2" />
+            Day Stay Cancellation Policies
+          </h6>
+          {policiesModalData.dayStayCancellation?.length > 0 ? (
+            <ul className="mb-4 ps-3">
+              {policiesModalData.dayStayCancellation.map((policy, idx) => {
+                const text =
+                  typeof policy === "string"
+                    ? policy
+                    : policy?.policyText ||
+                      policy?.description ||
+                      policy?.text ||
+                      "";
+                const validity =
+                  typeof policy === "object"
+                    ? renderPolicyValidity(policy?.fromDate, policy?.toDate)
+                    : null;
+                if (!text && !validity) return null;
+                return (
+                  <li key={idx} className="mb-2">
+                    <div style={{ whiteSpace: "pre-line" }}>{text}</div>
+                    {validity && (
+                      <small className="text-muted">{validity}</small>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-muted mb-4">
+              No day-stay cancellation policies available for this rate.
+            </p>
+          )}
+
+          {/* Day-stay-specific terms & conditions from the same contract
+              response. Rendered separately from the hotel-wide T&C so
+              the operator can distinguish contract vs hotel obligations. */}
+          {policiesModalData.dayStayTerms?.length > 0 && (
+            <>
+              <h6 className="text-secondary mb-2 pt-2 border-top">
+                <FaInfoCircle className="me-2" />
+                Day Stay Terms &amp; Conditions
+              </h6>
+              <ul className="mb-4 ps-3">
+                {policiesModalData.dayStayTerms.map((term, idx) => {
+                  const text =
+                    typeof term === "string"
+                      ? term
+                      : term?.description ||
+                        term?.policyText ||
+                        term?.text ||
+                        "";
+                  if (!text) return null;
+                  return (
+                    <li
+                      key={idx}
+                      className="mb-2"
+                      style={{ whiteSpace: "pre-line" }}
+                    >
+                      {text}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+
+          {policyList?.policies?.amendmentPolicy?.length > 0 && (
+            <>
+              <h6 className="text-warning mb-2 pt-2 border-top">
+                <FaInfoCircle className="me-2" />
+                Amendment Policies
+              </h6>
+              <ul className="mb-4 ps-3">
+                {policyList.policies.amendmentPolicy.map((policy, idx) => {
+                  const validity = renderPolicyValidity(
+                    policy?.fromDate,
+                    policy?.toDate,
+                  );
+                  return (
+                    <li key={idx} className="mb-2">
+                      <div style={{ whiteSpace: "pre-line" }}>
+                        {policy?.policyText || ""}
+                      </div>
+                      {validity && (
+                        <small className="text-muted">{validity}</small>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+
+          {policyList?.policies?.childPolicy?.length > 0 && (
+            <>
+              <h6 className="text-primary mb-2 pt-2 border-top">
+                <FaUsers className="me-2" />
+                Child Policy
+              </h6>
+              <ul className="mb-4 ps-3">
+                {policyList.policies.childPolicy.map((policy, idx) => (
+                  <li
+                    key={idx}
+                    className="mb-2"
+                    style={{ whiteSpace: "pre-line" }}
+                  >
+                    {policy?.policyText || ""}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          {policyList?.policies?.additionalPolicy && (() => {
+            const ap = policyList.policies.additionalPolicy;
+            const formatFee = (amt, type) => {
+              if (amt === null || amt === undefined || Number(amt) === 0) return null;
+              const suffix =
+                String(type || "").toUpperCase() === "PERCENT" ? "%" : "";
+              return `${amt}${suffix}`;
+            };
+            const noShow = formatFee(ap.noShowFee, ap.noShowFeeType);
+            const earlyDep = formatFee(ap.earlyDepartureFee, ap.earlyDepartureFeeType);
+            const nonRef = formatFee(ap.nonRefundableFee, ap.nonRefundableFeeType);
+            if (!noShow && !earlyDep && !nonRef) return null;
+            return (
+              <>
+                <h6 className="text-info mb-2 pt-2 border-top">
+                  <FaInfoCircle className="me-2" />
+                  Additional Policy
+                </h6>
+                <ul className="mb-4 ps-3">
+                  {noShow && (
+                    <li className="mb-2">
+                      <strong>No-Show Fee:</strong> {noShow}
+                    </li>
+                  )}
+                  {earlyDep && (
+                    <li className="mb-2">
+                      <strong>Early Departure Fee:</strong> {earlyDep}
+                    </li>
+                  )}
+                  {nonRef && (
+                    <li className="mb-2">
+                      <strong>Non-Refundable Fee:</strong> {nonRef}
+                    </li>
+                  )}
+                </ul>
+              </>
+            );
+          })()}
+
+          <h6 className="text-secondary mb-2 pt-2 border-top">
+            <FaInfoCircle className="me-2" />
+            Hotel Terms &amp; Conditions
+          </h6>
+          {loadingTerms ? (
+            <div className="d-flex align-items-center text-muted mb-0">
+              <Spinner animation="border" size="sm" className="me-2" />
+              Loading terms &amp; conditions…
+            </div>
+          ) : policiesModalData.hotelTerms?.length > 0 ? (
+            <ul className="mb-0 ps-3">
+              {policiesModalData.hotelTerms.map((term, idx) => {
+                const text =
+                  typeof term === "string"
+                    ? term
+                    : term?.description || term?.policyText || term?.text || "";
+                if (!text) return null;
+                return (
+                  <li
+                    key={idx}
+                    className="mb-2"
+                    style={{ whiteSpace: "pre-line" }}
+                  >
+                    {text}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-muted mb-0">
+              No hotel terms &amp; conditions available.
+            </p>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setShowPoliciesModal(false)}
+          >
+            Close
           </Button>
         </Modal.Footer>
       </Modal>

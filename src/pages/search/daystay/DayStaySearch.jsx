@@ -258,6 +258,166 @@ export default function DayStaySearch() {
   const [clickedHotelIds, setClickedHotelIds] = useState([]);
   const resultsRef = useRef(null);
 
+  // Result sort / star-rating filter — mirrors HotelSearch's "sort-pill"
+  // + starRating select, styled through the shared HotelSearch.css
+  // classes. Defaults to price ascending (Low → High). "Clear" resets
+  // both back to their initial values.
+  const [sortBy, setSortBy] = useState("priceAsc");
+  const [starRating, setStarRating] = useState(null);
+  const starOptions = [
+    { value: 5, label: "5 Stars" },
+    { value: 4, label: "4 Stars" },
+    { value: 3, label: "3 Stars" },
+    { value: 2, label: "2 Stars" },
+    { value: 1, label: "1 Star" },
+  ];
+
+  // Left-sidebar filters — Hotel Name text search + Hotel Type checkbox
+  // list. Both match on the hotel entries returned by /day-stay-hotels
+  // (client-side; the search endpoint itself is untouched).
+  const [hotelSearchTerm, setHotelSearchTerm] = useState("");
+  const [hotelType, setHotelType] = useState([]);
+  const hotelTypeOptions = [
+    { value: "hotel", label: "Hotel" },
+    { value: "villa", label: "Villa" },
+    { value: "resort", label: "Resort" },
+    { value: "apartment", label: "Apartment" },
+  ];
+
+  // Channel filter — mirrors HotelSearch. DayStay currently only exposes
+  // Inhouse contracts, but the checkbox pattern matches Hotel so future
+  // supplier channels drop in.
+  const [channelType, setChannelType] = useState([]);
+  const channelTypeOptions = [
+    { value: "inhouse", label: "Inhouse" },
+  ];
+
+  // Display currency + rate-conversion helpers. Rates come back from the
+  // search endpoint quoted in AED; the conversion here is purely
+  // display-only. Admins/SuperAdmins see the dropdown and can switch;
+  // agent logins are locked to their configured currency (auto-loaded
+  // from /api/agent/{id}, same as HotelSearch).
+  const [currencyOptions, setCurrencyOptions] = useState([]);
+  const [selectedCurrency, setSelectedCurrency] = useState(null);
+  const currencyTouchedRef = useRef(false);
+  const [selfAgentId, setSelfAgentId] = useState(null);
+
+  const mapCurrencyOptions = (list) =>
+    (Array.isArray(list) ? list : [])
+      .filter((c) => c && c.currencyCode)
+      .map((c) => ({
+        value: c.currencyId,
+        label: c.currencyCode,
+        code: c.currencyCode,
+        rate: Number(c.value),
+      }));
+
+  const fetchCurrencies = async (search = "") => {
+    const q = search ? `&search=${encodeURIComponent(search)}` : "";
+    const res = await axiosInstance.get(`/api/currency?page=0${q}`);
+    return mapCurrencyOptions(res.data);
+  };
+
+  const debouncedCurrencySearch = useRef(
+    debounce(async (search) => {
+      try {
+        setCurrencyOptions(await fetchCurrencies(search));
+      } catch (err) {
+        console.warn("currency search failed (non-fatal):", err);
+      }
+    }, 300),
+  ).current;
+
+  // Load the currency list once + default to AED.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const options = await fetchCurrencies("");
+        if (cancelled) return;
+        setCurrencyOptions(options);
+        const aed = options.find((o) => o.code === "AED");
+        setSelectedCurrency(aed || options[0] || null);
+      } catch (err) {
+        console.warn("currency list fetch failed (non-fatal):", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Agent-login self-id resolution — used to look up their default
+  // currency below. Mirrors HotelSearch line-for-line.
+  useEffect(() => {
+    if (!isAgentRole) return;
+    const cached = localStorage.getItem("userId");
+    if (cached) {
+      setSelfAgentId(cached);
+      return;
+    }
+    const userName =
+      localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+    if (!userName) return;
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/personalProfile/${userName}`)
+      .then((res) => {
+        if (cancelled) return;
+        if (res?.data?.id != null) {
+          const idv = String(res.data.id);
+          localStorage.setItem("userId", idv);
+          setSelfAgentId(idv);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isAgentRole]);
+
+  // Default the display currency to the agent's configured currency.
+  // Admin: uses the picked agent id; Agent login: uses selfAgentId.
+  // Stops once the operator changes the currency manually.
+  const currencyAgentId = isAgentRole ? selfAgentId : agent;
+  useEffect(() => {
+    if (currencyTouchedRef.current) return;
+    if (!currencyAgentId || currencyOptions.length === 0) return;
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/agent/${currencyAgentId}`)
+      .then((res) => {
+        const code = res?.data?.currencyCode;
+        if (cancelled || !code || currencyTouchedRef.current) return;
+        const opt = currencyOptions.find((o) => o.code === code);
+        if (opt) setSelectedCurrency(opt);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [currencyAgentId, currencyOptions]);
+
+  // AED is the base the search rates arrive in. Normalise against its
+  // stored value so AED→AED is always ×1 regardless of how the master
+  // row is configured. Falls back to 1 until the list loads.
+  const aedBaseRate = (() => {
+    const aed = currencyOptions.find((o) => o.code === "AED");
+    return aed && Number.isFinite(aed.rate) && aed.rate > 0 ? aed.rate : 1;
+  })();
+
+  const displayCurrencyCode = selectedCurrency?.code || "AED";
+
+  const convertFromAed = (aedPrice) => {
+    if (aedPrice == null) return aedPrice;
+    const targetRate =
+      selectedCurrency && Number.isFinite(selectedCurrency.rate)
+        ? selectedCurrency.rate
+        : aedBaseRate;
+    return Number(aedPrice) * (targetRate / aedBaseRate);
+  };
+
   // Reuse the HotelSearch debounce helper.
   function debounce(func, wait) {
     let timeout;
@@ -561,7 +721,7 @@ export default function DayStaySearch() {
                 <Row className="g-4">
                   {/* 1. Agent */}
                   {!isAgentRole && (
-                  <Col lg={3} md={6}>
+                  <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         Agent
@@ -896,12 +1056,15 @@ export default function DayStaySearch() {
                 </Card>
               )}
 
-              <Row className="g-4">
-                {/* Dedupe: one card per hotel, pick the contract with the
-                    lowest day-stay rate. The full list of matching contract
-                    ids is forwarded to the room list so the user can see
-                    every window the hotel offers. */}
-                {Object.values(
+              {/* Search-results layout mirrors HotelSearch: a left-side
+                  filtersection Card (Explore-on-Map preview, Hotel Name
+                  text search, Hotel Type checkboxes) + a right-side main
+                  column with the sort-pill bar and result cards. */}
+              {(() => {
+                // Dedupe by hotelId + apply the sidebar/top-bar filters
+                // once so the entry counter and result cards read the
+                // same list.
+                const deduped = Object.values(
                   results.reduce((acc, h) => {
                     const key = h.hotelId;
                     const rate = Number(h.dayStayRate || 0);
@@ -926,8 +1089,280 @@ export default function DayStaySearch() {
                       };
                     }
                     return acc;
-                  }, {})
-                ).map((hotel) => {
+                  }, {}),
+                );
+                const needle = hotelSearchTerm.trim().toLowerCase();
+                const displayed = deduped
+                  .filter((h) =>
+                    starRating
+                      ? Number(h.starRating) === Number(starRating.value)
+                      : true,
+                  )
+                  .filter((h) =>
+                    hotelType.length > 0
+                      ? hotelType.some(
+                          (t) =>
+                            String(h.hotelType || "").toLowerCase() ===
+                            String(t.value).toLowerCase(),
+                        )
+                      : true,
+                  )
+                  .filter((h) =>
+                    needle
+                      ? String(h.hotelName || "")
+                          .toLowerCase()
+                          .includes(needle)
+                      : true,
+                  )
+                  .filter((h) =>
+                    channelType.length > 0
+                      ? channelType.some(
+                          (c) =>
+                            String(h.channelType || "inhouse").toLowerCase() ===
+                            String(c.value).toLowerCase(),
+                        )
+                      : true,
+                  )
+                  .sort((a, b) => {
+                    const ra = Number(a.dayStayRate || 0);
+                    const rb = Number(b.dayStayRate || 0);
+                    return sortBy === "priceDesc" ? rb - ra : ra - rb;
+                  });
+                const totalDisplayed = displayed.length;
+                return (
+                  <Row className="g-4">
+                    {/* Left Sidebar — mirrors HotelSearch.filtersection */}
+                    <Col lg={3} className="leftside d-none d-lg-block">
+                      <div className="left-fixed">
+                        <Card className="shadow-sm rounded-xl filtersection">
+                          <Card.Body className="p-2">
+                            {/* Map preview — visual only for now (matches
+                                HotelSearch layout); the "Explore On Map"
+                                overlay button is a display affordance
+                                until a map component is wired up. */}
+                            <div className="map-preview-wrapper mb-2">
+                              <img
+                                src="/images/map.jpg"
+                                alt="Map preview"
+                                className="map-preview-img"
+                              />
+                              <button className="map-overlay-btn" type="button">
+                                EXPLORE ON MAP 📍
+                              </button>
+                            </div>
+
+                            <Form.Control
+                              type="text"
+                              placeholder="Search Hotel Name..."
+                              className="ps-3 mb-2"
+                              value={hotelSearchTerm}
+                              onChange={(e) =>
+                                setHotelSearchTerm(e.target.value)
+                              }
+                            />
+
+                            {/* Display currency — converts the shown
+                                rates from AED into the chosen currency
+                                using the master_currency multiplier.
+                                Display-only: search/booking payloads
+                                stay in AED. Hidden for Agent logins
+                                (locked to the agent's configured
+                                currency). Server-side search: react-
+                                select's client filter is disabled so
+                                the /api/currency search param drives
+                                the option list. */}
+                            {!isAgentRole && (
+                              <>
+                                <Form.Group className="mb-2">
+                                  <Form.Label className="fw-semibold small">
+                                    Currency
+                                  </Form.Label>
+                                  <Select
+                                    options={currencyOptions}
+                                    value={selectedCurrency}
+                                    onChange={(opt) => {
+                                      currencyTouchedRef.current = true;
+                                      setSelectedCurrency(opt);
+                                    }}
+                                    placeholder="Select currency"
+                                    isSearchable
+                                    filterOption={() => true}
+                                    onInputChange={(value, { action }) => {
+                                      if (action === "input-change")
+                                        debouncedCurrencySearch(value);
+                                    }}
+                                    className="modern-select-sm"
+                                    menuPortalTarget={document.body}
+                                    styles={{
+                                      control: (base) => ({
+                                        ...base,
+                                        minHeight: "36px",
+                                        background: "#ffffff",
+                                        color: "#000000",
+                                      }),
+                                      menuPortal: (base) => ({
+                                        ...base,
+                                        zIndex: 9999,
+                                      }),
+                                      menu: (base) => ({
+                                        ...base,
+                                        zIndex: 9999,
+                                      }),
+                                    }}
+                                  />
+                                </Form.Group>
+
+                                <hr />
+                              </>
+                            )}
+
+                            <Form.Group className="mb-2">
+                              <Form.Label className="fw-semibold small">
+                                Hotel Type
+                              </Form.Label>
+                              <div className="filter-checkbox-list">
+                                {hotelTypeOptions.map((item) => (
+                                  <Form.Check
+                                    key={item.value}
+                                    type="checkbox"
+                                    id={`hotel-type-${item.value}`}
+                                    label={item.label}
+                                    checked={hotelType.some(
+                                      (t) => t.value === item.value,
+                                    )}
+                                    onChange={(e) => {
+                                      if (e.target.checked)
+                                        setHotelType([...hotelType, item]);
+                                      else
+                                        setHotelType(
+                                          hotelType.filter(
+                                            (t) => t.value !== item.value,
+                                          ),
+                                        );
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                            </Form.Group>
+
+                            <hr />
+
+                            <Form.Group>
+                              <Form.Label className="fw-semibold small">
+                                Channel
+                              </Form.Label>
+                              <div className="filter-checkbox-list">
+                                {channelTypeOptions.map((item) => (
+                                  <Form.Check
+                                    key={item.value}
+                                    type="checkbox"
+                                    id={`channel-${item.value}`}
+                                    label={item.label}
+                                    checked={channelType.some(
+                                      (c) => c.value === item.value,
+                                    )}
+                                    onChange={(e) => {
+                                      if (e.target.checked)
+                                        setChannelType([...channelType, item]);
+                                      else
+                                        setChannelType(
+                                          channelType.filter(
+                                            (c) => c.value !== item.value,
+                                          ),
+                                        );
+                                    }}
+                                  />
+                                ))}
+                              </div>
+                            </Form.Group>
+                          </Card.Body>
+                        </Card>
+                      </div>
+                    </Col>
+
+                    {/* Right Content — sort bar + entry counter + cards */}
+                    <Col lg={9}>
+                      {results.length > 0 && (
+                        <Card className="shadow-sm rounded-xl mb-3 filtersection">
+                          <Card.Body className="p-2">
+                            <div className="d-flex align-items-center gap-3 flex-wrap">
+                              <Select
+                                options={starOptions}
+                                value={starRating}
+                                onChange={setStarRating}
+                                placeholder="All Stars"
+                                isClearable
+                                className="modern-select-sm"
+                                menuPortalTarget={document.body}
+                                styles={{
+                                  control: (base) => ({
+                                    ...base,
+                                    height: "36px",
+                                    minHeight: "36px",
+                                    width: "180px",
+                                    background: "#ffffff",
+                                    color: "#000000",
+                                    marginLeft: "30px",
+                                  }),
+                                  menuPortal: (base) => ({
+                                    ...base,
+                                    zIndex: 9999,
+                                  }),
+                                  menu: (base) => ({ ...base, zIndex: 9999 }),
+                                }}
+                              />
+
+                              <div className="d-flex gap-2">
+                                <Button
+                                  size="sm"
+                                  className={`sort-pill ${sortBy === "priceAsc" ? "active" : ""}`}
+                                  onClick={() => setSortBy("priceAsc")}
+                                >
+                                  Low to High
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  className={`sort-pill ${sortBy === "priceDesc" ? "active" : ""}`}
+                                  onClick={() => setSortBy("priceDesc")}
+                                >
+                                  High to Low
+                                </Button>
+                              </div>
+
+                              <Button
+                                className="clear-pill"
+                                variant="outline-primary"
+                                size="sm"
+                                onClick={() => {
+                                  setStarRating(null);
+                                  setSortBy("priceAsc");
+                                  setHotelSearchTerm("");
+                                  setHotelType([]);
+                                  setChannelType([]);
+                                }}
+                              >
+                                Clear
+                              </Button>
+                            </div>
+                          </Card.Body>
+                        </Card>
+                      )}
+
+                      {/* Entry counter — mirrors HotelSearch's "Showing
+                          X to Y of Z entries" strip. Day-Stay results
+                          aren't paginated client-side so start/end are
+                          always 1 and totalDisplayed respectively. */}
+                      {results.length > 0 && (
+                        <div className="d-flex justify-content-between align-items-center mb-3">
+                          <small className="text-muted fw-semibold">
+                            Showing {totalDisplayed > 0 ? 1 : 0} to{" "}
+                            {totalDisplayed} of {totalDisplayed} entries
+                          </small>
+                        </div>
+                      )}
+
+                      <Row className="g-4">
+                        {displayed.map((hotel) => {
                   const baseRate = Number(hotel.dayStayRate || 0);
                   const pct = Number(hotel.percentage || 0);
                   // Pax-adjusted: base rate per room + extra adults +
@@ -953,9 +1388,18 @@ export default function DayStaySearch() {
                     : [];
                   return (
                     <Col xs={12} key={hotel.contractId}>
-                      {/* Mirrors HotelSearch.jsx result-card layout */}
+                      {/* Mirrors HotelSearch.jsx result-card layout —
+                          tight card padding (12px 14px), 10px image
+                          padding, flex-column main content that pushes
+                          the price/button row to the card bottom, and
+                          Hotel's badge-row + Rate-Available conventions.
+                          Day-Stay-specific pieces preserved: DAY STAY
+                          chip on the image, Day Stay Window green pill,
+                          optional markup badge, Categories chip list,
+                          and the pax breakdown under the price. */}
                       <div
                         style={{
+                          position: "relative",
                           backgroundColor: "white",
                           border: "1px solid #dee2e6",
                           borderRadius: "12px",
@@ -969,7 +1413,7 @@ export default function DayStaySearch() {
                               style={{
                                 position: "relative",
                                 height: "100%",
-                                padding: "15px",
+                                padding: "10px",
                               }}
                             >
                               <img
@@ -978,12 +1422,16 @@ export default function DayStaySearch() {
                                   "https://via.placeholder.com/480x270?text=Day+Stay"
                                 }
                                 alt={hotel.hotelName}
+                                loading="lazy"
+                                onError={(e) => {
+                                  e.currentTarget.src =
+                                    "https://via.placeholder.com/480x270?text=Day+Stay";
+                                }}
                                 style={{
                                   width: "100%",
                                   height: "100%",
                                   objectFit: "cover",
                                   borderRadius: "9px",
-                                  minHeight: "180px",
                                 }}
                               />
                               <div
@@ -1017,12 +1465,19 @@ export default function DayStaySearch() {
                             </div>
                           </Col>
                           <Col md={8}>
-                            <div style={{ padding: "16px" }}>
+                            <div
+                              style={{
+                                padding: "12px 14px",
+                                display: "flex",
+                                flexDirection: "column",
+                                height: "100%",
+                              }}
+                            >
                               <h6
                                 style={{
                                   fontSize: "1.0rem",
                                   fontWeight: "600",
-                                  marginBottom: "8px",
+                                  marginBottom: "4px",
                                   color: "#333",
                                 }}
                               >
@@ -1033,7 +1488,7 @@ export default function DayStaySearch() {
                                 style={{
                                   fontSize: "0.875rem",
                                   color: "#666",
-                                  marginBottom: "8px",
+                                  marginBottom: "4px",
                                 }}
                               >
                                 📍{" "}
@@ -1061,45 +1516,68 @@ export default function DayStaySearch() {
                                 </div>
                               )}
 
-                              <span
+                              {/* Badge row — same wrapper Hotel uses so the
+                                  Rate-Available signal, Day Stay Window
+                                  and optional markup pill wrap uniformly
+                                  on small screens. */}
+                              <div
                                 style={{
-                                  backgroundColor: "#28a745",
-                                  color: "white",
-                                  padding: "4px 8px",
-                                  borderRadius: "4px",
-                                  fontSize: "0.75rem",
-                                  display: "inline-block",
-                                  marginBottom: "12px",
-                                  marginRight: "6px",
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: "6px",
+                                  marginBottom: "6px",
+                                  alignItems: "center",
                                 }}
                               >
-                                Day Stay Window:{" "}
-                                {(hotel.checkInStartTime || "").slice(0, 5)} –{" "}
-                                {(hotel.checkInEndTime || "").slice(0, 5)}
-                              </span>
-                              {pct > 0 && (
                                 <span
                                   style={{
-                                    backgroundColor: "#ffc107",
-                                    color: "#212529",
+                                    backgroundColor: "#28a745",
+                                    color: "white",
                                     padding: "4px 8px",
                                     borderRadius: "4px",
                                     fontSize: "0.75rem",
                                     display: "inline-block",
-                                    marginBottom: "12px",
                                   }}
                                 >
-                                  +{pct}% markup
+                                  Rate Available
                                 </span>
-                              )}
+                                <span
+                                  style={{
+                                    backgroundColor: "#28a745",
+                                    color: "white",
+                                    padding: "4px 8px",
+                                    borderRadius: "4px",
+                                    fontSize: "0.75rem",
+                                    display: "inline-block",
+                                  }}
+                                >
+                                  Day Stay Window:{" "}
+                                  {(hotel.checkInStartTime || "").slice(0, 5)} –{" "}
+                                  {(hotel.checkInEndTime || "").slice(0, 5)}
+                                </span>
+                                {pct > 0 && (
+                                  <span
+                                    style={{
+                                      backgroundColor: "#ffc107",
+                                      color: "#212529",
+                                      padding: "4px 8px",
+                                      borderRadius: "4px",
+                                      fontSize: "0.75rem",
+                                      display: "inline-block",
+                                    }}
+                                  >
+                                    +{pct}% markup
+                                  </span>
+                                )}
+                              </div>
 
                               <div
                                 style={{
                                   display: "flex",
                                   justifyContent: "space-between",
                                   alignItems: "center",
-                                  marginTop: "16px",
-                                  paddingTop: "12px",
+                                  marginTop: "auto",
+                                  paddingTop: "8px",
                                   borderTop: "1px solid #eee",
                                 }}
                               >
@@ -1112,7 +1590,12 @@ export default function DayStaySearch() {
                                     }}
                                   >
                                     {displayRate != null
-                                      ? `AED ${displayRate.toLocaleString()}`
+                                      ? `${displayCurrencyCode} ${convertFromAed(
+                                          displayRate,
+                                        ).toLocaleString(undefined, {
+                                          minimumFractionDigits: 2,
+                                          maximumFractionDigits: 2,
+                                        })}`
                                       : "Rate on request"}
                                   </div>
                                   <small className="text-muted">
@@ -1127,6 +1610,15 @@ export default function DayStaySearch() {
                                     {roomsN > 1 ? "s" : ""}
                                   </small>
                                 </div>
+
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    alignItems: "flex-end",
+                                    gap: "6px",
+                                  }}
+                                >
                                 <Button
                                   size="sm"
                                   variant={
@@ -1209,6 +1701,7 @@ export default function DayStaySearch() {
                                 >
                                   View Rooms
                                 </Button>
+                                </div>
                               </div>
                             </div>
                           </Col>
@@ -1217,7 +1710,11 @@ export default function DayStaySearch() {
                     </Col>
                   );
                 })}
-              </Row>
+                      </Row>
+                    </Col>
+                  </Row>
+                );
+              })()}
             </div>
           )}
         </main>
