@@ -72,6 +72,37 @@ const voucherIndicatesDeferredCredit = (vg) => {
   return DEFERRED_CREDIT_VOUCHER_TOKENS.some((t) => s.includes(t));
 };
 
+// Resolve a human-readable Payment Mode label from whatever shape the
+// backend sends. Mirrors HotelBookingList.getPaymentModeLabel so the
+// detail view and the list agree on wording for every persisted value
+// ("CREDITLIMIT" / "ONLINE" / "CASH" / "CARD" + legacy aliases). Boolean
+// fallbacks kept for rows that pre-date the paymentMode string column.
+const getPaymentModeLabel = (booking) => {
+  const raw =
+    booking?.paymentMode ||
+    booking?.payment_mode ||
+    booking?.paymentType ||
+    "";
+  const norm = String(raw).trim().toUpperCase();
+  if (
+    norm === "CREDIT" ||
+    norm === "CREDIT_LIMIT" ||
+    norm === "CREDIT LIMIT" ||
+    norm === "CREDITLIMIT"
+  ) {
+    return "Credit Limit Payment";
+  }
+  if (norm === "ONLINE" || norm === "ONLINE_PAYMENT" || norm === "ONLINE PAYMENT") {
+    return "Online Payment";
+  }
+  if (norm) return raw;
+  if (booking?.creditLimitPayment === true) return "Credit Limit Payment";
+  if (booking?.paidOnline === true || booking?.onlinePayment === true) {
+    return "Online Payment";
+  }
+  return "-";
+};
+
 // Dummy online-payment gateways — mirrors HotelBookingPage so an operator
 // gets the same payment picker whether the deduction is settled at create
 // or at reconfirm time.
@@ -1289,6 +1320,17 @@ export default function BookingDetailedView() {
                         <InfoRow
                           label="Refund Status"
                           value={booking.refundStatus}
+                        />
+                        {/* Payment Mode — same source of truth the Booking
+                            List uses (booking.paymentMode). Label helper is
+                            shared (see getPaymentModeLabel at the top of
+                            this file) so the wording — "Credit Limit
+                            Payment" / "Online Payment" / raw fallback —
+                            matches the list column exactly. Legacy rows
+                            without paymentMode render as "-". */}
+                        <InfoRow
+                          label="Payment Mode"
+                          value={getPaymentModeLabel(booking)}
                         />
                         <InfoRow
                           label="Voucher"
