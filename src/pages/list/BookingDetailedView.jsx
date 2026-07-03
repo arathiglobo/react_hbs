@@ -588,19 +588,34 @@ export default function BookingDetailedView() {
 
   // Reconfirm modal's "Reconfirm" button handler.
   //
-  // For deferred-credit bookings (Case 5 marker on voucherGenerated): first
-  // ask the BE whether the agent has enough credit RIGHT NOW. If not, swap
-  // the Reconfirm modal out for the Online Payment Required modal — the
-  // operator pays through the gateway picker, returns here via
-  // location.state.resumeReconfirm = true, and the resume effect fires
-  // runReconfirm to actually complete the reconfirmation.
+  // The credit + card pre-check runs for TWO kinds of booking:
   //
-  // For every other booking (regular credit-deducted, non-refundable,
-  // on-request, etc.) credit isn't touched at Reconfirm time, so we skip
-  // the pre-check entirely and hit runReconfirm directly — preserves the
-  // existing flow unchanged.
+  //   • Deferred-credit bookings (Cases 3/5/6 markers on voucherGenerated):
+  //     ask the BE whether the agent has enough credit RIGHT NOW. If not,
+  //     swap the Reconfirm modal out for the Online Payment Required modal
+  //     — the operator pays through the gateway picker, returns here via
+  //     location.state.resumeReconfirm = true, and the resume effect fires
+  //     runReconfirm to actually complete the reconfirmation.
+  //
+  //   • On Request bookings — RECONFIRM step ONLY: the create matrix
+  //     returns early for them (voucherGenerated never stamped), so they
+  //     carry no deferred marker — but they also never had credit settled
+  //     at create. Per spec these bookings are always allowed to be
+  //     CREATED (HotelBookingPage lets them through even with no credit
+  //     and no card) and their step-1 Confirm (isOnRequestPending, the
+  //     supplier-response step) must also go through untouched. The
+  //     no-payment-path gate applies only when the operator tries to
+  //     RECONFIRM: no available credit AND Card disabled → the
+  //     "Booking Cannot Be Completed" modal blocks the action.
+  //
+  // Every other booking (Cases 1/2 — credit already deducted at create,
+  // non-refundable, etc.) skips the pre-check entirely and hits
+  // runReconfirm directly — preserves the existing flow unchanged.
   const confirmBooking = async () => {
-    if (!isDeferredCreditBooking) {
+    // On Request step 2 (Reconfirm) — step 1 (Confirm, isOnRequestPending)
+    // is deliberately NOT gated.
+    const isOnRequestReconfirmStep = isOnRequestRoom && !isOnRequestPending;
+    if (!isDeferredCreditBooking && !isOnRequestReconfirmStep) {
       await runReconfirm();
       return;
     }
@@ -630,20 +645,28 @@ export default function BookingDetailedView() {
       const cardEnabled = !!agentResp?.data?.cardPaymentEnabled;
       setAgentCardPaymentEnabled(cardEnabled);
       if (credit.data === false) {
-        // Insufficient credit — route into the online-payment picker.
-        // Close the Reconfirm modal so the Insufficient modal owns the
-        // screen, and stamp the deferred amount so the gateway page has
-        // it to display / charge.
+        // Insufficient credit. Applies to BOTH deferred-credit bookings
+        // AND On Request bookings (Reconfirm step only — step-1 Confirm
+        // never reaches this pre-check). Close the Reconfirm modal so
+        // the follow-up modal owns the screen, and stamp the amount so
+        // the block message / gateway page has it to display or charge.
         setInsufficientAmount(amount);
         setShowConfirmModal(false);
         // Card disabled at the agent level → no viable payment path,
-        // block the reconfirm with a dedicated "sorry" modal instead of
-        // pushing the operator into an online-payment flow they can't
-        // complete.
+        // block the action with the dedicated "Booking Cannot Be
+        // Completed" modal instead of pushing the operator into an
+        // online-payment flow they can't complete.
         if (!cardEnabled) {
           setShowNoPaymentPathModal(true);
           return;
         }
+        // Card enabled → route into the Online Payment Required flow.
+        // The operator pays through the gateway picker and returns with
+        // resumeReconfirm=true, which fires runReconfirm to finish the
+        // action. For deferred-credit bookings the BE settles the
+        // deferred deduction on that reconfirm; for pure On Request
+        // bookings (no deferred marker) the BE settle hook is a no-op —
+        // the gateway payment itself is what covers the booking.
         setShowInsufficientModal(true);
         return;
       }

@@ -39,6 +39,7 @@ import axiosInstance from "../../../components/AxiosInstance";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
+import AgentCreditBalance from "../../../components/AgentCreditBalance";
 
 const SPACE_TYPES = [
   "",
@@ -391,15 +392,21 @@ export default function MeetAndSpaceSearch() {
            <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <Card className="shadow-sm rounded-xl h-100 search-card-modern bg-white">
             <Card.Body className="p-4">
-              <div className="mb-4 text-start">
-                <h2 className="fw-semibold text-primary mb-1">
-                  Meet &amp; Space — Find Your Venue
-                </h2>
-                <p className="text-muted">
-                  Pick a date / time window and we'll show every meeting,
-                  conference and event space with live availability and
-                  applicable rate.
-                </p>
+              <div className="mb-4 text-start d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                  <h2 className="fw-semibold text-primary mb-1">
+                    Meet &amp; Space — Find Your Venue
+                  </h2>
+                  <p className="text-muted">
+                    Pick a date / time window and we'll show every meeting,
+                    conference and event space with live availability and
+                    applicable rate.
+                  </p>
+                </div>
+                {/* Agent logins see their available credit balance at the
+                    right end of the heading row (renders nothing for other
+                    roles). */}
+                <AgentCreditBalance />
               </div>
 
               <Form onSubmit={handleSearchSubmit}>

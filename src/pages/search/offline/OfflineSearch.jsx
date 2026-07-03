@@ -7,6 +7,7 @@ import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
+import AgentCreditBalance from "../../../components/AgentCreditBalance";
 import { FaSearch } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import "../../../styles/OfflineSearch.css";
@@ -488,9 +489,15 @@ const OfflineSearch = () => {
 
               {!collapseSearch && (
               <div className="hs-form-expand">
-              <div className="mb-3">
-                <h3 className="card-title-modern">Offline Booking</h3>
-                <p className="text-muted small">Search and add criteria for offline bookings</p>
+              <div className="mb-3 d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                  <h3 className="card-title-modern">Offline Booking</h3>
+                  <p className="text-muted small">Search and add criteria for offline bookings</p>
+                </div>
+                {/* Agent logins see their available credit balance at the
+                    right end of the heading row (renders nothing for other
+                    roles). */}
+                <AgentCreditBalance />
               </div>
 
               <Form onSubmit={handleSubmit}>

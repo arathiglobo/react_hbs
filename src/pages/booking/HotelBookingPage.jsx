@@ -470,17 +470,12 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
           setShowConfirmModal(false);
           navigate(postBookingListRoute);
         } else {
-          const beMsg =
-            (bookingResponse && bookingResponse.message) || null;
-          toast.error(
-            beMsg || "Booking submission failed. Please try again.",
-          );
+          const beMsg = (bookingResponse && bookingResponse.message) || null;
+          toast.error(beMsg || "Booking submission failed. Please try again.");
         }
       } catch (err) {
         const beMsg =
-          err?.response?.data?.message ||
-          err?.response?.data?.error ||
-          null;
+          err?.response?.data?.message || err?.response?.data?.error || null;
         console.error("Error finalising booking after payment:", err);
         toast.error(beMsg || "Booking submission failed. Please try again.");
       } finally {
@@ -572,6 +567,8 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
         return <Badge bg="secondary">{refundStatus}</Badge>;
     }
   };
+
+ 
 
   const validateForm = () => {
     const errors = {};
@@ -915,37 +912,41 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
       );
 
       if (creditResponse.data === false) {
-        // ❌ Not enough credit. Three sub-paths bypass the online-payment
-        // popup; everything else falls through to it.
+        // ❌ Not enough credit.
         //
-        //   • Book Now & Voucher LATER → let the booking proceed normally.
-        //     The backend (InhouseHotelBookingService Case 5 →
-        //     "On Reconfirmation/ Credit Card") creates the booking in
-        //     Confirmed state WITHOUT touching the agent's credit, and the
-        //     deduction is deferred to the Reconfirm step
-        //     (BookingConfirmationServiceImpl CONFIRM action).
+        //   • On Request rate (Refundable OR Non-Refundable) → ALWAYS
+        //     proceeds at create, even when Card payment is disabled for
+        //     the agent. The booking is created in "Not Confirmed" state
+        //     pending the supplier's response (REQUESTED in the engine)
+        //     and no credit is touched at create-time on the BE. The
+        //     no-payment-path gate for these bookings lives on the detail
+        //     page instead: Confirm (step 1) works, but RECONFIRM is
+        //     blocked with "Booking Cannot Be Completed" while the agent
+        //     still has no credit and no card (see BookingDetailedView).
         //
-        //   • On Request rate → the booking is created in "Not Confirmed"
-        //     state pending the supplier's response (REQUESTED in the
-        //     engine). No credit is touched at create-time on the BE, so
-        //     gating creation on online payment would block a perfectly
-        //     valid request flow. Per spec, On Request bookings always
-        //     proceed without the modal.
+        //   • Available rate + Book Now & Voucher LATER → ALWAYS proceeds
+        //     at create too, even with Card disabled. The backend
+        //     (InhouseHotelBookingService Case 5 → "On Reconfirmation/
+        //     Credit Card") creates the booking in Confirmed state
+        //     WITHOUT touching the agent's credit — the deduction is
+        //     deferred to the Reconfirm step. Like On Request, the
+        //     no-payment-path gate fires on the detail page's RECONFIRM
+        //     instead ("Booking Cannot Be Completed") while the agent
+        //     still has no credit and no card.
         //
-        //   • Everything else (Voucher Now on Available rate, non-
-        //     refundable, no voucher choice shown) → existing behaviour:
-        //     open "Online Payment Required", Pay / Cancel, and suppress
-        //     the create call until payment completes.
+        //   • Everything else (Voucher NOW on Available rate, non-
+        //     refundable, no voucher choice shown):
+        //       – Card disabled → no viable payment path (no credit AND
+        //         no card). Block the booking with the dedicated
+        //         "Booking Cannot Be Completed" modal.
+        //       – Card enabled → open "Online Payment Required",
+        //         Pay / Cancel, and suppress the create call until
+        //         payment completes.
         const isVoucherLater =
           bookingConfirmation === "Book Now & Voucher later";
-        const bypassPaymentModal = isVoucherLater || isOnRequestRate;
-        if (!bypassPaymentModal) {
+        if (!isOnRequestRate && !isVoucherLater) {
           setInsufficientAmount(requiredAmount);
           setShowConfirmModal(false);
-          // Card disabled at the agent level → there's no viable payment
-          // path (no credit AND no card). Block the booking with a
-          // dedicated "sorry" modal instead of the online-payment popup
-          // the agent can't use anyway.
           if (!agentCardPaymentEnabled) {
             setShowNoPaymentPathModal(true);
             return;
@@ -1001,8 +1002,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
         // "Credit limit error: …", "Invalid request: …"). Falling back
         // to the generic "Please try again" when the BE returned an
         // empty body / no message.
-        const beMsg =
-          (bookingResponse && bookingResponse.message) || null;
+        const beMsg = (bookingResponse && bookingResponse.message) || null;
         console.warn(
           "Booking create returned non-success status:",
           bookingResponse && bookingResponse.status,
@@ -1016,9 +1016,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
       // axios error body when present so the operator can see what
       // actually failed instead of a generic "Please try again".
       const beMsg =
-        err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        null;
+        err?.response?.data?.message || err?.response?.data?.error || null;
       console.error(
         "❌ Error in booking confirmation:",
         err?.response?.status,
@@ -1156,11 +1154,14 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                             slot.nonRefundable === "true";
                           const slotRefundDeadlineLabel =
                             !slotNonRefundable && cancellationDeadline
-                              ? cancellationDeadline.toLocaleDateString("en-GB", {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                })
+                              ? cancellationDeadline.toLocaleDateString(
+                                  "en-GB",
+                                  {
+                                    day: "2-digit",
+                                    month: "short",
+                                    year: "numeric",
+                                  },
+                                )
                               : null;
                           return (
                             <Accordion.Item
@@ -1581,6 +1582,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                                   ? "NON REFUNDABLE"
                                   : "FLEXIBLE",
                               )}
+                           
                           </div>
                         </div>
 
@@ -1628,6 +1630,15 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                           </div>
                           <div className="hbp-summary-value">
                             {selectedRate.mealPlan}
+                          </div>
+                        </div>
+                         <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">
+                            <FaUtensils className="me-2 text-primary" />
+                           Room Status
+                          </div>
+                          <div className="hbp-summary-value">
+                            {selectedRate.roomStatus}
                           </div>
                         </div>
                       </Card.Body>
@@ -2066,7 +2077,12 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                         {(() => {
                           const lp = pendingPayload?.primaryGuest;
                           if (!lp) return null;
-                          const fullName = [lp.salutation, lp.firstName, lp.middleName, lp.lastName]
+                          const fullName = [
+                            lp.salutation,
+                            lp.firstName,
+                            lp.middleName,
+                            lp.lastName,
+                          ]
                             .filter((p) => p && String(p).trim() !== "")
                             .join(" ");
                           if (!fullName) return null;
@@ -2300,15 +2316,15 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                 </Modal.Header>
                 <Modal.Body className="text-center py-4">
                   <p className="mb-2 text-dark">
-                    Sorry — this booking can't be completed because the
-                    agent has no available credit and{" "}
+                    Sorry — this booking can't be completed because the agent
+                    has no available credit and{" "}
                     <strong>Card payment is not enabled</strong> for this
                     account.
                   </p>
                   <p className="mb-0 text-muted small">
                     Please top up the agent's credit limit, or ask an
-                    administrator to enable Card payment on the agent's
-                    profile, then try again.
+                    administrator to enable Card payment on the agent's profile,
+                    then try again.
                   </p>
                   <div className="mt-3">
                     <div className="text-muted small">Payable amount</div>

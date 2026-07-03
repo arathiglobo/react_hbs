@@ -15,6 +15,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import AgentSelect from "../../components/AgentSelect";
 import AdvertisementCarousel from "../../components/AdvertisementCarousel";
+import AgentCreditBalance from "../../components/AgentCreditBalance";
 import { FaSearch, FaStar } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import "../../styles/HotelSearch.css";
@@ -1024,13 +1025,19 @@ export default function LongStaySearch() {
            <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <Card className="shadow-sm rounded-xl search-card-modern bg-white h-100">
             <Card.Body className="p-4">
-              <div className="mb-4 text-start">
-                <h2 className="fw-semibold text-primary mb-1">
-                  Find Your Long Stay
-                </h2>
-                <p className="text-muted">
-                  Discover monthly long-stay contracts and the best rates
-                </p>
+              <div className="mb-4 text-start d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                  <h2 className="fw-semibold text-primary mb-1">
+                    Find Your Long Stay
+                  </h2>
+                  <p className="text-muted">
+                    Discover monthly long-stay contracts and the best rates
+                  </p>
+                </div>
+                {/* Agent logins see their available credit balance at the
+                    right end of the heading row (renders nothing for other
+                    roles). */}
+                <AgentCreditBalance />
               </div>
 
               <Form onSubmit={handleSearchSubmit}>
