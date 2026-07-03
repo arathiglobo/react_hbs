@@ -894,8 +894,28 @@ export default function DayStayBookingList() {
                                         {text}
                                       </span>
                                     );
-                                    if (isOnRequestRoom && isConfirmed) {
-                                      return pill("#e67e22", "On Request");
+                                    // On Request chain — mirrors the detail
+                                    // view's breadcrumb. Day-stay On Request
+                                    // bookings are CREATED as "Not Confirmed"
+                                    // (flow REQUESTED), so key on the room
+                                    // status, not on a Confirmed text match:
+                                    //   created            → "On Request"
+                                    //   after step-1 Confirm → "On Request/Confirmed"
+                                    // ReConfirmed / Cancelled / Rejected fall
+                                    // through to the standard pills below.
+                                    const isRejected = norm === "rejected";
+                                    if (
+                                      isOnRequestRoom &&
+                                      !isReconfirmed &&
+                                      !isCancelled &&
+                                      !isRejected
+                                    ) {
+                                      return pill(
+                                        "#e67e22",
+                                        b.onRequestConfirmed
+                                          ? "On Request/Confirmed"
+                                          : "On Request",
+                                      );
                                     }
                                     if (isConfirmed) return pill("#06a301", "Confirmed");
                                     if (isReconfirmed) return pill("#06a301", "ReConfirmed");

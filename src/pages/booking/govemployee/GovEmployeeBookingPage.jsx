@@ -67,6 +67,15 @@ const SPECIAL_REQUEST_OPTIONS = [
   "Smoking Room",
 ];
 
+// Dummy online-payment gateways — mirrors HotelBookingPage /
+// DayStayBookingPage so the operator gets the same payment picker when
+// the agent's credit is short.
+const PAYMENT_GATEWAYS = [
+  { id: "razorpay", name: "Razorpay", desc: "Cards, UPI, Net Banking" },
+  { id: "stripe", name: "Stripe", desc: "International cards" },
+  { id: "payu", name: "PayU", desc: "Cards & wallets" },
+];
+
 const METHOD_CODE = "EMPLOYEE_CODE";
 const METHOD_UPLOAD = "GOVT_ID_UPLOAD";
 
@@ -131,6 +140,19 @@ const GovEmployeeBookingPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
+
+  // ── Payment-gate modals (mirrors HotelBookingPage / DayStayBookingPage) ──
+  // When the agent's credit is short at Confirm time:
+  //   • Card disabled → "Booking Cannot Be Completed" blocks the booking.
+  //   • Card enabled  → "Online Payment Required" → gateway picker.
+  const [showInsufficientModal, setShowInsufficientModal] = useState(false);
+  const [showGatewayModal, setShowGatewayModal] = useState(false);
+  const [insufficientAmount, setInsufficientAmount] = useState(0);
+  const [selectedGateway, setSelectedGateway] = useState("");
+  const [showNoPaymentPathModal, setShowNoPaymentPathModal] = useState(false);
+  // Per-agent "Card" payment-mode gate, toggled from AgentView. Also
+  // filters the Card option out of the Payment Mode dropdown.
+  const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
 
   // ── Voucher-choice + booking-flow status (mirrors HotelBookingPage) ──
   // Refundable + Available rate with a still-upcoming deadline → surface
@@ -198,6 +220,40 @@ const GovEmployeeBookingPage = () => {
       cancelled = true;
     };
   }, [bookingData]);
+
+  // ── Agent card-payment flag — same gate as HotelBookingPage. Drives
+  //    the Card option in the Payment Mode dropdown and the
+  //    no-payment-path block when credit is short. Fail-safe default:
+  //    card DISABLED.
+  useEffect(() => {
+    const aId = bookingData?.payload?.agentId;
+    if (!aId) {
+      setAgentCardPaymentEnabled(false);
+      return;
+    }
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/agent/${aId}`)
+      .then((res) => {
+        if (!cancelled) {
+          setAgentCardPaymentEnabled(!!res?.data?.cardPaymentEnabled);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAgentCardPaymentEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingData]);
+
+  // Keep the selected Payment Mode valid — if Card was selected and the
+  // agent's Card gate turns out to be off, fall back to Credit Limit.
+  useEffect(() => {
+    if (paymentMode === "CARD" && !agentCardPaymentEnabled) {
+      setPaymentMode("CREDITLIMIT");
+    }
+  }, [paymentMode, agentCardPaymentEnabled]);
 
   // ── Guest input handlers ────────────────────────────────────────
   const handleGuestChange = (roomIndex, guestIndex, field, value) => {
@@ -336,6 +392,11 @@ const GovEmployeeBookingPage = () => {
   //       - "Book Now & Voucher later" → Confirmed
   //       - otherwise                  → ReConfirmed
   const resolvedConfirmationStatus = (() => {
+    // On Request rooms land on the tentative "Confirmed" step (mirrors the
+    // hotel flow, where the engine stamps On Request creates CONFIRMED) so
+    // the detail view can run the two-step CONFIRM → RECONFIRM flow. They
+    // must never resolve to ReConfirmed at create.
+    if (isOnRequestRate) return "Confirmed";
     if (isNonRefundableRate) return "ReConfirmed";
     if (isOutsideDeadline) return "ReConfirmed";
     return bookingConfirmation === "Book Now & Voucher later"
@@ -575,6 +636,13 @@ const GovEmployeeBookingPage = () => {
       isBookandVoucher:
         !isNonRefundableRate && bookingConfirmation === "Book & Voucher",
       isOutsideDeadline,
+      // Availability of the selected rate ("Available" / "On Request").
+      // The BE payment-gate + two-step Confirm flow key off this: without
+      // it the create endpoint can't recognise On Request bookings — it
+      // would check-and-reject them on low credit ("Insufficient agent
+      // credit limit…") and the detail view's CONFIRM/RECONFIRM split
+      // would never activate.
+      roomStatus: bookingData?.selectedRate?.roomStatus || "Available",
       source: "WEB",
       createdByRole: activeUserRole || "agent",
       verificationMethod,
@@ -614,6 +682,58 @@ const GovEmployeeBookingPage = () => {
     if (!pendingPayload) return;
     setIsSubmitting(true);
     try {
+      // ── Payment-gate pre-check (mirrors HotelBookingPage.confirmBooking) ──
+      // Ask the BE whether the agent has enough credit for the (discounted)
+      // total the create endpoint will debit. When credit is short:
+      //   • On Request room OR Book Now & Voucher Later → proceed with the
+      //     create call (payment-gate matrix: these flows always book; the
+      //     BE now skips their create-time debit too).
+      //   • Everything else → close the Order Summary modal, then:
+      //       – Card disabled at the agent level → no viable payment path;
+      //         block with the "Booking Cannot Be Completed" modal.
+      //       – Card enabled → "Online Payment Required" → gateway picker.
+      // The check itself fails OPEN (credit endpoint error → proceed; the
+      // BE keeps its own check-and-reject backstop) so the operator is
+      // never trapped by a flaky pre-check.
+      try {
+        const agentIdNum = Number(String(pendingPayload.agentId || "").trim());
+        const requiredAmount = (pendingPayload.rooms || []).reduce(
+          (s, r) => s + Number(r.rate || 0),
+          0,
+        );
+        if (
+          Number.isFinite(agentIdNum) &&
+          agentIdNum > 0 &&
+          requiredAmount > 0
+        ) {
+          const creditResponse = await axiosInstance.get(
+            `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentIdNum}&requiredAmount=${requiredAmount}`,
+          );
+          if (creditResponse.data === false) {
+            const isVoucherLater =
+              bookingConfirmation === "Book Now & Voucher later";
+            const bypassPaymentModal = isVoucherLater || isOnRequestRate;
+            if (!bypassPaymentModal) {
+              setInsufficientAmount(requiredAmount);
+              setShowConfirmModal(false);
+              if (!agentCardPaymentEnabled) {
+                setShowNoPaymentPathModal(true);
+                return;
+              }
+              setShowInsufficientModal(true);
+              return;
+            }
+            console.log(
+              isOnRequestRate
+                ? "[GOV_EMPLOYEE] Insufficient credit but On Request rate — proceeding with create."
+                : "[GOV_EMPLOYEE] Insufficient credit but Voucher Later selected — proceeding with create; credit deducted at Reconfirm.",
+            );
+          }
+        }
+      } catch (err) {
+        console.warn("credit check failed", err);
+      }
+
       const { data } = await axiosInstance.post(
         "/api/gov-employee-booking/create",
         pendingPayload,
@@ -1078,7 +1198,12 @@ const GovEmployeeBookingPage = () => {
                           >
                             <option value="CREDITLIMIT">Credit Limit</option>
                             <option value="CASH">Cash</option>
-                            <option value="CARD">Card</option>
+                            {/* Per-agent gate — Card only when the AgentView
+                                "Enable Card payment mode" checkbox is on
+                                (mirrors HotelBookingPage). */}
+                            {agentCardPaymentEnabled && (
+                              <option value="CARD">Card</option>
+                            )}
                           </Form.Select>
                         </Form.Group>
                       </Col>
@@ -1214,6 +1339,19 @@ const GovEmployeeBookingPage = () => {
                                 </div>
                               );
                             })}
+                          </div>
+                        </div>
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">
+                            <FaUtensils className="me-2 text-primary" />
+                            Room Status
+                          </div>
+                          {/* Availability of the selected rate — same field
+                              isOnRequestRate and the create payload's
+                              roomStatus derive from (mirrors HotelBookingPage
+                              / DayStayBookingPage). */}
+                          <div className="hbp-summary-value">
+                            {selectedRate?.roomStatus || "Available"}
                           </div>
                         </div>
                       </Card.Body>
@@ -1751,6 +1889,151 @@ const GovEmployeeBookingPage = () => {
                     ) : (
                       "Confirm"
                     )}
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* ─── Insufficient credit + card disabled → block booking ───
+                  Shown when the agent has no available credit AND the
+                  AgentView "Allow Card payment mode" toggle is off. No
+                  payment path exists, so the booking is turned away. Same
+                  shape as HotelBookingPage / DayStayBookingPage. */}
+              <Modal
+                show={showNoPaymentPathModal}
+                onHide={() => setShowNoPaymentPathModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Booking Cannot Be Completed</Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="text-center py-4">
+                  <p className="mb-2 text-dark">
+                    Sorry — this booking can't be completed because the agent
+                    has no available credit and{" "}
+                    <strong>Card payment is not enabled</strong> for this
+                    account.
+                  </p>
+                  <p className="mb-0 text-muted small">
+                    Please top up the agent's credit limit, or ask an
+                    administrator to enable Card payment on the agent's
+                    profile, then try again.
+                  </p>
+                  <div className="mt-3">
+                    <div className="text-muted small">Payable amount</div>
+                    <div className="fs-4 fw-bold text-dark">
+                      {formatPrice(insufficientAmount)}
+                    </div>
+                  </div>
+                </Modal.Body>
+                <Modal.Footer className="justify-content-center border-0">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowNoPaymentPathModal(false)}
+                  >
+                    OK
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* ─── Insufficient Credit → online payment required ─── */}
+              <Modal
+                show={showInsufficientModal}
+                onHide={() => setShowInsufficientModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Online Payment Required</Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="text-center py-4">
+                  <p className="mb-2 text-muted">
+                    The agent's available credit is insufficient for this
+                    booking. You need to proceed with{" "}
+                    <strong>online payment</strong>.
+                  </p>
+                  <div className="mt-3">
+                    <div className="text-muted small">Payable amount</div>
+                    <div className="fs-4 fw-bold text-dark">
+                      {formatPrice(insufficientAmount)}
+                    </div>
+                  </div>
+                </Modal.Body>
+                <Modal.Footer className="justify-content-center border-0">
+                  <Button
+                    variant="danger"
+                    onClick={() => setShowInsufficientModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="success"
+                    onClick={() => {
+                      setShowInsufficientModal(false);
+                      setSelectedGateway("");
+                      setShowGatewayModal(true);
+                    }}
+                  >
+                    Pay
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* ─── Payment Gateway (dummy) ─── */}
+              <Modal
+                show={showGatewayModal}
+                onHide={() => setShowGatewayModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Select Payment Gateway</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                  <p className="text-muted small mb-3">
+                    Choose a gateway to enter your card details.
+                  </p>
+                  {PAYMENT_GATEWAYS.map((g) => (
+                    <Form.Check
+                      key={g.id}
+                      type="radio"
+                      name="gov-payment-gateway"
+                      id={`gov-gw-${g.id}`}
+                      className="mb-2"
+                      checked={selectedGateway === g.id}
+                      onChange={() => setSelectedGateway(g.id)}
+                      label={
+                        <span>
+                          <span className="fw-semibold">{g.name}</span>
+                          <span className="text-muted small ms-2">
+                            {g.desc}
+                          </span>
+                        </span>
+                      }
+                    />
+                  ))}
+                </Modal.Body>
+                <Modal.Footer className="border-0">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowGatewayModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="success"
+                    disabled={!selectedGateway}
+                    onClick={() => {
+                      const gw = PAYMENT_GATEWAYS.find(
+                        (x) => x.id === selectedGateway,
+                      );
+                      setShowGatewayModal(false);
+                      navigate(`/payment/${selectedGateway}`, {
+                        state: {
+                          amountLabel: formatPrice(insufficientAmount),
+                          gatewayName: gw ? gw.name : selectedGateway,
+                        },
+                      });
+                    }}
+                  >
+                    Proceed to Pay
                   </Button>
                 </Modal.Footer>
               </Modal>

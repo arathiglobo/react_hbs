@@ -300,34 +300,32 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
     bookingData?.selectedRate?.nonRefundable === "true";
 
   // ── Payment Type availability ──────────────────────────────────────────
-  // A "Cash Agent" is one with no usable credit available — available balance
-  // 0/null, or no credit-limit row at all (agentHasAvailableCredit === false).
-  // This includes credit agents who have used up their balance. When the
-  // booking is Non-Refundable AND the agent is a Cash Agent, the Payment Type
-  // dropdown is restricted to Card / Cash Deposit only. Every other
-  // combination keeps the full, existing option set untouched.
-  const isCashAgent = agentHasAvailableCredit === false;
-  const restrictToCardCashDeposit = isNonRefundableRate && isCashAgent;
   // Only Credit Limit / Cash / Card are exposed in the UI. Online, Bank
   // Transfer, Cheque, and Cash Deposit are intentionally hidden per business
   // decision — the enums stay valid on the backend, they're just not
-  // selectable here. Restricted mode (non-refundable rate + no-credit agent)
-  // collapses to Card since Credit Limit isn't usable then.
+  // selectable here.
+  //
+  // NOTE (2026-07-03): the old rule that collapsed the dropdown to
+  // Card-only for Non-Refundable + no-credit agents is REMOVED — combined
+  // with the per-agent Card gate below it left the Mode dropdown
+  // completely EMPTY when that agent's Card payment was also disabled
+  // (seen on the demo server). The full option set is always offered now;
+  // whether the agent can actually pay is enforced at Confirm time by the
+  // credit pre-check ("Online Payment Required" / "Booking Cannot Be
+  // Completed" modals).
   const paymentModeOptions = useMemo(() => {
-    const base = restrictToCardCashDeposit
-      ? [{ value: "CARD", label: "Card" }]
-      : [
-          { value: "CREDITLIMIT", label: "Credit Limit" },
-          { value: "CASH", label: "Cash" },
-          { value: "CARD", label: "Card" },
-        ];
+    const base = [
+      { value: "CREDITLIMIT", label: "Credit Limit" },
+      { value: "CASH", label: "Cash" },
+      { value: "CARD", label: "Card" },
+    ];
     // Per-agent gate — the Card option is only exposed when the
     // AgentView "Enable Card payment mode" checkbox is on for this
     // agent (see agent.cardPaymentEnabled).
     return agentCardPaymentEnabled
       ? base
       : base.filter((o) => o.value !== "CARD");
-  }, [restrictToCardCashDeposit, agentCardPaymentEnabled]);
+  }, [agentCardPaymentEnabled]);
 
   // Keep the selected Payment Type valid for the currently available options.
   // When the option set changes (e.g. the restriction kicks in and removes
