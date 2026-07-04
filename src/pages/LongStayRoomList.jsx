@@ -136,6 +136,17 @@ const refundableBadge = (refundable) =>
     <Badge bg="danger">Non-Refundable</Badge>
   );
 
+// Availability badge — mirrors /room-list's per-room status. "Available"
+// (green) when the hotel has an active availability header configured for the
+// room's category, "On Request" (amber) otherwise. Driven by room.roomStatus
+// from the backend (LongStayContractService#toDTO).
+const availabilityBadge = (roomStatus) =>
+  roomStatus === "On Request" ? (
+    <Badge bg="warning" text="dark">On Request</Badge>
+  ) : (
+    <Badge bg="success">Available</Badge>
+  );
+
 const costTypeBadge = (type) => {
   const t = (type || "").toUpperCase();
   if (t === "WEEKLY") {
@@ -262,7 +273,10 @@ function RoomCardGrid({
                 {room.roomTypeName || `Type #${room.hotelRoomTypeId}`}
               </div>
             </div>
-            {refundableBadge(room.refundable)}
+            <div className="d-flex flex-column align-items-end gap-1">
+              {room.roomStatus && availabilityBadge(room.roomStatus)}
+              {refundableBadge(room.refundable)}
+            </div>
           </div>
 
           {/* Attributes */}
@@ -423,6 +437,7 @@ function RoomCardList({
           {room.roomTypeName || `Type #${room.hotelRoomTypeId}`}
         </div>
         <div className="d-flex flex-wrap gap-2 mt-1">
+          {room.roomStatus && availabilityBadge(room.roomStatus)}
           {refundableBadge(room.refundable)}
           {room.meal && (
             <Badge bg="success" className="small">

@@ -117,7 +117,8 @@ const StatusBadge = ({ status }) => {
     const p = (part || "").trim().toUpperCase();
     if (p.startsWith("CONFIRMED") || p.startsWith("RECONFIRMED")) return "#16a34a";
     if (p.startsWith("CANCELLED")) return "#dc2626";
-    if (p === "ON REQUEST") return "#e67e22";
+    if (p.startsWith("REJECTED")) return "#dc2626";
+    if (p === "ON REQUEST" || p.startsWith("ONREQUEST")) return "#e67e22";
     return "#888";
   };
   const parts = String(status || "-").split("/");
@@ -197,6 +198,11 @@ export default function LongStayBookingDetailView() {
   // Reconfirm — long stay has no On Request flow, so no Reject branch.
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmingBooking, setConfirmingBooking] = useState(false);
+
+  // Reject (On-Request bookings only)
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectRemarks, setRejectRemarks] = useState("");
+  const [rejectingBooking, setRejectingBooking] = useState(false);
 
   // Agent Reference
   const [showConfirmStatusModal, setShowConfirmStatusModal] = useState(false);
@@ -303,22 +309,53 @@ export default function LongStayBookingDetailView() {
     normalizedConf === "CANCELLED";
   const isReconfirmed =
     detail?.reconfirmation === true || normalizedConf === "RECONFIRMED";
+  const isRejected = normalizedConf === "REJECTED";
 
-  // Non-cancel status label. Long-stay bookings are always created CONFIRMED,
-  // so an unset confirmationStatus is treated as "Confirmed".
-  const baseStatusLabel = isReconfirmed
-    ? "ReConfirmed"
-    : rawConfStatus && normalizedConf !== "CANCELLED"
-    ? rawConfStatus // e.g. "Rejected"
-    : "Confirmed";
+  // Availability origin captured at booking time. On-Request bookings carry a
+  // distinct lifecycle: OnRequest → Confirmed → Reconfirmed (or → Rejected).
+  const isOnRequestOrigin =
+    String(detail?.roomStatus || "").replace(/\s+/g, "").toUpperCase() ===
+    "ONREQUEST";
+  const isOnRequestConfirmed = detail?.onRequestConfirmed === true;
+  // On-Request booking still awaiting the first Confirm action.
+  const isOnRequestPending =
+    isOnRequestOrigin &&
+    !isOnRequestConfirmed &&
+    !isReconfirmed &&
+    !isRejected &&
+    !isCancelled;
 
-  const showsFinalDocs =
-    isReconfirmed || normalizedConf === "COMPLETED";
-  // Confirmed-or-better unlocks Agent Reference / Confirmation No.
+  // Compound progression label — mirrors the backend buildProgressionLabel so
+  // the live view reads the same as the persisted cancelledFromStatus. Split on
+  // "/" by StatusBadge, e.g. "OnRequest/Confirmed/Reconfirmed".
+  const buildLiveStatus = () => {
+    if (isOnRequestOrigin) {
+      if (isRejected) return "OnRequest/Rejected";
+      const parts = ["OnRequest"];
+      if (isOnRequestConfirmed || isReconfirmed) parts.push("Confirmed");
+      if (isReconfirmed) parts.push("Reconfirmed");
+      return parts.join("/");
+    }
+    if (isRejected) return "Rejected";
+    // Directly-created Reconfirmed bookings show just "Reconfirmed"; a Confirmed
+    // booking later reconfirmed shows the "Confirmed/Reconfirmed" path.
+    if (String(detail?.bookingStatus || "").toUpperCase() === "RECONFIRMED")
+      return "Reconfirmed";
+    return isReconfirmed ? "Confirmed/Reconfirmed" : "Confirmed";
+  };
+
+  const showsFinalDocs = isReconfirmed || normalizedConf === "COMPLETED";
+  // Confirmed-or-better unlocks Agent Reference / Confirmation No. — but NOT
+  // while an On-Request booking is still pending its first Confirm, and never
+  // once Rejected.
   const isConfirmedOrLater =
-    isReconfirmed ||
-    baseStatusLabel.toUpperCase() === "CONFIRMED" ||
-    normalizedConf === "COMPLETED";
+    !isOnRequestPending &&
+    !isRejected &&
+    (isReconfirmed ||
+      isOnRequestConfirmed ||
+      (!isOnRequestOrigin &&
+        String(detail?.bookingStatus || "").toUpperCase() !== "ONREQUEST") ||
+      normalizedConf === "COMPLETED");
 
   // Pre-cancellation doc / reference gating — read the persisted
   // cancelledFromStatus when present, else the live flags.
@@ -326,22 +363,24 @@ export default function LongStayBookingDetailView() {
     .replace(/\s+/g, "")
     .toUpperCase();
   const cancelledShowsFinalDocs =
-    priorStatus === "RECONFIRMED" || priorStatus === "COMPLETED" || isReconfirmed;
+    priorStatus.includes("RECONFIRMED") ||
+    priorStatus.includes("COMPLETED") ||
+    isReconfirmed;
   const cancelledFromConfirmedOrLater =
-    priorStatus === "CONFIRMED" ||
-    priorStatus === "RECONFIRMED" ||
-    priorStatus === "COMPLETED" ||
+    priorStatus.includes("CONFIRMED") ||
+    priorStatus.includes("RECONFIRMED") ||
+    priorStatus.includes("COMPLETED") ||
     isConfirmedOrLater;
 
-  // Status label fed to the badge. When cancelled, surface the prior status so
-  // e.g. a confirmed booking shows "Confirmed/Cancelled" (not just
-  // "Cancelled"). cancelledFromStatus is persisted by the cancel flow; for
-  // older rows we reconstruct it (every long-stay starts Confirmed).
+  // Status label fed to the badge. When cancelled, surface the prior progression
+  // so e.g. a confirmed booking shows "Confirmed/Cancelled" and an on-request
+  // one shows "OnRequest/Confirmed/Reconfirmed/Cancelled". cancelledFromStatus
+  // is persisted by the cancel flow; older rows fall back to the live builder.
   const displayStatus = isCancelled
     ? detail?.cancelledFromStatus
       ? `${detail.cancelledFromStatus}/Cancelled`
-      : `${baseStatusLabel}/Cancelled`
-    : baseStatusLabel;
+      : `${buildLiveStatus()}/Cancelled`
+    : buildLiveStatus();
 
   // Cancel button gate: cancellation isn't allowed once the stay has started.
   const isPastCheckIn = (() => {
@@ -383,7 +422,9 @@ export default function LongStayBookingDetailView() {
     }
   };
 
-  // ── Reconfirm (no Reject — long stay has no On Request flow) ───────
+  // ── Confirm / Reconfirm ─────────────────────────────────────────────
+  // One endpoint drives both steps: for an On-Request booking still pending,
+  // the backend advances OnRequest → Confirmed; otherwise it Reconfirms.
   const openConfirmModal = () => setShowConfirmModal(true);
 
   const confirmBooking = async () => {
@@ -395,15 +436,49 @@ export default function LongStayBookingDetailView() {
         { confirmStatus: true }
       );
       setShowConfirmModal(false);
-      toast.success("Booking reconfirmed successfully!");
+      toast.success(
+        isOnRequestPending
+          ? "Booking confirmed successfully!"
+          : "Booking reconfirmed successfully!"
+      );
       await fetchDetail();
     } catch (error) {
       toast.error(
         error.response?.data?.message ||
-          "Failed to reconfirm booking. Please try again."
+          "Failed to update booking. Please try again."
       );
     } finally {
       setConfirmingBooking(false);
+    }
+  };
+
+  // ── Reject (On-Request bookings only) ───────────────────────────────
+  const openRejectModal = () => {
+    setRejectRemarks("");
+    setShowConfirmModal(false);
+    setShowRejectModal(true);
+  };
+
+  const rejectBooking = async () => {
+    if (!bookingId) return;
+    try {
+      setRejectingBooking(true);
+      await axiosInstance.patch(
+        `/api/longStayBooking/${bookingId}/confirmation-status`,
+        {
+          action: "REJECT",
+          rejectedBy: localStorage.getItem("UserName") || "",
+          rejectionRemarks: rejectRemarks.trim() || null,
+        }
+      );
+      setShowRejectModal(false);
+      setRejectRemarks("");
+      toast.success("Booking rejected");
+      await fetchDetail();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to reject booking.");
+    } finally {
+      setRejectingBooking(false);
     }
   };
 
@@ -1311,16 +1386,19 @@ export default function LongStayBookingDetailView() {
                       disabled={isPastCheckIn}
                       title={
                         isPastCheckIn
-                          ? "Cancellation is not allowed after the check-in date."
+                          ? "This booking cannot be cancelled because the check-in date has already passed."
                           : undefined
                       }
                     >
                       CANCEL
                     </button>
 
-                    {!showsFinalDocs && (
+                    {/* Single Confirm/Reconfirm button. On-Request bookings show
+                        CONFIRM (the Reject action lives inside its modal); once
+                        Confirmed they Reconfirm like any other booking. */}
+                    {!isRejected && (isOnRequestPending || !showsFinalDocs) && (
                       <button style={BTN_TEAL} onClick={openConfirmModal}>
-                        RECONFIRM
+                        {isOnRequestPending ? "CONFIRM" : "RECONFIRM"}
                       </button>
                     )}
 
@@ -1696,9 +1774,10 @@ export default function LongStayBookingDetailView() {
                   </Modal.Footer>
                 </Modal>
 
-                {/* ── Reconfirm Booking Modal ─────────────────────────
-                    No Reject branch — long-stay has no "On Request" flow.
-                    Reject is the hotel-side on-request-pending action only. */}
+                {/* ── Confirm / Reconfirm Booking Modal ───────────────
+                    Same modal drives both steps: an On-Request booking still
+                    pending confirms first (OnRequest → Confirmed); everything
+                    else reconfirms. Wording follows isOnRequestPending. */}
                 <Modal
                   show={showConfirmModal}
                   onHide={() => {
@@ -1717,13 +1796,17 @@ export default function LongStayBookingDetailView() {
                   >
                     <Modal.Title className="fw-bold d-flex align-items-center">
                       <FaExclamationCircle className="me-2 text-warning" />
-                      <span>Reconfirm Booking</span>
+                      <span>
+                        {isOnRequestPending ? "Confirm Booking" : "Reconfirm Booking"}
+                      </span>
                     </Modal.Title>
                   </Modal.Header>
                   <Modal.Body style={{ padding: "1.5rem" }}>
                     <div className="text-center">
                       <p className="fs-5 mb-3">
-                        Are you sure you want to reconfirm the booking?
+                        {isOnRequestPending
+                          ? "Are you sure you want to confirm this On-Request booking?"
+                          : "Are you sure you want to reconfirm the booking?"}
                       </p>
                       {(detail.bookingCode || detail.hotelName) && (
                         <div className="text-muted small mb-3">
@@ -1748,13 +1831,17 @@ export default function LongStayBookingDetailView() {
                       borderTop: "1px solid #dee2e6",
                     }}
                   >
-                    <Button
-                      variant="secondary"
-                      onClick={() => setShowConfirmModal(false)}
-                      disabled={confirmingBooking}
-                    >
-                      Cancel
-                    </Button>
+                    {/* Reject action shown only in the Confirm Booking
+                        (on-request) flow. The Reconfirm flow hides it. */}
+                    {isOnRequestPending && (
+                      <Button
+                        variant="outline-danger"
+                        onClick={openRejectModal}
+                        disabled={confirmingBooking}
+                      >
+                        Reject
+                      </Button>
+                    )}
                     <Button
                       variant="success"
                       onClick={confirmBooking}
@@ -1767,10 +1854,100 @@ export default function LongStayBookingDetailView() {
                             size="sm"
                             className="me-2"
                           />
-                          Confirming...
+                          {isOnRequestPending ? "Confirming..." : "Reconfirming..."}
                         </>
+                      ) : isOnRequestPending ? (
+                        "Confirm"
                       ) : (
                         "Reconfirm"
+                      )}
+                    </Button>
+                  </Modal.Footer>
+                </Modal>
+
+                {/* ── Reject Booking Modal (On-Request bookings) ─────── */}
+                <Modal
+                  show={showRejectModal}
+                  onHide={() => {
+                    if (!rejectingBooking) setShowRejectModal(false);
+                  }}
+                  centered
+                  backdrop="static"
+                  keyboard={false}
+                >
+                  <Modal.Header
+                    closeButton={!rejectingBooking}
+                    style={{
+                      backgroundColor: "#fff",
+                      borderBottom: "2px solid #e9ecef",
+                    }}
+                  >
+                    <Modal.Title className="fw-bold d-flex align-items-center">
+                      <FaExclamationCircle className="me-2 text-danger" />
+                      <span>Reject Booking</span>
+                    </Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body style={{ padding: "1.5rem" }}>
+                    <p className="fs-6 mb-3">
+                      Are you sure you want to reject this On-Request booking?
+                      {(detail.bookingCode || detail.hotelName) && (
+                        <span className="d-block text-muted small mt-2">
+                          {detail.bookingCode && (
+                            <span className="d-block">
+                              <strong>Booking Code:</strong> {detail.bookingCode}
+                            </span>
+                          )}
+                          {detail.hotelName && (
+                            <span className="d-block">
+                              <strong>Hotel:</strong> {detail.hotelName}
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </p>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold small">
+                        Rejection remarks (optional)
+                      </Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={3}
+                        value={rejectRemarks}
+                        onChange={(e) => setRejectRemarks(e.target.value)}
+                        placeholder="Reason for rejection"
+                        disabled={rejectingBooking}
+                      />
+                    </Form.Group>
+                  </Modal.Body>
+                  <Modal.Footer
+                    style={{
+                      backgroundColor: "#f8f9fa",
+                      borderTop: "1px solid #dee2e6",
+                    }}
+                  >
+                    <Button
+                      variant="secondary"
+                      onClick={() => setShowRejectModal(false)}
+                      disabled={rejectingBooking}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="danger"
+                      onClick={rejectBooking}
+                      disabled={rejectingBooking}
+                    >
+                      {rejectingBooking ? (
+                        <>
+                          <Spinner
+                            animation="border"
+                            size="sm"
+                            className="me-2"
+                          />
+                          Rejecting...
+                        </>
+                      ) : (
+                        "Reject"
                       )}
                     </Button>
                   </Modal.Footer>

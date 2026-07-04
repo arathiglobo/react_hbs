@@ -207,6 +207,12 @@ export default function LongStayBookingPage() {
   // exactly like the hotel flow's "no deadline applies" branch.
   // ────────────────────────────────────────────────────────────────
   const isRefundableRate = draft?.room?.refundable === true;
+  // On-Request rate: the room the operator picked had no configured
+  // availability (roomStatus "On Request" from the room list). On-Request
+  // takes precedence over the refundable/voucher rules — the booking is
+  // created as OnRequest even when the rate is Non-Refundable (mirrors the
+  // hotel flow's isOnRequestRate branch).
+  const isOnRequestRate = draft?.room?.roomStatus === "On Request";
   const hasCancellationPolicy = Array.isArray(
     draft?.contract?.cancellationPolicy,
   ) && draft.contract.cancellationPolicy.length > 0;
@@ -227,9 +233,9 @@ export default function LongStayBookingPage() {
     return today > cancellationDeadline;
   })();
   // Only shown for Refundable rates whose deadline hasn't passed.
-  // Non-refundable / past-deadline skip the choice.
+  // Non-refundable / past-deadline / On-Request skip the choice.
   const showVoucherChoice =
-    isRefundableRate && !!cancellationDeadline && !isOutsideDeadline;
+    !isOnRequestRate && isRefundableRate && !!cancellationDeadline && !isOutsideDeadline;
   // Resolved status that will travel to the backend on
   // payload.bookingFlowStatus. Same rules as HotelBookingPage:
   //   • Non-refundable       → RECONFIRMED
@@ -238,6 +244,7 @@ export default function LongStayBookingPage() {
   //       - "Book Now & Voucher later" → CONFIRMED
   //       - otherwise                  → RECONFIRMED
   const resolvedBookingFlowStatus = (() => {
+    if (isOnRequestRate) return "ONREQUEST";
     if (!isRefundableRate) return "RECONFIRMED";
     if (isOutsideDeadline) return "RECONFIRMED";
     return bookingConfirmation === "Book Now & Voucher later"
@@ -380,6 +387,10 @@ export default function LongStayBookingPage() {
         // (refundable, deadlineDate, bookingConfirmation).
         bookingConfirmation: bookingConfirmation || "Book & Voucher",
         bookingFlowStatus: resolvedBookingFlowStatus,
+        // Availability origin captured from the room list badge so the backend
+        // starts On-Request bookings as ONREQUEST and drives the credit
+        // lifecycle (charged only on Reconfirm).
+        roomStatus: draft?.room?.roomStatus || "Available",
         isBookandVoucher: isRefundableRate
           ? bookingConfirmation === "Book & Voucher"
           : false,

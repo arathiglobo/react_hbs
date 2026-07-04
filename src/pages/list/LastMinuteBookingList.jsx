@@ -12,6 +12,7 @@ import {
   Row,
   Col,
   Pagination,
+  Button,
 } from "react-bootstrap";
 import {
   FaEye,
@@ -25,9 +26,42 @@ import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import { formatDateTime } from "../../utils/dateUtils";
+// Shared "hotel booking list" look (Lexend, red/white theme, table/card/
+// pagination styling). Scoped under .hbl-modern — same stylesheet the
+// /booking-details/hotel-booking-list and long-stay list use, so all three
+// pages share one uniform look. Visual only; no logic change.
+import "../../styles/HotelBookingListModern.css";
 
 // Rows-per-page choices — same set as /booking-details/hotel-booking-list.
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
+
+// Column-width hints kept in sync with HotelBookingList / LongStayBookingList so
+// all three booking lists line up visually under the shared hbl-modern skin.
+const COLUMN_WIDTHS = {
+  sn: "40px",
+  customerName: "150px",
+  bookingCode: "100px",
+  bookDate: "95px",
+  bookingDetails: "240px",
+  nights: "70px",
+  total: "110px",
+  status: "110px",
+  action: "70px",
+};
+
+// "dd/mm/yyyy" — same shape the hotel / long-stay lists use in their table
+// cells so dates render identically across all three pages.
+const formatShortDate = (dateString) => {
+  if (!dateString) return "";
+  const normalized = String(dateString).includes("T")
+    ? dateString
+    : `${dateString}T00:00:00`;
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return `${day}/${month}/${d.getFullYear()}`;
+};
 
 const STATUS_META = {
   CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
@@ -37,6 +71,29 @@ const STATUS_META = {
   PENDING:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
   Cancelled: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+  "On Request": { label: "On Request", bg: "#fff3e0", color: "#e67e22", dot: "#f59e0b" },
+  Rejected: { label: "Rejected", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+};
+
+// Derive the display status label from a booking's lifecycle fields — mirrors
+// /booking-details/hotel-booking-list. An On-Request booking is engine-CONFIRMED
+// (so it can follow the reconfirm flow) but must DISPLAY as "On Request" until it
+// is reconfirmed; the list keys that off roomStatus exactly like the hotel list.
+const deriveDisplayStatus = (b) => {
+  const conf = String(b?.confirmationStatus || "").replace(/\s+/g, "").toLowerCase();
+  const engine = String(b?.bookingStatus || "").replace(/\s+/g, "").toUpperCase();
+  if (b?.isCancelled === true || engine === "CANCELLED" || conf === "cancelled") {
+    return "Cancelled";
+  }
+  if (conf === "rejected") return "Rejected";
+  const isReconfirmed =
+    b?.reconfirmation === true || engine === "RECONFIRMED" || conf === "reconfirmed";
+  if (isReconfirmed) return "ReConfirmed";
+  const isOnRequestRoom = /^on\s*request$/i.test(String(b?.roomStatus || "").trim());
+  if (isOnRequestRoom) return "On Request";
+  if (engine === "CONFIRMED" || conf === "confirmed") return "Confirmed";
+  if (engine === "REQUESTED" || conf === "requested") return "Requested";
+  return b?.confirmationStatus || "Confirmed";
 };
 
 // Every customer/guest name on a booking. The backend now sends a
@@ -71,16 +128,15 @@ const BOOKING_TYPE_OPTIONS = [
 // confirmationStatus ("ReConfirmed" / "Confirmed" / "Requested").
 const matchesBookingType = (booking, type) => {
   if (!type || type === "all") return true;
-  const isCancelled = booking?.isCancelled === true;
-  if (type === "cancelled") return isCancelled;
-  if (isCancelled) return false;
+  // Match against the derived display label so the filter stays consistent
+  // with the Status column (e.g. an On-Request booking is filterable).
+  const derived = deriveDisplayStatus(booking).replace(/\s+/g, "").toLowerCase();
+  if (type === "cancelled") return derived === "cancelled";
+  if (derived === "cancelled") return false;
 
-  const status = String(booking?.confirmationStatus || "")
-    .replace(/\s+/g, "")
-    .toLowerCase();
-  if (type === "reconfirmed") return status === "reconfirmed";
-  if (type === "confirmed") return status === "confirmed";
-  if (type === "requested") return status === "requested";
+  if (type === "reconfirmed") return derived === "reconfirmed";
+  if (type === "confirmed") return derived === "confirmed";
+  if (type === "requested") return derived === "onrequest" || derived === "requested";
 
   const co = booking?.checkOutDate ? new Date(booking.checkOutDate) : null;
   if (!co || isNaN(co.getTime())) return type === "upcoming";
@@ -126,16 +182,16 @@ const StatusPill = ({ meta, raw }) => {
  * Last Minute flow. Talks to /api/last-minute-booking/list, /api/last-minute-
  * booking/{id} (view), and /api/last-minute-booking/{id}/cancel.
  *
- * Columns: S.N · Customer · Booking Code · Hotel · Supplier · Supplier Ref ·
- * Check-in · Check-out · Total · Payment Method · Status · Actions.
+ * Columns: S.N · Customer · Booking Code · Hotel · Check-in · Check-out ·
+ * Total · Payment Method · Status · Actions.
  * Action column is the eye icon only; it navigates to
  * /booking-details/last-minute-booking/:id where Voucher (PDF in new
  * tab), Invoice (/invoice?bookingId=... in new tab), and Cancel
  * (SweetAlert confirm + PATCH .../cancel) live as buttons at the
  * bottom-left of the detail view.
  *
- * Supplier / Supplier Ref / Payment Method may be left blank by the backend
- * and rendered as "-" — they are populated by ops at a later stage.
+ * Payment Method may be left blank by the backend and rendered as "-" —
+ * it is populated by ops at a later stage.
  */
 export default function LastMinuteBookingList() {
   const navigate = useNavigate();
@@ -144,6 +200,8 @@ export default function LastMinuteBookingList() {
   const [search, setSearch] = useState("");
   // Booking Type filter — same control as /booking-details/hotel-booking-list.
   const [bookingType, setBookingType] = useState("all");
+  // Check-in Date filter — exact-day match, mirrors /booking-details/hotel-booking-list.
+  const [checkInDateFilter, setCheckInDateFilter] = useState("");
   // Time Period filter (by check-in month/year) — same control + position as
   // /booking-details/hotel-booking-list. Either field can be set independently.
   const [selectedMonth, setSelectedMonth] = useState("");
@@ -189,7 +247,11 @@ export default function LastMinuteBookingList() {
 
   // Client-side filter by Booking Type, Time Period (check-in month/year),
   // then search term (booking code / customer / hotel name).
+  // Exact check-in day match (YYYY-MM-DD from the <input type="date">).
+  const checkInPick = (checkInDateFilter || "").trim();
+  const toIsoDay = (d) => (d ? String(d).split("T")[0].trim() : "");
   const filtered = bookings.filter((b) => {
+    if (checkInPick && toIsoDay(b.checkInDate) !== checkInPick) return false;
     if (!matchesBookingType(b, bookingType)) return false;
     // Time Period — match the check-in date's month/year (mirrors the hotel
     // list, whose month/year primarily filters on checkInDate). Each field is
@@ -238,15 +300,38 @@ export default function LastMinuteBookingList() {
   // stranded on an out-of-range page.
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, bookingType, selectedMonth, selectedYear, perPage]);
+  }, [search, bookingType, checkInDateFilter, selectedMonth, selectedYear, perPage]);
 
   const goToPage = (p) => {
     if (p < 1 || p > totalPages) return;
     setCurrentPage(p);
   };
 
+  // Shared table cell/header styling — identical to HotelBookingList /
+  // LongStayBookingList so the three tables render uniformly.
+  const baseCellStyle = {
+    padding: "0.5rem 0.6rem",
+    fontSize: "0.8rem",
+    border: "1px solid #dee2e6",
+    verticalAlign: "middle",
+    whiteSpace: "normal",
+    overflow: "visible",
+    wordBreak: "break-word",
+    lineHeight: 1.4,
+  };
+
+  const baseHeaderStyle = {
+    padding: "0.45rem 0.6rem",
+    fontWeight: 600,
+    textTransform: "uppercase",
+    color: "#495057",
+    border: "1px solid #dee2e6",
+    whiteSpace: "normal",
+    lineHeight: 1.2,
+  };
+
   return (
-    <div className="min-vh-100 bg-light d-flex flex-column">
+    <div className="min-vh-100 bg-light d-flex flex-column hbl-modern">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
@@ -264,10 +349,10 @@ export default function LastMinuteBookingList() {
           >
             {/* Header: Title + Search (left) | Time Period (right) — mirrors
                 /booking-details/hotel-booking-list */}
-            <div className="d-flex justify-content-between align-items-end mb-3">
-              <div>
+            <div className="d-flex justify-content-between align-items-end mb-3 hbl-header">
+              <div className="hbl-header-left">
                 <h3 className="fw-bold text-dark mb-2">Last Minute Bookings</h3>
-                <InputGroup style={{ height: "40px", width: "300px" }}>
+                <InputGroup className="hbl-search" style={{ height: "40px", width: "300px" }}>
                   <InputGroup.Text
                     style={{
                       backgroundColor: "#f8f9fa",
@@ -292,7 +377,7 @@ export default function LastMinuteBookingList() {
                 </InputGroup>
               </div>
               <Card
-                className="shadow-sm border-0"
+                className="shadow-sm border-0 hbl-timecard"
                 style={{ borderRadius: "8px", minWidth: "260px" }}
               >
                 <Card.Body className="p-3">
@@ -348,15 +433,14 @@ export default function LastMinuteBookingList() {
                   style={{ borderRadius: "8px" }}
                 >
                   <Card.Body className="p-3">
-                    <h6
-                      className="mb-2 fw-bold text-dark"
-                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
-                    >
-                      Booking Type
-                    </h6>
-
                     <Row className="g-2">
                       <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Booking Type
+                        </h6>
                         <Form.Select
                           value={bookingType}
                           onChange={(e) => setBookingType(e.target.value)}
@@ -370,6 +454,39 @@ export default function LastMinuteBookingList() {
                             </option>
                           ))}
                         </Form.Select>
+                      </Col>
+                      {/* Check-in Date filter — mirrors /booking-details/hotel-booking-list. */}
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Check-in Date
+                        </h6>
+                        <div className="d-flex gap-2">
+                          <Form.Control
+                            type="date"
+                            value={checkInDateFilter}
+                            onChange={(e) => setCheckInDateFilter(e.target.value)}
+                            size="sm"
+                            aria-label="Check-in date filter"
+                            style={{ fontSize: "0.85rem", height: "46px" }}
+                          />
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            onClick={() => setCheckInDateFilter("")}
+                            disabled={!checkInDateFilter}
+                            aria-label="Clear check-in date filter"
+                            style={{
+                              fontSize: "0.85rem",
+                              height: "46px",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            Clear
+                          </Button>
+                        </div>
                       </Col>
                     </Row>
                   </Card.Body>
@@ -409,37 +526,77 @@ export default function LastMinuteBookingList() {
                   </div>
                 ) : (
                   <>
-                    <div className="table-responsive saas-table-wrap">
-                      <Table hover className="mb-0 align-middle saas-table">
-                        <thead>
+                    <div
+                      className="thin-scrollbar"
+                      style={{ overflowX: "auto", width: "100%" }}
+                    >
+                      <Table
+                        hover
+                        size="sm"
+                        className="mb-0 align-middle table-bordered hbl-table"
+                        style={{
+                          tableLayout: "auto",
+                          width: "100%",
+                          fontSize: "0.78rem",
+                          borderCollapse: "separate",
+                          borderSpacing: 0,
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        <thead
+                          style={{
+                            backgroundColor: "#f8f9fa",
+                            borderBottom: "2px solid #dee2e6",
+                            boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                            fontSize: "0.7rem",
+                            letterSpacing: "0.03em",
+                          }}
+                        >
                           <tr>
-                            <th style={{ width: "48px" }}>#</th>
-                            <th>Customer</th>
-                            <th>Booking</th>
-                            <th>Hotel</th>
-                            <th>Supplier</th>
-                            <th>Supplier Ref</th>
-                            <th>Stay</th>
-                            <th className="text-end">Total</th>
-                            <th>Payment</th>
-                            <th>Status</th>
-                            <th className="text-center" style={{ width: "70px" }}>Action</th>
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.sn }}>
+                              S.N
+                            </th>
+                            <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.customerName }}>
+                              Customer Name
+                            </th>
+                            <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingCode }}>
+                              Booking Code
+                            </th>
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.bookDate }}>
+                              Book Date
+                            </th>
+                            <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingDetails }}>
+                              Booking Details
+                            </th>
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.nights }}>
+                              Nights
+                            </th>
+                            <th style={{ ...baseHeaderStyle, textAlign: "right", width: COLUMN_WIDTHS.total }}>
+                              Total
+                            </th>
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
+                              Status
+                            </th>
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.action }}>
+                              Action
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
                           {pageItems.map((b, idx) => {
-                            const statusText = b.isCancelled
-                              ? "Cancelled"
-                              : b.confirmationStatus || "Confirmed";
+                            const statusText = deriveDisplayStatus(b);
                             const sMeta = STATUS_META[statusText];
                             return (
                               <tr key={b.bookingId}>
-                                <td className="text-muted">{startIdx + idx + 1}</td>
-                                {/* Customer — a booking can hold many guests.
-                                    Show the first prominently; the rest sit
-                                    behind a "+N more" badge that opens the
-                                    Customers modal. */}
-                                <td>
+                                <td
+                                  className="text-muted fw-semibold"
+                                  style={{ ...baseCellStyle, textAlign: "center", color: "#6c757d", width: COLUMN_WIDTHS.sn }}
+                                >
+                                  {startIdx + idx + 1}
+                                </td>
+                                {/* Customer — first guest prominent, rest behind
+                                    a "+N more" badge that opens the modal. */}
+                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.customerName }}>
                                   {(() => {
                                     const names = getGuestNames(b);
                                     const first = names[0] || "-";
@@ -454,11 +611,7 @@ export default function LastMinuteBookingList() {
                                           style={{ gap: "0.3rem" }}
                                         >
                                           <FaUser
-                                            style={{
-                                              color: "#98a2b3",
-                                              fontSize: "0.72rem",
-                                              flexShrink: 0,
-                                            }}
+                                            style={{ color: "#6c757d", fontSize: "0.78rem", flexShrink: 0 }}
                                           />
                                           <span className="fw-medium text-dark">
                                             {first}
@@ -482,7 +635,7 @@ export default function LastMinuteBookingList() {
                                               cursor: "pointer",
                                               border: "1px solid #cfe2ff",
                                               fontWeight: 600,
-                                              fontSize: "0.68rem",
+                                              fontSize: "0.7rem",
                                             }}
                                           >
                                             +{extra} more
@@ -492,32 +645,49 @@ export default function LastMinuteBookingList() {
                                     );
                                   })()}
                                 </td>
-                                <td>
-                                  <span
-                                    className="fw-semibold"
-                                    style={{ color: "#1d4ed8" }}
-                                  >
+                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.bookingCode }}>
+                                  <span className="fw-bold text-primary">
                                     {b.bookingCode || "-"}
                                   </span>
                                 </td>
-                                <td>{b.hotelName || "-"}</td>
-                                <td>
-                                  {b.supplierName && b.supplierName !== "Inhouse"
-                                    ? b.supplierName
-                                    : "-"}
+                                <td
+                                  className="text-muted"
+                                  style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.bookDate }}
+                                >
+                                  {formatShortDate(b.bookingDate) ||
+                                    formatDateTime(b.bookingDate) ||
+                                    "-"}
                                 </td>
-                                <td>
-                                  {b.supplierReference && b.supplierReference !== "0"
-                                    ? b.supplierReference
-                                    : "-"}
-                                </td>
-                                <td style={{ whiteSpace: "nowrap" }}>
-                                  <div>{formatDateTime(b.checkInDate)}</div>
-                                  <div className="text-muted" style={{ fontSize: "0.7rem" }}>
-                                    → {formatDateTime(b.checkOutDate)}
+                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.bookingDetails }}>
+                                  <div
+                                    className="d-flex align-items-center"
+                                    style={{ gap: "0.35rem", flexWrap: "wrap" }}
+                                  >
+                                    <span
+                                      className="fw-semibold text-dark"
+                                      style={{ fontSize: "0.875rem" }}
+                                    >
+                                      {b.hotelName || "-"}
+                                    </span>
+                                    {formatShortDate(b.checkInDate) &&
+                                      formatShortDate(b.checkOutDate) && (
+                                        <span
+                                          className="text-muted"
+                                          style={{ fontSize: "0.75rem" }}
+                                        >
+                                          ({formatShortDate(b.checkInDate)} -{" "}
+                                          {formatShortDate(b.checkOutDate)})
+                                        </span>
+                                      )}
                                   </div>
                                 </td>
-                                <td className="text-end" style={{ whiteSpace: "nowrap" }}>
+                                <td
+                                  className="text-muted"
+                                  style={{ ...baseCellStyle, textAlign: "center", fontFamily: "monospace", width: COLUMN_WIDTHS.nights }}
+                                >
+                                  {b.nights ?? "-"}
+                                </td>
+                                <td style={{ ...baseCellStyle, textAlign: "right", width: COLUMN_WIDTHS.total, whiteSpace: "nowrap" }}>
                                   <span className="fw-semibold text-dark">
                                     {b.displayCurrencyCode &&
                                     b.displayCurrencyCode !== "AED" &&
@@ -528,29 +698,33 @@ export default function LastMinuteBookingList() {
                                         : "-"}
                                   </span>
                                 </td>
-                                <td>{b.paymentMethod || "-"}</td>
-                                <td>
+                                <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
                                   <StatusPill meta={sMeta} raw={statusText} />
                                 </td>
-                                <td className="text-center">
-                                  <button
-                                    type="button"
-                                    className="btn btn-sm border-0 p-1"
-                                    style={{
-                                      backgroundColor: "#eff6ff",
-                                      color: "#1d4ed8",
-                                      borderRadius: "6px",
-                                    }}
-                                    onClick={() =>
-                                      navigate(
-                                        `/booking-details/last-minute-booking/${b.bookingId}`,
-                                        { state: { booking: b } },
-                                      )
-                                    }
-                                    title="View details"
-                                  >
-                                    <FaEye style={{ fontSize: "12px" }} />
-                                  </button>
+                                <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.action }}>
+                                  <div className="d-flex justify-content-center align-items-center">
+                                    <FaEye
+                                      role="button"
+                                      tabIndex={0}
+                                      title="View full booking details"
+                                      style={{ fontSize: "18px", color: "#007bff", cursor: "pointer" }}
+                                      onClick={() =>
+                                        navigate(
+                                          `/booking-details/last-minute-booking/${b.bookingId}`,
+                                          { state: { booking: b } },
+                                        )
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                          e.preventDefault();
+                                          navigate(
+                                            `/booking-details/last-minute-booking/${b.bookingId}`,
+                                            { state: { booking: b } },
+                                          );
+                                        }
+                                      }}
+                                    />
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -559,33 +733,8 @@ export default function LastMinuteBookingList() {
                       </Table>
                     </div>
 
-                    <style>{`
-                      .saas-table-wrap { border: 1px solid #eaecf0; border-radius: 8px; overflow-x: auto; }
-                      .saas-table { font-size: 0.8rem; margin-bottom: 0; }
-                      .saas-table thead th {
-                        background-color: #f9fafb;
-                        color: #667085;
-                        font-size: 0.68rem;
-                        font-weight: 600;
-                        text-transform: uppercase;
-                        letter-spacing: 0.04em;
-                        border-bottom: 1px solid #eaecf0;
-                        border-top: none;
-                        padding: 0.65rem 0.75rem;
-                        white-space: nowrap;
-                      }
-                      .saas-table tbody td {
-                        padding: 0.65rem 0.75rem;
-                        border-top: 1px solid #f2f4f7;
-                        vertical-align: middle;
-                        color: #344054;
-                      }
-                      .saas-table tbody tr:first-child td { border-top: none; }
-                      .saas-table tbody tr:hover { background-color: #fafbfc; }
-                    `}</style>
-
                     {/* Pagination footer — mirrors /booking-details/hotel-booking-list */}
-                    <div className="d-flex justify-content-between align-items-center flex-wrap gap-3 mt-3">
+                    <div className="d-flex justify-content-between align-items-center flex-wrap gap-3 mt-3 hbl-pagination-bar">
                       <div className="text-muted" style={{ fontSize: "0.875rem" }}>
                         Showing{" "}
                         <span className="fw-semibold text-dark">{displayStart}</span>{" "}

@@ -12,6 +12,7 @@ import {
   InputGroup,
   Badge,
   Modal,
+  Button,
 } from "react-bootstrap";
 import {
   FaEye,
@@ -139,6 +140,8 @@ export default function LongStayBookingList() {
   // single fetch.
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
+  // Check-in Date filter — exact-day match, mirrors HotelBookingList.
+  const [checkInDateFilter, setCheckInDateFilter] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
 
@@ -194,11 +197,16 @@ export default function LongStayBookingList() {
   const filteredBookings = useMemo(() => {
     const now = new Date();
     const needle = search.trim().toLowerCase();
+    // YYYY-MM-DD from the <input type="date">; compare against the booking's
+    // check-in normalised to the same day form.
+    const checkInPick = (checkInDateFilter || "").trim();
+    const toIsoDay = (d) => (d ? String(d).split("T")[0].trim() : "");
     return (bookings || []).filter((b) => {
       const isCancelled =
         b.bookingStatus === "CANCELLED" || b.cancelStatus === true;
       const checkIn = b.checkInDate ? new Date(b.checkInDate) : null;
       const checkOut = b.checkOutDate ? new Date(b.checkOutDate) : null;
+      if (checkInPick && toIsoDay(b.checkInDate) !== checkInPick) return false;
       if (status === "cancelled" && !isCancelled) return false;
       if (status === "upcoming") {
         if (isCancelled) return false;
@@ -256,12 +264,12 @@ export default function LongStayBookingList() {
       }
       return true;
     });
-  }, [bookings, search, status, selectedMonth, selectedYear]);
+  }, [bookings, search, status, checkInDateFilter, selectedMonth, selectedYear]);
 
   // Reset to page 1 whenever a filter changes.
   useEffect(() => {
     setPage(1);
-  }, [search, status, selectedMonth, selectedYear, perPage]);
+  }, [search, status, checkInDateFilter, selectedMonth, selectedYear, perPage]);
 
   // Pagination derived from the filtered list (single client-side window).
   const totalEntries = filteredBookings.length;
@@ -394,14 +402,14 @@ export default function LongStayBookingList() {
                   style={{ borderRadius: "8px" }}
                 >
                   <Card.Body className="p-3">
-                    <h6
-                      className="mb-2 fw-bold text-dark"
-                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
-                    >
-                      Booking Type
-                    </h6>
                     <Row className="g-2">
                       <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Booking Type
+                        </h6>
                         <Form.Select
                           value={status}
                           onChange={(e) => setStatus(e.target.value)}
@@ -415,6 +423,39 @@ export default function LongStayBookingList() {
                             </option>
                           ))}
                         </Form.Select>
+                      </Col>
+                      {/* Check-in Date filter — mirrors HotelBookingList. */}
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Check-in Date
+                        </h6>
+                        <div className="d-flex gap-2">
+                          <Form.Control
+                            type="date"
+                            value={checkInDateFilter}
+                            onChange={(e) => setCheckInDateFilter(e.target.value)}
+                            size="sm"
+                            aria-label="Check-in date filter"
+                            style={{ fontSize: "0.85rem", height: "46px" }}
+                          />
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            onClick={() => setCheckInDateFilter("")}
+                            disabled={!checkInDateFilter}
+                            aria-label="Clear check-in date filter"
+                            style={{
+                              fontSize: "0.85rem",
+                              height: "46px",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            Clear
+                          </Button>
+                        </div>
                       </Col>
                     </Row>
                   </Card.Body>
