@@ -261,7 +261,7 @@ const AgentView = () => {
       .then((res) => {
         toast.success(
           res.data?.message ||
-            `Card payment ${enabled ? "enabled" : "disabled"} for agent`,
+            `Payment gateway ${enabled ? "enabled" : "disabled"} for agent`,
         );
         setAgent((prev) =>
           prev ? { ...prev, cardPaymentEnabled: enabled } : prev,
@@ -270,7 +270,7 @@ const AgentView = () => {
       .catch((err) =>
         toast.error(
           err.response?.data?.message ||
-            "Failed to update card payment setting",
+            "Failed to update payment gateway setting",
         ),
       )
       .finally(() => setCardPaymentUpdating(false));
@@ -1113,7 +1113,7 @@ const AgentView = () => {
               className="fw-bold"
               style={{ fontSize: "1.05rem", color: "#b45309" }}
             >
-              Allow Card payment mode
+              Block Payment Gateway
             </span>
             <Form.Check
               type="switch"

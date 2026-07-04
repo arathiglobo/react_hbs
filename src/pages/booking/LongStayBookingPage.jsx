@@ -31,6 +31,15 @@ import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
 // /booking/hotel.
 import "../../styles/HotelBookingPage.css";
 
+// Dummy online-payment gateways — mirrors HotelBookingPage /
+// StudentBookingPage so the operator gets the same payment picker when
+// the agent's credit is short.
+const PAYMENT_GATEWAYS = [
+  { id: "razorpay", name: "Razorpay", desc: "Cards, UPI, Net Banking" },
+  { id: "stripe", name: "Stripe", desc: "International cards" },
+  { id: "payu", name: "PayU", desc: "Cards & wallets" },
+];
+
 // Pretty-print the structured cancellation policy chargeType + value
 // rendered on the booking page. Mirrors the dropdown labels used in
 // the contract create/edit table editor.
@@ -101,6 +110,19 @@ export default function LongStayBookingPage() {
   // regardless of the chosen mode).
   const [paymentMode, setPaymentMode] = useState("CREDITLIMIT");
 
+  // ── Payment-gate modals (mirrors HotelBookingPage / StudentBookingPage) ──
+  // When the agent's credit is short at Confirm time:
+  //   • Card disabled → "Booking Cannot Be Completed" blocks the booking.
+  //   • Card enabled  → "Online Payment Required" → gateway picker.
+  const [showInsufficientModal, setShowInsufficientModal] = useState(false);
+  const [showGatewayModal, setShowGatewayModal] = useState(false);
+  const [insufficientAmount, setInsufficientAmount] = useState(0);
+  const [selectedGateway, setSelectedGateway] = useState("");
+  const [showNoPaymentPathModal, setShowNoPaymentPathModal] = useState(false);
+  // Per-agent "Card" payment-mode gate, toggled from AgentView. Also filters
+  // the Card option out of the Payment Mode dropdown.
+  const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
+
   // ── Voucher-choice + booking-flow status (mirrors HotelBookingPage) ──
   // Refundable rate + a cancellation policy on the contract → surface the
   // "Book Now & Voucher Now" / "Book Now & Voucher Later" choice above the
@@ -160,6 +182,27 @@ export default function LongStayBookingPage() {
       .catch(() => {});
   }, [navigate]);
 
+  // ── Agent card-payment flag — same gate as HotelBookingPage. Drives the
+  //    Card option in the Payment Mode dropdown and (re-fetched at Confirm
+  //    time) the no-payment-path block. Fail-safe default: card DISABLED.
+  useEffect(() => {
+    if (!agentId) { setAgentCardPaymentEnabled(false); return; }
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/agent/${agentId}`)
+      .then((res) => { if (!cancelled) setAgentCardPaymentEnabled(!!res?.data?.cardPaymentEnabled); })
+      .catch(() => { if (!cancelled) setAgentCardPaymentEnabled(false); });
+    return () => { cancelled = true; };
+  }, [agentId]);
+
+  // Keep the selected Payment Mode valid — if Card was selected and the
+  // agent's Card gate turns out to be off, fall back to Credit Limit.
+  useEffect(() => {
+    if (paymentMode === "CARD" && !agentCardPaymentEnabled) {
+      setPaymentMode("CREDITLIMIT");
+    }
+  }, [paymentMode, agentCardPaymentEnabled]);
+
   useEffect(() => {
     if (!draft) return;
     const fetchQuote = async () => {
@@ -198,13 +241,11 @@ export default function LongStayBookingPage() {
   // ────────────────────────────────────────────────────────────────
   // Booking-flow derivation — mirrors HotelBookingPage's confirm-booking
   // flowchart. Long-stay data model doesn't carry a maxCancellationNights
-  // number, so the cancellation deadline is derived from the contract's
-  // structured cancellationPolicy tiers: if any policy row is configured
-  // for the contract, we treat the check-in date as the free-cancellation
-  // cutoff (any earlier tiered rules already inform the operator via the
-  // Policies modal). Non-refundable rooms and rooms whose contract has no
-  // policy tiers skip the choice entirely and resolve to RECONFIRMED —
-  // exactly like the hotel flow's "no deadline applies" branch.
+  // number, so — like HotelBookingPage's "cancel until check-in" default —
+  // the free-cancellation cutoff for ANY Flexible/Refundable room is the
+  // check-in date itself (any earlier tiered rules still inform the operator
+  // via the Policies modal). Non-refundable and On-Request rooms skip the
+  // choice entirely and resolve to RECONFIRMED, exactly like the hotel flow.
   // ────────────────────────────────────────────────────────────────
   const isRefundableRate = draft?.room?.refundable === true;
   // On-Request rate: the room the operator picked had no configured
@@ -213,11 +254,12 @@ export default function LongStayBookingPage() {
   // created as OnRequest even when the rate is Non-Refundable (mirrors the
   // hotel flow's isOnRequestRate branch).
   const isOnRequestRate = draft?.room?.roomStatus === "On Request";
-  const hasCancellationPolicy = Array.isArray(
-    draft?.contract?.cancellationPolicy,
-  ) && draft.contract.cancellationPolicy.length > 0;
+  // Deadline = the check-in day for every Flexible/Refundable room (no
+  // dependency on whether the contract has cancellation-policy tiers, so the
+  // Voucher Now / Voucher Later choice appears for all refundable rooms —
+  // matching HotelBookingPage). Non-refundable rooms get no deadline.
   const cancellationDeadline = (() => {
-    if (!isRefundableRate || !hasCancellationPolicy) return null;
+    if (!isRefundableRate) return null;
     const cinRaw = draft?.checkIn;
     if (!cinRaw) return null;
     const cin = new Date(cinRaw);
@@ -324,20 +366,14 @@ export default function LongStayBookingPage() {
       toast.error("Please select a booking option to continue.");
       return;
     }
-    // If the contract has any cancellation rules / notes / T&C, gate
-    // the booking summary behind the Policies & Terms modal. If
-    // nothing is configured (legacy contracts), skip straight to the
-    // confirmation modal so the agent flow doesn't change for them.
-    const hasPolicy =
-      (draft?.contract?.cancellationPolicy || []).length > 0 ||
-      !!draft?.contract?.cancellationPolicyNotes ||
-      (draft?.contract?.termsAndConditions || []).length > 0;
-    if (hasPolicy) {
-      setPolicyAccepted(false);
-      setShowPolicyModal(true);
-    } else {
-      setShowConfirmModal(true);
-    }
+    // Always gate the booking summary behind the Policies & Terms modal —
+    // the operator must accept T&C before the "Confirm Your Booking" summary
+    // modal opens (mirrors HotelBookingPage). Proceed inside the policy modal
+    // opens the summary (see its Proceed button → setShowConfirmModal). The
+    // modal degrades gracefully when the contract has no policies/T&C
+    // configured, showing "No … configured" placeholders.
+    setPolicyAccepted(false);
+    setShowPolicyModal(true);
   };
 
   const confirmBooking = async () => {
@@ -443,6 +479,56 @@ export default function LongStayBookingPage() {
           })),
         })),
       };
+      // ── Payment-gate pre-check (mirrors HotelBookingPage.confirmBooking) ──
+      // Ask the BE whether the agent has enough credit for the payable total
+      // (markup + Tourism Dirham inclusive — what the create endpoint debits).
+      // When credit is short:
+      //   • On Request room OR Book Now & Voucher Later → proceed with the
+      //     create call (payment-gate matrix: these flows always book; the BE
+      //     skips their create-time debit and settles at Reconfirm).
+      //   • Everything else → close the Order Summary modal, then:
+      //       – Card disabled at the agent level → no viable payment path;
+      //         block with the "Booking Cannot Be Completed" modal.
+      //       – Card enabled → "Online Payment Required" → gateway picker.
+      // The check fails OPEN (credit endpoint error → proceed; the BE keeps
+      // its own check-and-reject backstop) so the operator is never trapped.
+      const requiredAmount = Number(newTotal) || 0;
+      if (payload.agentId && requiredAmount > 0) {
+        try {
+          const [credit, agentResp] = await Promise.all([
+            axiosInstance.get(
+              `/api/agent-credit-limit/check-sufficient-credit?agentId=${payload.agentId}&requiredAmount=${requiredAmount}`,
+            ),
+            axiosInstance
+              .get(`/api/agent/${payload.agentId}`)
+              .catch(() => ({ data: { cardPaymentEnabled: false } })),
+          ]);
+          if (credit.data === false) {
+            const isVoucherLater =
+              bookingConfirmation === "Book Now & Voucher later";
+            const bypassPaymentModal = isVoucherLater || isOnRequestRate;
+            if (!bypassPaymentModal) {
+              setInsufficientAmount(requiredAmount);
+              setShowConfirmModal(false);
+              setSubmitting(false);
+              if (!agentResp?.data?.cardPaymentEnabled) {
+                setShowNoPaymentPathModal(true);
+                return;
+              }
+              setShowInsufficientModal(true);
+              return;
+            }
+            console.log(
+              isOnRequestRate
+                ? "[LONG_STAY] Insufficient credit but On Request rate — proceeding with create."
+                : "[LONG_STAY] Insufficient credit but Voucher Later selected — proceeding with create; credit deducted at Reconfirm.",
+            );
+          }
+        } catch (e) {
+          /* non-fatal — backend create still enforces the credit check */
+        }
+      }
+
       const res = await axiosInstance.post("/api/longStayBooking/create", payload);
       toast.success(`Booking confirmed: ${res.data.bookingCode}`);
       sessionStorage.removeItem("longStayBookingDraft");
@@ -732,77 +818,10 @@ export default function LongStayBookingPage() {
                       aren't collected on the form any more and ride
                       along as empty strings. */}
 
-                  {/* Stay & Room Details */}
-                  <Card className="p-4 mb-4 shadow-sm border-0">
-                    <h5 className="mb-3 fw-bold">Stay &amp; Room Details</h5>
-                    <Row className="g-3">
-                      <Col md={4}>
-                        <div className="text-muted small fw-semibold">Hotel</div>
-                        <div className="fw-semibold">{draft.hotelName}</div>
-                      </Col>
-                      <Col md={4}>
-                        <div className="text-muted small fw-semibold">Contract</div>
-                        <div className="fw-semibold">{draft.contract.rateCode}</div>
-                      </Col>
-                      <Col md={4}>
-                        <div className="text-muted small fw-semibold">Billing</div>
-                        <div className="fw-semibold">
-                          {draft.contract.additionalCostType === "WEEKLY"
-                            ? "Weekly"
-                            : "Day-wise"}
-                        </div>
-                      </Col>
-                      <Col md={4}>
-                        <div className="text-muted small fw-semibold">
-                          Room Category
-                        </div>
-                        <div className="fw-semibold">
-                          {draft.room.roomCategoryName ||
-                            `Category #${draft.room.hotelRoomCategoryId}`}
-                        </div>
-                      </Col>
-                      <Col md={4}>
-                        <div className="text-muted small fw-semibold">Meal Plan</div>
-                        <div className="fw-semibold d-flex align-items-center">
-                          <FaUtensils className="me-2 text-muted" />
-                          {mealPlanLabel}
-                        </div>
-                      </Col>
-                      <Col md={4}>
-                        <div className="text-muted small fw-semibold">Occupancy</div>
-                        <div className="fw-semibold">
-                          {draft.room.occupancyTypeName ||
-                            `Occ-${draft.room.occupancyTypeId}`}
-                        </div>
-                      </Col>
-                      <Col md={4}>
-                        <div className="text-muted small fw-semibold">Check-In</div>
-                        <div className="fw-semibold">
-                          {formatDateTime(draft.checkIn)}
-                        </div>
-                      </Col>
-                      <Col md={4}>
-                        <div className="text-muted small fw-semibold">Check-Out</div>
-                        <div className="fw-semibold">
-                          {formatDateTime(draft.checkOut)}
-                        </div>
-                      </Col>
-                      <Col md={4}>
-                        <div className="text-muted small fw-semibold">
-                          Refund Policy
-                        </div>
-                        <div>
-                          {draft.room.refundable ? (
-                            <Badge bg="success">
-                              <FaCheckCircle className="me-1" /> Flexible
-                            </Badge>
-                          ) : (
-                            <Badge bg="danger">Non-Refundable</Badge>
-                          )}
-                        </div>
-                      </Col>
-                    </Row>
-                  </Card>
+                  {/* "Stay & Room Details" card removed — every field it
+                      showed (hotel, contract, billing, room category, meal
+                      plan, occupancy, check-in/out, refund policy) is already
+                      surfaced in the right-hand Booking Summary + Price cards. */}
 
                   {/* Tourism Dirhams (AED) input hidden per request. The
                       `tourismDirham` state stays at its default ("") so the
@@ -830,7 +849,12 @@ export default function LongStayBookingPage() {
                           >
                             <option value="CREDITLIMIT">Credit Limit</option>
                             <option value="CASH">Cash</option>
-                            <option value="CARD">Card</option>
+                            {/* Per-agent gate — Card only when the AgentView
+                                "Enable Card payment mode" checkbox is on
+                                (mirrors HotelBookingPage). */}
+                            {agentCardPaymentEnabled && (
+                              <option value="CARD">Card</option>
+                            )}
                           </Form.Select>
                         </Form.Group>
                       </Col>
@@ -914,6 +938,18 @@ export default function LongStayBookingPage() {
                             Meal Plan
                           </div>
                           <div className="hbp-summary-value">{mealPlanLabel}</div>
+                        </div>
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">
+                            <FaUtensils className="me-2 text-primary" />
+                            Room Status
+                          </div>
+                          {/* Availability of the selected room — same field
+                              isOnRequestRate and the create payload's
+                              roomStatus derive from (mirrors HotelBookingPage). */}
+                          <div className="hbp-summary-value">
+                            {draft?.room?.roomStatus || "Available"}
+                          </div>
                         </div>
                         <div className="hbp-summary-row">
                           <div className="hbp-summary-label">Nights</div>
@@ -1051,11 +1087,10 @@ export default function LongStayBookingPage() {
                     </Card>
 
                     {/* Voucher-choice card — mirrors HotelBookingPage.
-                        Shown only when the rate is refundable AND the
-                        contract has a cancellation policy AND the
-                        deadline hasn't passed. Non-refundable / past-
-                        deadline flows skip it and resolve to
-                        RECONFIRMED automatically. */}
+                        Shown for every Flexible/Refundable room whose
+                        check-in date hasn't passed. Non-refundable /
+                        past-deadline / On-Request flows skip it and resolve
+                        to RECONFIRMED automatically. */}
                     {showVoucherChoice && (
                       <Card className="shadow-sm rounded-3 border-0 mt-3">
                         <Card.Body className="p-3">
@@ -1509,6 +1544,151 @@ export default function LongStayBookingPage() {
                         <FaCheckCircle className="me-1" /> Confirm
                       </>
                     )}
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* ─── Insufficient credit + card disabled → block booking ───
+                  Shown when the agent has no available credit AND the
+                  AgentView "Allow Card payment mode" toggle is off. No
+                  payment path exists, so the booking is turned away. Same
+                  shape as HotelBookingPage / StudentBookingPage. */}
+              <Modal
+                show={showNoPaymentPathModal}
+                onHide={() => setShowNoPaymentPathModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Booking Cannot Be Completed</Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="text-center py-4">
+                  <p className="mb-2 text-dark">
+                    Sorry — this booking can't be completed because the agent
+                    has no available credit and{" "}
+                    <strong>Card payment is not enabled</strong> for this
+                    account.
+                  </p>
+                  <p className="mb-0 text-muted small">
+                    Please top up the agent's credit limit, or ask an
+                    administrator to enable Card payment on the agent's
+                    profile, then try again.
+                  </p>
+                  <div className="mt-3">
+                    <div className="text-muted small">Payable amount</div>
+                    <div className="fs-4 fw-bold text-dark">
+                      {formatPrice(insufficientAmount)}
+                    </div>
+                  </div>
+                </Modal.Body>
+                <Modal.Footer className="justify-content-center border-0">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowNoPaymentPathModal(false)}
+                  >
+                    OK
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* ─── Insufficient Credit → online payment required ─── */}
+              <Modal
+                show={showInsufficientModal}
+                onHide={() => setShowInsufficientModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Online Payment Required</Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="text-center py-4">
+                  <p className="mb-2 text-muted">
+                    The agent's available credit is insufficient for this
+                    booking. You need to proceed with{" "}
+                    <strong>online payment</strong>.
+                  </p>
+                  <div className="mt-3">
+                    <div className="text-muted small">Payable amount</div>
+                    <div className="fs-4 fw-bold text-dark">
+                      {formatPrice(insufficientAmount)}
+                    </div>
+                  </div>
+                </Modal.Body>
+                <Modal.Footer className="justify-content-center border-0">
+                  <Button
+                    variant="danger"
+                    onClick={() => setShowInsufficientModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="success"
+                    onClick={() => {
+                      setShowInsufficientModal(false);
+                      setSelectedGateway("");
+                      setShowGatewayModal(true);
+                    }}
+                  >
+                    Pay
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* ─── Payment Gateway (dummy) ─── */}
+              <Modal
+                show={showGatewayModal}
+                onHide={() => setShowGatewayModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Select Payment Gateway</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                  <p className="text-muted small mb-3">
+                    Choose a gateway to enter your card details.
+                  </p>
+                  {PAYMENT_GATEWAYS.map((g) => (
+                    <Form.Check
+                      key={g.id}
+                      type="radio"
+                      name="longstay-payment-gateway"
+                      id={`longstay-gw-${g.id}`}
+                      className="mb-2"
+                      checked={selectedGateway === g.id}
+                      onChange={() => setSelectedGateway(g.id)}
+                      label={
+                        <span>
+                          <span className="fw-semibold">{g.name}</span>
+                          <span className="text-muted small ms-2">
+                            {g.desc}
+                          </span>
+                        </span>
+                      }
+                    />
+                  ))}
+                </Modal.Body>
+                <Modal.Footer className="border-0">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowGatewayModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="success"
+                    disabled={!selectedGateway}
+                    onClick={() => {
+                      const gw = PAYMENT_GATEWAYS.find(
+                        (x) => x.id === selectedGateway,
+                      );
+                      setShowGatewayModal(false);
+                      navigate(`/payment/${selectedGateway}`, {
+                        state: {
+                          amountLabel: formatPrice(insufficientAmount),
+                          gatewayName: gw ? gw.name : selectedGateway,
+                        },
+                      });
+                    }}
+                  >
+                    Proceed to Pay
                   </Button>
                 </Modal.Footer>
               </Modal>

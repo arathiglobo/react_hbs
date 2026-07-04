@@ -30,8 +30,6 @@ import {
   FaChevronUp,
   FaTimesCircle,
   FaGlobe,
-  FaThLarge,
-  FaList,
 } from "react-icons/fa";
 import axiosInstance from "../components/AxiosInstance";
 import Sidebar from "../components/Sidebar";
@@ -174,31 +172,33 @@ function AccordionToggleButton({ eventKey, isActive }) {
 }
 
 // ── View Toggle Bar ──────────────────────────────────────────────────────────
+// Grid / List toggle mirrors RoomList.jsx exactly: a bootstrap btn-group of
+// primary/outline-primary Buttons with the ⊞ / ☰ glyphs (no icons/labels).
 function ViewToggleBar({ view, onViewChange, count }) {
   return (
-    <div className="d-flex justify-content-between align-items-center mb-3">
+    <div className="d-flex justify-content-between align-items-center mb-4">
       <h4 className="mb-0">
         Available Long Stay Contracts ({count})
       </h4>
-      <div className="btn-group btn-group-sm" role="group" aria-label="View toggle">
-        <button
-          type="button"
-          className={`btn ${view === "grid" ? "btn-primary" : "btn-outline-secondary"} d-flex align-items-center gap-1`}
+      <div className="btn-group shadow-sm gap-1" role="group">
+        <Button
+          variant={view === "grid" ? "primary" : "outline-primary"}
           onClick={() => onViewChange("grid")}
+          className="d-flex align-items-center gap-2"
+          size="sm"
           title="Grid view"
         >
-          <FaThLarge size={13} />
-          <span className="d-none d-sm-inline">Grid</span>
-        </button>
-        <button
-          type="button"
-          className={`btn ${view === "list" ? "btn-primary" : "btn-outline-secondary"} d-flex align-items-center gap-1`}
+          <span className="fs-5" style={{ lineHeight: 1 }}>⊞</span>
+        </Button>
+        <Button
+          variant={view === "list" ? "primary" : "outline-primary"}
           onClick={() => onViewChange("list")}
+          className="d-flex align-items-center gap-2"
+          size="sm"
           title="List view"
         >
-          <FaList size={13} />
-          <span className="d-none d-sm-inline">List</span>
-        </button>
+          <span className="fs-5" style={{ lineHeight: 1 }}>☰</span>
+        </Button>
       </div>
     </div>
   );
@@ -1147,36 +1147,22 @@ export default function LongStayRoomList() {
                         eventKey={eventKey}
                         className="room-category-item mb-2"
                       >
-                        {/* Header — arranged like RoomList.jsx: clean h5
-                            room-name title on top, single small description
-                            line below (badge + validity + stay cap), price /
-                            toggle stack on the right. Rate code is
-                            intentionally NOT surfaced here — it stays
-                            available inside the room cards / booking flow. */}
+                        {/* Header — mirrors RoomList.jsx exactly: a clean h5
+                            room-name title with a short description line, and
+                            the price / toggle stack on the right. The
+                            contract-level billing badge + validity + stay cap
+                            now live in the accordion BODY (see below), not the
+                            header. */}
                         <Accordion.Header
                           as="div"
                           className="room-category-header"
                         >
-                          <div className="d-flex justify-content-between align-items-center w-100 flex-wrap gap-2">
+                          <div className="d-flex justify-content-between align-items-center w-100">
                             <div className="room-category-info">
                               <h5 className="mb-1">{roomNameTitle}</h5>
-                              <div className="mb-0 text-muted small d-flex align-items-center flex-wrap gap-2">
-                                {costTypeBadge(c.additionalCostType)}
-                                <span>
-                                  <FaCalendarAlt className="me-1" />
-                                  Validity: <strong>{c.validityFrom}</strong> →{" "}
-                                  <strong>{c.validityTo}</strong>
-                                  {c.maxBookingDays ? (
-                                    <>
-                                      {" "}
-                                      · Max stay:{" "}
-                                      <strong>{c.maxBookingDays}</strong> nights
-                                    </>
-                                  ) : (
-                                    " · No stay cap"
-                                  )}
-                                </span>
-                              </div>
+                              <p className="mb-0 text-muted small">
+                                Long Stay Contract
+                              </p>
                             </div>
 
                             <div className="d-flex align-items-center gap-3">
@@ -1199,6 +1185,28 @@ export default function LongStayRoomList() {
                         </Accordion.Header>
 
                         <Accordion.Body className="room-rates-section">
+                          {/* Contract-level details — moved out of the header
+                              per the RoomList-style layout: day-wise billing
+                              badge + validity window + stay cap sit at the top
+                              of the body, above the room cards. */}
+                          <div className="mb-3 pb-2 border-bottom d-flex align-items-center flex-wrap gap-2 text-muted small">
+                            {costTypeBadge(c.additionalCostType)}
+                            <span>
+                              <FaCalendarAlt className="me-1" />
+                              Validity: <strong>{c.validityFrom}</strong> →{" "}
+                              <strong>{c.validityTo}</strong>
+                              {c.maxBookingDays ? (
+                                <>
+                                  {" "}
+                                  · Max stay:{" "}
+                                  <strong>{c.maxBookingDays}</strong> nights
+                                </>
+                              ) : (
+                                " · No stay cap"
+                              )}
+                            </span>
+                          </div>
+
                           {exceedsCap && (
                             <Alert variant="warning" className="py-2 small mb-3">
                               <FaInfoCircle className="me-2" />
