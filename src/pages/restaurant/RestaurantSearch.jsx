@@ -30,6 +30,7 @@ import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import RestaurantCard from "./RestaurantCard";
 import AdvertisementCarousel from "../../components/AdvertisementCarousel";
+import AgentCreditBalance from "../../components/AgentCreditBalance";
 
 const MEAL_TYPES = ["Any", "Breakfast", "Lunch", "Dinner", "High Tea"];
 const today = () => new Date().toISOString().slice(0, 10);
@@ -577,6 +578,10 @@ const RestaurantSearch = () => {
                   Search restaurants by destination and book a table for your guests.
                 </p>
               </div>
+              {/* Agent logins see their available credit balance at the
+                  right end of the heading row (renders nothing for other
+                  roles). */}
+              <AgentCreditBalance />
             </div>
 
             {/* ── Search Card + Ads ── */}

@@ -106,6 +106,8 @@ const AgentView = () => {
   const [loading, setLoading] = useState(true);
   // Active/Inactive toggle in-flight flag (disables the button while saving).
   const [statusUpdating, setStatusUpdating] = useState(false);
+  // Card-payment-mode toggle in-flight flag.
+  const [cardPaymentUpdating, setCardPaymentUpdating] = useState(false);
   /* Lightbox state — when the user clicks the agent photo on the header,
      the full image is shown enlarged inside a clean Bootstrap Modal. */
   const [showPhotoModal, setShowPhotoModal] = useState(false);
@@ -244,6 +246,34 @@ const AgentView = () => {
         )
         .finally(() => setStatusUpdating(false));
     });
+  };
+
+  // ===================================================================
+  // Card-payment toggle — flips the per-agent "Card" payment-mode gate.
+  // Booking pages read agent.cardPaymentEnabled to decide whether to
+  // surface the Card option in the payment-mode dropdown.
+  // ===================================================================
+  const handleToggleCardPayment = (e) => {
+    const enabled = !!e?.target?.checked;
+    setCardPaymentUpdating(true);
+    axiosInstance
+      .patch(`/api/agent/${id}/card-payment`, { enabled })
+      .then((res) => {
+        toast.success(
+          res.data?.message ||
+            `Card payment ${enabled ? "enabled" : "disabled"} for agent`,
+        );
+        setAgent((prev) =>
+          prev ? { ...prev, cardPaymentEnabled: enabled } : prev,
+        );
+      })
+      .catch((err) =>
+        toast.error(
+          err.response?.data?.message ||
+            "Failed to update card payment setting",
+        ),
+      )
+      .finally(() => setCardPaymentUpdating(false));
   };
 
   // ===================================================================
@@ -1070,6 +1100,39 @@ const AgentView = () => {
             )}
           </Section>
           )}
+
+          {/* ------------ Allow Card payment toggle ----------------- */}
+          <div
+            className="d-flex justify-content-end align-items-center gap-3 mb-2 px-3 py-2 rounded"
+            style={{
+              background: "#fff4e5",
+              border: "1px solid #ffb84d",
+            }}
+          >
+            <span
+              className="fw-bold"
+              style={{ fontSize: "1.05rem", color: "#b45309" }}
+            >
+              Allow Card payment mode
+            </span>
+            <Form.Check
+              type="switch"
+              id={`agent-card-payment-${id}`}
+              label={
+                cardPaymentUpdating
+                  ? "Updating…"
+                  : Boolean(agent?.cardPaymentEnabled)
+                    ? "Yes"
+                    : "No"
+              }
+              checked={Boolean(agent?.cardPaymentEnabled)}
+              onChange={handleToggleCardPayment}
+              disabled={cardPaymentUpdating}
+              className="d-flex align-items-center fw-semibold"
+              style={{ fontSize: "1rem" }}
+              title="When on, this agent sees the 'Card' option in the booking-page payment-mode dropdown."
+            />
+          </div>
 
           {/* ------------ Bottom action bar ----------------------- */}
           <Card className="shadow-sm">

@@ -31,6 +31,7 @@ import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import HoneymoonCard from "./HoneymoonCard";
 import AdvertisementCarousel from "../../components/AdvertisementCarousel";
+import AgentCreditBalance from "../../components/AgentCreditBalance";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -413,14 +414,20 @@ const HoneymoonSearch = () => {
         <Sidebar />
         <main className="flex-grow-1 p-4 hs-page">
           <Container fluid>
-            <div className="mb-4">
-              <h2 className="text-primary mb-1">
-                <FaSuitcaseRolling className="me-2" />
-                Honeymoon Package Booking
-              </h2>
-              <p className="text-muted mb-0">
-                Find the perfect romantic getaway for your couple.
-              </p>
+            <div className="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
+              <div>
+                <h2 className="text-primary mb-1">
+                  <FaSuitcaseRolling className="me-2" />
+                  Honeymoon Package Booking
+                </h2>
+                <p className="text-muted mb-0">
+                  Find the perfect romantic getaway for your couple.
+                </p>
+              </div>
+              {/* Agent logins see their available credit balance at the
+                  right end of the heading row (renders nothing for other
+                  roles). */}
+              <AgentCreditBalance />
             </div>
 
             {/* ── Search Card + Ads ── */}

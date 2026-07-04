@@ -50,6 +50,15 @@ import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 
+// Dummy online-payment gateways — mirrors HotelBookingPage /
+// BookingDetailedView so the operator gets the same payment picker
+// whether the deduction is settled at create or at reconfirm time.
+const PAYMENT_GATEWAYS = [
+  { id: "razorpay", name: "Razorpay", desc: "Cards, UPI, Net Banking" },
+  { id: "stripe", name: "Stripe", desc: "International cards" },
+  { id: "payu", name: "PayU", desc: "Cards & wallets" },
+];
+
 // ── Visual tokens (copied from the Hotel Booking detail view) ──────────
 const BUTTON_STYLE = {
   backgroundColor: "#c0392b",
@@ -221,6 +230,20 @@ export default function DayStayBookingDetailView() {
   // Reconfirm (Confirm / Reject popup)
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmingBooking, setConfirmingBooking] = useState(false);
+
+  // ── Online Payment Required (Reconfirm credit pre-check) ──────────
+  // Mirrors BookingDetailedView: when the operator reconfirms a
+  // Voucher-Later or On-Request day-stay booking and the agent STILL has
+  // no credit, we surface the Online Payment Required modal → gateway
+  // picker → dummy payment page, which navigates back here with
+  // location.state.resumeReconfirm = true and the reconfirm completes.
+  // When the agent's Card payment is disabled too, the dedicated
+  // "Booking Cannot Be Completed" modal blocks the action instead.
+  const [showInsufficientModal, setShowInsufficientModal] = useState(false);
+  const [showGatewayModal, setShowGatewayModal] = useState(false);
+  const [insufficientAmount, setInsufficientAmount] = useState(0);
+  const [selectedGateway, setSelectedGateway] = useState("");
+  const [showNoPaymentPathModal, setShowNoPaymentPathModal] = useState(false);
 
   // Reject (follow-up modal from Reconfirm → Reject)
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -398,9 +421,19 @@ export default function DayStayBookingDetailView() {
   );
   const isOnRequestConfirmedStep =
     isOnRequestRoom && Boolean(selected?.onRequestConfirmed);
+  // "Pending" = the INITIAL On Request step (before the first Confirm).
+  // Unlike the hotel flow (where the engine stamps On Request creates as
+  // CONFIRMED), day-stay On Request bookings are created with
+  // confirmationStatus "Not Confirmed" (flow REQUESTED) — so both states,
+  // plus a null status on legacy rows, count as pending. Rejected /
+  // ReConfirmed / Cancelled never match. The first Confirm flips
+  // onRequestConfirmed on the BE (updateConfirmationStatus step-1 branch)
+  // and the button becomes RECONFIRM.
   const isOnRequestPending =
     isOnRequestRoom &&
-    normalizedStatus === "CONFIRMED" &&
+    (normalizedStatus === "CONFIRMED" ||
+      normalizedStatus === "NOTCONFIRMED" ||
+      normalizedStatus === "") &&
     !selected?.onRequestConfirmed;
 
   // For a cancelled booking the doc variant (final vs proforma) and whether
@@ -474,7 +507,11 @@ export default function DayStayBookingDetailView() {
   // ── Reconfirm ──────────────────────────────────────────────────────
   const openConfirmModal = () => setShowConfirmModal(true);
 
-  const confirmBooking = async () => {
+  // Actual reconfirm API call. Split out (mirrors BookingDetailedView)
+  // so the same call can be made from (a) the Reconfirm modal's Confirm
+  // button when credit is fine, and (b) the post-payment resume effect
+  // after the operator pays through the gateway picker.
+  const runReconfirm = async () => {
     if (!bookingId) return;
     try {
       setConfirmingBooking(true);
@@ -483,7 +520,14 @@ export default function DayStayBookingDetailView() {
         { confirmStatus: true }
       );
       setShowConfirmModal(false);
-      toast.success("Booking reconfirmed successfully!");
+      // Step-aware message: the same PATCH drives BOTH On-Request steps —
+      // step 1 lands "On Request/Confirmed", step 2 (and every non-On-
+      // Request booking) lands ReConfirmed.
+      toast.success(
+        isOnRequestPending
+          ? "Booking confirmed successfully!"
+          : "Booking reconfirmed successfully!",
+      );
       await fetchDetail();
     } catch (error) {
       toast.error(
@@ -494,6 +538,84 @@ export default function DayStayBookingDetailView() {
       setConfirmingBooking(false);
     }
   };
+
+  // Reconfirm modal's Confirm/Reconfirm button handler — same payment-gate
+  // pre-check as the hotel detail page (BookingDetailedView.confirmBooking).
+  //
+  // The credit + card pre-check runs ONLY for:
+  //   • Voucher-Later bookings (bookingConfirmation === "Book Now &
+  //     Voucher later") — day-stay has NO voucherGenerated marker (the
+  //     hotel create matrix stamps it; DayStayBookingServiceImpl doesn't),
+  //     so the voucher choice string persisted on the booking is the
+  //     deferred-credit equivalent here.
+  //   • On Request bookings at the RECONFIRM step only — step-1 Confirm
+  //     (isOnRequestPending) goes through untouched, same as hotel.
+  // Every other booking (credit already settled at create) calls
+  // runReconfirm directly — existing flow unchanged.
+  //
+  // Insufficient credit → close the Reconfirm modal, then:
+  //   • Card disabled  → "Booking Cannot Be Completed" (blocked).
+  //   • Card enabled   → "Online Payment Required" → gateway picker →
+  //     back here with state.resumeReconfirm=true → runReconfirm.
+  // Missing agentId/amount or a credit-check API error fail OPEN to the
+  // legacy direct reconfirm so the operator is never trapped.
+  const confirmBooking = async () => {
+    const isVoucherLaterBooking =
+      (selected?.bookingConfirmation || "") === "Book Now & Voucher later";
+    const isOnRequestReconfirmStep = isOnRequestRoom && !isOnRequestPending;
+    if (!isVoucherLaterBooking && !isOnRequestReconfirmStep) {
+      await runReconfirm();
+      return;
+    }
+    const agentIdNum = selected?.agentId
+      ? Number(String(selected.agentId).trim())
+      : null;
+    const amount = Number(selected?.totalAmount) || 0;
+    if (!agentIdNum || amount <= 0) {
+      await runReconfirm();
+      return;
+    }
+    try {
+      setConfirmingBooking(true);
+      const [credit, agentResp] = await Promise.all([
+        axiosInstance.get(
+          `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentIdNum}&requiredAmount=${amount}`,
+        ),
+        axiosInstance
+          .get(`/api/agent/${agentIdNum}`)
+          .catch(() => ({ data: { cardPaymentEnabled: false } })),
+      ]);
+      const cardEnabled = !!agentResp?.data?.cardPaymentEnabled;
+      if (credit.data === false) {
+        setInsufficientAmount(amount);
+        setShowConfirmModal(false);
+        if (!cardEnabled) {
+          setShowNoPaymentPathModal(true);
+          return;
+        }
+        setShowInsufficientModal(true);
+        return;
+      }
+      await runReconfirm();
+    } catch (err) {
+      console.error("Error checking credit before reconfirm:", err);
+      await runReconfirm();
+    } finally {
+      setConfirmingBooking(false);
+    }
+  };
+
+  // Post-payment resume — the gateway page navigates back here with
+  // state.resumeReconfirm = true once the operator finishes the dummy
+  // card-entry flow. Strip the flag from history (so a reload doesn't
+  // re-trigger), then fire runReconfirm to complete the reconfirmation.
+  useEffect(() => {
+    if (!location.state?.resumeReconfirm) return;
+    if (!selected) return;
+    navigate(location.pathname, { replace: true, state: {} });
+    runReconfirm();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state?.resumeReconfirm, selected]);
 
   // ── Reject (Reconfirm popup → "Reject") ────────────────────────────
   const openRejectModal = () => {
@@ -1771,6 +1893,166 @@ export default function DayStayBookingDetailView() {
                       ) : (
                         isOnRequestPending ? "Confirm" : "Reconfirm"
                       )}
+                    </Button>
+                  </Modal.Footer>
+                </Modal>
+
+                {/* ── Booking Cannot Be Completed (Reconfirm) ──
+                    Voucher-Later / On-Request Reconfirm + agent has no
+                    credit AND Card payment is disabled → the operator has
+                    no path to complete this action. Blocks the reconfirm
+                    with a courteous message. Same shape as the hotel
+                    detail page's block modal. */}
+                <Modal
+                  show={showNoPaymentPathModal}
+                  onHide={() => setShowNoPaymentPathModal(false)}
+                  centered
+                >
+                  <Modal.Header closeButton>
+                    <Modal.Title>Booking Cannot Be Completed</Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body className="text-center py-4">
+                    <p className="mb-2 text-dark">
+                      Sorry — this booking can't be completed because the
+                      agent has no available credit and{" "}
+                      <strong>Card payment is not enabled</strong> for this
+                      account.
+                    </p>
+                    <p className="mb-0 text-muted small">
+                      Please top up the agent's credit limit, or ask an
+                      administrator to enable Card payment on the agent's
+                      profile, then try again.
+                    </p>
+                    <div className="mt-3">
+                      <div className="text-muted small">Payable amount</div>
+                      <div className="fs-4 fw-bold text-dark">
+                        AED {Number(insufficientAmount).toFixed(2)}
+                      </div>
+                    </div>
+                  </Modal.Body>
+                  <Modal.Footer className="justify-content-center border-0">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setShowNoPaymentPathModal(false)}
+                    >
+                      OK
+                    </Button>
+                  </Modal.Footer>
+                </Modal>
+
+                {/* ── Online Payment Required (Reconfirm) ──
+                    Surfaced when the operator reconfirms a Voucher-Later /
+                    On-Request booking and the agent still has no credit
+                    but CAN pay by card. Same shape as the hotel detail
+                    page so the operator gets a consistent experience. */}
+                <Modal
+                  show={showInsufficientModal}
+                  onHide={() => setShowInsufficientModal(false)}
+                  centered
+                >
+                  <Modal.Header closeButton>
+                    <Modal.Title>Online Payment Required</Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body className="text-center py-4">
+                    <p className="mb-2 text-muted">
+                      The agent's available credit is insufficient to
+                      reconfirm this booking. You need to proceed with{" "}
+                      <strong>online payment</strong>.
+                    </p>
+                    <div className="mt-3">
+                      <div className="text-muted small">Payable amount</div>
+                      <div className="fs-4 fw-bold text-dark">
+                        AED {Number(insufficientAmount).toFixed(2)}
+                      </div>
+                    </div>
+                  </Modal.Body>
+                  <Modal.Footer className="justify-content-center border-0">
+                    <Button
+                      variant="danger"
+                      onClick={() => setShowInsufficientModal(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="success"
+                      onClick={() => {
+                        setShowInsufficientModal(false);
+                        setSelectedGateway("");
+                        setShowGatewayModal(true);
+                      }}
+                    >
+                      Pay
+                    </Button>
+                  </Modal.Footer>
+                </Modal>
+
+                {/* ── Select Payment Gateway ──
+                    Identical to the hotel detail picker; on Proceed we
+                    hand off to /payment/<gateway> and stamp returnTo so
+                    the gateway page can send the operator back here with
+                    state.resumeReconfirm = true. */}
+                <Modal
+                  show={showGatewayModal}
+                  onHide={() => setShowGatewayModal(false)}
+                  centered
+                >
+                  <Modal.Header closeButton>
+                    <Modal.Title>Select Payment Gateway</Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body>
+                    <p className="text-muted small mb-3">
+                      Choose a gateway to enter your card details.
+                    </p>
+                    {PAYMENT_GATEWAYS.map((g) => (
+                      <Form.Check
+                        key={g.id}
+                        type="radio"
+                        name="ds-reconfirm-payment-gateway"
+                        id={`ds-reconfirm-gw-${g.id}`}
+                        className="mb-2"
+                        checked={selectedGateway === g.id}
+                        onChange={() => setSelectedGateway(g.id)}
+                        label={
+                          <span>
+                            <span className="fw-semibold">{g.name}</span>
+                            <span className="text-muted small ms-2">
+                              {g.desc}
+                            </span>
+                          </span>
+                        }
+                      />
+                    ))}
+                  </Modal.Body>
+                  <Modal.Footer className="border-0">
+                    <Button
+                      variant="secondary"
+                      onClick={() => setShowGatewayModal(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="success"
+                      disabled={!selectedGateway}
+                      onClick={() => {
+                        const gw = PAYMENT_GATEWAYS.find(
+                          (x) => x.id === selectedGateway,
+                        );
+                        setShowGatewayModal(false);
+                        // Hand off to the dummy gateway page. returnTo
+                        // brings the operator back to THIS detail page on
+                        // completion; resumeReconfirm makes the resume
+                        // effect fire runReconfirm.
+                        navigate(`/payment/${selectedGateway}`, {
+                          state: {
+                            amountLabel: `AED ${Number(insufficientAmount).toFixed(2)}`,
+                            gatewayName: gw ? gw.name : selectedGateway,
+                            returnTo: location.pathname,
+                            returnState: { resumeReconfirm: true },
+                          },
+                        });
+                      }}
+                    >
+                      Proceed to Pay
                     </Button>
                   </Modal.Footer>
                 </Modal>

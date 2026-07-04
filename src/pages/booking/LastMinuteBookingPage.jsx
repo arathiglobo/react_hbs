@@ -16,6 +16,7 @@ import AgentSelect from "../../components/AgentSelect";
 import axiosInstance from "../../components/AxiosInstance";
 import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import AdvertisementCarousel from "../../components/AdvertisementCarousel";
+import AgentCreditBalance from "../../components/AgentCreditBalance";
 import { FaSearch, FaStar, FaMapMarkerAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
@@ -600,9 +601,15 @@ export default function LastMinuteBookingPage() {
             <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <Card className="shadow-sm rounded-xl h-100 search-card-modern bg-white">
             <Card.Body className="p-4">
-              <div className="mb-4">
-                <h2 className="fw-semibold text-primary mb-1">Last Minute Deals</h2>
-                <p className="text-muted mb-0">Discounted rooms for check-in upto {checkInWindowDays} days</p>
+              <div className="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                  <h2 className="fw-semibold text-primary mb-1">Last Minute Deals</h2>
+                  <p className="text-muted mb-0">Discounted rooms for check-in upto {checkInWindowDays} days</p>
+                </div>
+                {/* Agent logins see their available credit balance at the
+                    right end of the heading row (renders nothing for other
+                    roles). */}
+                <AgentCreditBalance />
               </div>
 
               <Form onSubmit={handleSearch}>

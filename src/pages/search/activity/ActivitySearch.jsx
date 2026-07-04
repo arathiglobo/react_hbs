@@ -21,6 +21,7 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
+import AgentCreditBalance from "../../../components/AgentCreditBalance";
 
 function LazyImage({ src, alt, className }) {
   const containerRef = useRef(null);
@@ -865,6 +866,10 @@ const ActivitySearch = () => {
                 <h4 className="fw-bold text-primary mb-0">
                   Tours & Activities Search
                 </h4>
+                {/* Agent logins see their available credit balance at the
+                    right end of the heading row (renders nothing for other
+                    roles). */}
+                <AgentCreditBalance />
                
               </div>
 

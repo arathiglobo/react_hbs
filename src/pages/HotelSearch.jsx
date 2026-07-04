@@ -12,6 +12,7 @@ import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
 import Select from "react-select";
 import AgentSelect from "../components/AgentSelect";
+import AgentCreditBalance from "../components/AgentCreditBalance";
 import axiosInstance from "../components/AxiosInstance";
 import AdvertisementCarousel from "../components/AdvertisementCarousel";
 import { FaSearch, FaStar, FaInfoCircle } from "react-icons/fa";
@@ -1563,17 +1564,23 @@ export default function HotelSearch({ force24Hour = false } = {}) {
            <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <Card className="shadow-sm rounded-xl search-card-modern bg-white h-100">
             <Card.Body className="p-4">
-              <div className="mb-4 text-start">
-                <h2 className="fw-semibold text-primary mb-1">
-                  {force24Hour
-                    ? "24 Hour Check-In Booking"
-                    : "Find Your Perfect Stay"}
-                </h2>
-                <p className="text-muted">
-                  {force24Hour
-                    ? "Pick a check-in time — we'll filter to hotels with an active 24-hour config and apply the per-hotel uplift."
-                    : "Discover amazing hotels and exclusive deals"}
-                </p>
+              <div className="mb-4 text-start d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                  <h2 className="fw-semibold text-primary mb-1">
+                    {force24Hour
+                      ? "24 Hour Check-In Booking"
+                      : "Find Your Perfect Stay"}
+                  </h2>
+                  <p className="text-muted">
+                    {force24Hour
+                      ? "Pick a check-in time — we'll filter to hotels with an active 24-hour config and apply the per-hotel uplift."
+                      : "Discover amazing hotels and exclusive deals"}
+                  </p>
+                </div>
+                {/* Agent logins see their available credit balance at the
+                    right end of the heading row (renders nothing for other
+                    roles). */}
+                <AgentCreditBalance />
               </div>
 
               <Form onSubmit={handleSearchSubmit}>

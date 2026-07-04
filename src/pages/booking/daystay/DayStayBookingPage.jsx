@@ -118,6 +118,15 @@ export default function DayStayBookingPage() {
   const [showGatewayModal, setShowGatewayModal] = useState(false);
   const [insufficientAmount, setInsufficientAmount] = useState(0);
   const [selectedGateway, setSelectedGateway] = useState("");
+  // Block-booking modal shown when the agent is short on credit AND the
+  // AgentView "Allow Card payment mode" toggle is off — no payment path
+  // exists, so the booking is turned away instead of being pushed into
+  // the online-payment flow. Mirrors HotelBookingPage.
+  const [showNoPaymentPathModal, setShowNoPaymentPathModal] = useState(false);
+  // Per-agent "Card" payment-mode gate, toggled from AgentView. Decides
+  // between the Online-Payment and Booking-Cannot-Be-Completed modals
+  // when credit is short.
+  const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
 
   const [remarks, setRemarks] = useState("");
   const [specialRequests, setSpecialRequests] = useState([]);
@@ -180,26 +189,30 @@ export default function DayStayBookingPage() {
     return today > cancellationDeadline;
   }, [cancellationDeadline]);
 
-  // Payment-type restriction — matches HotelBookingPage's Cash Agent rule.
-  const isCashAgent = agentHasAvailableCredit === false;
-  const restrictToCardCashDeposit = isNonRefundableRate && isCashAgent;
-  const paymentModeOptions = useMemo(
-    () =>
-      restrictToCardCashDeposit
-        ? [
-            { value: "CARD", label: "Card" },
-            { value: "CASH_DEPOSIT", label: "Cash Deposit" },
-          ]
-        : [
-            { value: "CREDITLIMIT", label: "Credit Limit" },
-            { value: "ONLINE", label: "Online" },
-            { value: "CASH", label: "Cash" },
-            { value: "CARD", label: "Card" },
-            { value: "BANK_TRANSFER", label: "Bank Transfer" },
-            { value: "CHEQUE", label: "Cheque" },
-          ],
-    [restrictToCardCashDeposit],
-  );
+  // ── Payment Type availability — mirrors HotelBookingPage exactly ──────
+  // Only Credit Limit / Cash / Card are exposed in the UI. Online, Bank
+  // Transfer, Cheque, and Cash Deposit are intentionally hidden per business
+  // decision — the enums stay valid on the backend, they're just not
+  // selectable here.
+  //
+  // The old Non-Refundable + Cash-Agent collapse (Card/Cash-Deposit only)
+  // is REMOVED, same as on HotelBookingPage — combined with the per-agent
+  // Card gate it could leave the dropdown empty, and whether the agent can
+  // actually pay is enforced at Confirm time by the credit pre-check
+  // ("Online Payment Required" / "Booking Cannot Be Completed" modals).
+  const paymentModeOptions = useMemo(() => {
+    const base = [
+      { value: "CREDITLIMIT", label: "Credit Limit" },
+      { value: "CASH", label: "Cash" },
+      { value: "CARD", label: "Card" },
+    ];
+    // Per-agent gate — the Card option is only exposed when the
+    // AgentView "Enable Card payment mode" checkbox is on for this
+    // agent (see agent.cardPaymentEnabled).
+    return agentCardPaymentEnabled
+      ? base
+      : base.filter((o) => o.value !== "CARD");
+  }, [agentCardPaymentEnabled]);
 
   // Keep the selected Payment Type valid — mirrors HotelBookingPage.
   useEffect(() => {
@@ -405,6 +418,31 @@ export default function DayStayBookingPage() {
         setAgentAvailableBalance(null);
         // 404 (no credit-limit row) → treat as Cash Agent.
         setAgentHasAvailableCredit(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [payload]);
+
+  // ── Agent card-payment flag — same gate as HotelBookingPage. Drives
+  //    the no-payment-path block when credit is short (see
+  //    confirmBooking). Fail-safe default: card DISABLED.
+  useEffect(() => {
+    const aId = payload?.agentId;
+    if (!aId) {
+      setAgentCardPaymentEnabled(false);
+      return;
+    }
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/agent/${aId}`)
+      .then((res) => {
+        if (!cancelled) {
+          setAgentCardPaymentEnabled(!!res?.data?.cardPaymentEnabled);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAgentCardPaymentEnabled(false);
       });
     return () => {
       cancelled = true;
@@ -762,6 +800,15 @@ export default function DayStayBookingPage() {
             if (!bypassPaymentModal) {
               setInsufficientAmount(requiredAmount);
               setShowConfirmModal(false);
+              // Card disabled at the agent level → there's no viable
+              // payment path (no credit AND no card). Block the booking
+              // with the dedicated "Booking Cannot Be Completed" modal
+              // instead of the online-payment popup the agent can't use.
+              // Mirrors HotelBookingPage's create-flow gate.
+              if (!agentCardPaymentEnabled) {
+                setShowNoPaymentPathModal(true);
+                return;
+              }
               setShowInsufficientModal(true);
               return;
             }
@@ -1009,6 +1056,7 @@ export default function DayStayBookingPage() {
                         defaultActiveKey={rooms.map((_, i) => i.toString())}
                         className="guest-details-accordion"
                       >
+                       
                         {rooms.map((room, roomIndex) => {
                           // Per-slot refund deadline label — mirrors
                           // HotelBookingPage's slotRefundDeadlineLabel.
@@ -1401,6 +1449,21 @@ export default function DayStayBookingPage() {
                           </div>
                           <div className="hbp-summary-value">
                             {rooms[0]?.mealPlan || "Room Only"}
+                          </div>
+                        </div>
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">
+                            <FaUtensils className="me-2 text-primary" />
+                           Room Status
+                          </div>
+                          {/* Availability of the selected rate. The guest-rooms
+                              state doesn't carry roomStatus — the rate row on
+                              the search handoff payload is the source of truth
+                              (same field isOnRequestRate derives from). */}
+                          <div className="hbp-summary-value">
+                            {payload?.rateRow?.roomStatus ||
+                              rooms[0]?.roomStatus ||
+                              "Available"}
                           </div>
                         </div>
                       </Card.Body>
@@ -2010,6 +2073,49 @@ export default function DayStayBookingPage() {
                         <FaCheckCircle className="me-1" /> Confirm
                       </>
                     )}
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* ─── Insufficient credit + card disabled → block booking ───
+                  Shown when the agent has no available credit AND the
+                  AgentView "Allow Card payment mode" toggle is off. There
+                  is no payment path open to this agent, so the booking is
+                  turned away with a courteous message. Same shape as
+                  HotelBookingPage's block modal. */}
+              <Modal
+                show={showNoPaymentPathModal}
+                onHide={() => setShowNoPaymentPathModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Booking Cannot Be Completed</Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="text-center py-4">
+                  <p className="mb-2 text-dark">
+                    Sorry — this booking can't be completed because the agent
+                    has no available credit and{" "}
+                    <strong>Card payment is not enabled</strong> for this
+                    account.
+                  </p>
+                  <p className="mb-0 text-muted small">
+                    Please top up the agent's credit limit, or ask an
+                    administrator to enable Card payment on the agent's
+                    profile, then try again.
+                  </p>
+                  <div className="mt-3">
+                    <div className="text-muted small">Payable amount</div>
+                    <div className="fs-4 fw-bold text-dark">
+                      {formatPrice(insufficientAmount)}
+                    </div>
+                  </div>
+                </Modal.Body>
+                <Modal.Footer className="justify-content-center border-0">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowNoPaymentPathModal(false)}
+                  >
+                    OK
                   </Button>
                 </Modal.Footer>
               </Modal>

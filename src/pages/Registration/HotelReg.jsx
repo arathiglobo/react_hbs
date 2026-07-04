@@ -39,6 +39,7 @@ import {
   FaCheckCircle,
   FaExclamationTriangle,
   FaInfoCircle,
+  FaArrowLeft,
 } from "react-icons/fa";
 
 const tabOrder = [
@@ -1711,6 +1712,15 @@ const handleAmenityChange = (e) => {
             {/* Header Section */}
             <div className="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-4">
               <div>
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={() => navigate("/registration/hotel")}
+                  className="mb-2 d-inline-flex align-items-center gap-1"
+                >
+                  <FaArrowLeft />
+                  Back
+                </Button>
                 <h2 className="text-primary mb-1 d-flex align-items-center gap-2">
                   <FaHotel className="me-2" />
                   {isEditMode ? "Edit Hotel" : "Hotel Registration"}

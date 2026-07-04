@@ -20,6 +20,7 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
+import AgentCreditBalance from "../../../components/AgentCreditBalance";
 
 function LazyImage({ src, alt, className }) {
   const containerRef = useRef(null);
@@ -1350,7 +1351,7 @@ export const CabSearch = () => {
           <Card className="shadow-sm rounded-xl mb-4 border-0">
             <Card.Body>
               {/* 🔷 Header */}
-              <div className="mb-4 d-flex justify-content-between align-items-start">
+              <div className="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
                 <div>
                   <h4 className="fw-bold text-primary mb-1">
                     Transfers Search
@@ -1359,6 +1360,10 @@ export const CabSearch = () => {
                     Search and compare available transfer options
                   </p>
                 </div>
+                {/* Agent logins see their available credit balance at the
+                    right end of the heading row (renders nothing for other
+                    roles). */}
+                <AgentCreditBalance />
               </div>
 
               {/* ── Collapsed sticky search summary strip ──

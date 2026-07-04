@@ -9,6 +9,7 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
+import AgentCreditBalance from "../../../components/AgentCreditBalance";
 
 function LazyImage({ src, alt, className }) {
   const containerRef = useRef(null);
@@ -383,14 +384,20 @@ export const SchefferDriverSearch = () => {
         <main className="flex-grow-1 p-4 hs-page">
           <Card className="shadow-sm rounded-xl mb-4 border-0">
             <Card.Body>
-              <div className="mb-4">
-                <h4 className="fw-bold text-primary mb-1">
-                  <FaCar className="me-2" />
-                  Chauffeur Driver Search
-                </h4>
-                <p className="text-muted small mb-0">
-                  Book an hourly chauffeur rental — travel anywhere within the city for the package duration.
-                </p>
+              <div className="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                  <h4 className="fw-bold text-primary mb-1">
+                    <FaCar className="me-2" />
+                    Chauffeur Driver Search
+                  </h4>
+                  <p className="text-muted small mb-0">
+                    Book an hourly chauffeur rental — travel anywhere within the city for the package duration.
+                  </p>
+                </div>
+                {/* Agent logins see their available credit balance at the
+                    right end of the heading row (renders nothing for other
+                    roles). */}
+                <AgentCreditBalance />
               </div>
 
               {/* ── Collapsed sticky search summary strip ──

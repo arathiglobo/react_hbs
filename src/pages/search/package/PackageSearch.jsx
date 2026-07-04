@@ -5,6 +5,7 @@ import TopBar from "../../../components/TopBar";
 import Select from "react-select";
 import axiosInstance from "../../../components/AxiosInstance";
 import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
+import AgentCreditBalance from "../../../components/AgentCreditBalance";
 import {
   FaSearch,
   FaEye,
@@ -317,11 +318,17 @@ const PackageSearch = () => {
           {!collapseSearch && (
           <Card className="search-card-modern shadow-sm border-0 hs-form-expand">
             <Card.Body>
-              <div className="mb-4">
-                <h2 className="fw-bold text-primary mb-1">Package Search</h2>
-                <p className="text-muted">
-                  Find the best travel packages for your clients
-                </p>
+              <div className="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                  <h2 className="fw-bold text-primary mb-1">Package Search</h2>
+                  <p className="text-muted">
+                    Find the best travel packages for your clients
+                  </p>
+                </div>
+                {/* Agent logins see their available credit balance at the
+                    right end of the heading row (renders nothing for other
+                    roles). */}
+                <AgentCreditBalance />
               </div>
 
               <Form onSubmit={handleSearchSubmit}>

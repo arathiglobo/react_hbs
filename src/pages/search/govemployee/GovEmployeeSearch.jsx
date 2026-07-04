@@ -30,6 +30,7 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
+import AgentCreditBalance from "../../../components/AgentCreditBalance";
 import "../../../styles/HotelSearch.css";
 
 // ─────────────────────────────────────────────
@@ -837,7 +838,7 @@ export default function GovEmployeeSearch() {
           {/* ── Search Card — mirrors HotelSearch.jsx's chrome ── */}
           <Card className="shadow-sm rounded-xl mb-4 search-card-modern bg-white">
             <Card.Body className="p-4">
-                <div className="mb-4 text-start">
+                <div className="mb-4 text-start d-flex justify-content-between align-items-start flex-wrap gap-2">
                 <h2 className="fw-semibold text-primary mb-1 d-flex align-items-center">
                   <div>
                     <div style={{ fontSize: "1rem", fontWeight: "400" }}>
@@ -848,6 +849,10 @@ export default function GovEmployeeSearch() {
                     </div>
                   </div>
                 </h2>
+                {/* Agent logins see their available credit balance at the
+                    right end of the heading row (renders nothing for other
+                    roles). */}
+                <AgentCreditBalance />
               </div>
 
               <Form onSubmit={handleSearchSubmit}>
