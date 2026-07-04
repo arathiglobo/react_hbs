@@ -56,6 +56,7 @@ const STATUS_META = {
   COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
   PENDING: { label: "Pending", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   NOTCONFIRMED: { label: "Not Confirmed", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  ONREQUEST: { label: "On Request", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
 };
 
@@ -231,11 +232,30 @@ export default function StudentBookingList() {
   const compositeStatus = (b) => {
     const raw = String(b?.confirmationStatus || "").trim();
     const normalized = raw.replace(/\s+/g, "").toLowerCase();
+    // On Request chain — keyed off the ROOM status (mirrors
+    // HotelBookingList / DayStayBookingList), because On Request student
+    // bookings are created with confirmationStatus "Confirmed" and would
+    // otherwise render as a plain green "Confirmed":
+    //   created            → "On Request"
+    //   after step-1 Confirm → "On Request/Confirmed"
+    //   ReConfirmed / Cancelled fall through to the standard branches.
+    const isOnRequestRoom = /^on\s*request$/i.test(
+      String(b?.roomStatus || "").trim(),
+    );
+    const onRequestChain = b?.onRequestConfirmed
+      ? "On Request/Confirmed"
+      : "On Request";
     if (b?.cancelled) {
+      if (isOnRequestRoom && normalized !== "reconfirmed") {
+        return { label: `${onRequestChain} / Cancelled`, kind: "cancelled" };
+      }
       if (normalized === "confirmed" || normalized === "reconfirmed") {
         return { label: `${raw} / Cancelled`, kind: "cancelled" };
       }
       return { label: "Cancelled", kind: "cancelled" };
+    }
+    if (isOnRequestRoom && normalized !== "reconfirmed") {
+      return { label: onRequestChain, kind: "onrequest" };
     }
     if (normalized === "confirmed") return { label: "Confirmed", kind: "confirmed" };
     if (normalized === "reconfirmed") return { label: "ReConfirmed", kind: "confirmed" };
@@ -261,7 +281,13 @@ export default function StudentBookingList() {
           case "completed":
             return !b.cancelled && checkout && checkout < now;
           case "onrequest":
-            return !b.cancelled && normalized === "notconfirmed";
+            // On Request is a ROOM status for student bookings (they are
+            // created with confirmationStatus "Confirmed"), so filter on
+            // roomStatus — matching the Notification pill.
+            return (
+              !b.cancelled &&
+              /^on\s*request$/i.test(String(b.roomStatus || "").trim())
+            );
           case "reconfirmed":
             return (
               !b.cancelled &&
@@ -356,6 +382,8 @@ export default function StudentBookingList() {
         ? "CANCELLED"
         : status.kind === "notconfirmed"
         ? "NOTCONFIRMED"
+        : status.kind === "onrequest"
+        ? "ONREQUEST"
         : null;
     const meta = metaKey
       ? { ...STATUS_META[metaKey], label: status.label }

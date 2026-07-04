@@ -438,8 +438,8 @@ export default function ViewLastMinuteContractRate() {
                 View Last Minute Contract Rate
                 <HotelTitleBadge hotelId={hotelId} />
               </h4>
-              <Button variant="secondary" onClick={() => navigate(-1)}>
-                Close
+              <Button variant="outline-secondary" style={{ visibility: "hidden" }} tabIndex={-1} aria-hidden="true">
+                <FaArrowLeft className="me-2" /> Back
               </Button>
             </div>
 

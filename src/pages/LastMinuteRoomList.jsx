@@ -28,6 +28,8 @@ import {
   FaHotel,
   FaMoneyBillWave,
   FaShieldAlt,
+  FaCalendarAlt,
+  FaGlobe,
 } from "react-icons/fa";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
@@ -421,6 +423,27 @@ export default function LastMinuteRoomList() {
   const results = payload.results;
   const categories = groupRoomsByCategory(hotel.rooms || []);
 
+  // Stay-summary data for the right-hand Booking Summary card — mirrors
+  // RoomList.jsx. Guests come from the search context's per-room adults/
+  // children (single-room shows a combined line, multi-room lists per room).
+  const sc = payload.searchContext || {};
+  const scRooms = Array.isArray(sc.rooms) ? sc.rooms : [];
+  const summaryRoomCount = scRooms.length || 1;
+  const summaryTotalAdults = scRooms.reduce((a, r) => a + (r.adults || 0), 0);
+  const summaryTotalChildren = scRooms.reduce((a, r) => a + (r.children || 0), 0);
+  const summaryGuestLine =
+    [
+      summaryTotalAdults
+        ? `${summaryTotalAdults} adult${summaryTotalAdults > 1 ? "s" : ""}`
+        : "",
+      summaryTotalChildren
+        ? `${summaryTotalChildren} child${summaryTotalChildren > 1 ? "ren" : ""}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(", ") || "—";
+  const summaryNationality = sc.nationality?.label || "—";
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column room-list-container">
       <TopBar />
@@ -454,53 +477,136 @@ export default function LastMinuteRoomList() {
                       onError={(e) => { e.currentTarget.src = DEFAULT_HOTEL_IMAGE; }}
                     />
                   </Col>
-                  <Col md={9}>
-                    <div className="d-flex align-items-start gap-3">
-                      <div className="hotel-icon">
-                        <FaHotel size={36} className="text-primary" />
+                  <Col md={5}>
+                    <div className="hotel-info">
+                      <h2 className="hotel-name mb-2">{hotel.hotelName}</h2>
+                      <div className="d-flex align-items-center gap-3 mb-2 flex-wrap">
+                        <div className="star-rating">
+                          {renderStars(hotel.starRating)}
+                        </div>
+                        {hotel.categoryName && (
+                          <Badge bg="primary">{hotel.categoryName}</Badge>
+                        )}
+                        <Badge bg="warning" text="dark">LAST MINUTE</Badge>
                       </div>
-                      <div className="hotel-info flex-grow-1">
-                        <h2 className="hotel-name mb-2">{hotel.hotelName}</h2>
-                        <div className="d-flex align-items-center gap-3 mb-2 flex-wrap">
-                          <div className="star-rating">
-                            {renderStars(hotel.starRating)}
-                          </div>
-                          {hotel.categoryName && (
-                            <Badge bg="primary">{hotel.categoryName}</Badge>
-                          )}
-                          <Badge bg="warning" text="dark">LAST MINUTE</Badge>
-                          <Badge bg="info">
-                            {results.checkInDate} → {results.checkOutDate} ·{" "}
-                            {results.nights} night{results.nights !== 1 ? "s" : ""}
-                          </Badge>
-                        </div>
-                        <div className="hotel-details">
-                          <p className="mb-1">
-                            <FaMapMarkerAlt className="text-muted me-2" />
-                            {hotel.address || hotel.cityName || "—"}
+                      <div className="hotel-details">
+                        <p className="mb-1">
+                          <FaMapMarkerAlt className="text-muted me-2" />
+                          {hotel.address || hotel.cityName || "—"}
+                        </p>
+                        {hotel.phone && (
+                          <p className="mb-0">
+                            <FaPhone className="text-muted me-2" />
+                            {hotel.phone}
                           </p>
-                          {hotel.phone && (
-                            <p className="mb-0">
-                              <FaPhone className="text-muted me-2" />
-                              {hotel.phone}
-                            </p>
-                          )}
-                          <div className="mt-2">
-                            <small className="text-muted">
-                              <strong>Please note:</strong>{" "}
-                              <span className="someproperties">
-                                Last-minute rates are typically non-refundable.
-                                Some properties may collect additional charges
-                                such as city tax, resort fees, or security
-                                deposits during check-in.
-                              </span>
-                            </small>
-                          </div>
+                        )}
+                        <div className="mt-2">
+                          <small className="text-muted">
+                            <strong>Please note:</strong>{" "}
+                            <span className="someproperties">
+                              Last-minute rates are typically non-refundable.
+                              Some properties may collect additional charges
+                              such as city tax, resort fees, or security
+                              deposits during check-in.
+                            </span>
+                          </small>
                         </div>
-                        {/* Back-to-Search button now lives in the top
-                            toolbar above this card — matches RoomList. */}
                       </div>
                     </div>
+                  </Col>
+                  {/* Stay summary on the right — mirrors RoomList.jsx's
+                      Booking Summary card. */}
+                  <Col md={4}>
+                    <Card className="booking-summary">
+                      <Card.Body className="p-3">
+                        <h6 className="mb-3">Booking Summary</h6>
+                        <div className="booking-details">
+                          <div className="d-flex justify-content-between mb-2">
+                            <span>
+                              <FaCalendarAlt className="text-muted me-2" />
+                              Check-in:
+                            </span>
+                            <span className="fw-semibold">
+                              {results.checkInDate}
+                            </span>
+                          </div>
+                          <div className="d-flex justify-content-between mb-2">
+                            <span>
+                              <FaCalendarAlt className="text-muted me-2" />
+                              Check-out:
+                            </span>
+                            <span className="fw-semibold">
+                              {results.checkOutDate}
+                            </span>
+                          </div>
+                          <div className="mb-2">
+                            <div className="d-flex justify-content-between">
+                              <span>
+                                <FaUsers className="text-muted me-2" />
+                                Guests:
+                              </span>
+                              {summaryRoomCount <= 1 && (
+                                <span className="fw-semibold">
+                                  {summaryGuestLine}
+                                </span>
+                              )}
+                            </div>
+                            {summaryRoomCount > 1 && (
+                              <div className="mt-1 ps-4 guest-breakdown-list">
+                                {scRooms.map((r, i) => {
+                                  const a = r.adults || 0;
+                                  const c = r.children || 0;
+                                  const parts = [];
+                                  if (a) parts.push(`${a} adult${a > 1 ? "s" : ""}`);
+                                  if (c) parts.push(`${c} child${c > 1 ? "ren" : ""}`);
+                                  return (
+                                    <div
+                                      key={i}
+                                      className="d-flex justify-content-between small"
+                                    >
+                                      <span className="text-muted">
+                                        Room {i + 1}:
+                                      </span>
+                                      <span className="fw-semibold">
+                                        {parts.join(", ") || "—"}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                          <div className="d-flex justify-content-between mb-2">
+                            <span>
+                              <FaBed className="text-muted me-2" />
+                              Rooms:
+                            </span>
+                            <span className="fw-semibold">
+                              {summaryRoomCount}
+                            </span>
+                          </div>
+                          <div className="d-flex justify-content-between mb-2">
+                            <span>
+                              <FaCalendarAlt className="text-muted me-2" />
+                              Nights:
+                            </span>
+                            <span className="fw-semibold">
+                              {results.nights} night
+                              {results.nights !== 1 ? "s" : ""}
+                            </span>
+                          </div>
+                          <div className="d-flex justify-content-between">
+                            <span>
+                              <FaGlobe className="text-muted me-2" />
+                              Nationality:
+                            </span>
+                            <span className="fw-semibold">
+                              {summaryNationality}
+                            </span>
+                          </div>
+                        </div>
+                      </Card.Body>
+                    </Card>
                   </Col>
                 </Row>
               </Card.Body>

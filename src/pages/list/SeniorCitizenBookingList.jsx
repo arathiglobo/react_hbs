@@ -71,6 +71,7 @@ const STATUS_META = {
   COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
   PENDING: { label: "Pending", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   NOTCONFIRMED: { label: "Not Confirmed", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  ONREQUEST: { label: "On Request", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
 };
 
@@ -233,7 +234,31 @@ export default function SeniorCitizenBookingList() {
   const statusMetaFor = (b) => {
     const raw = String(b?.confirmationStatus || "").trim();
     const normalized = raw.replace(/\s+/g, "").toLowerCase();
+    // On Request chain — keyed off the ROOM status (mirrors
+    // HotelBookingList / StudentBookingList), because On Request senior
+    // bookings are created with confirmationStatus "Confirmed" and would
+    // otherwise render as a plain green "Confirmed":
+    //   created            → "On Request"
+    //   after step-1 Confirm → "On Request/Confirmed"
+    //   ReConfirmed / Cancelled fall through to the standard branches.
+    const isOnRequestRoom = /^on\s*request$/i.test(
+      String(b?.roomStatus || "").trim(),
+    );
+    const onRequestLabel = b?.onRequestConfirmed
+      ? "On Request/Confirmed"
+      : "On Request";
     if (b?.cancelled) {
+      if (isOnRequestRoom && normalized !== "reconfirmed") {
+        return {
+          meta: {
+            label: `${onRequestLabel} / Cancelled`,
+            bg: "#fdecec",
+            color: "#b42318",
+            dot: "#ef4444",
+          },
+          raw: `${onRequestLabel} / Cancelled`,
+        };
+      }
       if (normalized === "confirmed" || normalized === "reconfirmed") {
         return {
           meta: {
@@ -246,6 +271,9 @@ export default function SeniorCitizenBookingList() {
         };
       }
       return { meta: STATUS_META.CANCELLED, raw: "Cancelled" };
+    }
+    if (isOnRequestRoom && normalized !== "reconfirmed") {
+      return { meta: { ...STATUS_META.ONREQUEST, label: onRequestLabel }, raw: onRequestLabel };
     }
     if (normalized === "confirmed") return { meta: STATUS_META.CONFIRMED, raw };
     if (normalized === "reconfirmed") return { meta: STATUS_META.RECONFIRMED, raw };
@@ -272,7 +300,13 @@ export default function SeniorCitizenBookingList() {
           case "completed":
             return !b.cancelled && checkout && checkout < now;
           case "onrequest":
-            return !b.cancelled && normalized === "notconfirmed";
+            // On Request is a ROOM status for senior bookings (they are
+            // created with confirmationStatus "Confirmed"), so filter on
+            // roomStatus — matching the Notification pill.
+            return (
+              !b.cancelled &&
+              /^on\s*request$/i.test(String(b.roomStatus || "").trim())
+            );
           case "reconfirmed":
             return (
               !b.cancelled &&

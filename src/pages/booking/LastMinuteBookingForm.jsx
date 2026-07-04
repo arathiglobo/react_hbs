@@ -200,6 +200,10 @@ export default function LastMinuteBookingForm() {
   const [insufficientAmount, setInsufficientAmount] = useState(0);
   const [selectedGateway, setSelectedGateway] = useState("");
   const [showNoPaymentPathModal, setShowNoPaymentPathModal] = useState(false);
+  // Per-agent "Card" payment-mode gate, toggled from AgentView. Filters the
+  // Card option out of the Payment Mode dropdown (mirrors HotelBookingPage).
+  // The Confirm-time pre-check re-fetches this flag authoritatively.
+  const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
   const [showPolicyModal, setShowPolicyModal] = useState(false);
   const [policyLoading, setPolicyLoading] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
@@ -323,6 +327,28 @@ export default function LastMinuteBookingForm() {
       })
     );
   }, []); // run once after mount
+
+  // ── Agent card-payment flag — same gate as HotelBookingPage. Drives
+  //    the Card option in the Payment Mode dropdown. Fail-safe default:
+  //    card DISABLED.
+  useEffect(() => {
+    const aId = ctx?.agentId;
+    if (!aId) { setAgentCardPaymentEnabled(false); return; }
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/agent/${aId}`)
+      .then((res) => { if (!cancelled) setAgentCardPaymentEnabled(!!res?.data?.cardPaymentEnabled); })
+      .catch(() => { if (!cancelled) setAgentCardPaymentEnabled(false); });
+    return () => { cancelled = true; };
+  }, [ctx?.agentId]);
+
+  // Keep the selected Payment Mode valid — if Card was selected and the
+  // agent's Card gate turns out to be off, fall back to Credit Limit.
+  useEffect(() => {
+    if (paymentMode === "CARD" && !agentCardPaymentEnabled) {
+      setPaymentMode("CREDITLIMIT");
+    }
+  }, [paymentMode, agentCardPaymentEnabled]);
 
   function defaultGuest(isChild) {
     return {
@@ -961,7 +987,12 @@ export default function LastMinuteBookingForm() {
                       >
                         <option value="CREDITLIMIT">Credit Limit</option>
                         <option value="CASH">Cash</option>
-                        <option value="CARD">Card</option>
+                        {/* Per-agent gate — Card only when the AgentView
+                            "Enable Card payment mode" checkbox is on
+                            (mirrors HotelBookingPage). */}
+                        {agentCardPaymentEnabled && (
+                          <option value="CARD">Card</option>
+                        )}
                       </Form.Select>
                     </Form.Group>
                   </Col>
@@ -1073,6 +1104,18 @@ export default function LastMinuteBookingForm() {
                             </div>
                           );
                         })}
+                      </div>
+                    </div>
+                    <div className="hbp-summary-row">
+                      <div className="hbp-summary-label">
+                        <FaUtensils className="me-2 text-primary" />
+                        Room Status
+                      </div>
+                      {/* Availability of the selected room — same field
+                          isOnRequestRoom and the create payload's roomStatus
+                          derive from (mirrors HotelBookingPage). */}
+                      <div className="hbp-summary-value">
+                        {ctx?.room?.roomStatus || "Available"}
                       </div>
                     </div>
                     <div className="hbp-summary-row">

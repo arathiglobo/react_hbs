@@ -36,6 +36,11 @@ export default function LastMinuteContractRate() {
   const [selectedValidityData, setSelectedValidityData] = useState([]);
   const [selectedRateCode, setSelectedRateCode] = useState("");
 
+  // Status toggle modal state
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedRate, setSelectedRate] = useState(null);
+  const [statusUpdating, setStatusUpdating] = useState(false);
+
 
   const fetchRates = async (pageNum = 0, searchTerm = search) => {
     try {
@@ -94,6 +99,41 @@ export default function LastMinuteContractRate() {
     setSelectedValidityData(validityData || []);
     setSelectedRateCode(rateCode);
     setShowValidityModal(true);
+  };
+
+  // Status toggle handlers
+  const handleStatusToggle = (rate) => {
+    setSelectedRate(rate);
+    setShowStatusModal(true);
+  };
+
+  const updateRowStatus = async () => {
+    if (!selectedRate) return;
+    const rateId = selectedRate.lastMinuteContractRateId;
+    const newIsLive = !selectedRate.isLive;
+    try {
+      setStatusUpdating(true);
+      // Try query-param style (same as LongStayContract pattern)
+      await axiosInstance.patch(
+        `/api/last-minute-contract-rate/${rateId}/status?isLive=${newIsLive}`
+      );
+      toast.success(
+        selectedRate.isLive
+          ? "Last Minute Contract Rate deactivated"
+          : "Last Minute Contract Rate activated"
+      );
+      await fetchRates(page, search);
+      setShowStatusModal(false);
+      setSelectedRate(null);
+    } catch (err) {
+      console.error("Status toggle failed:", err);
+      toast.error(
+        err?.response?.data?.message ||
+          "Failed to update last-minute contract rate status"
+      );
+    } finally {
+      setStatusUpdating(false);
+    }
   };
 
   // View — opens the dedicated ViewLastMinuteContractRate screen. That
@@ -183,7 +223,12 @@ export default function LastMinuteContractRate() {
                           )}
                         </td>
                         <td>
-                          <Badge bg={rate.isLive ? "success" : "danger"}>
+                          <Badge
+                            bg={rate.isLive ? "success" : "danger"}
+                            style={{ cursor: "pointer" }}
+                            onClick={() => handleStatusToggle(rate)}
+                            title={`Click to ${rate.isLive ? "deactivate" : "activate"} last minute contract rate`}
+                          >
                             {rate.isLive ? "Active" : "Inactive"}
                           </Badge>
                         </td>
@@ -253,6 +298,61 @@ export default function LastMinuteContractRate() {
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowValidityModal(false)}>Close</Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Status Toggle Modal */}
+      <Modal
+        show={showStatusModal}
+        onHide={() => !statusUpdating && setShowStatusModal(false)}
+        centered
+        size="sm"
+        backdrop="static"
+        keyboard={false}
+      >
+        <Modal.Header closeButton={!statusUpdating}>
+          <Modal.Title>Confirm Status Change</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p>
+            Are you sure you want to{" "}
+            <strong className={selectedRate?.isLive ? "text-danger" : "text-success"}>
+              {selectedRate?.isLive ? "deactivate" : "activate"}
+            </strong>{" "}
+            this last minute contract rate?
+          </p>
+        </Modal.Body>
+        <Modal.Footer className="justify-content-between">
+          <Button
+            variant="secondary"
+            onClick={() => setShowStatusModal(false)}
+            disabled={statusUpdating}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant={selectedRate?.isLive ? "danger" : "success"}
+            onClick={updateRowStatus}
+            disabled={statusUpdating}
+          >
+            {statusUpdating ? (
+              <>
+                <Spinner
+                  as="span"
+                  animation="border"
+                  size="sm"
+                  role="status"
+                  aria-hidden="true"
+                  className="me-2"
+                />
+                Processing...
+              </>
+            ) : selectedRate?.isLive ? (
+              "Deactivate"
+            ) : (
+              "Activate"
+            )}
+          </Button>
         </Modal.Footer>
       </Modal>
     </div>

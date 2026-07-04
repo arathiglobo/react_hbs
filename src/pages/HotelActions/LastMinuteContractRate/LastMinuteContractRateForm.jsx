@@ -56,7 +56,7 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
     daySelection: "allDays", // allDays | weekDays | weekendDays
     validityList: [{ validityFrom: "", validityTo: "" }],
     roomRates: [],
-    isLive: true,
+    isLive: false,
     checkInWindowDays: 2,
     markup: "",
     termsAndConditions: [""],

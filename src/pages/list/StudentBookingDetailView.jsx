@@ -360,6 +360,39 @@ export default function StudentBookingDetailView() {
       normalizedStatus === "COMPLETED";
     const base = { fontWeight: "700", fontSize: "0.85rem" };
 
+    // ── On Request breadcrumb chain (mirrors BookingDetailedView) ──
+    // On Request student bookings are created with confirmationStatus
+    // "Confirmed", so without this override the badge would read a plain
+    // green "Confirmed". The chain grows as the operator acts:
+    //   created            → "On Request"                       (orange)
+    //   after step-1 Confirm → "On Request/Confirmed"            (orange)
+    //   after Reconfirm     → "On Request/Confirmed/Reconfirmed" (green)
+    //   cancelled at any point → chain + " / Cancelled" two-tone.
+    if (isOnRequestRoom) {
+      const finalised =
+        normalizedStatus === "RECONFIRMED" || normalizedStatus === "COMPLETED";
+      const chain = finalised
+        ? "On Request/Confirmed/Reconfirmed"
+        : booking?.onRequestConfirmed
+        ? "On Request/Confirmed"
+        : "On Request";
+      if (isCancelled) {
+        return (
+          <span style={base}>
+            <span style={{ color: finalised ? "#198754" : "#e67e22" }}>
+              {chain}
+            </span>
+            <span style={{ color: "#dc3545" }}> / Cancelled</span>
+          </span>
+        );
+      }
+      return (
+        <span style={{ ...base, color: finalised ? "#198754" : "#e67e22" }}>
+          {chain}
+        </span>
+      );
+    }
+
     // Cancelled on top of a Confirmed/Reconfirmed booking → two-tone:
     // the original status in green, "/ Cancelled" in red.
     if (isCancelled && isConfirmedish) {
@@ -505,6 +538,18 @@ export default function StudentBookingDetailView() {
   // Missing agentId/amount or a credit-check API error fail OPEN to the
   // legacy direct reconfirm so the operator is never trapped.
   const confirmBooking = async () => {
+    // STEP-1 CONFIRM of an On Request booking is NEVER gated — it only
+    // moves the booking to "On Request/Confirmed" (no credit settles yet),
+    // so it must go straight through to the BE step-1 branch. Unlike the
+    // hotel flow, student On Request bookings carry creditDeferred=TRUE, so
+    // without this explicit guard the pre-check below would fire the
+    // payment gate at CONFIRM instead of at RECONFIRM. The gate applies
+    // only to the RECONFIRM step (handled by the block below, where
+    // isOnRequestPending is false).
+    if (isOnRequestPending) {
+      await runReconfirm();
+      return;
+    }
     const isDeferredCreditBooking = booking?.creditDeferred === true;
     const isOnRequestReconfirmStep = isOnRequestRoom && !isOnRequestPending;
     if (!isDeferredCreditBooking && !isOnRequestReconfirmStep) {

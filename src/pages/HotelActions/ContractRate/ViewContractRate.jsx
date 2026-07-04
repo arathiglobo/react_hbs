@@ -305,8 +305,8 @@ export default function ViewContractRate() {
                 View Contract Rate
                 <HotelTitleBadge hotelId={id} />
               </h4>
-              <Button variant="secondary" onClick={() => navigate(-1)}>
-                Close
+              <Button variant="outline-secondary" style={{ visibility: "hidden" }} tabIndex={-1} aria-hidden="true">
+                <FaArrowLeft className="me-2" /> Back
               </Button>
             </div>
 
