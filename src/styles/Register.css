@@ -206,7 +206,11 @@
   outline: none;
 }
 
-/* Dropdown specific styles */
+/* Dropdown specific styles.
+ * Every <Form.Select> on /register carries both `.form-input` (which uses
+ * the `background:` shorthand and strips the chevron image) and
+ * `.form-select`. Re-attach the caret here so it survives the cascade
+ * without having to hunt through custom.scss for `!important` ordering. */
 .form-select {
   background-color: #f7fafc !important;
   color: #2d3748 !important;
@@ -215,6 +219,28 @@
   padding: 0.875rem 1rem;
   font-size: 1rem;
   transition: all 0.3s ease;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%232d3748' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.9rem center !important;
+  background-size: 14px 12px !important;
+  padding-right: 2.25rem !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+}
+
+/* Same caret for the Location dropdown (and any other) that only carries
+ * `.form-input` without `.form-select` — e.g. `<Form.Select className="form-input">`
+ * still resolves to a `<select>` element. */
+select.form-input {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%232d3748' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.9rem center !important;
+  background-size: 14px 12px !important;
+  padding-right: 2.25rem !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
 }
 
 .form-select:focus {

@@ -1156,10 +1156,17 @@ const AgentView = () => {
                 <FaBan className="me-2" />
                 Agent Exclude
               </Button>
+              {/* Login button removed — agent login credentials are now
+                  collected on the public /register page and provisioned by
+                  the admin from /admin/approval/agents. Keeping the modal
+                  code below so the reset-password flow (used elsewhere)
+                  still compiles. */}
+              {false && (
               <Button variant="success" onClick={handleLogin}>
                 <FaSignInAlt className="me-2" />
                 Login
               </Button>
+              )}
               <Button
                 variant={isAgentActive ? "outline-danger" : "outline-success"}
                 onClick={handleToggleStatus}

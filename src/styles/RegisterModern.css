@@ -122,14 +122,28 @@
 .register-page .required { color: #EC0B43 !important; font-weight: 700 !important; }
 .register-page .form-control,
 .register-page .form-select {
-  border-radius: 11px !important; border: 1.5px solid #E5E5E1 !important; background: #FAFAF8 !important;
+  border-radius: 11px !important; border: 1.5px solid #E5E5E1 !important; background-color: #FAFAF8 !important;
   padding: .65rem .9rem !important; font-size: .92rem !important; font-weight: 500 !important;
   color: #15171C !important; letter-spacing: -.006em !important;
-  transition: border-color .16s ease, box-shadow .16s ease, background .16s ease !important;
+  transition: border-color .16s ease, box-shadow .16s ease, background-color .16s ease !important;
+}
+/* Restore the dropdown chevron — the sibling rule above used the
+   `background:` shorthand which erased Bootstrap's built-in caret. Use
+   `background-color` above and re-apply the SVG caret here so every
+   <Form.Select> on /register shows a downward arrow on the right edge. */
+.register-page .form-select {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%2315171C' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.9rem center !important;
+  background-size: 14px 12px !important;
+  padding-right: 2.25rem !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
 }
 .register-page .form-control:focus,
 .register-page .form-select:focus {
-  border-color: #EC0B43 !important; background: #ffffff !important;
+  border-color: #EC0B43 !important; background-color: #ffffff !important;
   box-shadow: 0 0 0 4px rgba(236, 11, 67, .12) !important;
 }
 .register-page .form-control::placeholder { color: #A8A8A3 !important; font-weight: 400 !important; }

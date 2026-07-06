@@ -214,6 +214,12 @@ const AgentReg = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [items, setItems] = useState([]);
+  /**
+   * Set of agent ids that have a PENDING agent_external_registration row.
+   * Populated in parallel with the agent list — the status column renders
+   * "Approval Pending" for agents in this set, overriding Active/Inactive.
+   */
+  const [pendingAgentIds, setPendingAgentIds] = useState(() => new Set());
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [isViewMode, setIsViewMode] = useState(false);
@@ -921,6 +927,23 @@ const AgentReg = () => {
       setPage(0);
     } finally {
       setIsLoading(false);
+    }
+
+    // In parallel refresh the pending-approval set so the status column
+    // reflects the current /admin/approval/agents state. Failure here is
+    // non-fatal — the list still renders with Active/Inactive badges.
+    try {
+      const pendingRes = await axiosInstance.get(
+        "/api/agent-external-register/pending",
+      );
+      const rows = Array.isArray(pendingRes.data) ? pendingRes.data : [];
+      const ids = new Set(
+        rows.map((r) => r?.agentId).filter((v) => v != null),
+      );
+      setPendingAgentIds(ids);
+    } catch (_) {
+      // Silent — pre-existing agents predate this feature and the endpoint
+      // may not be reachable during development against an old backend.
     }
   };
 
@@ -2156,8 +2179,12 @@ const AgentReg = () => {
                       <td>{item.countryName || "—"}</td>
                       <td>{item.provinceName || "—"}</td>
                       <td>
-                        {String(item.status || "").trim().toLowerCase() ===
-                        "inactive" ? (
+                        {pendingAgentIds.has(item.id) ? (
+                          <span className="bg-warning text-dark">
+                            Approval Pending
+                          </span>
+                        ) : String(item.status || "").trim().toLowerCase() ===
+                          "inactive" ? (
                           <span className="badge bg-danger">Inactive</span>
                         ) : (
                           <span className="badge bg-success">Active</span>

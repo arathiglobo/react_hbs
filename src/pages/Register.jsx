@@ -38,7 +38,17 @@ const Register = () => {
     gmEmail: "",
     // Incentive claim preference: "" | "CREDIT_LIMIT" | "BANK_TRANSFER".
     preferredClaimMethod: "",
+    // Self-service login credentials. Collected here now (previously admin
+    // did this via the AgentView Login button). Backend creates a pending
+    // agent_external_registration row that admin approves on
+    // /admin/approval/agents to provision the AGENT UserAccount.
+    username: "",
+    password: "",
+    repassword: "",
   });
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [showRePassword, setShowRePassword] = useState(false);
 
   const [errors, setErrors] = useState({});
   // Tracks whether the user picked "Others" in the Business Type dropdown,
@@ -249,7 +259,31 @@ const Register = () => {
       if (!formData.placeId) newErrors.placeId = "Location is required";
       if (!formData.address.trim()) newErrors.address = "Address is required";
     } else if (currentStep === 4) {
-      // Step 4 — Finance Manager + GM details (always required to match backend)
+      // Step 4 — Login credentials (used to provision the AGENT UserAccount
+      // once an admin approves this request from /admin/approval/agents).
+      if (!formData.username.trim()) {
+        newErrors.username = "Username is required";
+      } else if (formData.username.length < 4) {
+        newErrors.username = "Username must be at least 4 characters long";
+      } else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
+        newErrors.username =
+          "Username can only contain letters, numbers, and underscores";
+      }
+      if (!formData.password) {
+        newErrors.password = "Password is required";
+      } else if (formData.password.length < 8) {
+        newErrors.password = "Password must be at least 8 characters long";
+      } else if (!/(?=.*[A-Z])(?=.*[0-9])/.test(formData.password)) {
+        newErrors.password =
+          "Password must contain at least one uppercase letter and one number";
+      }
+      if (!formData.repassword) {
+        newErrors.repassword = "Please confirm your password";
+      } else if (formData.password !== formData.repassword) {
+        newErrors.repassword = "Passwords do not match";
+      }
+    } else if (currentStep === 5) {
+      // Step 5 — Finance Manager + GM details (always required to match backend)
       if (!formData.financeManagerName.trim())
         newErrors.financeManagerName = "Finance Manager name is required";
       if (!formData.financeManagerContactNo.trim())
@@ -266,7 +300,7 @@ const Register = () => {
         newErrors.gmEmail = "GM email is required";
       if (formData.gmEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.gmEmail))
         newErrors.gmEmail = "Invalid GM email format";
-    } else if (currentStep === 5 && formData.countryId === "1") {
+    } else if (currentStep === 6 && formData.countryId === "1") {
       if (formData.agentClassification === "registered" && !formData.agentGstIn.trim()) {
         newErrors.agentGstIn = "GSTIN is required for registered agencies";
       }
@@ -327,6 +361,30 @@ const Register = () => {
     )
       newErrors.mobileNumber = "Mobile Number must be 10-15 digits";
 
+    // Login credentials (Step 4). Backend uses these to create the
+    // agent_external_registration pending row.
+    if (!formData.username.trim()) {
+      newErrors.username = "Username is required";
+    } else if (formData.username.length < 4) {
+      newErrors.username = "Username must be at least 4 characters long";
+    } else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
+      newErrors.username =
+        "Username can only contain letters, numbers, and underscores";
+    }
+    if (!formData.password) {
+      newErrors.password = "Password is required";
+    } else if (formData.password.length < 8) {
+      newErrors.password = "Password must be at least 8 characters long";
+    } else if (!/(?=.*[A-Z])(?=.*[0-9])/.test(formData.password)) {
+      newErrors.password =
+        "Password must contain at least one uppercase letter and one number";
+    }
+    if (!formData.repassword) {
+      newErrors.repassword = "Please confirm your password";
+    } else if (formData.password !== formData.repassword) {
+      newErrors.repassword = "Passwords do not match";
+    }
+
     // Finance Manager + GM details (required by backend)
     if (!formData.financeManagerName.trim())
       newErrors.financeManagerName = "Finance Manager name is required";
@@ -380,10 +438,12 @@ const Register = () => {
     }
 
     try {
-      /* GM / Finance Manager fields are now collected in Step 4 of the form
+      /* GM / Finance Manager fields are now collected in Step 5 of the form
          (matches the Agent admin registration). The form validation guarantees
-         non-empty values; the `|| ""` here is just a defensive no-op. */
-      const payload = { ...formData };
+         non-empty values; the `|| ""` here is just a defensive no-op.
+         Strip `repassword` — client-side confirmation only, backend doesn't
+         accept it. */
+      const { repassword: _rp, ...payload } = formData;
       const registerResponse = await axiosInstance.post(
         "/api/agent/register",
         payload
@@ -434,6 +494,9 @@ const Register = () => {
         gmContactNo: "",
         gmEmail: "",
         preferredClaimMethod: "",
+        username: "",
+        password: "",
+        repassword: "",
       });
       setErrors({});
       setCurrentStep(1);
@@ -477,13 +540,18 @@ const Register = () => {
       <div className={`step-connector ${currentStep >= 4 ? 'active' : ''}`}></div>
       <div className="step-item" onClick={() => setCurrentStep(4)} style={{ cursor: 'pointer' }}>
         <div className={`step-circle ${currentStep >= 4 ? 'active' : ''}`}>4</div>
+        <div className="step-label">Account</div>
+      </div>
+      <div className={`step-connector ${currentStep >= 5 ? 'active' : ''}`}></div>
+      <div className="step-item" onClick={() => setCurrentStep(5)} style={{ cursor: 'pointer' }}>
+        <div className={`step-circle ${currentStep >= 5 ? 'active' : ''}`}>5</div>
         <div className="step-label">Finance & GM</div>
       </div>
       {formData.countryId === "1" && (
         <>
-          <div className={`step-connector ${currentStep >= 5 ? 'active' : ''}`}></div>
-          <div className="step-item" onClick={() => setCurrentStep(5)} style={{ cursor: 'pointer' }}>
-            <div className={`step-circle ${currentStep >= 5 ? 'active' : ''}`}>5</div>
+          <div className={`step-connector ${currentStep >= 6 ? 'active' : ''}`}></div>
+          <div className="step-item" onClick={() => setCurrentStep(6)} style={{ cursor: 'pointer' }}>
+            <div className={`step-circle ${currentStep >= 6 ? 'active' : ''}`}>6</div>
             <div className="step-label">GST Details</div>
           </div>
         </>
@@ -537,10 +605,11 @@ const Register = () => {
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                       </svg>
                     </div>
-                    <h2 className="success-title">Registration Successful!</h2>
+                    <h2 className="success-title">Registration Submitted!</h2>
                     <p className="success-message">
-                      Welcome to our network! Your account has been created successfully.
-                      You can now log in with your email and password.
+                      Your registration has been submitted for review. An administrator
+                      will verify your details, and you'll be able to log in with your
+                      chosen username and password once your account is approved.
                     </p>
                     <div className="success-actions">
                       <Button
@@ -1076,8 +1145,120 @@ const Register = () => {
                         </Row>
                       </div>
 
-                      {/* Step 4: Finance Manager & GM Details + Incentive Claim Preferences */}
+                      {/* Step 4: Account — login credentials for the agent portal.
+                          Backend creates a pending agent_external_registration
+                          record; an admin approves it on /admin/approval/agents. */}
                       <div className={`form-step ${currentStep === 4 ? 'active' : ''}`}>
+                        <div className="step-header">
+                          <h3 className="step-title">
+                            <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="step-icon">
+                              <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                            </svg>
+                            Account Credentials
+                          </h3>
+                          <p className="step-description">Choose the username and password you will use to sign in once your account is approved.</p>
+                        </div>
+                        <Row className="g-3">
+                          <Col xs={12}>
+                            <Form.Group>
+                              <Form.Label className="form-label">
+                                Username <span className="required">*</span>
+                              </Form.Label>
+                              <Form.Control
+                                type="text"
+                                name="username"
+                                value={formData.username}
+                                onChange={handleChange}
+                                placeholder="Enter a username (min 4 chars, letters/digits/underscore)"
+                                className={`form-input ${errors.username ? 'is-invalid' : ''}`}
+                                autoComplete="new-password"
+                                maxLength={30}
+                              />
+                              {errors.username && (
+                                <Form.Control.Feedback type="invalid">
+                                  {errors.username}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="form-label">
+                                Password <span className="required">*</span>
+                              </Form.Label>
+                              <div className="position-relative">
+                                <Form.Control
+                                  type={showPassword ? "text" : "password"}
+                                  name="password"
+                                  value={formData.password}
+                                  onChange={handleChange}
+                                  placeholder="Min 8 chars, 1 uppercase, 1 number"
+                                  className={`form-input ${errors.password ? 'is-invalid' : ''}`}
+                                  autoComplete="new-password"
+                                  style={{ paddingRight: 40 }}
+                                />
+                                <button
+                                  type="button"
+                                  className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
+                                  style={{ border: "none", background: "none", color: "#6c757d", padding: "0 12px", zIndex: 10 }}
+                                  onClick={() => setShowPassword((s) => !s)}
+                                  tabIndex={-1}
+                                >
+                                  {showPassword ? (
+                                    <i className="fas fa-eye-slash"></i>
+                                  ) : (
+                                    <i className="fas fa-eye"></i>
+                                  )}
+                                </button>
+                              </div>
+                              {errors.password && (
+                                <div className="text-danger small mt-1">{errors.password}</div>
+                              )}
+                            </Form.Group>
+                          </Col>
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="form-label">
+                                Re-enter Password <span className="required">*</span>
+                              </Form.Label>
+                              <div className="position-relative">
+                                <Form.Control
+                                  type={showRePassword ? "text" : "password"}
+                                  name="repassword"
+                                  value={formData.repassword}
+                                  onChange={handleChange}
+                                  placeholder="Confirm password"
+                                  className={`form-input ${errors.repassword ? 'is-invalid' : ''}`}
+                                  autoComplete="new-password"
+                                  style={{ paddingRight: 40 }}
+                                />
+                                <button
+                                  type="button"
+                                  className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
+                                  style={{ border: "none", background: "none", color: "#6c757d", padding: "0 12px", zIndex: 10 }}
+                                  onClick={() => setShowRePassword((s) => !s)}
+                                  tabIndex={-1}
+                                >
+                                  {showRePassword ? (
+                                    <i className="fas fa-eye-slash"></i>
+                                  ) : (
+                                    <i className="fas fa-eye"></i>
+                                  )}
+                                </button>
+                              </div>
+                              {errors.repassword && (
+                                <div className="text-danger small mt-1">{errors.repassword}</div>
+                              )}
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                        <div className="alert alert-info mt-3 mb-0" style={{ fontSize: "0.85rem" }}>
+                          After you submit, an administrator will review your registration. Once approved, you can sign in using the credentials chosen above.
+                        </div>
+                      </div>
+
+                      {/* Step 5: Finance Manager & GM Details + Incentive Claim Preferences */}
+                      <div className={`form-step ${currentStep === 5 ? 'active' : ''}`}>
                         <div className="step-header">
                           <h3 className="step-title">
                             <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="step-icon">
@@ -1232,9 +1413,9 @@ const Register = () => {
                         )}
                       </div>
 
-                      {/* Step 5: GST Details (India only) */}
+                      {/* Step 6: GST Details (India only) */}
                       {formData.countryId === "1" && (
-                        <div className={`form-step ${currentStep === 5 ? 'active' : ''}`}>
+                        <div className={`form-step ${currentStep === 6 ? 'active' : ''}`}>
                           <div className="step-header">
                             <h3 className="step-title">
                               <svg width="24" height="24" fill="currentColor" viewBox="0 0 20 20" className="step-icon">
@@ -1381,7 +1562,7 @@ const Register = () => {
                                 Previous
                               </Button>
                             )}
-                            {currentStep < 4 && (
+                            {currentStep < 5 && (
                               <Button
                                 type="button"
                                 variant="outline-primary"
@@ -1395,7 +1576,7 @@ const Register = () => {
                                 </svg>
                               </Button>
                             )}
-                            {currentStep === 4 && formData.countryId === "1" && (
+                            {currentStep === 5 && formData.countryId === "1" && (
                               <Button
                                 type="button"
                                 variant="outline-primary"
@@ -1409,7 +1590,7 @@ const Register = () => {
                                 </svg>
                               </Button>
                             )}
-                            {currentStep === 4 && formData.countryId !== "1" && (
+                            {currentStep === 5 && formData.countryId !== "1" && (
                               <Button
                                 type="submit"
                                 variant="primary"
@@ -1434,7 +1615,7 @@ const Register = () => {
                                 )}
                               </Button>
                             )}
-                            {currentStep === 5 && formData.countryId === "1" && (
+                            {currentStep === 6 && formData.countryId === "1" && (
                               <Button
                                 type="submit"
                                 variant="primary"
