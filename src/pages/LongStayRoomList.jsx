@@ -587,6 +587,14 @@ export default function LongStayRoomList() {
   // markup = { markupType: "PERCENT" | "AMOUNT", markupValue: Number }
   const [agentMarkup, setAgentMarkup] = useState(null);
 
+  // ── Payment-path gate — mirrors RoomList / LastMinuteRoomList. When
+  //    the agent has NO available credit AND per-agent Card payment is
+  //    disabled, block Book here instead of sending them into a booking
+  //    form they can't submit.
+  const [agentBalance, setAgentBalance] = useState(null);
+  const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
+  const [showNoPaymentPathModal, setShowNoPaymentPathModal] = useState(false);
+
   useEffect(() => {
     const raw = sessionStorage.getItem("longStayRoomListPayload");
     if (!raw) {
@@ -650,8 +658,32 @@ export default function LongStayRoomList() {
           // Agent without configured markup — leave agentMarkup null
           // so the room list shows pre-markup rates.
         });
+
+      // Available credit + Card gate — both drive the "no viable
+      // payment path" block modal. Fail-safe defaults keep the flow
+      // unblocked on a hiccup so a network error never spuriously
+      // gates a booking.
+      axiosInstance
+        .get(`/api/agent-credit-limit/agent/${agentId}`)
+        .then((res) => {
+          setAgentBalance(res?.data?.availableCreditLimit ?? 0);
+        })
+        .catch(() => setAgentBalance(0));
+      axiosInstance
+        .get(`/api/agent/${agentId}`)
+        .then((res) => {
+          setAgentCardPaymentEnabled(!!res?.data?.cardPaymentEnabled);
+        })
+        .catch(() => setAgentCardPaymentEnabled(false));
     }
   }, []);
+
+  // Blanket "no viable payment path" check for the room-list gate:
+  // available credit 0 (or no credit-limit row) AND Card disabled.
+  // Partial-credit shortfalls are still caught by the booking page's
+  // own scenario-3 gate.
+  const hasNoPaymentPath =
+    Number(agentBalance) <= 0 && !agentCardPaymentEnabled;
 
   const totalNights = useMemo(() => {
     if (!draft) return 0;
@@ -739,6 +771,12 @@ export default function LongStayRoomList() {
   };
 
   const handleBook = (contract, room) => {
+    // Scenario-3 short-circuit — block here when the agent has zero
+    // credit AND no Card option (no viable payment path anywhere).
+    if (hasNoPaymentPath) {
+      setShowNoPaymentPathModal(true);
+      return;
+    }
     if (contract.maxBookingDays && totalNights > contract.maxBookingDays) {
       toast.error(
         `Selected contract caps stays at ${contract.maxBookingDays} nights — your dates are ${totalNights}.`
@@ -811,6 +849,12 @@ export default function LongStayRoomList() {
    *  `roomBreakdown` for future backend work. */
   const handleProceedBooking = () => {
     if (!allRoomsSelected || !draft) return;
+    // Same room-list gate as the single-room path — block scenario 3
+    // before we navigate into the booking form.
+    if (hasNoPaymentPath) {
+      setShowNoPaymentPathModal(true);
+      return;
+    }
     try {
       const primary = selectedRooms[0];
       // Pre-flight: same cap check as handleBook.
@@ -1598,6 +1642,37 @@ export default function LongStayRoomList() {
             onClick={() => setShowPoliciesModal(false)}
           >
             Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* No Payment Path Modal — scenario 3 hard block. Shown right
+          here on the room list so the agent doesn't get pushed into a
+          booking form they can't submit. */}
+      <Modal
+        show={showNoPaymentPathModal}
+        onHide={() => setShowNoPaymentPathModal(false)}
+        centered
+        backdrop="static"
+        keyboard={false}
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Booking Cannot Be Completed</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="mb-0">
+            You do not have sufficient credit limit, and online card
+            payment is not enabled for your account. Therefore, this
+            booking cannot be completed. Please contact your account
+            manager or administrator to enable a payment method.
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setShowNoPaymentPathModal(false)}
+          >
+            OK
           </Button>
         </Modal.Footer>
       </Modal>

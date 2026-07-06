@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   FaHotel,
   FaCalendarAlt,
@@ -70,6 +70,7 @@ const SPECIAL_REQUEST_OPTIONS = [
  */
 export default function DayStayBookingPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const activeUserRole = localStorage.getItem("currentActiveRole");
 
   // ── Source of truth ───────────────────────────────────────────────
@@ -189,37 +190,130 @@ export default function DayStayBookingPage() {
     return today > cancellationDeadline;
   }, [cancellationDeadline]);
 
-  // ── Payment Type availability — mirrors HotelBookingPage exactly ──────
-  // Only Credit Limit / Cash / Card are exposed in the UI. Online, Bank
-  // Transfer, Cheque, and Cash Deposit are intentionally hidden per business
-  // decision — the enums stay valid on the backend, they're just not
-  // selectable here.
-  //
-  // The old Non-Refundable + Cash-Agent collapse (Card/Cash-Deposit only)
-  // is REMOVED, same as on HotelBookingPage — combined with the per-agent
-  // Card gate it could leave the dropdown empty, and whether the agent can
-  // actually pay is enforced at Confirm time by the credit pre-check
-  // ("Online Payment Required" / "Booking Cannot Be Completed" modals).
-  const paymentModeOptions = useMemo(() => {
-    const base = [
-      { value: "CREDITLIMIT", label: "Credit Limit" },
-      { value: "CASH", label: "Cash" },
-      { value: "CARD", label: "Card" },
-    ];
-    // Per-agent gate — the Card option is only exposed when the
-    // AgentView "Enable Card payment mode" checkbox is on for this
-    // agent (see agent.cardPaymentEnabled).
-    return agentCardPaymentEnabled
-      ? base
-      : base.filter((o) => o.value !== "CARD");
-  }, [agentCardPaymentEnabled]);
+  // ── Payment-mode scenario derivation (mirrors HotelBookingPage) ────────
+  // bookingSellingPrice = the AED total the agent owes for this booking
+  // (same amount /api/day-stay-booking/save debits and the credit
+  // pre-check uses).
+  const bookingSellingPrice = useMemo(() => {
+    return (rooms || []).reduce(
+      (s, r) => s + Number(r?.rate || 0),
+      0,
+    );
+  }, [rooms]);
 
-  // Keep the selected Payment Type valid — mirrors HotelBookingPage.
+  // Client-side "sufficient credit" flag — null while balance is loading
+  // so the UI doesn't flash the wrong scenario on first render.
+  const hasSufficientCredit = useMemo(() => {
+    if (agentAvailableBalance == null) return null;
+    return Number(agentAvailableBalance) >= bookingSellingPrice;
+  }, [agentAvailableBalance, bookingSellingPrice]);
+
+  // Scenario 3 — insufficient credit AND per-agent Card payment disabled.
+  const noPaymentPathAvailable =
+    hasSufficientCredit === false && !agentCardPaymentEnabled;
+
+  // ── Payment Mode availability — three scenarios (mirrors HotelBookingPage):
+  //   1. Sufficient credit                    → Credit Limit only (Card hidden)
+  //   2. Insufficient credit + Card enabled   → Card only (+ note below)
+  //   3. Insufficient credit + Card disabled  → no options; booking blocked
+  // While the credit balance is still loading (hasSufficientCredit == null),
+  // fall back to Credit Limit so nothing flashes empty.
+  const paymentModeOptions = useMemo(() => {
+    if (hasSufficientCredit === true) {
+      return [{ value: "CREDITLIMIT", label: "Credit Limit" }];
+    }
+    if (hasSufficientCredit === false && agentCardPaymentEnabled) {
+      return [{ value: "CARD", label: "Card" }];
+    }
+    if (hasSufficientCredit === false && !agentCardPaymentEnabled) {
+      return [];
+    }
+    return [{ value: "CREDITLIMIT", label: "Credit Limit" }];
+  }, [hasSufficientCredit, agentCardPaymentEnabled]);
+
+  // Keep the selected Payment Mode valid — auto-select the first
+  // remaining option when the current selection drops out. Empty
+  // options (scenario 3) is a no-op.
   useEffect(() => {
+    if (paymentModeOptions.length === 0) return;
     if (!paymentModeOptions.some((o) => o.value === paymentMode)) {
       setPaymentMode(paymentModeOptions[0].value);
     }
   }, [paymentModeOptions, paymentMode]);
+
+  // Post-payment resume — mirrors HotelBookingPage. DummyPaymentPage
+  // returns us here with location.state.resumeCreate = true after the
+  // dummy card charge succeeds. React state (rooms / pendingPayload)
+  // is lost across the /payment detour, so we rebuild the create call
+  // purely from the payload persisted under
+  // "dayStayPendingCreatePayload" just before navigating away.
+  //
+  // On success we go to the Day Stay Booking LIST — same landing as
+  // the direct-credit-limit confirmBooking() success path, so both
+  // flows end up on the same page and the operator can find the row
+  // there.
+  //
+  // Guards:
+  //   • The flag is stripped from history immediately so a reload /
+  //     back doesn't re-fire the create.
+  //   • sessionStorage is cleared right after read so a stray landing
+  //     on this URL with a stale flag can't replay an old payload.
+  //   • The credit-check step in confirmBooking() is skipped here —
+  //     the operator has already paid via the gateway.
+  useEffect(() => {
+    if (!location.state?.resumeCreate) return;
+    const stored = sessionStorage.getItem("dayStayPendingCreatePayload");
+    navigate(location.pathname, { replace: true, state: {} });
+    if (!stored) return;
+    sessionStorage.removeItem("dayStayPendingCreatePayload");
+    let payload;
+    try {
+      payload = JSON.parse(stored);
+    } catch (e) {
+      console.error("Malformed persisted day-stay create payload", e);
+      return;
+    }
+    (async () => {
+      try {
+        setIsSubmitting(true);
+        const response = await axiosInstance.post(
+          "/api/day-stay-booking/save",
+          payload,
+        );
+        const bookingResponse = response.data;
+        const responseId = Number(bookingResponse?.id);
+        const succeeded =
+          bookingResponse &&
+          bookingResponse.bookingCode &&
+          Number.isFinite(responseId) &&
+          responseId > 0;
+        if (succeeded) {
+          setSavedBooking(bookingResponse);
+          setShowConfirmModal(false);
+          sessionStorage.removeItem("dayStayBookingPayload");
+          toast.success(
+            bookingResponse.message ||
+              `Booking ${bookingResponse.bookingCode} created after payment.`,
+          );
+          navigate("/booking-details/day-stay-booking-list");
+        } else {
+          const beMsg =
+            (bookingResponse && bookingResponse.message) || null;
+          toast.error(beMsg || "Booking submission failed. Please try again.");
+        }
+      } catch (err) {
+        const beMsg =
+          err?.response?.data?.message ||
+          err?.response?.data?.error ||
+          null;
+        console.error("Error finalising day-stay booking after payment:", err);
+        toast.error(beMsg || "Booking submission failed. Please try again.");
+      } finally {
+        setIsSubmitting(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state?.resumeCreate]);
 
   // Voucher choice visibility — mirrors HotelBookingPage exactly:
   //   • today ≤ deadline  → offer the choice (Voucher Later means the
@@ -517,6 +611,15 @@ export default function DayStayBookingPage() {
   // hotel-level Amendment / Child / T&C — same structural layout as
   // HotelBookingPage, just enriched with the contract's inline lists.
   const openPolicyConsent = async () => {
+    // Scenario 3 guard — no viable payment path (no credit AND Card
+    // disabled). Bail out before validation so a form-submit via
+    // Enter key can't sneak past the disabled Confirm Booking button.
+    if (noPaymentPathAvailable) {
+      toast.error(
+        "Booking cannot be completed — no payment method available for this agent.",
+      );
+      return;
+    }
     const { errors, hasErrors } = validateForm();
     if (hasErrors) {
       setValidationErrors(errors);
@@ -1329,28 +1432,50 @@ export default function DayStayBookingPage() {
                     </Row>
                   </Card>
 
-                  {/* ─── Payment Mode ─── */}
+                  {/* ─── Payment Mode ─── Three-scenario UI (mirrors HotelBookingPage):
+                        1. Sufficient credit           → Credit Limit only
+                        2. No credit + Card enabled    → Card only + note
+                        3. No credit + Card disabled   → hard block banner */}
                   <Card className="p-4 mb-2 shadow-sm border-0">
                     <h5 className="mb-3 fw-bold">Payment Mode</h5>
-                    <Row className="g-3">
-                      <Col md={6}>
-                        <Form.Group>
-                          <Form.Label className="fw-semibold mb-1">
-                            Mode
-                          </Form.Label>
-                          <Form.Select
-                            value={paymentMode}
-                            onChange={(e) => setPaymentMode(e.target.value)}
-                          >
-                            {paymentModeOptions.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </Form.Select>
-                        </Form.Group>
-                      </Col>
-                    </Row>
+                    {paymentModeOptions.length > 0 ? (
+                      <>
+                        <Row className="g-3">
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="fw-semibold mb-1">
+                                Mode
+                              </Form.Label>
+                              <Form.Select
+                                value={paymentMode}
+                                onChange={(e) => setPaymentMode(e.target.value)}
+                              >
+                                {paymentModeOptions.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </Form.Select>
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                        {hasSufficientCredit === false &&
+                          agentCardPaymentEnabled && (
+                            <div className="text-danger small mt-2 fw-semibold">
+                              Insufficient credit limit. Please proceed with
+                              online card payment to complete your booking.
+                            </div>
+                          )}
+                      </>
+                    ) : (
+                      <Alert variant="danger" className="mb-0">
+                        You do not have sufficient credit limit, and online
+                        card payment is not enabled for your account.
+                        Therefore, this booking cannot be completed. Please
+                        contact your account manager or administrator to
+                        enable a payment method.
+                      </Alert>
+                    )}
                   </Card>
                 </Col>
 
@@ -1583,7 +1708,12 @@ export default function DayStayBookingPage() {
                         type="button"
                         onClick={openPolicyConsent}
                         className="flex-grow-1"
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || noPaymentPathAvailable}
+                        title={
+                          noPaymentPathAvailable
+                            ? "Booking cannot be completed — no payment method available for this agent."
+                            : undefined
+                        }
                       >
                         Confirm Booking
                       </Button>
@@ -1907,38 +2037,35 @@ export default function DayStayBookingPage() {
                           );
                         })()}
 
-                        {/* Cancellation block — non-refundable notice for
-                            non-refundable rates, otherwise the computed
-                            cancellation-deadline row (mirrors
-                            HotelBookingPage's Confirm modal). */}
+                        {/* Cancellation block — non-refundable → compact
+                            label + badge + policy text. Refundable +
+                            deadline → deadline + refundable badge. Paired
+                            with a Payment Mode badge column below so the
+                            two read as one row (mirrors HotelBookingPage). */}
                         {isNonRefundableRate ? (
-                          <Col xs={12}>
-                            <div
-                              className="p-2 rounded border"
-                              style={{
-                                borderColor: "#dc2626",
-                                background: "#fef2f2",
-                              }}
-                            >
-                              <p
-                                className="mb-1 fw-bold"
-                                style={{ color: "#dc2626" }}
+                          <Col xs={12} md={6}>
+                            <p className="mb-1">
+                              <strong>Cancellation Policy:</strong>
+                              <br />
+                              <span
+                                className="badge bg-danger"
+                                style={{ fontSize: "0.7rem" }}
                               >
                                 Non-refundable
-                              </p>
-                              <p className="mb-1 text-dark small">
-                                No refund will be provided if this booking
-                                is cancelled.
-                              </p>
-                              <p className="mb-0 text-dark small">
-                                100% cancellation charges apply from the
-                                time of booking.
-                              </p>
-                            </div>
+                              </span>
+                            </p>
+                            <p
+                              className="mb-0 text-muted"
+                              style={{ fontSize: "0.75rem", lineHeight: 1.35 }}
+                            >
+                              No refund will be provided if this booking is
+                              cancelled. 100% cancellation charges apply from
+                              the time of booking.
+                            </p>
                           </Col>
                         ) : (
                           cancellationDeadline && (
-                            <Col xs={12}>
+                            <Col xs={12} md={6}>
                               <p className="mb-1">
                                 <strong>Cancellation Deadline:</strong>
                                 <br />
@@ -1970,6 +2097,32 @@ export default function DayStayBookingPage() {
                               </p>
                             </Col>
                           )
+                        )}
+
+                        {/* Payment Mode — badge beside the cancellation block. */}
+                        {(isNonRefundableRate || cancellationDeadline) && (
+                          <Col
+                            xs={12}
+                            md={6}
+                            className="d-flex align-items-start justify-content-md-end"
+                          >
+                            <p className="mb-1">
+                              <strong>Payment Mode:</strong>
+                              <br />
+                              <span
+                                className="badge bg-success"
+                                style={{ fontSize: "0.75rem" }}
+                              >
+                                {paymentMode === "CREDITLIMIT"
+                                  ? "Credit Limit"
+                                  : paymentMode === "CARD"
+                                    ? "Online Payment"
+                                    : paymentMode === "CASH"
+                                      ? "Cash"
+                                      : paymentMode || "—"}
+                              </span>
+                            </p>
+                          </Col>
                         )}
 
                         <Col xs={12}>
@@ -2210,10 +2363,38 @@ export default function DayStayBookingPage() {
                         (x) => x.id === selectedGateway,
                       );
                       setShowGatewayModal(false);
+                      // Persist the payload the resume flow will replay.
+                      // React state (rooms / pendingPayload) is lost when
+                      // the user navigates to /payment and back, so the
+                      // resume effect below rebuilds the create call purely
+                      // from sessionStorage. paymentMode is flipped to
+                      // "ONLINE" so the Booking List labels the row
+                      // correctly and the backend skips its credit debit.
+                      try {
+                        sessionStorage.setItem(
+                          "dayStayPendingCreatePayload",
+                          JSON.stringify({
+                            ...pendingPayload,
+                            paymentMode: "ONLINE",
+                          }),
+                        );
+                      } catch (e) {
+                        console.error(
+                          "Could not persist pending day-stay create payload",
+                          e,
+                        );
+                      }
                       navigate(`/payment/${selectedGateway}`, {
                         state: {
                           amountLabel: formatPrice(insufficientAmount),
                           gatewayName: gw ? gw.name : selectedGateway,
+                          // After payment, land back on this booking page
+                          // with resumeCreate=true — the effect below fires
+                          // the create call using the persisted payload,
+                          // then navigates to the day-stay booking DETAIL
+                          // page on success (per client spec).
+                          returnTo: location.pathname,
+                          returnState: { resumeCreate: true },
                         },
                       });
                     }}

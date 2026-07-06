@@ -36,6 +36,7 @@ import TopBar from "../components/TopBar";
 import AgentBalanceDisplay from "../components/AgentBalanceDisplay";
 import RoomFilters from "../components/roomlist/RoomFilters";
 import useRoomFilters from "../hooks/useRoomFilters";
+import axiosInstance from "../components/AxiosInstance";
 import "../styles/RoomList.css";
 
 /**
@@ -186,6 +187,16 @@ export default function LastMinuteRoomList() {
   // to sit in the bottom "Booking Policies" card, per-rate.
   const [showPoliciesModal, setShowPoliciesModal] = useState(false);
   const [selectedRateForPolicies, setSelectedRateForPolicies] = useState(null);
+
+  // ── Payment-path gate — mirrors RoomList.jsx. When the agent has NO
+  // available credit (0 / no credit-limit row) AND per-agent Card
+  // payment is disabled, block Book-Now here on the room list with the
+  // "Booking Cannot Be Completed" modal instead of pushing the user
+  // into a booking form they can't submit. Partial-credit shortfalls
+  // are still caught by the booking form's own scenario-3 gate.
+  const [agentBalance, setAgentBalance] = useState(null);
+  const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
+  const [showNoPaymentPathModal, setShowNoPaymentPathModal] = useState(false);
   const openPoliciesModal = (rate) => {
     setSelectedRateForPolicies(rate || null);
     setShowPoliciesModal(true);
@@ -247,7 +258,56 @@ export default function LastMinuteRoomList() {
     }
   }, []);
 
+  // Fetch the agent's credit balance + Card gate once the search
+  // context is available. Same endpoints RoomList uses. Fail-safe
+  // defaults keep the flow unblocked when the fetch itself errors so a
+  // network hiccup never spuriously blocks a booking.
+  useEffect(() => {
+    const aId = payload?.searchContext?.agent;
+    if (!aId) {
+      setAgentBalance(null);
+      setAgentCardPaymentEnabled(false);
+      return;
+    }
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/agent-credit-limit/agent/${aId}`)
+      .then((res) => {
+        if (!cancelled) {
+          setAgentBalance(res?.data?.availableCreditLimit ?? 0);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAgentBalance(0);
+      });
+    axiosInstance
+      .get(`/api/agent/${aId}`)
+      .then((res) => {
+        if (!cancelled) {
+          setAgentCardPaymentEnabled(!!res?.data?.cardPaymentEnabled);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAgentCardPaymentEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [payload?.searchContext?.agent]);
+
+  // Blanket "no viable payment path" check for the room-list gate:
+  // available credit is 0 (or no credit-limit row) AND Card is disabled.
+  // Any partial-credit shortfalls are still caught by the booking form.
+  const hasNoPaymentPath =
+    Number(agentBalance) <= 0 && !agentCardPaymentEnabled;
+
   const handleBookRate = (rate, hotel, results) => {
+    // Scenario-3 short-circuit: block here when the agent has zero
+    // credit AND no Card option — no viable payment path anywhere.
+    if (hasNoPaymentPath) {
+      setShowNoPaymentPathModal(true);
+      return;
+    }
     const sc = payload?.searchContext || {};
     const searchRooms = sc.rooms || [{ adults: 1, children: 0, childAges: [] }];
     const nat = sc.nationality || null;
@@ -320,6 +380,12 @@ export default function LastMinuteRoomList() {
    *  per-room rates. */
   const handleProceedBooking = () => {
     if (!allRoomsSelected || !payload) return;
+    // Same room-list gate as the single-room path — block scenario 3
+    // before we navigate into the booking form.
+    if (hasNoPaymentPath) {
+      setShowNoPaymentPathModal(true);
+      return;
+    }
     try {
       const hotelFromPayload = payload.hotel;
       const resultsFromPayload = payload.results;
@@ -1284,6 +1350,37 @@ export default function LastMinuteRoomList() {
             onClick={() => setShowPoliciesModal(false)}
           >
             Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* No Payment Path Modal — scenario 3 hard block. Shown right
+          here on the room list so the agent doesn't get pushed into a
+          booking form they can't submit. */}
+      <Modal
+        show={showNoPaymentPathModal}
+        onHide={() => setShowNoPaymentPathModal(false)}
+        centered
+        backdrop="static"
+        keyboard={false}
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Booking Cannot Be Completed</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="mb-0">
+            You do not have sufficient credit limit, and online card
+            payment is not enabled for your account. Therefore, this
+            booking cannot be completed. Please contact your account
+            manager or administrator to enable a payment method.
+          </p>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setShowNoPaymentPathModal(false)}
+          >
+            OK
           </Button>
         </Modal.Footer>
       </Modal>

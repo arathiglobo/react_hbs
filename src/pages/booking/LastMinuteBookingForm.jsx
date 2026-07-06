@@ -104,7 +104,8 @@ const isRateNonRefundable = (rate, checkInDate) => {
 
 export default function LastMinuteBookingForm() {
   const navigate = useNavigate();
-  const { state } = useLocation();
+  const location = useLocation();
+  const { state } = location;
   const ctx = state?.ctx;
 
   // Display currency carried from the search/room-list (rates are AED; this
@@ -200,10 +201,19 @@ export default function LastMinuteBookingForm() {
   const [insufficientAmount, setInsufficientAmount] = useState(0);
   const [selectedGateway, setSelectedGateway] = useState("");
   const [showNoPaymentPathModal, setShowNoPaymentPathModal] = useState(false);
+  // Payload snapshot the payment-gateway modal uses to persist a resumable
+  // create call. Built inside handleConfirmFromModal before the credit
+  // check so the online-payment branch can hand it off to /payment/*.
+  const [pendingPayload, setPendingPayload] = useState(null);
   // Per-agent "Card" payment-mode gate, toggled from AgentView. Filters the
   // Card option out of the Payment Mode dropdown (mirrors HotelBookingPage).
   // The Confirm-time pre-check re-fetches this flag authoritatively.
   const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
+  // Agent's currently available credit balance (AED). Fetched upfront so
+  // the Payment Mode dropdown can render the correct three-scenario UI
+  // BEFORE the user hits Confirm (Scenario 1 → Credit Limit only,
+  // Scenario 2 → Card only + note, Scenario 3 → hard block).
+  const [agentAvailableBalance, setAgentAvailableBalance] = useState(null);
   const [showPolicyModal, setShowPolicyModal] = useState(false);
   const [policyLoading, setPolicyLoading] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
@@ -314,6 +324,118 @@ export default function LastMinuteBookingForm() {
       ? false
       : bookingConfirmation === "Book & Voucher";
 
+  // ── Payment-mode scenario derivation (mirrors HotelBookingPage) ────────
+  // bookingSellingPrice is the AED total the agent owes for this booking
+  // (per-room rates + tourism dirham) — same amount the create endpoint
+  // debits and the credit pre-check uses.
+  const bookingSellingPrice = useMemo(() => {
+    const base = Number(totalPrice) || 0;
+    const td = parseFloat(tourismDirham);
+    return base + (Number.isFinite(td) ? td : 0);
+  }, [totalPrice, tourismDirham]);
+
+  // Client-side "sufficient credit" flag — null while agentAvailableBalance
+  // is still loading so the UI doesn't flash the wrong scenario.
+  const hasSufficientCredit = useMemo(() => {
+    if (agentAvailableBalance == null) return null;
+    return Number(agentAvailableBalance) >= bookingSellingPrice;
+  }, [agentAvailableBalance, bookingSellingPrice]);
+
+  // Scenario 3 — insufficient credit AND per-agent Card payment disabled.
+  const noPaymentPathAvailable =
+    hasSufficientCredit === false && !agentCardPaymentEnabled;
+
+  // Three-scenario Payment Mode options:
+  //   1. Sufficient credit                  → Credit Limit only
+  //   2. Insufficient credit + Card enabled → Card only + note
+  //   3. Insufficient credit + Card disabled → no options; booking blocked
+  // Loading (hasSufficientCredit == null) falls back to Credit Limit so
+  // nothing flashes empty.
+  const paymentModeOptions = useMemo(() => {
+    if (hasSufficientCredit === true) {
+      return [{ value: "CREDITLIMIT", label: "Credit Limit" }];
+    }
+    if (hasSufficientCredit === false && agentCardPaymentEnabled) {
+      return [{ value: "CARD", label: "Card" }];
+    }
+    if (hasSufficientCredit === false && !agentCardPaymentEnabled) {
+      return [];
+    }
+    return [{ value: "CREDITLIMIT", label: "Credit Limit" }];
+  }, [hasSufficientCredit, agentCardPaymentEnabled]);
+
+  // Keep the selected paymentMode in sync with the options that are
+  // actually valid — auto-select the first remaining option when the
+  // current selection drops out. Empty options (scenario 3) = no-op.
+  useEffect(() => {
+    if (paymentModeOptions.length === 0) return;
+    if (!paymentModeOptions.some((o) => o.value === paymentMode)) {
+      setPaymentMode(paymentModeOptions[0].value);
+    }
+  }, [paymentModeOptions, paymentMode]);
+
+  // Post-payment resume — mirrors HotelBookingPage / StudentBookingPage.
+  // DummyPaymentPage returns us here with location.state.resumeCreate =
+  // true after the dummy card charge succeeds. React state (rooms /
+  // pendingPayload) is lost across the /payment detour, so we rebuild
+  // the create call purely from the payload persisted under
+  // "lastMinutePendingCreatePayload" just before navigating away. On
+  // success we go to the Last Minute Booking List.
+  //
+  // Guards:
+  //   • The flag is stripped from history immediately (but ctx is
+  //     preserved) so a reload / back doesn't re-fire the create.
+  //   • sessionStorage is cleared right after read so a stray landing
+  //     on this URL with a stale flag can't replay an old payload.
+  useEffect(() => {
+    if (!location.state?.resumeCreate) return;
+    const stored = sessionStorage.getItem("lastMinutePendingCreatePayload");
+    // Strip only the resume flag; keep ctx so the page still renders
+    // (avoids the "Missing rate context" fallback while the POST runs).
+    navigate(location.pathname, {
+      replace: true,
+      state: { ctx: location.state?.ctx },
+    });
+    if (!stored) return;
+    sessionStorage.removeItem("lastMinutePendingCreatePayload");
+    let payload;
+    try {
+      payload = JSON.parse(stored);
+    } catch (e) {
+      console.error("Malformed persisted last-minute create payload", e);
+      return;
+    }
+    (async () => {
+      try {
+        setSubmitting(true);
+        const res = await axiosInstance.post(
+          "/api/last-minute-booking/create",
+          payload,
+        );
+        if (res.data?.success) {
+          toast.success(
+            res.data.message ||
+              `Booking ${res.data.bookingCode || ""} created after payment.`,
+          );
+          setShowSummaryModal(false);
+          navigate("/booking-details/last-minute-booking-list");
+        } else {
+          toast.error(
+            res.data?.message || "Booking submission failed. Please try again.",
+          );
+        }
+      } catch (err) {
+        const beMsg =
+          err?.response?.data?.message || err?.response?.data?.error || null;
+        console.error("Error finalising last-minute booking after payment:", err);
+        toast.error(beMsg || "Booking submission failed. Please try again.");
+      } finally {
+        setSubmitting(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state?.resumeCreate]);
+
   // Resync rooms[].guests array when adults/children counts change.
   useEffect(() => {
     setRooms((prev) =>
@@ -342,13 +464,26 @@ export default function LastMinuteBookingForm() {
     return () => { cancelled = true; };
   }, [ctx?.agentId]);
 
-  // Keep the selected Payment Mode valid — if Card was selected and the
-  // agent's Card gate turns out to be off, fall back to Credit Limit.
+  // ── Agent available credit balance — mirror HotelBookingPage so we can
+  //    resolve the payment-mode scenario at render time (not just at
+  //    Confirm). null = still loading / not applicable.
   useEffect(() => {
-    if (paymentMode === "CARD" && !agentCardPaymentEnabled) {
-      setPaymentMode("CREDITLIMIT");
-    }
-  }, [paymentMode, agentCardPaymentEnabled]);
+    const aId = ctx?.agentId;
+    if (!aId) { setAgentAvailableBalance(null); return; }
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/agent-credit-limit/agent/${aId}`)
+      .then((res) => {
+        if (!cancelled) {
+          setAgentAvailableBalance(res?.data?.availableCreditLimit ?? null);
+        }
+      })
+      .catch(() => {
+        // 404 (no credit-limit row) → treat as zero available.
+        if (!cancelled) setAgentAvailableBalance(0);
+      });
+    return () => { cancelled = true; };
+  }, [ctx?.agentId]);
 
   function defaultGuest(isChild) {
     return {
@@ -446,6 +581,15 @@ export default function LastMinuteBookingForm() {
   const handleConfirmClick = async (e) => {
     e?.preventDefault?.();
     setError(null);
+    // Scenario 3 short-circuit — no viable payment path (no credit AND
+    // Card disabled). Blocks a form-submit (Enter key) from bypassing the
+    // disabled Confirm Booking button.
+    if (noPaymentPathAvailable) {
+      toast.error(
+        "Booking cannot be completed — no payment method available for this agent.",
+      );
+      return;
+    }
     if (!ctx?.room?.lastMinuteRateId) {
       setError("Missing rate context. Go back and pick a room again.");
       return;
@@ -514,56 +658,6 @@ export default function LastMinuteBookingForm() {
     const createdByRole =
       localStorage.getItem("currentActiveRole") || "agent";
 
-    // ── Payment-gate pre-check (mirrors HotelBookingPage.confirmBooking) ──
-    // Ask the BE whether the agent has enough credit for the payable total
-    // (Tourism-Dirham inclusive — same amount the create endpoint debits).
-    // When credit is short:
-    //   • On Request room OR Book Now & Voucher Later → proceed with the
-    //     create call (payment-gate matrix: these flows always book).
-    //   • Everything else → close the Order Summary modal, then:
-    //       – Card disabled at the agent level → no viable payment path;
-    //         block with the "Booking Cannot Be Completed" modal.
-    //       – Card enabled → "Online Payment Required" → gateway picker.
-    // The check itself fails OPEN (credit endpoint error → proceed) so the
-    // operator is never trapped by a flaky pre-check — same as the other
-    // booking pages.
-    try {
-      const agentIdNum = Number(String(agentId).trim());
-      const requiredAmount = Number(payableTotal) || 0;
-      if (Number.isFinite(agentIdNum) && agentIdNum > 0 && requiredAmount > 0) {
-        const [credit, agentResp] = await Promise.all([
-          axiosInstance.get(
-            `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentIdNum}&requiredAmount=${requiredAmount}`,
-          ),
-          axiosInstance
-            .get(`/api/agent/${agentIdNum}`)
-            .catch(() => ({ data: { cardPaymentEnabled: false } })),
-        ]);
-        if (credit.data === false) {
-          const isVoucherLater =
-            bookingConfirmation === "Book Now & Voucher later";
-          const bypassPaymentModal = isVoucherLater || isOnRequestRoom;
-          if (!bypassPaymentModal) {
-            setInsufficientAmount(requiredAmount);
-            setShowSummaryModal(false);
-            if (!agentResp?.data?.cardPaymentEnabled) {
-              setShowNoPaymentPathModal(true);
-              return;
-            }
-            setShowInsufficientModal(true);
-            return;
-          }
-          console.log(
-            isOnRequestRoom
-              ? "[LASTMINUTE] Insufficient credit but On Request rate — proceeding with create."
-              : "[LASTMINUTE] Insufficient credit but Voucher Later selected — proceeding with create.",
-          );
-        }
-      }
-    } catch (err) {
-      console.warn("credit check failed", err);
-    }
-
     // Primary Guest Details card is hidden — derive customer from
     // the Lead-marked guest in the Guest Details grid above. Email
     // / phone / passportNo / agentLpo are no longer collected on
@@ -588,6 +682,10 @@ export default function LastMinuteBookingForm() {
         "",
     };
 
+    // Build the create payload up-front so both the direct-post path AND
+    // the online-payment gateway path can use it (the gateway modal
+    // persists it to sessionStorage and the resume effect replays it
+    // after payment).
     const payload = {
       lastMinuteRateId: ctx.room.lastMinuteRateId,
       checkInDate: toLocalDateTime(ctx.checkInDate),
@@ -656,6 +754,60 @@ export default function LastMinuteBookingForm() {
       // booking flows send. Backend accepts the same enum values.
       paymentMode,
     };
+    // Stash the payload so the gateway modal (below) can persist it to
+    // sessionStorage before navigating to /payment/*, and the resume
+    // effect can replay it after payment.
+    setPendingPayload(payload);
+
+    // ── Payment-gate pre-check (mirrors HotelBookingPage.confirmBooking) ──
+    // Ask the BE whether the agent has enough credit for the payable total
+    // (Tourism-Dirham inclusive — same amount the create endpoint debits).
+    // When credit is short:
+    //   • On Request room OR Book Now & Voucher Later → proceed with the
+    //     create call (payment-gate matrix: these flows always book).
+    //   • Everything else → close the Order Summary modal, then:
+    //       – Card disabled at the agent level → no viable payment path;
+    //         block with the "Booking Cannot Be Completed" modal.
+    //       – Card enabled → "Online Payment Required" → gateway picker.
+    // The check itself fails OPEN (credit endpoint error → proceed) so the
+    // operator is never trapped by a flaky pre-check — same as the other
+    // booking pages.
+    try {
+      const agentIdNum = Number(String(agentId).trim());
+      const requiredAmount = Number(payableTotal) || 0;
+      if (Number.isFinite(agentIdNum) && agentIdNum > 0 && requiredAmount > 0) {
+        const [credit, agentResp] = await Promise.all([
+          axiosInstance.get(
+            `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentIdNum}&requiredAmount=${requiredAmount}`,
+          ),
+          axiosInstance
+            .get(`/api/agent/${agentIdNum}`)
+            .catch(() => ({ data: { cardPaymentEnabled: false } })),
+        ]);
+        if (credit.data === false) {
+          const isVoucherLater =
+            bookingConfirmation === "Book Now & Voucher later";
+          const bypassPaymentModal = isVoucherLater || isOnRequestRoom;
+          if (!bypassPaymentModal) {
+            setInsufficientAmount(requiredAmount);
+            setShowSummaryModal(false);
+            if (!agentResp?.data?.cardPaymentEnabled) {
+              setShowNoPaymentPathModal(true);
+              return;
+            }
+            setShowInsufficientModal(true);
+            return;
+          }
+          console.log(
+            isOnRequestRoom
+              ? "[LASTMINUTE] Insufficient credit but On Request rate — proceeding with create."
+              : "[LASTMINUTE] Insufficient credit but Voucher Later selected — proceeding with create.",
+          );
+        }
+      }
+    } catch (err) {
+      console.warn("credit check failed", err);
+    }
 
     try {
       setSubmitting(true);
@@ -971,32 +1123,47 @@ export default function LastMinuteBookingForm() {
               </Card>
 
               {/* ── Payment Mode ──
-                  Mirrors HotelBookingPage / StudentBookingPage /
-                  SeniorCitizenBookingPage. Rides on the create payload as
-                  `paymentMode`. Only Credit Limit / Cash / Card are exposed
-                  per business decision. */}
+                  Mirrors HotelBookingPage's three-scenario UI:
+                    1. Sufficient credit           → Credit Limit only
+                    2. No credit + Card enabled    → Card only + note
+                    3. No credit + Card disabled   → hard block banner */}
               <Card className="p-4 mb-2 shadow-sm border-0">
                 <h5 className="mb-3 fw-bold">Payment Mode</h5>
-                <Row className="g-3">
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold mb-1">Mode</Form.Label>
-                      <Form.Select
-                        value={paymentMode}
-                        onChange={(e) => setPaymentMode(e.target.value)}
-                      >
-                        <option value="CREDITLIMIT">Credit Limit</option>
-                        <option value="CASH">Cash</option>
-                        {/* Per-agent gate — Card only when the AgentView
-                            "Enable Card payment mode" checkbox is on
-                            (mirrors HotelBookingPage). */}
-                        {agentCardPaymentEnabled && (
-                          <option value="CARD">Card</option>
-                        )}
-                      </Form.Select>
-                    </Form.Group>
-                  </Col>
-                </Row>
+                {paymentModeOptions.length > 0 ? (
+                  <>
+                    <Row className="g-3">
+                      <Col md={6}>
+                        <Form.Group>
+                          <Form.Label className="fw-semibold mb-1">Mode</Form.Label>
+                          <Form.Select
+                            value={paymentMode}
+                            onChange={(e) => setPaymentMode(e.target.value)}
+                          >
+                            {paymentModeOptions.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </Form.Select>
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                    {hasSufficientCredit === false &&
+                      agentCardPaymentEnabled && (
+                        <div className="text-danger small mt-2 fw-semibold">
+                          Insufficient credit limit. Please proceed with
+                          online card payment to complete your booking.
+                        </div>
+                      )}
+                  </>
+                ) : (
+                  <Alert variant="danger" className="mb-0">
+                    You do not have sufficient credit limit, and online card
+                    payment is not enabled for your account. Therefore, this
+                    booking cannot be completed. Please contact your account
+                    manager or administrator to enable a payment method.
+                  </Alert>
+                )}
               </Card>
             </Col>
 
@@ -1201,7 +1368,12 @@ export default function LastMinuteBookingForm() {
                   <Button
                     type="submit"
                     variant="primary"
-                    disabled={submitting}
+                    disabled={submitting || noPaymentPathAvailable}
+                    title={
+                      noPaymentPathAvailable
+                        ? "Booking cannot be completed — no payment method available for this agent."
+                        : undefined
+                    }
                     className="flex-grow-1"
                   >
                     {submitting ? "Booking…" : "Confirm Booking"}
@@ -1471,35 +1643,32 @@ export default function LastMinuteBookingForm() {
                     deadline with a green "Refundable until this date"
                     badge, or a red "Passed" badge if already crossed.
                     Last-minute rates are typically non-refundable so the
-                    red box is the common path. */}
+                    red box is the common path. Paired with a Payment Mode
+                    badge column on tablet+ so the two read as one row. */}
                 {isNonRefundableRoom ? (
-                  <Col xs={12}>
-                    <div
-                      className="p-2 rounded border"
-                      style={{
-                        borderColor: "#dc2626",
-                        background: "#fef2f2",
-                      }}
-                    >
-                      <p
-                        className="mb-1 fw-bold"
-                        style={{ color: "#dc2626" }}
+                  <Col xs={12} md={6}>
+                    <p className="mb-1">
+                      <strong>Cancellation Policy:</strong>
+                      <br />
+                      <span
+                        className="badge bg-danger"
+                        style={{ fontSize: "0.7rem" }}
                       >
                         Non-refundable
-                      </p>
-                      <p className="mb-1 text-dark small">
-                        No refund will be provided if this booking is
-                        cancelled.
-                      </p>
-                      <p className="mb-0 text-dark small">
-                        100% cancellation charges apply from the time of
-                        booking.
-                      </p>
-                    </div>
+                      </span>
+                    </p>
+                    <p
+                      className="mb-0 text-muted"
+                      style={{ fontSize: "0.75rem", lineHeight: 1.35 }}
+                    >
+                      No refund will be provided if this booking is
+                      cancelled. 100% cancellation charges apply from the
+                      time of booking.
+                    </p>
                   </Col>
                 ) : (
                   cancellationDeadline && (
-                    <Col xs={12}>
+                    <Col xs={12} md={6}>
                       <p className="mb-1">
                         <strong>Cancellation Deadline:</strong>
                         <br />
@@ -1528,6 +1697,33 @@ export default function LastMinuteBookingForm() {
                       </p>
                     </Col>
                   )
+                )}
+
+                {/* Payment Mode — small badge beside the cancellation
+                    block. Same layout/labelling as HotelBookingPage. */}
+                {(isNonRefundableRoom || cancellationDeadline) && (
+                  <Col
+                    xs={12}
+                    md={6}
+                    className="d-flex align-items-start justify-content-md-end"
+                  >
+                    <p className="mb-1">
+                      <strong>Payment Mode:</strong>
+                      <br />
+                      <span
+                        className="badge bg-success"
+                        style={{ fontSize: "0.75rem" }}
+                      >
+                        {paymentMode === "CREDITLIMIT"
+                          ? "Credit Limit"
+                          : paymentMode === "CARD"
+                            ? "Online Payment"
+                            : paymentMode === "CASH"
+                              ? "Cash"
+                              : paymentMode || "—"}
+                      </span>
+                    </p>
+                  </Col>
                 )}
 
                 <Col xs={12}>
@@ -1760,10 +1956,37 @@ export default function LastMinuteBookingForm() {
                   (x) => x.id === selectedGateway,
                 );
                 setShowGatewayModal(false);
+                // Persist the payload the resume flow will replay.
+                // React state (rooms / pendingPayload / ...) is lost when
+                // the user navigates away to /payment and back, so the
+                // resume effect below rebuilds the create call purely
+                // from sessionStorage. paymentMode is flipped to "ONLINE"
+                // so the Booking List labels the row correctly and the
+                // backend skips its credit check + debit.
+                try {
+                  sessionStorage.setItem(
+                    "lastMinutePendingCreatePayload",
+                    JSON.stringify({
+                      ...pendingPayload,
+                      paymentMode: "ONLINE",
+                    }),
+                  );
+                } catch (e) {
+                  console.error(
+                    "Could not persist pending last-minute create payload",
+                    e,
+                  );
+                }
                 navigate(`/payment/${selectedGateway}`, {
                   state: {
                     amountLabel: formatPrice(insufficientAmount),
                     gatewayName: gw ? gw.name : selectedGateway,
+                    // After payment, land back on this same booking form
+                    // with resumeCreate=true — the effect below fires the
+                    // create call using the persisted payload, then
+                    // navigates to the last-minute booking list on success.
+                    returnTo: location.pathname,
+                    returnState: { resumeCreate: true, ctx },
                   },
                 });
               }}

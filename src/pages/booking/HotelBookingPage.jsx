@@ -299,33 +299,51 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
     bookingData?.selectedRate?.nonRefundable === true ||
     bookingData?.selectedRate?.nonRefundable === "true";
 
-  // ── Payment Type availability ──────────────────────────────────────────
-  // Only Credit Limit / Cash / Card are exposed in the UI. Online, Bank
-  // Transfer, Cheque, and Cash Deposit are intentionally hidden per business
-  // decision — the enums stay valid on the backend, they're just not
-  // selectable here.
-  //
-  // NOTE (2026-07-03): the old rule that collapsed the dropdown to
-  // Card-only for Non-Refundable + no-credit agents is REMOVED — combined
-  // with the per-agent Card gate below it left the Mode dropdown
-  // completely EMPTY when that agent's Card payment was also disabled
-  // (seen on the demo server). The full option set is always offered now;
-  // whether the agent can actually pay is enforced at Confirm time by the
-  // credit pre-check ("Online Payment Required" / "Booking Cannot Be
-  // Completed" modals).
+  // Total the agent owes for this booking (AED — matches the
+  // `requiredAmount` param the backend uses for
+  // /api/agent-credit-limit/check-sufficient-credit). Computed here so
+  // the credit-sufficiency check that drives the Payment Mode options
+  // has the amount available at render time, not just at confirm time.
+  const bookingSellingPrice = useMemo(() => {
+    const base =
+      Number(bookingData?.selectedRate?.roomRateBasedOnRoomCount) || 0;
+    const td = parseFloat(tourismDirhams) || 0;
+    return base + td;
+  }, [bookingData, tourismDirhams]);
+
+  // Client-side "sufficient credit" flag — availableCreditLimit >=
+  // total payable. null while the balance is still loading so the UI
+  // doesn't flash the wrong scenario on first render.
+  const hasSufficientCredit = useMemo(() => {
+    if (agentAvailableBalance == null) return null;
+    return Number(agentAvailableBalance) >= bookingSellingPrice;
+  }, [agentAvailableBalance, bookingSellingPrice]);
+
+  // No viable payment path: insufficient credit AND per-agent Card
+  // payment is blocked. Drives the "Booking Cannot Be Completed"
+  // banner and disables Confirm Booking.
+  const noPaymentPathAvailable =
+    hasSufficientCredit === false && !agentCardPaymentEnabled;
+
+  // ── Payment Mode availability ─────────────────────────────────────────
+  // Three scenarios (per client spec):
+  //   1. Sufficient credit                    → Credit Limit only (Card hidden)
+  //   2. Insufficient credit + Card enabled   → Card only (+ note below)
+  //   3. Insufficient credit + Card disabled  → no options; booking blocked
+  // While the credit balance is still loading (hasSufficientCredit == null),
+  // fall back to Credit Limit so nothing flashes empty.
   const paymentModeOptions = useMemo(() => {
-    const base = [
-      { value: "CREDITLIMIT", label: "Credit Limit" },
-      { value: "CASH", label: "Cash" },
-      { value: "CARD", label: "Card" },
-    ];
-    // Per-agent gate — the Card option is only exposed when the
-    // AgentView "Enable Card payment mode" checkbox is on for this
-    // agent (see agent.cardPaymentEnabled).
-    return agentCardPaymentEnabled
-      ? base
-      : base.filter((o) => o.value !== "CARD");
-  }, [agentCardPaymentEnabled]);
+    if (hasSufficientCredit === true) {
+      return [{ value: "CREDITLIMIT", label: "Credit Limit" }];
+    }
+    if (hasSufficientCredit === false && agentCardPaymentEnabled) {
+      return [{ value: "CARD", label: "Card" }];
+    }
+    if (hasSufficientCredit === false && !agentCardPaymentEnabled) {
+      return [];
+    }
+    return [{ value: "CREDITLIMIT", label: "Credit Limit" }];
+  }, [hasSufficientCredit, agentCardPaymentEnabled]);
 
   // Keep the selected Payment Type valid for the currently available options.
   // When the option set changes (e.g. the restriction kicks in and removes
@@ -615,6 +633,16 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
 
   // Step 1 in confirm flow: validate, fetch policies + T&C, show consent modal.
   const openPolicyConsent = async () => {
+    // Scenario 3 gate — no viable payment path (no credit + Card
+    // disabled). Bail out before validation so a form-submit via Enter
+    // key can't sneak past the disabled Confirm Booking button.
+    if (noPaymentPathAvailable) {
+      toast.error(
+        "Booking cannot be completed — no payment method available for this agent.",
+      );
+      return;
+    }
+
     const { errors, hasErrors } = validateForm();
     if (hasErrors) {
       setValidationErrors(errors);
@@ -1522,28 +1550,52 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
 
                   {/* Payment Mode — sits under Special Requests on the
                       left column. Drives the paymentMode field on the
-                      /api/hotel-booking/create payload. */}
+                      /api/hotel-booking/create payload.
+
+                      Three-scenario UI:
+                        1. Sufficient credit           → Credit Limit only
+                        2. No credit + Card enabled    → Card only + note
+                        3. No credit + Card disabled   → hard block banner */}
                   <Card className="p-4 mb-2 shadow-sm border-0">
                     <h5 className="mb-3 fw-bold">Payment Mode</h5>
-                    <Row className="g-3">
-                      <Col md={6}>
-                        <Form.Group>
-                          <Form.Label className="fw-semibold mb-1">
-                            Mode
-                          </Form.Label>
-                          <Form.Select
-                            value={paymentMode}
-                            onChange={(e) => setPaymentMode(e.target.value)}
-                          >
-                            {paymentModeOptions.map((opt) => (
-                              <option key={opt.value} value={opt.value}>
-                                {opt.label}
-                              </option>
-                            ))}
-                          </Form.Select>
-                        </Form.Group>
-                      </Col>
-                    </Row>
+                    {paymentModeOptions.length > 0 ? (
+                      <>
+                        <Row className="g-3">
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="fw-semibold mb-1">
+                                Mode
+                              </Form.Label>
+                              <Form.Select
+                                value={paymentMode}
+                                onChange={(e) => setPaymentMode(e.target.value)}
+                              >
+                                {paymentModeOptions.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </Form.Select>
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                        {hasSufficientCredit === false &&
+                          agentCardPaymentEnabled && (
+                            <div className="text-danger small mt-2 fw-semibold">
+                              Insufficient credit limit. Please proceed with
+                              online card payment to complete your booking.
+                            </div>
+                          )}
+                      </>
+                    ) : (
+                      <Alert variant="danger" className="mb-0">
+                        You do not have sufficient credit limit, and online
+                        card payment is not enabled for your account.
+                        Therefore, this booking cannot be completed. Please
+                        contact your account manager or administrator to
+                        enable a payment method.
+                      </Alert>
+                    )}
                   </Card>
 
                   {/* "Booking Done By Employee" was moved into the
@@ -1755,6 +1807,12 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                         type="button"
                         onClick={openPolicyConsent}
                         className="flex-grow-1"
+                        disabled={noPaymentPathAvailable}
+                        title={
+                          noPaymentPathAvailable
+                            ? "Booking cannot be completed — no payment method available for this agent."
+                            : undefined
+                        }
                       >
                         Confirm Booking
                       </Button>
@@ -2099,9 +2157,12 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                             deadline doesn't apply at all, so we render a clear
                             "no refund" notice instead. The rate's refundability
                             takes precedence over the Hotel Cancellation Policy
-                            (also overridden in the Policies modal below). */}
+                            (also overridden in the Policies modal below).
+                            Payment Mode badge sits in a paired md=6 column so
+                            the two read as one row (deadline left, mode right)
+                            on tablet+, and stack cleanly on mobile. */}
                         {isNonRefundableRate ? (
-                          <Col xs={12}>
+                          <Col xs={12} md={6}>
                             <div
                               className="p-2 rounded border"
                               style={{
@@ -2127,7 +2188,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                           </Col>
                         ) : (
                           cancellationDeadline && (
-                            <Col xs={12}>
+                            <Col xs={12} md={6}>
                               <p className="mb-1">
                                 <strong>Cancellation Deadline:</strong>
                                 <br />
@@ -2159,6 +2220,35 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                               </p>
                             </Col>
                           )
+                        )}
+
+                        {/* Payment Mode — small badge beside the cancellation
+                            deadline / non-refundable notice. Shown for either
+                            refundable branch so the user re-confirms which
+                            method will be used before submitting. */}
+                        {(isNonRefundableRate || cancellationDeadline) && (
+                          <Col
+                            xs={12}
+                            md={6}
+                            className="d-flex align-items-start justify-content-md-end"
+                          >
+                            <p className="mb-1">
+                              <strong>Payment Mode:</strong>
+                              <br />
+                              <span
+                                className="badge bg-success"
+                                style={{ fontSize: "0.75rem" }}
+                              >
+                                {paymentMode === "CREDITLIMIT"
+                                  ? "Credit Limit"
+                                  : paymentMode === "CARD"
+                                    ? "Online Payment"
+                                    : paymentMode === "CASH"
+                                      ? "Cash"
+                                      : paymentMode || "—"}
+                              </span>
+                            </p>
+                          </Col>
                         )}
 
                         {/* <Col xs={12}>

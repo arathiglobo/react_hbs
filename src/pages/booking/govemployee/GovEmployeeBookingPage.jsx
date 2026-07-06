@@ -23,8 +23,8 @@
  *    and decrements it.
  */
 
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   FaHotel,
   FaCalendarAlt,
@@ -46,6 +46,7 @@ import {
   Badge,
   Modal,
   Spinner,
+  Alert,
 } from "react-bootstrap";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
@@ -90,6 +91,7 @@ const formatDateTime = (dateStr) => {
 
 const GovEmployeeBookingPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const activeUserRole = localStorage.getItem("currentActiveRole");
 
   // ── State pulled from sessionStorage (set by GovEmployeeRoomList) ─
@@ -247,13 +249,118 @@ const GovEmployeeBookingPage = () => {
     };
   }, [bookingData]);
 
-  // Keep the selected Payment Mode valid — if Card was selected and the
-  // agent's Card gate turns out to be off, fall back to Credit Limit.
-  useEffect(() => {
-    if (paymentMode === "CARD" && !agentCardPaymentEnabled) {
-      setPaymentMode("CREDITLIMIT");
+  // ── Payment-mode scenario derivation (mirrors HotelBookingPage) ────────
+  // bookingSellingPrice = the AED total the agent owes (same amount the
+  // create endpoint debits and the credit pre-check uses).
+  const bookingSellingPrice = useMemo(() => {
+    if (!bookingData) return 0;
+    const { selectedRate, roomBreakdown } = bookingData;
+    if (roomBreakdown?.length) {
+      return roomBreakdown.reduce(
+        (s, r) => s + Number(r.rate || 0),
+        0,
+      );
     }
-  }, [paymentMode, agentCardPaymentEnabled]);
+    return (
+      Number(selectedRate?.rate || 0) * (bookingData?.payload?.rooms?.length || 1)
+    );
+  }, [bookingData]);
+
+  // Client-side "sufficient credit" flag — null while balance is loading
+  // so the UI doesn't flash the wrong scenario on first render.
+  const hasSufficientCredit = useMemo(() => {
+    if (agentAvailableBalance == null) return null;
+    return Number(agentAvailableBalance) >= bookingSellingPrice;
+  }, [agentAvailableBalance, bookingSellingPrice]);
+
+  // Scenario 3 — insufficient credit AND per-agent Card payment disabled.
+  const noPaymentPathAvailable =
+    hasSufficientCredit === false && !agentCardPaymentEnabled;
+
+  // Three-scenario Payment Mode options:
+  //   1. Sufficient credit                  → Credit Limit only
+  //   2. Insufficient credit + Card enabled → Card only + note
+  //   3. Insufficient credit + Card disabled → no options; booking blocked
+  const paymentModeOptions = useMemo(() => {
+    if (hasSufficientCredit === true) {
+      return [{ value: "CREDITLIMIT", label: "Credit Limit" }];
+    }
+    if (hasSufficientCredit === false && agentCardPaymentEnabled) {
+      return [{ value: "CARD", label: "Card" }];
+    }
+    if (hasSufficientCredit === false && !agentCardPaymentEnabled) {
+      return [];
+    }
+    return [{ value: "CREDITLIMIT", label: "Credit Limit" }];
+  }, [hasSufficientCredit, agentCardPaymentEnabled]);
+
+  // Keep the selected paymentMode in sync with the valid options — empty
+  // options (scenario 3) is a no-op.
+  useEffect(() => {
+    if (paymentModeOptions.length === 0) return;
+    if (!paymentModeOptions.some((o) => o.value === paymentMode)) {
+      setPaymentMode(paymentModeOptions[0].value);
+    }
+  }, [paymentModeOptions, paymentMode]);
+
+  // Post-payment resume — mirrors HotelBookingPage / StudentBookingPage
+  // / SeniorCitizenBookingPage. DummyPaymentPage returns us here with
+  // location.state.resumeCreate = true after the dummy card charge
+  // succeeds. React state (rooms / pendingPayload) is lost across the
+  // /payment detour, so we rebuild the create call purely from the
+  // payload persisted under "govEmployeePendingCreatePayload" just
+  // before navigating away. On success we go to the Gov Employee
+  // Booking List; the row surfaces on whichever status the backend
+  // engine assigns.
+  //
+  // Guards:
+  //   • The flag is stripped from history immediately so a reload /
+  //     back doesn't re-fire the create.
+  //   • sessionStorage is cleared right after read so a stray landing
+  //     on this URL with a stale flag can't replay an old payload.
+  //   • The credit-check step in confirmBooking() is skipped here —
+  //     the operator has already paid via the gateway.
+  useEffect(() => {
+    if (!location.state?.resumeCreate) return;
+    const stored = sessionStorage.getItem("govEmployeePendingCreatePayload");
+    navigate(location.pathname, { replace: true, state: {} });
+    if (!stored) return;
+    sessionStorage.removeItem("govEmployeePendingCreatePayload");
+    let payload;
+    try {
+      payload = JSON.parse(stored);
+    } catch (e) {
+      console.error("Malformed persisted gov-employee create payload", e);
+      return;
+    }
+    (async () => {
+      try {
+        setIsSubmitting(true);
+        const { data } = await axiosInstance.post(
+          "/api/gov-employee-booking/create",
+          payload,
+        );
+        if (data?.success) {
+          toast.success(
+            data.message ||
+              `Booking ${data.bookingCode || ""} created after payment.`,
+          );
+          setShowConfirmModal(false);
+          navigate("/booking-details/gov-employee-booking-list");
+        } else {
+          toast.error(data?.message || "Booking submission failed. Please try again.");
+        }
+      } catch (err) {
+        const beMsg =
+          err?.response?.data?.message || err?.response?.data?.error || null;
+        console.error("Error finalising gov-employee booking after payment:", err);
+        toast.error(beMsg || "Booking submission failed. Please try again.");
+      } finally {
+        setIsSubmitting(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state?.resumeCreate]);
 
   // ── Guest input handlers ────────────────────────────────────────
   const handleGuestChange = (roomIndex, guestIndex, field, value) => {
@@ -460,6 +567,15 @@ const GovEmployeeBookingPage = () => {
   // ── Step 1: Confirm Booking → validate + fetch policies + open
   //            T&C consent modal. Mirrors HotelBookingPage.
   const openPolicyConsent = async () => {
+    // Scenario 3 guard — no viable payment path (no credit AND Card
+    // disabled). Bail out before validation so a form-submit via
+    // Enter key can't sneak past the disabled Confirm Booking button.
+    if (noPaymentPathAvailable) {
+      toast.error(
+        "Booking cannot be completed — no payment method available for this agent.",
+      );
+      return;
+    }
     // Validation only — no button disabling. Errors are surfaced
     // inline (red borders + helper text) so the user can see exactly
     // which mandatory field is missing.
@@ -1182,32 +1298,48 @@ const GovEmployeeBookingPage = () => {
                     </div>
                   </Card>
 
-                  {/* Payment Mode — mirrors HotelBookingPage /
-                      StudentBookingPage / SeniorCitizenBookingPage. Rides
-                      on the create payload. Only Credit Limit / Cash /
-                      Card are exposed per business decision. */}
+                  {/* Payment Mode — mirrors HotelBookingPage's three-scenario UI:
+                        1. Sufficient credit           → Credit Limit only
+                        2. No credit + Card enabled    → Card only + note
+                        3. No credit + Card disabled   → hard block banner */}
                   <Card className="p-3 mb-2 shadow-sm border-0">
                     <h6 className="mb-2 fw-bold text-primary">Payment Mode</h6>
-                    <Row className="g-3">
-                      <Col md={6}>
-                        <Form.Group>
-                          <Form.Label className="fw-semibold mb-1">Mode</Form.Label>
-                          <Form.Select
-                            value={paymentMode}
-                            onChange={(e) => setPaymentMode(e.target.value)}
-                          >
-                            <option value="CREDITLIMIT">Credit Limit</option>
-                            <option value="CASH">Cash</option>
-                            {/* Per-agent gate — Card only when the AgentView
-                                "Enable Card payment mode" checkbox is on
-                                (mirrors HotelBookingPage). */}
-                            {agentCardPaymentEnabled && (
-                              <option value="CARD">Card</option>
-                            )}
-                          </Form.Select>
-                        </Form.Group>
-                      </Col>
-                    </Row>
+                    {paymentModeOptions.length > 0 ? (
+                      <>
+                        <Row className="g-3">
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="fw-semibold mb-1">Mode</Form.Label>
+                              <Form.Select
+                                value={paymentMode}
+                                onChange={(e) => setPaymentMode(e.target.value)}
+                              >
+                                {paymentModeOptions.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </Form.Select>
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                        {hasSufficientCredit === false &&
+                          agentCardPaymentEnabled && (
+                            <div className="text-danger small mt-2 fw-semibold">
+                              Insufficient credit limit. Please proceed with
+                              online card payment to complete your booking.
+                            </div>
+                          )}
+                      </>
+                    ) : (
+                      <Alert variant="danger" className="mb-0">
+                        You do not have sufficient credit limit, and online
+                        card payment is not enabled for your account.
+                        Therefore, this booking cannot be completed. Please
+                        contact your account manager or administrator to
+                        enable a payment method.
+                      </Alert>
+                    )}
                   </Card>
 
                   {/* "Booking Done By Employee" was moved into the
@@ -1462,6 +1594,12 @@ const GovEmployeeBookingPage = () => {
                         variant="primary"
                         type="button"
                         onClick={openPolicyConsent}
+                        disabled={noPaymentPathAvailable}
+                        title={
+                          noPaymentPathAvailable
+                            ? "Booking cannot be completed — no payment method available for this agent."
+                            : undefined
+                        }
                         className="flex-grow-1"
                       >
                         Confirm Booking
@@ -1725,40 +1863,36 @@ const GovEmployeeBookingPage = () => {
                         </Col>
 
                         {/* Cancellation block — mirrors HotelBookingPage's
-                            confirm modal placement (after Lead Passenger,
-                            before Rate Split). Non-refundable → clear "no
-                            refund" notice. Refundable + deadline → the
-                            free-cancellation deadline with a green
-                            "Refundable until this date" badge, or a red
-                            "Passed" badge if already crossed. */}
+                            confirm modal placement. Non-refundable →
+                            compact label + badge + policy text.
+                            Refundable + deadline → deadline with a green
+                            "Refundable until this date" badge (or red
+                            "Passed"). Paired with a Payment Mode badge
+                            column below so the two read as one row. */}
                         {isNonRefundableRate ? (
-                          <Col xs={12}>
-                            <div
-                              className="p-2 rounded border"
-                              style={{
-                                borderColor: "#dc2626",
-                                background: "#fef2f2",
-                              }}
-                            >
-                              <p
-                                className="mb-1 fw-bold"
-                                style={{ color: "#dc2626" }}
+                          <Col xs={12} md={6}>
+                            <p className="mb-1">
+                              <strong>Cancellation Policy:</strong>
+                              <br />
+                              <span
+                                className="badge bg-danger"
+                                style={{ fontSize: "0.7rem" }}
                               >
                                 Non-refundable
-                              </p>
-                              <p className="mb-1 text-dark small">
-                                No refund will be provided if this booking
-                                is cancelled.
-                              </p>
-                              <p className="mb-0 text-dark small">
-                                100% cancellation charges apply from the
-                                time of booking.
-                              </p>
-                            </div>
+                              </span>
+                            </p>
+                            <p
+                              className="mb-0 text-muted"
+                              style={{ fontSize: "0.75rem", lineHeight: 1.35 }}
+                            >
+                              No refund will be provided if this booking is
+                              cancelled. 100% cancellation charges apply from
+                              the time of booking.
+                            </p>
                           </Col>
                         ) : (
                           cancellationDeadline && (
-                            <Col xs={12}>
+                            <Col xs={12} md={6}>
                               <p className="mb-1">
                                 <strong>Cancellation Deadline:</strong>
                                 <br />
@@ -1790,6 +1924,33 @@ const GovEmployeeBookingPage = () => {
                               </p>
                             </Col>
                           )
+                        )}
+
+                        {/* Payment Mode — badge beside the cancellation
+                            block. Same layout / labelling as HotelBookingPage. */}
+                        {(isNonRefundableRate || cancellationDeadline) && (
+                          <Col
+                            xs={12}
+                            md={6}
+                            className="d-flex align-items-start justify-content-md-end"
+                          >
+                            <p className="mb-1">
+                              <strong>Payment Mode:</strong>
+                              <br />
+                              <span
+                                className="badge bg-success"
+                                style={{ fontSize: "0.75rem" }}
+                              >
+                                {paymentMode === "CREDITLIMIT"
+                                  ? "Credit Limit"
+                                  : paymentMode === "CARD"
+                                    ? "Online Payment"
+                                    : paymentMode === "CASH"
+                                      ? "Cash"
+                                      : paymentMode || "—"}
+                              </span>
+                            </p>
+                          </Col>
                         )}
                       </Row>
 
@@ -2025,10 +2186,38 @@ const GovEmployeeBookingPage = () => {
                         (x) => x.id === selectedGateway,
                       );
                       setShowGatewayModal(false);
+                      // Persist the payload the resume flow will replay.
+                      // React state (rooms / pendingPayload) is lost when the
+                      // user navigates to /payment and back, so the resume
+                      // effect below rebuilds the create call purely from
+                      // sessionStorage. paymentMode flipped to "ONLINE" so
+                      // the Booking List labels the row correctly and the
+                      // backend skips its create-time credit debit.
+                      try {
+                        sessionStorage.setItem(
+                          "govEmployeePendingCreatePayload",
+                          JSON.stringify({
+                            ...pendingPayload,
+                            paymentMode: "ONLINE",
+                          }),
+                        );
+                      } catch (e) {
+                        console.error(
+                          "Could not persist pending gov-employee create payload",
+                          e,
+                        );
+                      }
                       navigate(`/payment/${selectedGateway}`, {
                         state: {
                           amountLabel: formatPrice(insufficientAmount),
                           gatewayName: gw ? gw.name : selectedGateway,
+                          // After payment, land back on this same booking
+                          // page with resumeCreate=true — the effect below
+                          // fires the create call using the persisted
+                          // payload, then navigates to the gov-employee
+                          // booking list on success.
+                          returnTo: location.pathname,
+                          returnState: { resumeCreate: true },
                         },
                       });
                     }}
