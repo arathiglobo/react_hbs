@@ -70,7 +70,7 @@ const EMPTY_FORM = {
   // `active` stays in state so the row keeps its current Active/Inactive
   // flag through save — the operator toggles it from the list page's
   // status badge instead of from this modal.
-  active: true,
+  active: false,
 };
 
 export default function GovEmployeePromotion() {

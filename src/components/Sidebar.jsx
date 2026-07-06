@@ -215,10 +215,12 @@ export default function Sidebar() {
       children: [],
     },
     {
-      label: "Hotel Approval",
-      to: "/admin/hotel-approval",
+      label: "Approvals",
       roles: ["admin"],
-      children: [],
+      children: [
+        { label: "Hotel", to: "/admin/approval/hotels" },
+        { label: "Agent", to: "/admin/approval/agents" },
+      ],
     },
     {
       label: "Registration",
@@ -235,7 +237,7 @@ export default function Sidebar() {
         { label: "Honeymoon Packages", to: "/honeymoon/list" },
         { label: "Ayurveda", to: "/registration/ayurveda" },
         { label: "Scheffer Driver and Limousine", to: "/registration/schefferDriver" },
-        { label: "MYOP Package Add-Ons", to: "/registration/package-addons" },
+        { label: "Build Your Own Package Add-Ons", to: "/registration/package-addons" },
       ],
     },
     {
@@ -253,11 +255,11 @@ export default function Sidebar() {
         { label: "Hotel Booking", to: "/new-booking/hotel" },
         // Dedicated 24-Hour Check-In entry — separate route renders the
         // same HotelSearch component with force24Hour=true.
-        { label: "24 Hour Check-In", to: "/new-booking/hotel-24hr" },
+        { label: "24 Hour", to: "/new-booking/hotel-24hr" },
         // Last Minute Booking — Phase 2 entry (separate flow & APIs)
-        { label: "Last Minute Booking", to: "/new-booking/last-minute-booking" },
-        { label: "Long Stay Booking", to: "/new-booking/long-stay" },
-        { label: "Day Stay Check-In", to: "/new-booking/day-stay" },
+        { label: "Last Minute", to: "/new-booking/last-minute-booking" },
+        { label: "Long Stay", to: "/new-booking/long-stay" },
+        { label: "Day Stay", to: "/new-booking/day-stay" },
         // {
         //   label: "Make Your Own Package",
         //   to: "/new-booking/make-your-own-package",
@@ -267,23 +269,23 @@ export default function Sidebar() {
           // transfer, tour, etc.). The next page's tabs / cart options
           // are gated by what's selected here. The legacy entry above
           // is left unchanged so anyone who prefers it can keep using it.
-          label: "Make Your Own Package",
+          label: "Build Your Own Package",
           to: "/new-booking/make-your-own-package-v2",
         },
         
-        { label: "Package Booking", to: "/new-booking/package-search" },
-        { label: "Transfers Booking", to: "/new-booking/cab" },
-        { label: "Chauffeur Driver and Limousine Booking", to: "/new-booking/scheffer-driver" },
+        { label: "Package", to: "/new-booking/package-search" },
+        { label: "Transfers", to: "/new-booking/cab" },
+        { label: "Chauffeur Driver and Limousine", to: "/new-booking/scheffer-driver" },
         {
           label: "Tours and Activity",
           to: "/new-booking/tours-and-activities",
         },
         {
-          label: "Offline Booking",
+          label: "Offline",
           to: "/new-booking/offline-search",
         },
         {
-          label: "Restaurant Booking",
+          label: "Restaurant",
           to: "/new-booking/restaurant",
         },
         {
@@ -296,7 +298,7 @@ export default function Sidebar() {
           to: "/new-booking/meet-and-space",
         },
         {
-          label: "Government Employee",
+          label: "Govt / Airlines",
           to: "/new-booking/gov-employee",
         },
         // Ayurveda — packages, doctor consultations, courses
@@ -305,11 +307,11 @@ export default function Sidebar() {
           to: "/new-booking/ayurveda",
         },
         {
-          label: "Student Booking",
+          label: "Student",
           to: "/new-booking/student",
         },
         {
-          label: "Senior Citizen Booking",
+          label: "Senior Citizen",
           to: "/new-booking/senior-citizen",
         },
       ],
@@ -329,13 +331,13 @@ export default function Sidebar() {
       roles: ["admin", "agent", "staff"],
       children: [
         {
-          label: "Hotel Bookings",
+          label: "Hotel",
           to: "/booking-details/hotel-booking-list",
         },
         // Dedicated 24-Hour Check-In list — same page wrapped with
         // force24HourOnly so only is24HourCheckin=true rows are shown.
         {
-          label: "24Hrs Bookings",
+          label: "24 Hours",
           to: "/booking-details/24hr-booking-list",
         },
         // Last Minute Booking list — Phase 4 entry
@@ -1056,7 +1058,7 @@ function getIcon(label) {
     case "Company Profile":
       return <Building2 {...iconProps} />;
 
-    case "Hotel Approval":
+    case "Approvals":
       return <BadgeCheck {...iconProps} />;
 
     case "Registration":

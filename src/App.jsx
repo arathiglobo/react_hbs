@@ -6,6 +6,8 @@ import Register from "./pages/Register";
 import HotelRegisterFromOut from "./pages/HotelRegisterFromOut";
 import HotelApproval from "./pages/HotelApproval";
 import HotelApprovalDetail from "./pages/HotelApprovalDetail";
+import AgentApproval from "./pages/AgentApproval";
+import AgentApprovalDetail from "./pages/AgentApprovalDetail";
 
 import Country from "./pages/master/Country";
 import Destination from "./pages/master/Destination";
@@ -507,8 +509,12 @@ export default function App() {
         <Route path="/booking-details/offline-booking-list" element={<PrivateRoute><OfflineBookingList /></PrivateRoute>} />
         <Route path="/booking-details/offline-booking/:id" element={<PrivateRoute><OfflineBookingDetailView /></PrivateRoute>} />
         {/* Hotel Approval — admin only */}
-        <Route path="/admin/hotel-approval" element={<PrivateRoute><HotelApproval /></PrivateRoute>} />
-        <Route path="/admin/hotel-approval/:id" element={<PrivateRoute><HotelApprovalDetail /></PrivateRoute>} />
+        <Route path="/admin/approval/hotels" element={<PrivateRoute><HotelApproval /></PrivateRoute>} />
+        <Route path="/admin/approval/hotels/:id" element={<PrivateRoute><HotelApprovalDetail /></PrivateRoute>} />
+
+        {/* Agent Approval — admin only */}
+        <Route path="/admin/approval/agents" element={<PrivateRoute><AgentApproval /></PrivateRoute>} />
+        <Route path="/admin/approval/agents/:id" element={<PrivateRoute><AgentApprovalDetail /></PrivateRoute>} />
 
         {/* Company Profile */}
         <Route path="/company-profile" element={<PrivateRoute><CompanyProfile /></PrivateRoute>} />

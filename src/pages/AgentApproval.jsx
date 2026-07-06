@@ -14,7 +14,7 @@ import {
 import {
   FaSearch,
   FaInbox,
-  FaHotel,
+  FaUserTie,
   FaEye,
   FaSync,
 } from "react-icons/fa";
@@ -23,7 +23,7 @@ import TopBar from "../components/TopBar";
 import axiosInstance from "../components/AxiosInstance";
 import toast from "react-hot-toast";
 
-// Rows-per-page choices — same set as /booking-details/last-minute-booking-list.
+// Rows-per-page choices — matches HotelApproval.jsx.
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
 const STATUS_META = {
@@ -32,7 +32,6 @@ const STATUS_META = {
   REJECTED: { label: "Rejected", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
 };
 
-// Status filter options — mirrors the Booking Type control's position/look.
 const STATUS_OPTIONS = [
   { value: "all", label: "All" },
   { value: "PENDING", label: "Pending" },
@@ -70,13 +69,11 @@ const StatusPill = ({ status }) => {
 };
 
 /**
- * HotelApproval — admin review of hotel self-registration requests.
- * Mirrors the structure of /booking-details/last-minute-booking-list:
- * title + search (left), status filter card, SaaS-style table with
- * client-side search/filter/pagination. Approving a PENDING request
- * provisions an EXTRANET login so the hotel can sign in to its extranet.
+ * AgentApproval — admin review of agent self-registration requests.
+ * Mirrors HotelApproval.jsx. Approving a PENDING request provisions an
+ * AGENT login so the agent can sign in via the standard /auth/login flow.
  */
-export default function HotelApproval() {
+export default function AgentApproval() {
   const navigate = useNavigate();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -88,12 +85,11 @@ export default function HotelApproval() {
   const fetchRequests = async () => {
     try {
       setLoading(true);
-      // Full list so the status filter can switch between pending/approved/all.
-      const res = await axiosInstance.get("/api/hotel-external-register");
+      const res = await axiosInstance.get("/api/agent-external-register");
       setRequests(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error(err);
-      toast.error("Failed to load hotel registration requests");
+      toast.error("Failed to load agent registration requests");
       setRequests([]);
     } finally {
       setLoading(false);
@@ -104,13 +100,12 @@ export default function HotelApproval() {
     fetchRequests();
   }, []);
 
-  // Client-side filter by status, then search term.
   const filtered = requests.filter((r) => {
     if (statusFilter !== "all" && r.status !== statusFilter) return false;
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
     return (
-      (r.hotelName || "").toLowerCase().includes(q) ||
+      (r.companyName || "").toLowerCase().includes(q) ||
       (r.contactPerson || "").toLowerCase().includes(q) ||
       (r.email || "").toLowerCase().includes(q) ||
       (r.phone || "").toLowerCase().includes(q) ||
@@ -120,7 +115,6 @@ export default function HotelApproval() {
     );
   });
 
-  // ── Pagination (client-side, over the filtered list) ──
   const totalEntries = filtered.length;
   const totalPages = Math.max(1, Math.ceil(totalEntries / perPage));
   const safePage = Math.min(currentPage, totalPages);
@@ -148,10 +142,10 @@ export default function HotelApproval() {
             fluid
             style={{ maxWidth: "100%", paddingLeft: "0.5rem", paddingRight: "0.5rem" }}
           >
-            {/* Header: Title + Search (left) | Refresh (right) */}
+            {/* Header */}
             <div className="d-flex justify-content-between align-items-end mb-3">
               <div>
-                <h3 className="fw-bold text-dark mb-2">Hotel Registration Approvals</h3>
+                <h3 className="fw-bold text-dark mb-2">Agent Registration Approvals</h3>
                 <InputGroup style={{ height: "40px", width: "320px" }}>
                   <InputGroup.Text
                     style={{
@@ -164,7 +158,7 @@ export default function HotelApproval() {
                   </InputGroup.Text>
                   <Form.Control
                     type="text"
-                    placeholder="Search by hotel / contact / email / city"
+                    placeholder="Search by company / contact / email / city"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     style={{
@@ -194,7 +188,7 @@ export default function HotelApproval() {
               </button>
             </div>
 
-            {/* Status filter — mirrors the Booking Type filter card */}
+            {/* Status filter */}
             <Row className="mb-2 g-1">
               <Col xs={12}>
                 <Card className="shadow-sm border-0 w-100" style={{ borderRadius: "8px" }}>
@@ -250,7 +244,7 @@ export default function HotelApproval() {
                     <FaInbox className="display-4 mb-3" style={{ opacity: 0.4 }} />
                     <h6 className="fw-semibold">No registration requests found</h6>
                     <p className="mb-0 small">
-                      Hotel requests submitted from the public registration page appear here.
+                      Agent requests submitted from the public registration page appear here.
                     </p>
                   </div>
                 ) : (
@@ -260,7 +254,7 @@ export default function HotelApproval() {
                         <thead>
                           <tr>
                             <th style={{ width: "48px" }}>#</th>
-                            <th>Hotel Name</th>
+                            <th>Company Name</th>
                             <th>Contact Person</th>
                             <th>Email</th>
                             <th>Status</th>
@@ -273,8 +267,8 @@ export default function HotelApproval() {
                               <td className="text-muted">{startIdx + idx + 1}</td>
                               <td>
                                 <span className="d-inline-flex align-items-center" style={{ gap: "0.4rem" }}>
-                                  <FaHotel style={{ color: "#98a2b3", fontSize: "0.72rem", flexShrink: 0 }} />
-                                  <span className="fw-semibold text-dark">{r.hotelName || "-"}</span>
+                                  <FaUserTie style={{ color: "#98a2b3", fontSize: "0.72rem", flexShrink: 0 }} />
+                                  <span className="fw-semibold text-dark">{r.companyName || "-"}</span>
                                 </span>
                               </td>
                               <td>{r.contactPerson || "-"}</td>
@@ -291,7 +285,7 @@ export default function HotelApproval() {
                                     color: "#1d4ed8",
                                     borderRadius: "6px",
                                   }}
-                                  onClick={() => navigate(`/admin/approval/hotels/${r.id}`)}
+                                  onClick={() => navigate(`/admin/approval/agents/${r.id}`)}
                                   title="View details"
                                 >
                                   <FaEye style={{ fontSize: "12px" }} />

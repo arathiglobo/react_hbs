@@ -105,7 +105,7 @@ const emptyForm = {
   currencyId: null,
   currencyCode: "INR",
   taxPercent: "",
-  status: "Active",
+  status: "Inactive",
   images: [],
   cancellationPolicies: [],
 };
@@ -261,7 +261,7 @@ export default function MeetingSpaceManage() {
     currencyId: s.currencyId ?? null,
     currencyCode: s.currency || "INR",
     taxPercent: s.taxPercent ?? "",
-    status: s.status || "Active",
+    status: s.status || "Inactive",
     images: (s.images || []).map((i) => (i.imageUrl ? i.imageUrl : i)).filter(Boolean),
     cancellationPolicies: (s.cancellationPolicies || []).map((p) => ({
       policyText: p.policyText || "",
@@ -305,7 +305,7 @@ export default function MeetingSpaceManage() {
       currencyId: s.currencyId ?? null,
       currencyCode: s.currency || "INR",
       taxPercent: s.taxPercent ?? "",
-      status: s.status || "Active",
+      status: s.status || "Inactive",
       images: (s.images || []).map((i) => i.imageUrl).filter(Boolean),
       cancellationPolicies: (s.cancellationPolicies || []).map((p) => ({
         policyText: p.policyText || "",
@@ -902,64 +902,81 @@ export default function MeetingSpaceManage() {
               <div className="d-flex flex-wrap gap-2 mb-2">
                 {form.amenities.length === 0 && (
                   <span className="text-muted small">
-                    No amenities yet. Click a "Quick add" chip or type your own below.
+                    {isViewMode ? "No amenities configured." : "No amenities yet. Click a \"Quick add\" chip or type your own below."}
                   </span>
                 )}
-                {form.amenities.map((a) => (
-                  <Badge
-                    key={a}
-                    bg="info"
-                    pill
-                    style={{ cursor: "pointer" }}
-                    onClick={() => removeAmenity(a)}
-                    title="Click to remove"
-                  >
-                    {a} ✕
-                  </Badge>
-                ))}
+                {form.amenities.map((a) =>
+                  isViewMode ? (
+                    // View mode: plain non-interactive badge — no × or onClick
+                    <Badge key={a} bg="info" pill>
+                      {a}
+                    </Badge>
+                  ) : (
+                    // Edit/Create mode: removable chip
+                    <Badge
+                      key={a}
+                      bg="info"
+                      pill
+                      style={{ cursor: "pointer" }}
+                      onClick={() => removeAmenity(a)}
+                      title="Click to remove"
+                    >
+                      {a} ✕
+                    </Badge>
+                  )
+                )}
               </div>
-              <div className="d-flex flex-wrap gap-2 mb-2">
-                {COMMON_AMENITIES.map((a) => (
-                  <Button
-                    key={a}
-                    variant="outline-secondary"
+              {/* Quick-add preset buttons — hidden in view mode */}
+              {!isViewMode && (
+                <div className="d-flex flex-wrap gap-2 mb-2">
+                  {COMMON_AMENITIES.map((a) => (
+                    <Button
+                      key={a}
+                      variant="outline-secondary"
+                      size="sm"
+                      onClick={() => addAmenity(a)}
+                      disabled={form.amenities.includes(a)}
+                    >
+                      + {a}
+                    </Button>
+                  ))}
+                </div>
+              )}
+              {/* Custom amenity input row — hidden in view mode */}
+              {!isViewMode && (
+                <div className="d-flex gap-2">
+                  <Form.Control
                     size="sm"
-                    onClick={() => addAmenity(a)}
-                    disabled={form.amenities.includes(a)}
-                  >
-                    + {a}
-                  </Button>
-                ))}
-              </div>
-              <div className="d-flex gap-2">
-                <Form.Control
-                  size="sm"
-                  placeholder="Custom amenity name"
-                  value={newAmenity}
-                  onChange={(e) => setNewAmenity(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
+                    placeholder="Custom amenity name"
+                    value={newAmenity}
+                    onChange={(e) => setNewAmenity(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addAmenity(newAmenity);
+                        setNewAmenity("");
+                      }
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => {
                       addAmenity(newAmenity);
                       setNewAmenity("");
-                    }
-                  }}
-                />
-                <Button
-                  size="sm"
-                  variant="primary"
-                  onClick={() => {
-                    addAmenity(newAmenity);
-                    setNewAmenity("");
-                  }}
-                >
-                  Add
-                </Button>
-              </div>
-              <Form.Text className="text-muted">
-                Saved as one row per amenity in the meet_space_amenty table.
-              </Form.Text>
+                    }}
+                  >
+                    Add
+                  </Button>
+                </div>
+              )}
+              {!isViewMode && (
+                <Form.Text className="text-muted">
+                  Saved as one row per amenity in the meet_space_amenty table.
+                </Form.Text>
+              )}
             </Col>
+
 
             <Col md={12}>
               <hr />

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Container, Card, Spinner, Row, Col, Button } from "react-bootstrap";
 import {
-  FaHotel,
+  FaUserTie,
   FaArrowLeft,
   FaCheck,
   FaTimes,
@@ -46,7 +46,6 @@ const StatusPill = ({ status }) => {
   );
 };
 
-// Single label/value detail row.
 const DetailItem = ({ icon, label, value }) => (
   <Col md={6} className="mb-3">
     <div className="text-muted d-flex align-items-center gap-2" style={{ fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
@@ -58,7 +57,7 @@ const DetailItem = ({ icon, label, value }) => (
   </Col>
 );
 
-export default function HotelApprovalDetail() {
+export default function AgentApprovalDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [reg, setReg] = useState(null);
@@ -68,7 +67,7 @@ export default function HotelApprovalDetail() {
   const fetchDetail = async () => {
     try {
       setLoading(true);
-      const res = await axiosInstance.get(`/api/hotel-external-register/${id}`);
+      const res = await axiosInstance.get(`/api/agent-external-register/${id}`);
       setReg(res.data || null);
     } catch (err) {
       console.error(err);
@@ -87,8 +86,8 @@ export default function HotelApprovalDetail() {
   const handleApprove = async () => {
     try {
       setActionLoading("approve");
-      await axiosInstance.put(`/api/hotel-external-register/${id}/approve`);
-      toast.success("Hotel approved. They can now log in to the extranet.");
+      await axiosInstance.put(`/api/agent-external-register/${id}/approve`);
+      toast.success("Agent approved. They can now log in.");
       fetchDetail();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Approval failed.");
@@ -100,7 +99,7 @@ export default function HotelApprovalDetail() {
   const handleReject = async () => {
     try {
       setActionLoading("reject");
-      await axiosInstance.put(`/api/hotel-external-register/${id}/reject`);
+      await axiosInstance.put(`/api/agent-external-register/${id}/reject`);
       toast.success("Registration request rejected.");
       fetchDetail();
     } catch (err) {
@@ -119,11 +118,11 @@ export default function HotelApprovalDetail() {
           <Container fluid style={{ maxWidth: "1000px" }}>
             {/* Header */}
             <div className="d-flex justify-content-between align-items-center mb-3">
-              <h3 className="fw-bold text-dark mb-0">Hotel Registration Details</h3>
+              <h3 className="fw-bold text-dark mb-0">Agent Registration Details</h3>
               <Button
                 variant="outline-secondary"
                 size="sm"
-                onClick={() => navigate("/admin/approval/hotels")}
+                onClick={() => navigate("/admin/approval/agents")}
                 className="d-inline-flex align-items-center gap-2"
               >
                 <FaArrowLeft /> Back to List
@@ -143,38 +142,32 @@ export default function HotelApprovalDetail() {
               </Card>
             ) : (
               <Card className="border shadow-sm" style={{ borderRadius: "10px" }}>
-                {/* Card header — hotel name + status */}
                 <Card.Header
                   className="d-flex justify-content-between align-items-center py-3"
                   style={{ backgroundColor: "#f8f9fa", borderRadius: "10px 10px 0 0" }}
                 >
                   <span className="d-inline-flex align-items-center gap-2 fw-bold text-dark" style={{ fontSize: "1.05rem" }}>
-                    <FaHotel style={{ color: "#c0392b" }} /> {reg.hotelName}
+                    <FaUserTie style={{ color: "#c0392b" }} /> {reg.companyName}
                   </span>
                   <StatusPill status={reg.status} />
                 </Card.Header>
 
                 <Card.Body style={{ padding: "1.5rem" }}>
-                  {/* Contact & hotel info */}
                   <h6 className="fw-bold text-dark mb-3" style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}>
-                    Hotel & Contact Information
+                    Company & Contact Information
                   </h6>
                   <Row>
-                    <DetailItem icon={<FaHotel />} label="Hotel Name" value={reg.hotelName} />
+                    <DetailItem icon={<FaUserTie />} label="Company Name" value={reg.companyName} />
                     <DetailItem icon={<FaUser />} label="Contact Person" value={reg.contactPerson} />
                     <DetailItem icon={<FaEnvelope />} label="Email" value={reg.email} />
                     <DetailItem icon={<FaPhone />} label="Phone" value={reg.phone} />
-                    <DetailItem icon={<FaMapMarkerAlt />} label="Address" value={reg.address} />
-                    <DetailItem icon={<FaGlobe />} label="Region" value={reg.region} />
                     <DetailItem icon={<FaGlobe />} label="Country" value={reg.country} />
-                    <DetailItem icon={<FaMapMarkerAlt />} label="State / Province" value={reg.state} />
                     <DetailItem icon={<FaMapMarkerAlt />} label="City" value={reg.city} />
                     <DetailItem icon={<FaUserCircle />} label="Username" value={reg.username} />
                   </Row>
 
                   <hr className="my-3" />
 
-                  {/* Timestamps */}
                   <h6 className="fw-bold text-dark mb-3" style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}>
                     Request Timeline
                   </h6>
@@ -195,7 +188,6 @@ export default function HotelApprovalDetail() {
                     />
                   </Row>
 
-                  {/* Actions — only while pending */}
                   {reg.status === "PENDING" && (
                     <>
                       <hr className="my-3" />
