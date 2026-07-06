@@ -45,10 +45,52 @@ const Register = () => {
     username: "",
     password: "",
     repassword: "",
+    // Extended public-registration fields (Contact Info step) — surfaced to
+    // the admin on /admin/approval/agents/:id and on AgentView after approval.
+    salutation: "",
+    tradeLicenseNo: "",
+    /** Base64 data URL of the uploaded trade-license file (PDF/image). */
+    tradeLicenseFile: "",
+    tradeLicenseFileName: "",
+    tradeLicenseExpiry: "",
+    timezone: "",
   });
 
   const [showPassword, setShowPassword] = useState(false);
   const [showRePassword, setShowRePassword] = useState(false);
+
+  const SALUTATIONS = ["Mr", "Mrs", "Ms", "Dr", "Prof"];
+  // Timezones now come from the master_timezone table (seeded by
+  // MasterTimezoneSeeder). Kept in state so the dropdown reflects whatever
+  // the backend currently exposes without an app redeploy.
+  const [timezones, setTimezones] = useState([]);
+
+  /**
+   * Keep the raw File object in state — on submit we pipe it into a
+   * FormData multipart request so the backend can save it via
+   * FileStorageService (same pattern HotelReg.jsx uses for image360)
+   * and only the resulting URL lands on the agent row.
+   */
+  const handleTradeLicenseFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setFormData((prev) => ({ ...prev, tradeLicenseFile: "", tradeLicenseFileName: "" }));
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setErrors((prev) => ({
+        ...prev,
+        tradeLicenseFile: "File too large (max 10 MB).",
+      }));
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      tradeLicenseFile: file,
+      tradeLicenseFileName: file.name,
+    }));
+    setErrors((prev) => ({ ...prev, tradeLicenseFile: "" }));
+  };
 
   const [errors, setErrors] = useState({});
   // Tracks whether the user picked "Others" in the Business Type dropdown,
@@ -100,7 +142,17 @@ const Register = () => {
   useEffect(() => {
     countryList();
     agentCategoryList();
-
+    // Timezones come from the public /api/timezone master. Silent on
+    // failure — the dropdown just shows the placeholder if the backend
+    // is unreachable, matching the other master lookups on this page.
+    (async () => {
+      try {
+        const res = await axiosInstance.get("/api/timezone");
+        setTimezones(Array.isArray(res.data) ? res.data : []);
+      } catch (_) {
+        setTimezones([]);
+      }
+    })();
   }, []);
 
   const provinceList = async (countryId) => {
@@ -444,10 +496,44 @@ const Register = () => {
          Strip `repassword` — client-side confirmation only, backend doesn't
          accept it. */
       const { repassword: _rp, ...payload } = formData;
-      const registerResponse = await axiosInstance.post(
-        "/api/agent/register",
-        payload
-      );
+
+      // When the operator picked a trade-license file, upgrade the request to
+      // multipart so the backend can save the raw bytes via
+      // FileStorageService (same route HotelReg.jsx image360 uses). Otherwise
+      // stay on the JSON path — nothing else about the request changes.
+      const hasTradeLicense =
+        payload.tradeLicenseFile && typeof payload.tradeLicenseFile !== "string";
+      let registerResponse;
+      if (hasTradeLicense) {
+        const fd = new FormData();
+        Object.entries(payload).forEach(([k, v]) => {
+          if (k === "tradeLicenseFile" || k === "tradeLicenseFileName") return;
+          if (v === undefined || v === null) return;
+          fd.append(k, v);
+        });
+        // Distinct form-field name so Spring's @ModelAttribute doesn't try to
+        // bind the MultipartFile onto the DTO's String `tradeLicenseFile`
+        // field. The controller reads this under @RequestParam
+        // "tradeLicenseFileUpload" and pipes it through FileStorageService
+        // before setting the resulting URL on the DTO.
+        fd.append("tradeLicenseFileUpload", payload.tradeLicenseFile);
+        registerResponse = await axiosInstance.post(
+          "/api/agent/register",
+          fd,
+          { headers: { "Content-Type": "multipart/form-data" } },
+        );
+      } else {
+        // No file — send flat JSON as before (the tradeLicenseFile field is
+        // either "" or a string URL and can ride the JSON body).
+        const { tradeLicenseFileName: _fn, ...jsonPayload } = payload;
+        if (typeof jsonPayload.tradeLicenseFile !== "string") {
+          jsonPayload.tradeLicenseFile = "";
+        }
+        registerResponse = await axiosInstance.post(
+          "/api/agent/register",
+          jsonPayload,
+        );
+      }
       console.log("registerResponse::", registerResponse);
 
       // Show success state
@@ -795,7 +881,26 @@ const Register = () => {
                         </div>
 
                         <Row className="g-3">
-                          <Col md={6}>
+                          <Col md={2}>
+                            <Form.Group>
+                              <Form.Label className="form-label">Salutation</Form.Label>
+                              <Form.Select
+                                name="salutation"
+                                value={formData.salutation}
+                                onChange={handleChange}
+                                className="form-input"
+                              >
+                                <option value="">Select</option>
+                                {SALUTATIONS.map((s) => (
+                                  <option key={s} value={s}>
+                                    {s}
+                                  </option>
+                                ))}
+                              </Form.Select>
+                            </Form.Group>
+                          </Col>
+
+                          <Col md={5}>
                             <Form.Group>
                               <Form.Label className="form-label">
                                 First Name <span className="required">*</span>
@@ -817,7 +922,7 @@ const Register = () => {
                             </Form.Group>
                           </Col>
 
-                          <Col md={6}>
+                          <Col md={5}>
                             <Form.Group>
                               <Form.Label className="form-label">
                                 Last Name <span className="required">*</span>
@@ -902,6 +1007,137 @@ const Register = () => {
                                     Email is available.
                                   </div>
                                 )}
+                            </Form.Group>
+                          </Col>
+
+                          {/* ── Trade License + Timezone ── */}
+                          <Col md={4}>
+                            <Form.Group>
+                              <Form.Label className="form-label">Trade License No</Form.Label>
+                              <Form.Control
+                                type="text"
+                                name="tradeLicenseNo"
+                                value={formData.tradeLicenseNo}
+                                onChange={handleChange}
+                                placeholder="Enter trade license number"
+                                className="form-input"
+                                maxLength={80}
+                              />
+                            </Form.Group>
+                          </Col>
+
+                          <Col md={4}>
+                            <Form.Group>
+                              <Form.Label className="form-label">Trade License File</Form.Label>
+                              <Form.Control
+                                type="file"
+                                accept="application/pdf,image/*"
+                                onChange={handleTradeLicenseFile}
+                                className={`form-input ${errors.tradeLicenseFile ? 'is-invalid' : ''}`}
+                              />
+                              {formData.tradeLicenseFileName && (
+                                <div className="text-muted small mt-1">
+                                  Selected: {formData.tradeLicenseFileName}
+                                </div>
+                              )}
+                              {errors.tradeLicenseFile && (
+                                <div className="text-danger small mt-1">
+                                  {errors.tradeLicenseFile}
+                                </div>
+                              )}
+                            </Form.Group>
+                          </Col>
+
+                          <Col md={4}>
+                            <Form.Group>
+                              <Form.Label className="form-label">Trade License Expiry</Form.Label>
+                              <Form.Control
+                                type="date"
+                                name="tradeLicenseExpiry"
+                                value={formData.tradeLicenseExpiry}
+                                onChange={handleChange}
+                                className="form-input"
+                              />
+                            </Form.Group>
+                          </Col>
+
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="form-label">Timezone</Form.Label>
+                              {/* Searchable timezone dropdown. react-select's
+                                  built-in filter matches on the visible label
+                                  (display name / IANA id / offset), so a user
+                                  can type "IST", "kolkata", or "+05:30" and
+                                  find the same row. Selection updates the
+                                  same `timezone` form field with the IANA
+                                  zoneId, so the backend contract is unchanged. */}
+                              <Select
+                                inputId="timezone"
+                                name="timezone"
+                                classNamePrefix="reg-select"
+                                isSearchable
+                                isClearable
+                                placeholder="Search timezone..."
+                                /* Render the menu into <body> so it isn't
+                                   clipped by the card / step's overflow. Fixed
+                                   position lets it float freely, and the high
+                                   z-index keeps it above the sticky header. */
+                                menuPortalTarget={typeof document !== "undefined" ? document.body : null}
+                                menuPosition="fixed"
+                                menuPlacement="auto"
+                                maxMenuHeight={280}
+                                options={timezones.map((tz) => ({
+                                  value: tz.zoneId,
+                                  label: tz.displayName
+                                    ? `${tz.displayName} (${tz.utcOffset || tz.zoneId})`
+                                    : tz.zoneId,
+                                }))}
+                                value={
+                                  timezones
+                                    .map((tz) => ({
+                                      value: tz.zoneId,
+                                      label: tz.displayName
+                                        ? `${tz.displayName} (${tz.utcOffset || tz.zoneId})`
+                                        : tz.zoneId,
+                                    }))
+                                    .find(
+                                      (opt) => String(opt.value) === String(formData.timezone),
+                                    ) || null
+                                }
+                                onChange={(opt) =>
+                                  handleChange({
+                                    target: { name: "timezone", value: opt ? String(opt.value) : "" },
+                                  })
+                                }
+                                styles={{
+                                  control: (base, state) => ({
+                                    ...base,
+                                    minHeight: 44,
+                                    borderRadius: 11,
+                                    borderWidth: 1.5,
+                                    borderColor: state.isFocused ? "#EC0B43" : "#E5E5E1",
+                                    backgroundColor: state.isFocused ? "#fff" : "#FAFAF8",
+                                    boxShadow: state.isFocused
+                                      ? "0 0 0 4px rgba(236, 11, 67, .12)"
+                                      : "none",
+                                    fontSize: "0.92rem",
+                                    fontFamily: "inherit",
+                                  }),
+                                  placeholder: (b) => ({ ...b, color: "#A8A8A3", fontWeight: 400 }),
+                                  menu: (b) => ({ ...b, borderRadius: 11, overflow: "hidden" }),
+                                  menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+                                  option: (b, s) => ({
+                                    ...b,
+                                    backgroundColor: s.isSelected
+                                      ? "#EC0B43"
+                                      : s.isFocused
+                                        ? "#FDE7ED"
+                                        : "#fff",
+                                    color: s.isSelected ? "#fff" : "#15171C",
+                                    fontSize: "0.92rem",
+                                  }),
+                                }}
+                              />
                             </Form.Group>
                           </Col>
                         </Row>

@@ -32,11 +32,11 @@ const STATUS_META = {
   REJECTED: { label: "Rejected", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
 };
 
+// Approval list only shows PENDING requests; keep the filter for search
+// consistency but it's a no-op with the /pending endpoint.
 const STATUS_OPTIONS = [
   { value: "all", label: "All" },
   { value: "PENDING", label: "Pending" },
-  { value: "APPROVED", label: "Approved" },
-  { value: "REJECTED", label: "Rejected" },
 ];
 
 const StatusPill = ({ status }) => {
@@ -85,7 +85,10 @@ export default function AgentApproval() {
   const fetchRequests = async () => {
     try {
       setLoading(true);
-      const res = await axiosInstance.get("/api/agent-external-register");
+      // Only PENDING requests appear here — once an admin approves an agent
+      // the row moves off this list (approved details live on AgentView).
+      // Rejected rows also drop off; use the DB directly to audit history.
+      const res = await axiosInstance.get("/api/agent-external-register/pending");
       setRequests(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
       console.error(err);

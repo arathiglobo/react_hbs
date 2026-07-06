@@ -37,6 +37,12 @@ export default function Sidebar() {
   const sidebarRef = useRef(null);
   const offcanvasRef = useRef(null);
   const [hotelId, setHotelId] = useState(null);
+  /**
+   * Combined count of PENDING hotel + agent self-registration requests.
+   * Shown as a red pill next to the Approvals menu label so admins see
+   * there's queue work without opening the menu. Only admins fetch it.
+   */
+  const [approvalsPendingCount, setApprovalsPendingCount] = useState(0);
 
   // Desktop sidebar collapse (remembered across reloads). When collapsed the
   // <aside> is removed so the page content reclaims the space, and a small
@@ -77,6 +83,38 @@ export default function Sidebar() {
     };
 
     fetchHotelId();
+  }, [currentRole]);
+
+  // Poll pending-approval count for admins. One-shot on mount is enough
+  // for the badge to stay reasonably fresh across a session; the count
+  // also refreshes whenever this component remounts (route changes).
+  useEffect(() => {
+    if (currentRole !== "admin") {
+      setApprovalsPendingCount(0);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [hotelRes, agentRes] = await Promise.all([
+          axiosInstance
+            .get("/api/hotel-external-register/pending-count")
+            .catch(() => null),
+          axiosInstance
+            .get("/api/agent-external-register/pending-count")
+            .catch(() => null),
+        ]);
+        if (cancelled) return;
+        const h = Number(hotelRes?.data?.count) || 0;
+        const a = Number(agentRes?.data?.count) || 0;
+        setApprovalsPendingCount(h + a);
+      } catch (_) {
+        if (!cancelled) setApprovalsPendingCount(0);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [currentRole]);
 
   useEffect(() => {
@@ -826,6 +864,21 @@ export default function Sidebar() {
                   <span className="d-flex align-items-center">
                     <span className="me-2">{getIcon(item.label)}</span>
                     <span>{item.label}</span>
+                    {item.label === "Approvals" && approvalsPendingCount > 0 && (
+                      <span
+                        className="ms-2 badge rounded-pill"
+                        style={{
+                          background: "#EC0B43",
+                          color: "#fff",
+                          fontSize: "0.65rem",
+                          padding: "3px 7px",
+                          lineHeight: 1,
+                        }}
+                        title={`${approvalsPendingCount} pending approval${approvalsPendingCount === 1 ? "" : "s"}`}
+                      >
+                        {approvalsPendingCount}
+                      </span>
+                    )}
                   </span>
                   {(hasChildren || hasGroups) && (
                     <span className="caret">
@@ -953,6 +1006,20 @@ export default function Sidebar() {
                     }}
                   >
                     {getIcon(item.label)} {item.label}
+                    {item.label === "Approvals" && approvalsPendingCount > 0 && (
+                      <span
+                        className="ms-2 badge rounded-pill"
+                        style={{
+                          background: "#EC0B43",
+                          color: "#fff",
+                          fontSize: "0.65rem",
+                          padding: "3px 7px",
+                          lineHeight: 1,
+                        }}
+                      >
+                        {approvalsPendingCount}
+                      </span>
+                    )}
                     {(hasChildren || hasGroups) && (
                       <span className="caret ms-2">
                         {openGroups[item.label] ? "▴" : "▾"}

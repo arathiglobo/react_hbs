@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Container, Card, Spinner, Row, Col, Button } from "react-bootstrap";
+import { Container, Card, Spinner, Row, Col, Button, Modal } from "react-bootstrap";
 import {
   FaUserTie,
   FaArrowLeft,
@@ -61,18 +61,38 @@ export default function AgentApprovalDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [reg, setReg] = useState(null);
+  /**
+   * The linked Agent record — hydrated in a second call so extended fields
+   * added on the /register form (salutation, trade license, timezone, …)
+   * show up here for the admin reviewer.
+   */
+  const [agent, setAgent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
+  // Trade-license preview modal. Opens on the "Open" click below the
+  // license section and renders the file inline (iframe for PDFs, img
+  // for anything else) instead of forcing a new-tab navigation.
+  const [showLicenseModal, setShowLicenseModal] = useState(false);
 
   const fetchDetail = async () => {
     try {
       setLoading(true);
       const res = await axiosInstance.get(`/api/agent-external-register/${id}`);
       setReg(res.data || null);
+      const agentId = res.data?.agentId;
+      if (agentId) {
+        try {
+          const agentRes = await axiosInstance.get(`/api/agent/${agentId}`);
+          setAgent(agentRes.data || null);
+        } catch (_) {
+          setAgent(null);
+        }
+      }
     } catch (err) {
       console.error(err);
       toast.error("Failed to load registration details");
       setReg(null);
+      setAgent(null);
     } finally {
       setLoading(false);
     }
@@ -158,13 +178,61 @@ export default function AgentApprovalDetail() {
                   </h6>
                   <Row>
                     <DetailItem icon={<FaUserTie />} label="Company Name" value={reg.companyName} />
-                    <DetailItem icon={<FaUser />} label="Contact Person" value={reg.contactPerson} />
+                    <DetailItem
+                      icon={<FaUser />}
+                      label="Contact Person"
+                      value={
+                        agent?.salutation && reg.contactPerson
+                          ? `${agent.salutation} ${reg.contactPerson}`
+                          : reg.contactPerson
+                      }
+                    />
                     <DetailItem icon={<FaEnvelope />} label="Email" value={reg.email} />
                     <DetailItem icon={<FaPhone />} label="Phone" value={reg.phone} />
                     <DetailItem icon={<FaGlobe />} label="Country" value={reg.country} />
                     <DetailItem icon={<FaMapMarkerAlt />} label="City" value={reg.city} />
                     <DetailItem icon={<FaUserCircle />} label="Username" value={reg.username} />
+                    {agent?.timezone && (
+                      <DetailItem icon={<FaGlobe />} label="Timezone" value={agent.timezone} />
+                    )}
                   </Row>
+
+                  {(agent?.tradeLicenseNo ||
+                    agent?.tradeLicenseExpiry ||
+                    agent?.tradeLicenseFile) && (
+                    <>
+                      <hr className="my-3" />
+                      <h6
+                        className="fw-bold text-dark mb-3"
+                        style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                      >
+                        Trade License
+                      </h6>
+                      <Row>
+                        <DetailItem
+                          icon={<FaUserTie />}
+                          label="Trade License No"
+                          value={agent.tradeLicenseNo}
+                        />
+                        <DetailItem
+                          icon={<FaClock />}
+                          label="Expiry Date"
+                          value={agent.tradeLicenseExpiry}
+                        />
+                      </Row>
+                      {agent.tradeLicenseFile && (
+                        <div className="mt-2">
+                          <Button
+                            variant="outline-primary"
+                            size="sm"
+                            onClick={() => setShowLicenseModal(true)}
+                          >
+                            Open Trade License File
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
 
                   <hr className="my-3" />
 
@@ -223,6 +291,52 @@ export default function AgentApprovalDetail() {
               </Card>
             )}
           </Container>
+
+          {/* Trade-license preview modal — iframe handles PDFs directly;
+              anything else (jpg/png/webp) renders as an <img>. Uses the URL
+              stored on the agent row exactly as saved by FileStorageService. */}
+          <Modal
+            show={showLicenseModal}
+            onHide={() => setShowLicenseModal(false)}
+            size="xl"
+            centered
+            backdrop="static"
+          >
+            <Modal.Header closeButton>
+              <Modal.Title style={{ fontSize: "1rem", fontWeight: 700 }}>
+                Trade License — {reg?.companyName || "Agent"}
+              </Modal.Title>
+            </Modal.Header>
+            <Modal.Body style={{ padding: 0, height: "80vh", background: "#f8f9fa" }}>
+              {agent?.tradeLicenseFile ? (
+                /\.pdf($|\?)/i.test(agent.tradeLicenseFile) ? (
+                  <iframe
+                    key={agent.tradeLicenseFile}
+                    src={agent.tradeLicenseFile}
+                    title="Trade License"
+                    style={{ width: "100%", height: "100%", border: "none", display: "block" }}
+                  />
+                ) : (
+                  <div className="d-flex align-items-center justify-content-center h-100 p-3">
+                    <img
+                      src={agent.tradeLicenseFile}
+                      alt="Trade License"
+                      style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+                    />
+                  </div>
+                )
+              ) : (
+                <div className="d-flex align-items-center justify-content-center h-100 text-muted">
+                  No file uploaded.
+                </div>
+              )}
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="outline-secondary" size="sm" onClick={() => setShowLicenseModal(false)}>
+                Close
+              </Button>
+            </Modal.Footer>
+          </Modal>
         </main>
       </div>
     </div>
