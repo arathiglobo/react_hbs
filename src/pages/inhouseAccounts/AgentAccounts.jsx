@@ -70,7 +70,10 @@ export default function AgentAccounts() {
     setEditing(null);
     setSelectedAgent(agent);
     setDateOfReceive(new Date().toISOString().split('T')[0]);
-    setAmount(agent?.usedCreditLimit || "");
+    // Amount starts empty — admin types the receive amount fresh. The row's
+    // used-credit is already surfaced as the "Available Balance" hint below
+    // the field, so pre-filling it here would just be noise.
+    setAmount("");
     setPaymentType("");
     setRemarks("");
     setError("");
@@ -101,6 +104,10 @@ export default function AgentAccounts() {
     }
     if (!paymentType) {
       setError("Payment type is required");
+      return;
+    }
+    if (!remarks.trim()) {
+      setError("Remarks is required");
       return;
     }
 
@@ -155,6 +162,10 @@ export default function AgentAccounts() {
     }
     if (!paymentType) {
       setError("Payment type is required");
+      return;
+    }
+    if (!remarks.trim()) {
+      setError("Remarks is required");
       return;
     }
 
@@ -278,7 +289,7 @@ export default function AgentAccounts() {
                     <th>Credit Limit</th>
                     <th>Used</th>
                     <th>Available</th>
-                    <th style={{ width: 160 }}>Actions</th>
+                    <th style={{ width: 260, whiteSpace: "nowrap" }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -290,25 +301,52 @@ export default function AgentAccounts() {
                       <td>{item.usedCreditLimit}</td>
                       <td>{calculateAvailable(item.totalCreditLimit, item.usedCreditLimit)}</td>
                       <td>
-                        <div className="d-flex gap-2">
-                          <FaPlus
-                            className="text-success"
-                            style={{ cursor: "pointer", fontSize: "18px" }}
+                        <div
+                          className="d-flex gap-1 flex-nowrap"
+                          style={{ whiteSpace: "nowrap" }}
+                        >
+                          <Button
+                            size="sm"
+                            variant="outline-success"
                             onClick={() => openCreate(item)}
-                            title="Add Amount Receive"
-                          />
-                          <FaHistory
-                            className="text-info"
-                            style={{ cursor: "pointer", fontSize: "18px" }}
+                            title="Record a payment received from this agent"
+                            className="d-inline-flex align-items-center"
+                            style={{
+                              padding: "1px 6px",
+                              fontSize: "0.68rem",
+                              lineHeight: 1.15,
+                            }}
+                          >
+                            <FaPlus style={{ fontSize: "0.62rem" }} className="me-1" /> Payment
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline-info"
                             onClick={() => handlePaymentHistory(item)}
-                            title="Payment History"
-                          />
-                          <FaDollarSign
-                            className="text-warning"
-                            style={{ cursor: "pointer", fontSize: "18px" }}
+                            title="List of payments received from this agent"
+                            className="d-inline-flex align-items-center"
+                            style={{
+                              padding: "1px 6px",
+                              fontSize: "0.68rem",
+                              lineHeight: 1.15,
+                            }}
+                          >
+                            <FaHistory style={{ fontSize: "0.62rem" }} className="me-1" /> Payments
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline-warning"
                             onClick={() => handleCurrency(item)}
-                            title="Auto Generated Invoice"
-                          />
+                            title="Credit-limit adjustments added from Agent Credit Limit"
+                            className="d-inline-flex align-items-center"
+                            style={{
+                              padding: "1px 6px",
+                              fontSize: "0.68rem",
+                              lineHeight: 1.15,
+                            }}
+                          >
+                            <FaDollarSign style={{ fontSize: "0.62rem" }} className="me-1" /> Credits
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -405,6 +443,18 @@ export default function AgentAccounts() {
                     placeholder="Enter amount"
                     isInvalid={!!error && (!amount || amount <= 0)}
                   />
+                  {selectedAgent && (
+                    <div
+                      className="text-danger fw-semibold mt-1"
+                      style={{ fontSize: "0.85rem" }}
+                    >
+                      Available Balance:{" "}
+                      {calculateAvailable(
+                        selectedAgent.totalCreditLimit,
+                        selectedAgent.usedCreditLimit,
+                      )}
+                    </div>
+                  )}
                   {error && (!amount || amount <= 0) && (
                     <Form.Control.Feedback type="invalid">
                       {error}
@@ -413,7 +463,7 @@ export default function AgentAccounts() {
                 </Form.Group>
 
                 <Form.Group className="mb-3">
-                  <Form.Label>Payment Type</Form.Label>
+                  <Form.Label>Payment Mode</Form.Label>
                   <Form.Select
                     value={paymentType}
                     onChange={(e) => setPaymentType(e.target.value)}
@@ -422,10 +472,8 @@ export default function AgentAccounts() {
                     <option value="">SELECT</option>
                     <option value="CASH">Cash</option>
                     <option value="BANK_TRANSFER">Bank Transfer</option>
-                    <option value="CHEQUE">Cheque</option>
                     <option value="CREDIT_CARD">Credit Card</option>
-                    <option value="ONLINE">Online Payment</option>
-                  </Form.Select>
+                   </Form.Select>
                   {error && !paymentType && (
                     <Form.Control.Feedback type="invalid">
                       {error}
@@ -434,14 +482,22 @@ export default function AgentAccounts() {
                 </Form.Group>
 
                 <Form.Group className="mb-3">
-                  <Form.Label>Remarks</Form.Label>
+                  <Form.Label>
+                    Remarks <span className="text-danger">*</span>
+                  </Form.Label>
                   <Form.Control
                     as="textarea"
                     rows={3}
                     value={remarks}
                     onChange={(e) => setRemarks(e.target.value)}
-                    placeholder="Enter remarks (optional)"
+                    placeholder="Enter remarks"
+                    isInvalid={!!error && !remarks.trim()}
                   />
+                  {error && !remarks.trim() && (
+                    <Form.Control.Feedback type="invalid">
+                      {error}
+                    </Form.Control.Feedback>
+                  )}
                 </Form.Group>
               </Form>
             </Modal.Body>
