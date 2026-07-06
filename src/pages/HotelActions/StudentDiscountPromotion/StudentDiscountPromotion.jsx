@@ -62,7 +62,7 @@ const EMPTY_FORM = {
   validFrom: "",
   validTo: "",
   description: "",
-  active: true,
+  active: false,
 };
 
 export default function StudentDiscountPromotion() {

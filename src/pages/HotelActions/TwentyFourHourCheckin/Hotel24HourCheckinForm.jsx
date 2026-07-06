@@ -38,7 +38,7 @@ export default function Hotel24HourCheckinForm({ mode }) {
     checkInStartTime: "00:00",
     checkInEndTime: "23:59",
     percentage: "",
-    active: true,
+    active: false,
     remarks: "",
   });
 
@@ -75,7 +75,7 @@ export default function Hotel24HourCheckinForm({ mode }) {
             checkInStartTime: e.checkInStartTime || "00:00",
             checkInEndTime: e.checkInEndTime || "23:59",
             percentage: e.percentage ?? "",
-            active: e.active !== false,
+            active: e.active === true,
             remarks: e.remarks || "",
           });
         }
@@ -259,9 +259,9 @@ export default function Hotel24HourCheckinForm({ mode }) {
                         list page surfaces Active / Inactive via the
                         clickable status badge, so duplicating it here
                         was confusing. `form.active` is still seeded
-                        from the loaded record (defaults to true on
+                        from the loaded record (defaults to false on
                         create) and shipped in the save payload so
-                        the row stays Active by default. */}
+                        the row starts Inactive by default. */}
                   </Row>
 
                   <Row>

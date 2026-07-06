@@ -93,6 +93,7 @@ export default function DayStayContractForm({ mode }) {
     remarks: "",
     termsAndConditions: [{ value: "" }],
     cancellationPolicies: [{ value: "" }],
+    isLive: false,
   });
 
   const [markets, setMarkets] = useState([]);
@@ -233,6 +234,7 @@ export default function DayStayContractForm({ mode }) {
           remarks: d.remarks || "",
           termsAndConditions: seedPolicyRows(d.termsAndConditions),
           cancellationPolicies: seedPolicyRows(d.cancellationPolicies),
+          isLive: d.isLive ?? false,
         }));
       } catch (err) {
         toast.error("Failed to load Day Stay contract");
@@ -499,7 +501,7 @@ export default function DayStayContractForm({ mode }) {
           meal: !!r.meal,
           refundable: !!r.refundable,
         })),
-        isLive: true,
+        isLive: formData.isLive,
       };
 
       let res;
