@@ -12,16 +12,39 @@ import {
   FaUser,
   FaChartLine,
   FaChevronDown,
+  FaHotel,
+  FaClock,
+  FaFire,
+  FaBriefcase,
+  FaSun,
+  FaBoxOpen,
+  FaGift,
+  FaCar,
+  FaTaxi,
+  FaGlobeAmericas,
+  FaUtensils,
+  FaHeart,
+  FaUserFriends,
+  FaPlane,
+  FaLeaf,
+  FaGraduationCap,
+  FaUserAlt,
+  FaCreditCard,
+  FaCalendarAlt,
+  FaArrowRight,
+  FaPen,
+  FaCalendarCheck,
+  FaSyncAlt,
+  FaChartBar,
 } from "react-icons/fa";
+import { MdWifiOff } from "react-icons/md";
 import TopBar from "../components/TopBar";
 import axiosInstance from "../components/AxiosInstance";
 import {
   dashboardCss,
   DashboardHeader,
   DashboardFooter,
-  QuickActions,
   ChartCard,
-  Icon,
   formatNumber,
 } from "./dashboardSkin";
 
@@ -157,31 +180,45 @@ export default function AgentDashboard() {
 
   // Every "New Booking" feature (mirrors the Sidebar's New Booking submenu),
   // surfaced directly as Quick Actions so an agent can jump straight to the
-  // corresponding search/booking page without opening the sidebar.
+  // corresponding search/booking page without opening the sidebar. Each tile
+  // carries its own accent "tone" (styled in the scoped <style> block below)
+  // so the grid reads as a set of distinct shortcuts, not a uniform button row.
   const bookingActions = [
-    { label: "Hotel Booking",       icon: "hotel",    to: "/new-booking/hotel" },
-    { label: "24 Hour",             icon: "hotel",    to: "/new-booking/hotel-24hr" },
-    { label: "Last Minute",         icon: "booking",  to: "/new-booking/last-minute-booking" },
-    { label: "Long Stay",           icon: "hotel",    to: "/new-booking/long-stay" },
-    { label: "Day Stay",            icon: "hotel",    to: "/new-booking/day-stay" },
-    { label: "Build Your Own Pkg",  icon: "list",     to: "/new-booking/make-your-own-package-v2" },
-    { label: "Package",             icon: "booking",  to: "/new-booking/package-search" },
-    { label: "Transfers",           icon: "transfer", to: "/new-booking/cab" },
-    { label: "Chauffeur & Limo",    icon: "transfer", to: "/new-booking/scheffer-driver" },
-    { label: "Tours & Activity",    icon: "tour",     to: "/new-booking/tours-and-activities" },
-    { label: "Offline",             icon: "booking",  to: "/new-booking/offline-search" },
-    { label: "Restaurant",          icon: "booking",  to: "/new-booking/restaurant" },
-    { label: "Honeymoon Package",   icon: "booking",  to: "/new-booking/honeymoon" },
-    { label: "Meet & Space",        icon: "booking",  to: "/new-booking/meet-and-space" },
-    { label: "Govt / Airlines",     icon: "agent",    to: "/new-booking/gov-employee" },
-    { label: "Ayurveda",            icon: "booking",  to: "/new-booking/ayurveda" },
-    { label: "Student",             icon: "user",     to: "/new-booking/student" },
-    { label: "Senior Citizen",      icon: "user",     to: "/new-booking/senior-citizen" },
+    { label: "Hotel",              tone: "pink",   icon: <FaHotel />,          to: "/new-booking/hotel" },
+    { label: "24 Hour",            tone: "pink",   icon: <FaClock />,          to: "/new-booking/hotel-24hr" },
+    { label: "Last Minute",        tone: "orange", icon: <FaFire />,           to: "/new-booking/last-minute-booking" },
+    { label: "Long Stay",          tone: "purple", icon: <FaBriefcase />,      to: "/new-booking/long-stay" },
+    { label: "Day Stay",           tone: "blue",   icon: <FaSun />,            to: "/new-booking/day-stay" },
+    { label: "Build Your Own Pkg", tone: "green",  icon: <FaBoxOpen />,        to: "/new-booking/make-your-own-package-v2" },
+    { label: "Package",            tone: "orange", icon: <FaGift />,           to: "/new-booking/package-search" },
+    { label: "Transfers",          tone: "teal",   icon: <FaCar />,            to: "/new-booking/cab" },
+    { label: "Chauffeur & Limo",   tone: "purple", icon: <FaTaxi />,           to: "/new-booking/scheffer-driver" },
+    { label: "Tours & Activity",   tone: "green",  icon: <FaGlobeAmericas />,  to: "/new-booking/tours-and-activities" },
+    { label: "Offline",            tone: "gray",   icon: <MdWifiOff />,        to: "/new-booking/offline-search" },
+    { label: "Restaurant",         tone: "orange", icon: <FaUtensils />,       to: "/new-booking/restaurant" },
+    { label: "Honeymoon Package",  tone: "pink",   icon: <FaHeart />,          to: "/new-booking/honeymoon" },
+    { label: "Meet & Space",       tone: "purple", icon: <FaUserFriends />,    to: "/new-booking/meet-and-space" },
+    { label: "Govt",               tone: "blue",   icon: <FaPlane />,          to: "/new-booking/gov-employee" },
+    { label: "Ayurveda",           tone: "green",  icon: <FaLeaf />,           to: "/new-booking/ayurveda" },
+    { label: "Student",            tone: "purple", icon: <FaGraduationCap />,  to: "/new-booking/student" },
+    { label: "Senior Citizen",     tone: "orange", icon: <FaUserAlt />,        to: "/new-booking/senior-citizen" },
   ];
 
   const manageActions = [
-    { label: "Accounts",  icon: "wallet",   onClick: () => navigate("/inhouse-accounts/agent") },
-    { label: "Calendar",  icon: "calendar", onClick: () => navigate("/calendar") },
+    {
+      label: "Accounts",
+      desc: "Manage your accounts and finances",
+      tone: "pink",
+      icon: <FaCreditCard />,
+      onClick: () => navigate("/inhouse-accounts/agent"),
+    },
+    {
+      label: "Calendar",
+      desc: "View & manage calendar events",
+      tone: "purple",
+      icon: <FaCalendarAlt />,
+      onClick: () => navigate("/calendar"),
+    },
   ];
 
   const todayBookings =
@@ -204,80 +241,200 @@ export default function AgentDashboard() {
 
         .agent-compact .dash-main { gap: 14px; padding-top: 14px; }
         .agent-compact .dash-main > div:first-child { margin-bottom: 0 !important; }
-        .agent-compact .credit-panel-stats { margin-top: 10px; }
 
-        /* ── Overview — plain stat strip (no per-metric cards) ── */
+        /* ── Overview — icon-badged stat cards ── */
         .agent-overview-strip {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 10px;
+        }
+        .agent-overview-card {
           display: flex;
-          flex-wrap: wrap;
+          flex-direction: column;
+          gap: 6px;
           background: #fff;
           border: 1px solid rgba(0,0,0,.06);
-          border-radius: 14px;
-          box-shadow: 0 1px 3px rgba(0,0,0,.05);
+          border-radius: 12px;
+          padding: 12px 14px;
+          box-shadow: 0 1px 3px rgba(0,0,0,.04);
         }
-        .agent-overview-stat {
-          flex: 1 1 150px;
-          padding: 14px 18px;
-          border-right: 1px solid #F0F1F5;
+        .agent-overview-icon {
+          width: 28px; height: 28px;
+          border-radius: 8px;
+          display: grid; place-items: center;
+          font-size: 13px;
+          flex-shrink: 0;
         }
-        .agent-overview-stat:last-child { border-right: none; }
+        .agent-overview-icon.tone-pink   { background: #FDE7ED; color: #EC0B43; }
+        .agent-overview-icon.tone-green  { background: #E8F8EE; color: #10B981; }
+        .agent-overview-icon.tone-orange { background: #FFF1E0; color: #F59E0B; }
+        .agent-overview-icon.tone-blue   { background: #E7F3FE; color: #0EA5E9; }
         .agent-overview-label {
-          display: block;
           font-size: 10px;
           font-weight: 700;
           letter-spacing: .07em;
           text-transform: uppercase;
           color: #9198a8;
-          margin-bottom: 6px;
         }
         .agent-overview-value {
-          display: block;
-          font-size: 17px;
+          font-size: 18px;
           font-weight: 700;
           color: #1a1d23;
         }
-        .agent-overview-value-sm { font-size: 12.5px; font-weight: 600; line-height: 1.4; }
-        @media (max-width: 860px) {
-          .agent-overview-stat { flex: 1 1 45%; border-right: none; border-bottom: 1px solid #F0F1F5; }
-          .agent-overview-stat:last-child { border-bottom: none; }
-        }
 
-        /* ── Quick Actions — New Booking feature tile grid ── */
+        /* ── Quick Actions — New Booking feature tile grid, each tile
+            carrying its own pastel accent tone ── */
+        .agent-qa-headrow {
+          display: flex; align-items: center; justify-content: space-between;
+          margin-bottom: 10px;
+        }
+        .agent-qa-edit-btn {
+          display: inline-flex; align-items: center; gap: 6px;
+          padding: 7px 14px;
+          background: #fff;
+          border: 1px solid rgba(0,0,0,.08);
+          border-radius: 99px;
+          font-size: 12px; font-weight: 600; color: #3E3E3B;
+          cursor: pointer;
+          transition: border-color .15s, box-shadow .15s;
+        }
+        .agent-qa-edit-btn:hover { border-color: var(--color-primary-tint); box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+
+        .agent-qa-panel {
+          background: #fff;
+          border: 1px solid rgba(0,0,0,.06);
+          border-radius: 14px;
+          padding: 12px;
+          box-shadow: 0 1px 3px rgba(0,0,0,.05);
+        }
         .agent-qa-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
-          gap: 10px;
+          grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+          gap: 6px;
         }
         .agent-qa-tile {
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
-          gap: 7px;
-          padding: 12px 6px;
+          gap: 6px;
+          padding: 8px 6px;
+          min-height: 80px;
           background: #fff;
-          border: 1px solid rgba(0,0,0,.06);
-          border-radius: 12px;
-          font-size: 11.5px;
-          font-weight: 600;
-          color: var(--color-text);
+          border: 1px solid rgba(0,0,0,.08);
+          border-radius: 10px;
+          font-size: 13px;
+          font-weight: 700;
+          color: #1a1d23;
           text-align: center;
+          line-height: 1.2;
           cursor: pointer;
-          box-shadow: 0 1px 3px rgba(0,0,0,.04);
           transition: border-color .15s, box-shadow .15s, transform .15s;
         }
         .agent-qa-tile:hover {
           border-color: var(--color-primary-tint);
-          box-shadow: 0 6px 16px rgba(236,11,67,.12);
-          transform: translateY(-2px);
+          box-shadow: 0 6px 14px rgba(0,0,0,.08);
+          transform: translateY(-1px);
         }
         .agent-qa-icon {
-          width: 32px; height: 32px;
-          border-radius: 10px;
+          width: 36px; height: 36px;
+          border-radius: 50%;
           display: grid; place-items: center;
-          background: var(--color-primary-tint);
-          color: var(--color-primary);
+          font-size: 15px;
+          flex-shrink: 0;
         }
+        .agent-qa-icon.tone-pink   { background: #FDE7ED; color: #EC0B43; }
+        .agent-qa-icon.tone-orange { background: #FFF1E0; color: #F59E0B; }
+        .agent-qa-icon.tone-purple { background: #F1EAFB; color: #8B5CF6; }
+        .agent-qa-icon.tone-blue   { background: #E7F3FE; color: #0EA5E9; }
+        .agent-qa-icon.tone-green  { background: #E8F8EE; color: #10B981; }
+        .agent-qa-icon.tone-teal   { background: #E3F7F5; color: #14B8A6; }
+        .agent-qa-icon.tone-gray   { background: #F0F1F3; color: #9098A8; }
+
+        /* ── Manage + Credit Overview — single row, wraps on narrow screens ── */
+        .agent-manage-row {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: stretch;
+          gap: 10px;
+        }
+        .agent-manage-row .agent-manage-grid { flex: 1.2 1 320px; }
+        .agent-manage-row .agent-credit-panel { flex: 1.4 1 340px; }
+
+        /* ── Manage — compact gradient shortcut cards ── */
+        .agent-manage-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          gap: 10px;
+        }
+        .agent-manage-card {
+          position: relative;
+          overflow: hidden;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 10px 12px;
+          border: none;
+          border-radius: 12px;
+          text-align: left;
+          cursor: pointer;
+          transition: transform .15s, box-shadow .15s;
+        }
+        .agent-manage-card:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(0,0,0,.14); }
+        .agent-manage-card.tone-pink   { background: linear-gradient(135deg, #F0134F 0%, #C90939 100%); }
+        .agent-manage-card.tone-purple { background: linear-gradient(135deg, #8B6CF7 0%, #6D4CE0 100%); }
+        .agent-manage-dots {
+          position: absolute; top: 8px; right: 10px; width: 40px; height: 40px;
+          background-image: radial-gradient(currentColor 1.2px, transparent 1.2px);
+          background-size: 8px 8px;
+          opacity: .35;
+          color: #fff;
+        }
+        .agent-manage-icon {
+          width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+          display: grid; place-items: center; font-size: 14px; color: #fff;
+          background: rgba(255,255,255,.2);
+        }
+        .agent-manage-body { flex: 1; min-width: 0; }
+        .agent-manage-title { display: block; font-size: 13.5px; font-weight: 700; color: #fff; margin-bottom: 1px; }
+        .agent-manage-desc { display: block; font-size: 10.5px; color: rgba(255,255,255,.85); line-height: 1.3; }
+        .agent-manage-arrow {
+          width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+          display: grid; place-items: center;
+          background: #fff;
+          box-shadow: 0 2px 6px rgba(0,0,0,.10);
+        }
+        .agent-manage-card.tone-pink .agent-manage-arrow   { color: #EC0B43; }
+        .agent-manage-card.tone-purple .agent-manage-arrow { color: #6D4CE0; }
+
+        /* ── Credit Overview — stat columns + circular "% used" ring ── */
+        .agent-credit-panel {
+          background: #fff;
+          border: 1px solid rgba(0,0,0,.06);
+          border-radius: 14px;
+          padding: 16px 18px;
+          box-shadow: 0 1px 3px rgba(0,0,0,.05);
+        }
+        .agent-credit-head { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; }
+        .agent-credit-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--color-primary); flex-shrink: 0; }
+        .agent-credit-title { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #1a1d23; }
+        .agent-credit-body { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+        .agent-credit-stats { display: flex; gap: 28px; flex-wrap: wrap; }
+        .agent-credit-stat { display: flex; flex-direction: column; gap: 4px; }
+        .agent-credit-stat-label { font-size: 10.5px; color: #9198a8; }
+        .agent-credit-stat-value { font-size: 16px; font-weight: 700; color: #1a1d23; }
+        .agent-credit-ring {
+          width: 76px; height: 76px; border-radius: 50%; flex-shrink: 0;
+          background: conic-gradient(var(--color-primary) var(--pct), #F0F1F5 0);
+          display: grid; place-items: center;
+        }
+        .agent-credit-ring-inner {
+          width: 58px; height: 58px; border-radius: 50%;
+          background: #fff;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .agent-credit-ring-value { font-size: 14px; font-weight: 700; color: #1a1d23; line-height: 1; }
+        .agent-credit-ring-label { font-size: 8px; color: #9198a8; text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
 
         /* ── Analytics — collapsible accordion header (mirrors AdminDashboard) ── */
         .agent-analytics-toggle {
@@ -545,127 +702,150 @@ export default function AgentDashboard() {
             {/* ── Quick Actions — every New Booking feature as a neat tile
                 grid, each navigating straight to its own page ── */}
             <section>
-              <p className="qa-label">Quick Actions</p>
-              <div className="agent-qa-grid">
-                {bookingActions.map((a) => (
-                  <button
-                    key={a.label}
-                    type="button"
-                    className="agent-qa-tile"
-                    onClick={() => navigate(a.to)}
-                  >
-                    <span className="agent-qa-icon">
-                      <Icon name={a.icon} size={16} />
-                    </span>
-                    {a.label}
-                  </button>
-                ))}
+              <div className="agent-qa-headrow">
+                <p className="qa-label" style={{ marginBottom: 0 }}>Quick Actions</p>
+                {/* <button type="button" className="agent-qa-edit-btn">
+                  <FaPen size={11} /> Edit Actions
+                </button> */}
+              </div>
+              <div className="agent-qa-panel">
+                <div className="agent-qa-grid">
+                  {bookingActions.map((a) => (
+                    <button
+                      key={a.label}
+                      type="button"
+                      className="agent-qa-tile"
+                      onClick={() => navigate(a.to)}
+                    >
+                      <span className={`agent-qa-icon tone-${a.tone}`}>{a.icon}</span>
+                      <span>{a.label}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </section>
 
-            {/* ── Manage — existing account/calendar shortcuts, kept as a
-                lighter secondary row so nothing that was here before is lost ── */}
-            <QuickActions actions={manageActions} label="Manage" />
-
-            {/* ── Credit summary panel ── */}
+            {/* ── Manage + Credit Overview — one row, side by side ── */}
             <section>
-              <p className="qa-label">Credit</p>
-              <ChartCard
-                title="Credit Limit"
-                badge={creditSummary ? `${creditSummary.usedPercent}% used` : "—"}
-              >
-                {loadingCredit ? (
-                  <div style={{ padding: "8px 0", color: "var(--color-text-muted)", fontSize: "13px" }}>
-                    Loading credit information…
+              <p className="qa-label">Manage</p>
+              <div className="agent-manage-row">
+                <div className="agent-manage-grid">
+                  {manageActions.map((a) => (
+                    <button
+                      key={a.label}
+                      type="button"
+                      className={`agent-manage-card tone-${a.tone}`}
+                      onClick={a.onClick}
+                    >
+                      <span className="agent-manage-dots" aria-hidden="true" />
+                      <span className="agent-manage-icon">{a.icon}</span>
+                      <span className="agent-manage-body">
+                        <span className="agent-manage-title">{a.label}</span>
+                        <span className="agent-manage-desc">{a.desc}</span>
+                      </span>
+                      <span className="agent-manage-arrow">
+                        <FaArrowRight size={10} />
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Credit summary — header dot + stat columns + a circular
+                    "% used" progress ring on the right ── */}
+                <div className="agent-credit-panel">
+                  <div className="agent-credit-head">
+                    <span className="agent-credit-dot" />
+                    <span className="agent-credit-title">Credit Overview</span>
                   </div>
-                ) : creditSummary ? (
-                  <>
-                    <div className="credit-bar">
+                  {loadingCredit ? (
+                    <div style={{ padding: "8px 0", color: "var(--color-text-muted)", fontSize: "13px" }}>
+                      Loading credit information…
+                    </div>
+                  ) : creditSummary ? (
+                    <div className="agent-credit-body">
+                      <div className="agent-credit-stats">
+                        <div className="agent-credit-stat">
+                          <span className="agent-credit-stat-label">Credit Limit</span>
+                          <span className="agent-credit-stat-value">
+                            {formatNumber(creditSummary.creditLimit)}
+                          </span>
+                        </div>
+                        <div className="agent-credit-stat">
+                          <span className="agent-credit-stat-label">Used</span>
+                          <span className="agent-credit-stat-value">
+                            {formatNumber(creditSummary.used)}
+                          </span>
+                        </div>
+                        <div className="agent-credit-stat">
+                          <span className="agent-credit-stat-label">Available Limit</span>
+                          <span
+                            className="agent-credit-stat-value"
+                            style={{ color: "var(--color-primary)" }}
+                          >
+                            {formatNumber(creditSummary.available)}
+                          </span>
+                        </div>
+                      </div>
                       <div
-                        className="credit-bar-fill"
-                        style={{
-                          width: `${creditSummary.usedPercent}%`,
-                          background:
-                            creditSummary.usedPercent > 80
-                              ? "var(--color-primary)"
-                              : "var(--color-success)",
-                        }}
-                      />
-                    </div>
-                    <div className="credit-panel-stats">
-                      <div className="credit-stat">
-                        <span className="credit-stat-label">Credit</span>
-                        <span className="credit-stat-value">
-                          {formatNumber(creditSummary.creditLimit)}
-                        </span>
-                      </div>
-                      <div className="credit-stat">
-                        <span className="credit-stat-label">Used</span>
-                        <span className="credit-stat-value">
-                          {formatNumber(creditSummary.used)}
-                        </span>
-                      </div>
-                      <div className="credit-stat">
-                        <span className="credit-stat-label">Available Limit</span>
-                        <span
-                          className="credit-stat-value"
-                          style={{ color: "var(--color-primary)" }}
-                        >
-                          {formatNumber(creditSummary.available)}
-                        </span>
+                        className="agent-credit-ring"
+                        style={{ "--pct": `${creditSummary.usedPercent}%` }}
+                      >
+                        <div className="agent-credit-ring-inner">
+                          <span className="agent-credit-ring-value">{creditSummary.usedPercent}%</span>
+                          <span className="agent-credit-ring-label">Used</span>
+                        </div>
                       </div>
                     </div>
-                  </>
-                ) : (
-                  <div style={{ padding: "8px 0", color: "var(--color-text-muted)", fontSize: "13px" }}>
-                    No credit information available
-                  </div>
-                )}
-              </ChartCard>
+                  ) : (
+                    <div style={{ padding: "8px 0", color: "var(--color-text-muted)", fontSize: "13px" }}>
+                      No credit information available
+                    </div>
+                  )}
+                </div>
+              </div>
             </section>
 
-            {/* ── Overview — plain stat strip, no per-metric cards ── */}
+            {/* ── Overview — icon-badged stat cards ── */}
             <section>
               <p className="qa-label">Overview</p>
               <div className="agent-overview-strip">
-                <div className="agent-overview-stat">
+                <div className="agent-overview-card">
+                  <span className="agent-overview-icon tone-pink"><FaCalendarCheck /></span>
                   <span className="agent-overview-label">Total Bookings</span>
                   <span className="agent-overview-value">
                     {formatNumber(dashboardStatus.totalBookings)}
                   </span>
                 </div>
-                <div className="agent-overview-stat">
+                <div className="agent-overview-card">
+                  <span className="agent-overview-icon tone-green"><FaSyncAlt /></span>
                   <span className="agent-overview-label">Today's Bookings</span>
                   <span className="agent-overview-value">
                     {formatNumber(todayBookings)}
                   </span>
                 </div>
-                <div className="agent-overview-stat">
+                <div className="agent-overview-card">
+                  <span className="agent-overview-icon tone-pink"><FaChartBar /></span>
                   <span className="agent-overview-label">Total Revenue</span>
-                  <span className="agent-overview-value" style={{ color: "var(--color-primary)" }}>
+                  <span className="agent-overview-value">
                     AED {formatNumber(dashboardStatus.totalRevenue)}
                   </span>
                 </div>
-                <div className="agent-overview-stat">
+                <div className="agent-overview-card">
+                  <span className="agent-overview-icon tone-orange"><FaHotel /></span>
                   <span className="agent-overview-label">Hotels Bookings</span>
                   <span className="agent-overview-value">
                     {formatNumber(dashboardStatus.hotelsListed)}
                   </span>
                 </div>
-                <div className="agent-overview-stat">
+                {/* API Bookings — hidden for now, kept for a quick re-enable.
+                <div className="agent-overview-card">
+                  <span className="agent-overview-icon tone-blue"><FaGlobeAmericas /></span>
                   <span className="agent-overview-label">API Bookings</span>
                   <span className="agent-overview-value">
                     {formatNumber(dashboardStatus.totalApiBookings)}
                   </span>
                 </div>
-                <div className="agent-overview-stat">
-                  <span className="agent-overview-label">Agent Info</span>
-                  <span className="agent-overview-value agent-overview-value-sm">
-                    {[dashboardStatus.companyName, dashboardStatus.city, dashboardStatus.country]
-                      .filter(Boolean)
-                      .join(", ") || "—"}
-                  </span>
-                </div>
+                */}
               </div>
             </section>
 
