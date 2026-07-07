@@ -177,7 +177,12 @@ export default function LastMinuteRoomList() {
   const [payload, setPayload] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeAccordion, setActiveAccordion] = useState(null);
+  // Which category accordion is open, tracked PER ROOM SLOT so opening
+  // a category in Room 1 doesn't also open the same category in Room 2
+  // (they used to share a single string; multi-room searches now keep
+  // each room's expanded category independent). Single-room mode reads
+  // slot 0 and behaves exactly as before.
+  const [activeAccordions, setActiveAccordions] = useState({});
   const [viewMode, setViewMode] = useState("grid");
 
   // Cancellation Policies & Terms modal — mirrors RoomList.jsx. Opens from a
@@ -720,14 +725,23 @@ export default function LastMinuteRoomList() {
                     multi-room renders it per slot inside a
                     "Room N" Accordion. */}
                 {(isMultiRoom ? selectedRooms : [null]).map((_slot, roomSlotIndex) => {
+                  // Per-slot expanded-category key. Read from the map so
+                  // Room 1 and Room 2 keep independent expansion state.
+                  const slotActiveKey =
+                    activeAccordions[roomSlotIndex] ?? null;
+                  const setSlotActiveKey = (key) =>
+                    setActiveAccordions((prev) => ({
+                      ...prev,
+                      [roomSlotIndex]: key,
+                    }));
                   const inner = (
                 <Accordion
-                  activeKey={activeAccordion}
-                  onSelect={(key) => setActiveAccordion(key)}
+                  activeKey={slotActiveKey}
+                  onSelect={(key) => setSlotActiveKey(key)}
                 >
                   {categories.map((cat, index) => {
                     const eventKey = String(index);
-                    const isActive = activeAccordion === eventKey;
+                    const isActive = slotActiveKey === eventKey;
                     const visibleRates = (cat.rates || []).filter(rateVisible);
                     if (visibleRates.length === 0) return null;
                     const minRate = Math.min(
@@ -1050,7 +1064,11 @@ export default function LastMinuteRoomList() {
                   return (
                     <Accordion
                       key={`lm-room-slot-${roomSlotIndex}`}
-                      defaultActiveKey={`lm-room-slot-${roomSlotIndex}`}
+                      // No defaultActiveKey — all room accordions start
+                      // collapsed. Each room slot is rendered in its OWN
+                      // <Accordion>, so opening / closing one has no
+                      // effect on any other; the operator toggles each
+                      // room's header independently.
                       className="mb-3 room-slot-accordion"
                     >
                       <Accordion.Item eventKey={`lm-room-slot-${roomSlotIndex}`}>
