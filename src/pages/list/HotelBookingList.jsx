@@ -1839,9 +1839,33 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                                   }}
                                 >
                                   {(() => {
-                                    const normalizedStatus = String(
+                                    const rawStatus = String(
                                       b.confirmationStatus || "",
-                                    )
+                                    );
+                                    // A confirm-history compound label (e.g.
+                                    // "Confirmed / ReConfirmed", stamped when a
+                                    // booking is reconfirmed after being
+                                    // confirmed) should surface only the
+                                    // LATEST state in the list — the full
+                                    // history still shows on the booking
+                                    // detail page. Other compounds (e.g. a
+                                    // cancellation combined with a prior
+                                    // confirmed state) are left untouched and
+                                    // keep rendering in full below.
+                                    const rawSegments = rawStatus
+                                      .split("/")
+                                      .map((seg) => seg.trim());
+                                    const isConfirmHistoryCompound =
+                                      rawSegments.length > 1 &&
+                                      rawSegments.every((seg) =>
+                                        ["confirmed", "reconfirmed"].includes(
+                                          seg.replace(/\s+/g, "").toLowerCase(),
+                                        ),
+                                      );
+                                    const effectiveStatus = isConfirmHistoryCompound
+                                      ? rawSegments[rawSegments.length - 1]
+                                      : rawStatus;
+                                    const normalizedStatus = effectiveStatus
                                       .replace(/\s+/g, "")
                                       .toLowerCase();
                                     const isConfirmed =
@@ -1922,7 +1946,7 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
 
                                     const label = isNotConfirmed
                                       ? "Not Confirmed"
-                                      : b.confirmationStatus || "-";
+                                      : effectiveStatus || "-";
                                     const isUpdating =
                                       updatingConfirmationStatus ===
                                       b.bookingId;
