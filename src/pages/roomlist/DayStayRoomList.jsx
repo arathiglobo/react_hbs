@@ -103,7 +103,8 @@ export default function DayStayRoomList() {
   // single `activeAccordion` (the entire hotel has ONE open category
   // at a time, not one per contract window).
   const [activeAccordion, setActiveAccordion] = useState("0");
-  const [showSelectedModal, setShowSelectedModal] = useState(false);
+  // selectedRow is still tracked because the insufficient-credit
+  // deferred re-entry falls back to it when no explicit row is passed.
   const [selectedRow, setSelectedRow] = useState(null);
   const [agentBalance, setAgentBalance] = useState(null);
   // Grid / list view toggle — same pattern as RoomList.jsx
@@ -605,34 +606,41 @@ export default function DayStayRoomList() {
     }
   };
 
+  // Book-Now entry point. The intermediate "Confirm Rate" summary modal
+  // was removed per client spec — clicking Book on a rate goes straight
+  // to the booking page. We still stash the row on state so the
+  // insufficient-credit deferred re-entry path (which re-fires
+  // proceedToBooking(true) from a captured closure) has something to
+  // point at, but the row is also passed through explicitly to
+  // proceedToBooking so we don't race the async setState.
   const openBookConfirm = (row) => {
     setSelectedRow(row);
-    setShowSelectedModal(true);
+    proceedToBooking(false, row);
   };
 
-  const proceedToBooking = (skipCreditCheck = false) => {
-    if (!selectedRow || !payload) return;
+  const proceedToBooking = (skipCreditCheck = false, rowArg = null) => {
+    const row = rowArg || selectedRow;
+    if (!row || !payload) return;
     // Prefer canonical rate fields (populated by both the client
     // adapter and the backend /rooms-search response) so the booking
     // page receives a real price regardless of which shape the rate
     // came from. computeRoomsTotal/computeFinalRate still act as the
     // fallback for adapter-built rates that only carry `dayStayRate`.
-    const totalAmount = displayTotal(selectedRow);
-    const perRoomFinal = displayPerRoomRate(selectedRow);
+    const totalAmount = displayTotal(row);
+    const perRoomFinal = displayPerRoomRate(row);
 
     // Credit gate — soft. Raise the informational modal and defer the
     // actual navigation until the user clicks OK, at which point we
     // re-enter with skipCreditCheck=true and complete the flow (the
     // booking page then handles online payment).
     if (!skipCreditCheck && isInsufficientBalance(totalAmount)) {
-      setShowSelectedModal(false);
-      setPendingBookingFn(() => () => proceedToBooking(true));
+      setPendingBookingFn(() => () => proceedToBooking(true, row));
       setShowInsufficientCreditModal(true);
       return;
     }
     const bookingPayload = {
       ...payload,
-      contractId: selectedRow.contractId || payload.contractId,
+      contractId: row.contractId || payload.contractId,
       // Keep contract window times; adjustedCheckOut already caps to window end.
       checkOutTime: adjustedCheckOut,
       // The rate row can come from EITHER shape: the day-stay client
@@ -642,17 +650,17 @@ export default function DayStayRoomList() {
       // *Name mirrors). Read whichever is populated so the booking
       // payload is stable regardless of source.
       roomCategory:
-        selectedRow.roomCategoryName || selectedRow.roomCategory || "",
+        row.roomCategoryName || row.roomCategory || "",
       roomType:
-        selectedRow.roomTypeName || selectedRow.baseRoomType || "",
-      occupancyTypeName: selectedRow.occupancyTypeName,
-      mealPlan: selectedRow.mealPlan,
-      rateRow: selectedRow,
+        row.roomTypeName || row.baseRoomType || "",
+      occupancyTypeName: row.occupancyTypeName,
+      mealPlan: row.mealPlan,
+      rateRow: row,
       dayStayRate: perRoomFinal,
       perRoomRate: perRoomFinal,
       totalAmount,
-      termsAndConditions: selectedRow.termsAndConditions || [],
-      cancellationPolicies: selectedRow.cancellationPolicies || [],
+      termsAndConditions: row.termsAndConditions || [],
+      cancellationPolicies: row.cancellationPolicies || [],
     };
     sessionStorage.setItem(
       "dayStayBookingPayload",
@@ -1403,80 +1411,8 @@ export default function DayStayRoomList() {
         </main>
       </div>
 
-      {/* Confirm-rate modal before navigating to the booking page */}
-      <Modal
-        show={showSelectedModal}
-        onHide={() => setShowSelectedModal(false)}
-        centered
-      >
-        <Modal.Header closeButton>
-          <Modal.Title>
-            <FaCheckCircle className="text-success me-2" /> Confirm Rate
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {selectedRow && (
-            <>
-              <h5 className="mb-2">
-                {selectedRow.roomCategoryName || selectedRow.roomCategory}
-              </h5>
-              <p className="text-muted mb-2">
-                {selectedRow.roomTypeName || selectedRow.baseRoomType}
-              </p>
-              <div className="d-flex align-items-center gap-2 mb-2">
-                {getMealPlanIcon(selectedRow.mealPlan)}
-                <span className="fw-semibold">{selectedRow.mealPlan}</span>
-                {selectedRow.refundable ? (
-                  <Badge bg="success" className="ms-2">
-                    Refundable
-                  </Badge>
-                ) : (
-                  <Badge bg="danger" className="ms-2">
-                    Non-Refundable
-                  </Badge>
-                )}
-              </div>
-              <div className="border-top pt-2">
-                <div className="d-flex justify-content-between">
-                  <span>Day Stay Rate (per room)</span>
-                  <strong>{formatPrice(displayPerRoomRate(selectedRow))}</strong>
-                </div>
-                <div className="d-flex justify-content-between text-muted small">
-                  <span>
-                    Pax: {payload.adults || 0} adult
-                    {(payload.adults || 0) > 1 ? "s" : ""}
-                    {payload.children
-                      ? `, ${payload.children} child${
-                          payload.children > 1 ? "ren" : ""
-                        }`
-                      : ""}
-                  </span>
-                  <span>Rooms: {payload.rooms || 1}</span>
-                </div>
-                <div className="d-flex justify-content-between fs-5 fw-bold text-success mt-2">
-                  <span>Total</span>
-                  <span>{formatPrice(displayTotal(selectedRow))}</span>
-                </div>
-              </div>
-              <p className="text-muted small mt-3 mb-0">
-                Check-in {payload.checkInTime}, check-out {adjustedCheckOut}{" "}
-                ({totalGuests} guest{totalGuests > 1 ? "s" : ""}).
-              </p>
-            </>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button
-            variant="outline-secondary"
-            onClick={() => setShowSelectedModal(false)}
-          >
-            Cancel
-          </Button>
-          <Button variant="success" onClick={() => proceedToBooking()}>
-            Proceed to Booking
-          </Button>
-        </Modal.Footer>
-      </Modal>
+      {/* Confirm-Rate summary modal removed per client spec — Book
+          takes the operator straight to the booking page. */}
 
       {/* Insufficient Credit Modal — informational gate. Does NOT block
           the booking; clicking OK re-runs the deferred proceedToBooking

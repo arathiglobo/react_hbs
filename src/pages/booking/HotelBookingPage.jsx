@@ -299,6 +299,21 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
     bookingData?.selectedRate?.nonRefundable === true ||
     bookingData?.selectedRate?.nonRefundable === "true";
 
+  // True when the booking has BOTH refundable and non-refundable rooms
+  // in roomBreakdown. Drives the notice at the top of the Guest Details
+  // accordion (replacing the per-room deadline dates, which would be
+  // misleading when only some rooms actually qualify for that deadline).
+  // Falls back to false when roomBreakdown is absent (single-room flows),
+  // so nothing else changes.
+  const hasMixedRefundability = useMemo(() => {
+    const roomList = bookingData?.roomBreakdown;
+    if (!Array.isArray(roomList) || roomList.length < 2) return false;
+    const nonRefCount = roomList.filter(
+      (r) => r?.nonRefundable === true || r?.nonRefundable === "true",
+    ).length;
+    return nonRefCount > 0 && nonRefCount < roomList.length;
+  }, [bookingData]);
+
   // Total the agent owes for this booking (AED — matches the
   // `requiredAmount` param the backend uses for
   // /api/agent-credit-limit/check-sufficient-credit). Computed here so
@@ -1150,6 +1165,25 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                       </div>
                     </Card.Header>
                     <Card.Body className="p-0">
+                      {/* Mixed-refundability notice — appears above the
+                          per-room accordion whenever the booking has both
+                          refundable and non-refundable rooms. Replaces the
+                          per-row cancellation deadline text in that case
+                          because a single deadline wouldn't apply across
+                          all rooms. */}
+                      {hasMixedRefundability && (
+                        <div
+                          className="mx-3 mt-3 mb-2 p-2 rounded border small"
+                          style={{
+                            borderColor: "#f59e0b",
+                            background: "#fffbeb",
+                            color: "#78350f",
+                          }}
+                        >
+                          This booking has both refundable and non-refundable
+                          rooms.
+                        </div>
+                      )}
                       <Accordion
                         alwaysOpen
                         defaultActiveKey={rooms.map((_, i) => i.toString())}
@@ -1210,14 +1244,22 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                                       {slotMealPlan}
                                     </Badge>
                                   )}
-                                  {slotRefundDeadlineLabel && (
-                                    <span
-                                      className="ms-2 small fw-normal"
-                                      style={{ opacity: 0.9 }}
-                                    >
-                                      | Deadline: {slotRefundDeadlineLabel}
-                                    </span>
-                                  )}
+                                  {/* Per-room deadline text — hidden when
+                                      the booking has a mix of refundable and
+                                      non-refundable rooms; the mixed notice
+                                      above the accordion replaces every
+                                      row's individual deadline in that case
+                                      so we don't surface a date that only
+                                      applies to some rooms. */}
+                                  {!hasMixedRefundability &&
+                                    slotRefundDeadlineLabel && (
+                                      <span
+                                        className="ms-2 small fw-normal"
+                                        style={{ opacity: 0.9 }}
+                                      >
+                                        | Deadline: {slotRefundDeadlineLabel}
+                                      </span>
+                                    )}
                                 </h6>
                               </Accordion.Header>
                               <Accordion.Body className="p-3">

@@ -538,7 +538,12 @@ export default function LongStayRoomList() {
   const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeAccordion, setActiveAccordion] = useState("0");
+  // Which contract accordion is open, tracked PER ROOM SLOT so opening
+  // a contract in Room 1 doesn't also open the same contract in Room 2
+  // (they used to share a single string; multi-room searches now keep
+  // each room's expanded contract independent). Default seed "0" is
+  // read per-slot on first render so single-room mode is unchanged.
+  const [activeAccordions, setActiveAccordions] = useState({});
   const [viewMode, setViewMode] = useState("grid"); // "grid" | "list"
 
   // Cancellation Policies & Terms modal — opened from a per-room-card link.
@@ -1143,14 +1148,28 @@ export default function LongStayRoomList() {
                     renders it once per slot inside a "Room N"
                     Accordion. */}
                 {(isMultiRoom ? selectedRooms : [null]).map((_slot, roomSlotIndex) => {
+                  // Per-slot expanded-contract key. Read from the map so
+                  // Room 1 and Room 2 keep independent expansion state.
+                  // Falls back to "0" until the slot toggles anything so
+                  // the first contract stays open on first render — same
+                  // legacy behavior the single-string state used to give.
+                  const slotActiveKey =
+                    activeAccordions[roomSlotIndex] !== undefined
+                      ? activeAccordions[roomSlotIndex]
+                      : "0";
+                  const setSlotActiveKey = (key) =>
+                    setActiveAccordions((prev) => ({
+                      ...prev,
+                      [roomSlotIndex]: key,
+                    }));
                   const inner = (
                 <Accordion
-                  activeKey={activeAccordion}
-                  onSelect={(key) => setActiveAccordion(key)}
+                  activeKey={slotActiveKey}
+                  onSelect={(key) => setSlotActiveKey(key)}
                 >
                   {contracts.map((c, index) => {
                     const eventKey = index.toString();
-                    const isActive = activeAccordion === eventKey;
+                    const isActive = slotActiveKey === eventKey;
                     const exceedsCap =
                       c.maxBookingDays && totalNights > c.maxBookingDays;
                     // Apply Room-Type / Refund-Policy filters per room. Only
@@ -1355,7 +1374,11 @@ export default function LongStayRoomList() {
                   return (
                     <Accordion
                       key={`ls-room-slot-${roomSlotIndex}`}
-                      defaultActiveKey={`ls-room-slot-${roomSlotIndex}`}
+                      // No defaultActiveKey — all room accordions start
+                      // collapsed. Each room slot is rendered in its OWN
+                      // <Accordion>, so opening / closing one has no
+                      // effect on any other; the operator toggles each
+                      // room's header independently.
                       className="mb-3 room-slot-accordion"
                     >
                       <Accordion.Item eventKey={`ls-room-slot-${roomSlotIndex}`}>

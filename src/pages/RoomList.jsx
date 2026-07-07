@@ -84,7 +84,12 @@ const RoomList = ({ force24Hour = false } = {}) => {
   const [error, setError] = useState(null);
   const [selectedRate, setSelectedRate] = useState(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
-  const [activeAccordion, setActiveAccordion] = useState(null);
+  // Which category accordion is open, tracked PER ROOM SLOT so opening
+  // a category in Room 1 doesn't also open the same category in Room 2
+  // (they used to share a single string; multi-room searches now keep
+  // each room's expanded category independent). Single-room mode reads
+  // slot 0 and behaves exactly as before.
+  const [activeAccordions, setActiveAccordions] = useState({});
   const location = useLocation();
   const navigate = useNavigate();
   const [hotelStaticData, setHotelStaticData] = useState(null);
@@ -1376,14 +1381,22 @@ const RoomList = ({ force24Hour = false } = {}) => {
                   "Room N" Accordion with the slot's current selection
                   shown in the header. Mirrors the ExternalApi pattern. */}
               {(isMultiRoom ? selectedRooms : [null]).map((_slot, roomSlotIndex) => {
+                // Per-slot expanded-category key. Read from the map so
+                // Room 1 and Room 2 keep independent expansion state.
+                const slotActiveKey = activeAccordions[roomSlotIndex] ?? null;
+                const setSlotActiveKey = (key) =>
+                  setActiveAccordions((prev) => ({
+                    ...prev,
+                    [roomSlotIndex]: key,
+                  }));
                 const inner = (
               <Accordion
-                activeKey={activeAccordion}
-                onSelect={(key) => setActiveAccordion(key)}
+                activeKey={slotActiveKey}
+                onSelect={(key) => setSlotActiveKey(key)}
               >
                 {hotel.roomCategories.map((category, index) => {
                   const eventKey = index.toString();
-                  const isActive = activeAccordion === eventKey;
+                  const isActive = slotActiveKey === eventKey;
                   const filteredRates = (category.availableRates || []).filter(
                     matchesFilters,
                   );
@@ -1766,7 +1779,11 @@ const RoomList = ({ force24Hour = false } = {}) => {
                 return (
                   <Accordion
                     key={`room-slot-${roomSlotIndex}`}
-                    defaultActiveKey={`room-slot-${roomSlotIndex}`}
+                    // No defaultActiveKey — all room accordions start
+                    // collapsed. Each room slot is rendered in its OWN
+                    // <Accordion>, so opening / closing one has no effect
+                    // on any other; the operator toggles each room's
+                    // header independently.
                     className="mb-3 room-slot-accordion"
                   >
                     <Accordion.Item eventKey={`room-slot-${roomSlotIndex}`}>
