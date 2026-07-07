@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Nav, Button, Offcanvas } from "react-bootstrap";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import "./Sidebar.css";
 import {
   LayoutDashboard,
@@ -62,10 +62,38 @@ export default function Sidebar() {
     .split(",")
     .map((role) => role.trim().toLowerCase());
 
+  // The dashboard landing pages define which "hat" a multi-role user is
+  // currently wearing — opening /agentDashboard means acting as an agent
+  // even if the last role picked on /select-userRole was admin (that
+  // selection lives in localStorage, which goes stale across tabs and
+  // direct URL visits). Deriving the role from the dashboard route keeps
+  // the menu — including admin-only entries like Report → Hotel Booking
+  // History — consistent with the dashboard being viewed.
+  const { pathname } = useLocation();
+  const dashboardRoleByPath = {
+    "/adminDashboard": "admin",
+    "/agentDashboard": "agent",
+    "/staffDashboard": "staff",
+    "/extranetDashboard": "extranet",
+  };
+  const pathRole = dashboardRoleByPath[pathname];
+
   const currentRole =
+    pathRole ||
     localStorage.getItem("currentActiveRole")?.toLowerCase() ||
     storedRoles[0] ||
     "";
+
+  // Re-sync the stored active role with the dashboard context so the
+  // role-guarded routes (PrivateRoute roles=[...]) agree with the menu.
+  useEffect(() => {
+    if (
+      pathRole &&
+      localStorage.getItem("currentActiveRole")?.toLowerCase() !== pathRole
+    ) {
+      localStorage.setItem("currentActiveRole", pathRole);
+    }
+  }, [pathRole]);
 
   useEffect(() => {
     const fetchHotelId = async () => {
@@ -652,9 +680,30 @@ export default function Sidebar() {
   ];
 
   // Filter menu based on allowed roles
-  const filteredItems = items.filter((item) => {
-    if (!item.roles) return true; // if no roles specified, show for all
-    return item.roles.includes(currentRole);
+  // Filter menu based on allowed roles. Child items (and items inside
+  // groups) may also carry a `roles` key — those without one stay visible
+  // to every role that can see the parent.
+  const roleAllows = (entry) => !entry.roles || entry.roles.includes(currentRole);
+
+  const filteredItems = items.filter(roleAllows).map((item) => {
+    const next = { ...item };
+    if (Array.isArray(item.children)) {
+      next.children = item.children.filter(roleAllows);
+    }
+    if (Array.isArray(item.groups)) {
+      next.groups = item.groups
+        .map((group) => ({
+          ...group,
+          children: Array.isArray(group.children)
+            ? group.children.filter(roleAllows)
+            : group.children,
+        }))
+        .filter(
+          (group) =>
+            !Array.isArray(group.children) || group.children.length > 0,
+        );
+    }
+    return next;
   });
 
   const toggleGroup = (groupKey, isTopLevelItem = false) => {

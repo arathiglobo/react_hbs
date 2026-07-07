@@ -3,12 +3,15 @@ import Sidebar from "../components/Sidebar";
 import LineChart from "../components/LineChart";
 import BarChart from "../components/BarChart";
 import { useNavigate } from "react-router-dom";
+import { Collapse } from "react-bootstrap";
 import {
   FaUserTie,
   FaMapMarkerAlt,
   FaPhone,
   FaEnvelope,
   FaUser,
+  FaChartLine,
+  FaChevronDown,
 } from "react-icons/fa";
 import TopBar from "../components/TopBar";
 import axiosInstance from "../components/AxiosInstance";
@@ -17,8 +20,8 @@ import {
   DashboardHeader,
   DashboardFooter,
   QuickActions,
-  KpiCard,
   ChartCard,
+  Icon,
   formatNumber,
 } from "./dashboardSkin";
 
@@ -36,6 +39,9 @@ export default function AgentDashboard() {
   // card: company / location / contact + Finance Manager & GM.
   const [agentId, setAgentId] = useState(null);
   const [agentInfo, setAgentInfo] = useState(null);
+  // Analytics charts are collapsed by default to save vertical space,
+  // matching the AdminDashboard accordion pattern.
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const defaultDashboardStatus = {
     totalBookings: 0,
     todayBookings: 0,
@@ -149,10 +155,33 @@ export default function AgentDashboard() {
     };
   }, [agentId]);
 
-  const actions = [
-    { label: "New Booking", icon: "booking",  onClick: () => navigate("/new-booking/hotel") },
-    { label: "Accounts",    icon: "wallet",   onClick: () => navigate("/inhouse-accounts/agent") },
-    { label: "Calendar",    icon: "calendar", onClick: () => navigate("/calendar") },
+  // Every "New Booking" feature (mirrors the Sidebar's New Booking submenu),
+  // surfaced directly as Quick Actions so an agent can jump straight to the
+  // corresponding search/booking page without opening the sidebar.
+  const bookingActions = [
+    { label: "Hotel Booking",       icon: "hotel",    to: "/new-booking/hotel" },
+    { label: "24 Hour",             icon: "hotel",    to: "/new-booking/hotel-24hr" },
+    { label: "Last Minute",         icon: "booking",  to: "/new-booking/last-minute-booking" },
+    { label: "Long Stay",           icon: "hotel",    to: "/new-booking/long-stay" },
+    { label: "Day Stay",            icon: "hotel",    to: "/new-booking/day-stay" },
+    { label: "Build Your Own Pkg",  icon: "list",     to: "/new-booking/make-your-own-package-v2" },
+    { label: "Package",             icon: "booking",  to: "/new-booking/package-search" },
+    { label: "Transfers",           icon: "transfer", to: "/new-booking/cab" },
+    { label: "Chauffeur & Limo",    icon: "transfer", to: "/new-booking/scheffer-driver" },
+    { label: "Tours & Activity",    icon: "tour",     to: "/new-booking/tours-and-activities" },
+    { label: "Offline",             icon: "booking",  to: "/new-booking/offline-search" },
+    { label: "Restaurant",          icon: "booking",  to: "/new-booking/restaurant" },
+    { label: "Honeymoon Package",   icon: "booking",  to: "/new-booking/honeymoon" },
+    { label: "Meet & Space",        icon: "booking",  to: "/new-booking/meet-and-space" },
+    { label: "Govt / Airlines",     icon: "agent",    to: "/new-booking/gov-employee" },
+    { label: "Ayurveda",            icon: "booking",  to: "/new-booking/ayurveda" },
+    { label: "Student",             icon: "user",     to: "/new-booking/student" },
+    { label: "Senior Citizen",      icon: "user",     to: "/new-booking/senior-citizen" },
+  ];
+
+  const manageActions = [
+    { label: "Accounts",  icon: "wallet",   onClick: () => navigate("/inhouse-accounts/agent") },
+    { label: "Calendar",  icon: "calendar", onClick: () => navigate("/calendar") },
   ];
 
   const todayBookings =
@@ -168,9 +197,116 @@ export default function AgentDashboard() {
           margin needs !important to beat DashboardHeader's inline
           marginBottom. */}
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        /* Agent dashboard uses Inter instead of the shared skin's Lexend. */
+        .dash-shell.agent-compact,
+        .dash-shell.agent-compact * { font-family: 'Inter', sans-serif; }
+
         .agent-compact .dash-main { gap: 14px; padding-top: 14px; }
         .agent-compact .dash-main > div:first-child { margin-bottom: 0 !important; }
         .agent-compact .credit-panel-stats { margin-top: 10px; }
+
+        /* ── Overview — plain stat strip (no per-metric cards) ── */
+        .agent-overview-strip {
+          display: flex;
+          flex-wrap: wrap;
+          background: #fff;
+          border: 1px solid rgba(0,0,0,.06);
+          border-radius: 14px;
+          box-shadow: 0 1px 3px rgba(0,0,0,.05);
+        }
+        .agent-overview-stat {
+          flex: 1 1 150px;
+          padding: 14px 18px;
+          border-right: 1px solid #F0F1F5;
+        }
+        .agent-overview-stat:last-child { border-right: none; }
+        .agent-overview-label {
+          display: block;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: .07em;
+          text-transform: uppercase;
+          color: #9198a8;
+          margin-bottom: 6px;
+        }
+        .agent-overview-value {
+          display: block;
+          font-size: 17px;
+          font-weight: 700;
+          color: #1a1d23;
+        }
+        .agent-overview-value-sm { font-size: 12.5px; font-weight: 600; line-height: 1.4; }
+        @media (max-width: 860px) {
+          .agent-overview-stat { flex: 1 1 45%; border-right: none; border-bottom: 1px solid #F0F1F5; }
+          .agent-overview-stat:last-child { border-bottom: none; }
+        }
+
+        /* ── Quick Actions — New Booking feature tile grid ── */
+        .agent-qa-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+          gap: 10px;
+        }
+        .agent-qa-tile {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 7px;
+          padding: 12px 6px;
+          background: #fff;
+          border: 1px solid rgba(0,0,0,.06);
+          border-radius: 12px;
+          font-size: 11.5px;
+          font-weight: 600;
+          color: var(--color-text);
+          text-align: center;
+          cursor: pointer;
+          box-shadow: 0 1px 3px rgba(0,0,0,.04);
+          transition: border-color .15s, box-shadow .15s, transform .15s;
+        }
+        .agent-qa-tile:hover {
+          border-color: var(--color-primary-tint);
+          box-shadow: 0 6px 16px rgba(236,11,67,.12);
+          transform: translateY(-2px);
+        }
+        .agent-qa-icon {
+          width: 32px; height: 32px;
+          border-radius: 10px;
+          display: grid; place-items: center;
+          background: var(--color-primary-tint);
+          color: var(--color-primary);
+        }
+
+        /* ── Analytics — collapsible accordion header (mirrors AdminDashboard) ── */
+        .agent-analytics-toggle {
+          width: 100%; display: flex; align-items: center; gap: 12px;
+          background: #fff; border: 1px solid rgba(0,0,0,.06); border-radius: 14px;
+          padding: 13px 16px; cursor: pointer; text-align: left;
+          box-shadow: 0 1px 3px rgba(0,0,0,.05);
+          transition: border-color .15s ease, box-shadow .15s ease;
+        }
+        .agent-analytics-toggle:hover { border-color: var(--color-primary-tint); box-shadow: 0 6px 16px rgba(236,11,67,.10); }
+        .agent-analytics-toggle[aria-expanded="true"] { border-color: var(--color-primary-tint); }
+        .agent-acc-icon {
+          width: 34px; height: 34px; border-radius: 10px;
+          display: grid; place-items: center;
+          background: var(--color-primary-tint); color: var(--color-primary);
+          flex-shrink: 0; font-size: 15px;
+        }
+        .agent-acc-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+        .agent-acc-title { font-size: 14px; font-weight: 600; color: var(--color-text); }
+        .agent-acc-sub { font-size: 11.5px; color: var(--color-text-muted); }
+        .agent-acc-chev {
+          width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+          background: #F6F6F4; color: #6B7280; flex-shrink: 0; font-size: 12px;
+          transition: transform .25s cubic-bezier(.16,1,.3,1), background .15s ease, color .15s ease;
+        }
+        .agent-analytics-toggle[aria-expanded="true"] .agent-acc-chev {
+          background: var(--color-primary); color: #fff; transform: rotate(180deg);
+        }
+        .agent-analytics-panel { padding-top: 14px; }
       `}</style>
       <div className="dash-shell rw-dashboard agent-compact">
         <TopBar />
@@ -406,8 +542,30 @@ export default function AgentDashboard() {
               );
             })()}
 
-            {/* ── Quick Actions ── */}
-            <QuickActions actions={actions} />
+            {/* ── Quick Actions — every New Booking feature as a neat tile
+                grid, each navigating straight to its own page ── */}
+            <section>
+              <p className="qa-label">Quick Actions</p>
+              <div className="agent-qa-grid">
+                {bookingActions.map((a) => (
+                  <button
+                    key={a.label}
+                    type="button"
+                    className="agent-qa-tile"
+                    onClick={() => navigate(a.to)}
+                  >
+                    <span className="agent-qa-icon">
+                      <Icon name={a.icon} size={16} />
+                    </span>
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            {/* ── Manage — existing account/calendar shortcuts, kept as a
+                lighter secondary row so nothing that was here before is lost ── */}
+            <QuickActions actions={manageActions} label="Manage" />
 
             {/* ── Credit summary panel ── */}
             <section>
@@ -466,66 +624,84 @@ export default function AgentDashboard() {
               </ChartCard>
             </section>
 
-            {/* ── KPI Grid — 3×2 ── */}
+            {/* ── Overview — plain stat strip, no per-metric cards ── */}
             <section>
               <p className="qa-label">Overview</p>
-              <div className="kpi-grid">
-                <KpiCard
-                  title="Total Bookings"
-                  icon="booking"
-                  color="#6366f1"
-                  value={formatNumber(dashboardStatus.totalBookings)}
-                />
-                <KpiCard
-                  title="Today's Bookings"
-                  icon="booking"
-                  color="#0ea5e9"
-                  value={formatNumber(todayBookings)}
-                />
-                <KpiCard
-                  title="Total Revenue"
-                  icon="account"
-                  color="#EC0B43"
-                  value={`AED ${formatNumber(dashboardStatus.totalRevenue)}`}
-                />
-                <KpiCard
-                  title="Agent Info"
-                  icon="agent"
-                  color="#f59e0b"
-                  value={
-                    <div style={{ fontSize: "13px", lineHeight: 1.5, fontWeight: 600 }}>
-                      <div>{dashboardStatus.companyName || "—"}</div>
-                      <div>{dashboardStatus.city || ""}</div>
-                      <div>{dashboardStatus.country || ""}</div>
-                    </div>
-                  }
-                />
-                <KpiCard
-                  title="Hotels Bookings"
-                  icon="hotel"
-                  color="#8b5cf6"
-                  value={formatNumber(dashboardStatus.hotelsListed)}
-                />
-                <KpiCard
-                  title="API Bookings"
-                  icon="tour"
-                  color="#10b981"
-                  value={formatNumber(dashboardStatus.totalApiBookings)}
-                />
+              <div className="agent-overview-strip">
+                <div className="agent-overview-stat">
+                  <span className="agent-overview-label">Total Bookings</span>
+                  <span className="agent-overview-value">
+                    {formatNumber(dashboardStatus.totalBookings)}
+                  </span>
+                </div>
+                <div className="agent-overview-stat">
+                  <span className="agent-overview-label">Today's Bookings</span>
+                  <span className="agent-overview-value">
+                    {formatNumber(todayBookings)}
+                  </span>
+                </div>
+                <div className="agent-overview-stat">
+                  <span className="agent-overview-label">Total Revenue</span>
+                  <span className="agent-overview-value" style={{ color: "var(--color-primary)" }}>
+                    AED {formatNumber(dashboardStatus.totalRevenue)}
+                  </span>
+                </div>
+                <div className="agent-overview-stat">
+                  <span className="agent-overview-label">Hotels Bookings</span>
+                  <span className="agent-overview-value">
+                    {formatNumber(dashboardStatus.hotelsListed)}
+                  </span>
+                </div>
+                <div className="agent-overview-stat">
+                  <span className="agent-overview-label">API Bookings</span>
+                  <span className="agent-overview-value">
+                    {formatNumber(dashboardStatus.totalApiBookings)}
+                  </span>
+                </div>
+                <div className="agent-overview-stat">
+                  <span className="agent-overview-label">Agent Info</span>
+                  <span className="agent-overview-value agent-overview-value-sm">
+                    {[dashboardStatus.companyName, dashboardStatus.city, dashboardStatus.country]
+                      .filter(Boolean)
+                      .join(", ") || "—"}
+                  </span>
+                </div>
               </div>
             </section>
 
-            {/* ── Charts ── */}
+            {/* ── Analytics — collapsible accordion, same pattern as
+                AdminDashboard.jsx's "Analytics" section ── */}
             <section>
-              <p className="qa-label">Analytics</p>
-              <div className="chart-grid">
-                <ChartCard title="Bookings Over Time" dotColor="var(--color-primary)">
-                  <LineChart labels={bookingsLabels} data={bookingsData} />
-                </ChartCard>
-                <ChartCard title="Revenue Trends" dotColor="var(--color-secondary)">
-                  <BarChart labels={bookingsLabels} data={revenueData} />
-                </ChartCard>
-              </div>
+              <button
+                type="button"
+                className="agent-analytics-toggle"
+                onClick={() => setAnalyticsOpen((o) => !o)}
+                aria-expanded={analyticsOpen}
+                aria-controls="agent-analytics-panel"
+              >
+                <span className="agent-acc-icon" aria-hidden="true">
+                  <FaChartLine />
+                </span>
+                <span className="agent-acc-text">
+                  <span className="agent-acc-title">Analytics</span>
+                  <span className="agent-acc-sub">Bookings over time &amp; revenue trend</span>
+                </span>
+                <span className="agent-acc-chev" aria-hidden="true">
+                  <FaChevronDown />
+                </span>
+              </button>
+              <Collapse in={analyticsOpen}>
+                <div id="agent-analytics-panel" className="agent-analytics-panel">
+                  <div className="chart-grid">
+                    <ChartCard title="Bookings Over Time" dotColor="var(--color-primary)">
+                      <LineChart labels={bookingsLabels} data={bookingsData} />
+                    </ChartCard>
+                    <ChartCard title="Revenue Trends" dotColor="var(--color-secondary)">
+                      <BarChart labels={bookingsLabels} data={revenueData} />
+                    </ChartCard>
+                  </div>
+                </div>
+              </Collapse>
             </section>
 
           </main>

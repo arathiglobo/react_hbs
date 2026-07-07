@@ -421,11 +421,126 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
     }
   }, [bookingData, bookingConfirmation, showVoucherChoice, voucherChoiceMade]);
 
+  // ── Hotel Booking History snapshot ────────────────────────────────────
+  // Posts the search context to /api/search-history/save the moment the
+  // page loads, so the admin Report → Hotel Booking History report still
+  // shows the selection even if this tab is closed before the booking is
+  // created. Keyed by a UUID persisted inside the sessionStorage
+  // bookingData so refreshes update the same row instead of adding one.
+  // Fire-and-forget: history bookkeeping must never block booking.
+  //
+  // AGENT sessions only — an admin (or staff) abandoning a booking must
+  // not appear on the report. The backend save endpoint enforces the same
+  // rule from the JWT roles.
+  const isAgentSession = () => {
+    const stored = (localStorage.getItem("userRole") || "")
+      .split(",")
+      .map((r) => r.trim().toLowerCase());
+    const role =
+      localStorage.getItem("currentActiveRole")?.toLowerCase() ||
+      stored[0] ||
+      "";
+    return role === "agent";
+  };
+
+  const saveSearchHistorySnapshot = (data, rawJson) => {
+    try {
+      const p = data?.payload || {};
+      const toDate = (v) => {
+        if (!v) return null;
+        const d = new Date(v);
+        return isNaN(d.getTime()) ? null : d;
+      };
+      const cin = toDate(p.checkInDate);
+      const cout = toDate(p.checkOutDate);
+      const nights =
+        cin && cout
+          ? Math.max(1, Math.round((cout - cin) / 86400000))
+          : Number(p.nightsCount) || null;
+      const roomsArr = Array.isArray(p.rooms) ? p.rooms : [];
+      const adults = roomsArr.reduce(
+        (acc, r) => acc + (Number(r.adults) || 0),
+        0,
+      );
+      const children = roomsArr.reduce(
+        (acc, r) => acc + (Number(r.children) || 0),
+        0,
+      );
+      const roomsGuests = roomsArr.length
+        ? `${roomsArr.length} Room${roomsArr.length > 1 ? "s" : ""} · ` +
+          `${adults} Adult${adults !== 1 ? "s" : ""}` +
+          (children
+            ? ` · ${children} Child${children > 1 ? "ren" : ""}`
+            : "")
+        : null;
+      axiosInstance
+        .post("/api/search-history/save", {
+          contextKey: data.historyContextKey,
+          agentId: Number(p.agentId) || null,
+          agentName: p.agentName || null,
+          hotelCode: p.hotelCode || null,
+          hotelName:
+            data?.hotelStaticData?.hotelName ||
+            data?.selectedRate?.hotelName ||
+            null,
+          destination: p.destinationLabel || null,
+          nationality: p.nationalityLabel || p.nationality || null,
+          employeeId: p.employeeId || null,
+          employeeName: p.employeeName || null,
+          checkIn: p.checkInDate || null,
+          checkOut: p.checkOutDate || null,
+          nights,
+          roomsGuests,
+          sellingPrice: Number(data?.selectedRate?.rate) || null,
+          currency: "AED",
+          bookingDataJson: rawJson || null,
+        })
+        .catch((err) =>
+          console.warn("search-history save failed (non-fatal):", err),
+        );
+    } catch (err) {
+      console.warn("search-history snapshot skipped:", err);
+    }
+  };
+
+  // Flags the history snapshot as booked so it drops off the admin
+  // "Hotel Booking History" (abandoned searches) report. Reads the key
+  // from sessionStorage too because the post-payment resume path can run
+  // before the bookingData state has been populated.
+  const markSearchHistoryConfirmed = () => {
+    try {
+      const stored = sessionStorage.getItem("bookingData");
+      const key =
+        bookingData?.historyContextKey ||
+        (stored ? JSON.parse(stored).historyContextKey : null);
+      if (!key) return;
+      axiosInstance
+        .post(`/api/search-history/confirm/${key}`)
+        .catch((err) =>
+          console.warn("search-history confirm failed (non-fatal):", err),
+        );
+    } catch (err) {
+      console.warn("search-history confirm skipped:", err);
+    }
+  };
+
   // Load bookingData once
   useEffect(() => {
     const storedData = sessionStorage.getItem("bookingData");
     if (storedData) {
       const parsedData = JSON.parse(storedData);
+      // Stable per-selection key for the history row — persisted back into
+      // sessionStorage so a page refresh reuses the same row instead of
+      // creating a duplicate. Agent sessions only (see isAgentSession).
+      if (isAgentSession()) {
+        if (!parsedData.historyContextKey) {
+          parsedData.historyContextKey =
+            (window.crypto?.randomUUID && window.crypto.randomUUID()) ||
+            `hbh-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+          sessionStorage.setItem("bookingData", JSON.stringify(parsedData));
+        }
+        saveSearchHistorySnapshot(parsedData, JSON.stringify(parsedData));
+      }
       setBookingData(parsedData);
 
       // Initialize rooms with guests
@@ -498,6 +613,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
           toast.success(
             bookingResponse.message || "Booking created after payment.",
           );
+          markSearchHistoryConfirmed();
           setShowConfirmModal(false);
           navigate(postBookingListRoute);
         } else {
@@ -1031,6 +1147,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
         bookingResponse.bookingId != 0
       ) {
         toast.success(bookingResponse.message);
+        markSearchHistoryConfirmed();
         // Dismiss the Order Summary modal only after success, so the
         // in-button spinner remained visible for the full call.
         setShowConfirmModal(false);
