@@ -1239,10 +1239,46 @@ export default function LongStayRoomList() {
                                   available
                                 </div>
                               </div>
-                              <AccordionToggleButton
-                                eventKey={eventKey}
-                                isActive={isActive}
-                              />
+                              <div className="d-flex flex-column align-items-end gap-1">
+                                <AccordionToggleButton
+                                  eventKey={eventKey}
+                                  isActive={isActive}
+                                />
+                                <a
+                                  href="#hotel-information-section"
+                                  className="small"
+                                  onClick={(e) => {
+                                    // Stop propagation — this link sits
+                                    // inside the Accordion.Header, which
+                                    // react-bootstrap always wraps in a
+                                    // toggle <button>; without this the
+                                    // click also expands/collapses the
+                                    // accordion body. Mirrors RoomList.jsx.
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    // Each accordion item IS one contract
+                                    // (c), so its own cancellationPolicy /
+                                    // cancellationPolicyNotes /
+                                    // termsAndConditions are exactly what
+                                    // the "Cancellation Policies & Terms &
+                                    // Conditions" modal reads — reuse the
+                                    // same state (without opening the
+                                    // modal) so Hotel Information shows
+                                    // that same data.
+                                    setPoliciesModalContract(c);
+                                    document
+                                      .getElementById(
+                                        "hotel-information-section",
+                                      )
+                                      ?.scrollIntoView({
+                                        behavior: "smooth",
+                                        block: "start",
+                                      });
+                                  }}
+                                >
+                                  Cancellation Policy
+                                </a>
+                              </div>
                             </div>
                           </div>
                         </Accordion.Header>
@@ -1514,19 +1550,21 @@ export default function LongStayRoomList() {
                 Per spec (mirrors /room-list): the cancellation policy +
                 terms now live exclusively in the per-room-card
                 "Cancellation Policies & Terms" modal, so the section under
-                the room list shows ONLY general Hotel Information here. */}
-            <div className="mt-4">
+                the room list shows ONLY general Hotel Information here.
+                This is the scroll target of the "Cancellation Policy" link
+                under each room category's View Details/Book button above. */}
+            <div className="mt-4" id="hotel-information-section">
               <Card
                 className="mb-4 shadow-sm"
-                style={{ overflow: "hidden", border: "1px solid #dbe3ef" }}
+                style={{ overflow: "hidden", border: "1px solid #e5e9f0" }}
               >
                 <Card.Header
                   className="d-flex align-items-center gap-3 py-3"
                   style={{
-                    background:
-                      "linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%)",
-                    color: "#fff",
+                    background: "#f4f7fc",
+                    color: "#2b3648",
                     border: "none",
+                    borderBottom: "1px solid #e5e9f0",
                   }}
                 >
                   <div
@@ -1534,7 +1572,8 @@ export default function LongStayRoomList() {
                     style={{
                       width: 40,
                       height: 40,
-                      backgroundColor: "rgba(255,255,255,.18)",
+                      backgroundColor: "#e3ecfb",
+                      color: "#3b6fd6",
                       fontSize: "1.15rem",
                     }}
                   >
@@ -1547,13 +1586,83 @@ export default function LongStayRoomList() {
                     >
                       Hotel Information
                     </div>
-                    <div className="small" style={{ opacity: 0.85 }}>
+                    <div className="small text-muted">
                       General check-in &amp; stay details
                     </div>
                   </div>
                 </Card.Header>
                 <Card.Body className="p-4">
-                  <Row className="g-3">
+                  {policiesModalContract ? (
+                    <div className="mb-3">
+                      {policiesModalContract?.rateCode && (
+                        <div className="text-muted small mb-2">
+                          Contract: {policiesModalContract.rateCode}
+                        </div>
+                      )}
+
+                      <h6 className="text-danger mb-2">
+                        <FaTimesCircle className="me-2" />
+                        Cancellation Policy
+                      </h6>
+                      {(policiesModalContract?.cancellationPolicy || [])
+                        .length > 0 ? (
+                        <ul className="mb-3 ps-3">
+                          {policiesModalContract.cancellationPolicy.map(
+                            (p, idx) => (
+                              <li
+                                key={idx}
+                                className="mb-2"
+                                style={{ whiteSpace: "pre-line" }}
+                              >
+                                {formatCancellationPolicyLine(p)}
+                              </li>
+                            ),
+                          )}
+                        </ul>
+                      ) : !policiesModalContract?.cancellationPolicyNotes ? (
+                        <p className="text-muted mb-3">
+                          No cancellation policy configured.
+                        </p>
+                      ) : null}
+                      {policiesModalContract?.cancellationPolicyNotes && (
+                        <p className="mb-3" style={{ whiteSpace: "pre-line" }}>
+                          {policiesModalContract.cancellationPolicyNotes}
+                        </p>
+                      )}
+
+                      <h6 className="text-secondary mb-2 pt-2 border-top">
+                        <FaInfoCircle className="me-2" />
+                        Terms &amp; Conditions
+                      </h6>
+                      {(policiesModalContract?.termsAndConditions || [])
+                        .length > 0 ? (
+                        <ul className="mb-0 ps-3">
+                          {policiesModalContract.termsAndConditions.map(
+                            (t, idx) => (
+                              <li
+                                key={idx}
+                                className="mb-2"
+                                style={{ whiteSpace: "pre-line" }}
+                              >
+                                {t}
+                              </li>
+                            ),
+                          )}
+                        </ul>
+                      ) : (
+                        <p className="text-muted mb-0">
+                          No terms &amp; conditions configured.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mb-3 text-muted small">
+                      Click "Cancellation Policy" on a room category above to
+                      view its cancellation policy &amp; terms here.
+                    </div>
+                  )}
+
+                  <Row className="g-3 mt-1 pt-3 border-top">
                     <Col md={6}>
                       <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
                         <span className="text-muted">Check-in</span>

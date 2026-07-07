@@ -533,7 +533,12 @@ export default function DayStayRoomList() {
   // dedicated "Day Stay Cancellation Policies" and "Day Stay Terms &
   // Conditions" sections so they're clearly distinguishable from the
   // hotel-wide items.
-  const openPoliciesModal = async (rate) => {
+  // `openModal` defaults to true so every existing call site (which all
+  // want the modal to pop up) is unaffected. The new accordion-header
+  // "Cancellation Policy" link passes false — it wants the same data
+  // loaded into policiesModalData/policyList (so Hotel Information can
+  // render it) without popping the modal open.
+  const openPoliciesModal = async (rate, openModal = true) => {
     const label = [rate?.roomCategoryName, rate?.mealPlan]
       .filter(Boolean)
       .join(" • ");
@@ -560,7 +565,7 @@ export default function DayStayRoomList() {
     });
     if (cachedPolicies !== undefined) setPolicyList(cachedPolicies);
     else setPolicyList(null);
-    setShowPoliciesModal(true);
+    if (openModal) setShowPoliciesModal(true);
 
     // Bail out of network work when the hotel id is missing / opaque —
     // day-stay contracts have a numeric id, but be defensive.
@@ -1027,10 +1032,49 @@ export default function DayStayRoomList() {
                                     available
                                   </div>
                                 </div>
-                                <AccordionToggleButton
-                                  eventKey={eventKey}
-                                  isActive={isActive}
-                                />
+                                <div className="d-flex flex-column align-items-end gap-1">
+                                  <AccordionToggleButton
+                                    eventKey={eventKey}
+                                    isActive={isActive}
+                                  />
+                                  {filteredRates.length > 0 && (
+                                    <a
+                                      href="#hotel-information-section"
+                                      className="small"
+                                      onClick={(e) => {
+                                        // Stop propagation — this link sits
+                                        // inside the Accordion.Header, which
+                                        // react-bootstrap always wraps in a
+                                        // toggle <button>; without this the
+                                        // click also expands/collapses the
+                                        // accordion body. Mirrors RoomList.jsx.
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        // Load the same data the per-rate
+                                        // modal reads (day-stay cancellation
+                                        // / terms + inhouse amendment/child/
+                                        // additional policies) using this
+                                        // category's cheapest/first rate as
+                                        // the representative rate, without
+                                        // opening the modal.
+                                        openPoliciesModal(
+                                          filteredRates[0],
+                                          false,
+                                        );
+                                        document
+                                          .getElementById(
+                                            "hotel-information-section",
+                                          )
+                                          ?.scrollIntoView({
+                                            behavior: "smooth",
+                                            block: "start",
+                                          });
+                                      }}
+                                    >
+                                      Cancellation Policy
+                                    </a>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </Accordion.Header>
@@ -1323,24 +1367,25 @@ export default function DayStayRoomList() {
               })()}
 
             {/* ── Hotel Information / General check-in & stay details ──
-                Mirrors RoomList's section verbatim, adapted for the
-                day-stay window. Booking-policy details (Cancellation /
-                Amendment / Child / Additional / Terms & Conditions)
-                intentionally NOT shown here — they live exclusively in
-                the per-rate "Cancellation Policies & Terms" modal so
-                the same information isn't duplicated in two places. */}
-            <div className="mt-4">
+                Leads with the same Cancellation / Amendment / Child /
+                Additional / Terms & Conditions content as the per-rate
+                "Cancellation Policies & Terms" modal (loaded via the same
+                openPoliciesModal(rate, false) call, so no duplicate data
+                source), followed by the static stay-window facts. This is
+                the scroll target of the "Cancellation Policy" link under
+                each room category's toggle button above. */}
+            <div className="mt-4" id="hotel-information-section">
               <Card
                 className="mb-4 shadow-sm"
-                style={{ overflow: "hidden", border: "1px solid #dbe3ef" }}
+                style={{ overflow: "hidden", border: "1px solid #e5e9f0" }}
               >
                 <Card.Header
                   className="d-flex align-items-center gap-3 py-3"
                   style={{
-                    background:
-                      "linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%)",
-                    color: "#fff",
+                    background: "#f4f7fc",
+                    color: "#2b3648",
                     border: "none",
+                    borderBottom: "1px solid #e5e9f0",
                   }}
                 >
                   <div
@@ -1348,7 +1393,8 @@ export default function DayStayRoomList() {
                     style={{
                       width: 40,
                       height: 40,
-                      backgroundColor: "rgba(255,255,255,.18)",
+                      backgroundColor: "#e3ecfb",
+                      color: "#3b6fd6",
                       fontSize: "1.15rem",
                     }}
                   >
@@ -1361,13 +1407,255 @@ export default function DayStayRoomList() {
                     >
                       Hotel Information
                     </div>
-                    <div className="small" style={{ opacity: 0.85 }}>
+                    <div className="small text-muted">
                       General check-in &amp; stay details
                     </div>
                   </div>
                 </Card.Header>
                 <Card.Body className="p-4">
-                  <Row className="g-3">
+                  {policiesModalData.selectedRoomLabel ? (
+                    <div className="mb-3">
+                      <div className="text-muted small mb-3">
+                        {policiesModalData.selectedRoomLabel}
+                      </div>
+
+                      <h6 className="text-danger mb-2">
+                        <FaTimesCircle className="me-2" />
+                        Day Stay Cancellation Policies
+                      </h6>
+                      {policiesModalData.dayStayCancellation?.length > 0 ? (
+                        <ul className="mb-3 ps-3">
+                          {policiesModalData.dayStayCancellation.map(
+                            (policy, idx) => {
+                              const text =
+                                typeof policy === "string"
+                                  ? policy
+                                  : policy?.policyText ||
+                                    policy?.description ||
+                                    policy?.text ||
+                                    "";
+                              const validity =
+                                typeof policy === "object"
+                                  ? renderPolicyValidity(
+                                      policy?.fromDate,
+                                      policy?.toDate,
+                                    )
+                                  : null;
+                              if (!text && !validity) return null;
+                              return (
+                                <li key={idx} className="mb-2">
+                                  <div style={{ whiteSpace: "pre-line" }}>
+                                    {text}
+                                  </div>
+                                  {validity && (
+                                    <small className="text-muted">
+                                      {validity}
+                                    </small>
+                                  )}
+                                </li>
+                              );
+                            },
+                          )}
+                        </ul>
+                      ) : (
+                        <p className="text-muted mb-3">
+                          No day-stay cancellation policies available for
+                          this rate.
+                        </p>
+                      )}
+
+                      {policiesModalData.dayStayTerms?.length > 0 && (
+                        <>
+                          <h6 className="text-secondary mb-2 pt-2 border-top">
+                            <FaInfoCircle className="me-2" />
+                            Day Stay Terms &amp; Conditions
+                          </h6>
+                          <ul className="mb-3 ps-3">
+                            {policiesModalData.dayStayTerms.map(
+                              (term, idx) => {
+                                const text =
+                                  typeof term === "string"
+                                    ? term
+                                    : term?.description ||
+                                      term?.policyText ||
+                                      term?.text ||
+                                      "";
+                                if (!text) return null;
+                                return (
+                                  <li
+                                    key={idx}
+                                    className="mb-2"
+                                    style={{ whiteSpace: "pre-line" }}
+                                  >
+                                    {text}
+                                  </li>
+                                );
+                              },
+                            )}
+                          </ul>
+                        </>
+                      )}
+
+                      {policyList?.policies?.amendmentPolicy?.length > 0 && (
+                        <>
+                          <h6 className="text-warning mb-2 pt-2 border-top">
+                            <FaInfoCircle className="me-2" />
+                            Amendment Policies
+                          </h6>
+                          <ul className="mb-3 ps-3">
+                            {policyList.policies.amendmentPolicy.map(
+                              (policy, idx) => {
+                                const validity = renderPolicyValidity(
+                                  policy?.fromDate,
+                                  policy?.toDate,
+                                );
+                                return (
+                                  <li key={idx} className="mb-2">
+                                    <div style={{ whiteSpace: "pre-line" }}>
+                                      {policy?.policyText || ""}
+                                    </div>
+                                    {validity && (
+                                      <small className="text-muted">
+                                        {validity}
+                                      </small>
+                                    )}
+                                  </li>
+                                );
+                              },
+                            )}
+                          </ul>
+                        </>
+                      )}
+
+                      {policyList?.policies?.childPolicy?.length > 0 && (
+                        <>
+                          <h6 className="text-primary mb-2 pt-2 border-top">
+                            <FaUsers className="me-2" />
+                            Child Policy
+                          </h6>
+                          <ul className="mb-3 ps-3">
+                            {policyList.policies.childPolicy.map(
+                              (policy, idx) => (
+                                <li
+                                  key={idx}
+                                  className="mb-2"
+                                  style={{ whiteSpace: "pre-line" }}
+                                >
+                                  {policy?.policyText || ""}
+                                </li>
+                              ),
+                            )}
+                          </ul>
+                        </>
+                      )}
+
+                      {policyList?.policies?.additionalPolicy &&
+                        (() => {
+                          const ap = policyList.policies.additionalPolicy;
+                          const formatFee = (amt, type) => {
+                            if (
+                              amt === null ||
+                              amt === undefined ||
+                              Number(amt) === 0
+                            )
+                              return null;
+                            const suffix =
+                              String(type || "").toUpperCase() === "PERCENT"
+                                ? "%"
+                                : "";
+                            return `${amt}${suffix}`;
+                          };
+                          const noShow = formatFee(
+                            ap.noShowFee,
+                            ap.noShowFeeType,
+                          );
+                          const earlyDep = formatFee(
+                            ap.earlyDepartureFee,
+                            ap.earlyDepartureFeeType,
+                          );
+                          const nonRef = formatFee(
+                            ap.nonRefundableFee,
+                            ap.nonRefundableFeeType,
+                          );
+                          if (!noShow && !earlyDep && !nonRef) return null;
+                          return (
+                            <>
+                              <h6 className="text-info mb-2 pt-2 border-top">
+                                <FaInfoCircle className="me-2" />
+                                Additional Policy
+                              </h6>
+                              <ul className="mb-3 ps-3">
+                                {noShow && (
+                                  <li className="mb-2">
+                                    <strong>No-Show Fee:</strong> {noShow}
+                                  </li>
+                                )}
+                                {earlyDep && (
+                                  <li className="mb-2">
+                                    <strong>Early Departure Fee:</strong>{" "}
+                                    {earlyDep}
+                                  </li>
+                                )}
+                                {nonRef && (
+                                  <li className="mb-2">
+                                    <strong>Non-Refundable Fee:</strong>{" "}
+                                    {nonRef}
+                                  </li>
+                                )}
+                              </ul>
+                            </>
+                          );
+                        })()}
+
+                      <h6 className="text-secondary mb-2 pt-2 border-top">
+                        <FaInfoCircle className="me-2" />
+                        Hotel Terms &amp; Conditions
+                      </h6>
+                      {loadingTerms ? (
+                        <div className="d-flex align-items-center text-muted mb-0">
+                          <Spinner
+                            animation="border"
+                            size="sm"
+                            className="me-2"
+                          />
+                          Loading terms &amp; conditions…
+                        </div>
+                      ) : policiesModalData.hotelTerms?.length > 0 ? (
+                        <ul className="mb-0 ps-3">
+                          {policiesModalData.hotelTerms.map((term, idx) => {
+                            const text =
+                              typeof term === "string"
+                                ? term
+                                : term?.description ||
+                                  term?.policyText ||
+                                  term?.text ||
+                                  "";
+                            if (!text) return null;
+                            return (
+                              <li
+                                key={idx}
+                                className="mb-2"
+                                style={{ whiteSpace: "pre-line" }}
+                              >
+                                {text}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      ) : (
+                        <p className="text-muted mb-0">
+                          No hotel terms &amp; conditions configured.
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mb-3 text-muted small">
+                      Click "Cancellation Policy" on a room category above
+                      to view its cancellation policy &amp; terms here.
+                    </div>
+                  )}
+
+                  <Row className="g-3 mt-1 pt-3 border-top">
                     <Col md={6}>
                       <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
                         <span className="text-muted">Check-in Window</span>

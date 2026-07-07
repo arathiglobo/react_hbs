@@ -772,10 +772,36 @@ export default function LastMinuteRoomList() {
                                   {visibleRates.length !== 1 ? "s" : ""} available
                                 </div>
                               </div>
-                              <AccordionToggleButton
-                                eventKey={eventKey}
-                                isActive={isActive}
-                              />
+                              <div className="d-flex flex-column align-items-end gap-1">
+                                <AccordionToggleButton
+                                  eventKey={eventKey}
+                                  isActive={isActive}
+                                />
+                                <a
+                                  href="#hotel-information-section"
+                                  className="small"
+                                  onClick={(e) => {
+                                    // Stop propagation — this link sits
+                                    // inside the Accordion.Header, which
+                                    // react-bootstrap always wraps in a
+                                    // toggle <button>; without this the
+                                    // click also expands/collapses the
+                                    // accordion body. Mirrors RoomList.jsx.
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    document
+                                      .getElementById(
+                                        "hotel-information-section",
+                                      )
+                                      ?.scrollIntoView({
+                                        behavior: "smooth",
+                                        block: "start",
+                                      });
+                                  }}
+                                >
+                                  Cancellation Policy
+                                </a>
+                              </div>
                             </div>
                           </div>
                         </Accordion.Header>
@@ -1203,23 +1229,27 @@ export default function LastMinuteRoomList() {
               </Row>
             </div>
 
-            {/* Hotel Information — cancellation / amendment / child
-                policy sections have moved into the per-rate
-                "Cancellation Policies & Terms & Conditions" modal
-                (opens from each room card). Only stay-desk facts stay
-                on the page. Mirrors /room-list. */}
-            <div className="mt-4">
+            {/* Hotel Information — leads with the same Cancellation /
+                Amendment / Child Policy & Additional Notes / Terms &
+                Conditions text as the per-rate "Cancellation Policies &
+                Terms & Conditions" modal (Last Minute rates are a
+                fixed-rate product with one policy set for all rooms, so
+                this is just the same static copy, not a duplicate data
+                source), followed by the stay-desk facts. This is the
+                scroll target of the "Cancellation Policy" link under each
+                room category's View Details/Book button above. */}
+            <div className="mt-4" id="hotel-information-section">
               <Card
                 className="mb-4 shadow-sm"
-                style={{ overflow: "hidden", border: "1px solid #dbe3ef" }}
+                style={{ overflow: "hidden", border: "1px solid #e5e9f0" }}
               >
                 <Card.Header
                   className="d-flex align-items-center gap-3 py-3"
                   style={{
-                    background:
-                      "linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%)",
-                    color: "#fff",
+                    background: "#f4f7fc",
+                    color: "#2b3648",
                     border: "none",
+                    borderBottom: "1px solid #e5e9f0",
                   }}
                 >
                   <div
@@ -1227,7 +1257,8 @@ export default function LastMinuteRoomList() {
                     style={{
                       width: 40,
                       height: 40,
-                      backgroundColor: "rgba(255,255,255,.18)",
+                      backgroundColor: "#e3ecfb",
+                      color: "#3b6fd6",
                       fontSize: "1.15rem",
                     }}
                   >
@@ -1240,13 +1271,76 @@ export default function LastMinuteRoomList() {
                     >
                       Hotel Information
                     </div>
-                    <div className="small" style={{ opacity: 0.85 }}>
+                    <div className="small text-muted">
                       Stay desk &amp; general details
                     </div>
                   </div>
                 </Card.Header>
                 <Card.Body className="p-4">
-                  <Row className="g-3">
+                  <div className="mb-3">
+                    <h6 className="text-danger mb-2">
+                      <FaTimesCircle className="me-2" />
+                      Cancellation Policy
+                    </h6>
+                    <p className="text-muted mb-0">
+                      Last-minute bookings are non-refundable once
+                      confirmed. Cancellations or no-shows will be charged
+                      100% of the total booking value.
+                    </p>
+                  </div>
+
+                  <div className="mb-3 pt-2 border-top">
+                    <h6 className="text-warning mb-2">
+                      <FaInfoCircle className="me-2" />
+                      Amendment Policy
+                    </h6>
+                    <p className="text-muted mb-0">
+                      Date or guest-name amendments are subject to
+                      availability and may be charged at the rate
+                      difference plus an administrative fee.
+                    </p>
+                  </div>
+
+                  <div className="mb-3 pt-2 border-top">
+                    <h6 className="text-primary mb-2">
+                      <FaUsers className="me-2" />
+                      Child Policy &amp; Additional Notes
+                    </h6>
+                    <ul className="mb-0 text-muted ps-3">
+                      <li>
+                        Last-minute rates may have stricter cancellation
+                        rules than the regular contract rate.
+                      </li>
+                      <li>
+                        Mandatory gala dinner fees may apply on certain
+                        dates.
+                      </li>
+                      <li>
+                        Additional taxes or resort fees may be collected at
+                        the property during check-in.
+                      </li>
+                      <li>
+                        Photo identification and a deposit may be required
+                        at check-in for incidental charges.
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div className="mb-3 pt-2 border-top">
+                    <h6 className="text-secondary mb-2">
+                      <FaInfoCircle className="me-2" />
+                      Terms &amp; Conditions
+                    </h6>
+                    <p className="text-muted mb-0">
+                      Rates are quoted in AED and are subject to
+                      availability until confirmed. Prices include
+                      applicable taxes unless stated otherwise. All
+                      bookings are governed by the property's own terms
+                      &amp; conditions and check-in requirements.
+                    </p>
+                  </div>
+
+                  <Row className="g-3 mt-1 pt-3 border-top">
                     <Col md={6}>
                       <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
                         <span className="text-muted">Check-in</span>
