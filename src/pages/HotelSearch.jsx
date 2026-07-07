@@ -2686,6 +2686,34 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                               hotel.channelType?.toLowerCase()
                                             ] || 0;
                                          
+                                          // Display labels for values the
+                                          // payload otherwise carries only
+                                          // as ids/codes. Additive — they
+                                          // ride through RoomList into the
+                                          // booking page, which posts them
+                                          // to /api/search-history/save so
+                                          // the admin "Hotel Booking
+                                          // History" report can show the
+                                          // search context even if the
+                                          // booking tab is closed before
+                                          // the booking is created.
+                                          const pickedAgentId = String(
+                                            isAgentRole ? selfAgentId : agent,
+                                          );
+                                          const pickedAgent = (
+                                            Array.isArray(agents) ? agents : []
+                                          ).find(
+                                            (a) => String(a?.id) === pickedAgentId,
+                                          );
+                                          const agentName = isAgentRole
+                                            ? localStorage.getItem("UserName") ||
+                                              sessionStorage.getItem("UserName") ||
+                                              ""
+                                            : pickedAgent
+                                              ? pickedAgent.companyName ||
+                                                pickedAgent.name ||
+                                                `${pickedAgent.firstName || ""} ${pickedAgent.lastName || ""}`.trim()
+                                              : "";
                                           const payload = {
                                             checkInDate: checkIn,
                                             checkOutDate: checkOut,
@@ -2700,6 +2728,14 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                             agentId: String(
                                               isAgentRole ? selfAgentId : agent
                                             ),
+                                            agentName,
+                                            destinationLabel:
+                                              selectedDestination?.label || "",
+                                            nationalityLabel:
+                                              selectedNationality?.label || "",
+                                            employeeName:
+                                              selectedEmployee?.label || null,
+                                            nightsCount: nights,
                                             apiId,
                                             rooms: roomsPayload,
                                             parentBookingCode:

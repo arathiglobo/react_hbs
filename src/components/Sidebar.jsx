@@ -576,6 +576,11 @@ export default function Sidebar() {
           label: "Time Limit Daily Sales",
           to: "/report/time-limit-daily-sales",
         },
+        {
+          label: "Hotel Booking History",
+          to: "/report/hotel-booking-history",
+          roles: ["admin"],
+        },
       ],
     },
 
