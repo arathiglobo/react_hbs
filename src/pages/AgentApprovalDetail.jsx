@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Container, Card, Spinner, Row, Col, Button, Modal } from "react-bootstrap";
+import { Container, Card, Spinner, Row, Col, Button, Modal, Form } from "react-bootstrap";
 import {
   FaUserTie,
   FaArrowLeft,
@@ -73,6 +73,10 @@ export default function AgentApprovalDetail() {
   // license section and renders the file inline (iframe for PDFs, img
   // for anything else) instead of forcing a new-tab navigation.
   const [showLicenseModal, setShowLicenseModal] = useState(false);
+  // Reject confirmation modal — remarks are mandatory before the rejection
+  // is actually submitted.
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectRemarks, setRejectRemarks] = useState("");
 
   const fetchDetail = async () => {
     try {
@@ -116,14 +120,42 @@ export default function AgentApprovalDetail() {
     }
   };
 
-  const handleReject = async () => {
+  const openRejectModal = () => {
+    setRejectRemarks("");
+    setShowRejectModal(true);
+  };
+
+  const handleRejectConfirm = async () => {
+    const trimmed = rejectRemarks.trim();
+    if (!trimmed) {
+      toast.error("Remarks are required to reject this request.");
+      return;
+    }
     try {
       setActionLoading("reject");
-      await axiosInstance.put(`/api/agent-external-register/${id}/reject`);
+      await axiosInstance.put(`/api/agent-external-register/${id}/reject`, {
+        remarks: trimmed,
+      });
       toast.success("Registration request rejected.");
+      setShowRejectModal(false);
       fetchDetail();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Rejection failed.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // "Cancel" — discards a Rejected request entirely (removes it from the
+  // approval list) without approving the agent.
+  const handleCancelRejected = async () => {
+    try {
+      setActionLoading("cancel");
+      await axiosInstance.put(`/api/agent-external-register/${id}/cancel`);
+      toast.success("Rejected request removed from the approval list.");
+      navigate("/admin/approval/agents");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to remove request.");
     } finally {
       setActionLoading(null);
     }
@@ -256,6 +288,25 @@ export default function AgentApprovalDetail() {
                     />
                   </Row>
 
+                  {reg.remarks && (
+                    <Row>
+                      <Col md={12} className="mb-3">
+                        <div
+                          className="text-muted d-flex align-items-center gap-2"
+                          style={{ fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}
+                        >
+                          Rejection Remarks
+                        </div>
+                        <div
+                          className="mt-1"
+                          style={{ fontSize: "0.9rem", color: "#b42318", whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+                        >
+                          {reg.remarks}
+                        </div>
+                      </Col>
+                    </Row>
+                  )}
+
                   {reg.status === "PENDING" && (
                     <>
                       <hr className="my-3" />
@@ -276,12 +327,40 @@ export default function AgentApprovalDetail() {
                           variant="danger"
                           className="d-inline-flex align-items-center gap-2 px-4"
                           disabled={!!actionLoading}
-                          onClick={handleReject}
+                          onClick={openRejectModal}
                         >
-                          {actionLoading === "reject" ? (
+                          <FaTimes /> Reject
+                        </Button>
+                      </div>
+                    </>
+                  )}
+
+                  {reg.status === "REJECTED" && (
+                    <>
+                      <hr className="my-3" />
+                      <div className="d-flex justify-content-end gap-3">
+                        <Button
+                          variant="success"
+                          className="d-inline-flex align-items-center gap-2 px-4"
+                          disabled={!!actionLoading}
+                          onClick={handleApprove}
+                        >
+                          {actionLoading === "approve" ? (
                             <Spinner animation="border" size="sm" />
                           ) : (
-                            <><FaTimes /> Reject</>
+                            <><FaCheck /> Re-Approve</>
+                          )}
+                        </Button>
+                        <Button
+                          variant="outline-secondary"
+                          className="d-inline-flex align-items-center gap-2 px-4"
+                          disabled={!!actionLoading}
+                          onClick={handleCancelRejected}
+                        >
+                          {actionLoading === "cancel" ? (
+                            <Spinner animation="border" size="sm" />
+                          ) : (
+                            <><FaTimes /> Cancel</>
                           )}
                         </Button>
                       </div>
@@ -334,6 +413,64 @@ export default function AgentApprovalDetail() {
             <Modal.Footer>
               <Button variant="outline-secondary" size="sm" onClick={() => setShowLicenseModal(false)}>
                 Close
+              </Button>
+            </Modal.Footer>
+          </Modal>
+
+          {/* Reject confirmation modal — remarks are mandatory; the
+              rejection is only submitted once Confirm is clicked. */}
+          <Modal
+            show={showRejectModal}
+            onHide={() => !actionLoading && setShowRejectModal(false)}
+            centered
+            backdrop="static"
+          >
+            <Modal.Header closeButton={!actionLoading}>
+              <Modal.Title style={{ fontSize: "1rem", fontWeight: 700 }}>
+                Reject Registration Request
+              </Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <p className="text-muted mb-3" style={{ fontSize: "0.85rem" }}>
+                Please provide a reason for rejecting{" "}
+                <strong>{reg?.companyName || "this agent"}</strong>'s registration
+                request. The remarks will be visible in the request details.
+              </p>
+              <Form.Group>
+                <Form.Label className="fw-semibold" style={{ fontSize: "0.85rem" }}>
+                  Remarks <span className="text-danger">*</span>
+                </Form.Label>
+                <Form.Control
+                  as="textarea"
+                  rows={4}
+                  value={rejectRemarks}
+                  onChange={(e) => setRejectRemarks(e.target.value)}
+                  placeholder="Enter the reason for rejection..."
+                  disabled={!!actionLoading}
+                />
+              </Form.Group>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() => setShowRejectModal(false)}
+                disabled={!!actionLoading}
+              >
+                Close
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                className="d-inline-flex align-items-center gap-2"
+                onClick={handleRejectConfirm}
+                disabled={!!actionLoading || !rejectRemarks.trim()}
+              >
+                {actionLoading === "reject" ? (
+                  <Spinner animation="border" size="sm" />
+                ) : (
+                  "Confirm Rejection"
+                )}
               </Button>
             </Modal.Footer>
           </Modal>
