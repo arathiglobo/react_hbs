@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Card, Button, Table, Spinner, Badge, Modal } from "react-bootstrap";
+import { Card, Button, Table, Spinner, Badge, Modal, Form } from "react-bootstrap";
 import { FaArrowLeft, FaEdit, FaTrash, FaEye } from "react-icons/fa";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
@@ -28,6 +28,8 @@ export default function Hotel24HourCheckin() {
   const navigate = useNavigate();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [searchTimeout, setSearchTimeout] = useState(null);
 
   // Status-toggle modal state — mirrors the ContractRate pattern:
   // clicking the Active/Inactive badge opens a small confirmation
@@ -46,11 +48,13 @@ export default function Hotel24HourCheckin() {
     );
 
   // Fetch all configs for this hotel.
-  const fetchRows = async () => {
+  const fetchRows = async (searchTerm = search) => {
     try {
       setLoading(true);
+      const params = new URLSearchParams({ hotelId });
+      if (searchTerm?.trim()) params.append("search", searchTerm.trim());
       const res = await axiosInstance.get(
-        `/api/24-hour-checkin?hotelId=${hotelId}`
+        `/api/24-hour-checkin?${params}`
       );
       setRows(Array.isArray(res.data) ? res.data : []);
     } catch (err) {
@@ -63,8 +67,24 @@ export default function Hotel24HourCheckin() {
   };
 
   useEffect(() => {
-    if (hotelId) fetchRows();
+    if (hotelId) fetchRows("");
   }, [hotelId]);
+
+  // Debounced search
+  useEffect(() => {
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    const timeout = setTimeout(() => {
+      fetchRows(search);
+    }, 400);
+    setSearchTimeout(timeout);
+    return () => {
+      if (searchTimeout) {
+        clearTimeout(searchTimeout);
+      }
+    };
+  }, [search]);
 
   const handleCreate = () =>
     navigate(`/hotel-actions/hotel/${hotelId}/24-hour-checkin/create`);
@@ -150,7 +170,7 @@ export default function Hotel24HourCheckin() {
               <FaArrowLeft />
               Back
             </Button>
-            <h3 className="mb-0">24 Hour Check-In Configurations</h3>
+            <h3 className="mb-0">24 Hour </h3>
             <HotelTitleBadge hotelId={hotelId} className="ms-2" />
           </div>
 
@@ -162,6 +182,15 @@ export default function Hotel24HourCheckin() {
               >
                 24 Hour Check-In Configurations
               </span>
+              <Form.Group className="hotel-search-bar position-relative">
+                <Form.Control
+                  type="text"
+                  placeholder="Search..."
+                  className="form-control-modern-sm"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </Form.Group>
               <Button className="btn-green create-btn" onClick={handleCreate}>
                 + Create
               </Button>

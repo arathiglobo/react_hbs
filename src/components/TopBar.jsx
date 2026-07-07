@@ -36,20 +36,28 @@ import { toast } from "react-hot-toast";
 export default function TopBar() {
   const navigate = useNavigate();
   const location = useLocation();
-  // Show a "Back to Dashboard" shortcut for hotel-extranet logins on every
-  // page except the dashboard itself, so the hotel can always get back to
-  // /extranetDashboard (covers Calendar, Gallery, Contract Rate, Complete
-  // Registration, etc. in one place). Matches the exact EXTRANET role token —
-  // RESTAURANT_EXTRANET is intentionally excluded.
-  const roleTokens = (localStorage.getItem("userRole") || "")
-    .toUpperCase()
+  // "Back to Dashboard" shortcut shown on every page except the dashboards
+  // themselves, so a click on any Quick Actions tile (or any other nav) can
+  // always get back to whichever dashboard matches the current login role —
+  // mirrors the same role → dashboard mapping used by PrivateRoute.jsx and
+  // DashboardRedirections.jsx.
+  const DASHBOARD_BY_ROLE = {
+    admin: "/adminDashboard",
+    agent: "/agentDashboard",
+    staff: "/staffDashboard",
+    extranet: "/extranetDashboard",
+  };
+  const storedRoles = (localStorage.getItem("userRole") || "")
     .split(",")
-    .map((s) => s.trim());
-  const isHotelExtranet = roleTokens.includes("EXTRANET");
-  // "Back to Dashboard" button hidden per request. Flip the leading `false`
-  // back to re-enable it for hotel-extranet logins off the dashboard.
-  const showExtranetBack =
-    false && isHotelExtranet && location.pathname !== "/extranetDashboard";
+    .map((r) => r.trim().toLowerCase())
+    .filter(Boolean);
+  const currentRole =
+    localStorage.getItem("currentActiveRole")?.trim().toLowerCase() ||
+    storedRoles[0] ||
+    "";
+  const backToDashboardPath = DASHBOARD_BY_ROLE[currentRole];
+  const showBackToDashboard =
+    !!backToDashboardPath && location.pathname !== backToDashboardPath;
   const [showCartModal, setShowCartModal] = useState(false);
   const [cartItems, setCartItems] = useState([]);
   const [cartLoading, setCartLoading] = useState(false);
@@ -660,12 +668,12 @@ export default function TopBar() {
   <div className="logo-placeholder">GS</div>
   <span className="fw-semibold">Globosoft</span>
 </Navbar.Brand>
-        {showExtranetBack && (
+        {showBackToDashboard && (
           <Button
             variant="outline-light"
             size="sm"
             className="d-flex align-items-center gap-2 ms-2 fw-semibold"
-            onClick={() => navigate("/extranetDashboard")}
+            onClick={() => navigate(backToDashboardPath)}
             title="Back to Dashboard"
           >
             <FaArrowLeft /> <span className="d-none d-sm-inline">Back to Dashboard</span>

@@ -163,7 +163,7 @@ export default function Hotel24HourCheckinForm({ mode }) {
               <FaArrowLeft /> Back
             </Button>
             <h5 className="mb-0 d-flex align-items-center gap-2">
-              {isViewMode ? "View" : isEdit ? "Edit" : "Add"} 24 Hour Check-In Configuration
+              {isViewMode ? "View" : isEdit ? "Edit" : "Add"} 24 Hour 
               <HotelTitleBadge hotelId={hotelId} />
             </h5>
           </div>

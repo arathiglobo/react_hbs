@@ -296,6 +296,7 @@ import MakeYourOwnPackageV2BookingNotesPage from "./pages/list/MakeYourOwnPackag
 import CabBookingNotesPage from "./pages/list/CabBookingNotesPage";
 import SchefferDriverBookingNotesPage from "./pages/list/SchefferDriverBookingNotesPage";
 import DayStayBookingNotesPage from "./pages/list/DayStayBookingNotesPage";
+import HotelBookingHistory from "./pages/report/HotelBookingHistory";
 
 
 export default function App() {
@@ -412,6 +413,7 @@ export default function App() {
         <Route path="/report/offline-daily-sales" element={<OfflineBookingDailySalesStatement />} />
         <Route path="/report/online-daily-sales" element={<OnlineDailySalesReport />} />
         <Route path="/report/time-limit-daily-sales" element={<TimeLimitOnlineDailySalesReport />} />
+        <Route path="/report/hotel-booking-history" element={<PrivateRoute roles={["admin"]}><HotelBookingHistory /></PrivateRoute>} />
 
        {/* New Booking */}
         <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} /> 

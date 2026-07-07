@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Nav, Button, Offcanvas } from "react-bootstrap";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import "./Sidebar.css";
 import {
   LayoutDashboard,
@@ -37,6 +37,12 @@ export default function Sidebar() {
   const sidebarRef = useRef(null);
   const offcanvasRef = useRef(null);
   const [hotelId, setHotelId] = useState(null);
+  /**
+   * Combined count of PENDING hotel + agent self-registration requests.
+   * Shown as a red pill next to the Approvals menu label so admins see
+   * there's queue work without opening the menu. Only admins fetch it.
+   */
+  const [approvalsPendingCount, setApprovalsPendingCount] = useState(0);
 
   // Desktop sidebar collapse (remembered across reloads). When collapsed the
   // <aside> is removed so the page content reclaims the space, and a small
@@ -56,10 +62,38 @@ export default function Sidebar() {
     .split(",")
     .map((role) => role.trim().toLowerCase());
 
+  // The dashboard landing pages define which "hat" a multi-role user is
+  // currently wearing — opening /agentDashboard means acting as an agent
+  // even if the last role picked on /select-userRole was admin (that
+  // selection lives in localStorage, which goes stale across tabs and
+  // direct URL visits). Deriving the role from the dashboard route keeps
+  // the menu — including admin-only entries like Report → Hotel Booking
+  // History — consistent with the dashboard being viewed.
+  const { pathname } = useLocation();
+  const dashboardRoleByPath = {
+    "/adminDashboard": "admin",
+    "/agentDashboard": "agent",
+    "/staffDashboard": "staff",
+    "/extranetDashboard": "extranet",
+  };
+  const pathRole = dashboardRoleByPath[pathname];
+
   const currentRole =
+    pathRole ||
     localStorage.getItem("currentActiveRole")?.toLowerCase() ||
     storedRoles[0] ||
     "";
+
+  // Re-sync the stored active role with the dashboard context so the
+  // role-guarded routes (PrivateRoute roles=[...]) agree with the menu.
+  useEffect(() => {
+    if (
+      pathRole &&
+      localStorage.getItem("currentActiveRole")?.toLowerCase() !== pathRole
+    ) {
+      localStorage.setItem("currentActiveRole", pathRole);
+    }
+  }, [pathRole]);
 
   useEffect(() => {
     const fetchHotelId = async () => {
@@ -77,6 +111,38 @@ export default function Sidebar() {
     };
 
     fetchHotelId();
+  }, [currentRole]);
+
+  // Poll pending-approval count for admins. One-shot on mount is enough
+  // for the badge to stay reasonably fresh across a session; the count
+  // also refreshes whenever this component remounts (route changes).
+  useEffect(() => {
+    if (currentRole !== "admin") {
+      setApprovalsPendingCount(0);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const [hotelRes, agentRes] = await Promise.all([
+          axiosInstance
+            .get("/api/hotel-external-register/pending-count")
+            .catch(() => null),
+          axiosInstance
+            .get("/api/agent-external-register/pending-count")
+            .catch(() => null),
+        ]);
+        if (cancelled) return;
+        const h = Number(hotelRes?.data?.count) || 0;
+        const a = Number(agentRes?.data?.count) || 0;
+        setApprovalsPendingCount(h + a);
+      } catch (_) {
+        if (!cancelled) setApprovalsPendingCount(0);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [currentRole]);
 
   useEffect(() => {
@@ -538,6 +604,11 @@ export default function Sidebar() {
           label: "Time Limit Daily Sales",
           to: "/report/time-limit-daily-sales",
         },
+        {
+          label: "Hotel Booking History",
+          to: "/report/hotel-booking-history",
+          roles: ["admin"],
+        },
       ],
     },
 
@@ -609,9 +680,30 @@ export default function Sidebar() {
   ];
 
   // Filter menu based on allowed roles
-  const filteredItems = items.filter((item) => {
-    if (!item.roles) return true; // if no roles specified, show for all
-    return item.roles.includes(currentRole);
+  // Filter menu based on allowed roles. Child items (and items inside
+  // groups) may also carry a `roles` key — those without one stay visible
+  // to every role that can see the parent.
+  const roleAllows = (entry) => !entry.roles || entry.roles.includes(currentRole);
+
+  const filteredItems = items.filter(roleAllows).map((item) => {
+    const next = { ...item };
+    if (Array.isArray(item.children)) {
+      next.children = item.children.filter(roleAllows);
+    }
+    if (Array.isArray(item.groups)) {
+      next.groups = item.groups
+        .map((group) => ({
+          ...group,
+          children: Array.isArray(group.children)
+            ? group.children.filter(roleAllows)
+            : group.children,
+        }))
+        .filter(
+          (group) =>
+            !Array.isArray(group.children) || group.children.length > 0,
+        );
+    }
+    return next;
   });
 
   const toggleGroup = (groupKey, isTopLevelItem = false) => {
@@ -826,6 +918,21 @@ export default function Sidebar() {
                   <span className="d-flex align-items-center">
                     <span className="me-2">{getIcon(item.label)}</span>
                     <span>{item.label}</span>
+                    {item.label === "Approvals" && approvalsPendingCount > 0 && (
+                      <span
+                        className="ms-2 badge rounded-pill"
+                        style={{
+                          background: "#EC0B43",
+                          color: "#fff",
+                          fontSize: "0.65rem",
+                          padding: "3px 7px",
+                          lineHeight: 1,
+                        }}
+                        title={`${approvalsPendingCount} pending approval${approvalsPendingCount === 1 ? "" : "s"}`}
+                      >
+                        {approvalsPendingCount}
+                      </span>
+                    )}
                   </span>
                   {(hasChildren || hasGroups) && (
                     <span className="caret">
@@ -953,6 +1060,20 @@ export default function Sidebar() {
                     }}
                   >
                     {getIcon(item.label)} {item.label}
+                    {item.label === "Approvals" && approvalsPendingCount > 0 && (
+                      <span
+                        className="ms-2 badge rounded-pill"
+                        style={{
+                          background: "#EC0B43",
+                          color: "#fff",
+                          fontSize: "0.65rem",
+                          padding: "3px 7px",
+                          lineHeight: 1,
+                        }}
+                      >
+                        {approvalsPendingCount}
+                      </span>
+                    )}
                     {(hasChildren || hasGroups) && (
                       <span className="caret ms-2">
                         {openGroups[item.label] ? "▴" : "▾"}

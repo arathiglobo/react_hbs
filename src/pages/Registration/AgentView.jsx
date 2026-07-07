@@ -104,6 +104,15 @@ const AgentView = () => {
 
   const [agent, setAgent] = useState(null);
   const [loading, setLoading] = useState(true);
+  /**
+   * Approval record from agent_external_registration for this agent id
+   * (null when the agent was created directly by an admin — no self-service
+   * registration record exists in that case).
+   */
+  const [approvalInfo, setApprovalInfo] = useState(null);
+  // Trade-license preview modal — same iframe/img pattern as
+  // AgentApprovalDetail so the admin can inspect the file inline.
+  const [showLicenseModal, setShowLicenseModal] = useState(false);
   // Active/Inactive toggle in-flight flag (disables the button while saving).
   const [statusUpdating, setStatusUpdating] = useState(false);
   // Card-payment-mode toggle in-flight flag.
@@ -193,6 +202,19 @@ const AgentView = () => {
         setRolesList(rolesRes.data || []);
       } catch (_) {
         /* swallow — roles only needed inside login modal */
+      }
+    })();
+    // Latest approval record for this agent — used for the request /
+    // approved timestamps + approver username. 204 (empty) is fine when
+    // the agent was created without the /register flow.
+    (async () => {
+      try {
+        const res = await axiosInstance.get(
+          `/api/agent-external-register/by-agent/${id}`,
+        );
+        setApprovalInfo(res.data || null);
+      } catch (_) {
+        setApprovalInfo(null);
       }
     })();
   }, [id]);
@@ -961,14 +983,85 @@ const AgentView = () => {
                 <InfoRow label="Agent URL" value={agent.agentUrl} />
               </Col>
               <Col md={6}>
+                <InfoRow label="Salutation" value={agent.salutation} />
                 <InfoRow label="First Name" value={agent.firstName} />
                 <InfoRow label="Last Name" value={agent.lastName} />
                 <InfoRow label="Date of Birth" value={formatDob(agent.dateOfBirth)} />
                 <InfoRow label="Status" value={agent.status} />
                 <InfoRow label="Agent ID" value={agent.id} />
+                <InfoRow label="Timezone" value={agent.timezone} />
               </Col>
             </Row>
           </Section>
+
+          {(agent.tradeLicenseNo ||
+            agent.tradeLicenseExpiry ||
+            agent.tradeLicenseFile) && (
+            <Section title="Trade License">
+              <Row>
+                <Col md={6}>
+                  <InfoRow label="License Number" value={agent.tradeLicenseNo} />
+                  <InfoRow label="Expiry Date" value={agent.tradeLicenseExpiry} />
+                </Col>
+                <Col md={6}>
+                  {agent.tradeLicenseFile ? (
+                    <Button
+                      variant="outline-primary"
+                      size="sm"
+                      onClick={() => setShowLicenseModal(true)}
+                    >
+                      Open Trade License File
+                    </Button>
+                  ) : (
+                    <span className="text-muted small">No file uploaded</span>
+                  )}
+                </Col>
+              </Row>
+            </Section>
+          )}
+
+          {approvalInfo && (
+            <Section title="Approval Info">
+              <Row>
+                <Col md={6}>
+                  <InfoRow
+                    label="Approval Requested"
+                    value={
+                      approvalInfo.createdDate
+                        ? new Date(approvalInfo.createdDate).toLocaleString()
+                        : "-"
+                    }
+                  />
+                  <InfoRow
+                    label={
+                      approvalInfo.status === "REJECTED"
+                        ? "Rejected On"
+                        : "Approved On"
+                    }
+                    value={
+                      approvalInfo.reviewedDate
+                        ? new Date(approvalInfo.reviewedDate).toLocaleString()
+                        : "-"
+                    }
+                  />
+                </Col>
+                <Col md={6}>
+                  <InfoRow
+                    label={
+                      approvalInfo.status === "REJECTED"
+                        ? "Rejected By"
+                        : "Approved By"
+                    }
+                    value={approvalInfo.reviewedBy || "-"}
+                  />
+                  <InfoRow
+                    label="Approval Status"
+                    value={approvalInfo.status || "-"}
+                  />
+                </Col>
+              </Row>
+            </Section>
+          )}
 
           <Section title="Contact Details">
             <Row>
@@ -1897,6 +1990,52 @@ const AgentView = () => {
                 );
               })()}
             </Modal.Body>
+          </Modal>
+
+          {/* Trade-license preview modal — inline iframe/img so the admin
+              never leaves the page. Mirrors the /admin/approval/agents/:id
+              modal so the two views behave identically. */}
+          <Modal
+            show={showLicenseModal}
+            onHide={() => setShowLicenseModal(false)}
+            size="xl"
+            centered
+            backdrop="static"
+          >
+            <Modal.Header closeButton>
+              <Modal.Title style={{ fontSize: "1rem", fontWeight: 700 }}>
+                Trade License — {agent?.companyName || "Agent"}
+              </Modal.Title>
+            </Modal.Header>
+            <Modal.Body style={{ padding: 0, height: "80vh", background: "#f8f9fa" }}>
+              {agent?.tradeLicenseFile ? (
+                /\.pdf($|\?)/i.test(agent.tradeLicenseFile) ? (
+                  <iframe
+                    key={agent.tradeLicenseFile}
+                    src={agent.tradeLicenseFile}
+                    title="Trade License"
+                    style={{ width: "100%", height: "100%", border: "none", display: "block" }}
+                  />
+                ) : (
+                  <div className="d-flex align-items-center justify-content-center h-100 p-3">
+                    <img
+                      src={agent.tradeLicenseFile}
+                      alt="Trade License"
+                      style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+                    />
+                  </div>
+                )
+              ) : (
+                <div className="d-flex align-items-center justify-content-center h-100 text-muted">
+                  No file uploaded.
+                </div>
+              )}
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="outline-secondary" size="sm" onClick={() => setShowLicenseModal(false)}>
+                Close
+              </Button>
+            </Modal.Footer>
           </Modal>
         </main>
       </div>
