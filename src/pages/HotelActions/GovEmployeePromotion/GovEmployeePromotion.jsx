@@ -273,7 +273,7 @@ export default function GovEmployeePromotion() {
               <FaArrowLeft />
               Back
             </Button>
-            <h3 className="mb-0">Government Employee Discount</h3>
+            <h3 className="mb-0">Government Employee</h3>
             <HotelTitleBadge hotelId={hotelId} className="ms-2" />
           </div>
 

@@ -267,7 +267,7 @@ export default function StudentDiscountPromotion() {
             </Button>
             <h3 className="mb-0 d-flex align-items-center">
               <FaGraduationCap className="me-2 text-primary" />
-              Student Discount
+              Student 
             </h3>
             <HotelTitleBadge hotelId={hotelId} className="ms-2" />
           </div>

@@ -430,18 +430,22 @@ export default function ViewLastMinuteContractRate() {
         <main className="flex-grow-1 p-4">
           <Container fluid>
             {/* Header — Back / title + hotel badge / Close. No Update. */}
-            <div className="d-flex justify-content-between align-items-center mb-4">
-              <Button variant="outline-secondary" onClick={() => navigate(-1)}>
-                <FaArrowLeft className="me-2" /> Back
-              </Button>
-              <h4 className="fw-semibold text-dark mb-0 d-flex align-items-center gap-2">
-                View Last Minute Contract Rate
-                <HotelTitleBadge hotelId={hotelId} />
-              </h4>
-              <Button variant="outline-secondary" style={{ visibility: "hidden" }} tabIndex={-1} aria-hidden="true">
-                <FaArrowLeft className="me-2" /> Back
-              </Button>
-            </div>
+           <div className="d-flex justify-content-between align-items-center mb-4">
+  {/* Left */}
+  <Button variant="outline-secondary" onClick={() => navigate(-1)}>
+    <FaArrowLeft className="me-2" /> Back
+  </Button>
+
+  {/* Center */}
+  <h4 className="fw-semibold text-dark mb-0">
+    View Last Minute
+  </h4>
+
+  {/* Right */}
+  <div className="d-flex align-items-center">
+    <HotelTitleBadge hotelId={hotelId} />
+  </div>
+</div>
 
             <Card className="shadow-sm border-0 rounded-4 p-4">
               <Alert
