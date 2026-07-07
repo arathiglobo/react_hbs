@@ -67,7 +67,11 @@ export default function DayStayContract() {
     const q = (search || "").trim().toLowerCase();
     const f = !q
       ? rates
-      : rates.filter((r) => (r.rateCode || "").toLowerCase().includes(q));
+      : rates.filter((r) => 
+          (r.rateCode || "").toLowerCase().includes(q) ||
+          (q === "active" && r.isLive) ||
+          (q === "inactive" && !r.isLive)
+        );
     setFiltered(f);
     setPage(0);
   }, [search, rates]);
@@ -156,7 +160,7 @@ export default function DayStayContract() {
             >
               <FaArrowLeft /> Back
             </Button>
-            <h3 className="mb-0">Day Stay Contract Rates</h3>
+            <h3 className="mb-0">Day Stay </h3>
             <HotelTitleBadge hotelId={id} className="ms-2" />
           </div>
 

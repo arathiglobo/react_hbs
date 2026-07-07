@@ -140,7 +140,7 @@ export default function LongStayContract() {
               <FaArrowLeft />
               Back
             </Button>
-            <h3 className="mb-0">Long Stay Contracts</h3>
+            <h3 className="mb-0">Long Stay</h3>
             <HotelTitleBadge hotelId={id} className="ms-2" />
           </div>
 

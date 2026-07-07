@@ -303,7 +303,7 @@ export default function CreateLongStayContract() {
               Back
             </Button>
             <h4 className="m-0 d-flex align-items-center gap-2">
-              Create Long Stay Contract
+              Create Long Stay 
               <HotelTitleBadge hotelId={id} />
             </h4>
             <span />

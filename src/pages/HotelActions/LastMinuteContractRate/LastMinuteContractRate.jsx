@@ -161,7 +161,7 @@ export default function LastMinuteContractRate() {
               <FaArrowLeft />
               Back
             </Button>
-            <h3 className="mb-0">Last Minute Contract Rates</h3>
+            <h3 className="mb-0">Last Minute </h3>
             <HotelTitleBadge hotelId={hotelId} className="ms-2" />
           </div>
 

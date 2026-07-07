@@ -321,7 +321,7 @@ export default function EditLongStayContract() {
               Back
             </Button>
             <h4 className="m-0 d-flex align-items-center gap-2">
-              {isViewMode ? "View" : "Edit"} Long Stay Contract
+              {isViewMode ? "View" : "Edit"} Long Stay 
               <HotelTitleBadge hotelId={id} />
             </h4>
             <span />

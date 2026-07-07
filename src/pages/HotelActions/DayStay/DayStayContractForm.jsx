@@ -547,7 +547,7 @@ export default function DayStayContractForm({ mode }) {
                 <FaArrowLeft className="me-2" /> Back
               </Button>
               <h4 className="fw-semibold text-dark mb-0 d-flex align-items-center gap-2">
-                {isViewMode ? "View" : isEdit ? "Edit" : "Create"} Day Stay Contract
+                {isViewMode ? "View" : isEdit ? "Edit" : "Create"} Day Stay 
                 <HotelTitleBadge hotelId={hotelId} />
               </h4>
             </div>

@@ -105,7 +105,6 @@ const emptyForm = {
   currencyId: null,
   currencyCode: "INR",
   taxPercent: "",
-  status: "Inactive",
   images: [],
   cancellationPolicies: [],
 };
@@ -125,9 +124,7 @@ export default function MeetingSpaceManage() {
   const [searchTimeout, setSearchTimeout] = useState(null);
   const [hotelName, setHotelName] = useState("");
 
-  // Status-toggle modal state — mirrors the ContractRate pattern.
-  // The status column on this page is a string ("Active" / "Inactive")
-  // rather than a boolean, so the PATCH body uses { status: "..." }.
+  // Status-toggle modal state
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedSpace, setSelectedSpace] = useState(null);
   const [statusUpdating, setStatusUpdating] = useState(false);
@@ -261,7 +258,6 @@ export default function MeetingSpaceManage() {
     currencyId: s.currencyId ?? null,
     currencyCode: s.currency || "INR",
     taxPercent: s.taxPercent ?? "",
-    status: s.status || "Inactive",
     images: (s.images || []).map((i) => (i.imageUrl ? i.imageUrl : i)).filter(Boolean),
     cancellationPolicies: (s.cancellationPolicies || []).map((p) => ({
       policyText: p.policyText || "",
@@ -305,7 +301,6 @@ export default function MeetingSpaceManage() {
       currencyId: s.currencyId ?? null,
       currencyCode: s.currency || "INR",
       taxPercent: s.taxPercent ?? "",
-      status: s.status || "Inactive",
       images: (s.images || []).map((i) => i.imageUrl).filter(Boolean),
       cancellationPolicies: (s.cancellationPolicies || []).map((p) => ({
         policyText: p.policyText || "",
@@ -465,7 +460,6 @@ export default function MeetingSpaceManage() {
       currency: form.currencyCode,
       currencyId: form.currencyId,
       taxPercent: num(form.taxPercent),
-      status: form.status,
       images: form.images.map((url, i) => ({
         imageUrl: url,
         isPrimary: i === 0,
@@ -509,8 +503,6 @@ export default function MeetingSpaceManage() {
   };
 
   // PATCH the new status, refresh the list, close the modal.
-  // The status column stores a string ("Active" / "Inactive") rather
-  // than a boolean, so we send the literal target value.
   const updateSpaceStatus = async () => {
     if (!selectedSpace) return;
     try {
@@ -678,9 +670,6 @@ export default function MeetingSpaceManage() {
                           </span>
                         </td>
                         <td>
-                          {/* Clickable Active/Inactive badge — opens
-                              the confirm modal then PATCHes /status.
-                              Mirrors /contract-rate. */}
                           <Badge
                             bg={s.status === "Active" ? "success" : "danger"}
                             style={{ cursor: "pointer" }}
@@ -821,17 +810,6 @@ export default function MeetingSpaceManage() {
                 onChange={(e) => handleChange("areaSqft", e.target.value)}
               />
             </Col>
-            <Col md={1}>
-              <Form.Label>Status</Form.Label>
-              <Form.Select
-                value={form.status}
-                onChange={(e) => handleChange("status", e.target.value)}
-              >
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </Form.Select>
-            </Col>
-
             <Col md={3}>
               <Form.Label>Floor / Location</Form.Label>
               <Form.Control
@@ -1289,7 +1267,7 @@ export default function MeetingSpaceManage() {
         </Modal.Footer>
       </Modal>
 
-      {/* Status-toggle confirmation modal — mirrors /contract-rate. */}
+      {/* Status-toggle confirmation modal */}
       <Modal
         show={showStatusModal}
         onHide={() => setShowStatusModal(false)}
@@ -1336,6 +1314,7 @@ export default function MeetingSpaceManage() {
           </Button>
         </Modal.Footer>
       </Modal>
+
     </div>
   );
 }
