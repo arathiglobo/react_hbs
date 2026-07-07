@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Card, Button, Table, Modal, Form, Pagination } from "react-bootstrap";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
+import BackButton from "../../components/BackButton";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
@@ -250,7 +251,10 @@ export default function Designations() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex flex-column flex-sm-row gap-2 justify-content-between align-items-stretch align-items-sm-center">
-              <span className="fw-semibold">Designations</span>
+              <span className="d-flex align-items-center gap-2">
+                <BackButton fallback="/adminDashboard" />
+                <span className="fw-semibold">Designations</span>
+              </span>
               {/* Designation Name Search */}
               <Form.Group className="hotel-search-bar flex-grow-1 flex-sm-grow-0">
                 <Form.Control

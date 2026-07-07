@@ -5,6 +5,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import AsyncSelect from "react-select/async";
+import BackButton from "../../components/BackButton";
 
 const FetchNewHotels = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -239,7 +240,8 @@ const FetchNewHotels = () => {
         <Sidebar />
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm mb-4">
-            <Card.Header className="bg-white py-3">
+            <Card.Header className="bg-white py-3 d-flex align-items-center gap-2">
+              <BackButton fallback="/adminDashboard" />
               <h5 className="mb-0 fw-bold">Fetch New Hotels</h5>
             </Card.Header>
             <Card.Body>

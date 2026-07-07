@@ -7,6 +7,7 @@ import axios from "axios";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import { FaEdit, FaTrash, FaTimes, FaCheck, FaUndo, FaEye } from "react-icons/fa";
+import BackButton from "../../components/BackButton";
 
 // Enhanced SearchableSelect Component with loading support
 const SearchableSelect = ({
@@ -506,10 +507,13 @@ export default function VisaDetails() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex flex-column flex-sm-row gap-2 justify-content-between align-items-stretch align-items-sm-center">
-              <div>
-                <h4 className="fw-bold text-primary mb-0">Visa Details</h4>
-                <p className="text-muted mb-0">Visa Details List</p>
-               </div>
+              <div className="d-flex align-items-center gap-2">
+                <BackButton fallback="/adminDashboard" />
+                <div>
+                  <h4 className="fw-bold text-primary mb-0">Visa Details</h4>
+                  <p className="text-muted mb-0">Visa Details List</p>
+                </div>
+              </div>
               <div className="d-flex align-items-center gap-3">
                 <Form.Group className="mb-0">
                   <Form.Control

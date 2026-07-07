@@ -1442,11 +1442,41 @@ const RoomList = ({ force24Hour = false } = {}) => {
                               </div>
                             </div>
 
-                            {/* ✅ Button toggle */}
-                            <AccordionToggleButton
-                              eventKey={eventKey}
-                              isActive={isActive}
-                            />
+                            <div className="d-flex flex-column align-items-end gap-1">
+                              {/* ✅ Button toggle */}
+                              <AccordionToggleButton
+                                eventKey={eventKey}
+                                isActive={isActive}
+                              />
+                              {payload?.apiId === 1 &&
+                                policyList?.policies?.cancellationPolicy
+                                  ?.length > 0 && (
+                                  <a
+                                    href="#hotel-information-section"
+                                    className="small"
+                                    onClick={(e) => {
+                                      // Stop propagation — this link sits
+                                      // inside the Accordion.Header, which
+                                      // react-bootstrap always wraps in a
+                                      // toggle <button>; without this the
+                                      // click also expands/collapses the
+                                      // accordion body.
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      document
+                                        .getElementById(
+                                          "hotel-information-section",
+                                        )
+                                        ?.scrollIntoView({
+                                          behavior: "smooth",
+                                          block: "start",
+                                        });
+                                    }}
+                                  >
+                                    Cancellation Policy
+                                  </a>
+                                )}
+                            </div>
                           </div>
                         </div>
                       </Accordion.Header>
@@ -1918,13 +1948,15 @@ const RoomList = ({ force24Hour = false } = {}) => {
               </Row>
             </div>
 
-            {/* Hotel Information Section — booking-policy details
-                (Cancellation, Amendment, Child, Additional Policies and
-                Terms & Conditions) intentionally NOT shown here; they live
-                exclusively in the per-rate "Cancellation Policies &
-                Terms & Conditions" modal so the same information isn't
-                duplicated in two places on the page. */}
-            <div className="mt-4">
+            {/* Hotel Information Section — also renders every hotel-level
+                policy returned by GET /api/hotels/{id}/policies (policyList:
+                cancellationPolicy, amendmentPolicy, childPolicy). This is the
+                scroll target of the "Cancellation Policy" link under each
+                room category's View Details/Book button above. Additional
+                Policy and per-rate Terms & Conditions still live exclusively
+                in the per-rate "Cancellation Policies & Terms & Conditions"
+                modal, unchanged. */}
+            <div className="mt-4" id="hotel-information-section">
               <Card
                 className="mb-4 shadow-sm"
                 style={{ overflow: "hidden", border: "1px solid #dbe3ef" }}
@@ -1986,6 +2018,102 @@ const RoomList = ({ force24Hour = false } = {}) => {
                       </div>
                     </Col>
                   </Row>
+
+                  {payload?.apiId === 1 &&
+                    policyList?.policies?.cancellationPolicy?.length > 0 && (
+                      <div className="mt-4 pt-3 border-top">
+                        <h6 className="text-danger mb-3">
+                          <FaTimesCircle className="me-2" />
+                          Cancellation Policy
+                        </h6>
+                        <ul className="mb-0 ps-3">
+                          {policyList.policies.cancellationPolicy.map(
+                            (policy, idx) => {
+                              const validity = renderPolicyValidity(
+                                policy?.fromDate,
+                                policy?.toDate,
+                              );
+                              return (
+                                <li key={idx} className="mb-2">
+                                  <div style={{ whiteSpace: "pre-line" }}>
+                                    {policy?.policyText || ""}
+                                  </div>
+                                  {validity && (
+                                    <small className="text-muted">
+                                      {validity}
+                                    </small>
+                                  )}
+                                </li>
+                              );
+                            },
+                          )}
+                        </ul>
+                      </div>
+                    )}
+
+                  {payload?.apiId === 1 &&
+                    policyList?.policies?.amendmentPolicy?.length > 0 && (
+                      <div className="mt-4 pt-3 border-top">
+                        <h6 className="text-warning mb-3">
+                          <FaInfoCircle className="me-2" />
+                          Amendment Policy
+                        </h6>
+                        <ul className="mb-0 ps-3">
+                          {policyList.policies.amendmentPolicy.map(
+                            (policy, idx) => {
+                              const validity = renderPolicyValidity(
+                                policy?.fromDate,
+                                policy?.toDate,
+                              );
+                              return (
+                                <li key={idx} className="mb-2">
+                                  <div style={{ whiteSpace: "pre-line" }}>
+                                    {policy?.policyText || ""}
+                                  </div>
+                                  {validity && (
+                                    <small className="text-muted">
+                                      {validity}
+                                    </small>
+                                  )}
+                                </li>
+                              );
+                            },
+                          )}
+                        </ul>
+                      </div>
+                    )}
+
+                  {payload?.apiId === 1 &&
+                    policyList?.policies?.childPolicy?.length > 0 && (
+                      <div className="mt-4 pt-3 border-top">
+                        <h6 className="text-primary mb-3">
+                          <FaUsers className="me-2" />
+                          Child Policy
+                        </h6>
+                        <ul className="mb-0 ps-3">
+                          {policyList.policies.childPolicy.map(
+                            (policy, idx) => {
+                              const validity = renderPolicyValidity(
+                                policy?.fromDate,
+                                policy?.toDate,
+                              );
+                              return (
+                                <li key={idx} className="mb-2">
+                                  <div style={{ whiteSpace: "pre-line" }}>
+                                    {policy?.policyText || ""}
+                                  </div>
+                                  {validity && (
+                                    <small className="text-muted">
+                                      {validity}
+                                    </small>
+                                  )}
+                                </li>
+                              );
+                            },
+                          )}
+                        </ul>
+                      </div>
+                    )}
                 </Card.Body>
               </Card>
             </div>

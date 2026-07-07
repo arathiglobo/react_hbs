@@ -14,6 +14,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import AsyncSelect from "react-select/async";
+import BackButton from "../../components/BackButton";
 import "../../styles/CityMapping.css";
 
 const CityMapping = () => {
@@ -366,7 +367,10 @@ const CityMapping = () => {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
-          <h3 className="mb-3">City Mapping</h3>
+          <span className="d-flex align-items-center gap-2 mb-3">
+            <BackButton fallback="/adminDashboard" />
+            <h3 className="mb-0">City Mapping</h3>
+          </span>
           <p className="text-muted">
             Map master countries & cities to external API platforms.
           </p>

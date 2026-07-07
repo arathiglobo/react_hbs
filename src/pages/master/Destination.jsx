@@ -8,6 +8,7 @@ import Swal from "sweetalert2";
 import { FaEdit, FaTrash } from "react-icons/fa";
 import axios from "axios";
 import Select from "react-select";
+import BackButton from "../../components/BackButton";
 
 export default function Destination() {
   const [items, setItems] = useState([]);
@@ -329,7 +330,10 @@ export default function Destination() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex flex-column flex-sm-row gap-2 justify-content-between align-items-stretch align-items-sm-center">
-              <span className="fw-semibold">Destination</span>
+              <span className="d-flex align-items-center gap-2">
+                <BackButton fallback="/adminDashboard" />
+                <span className="fw-semibold">Destination</span>
+              </span>
               {/* Destination Name Search */}
               <Form.Group className="hotel-search-bar flex-grow-1 flex-sm-grow-0">
                 <Form.Control

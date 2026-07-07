@@ -7,6 +7,7 @@ import axios from "axios";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import { FaEdit, FaTrash, FaTimes, FaCheck, FaUndo, FaEye } from "react-icons/fa";
+import BackButton from "../../components/BackButton";
 
 // Enhanced SearchableSelect Component with loading support
 const SearchableSelect = ({
@@ -607,9 +608,10 @@ export default function TermsAndConditions() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex flex-column flex-sm-row gap-2 justify-content-between align-items-stretch align-items-sm-center">
-              <div>
+              <span className="d-flex align-items-center gap-2">
+                <BackButton fallback="/adminDashboard" />
                 <h4 className="fw-bold text-primary mb-0">Terms and Conditions</h4>
-              </div>
+              </span>
               <div className="d-flex align-items-center gap-3">
                
                 <Form.Group className="mb-0">
