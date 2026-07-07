@@ -329,13 +329,22 @@ export default function AgentDashboard() {
           text-align: center;
           line-height: 1.2;
           cursor: pointer;
-          transition: border-color .15s, box-shadow .15s, transform .15s;
+          transition: border-color .15s, box-shadow .15s, transform .15s, background-color .15s;
         }
         .agent-qa-tile:hover {
-          border-color: var(--color-primary-tint);
-          box-shadow: 0 6px 14px rgba(0,0,0,.08);
-          transform: translateY(-1px);
+          box-shadow: 0 10px 20px rgba(0,0,0,.10);
+          transform: translateY(-2px);
         }
+        .agent-qa-tile:active { transform: translateY(0); }
+        .agent-qa-tile .agent-qa-icon { transition: transform .15s; }
+        .agent-qa-tile:hover .agent-qa-icon { transform: scale(1.1); }
+        .agent-qa-tile.tone-pink:hover   { background: #FFF3F5; border-color: #F7BCC8; box-shadow: 0 10px 20px rgba(236,11,67,.18); }
+        .agent-qa-tile.tone-orange:hover { background: #FFF9EF; border-color: #FBD9A0; box-shadow: 0 10px 20px rgba(245,158,11,.18); }
+        .agent-qa-tile.tone-purple:hover { background: #FAF6FE; border-color: #D9C7FA; box-shadow: 0 10px 20px rgba(139,92,246,.18); }
+        .agent-qa-tile.tone-blue:hover   { background: #F2F9FE; border-color: #B9E0FB; box-shadow: 0 10px 20px rgba(14,165,233,.18); }
+        .agent-qa-tile.tone-green:hover  { background: #F2FBF6; border-color: #B7EAC9; box-shadow: 0 10px 20px rgba(16,185,129,.18); }
+        .agent-qa-tile.tone-teal:hover   { background: #EFFBFA; border-color: #A9E7E1; box-shadow: 0 10px 20px rgba(20,184,166,.18); }
+        .agent-qa-tile.tone-gray:hover   { background: #F6F7F8; border-color: #D9DCE1; box-shadow: 0 10px 20px rgba(107,114,128,.18); }
         .agent-qa-icon {
           width: 36px; height: 36px;
           border-radius: 50%;
@@ -714,7 +723,7 @@ export default function AgentDashboard() {
                     <button
                       key={a.label}
                       type="button"
-                      className="agent-qa-tile"
+                      className={`agent-qa-tile tone-${a.tone}`}
                       onClick={() => navigate(a.to)}
                     >
                       <span className={`agent-qa-icon tone-${a.tone}`}>{a.icon}</span>

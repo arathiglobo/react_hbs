@@ -2305,7 +2305,6 @@ const AgentReg = () => {
                             value={formData.companyName}
                             placeholder="Enter company name"
                             isInvalid={!!validationErrors.companyName}
-                            disabled={lockCompanyFields}
                             {...getFormControlProps(
                               "companyName",
                               (e) => {
