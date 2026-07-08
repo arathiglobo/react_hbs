@@ -14,6 +14,7 @@ import axios from "axios";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import { FaEdit, FaTrash, FaPlus, FaEye } from "react-icons/fa";
+import BackButton from "../../components/BackButton";
 
 // Enhanced SearchableSelect Component with loading support
 const SearchableSelect = ({
@@ -516,7 +517,10 @@ export default function DayActivities() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex flex-wrap justify-content-between align-items-center gap-2">
-              <span className="fw-semibold">Day Activities</span>
+              <span className="d-flex align-items-center gap-2">
+                <BackButton fallback="/adminDashboard" />
+                <span className="fw-semibold">Day Activities</span>
+              </span>
               <div className="d-flex align-items-center gap-3">
                 {/* <Form.Select className="form-select-sm" style={{ width: "auto" }}>
                   <option>Display 10 records</option>

@@ -6,6 +6,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import { FaEdit, FaTrash } from "react-icons/fa";
+import BackButton from "../../components/BackButton";
 
 export default function RoomType() {
   const [items, setItems] = useState([]);
@@ -296,7 +297,10 @@ export default function RoomType() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex flex-column flex-sm-row gap-2 justify-content-between align-items-stretch align-items-sm-center">
-              <span className="fw-semibold">Room Type</span>
+              <span className="d-flex align-items-center gap-2">
+                <BackButton fallback="/adminDashboard" />
+                <span className="fw-semibold">Room Type</span>
+              </span>
               {/* Room Type Search */}
                <Form.Group className="hotel-search-bar flex-grow-1 flex-sm-grow-0">
                   <Form.Control

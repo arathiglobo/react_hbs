@@ -668,17 +668,7 @@ export default function TopBar() {
   <div className="logo-placeholder">GS</div>
   <span className="fw-semibold">Globosoft</span>
 </Navbar.Brand>
-        {showBackToDashboard && (
-          <Button
-            variant="outline-light"
-            size="sm"
-            className="d-flex align-items-center gap-2 ms-2 fw-semibold"
-            onClick={() => navigate(backToDashboardPath)}
-            title="Back to Dashboard"
-          >
-            <FaArrowLeft /> <span className="d-none d-sm-inline">Back to Dashboard</span>
-          </Button>
-        )}
+       
         <Nav className="ms-auto d-flex flex-row align-items-center gap-2 gap-md-3 flex-nowrap">
   {/* Cart Button — hidden in the v3 flow (no Redis cart there;
        selection is held in component state on /results) */}

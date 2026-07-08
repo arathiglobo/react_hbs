@@ -311,7 +311,7 @@ export default function SeniorCitizenList() {
             </Button>
             <h3 className="mb-0 d-flex align-items-center">
               <FaUserClock className="me-2 text-primary" />
-              Senior Citizen Discount
+              Senior Citizen 
             </h3>
             <HotelTitleBadge hotelId={hotelId} className="ms-2" />
           </div>

@@ -14,6 +14,7 @@ import toast from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
+import BackButton from "../../components/BackButton";
 import { ArrowLeft, CheckCircle, AlertTriangle } from "lucide-react";
 
 const HotelMappingBulkList = () => {
@@ -145,7 +146,10 @@ const HotelMappingBulkList = () => {
                   >
                     <ArrowLeft size={18} className="me-1" /> Back to Search
                   </Button>
-                  <h4 className="fw-bold mb-0">Bulk Mapping Review</h4>
+                  <span className="d-flex align-items-center gap-2">
+                    <BackButton fallback="/adminDashboard" />
+                    <h4 className="fw-bold mb-0">Bulk Mapping Review</h4>
+                  </span>
                   <p className="text-muted small">
                     Review and select candidate groups for bulk mapping.
                   </p>

@@ -318,7 +318,7 @@ export default function Sidebar() {
       label: "New Booking",
       roles: ["admin", "agent"],
       children: [
-        { label: "Hotel Booking", to: "/new-booking/hotel" },
+        { label: "Hotel", to: "/new-booking/hotel" },
         // Dedicated 24-Hour Check-In entry — separate route renders the
         // same HotelSearch component with force24Hour=true.
         { label: "24 Hour", to: "/new-booking/hotel-24hr" },
@@ -349,6 +349,7 @@ export default function Sidebar() {
         {
           label: "Offline",
           to: "/new-booking/offline-search",
+          roles: ["admin"],
         },
         {
           label: "Restaurant",
@@ -403,46 +404,46 @@ export default function Sidebar() {
         // Dedicated 24-Hour Check-In list — same page wrapped with
         // force24HourOnly so only is24HourCheckin=true rows are shown.
         {
-          label: "24 Hours",
+          label: "24 Hour",
           to: "/booking-details/24hr-booking-list",
         },
         // Last Minute Booking list — Phase 4 entry
         {
-          label: "Last Minute Bookings",
+          label: "Last Minute",
           to: "/booking-details/last-minute-booking-list",
         },
         {
-          label: "Long Stay Bookings",
+          label: "Long Stay",
           to: "/booking-details/long-stay-booking-list",
         },
         {
-          label: "Day Stay Bookings",
+          label: "Day Stay",
           to: "/booking-details/day-stay-booking-list",
         },
-        {
-          label: "Custom Bookings",
-          to: "/booking-details/custom-booking-list",
-        },
+        // {
+        //   label: "Custom Bookings",
+        //   to: "/booking-details/custom-booking-list",
+        // },
         {
           // Listings for the v2 Make-Your-Own-Package flow (separate
           // table tree, separate endpoints).
-          label: "Make Your Own Packages",
+          label: "Build Your Own Package",
           to: "/booking-details/make-your-own-package-v2-list",
         },
         {
-          label: "Package Bookings",
+          label: "Package Booking",
           to: "/booking-details/package-booking-list",
         },
         {
-          label: "Tours and Activity Bookings",
+          label: "Tours and Activity",
           to: "/booking-details/activity-booking-list",
         },
         {
-          label: "Transfer Bookings",
+          label: "Transfers",
           to: "/booking-details/cab-booking-list",
         },
         {
-          label: "Chauffeur Driver and Limousine Bookings",
+          label: "Chauffeur Driver and Limousine",
           to: "/booking-details/scheffer-driver-booking-list", 
         },
         // {
@@ -454,11 +455,12 @@ export default function Sidebar() {
         //   to: "/booking-details/quotation-list-list",
         // },
         {
-          label: "Offline Bookings",
+          label: "Offline",
           to: "/booking-details/offline-booking-list",
+          roles: ["admin"],
         },
         {
-          label: "Restaurant Bookings",
+          label: "Restaurants",
           to: "/booking-details/restaurant-booking-list",
         },
         {
@@ -467,23 +469,23 @@ export default function Sidebar() {
         },
         // Meet & Space booking list — view + cancel from this page
         {
-          label: "Meet & Space Bookings",
+          label: "Meet & Space",
           to: "/booking-details/meet-and-space-booking-list",
         },
         {
-          label: "Government Employee Bookings",
+          label: "Govt / Airlines",
           to: "/booking-details/gov-employee-booking-list",
         },
         {
-          label: "Ayurveda Bookings",
+          label: "Ayurveda",
           to: "/booking-details/ayurveda-booking-list",
         },
         {
-          label: "Student Bookings",
+          label: "Student",
           to: "/booking-details/student-booking-list",
         },
         {
-          label: "Senior Citizen Bookings",
+          label: "Senior Citizen",
           to: "/booking-details/senior-citizen-booking-list",
         },
       ],

@@ -612,15 +612,24 @@ export default function LastMinuteContractRateForm({ mode = "create" }) {
         <Sidebar />
         <main className="flex-grow-1 p-4">
           <Container fluid>
-            <div className="d-flex justify-content-between align-items-center mb-4">
-              <Button variant="outline-secondary" onClick={() => navigate(-1)}>
-                <FaArrowLeft className="me-2" /> Back
-              </Button>
-              <h4 className="fw-semibold text-dark mb-0 d-flex align-items-center gap-2">
-                {isEdit ? "Edit" : "Create"} Last Minute Contract Rate
-                <HotelTitleBadge hotelId={hotelId} />
-              </h4>
-            </div>
+            <div className="position-relative d-flex align-items-center mb-4">
+  <Button
+    variant="outline-secondary"
+    onClick={() => navigate(-1)}
+  >
+    <FaArrowLeft className="me-2" /> Back
+  </Button>
+
+  <div className="position-absolute start-50 translate-middle-x">
+    <h4 className="fw-semibold text-dark mb-0">
+      {isEdit ? "Edit" : "Create"} Last Minute
+    </h4>
+  </div>
+
+  <div className="ms-auto">
+    <HotelTitleBadge hotelId={hotelId} />
+  </div>
+</div>
 
             <Card className="shadow-sm border-0 rounded-4 p-4">
               {loading ? (

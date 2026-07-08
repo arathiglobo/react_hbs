@@ -992,6 +992,16 @@ const RoomList = ({ force24Hour = false } = {}) => {
   const payload = roomData.payload || {};
   // console.log("selectedRate before bookingmodal:::", selectedRate);
 
+  // Drives whether the static check-in/check-out row in the Hotel
+  // Information card gets a top divider — it renders AFTER the policy
+  // sections there, so it only needs the divider when at least one
+  // policy section is actually shown above it.
+  const hasHotelInfoPolicy =
+    payload?.apiId === 1 &&
+    ((policyList?.policies?.cancellationPolicy?.length ?? 0) > 0 ||
+      (policyList?.policies?.amendmentPolicy?.length ?? 0) > 0 ||
+      (policyList?.policies?.childPolicy?.length ?? 0) > 0);
+
   return (
     <div className= "min-vh-100 bg-light d-flex flex-column room-list-container">
       <TopBar />
@@ -1452,11 +1462,41 @@ const RoomList = ({ force24Hour = false } = {}) => {
                               </div>
                             </div>
 
-                            {/* ✅ Button toggle */}
-                            <AccordionToggleButton
-                              eventKey={eventKey}
-                              isActive={isActive}
-                            />
+                            <div className="d-flex flex-column align-items-end gap-1">
+                              {/* ✅ Button toggle */}
+                              <AccordionToggleButton
+                                eventKey={eventKey}
+                                isActive={isActive}
+                              />
+                              {payload?.apiId === 1 &&
+                                policyList?.policies?.cancellationPolicy
+                                  ?.length > 0 && (
+                                  <a
+                                    href="#hotel-information-section"
+                                    className="small"
+                                    onClick={(e) => {
+                                      // Stop propagation — this link sits
+                                      // inside the Accordion.Header, which
+                                      // react-bootstrap always wraps in a
+                                      // toggle <button>; without this the
+                                      // click also expands/collapses the
+                                      // accordion body.
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      document
+                                        .getElementById(
+                                          "hotel-information-section",
+                                        )
+                                        ?.scrollIntoView({
+                                          behavior: "smooth",
+                                          block: "start",
+                                        });
+                                    }}
+                                  >
+                                    Cancellation Policy
+                                  </a>
+                                )}
+                            </div>
                           </div>
                         </div>
                       </Accordion.Header>
@@ -1928,24 +1968,27 @@ const RoomList = ({ force24Hour = false } = {}) => {
               </Row>
             </div>
 
-            {/* Hotel Information Section — booking-policy details
-                (Cancellation, Amendment, Child, Additional Policies and
-                Terms & Conditions) intentionally NOT shown here; they live
-                exclusively in the per-rate "Cancellation Policies &
-                Terms & Conditions" modal so the same information isn't
-                duplicated in two places on the page. */}
-            <div className="mt-4">
+            {/* Hotel Information Section — leads with every hotel-level
+                policy returned by GET /api/hotels/{id}/policies (policyList:
+                cancellationPolicy, amendmentPolicy, childPolicy), then the
+                static check-in/check-out details below. This is the scroll
+                target of the "Cancellation Policy" link under each room
+                category's View Details/Book button above. Additional Policy
+                and per-rate Terms & Conditions still live exclusively in the
+                per-rate "Cancellation Policies & Terms & Conditions" modal,
+                unchanged. */}
+            <div className="mt-4" id="hotel-information-section">
               <Card
                 className="mb-4 shadow-sm"
-                style={{ overflow: "hidden", border: "1px solid #dbe3ef" }}
+                style={{ overflow: "hidden", border: "1px solid #e5e9f0" }}
               >
                 <Card.Header
                   className="d-flex align-items-center gap-3 py-3"
                   style={{
-                    background:
-                      "linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%)",
-                    color: "#fff",
+                    background: "#f4f7fc",
+                    color: "#2b3648",
                     border: "none",
+                    borderBottom: "1px solid #e5e9f0",
                   }}
                 >
                   <div
@@ -1953,7 +1996,8 @@ const RoomList = ({ force24Hour = false } = {}) => {
                     style={{
                       width: 40,
                       height: 40,
-                      backgroundColor: "rgba(255,255,255,.18)",
+                      backgroundColor: "#e3ecfb",
+                      color: "#3b6fd6",
                       fontSize: "1.15rem",
                     }}
                   >
@@ -1966,13 +2010,111 @@ const RoomList = ({ force24Hour = false } = {}) => {
                     >
                       Hotel Information
                     </div>
-                    <div className="small" style={{ opacity: 0.85 }}>
+                    <div className="small text-muted">
                       General check-in &amp; stay details
                     </div>
                   </div>
                 </Card.Header>
                 <Card.Body className="p-4">
-                  <Row className="g-3">
+                  {payload?.apiId === 1 &&
+                    policyList?.policies?.cancellationPolicy?.length > 0 && (
+                      <div className="mb-3">
+                        <h6 className="text-danger mb-3">
+                          <FaTimesCircle className="me-2" />
+                          Cancellation Policy
+                        </h6>
+                        <ul className="mb-0 ps-3">
+                          {policyList.policies.cancellationPolicy.map(
+                            (policy, idx) => {
+                              const validity = renderPolicyValidity(
+                                policy?.fromDate,
+                                policy?.toDate,
+                              );
+                              return (
+                                <li key={idx} className="mb-2">
+                                  <div style={{ whiteSpace: "pre-line" }}>
+                                    {policy?.policyText || ""}
+                                  </div>
+                                  {validity && (
+                                    <small className="text-muted">
+                                      {validity}
+                                    </small>
+                                  )}
+                                </li>
+                              );
+                            },
+                          )}
+                        </ul>
+                      </div>
+                    )}
+
+                  {payload?.apiId === 1 &&
+                    policyList?.policies?.amendmentPolicy?.length > 0 && (
+                      <div className="mb-3 pt-3 border-top">
+                        <h6 className="text-warning mb-3">
+                          <FaInfoCircle className="me-2" />
+                          Amendment Policy
+                        </h6>
+                        <ul className="mb-0 ps-3">
+                          {policyList.policies.amendmentPolicy.map(
+                            (policy, idx) => {
+                              const validity = renderPolicyValidity(
+                                policy?.fromDate,
+                                policy?.toDate,
+                              );
+                              return (
+                                <li key={idx} className="mb-2">
+                                  <div style={{ whiteSpace: "pre-line" }}>
+                                    {policy?.policyText || ""}
+                                  </div>
+                                  {validity && (
+                                    <small className="text-muted">
+                                      {validity}
+                                    </small>
+                                  )}
+                                </li>
+                              );
+                            },
+                          )}
+                        </ul>
+                      </div>
+                    )}
+
+                  {payload?.apiId === 1 &&
+                    policyList?.policies?.childPolicy?.length > 0 && (
+                      <div className="mt-4 pt-3 border-top">
+                        <h6 className="text-primary mb-3">
+                          <FaUsers className="me-2" />
+                          Child Policy
+                        </h6>
+                        <ul className="mb-0 ps-3">
+                          {policyList.policies.childPolicy.map(
+                            (policy, idx) => {
+                              const validity = renderPolicyValidity(
+                                policy?.fromDate,
+                                policy?.toDate,
+                              );
+                              return (
+                                <li key={idx} className="mb-2">
+                                  <div style={{ whiteSpace: "pre-line" }}>
+                                    {policy?.policyText || ""}
+                                  </div>
+                                  {validity && (
+                                    <small className="text-muted">
+                                      {validity}
+                                    </small>
+                                  )}
+                                </li>
+                              );
+                            },
+                          )}
+                        </ul>
+                      </div>
+                    )}
+
+                  <Row
+                    className={`g-3${hasHotelInfoPolicy ? " mt-1 pt-3 border-top" : ""}`}
+                  >
                     <Col md={6}>
                       <div className="d-flex justify-content-between border-bottom pb-2 mb-2">
                         <span className="text-muted">Check-in</span>

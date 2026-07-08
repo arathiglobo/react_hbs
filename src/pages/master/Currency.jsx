@@ -15,6 +15,7 @@ import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import { FaEdit, FaTrash, FaSearch } from "react-icons/fa";
 import "../../styles/Swal.css";
+import BackButton from "../../components/BackButton";
 
 export default function Currency() {
   const [items, setItems] = useState([]);
@@ -227,7 +228,10 @@ export default function Currency() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex flex-column flex-sm-row gap-2 justify-content-between align-items-stretch align-items-sm-center">
-              <span className="fw-semibold">Currency</span>
+              <span className="d-flex align-items-center gap-2">
+                <BackButton fallback="/adminDashboard" />
+                <span className="fw-semibold">Currency</span>
+              </span>
               {/* Currency Name Search */}
               <Col lg={3} md={6}>
                 <Form.Group className="hotel-search-bar flex-grow-1 flex-sm-grow-0">

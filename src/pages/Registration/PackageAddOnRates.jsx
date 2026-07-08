@@ -184,92 +184,94 @@ export default function PackageAddOnRates() {
   };
 
   return (
-    <div className="d-flex" style={{ minHeight: "100vh" }}>
-      <Sidebar />
-      <div className="flex-grow-1" style={{ background: "#f6f8fa" }}>
-        <TopBar />
-        <div className="container-fluid p-4">
-          <div className="d-flex justify-content-between align-items-center mb-3">
-            <div>
-              <Button variant="link" className="p-0 me-2" onClick={() => navigate("/registration/package-addons")}>
-                <FaBackward /> Back
+    <div className="d-flex flex-column" style={{ minHeight: "100vh" }}>
+      <TopBar />
+      <div className="d-flex flex-grow-1">
+        <Sidebar />
+        <div className="flex-grow-1" style={{ background: "#f6f8fa" }}>
+          <div className="container-fluid p-4">
+            <div className="d-flex justify-content-between align-items-center mb-3">
+              <div>
+                <Button variant="link" className="p-0 me-2" onClick={() => navigate("/registration/package-addons")}>
+                  <FaBackward /> Back
+                </Button>
+                <span className="fw-bold fs-4">Rates — {addon?.name || "Add-On"}</span>
+                {addon?.code && <Badge bg="secondary" className="ms-2">{addon.code}</Badge>}
+              </div>
+              <Button variant="primary" onClick={openCreate}>
+                <FaPlus className="me-2" /> New Rate
               </Button>
-              <span className="fw-bold fs-4">Rates — {addon?.name || "Add-On"}</span>
-              {addon?.code && <Badge bg="secondary" className="ms-2">{addon.code}</Badge>}
             </div>
-            <Button variant="primary" onClick={openCreate}>
-              <FaPlus className="me-2" /> New Rate
-            </Button>
-          </div>
 
-          <Card className="border-0 shadow-sm rounded-4">
-            <Card.Body className="p-0">
-              <Table responsive hover className="mb-0 align-middle">
-                <thead className="table-light">
-                  <tr>
-                    <th>#</th>
-                    <th>Rate Code</th>
-                    <th>Market</th>
-                    <th>Currency</th>
-                    <th>Base</th>
-                    <th>Child</th>
-                    <th>Infant</th>
-                    <th>Pax</th>
-                    <th>Validity</th>
-                    <th>Active</th>
-                    <th className="text-end pe-3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading && (
-                    <tr><td colSpan={11} className="text-center text-muted py-4">Loading…</td></tr>
-                  )}
-                  {!loading && rates.length === 0 && (
-                    <tr><td colSpan={11} className="text-center text-muted py-4">No rates yet.</td></tr>
-                  )}
-                  {!loading && rates.map((row, i) => {
-                    const mkt = marketTypes.find((m) => m.id === row.marketTypeId);
-                    return (
-                      <tr key={row.rateId}>
-                        <td>{i + 1}</td>
-                        <td>{row.rateCode || "—"}</td>
-                        <td>{mkt ? (mkt.marketTypeName || mkt.name) : <span className="text-muted">Any</span>}</td>
-                        <td>{row.currency || "AED"}</td>
-                        <td>{row.basePrice ?? "—"}</td>
-                        <td>{row.childPrice ?? "—"}</td>
-                        <td>{row.infantPrice ?? "—"}</td>
-                        <td>
-                          {(row.minPax ?? "—")} – {(row.maxPax ?? "—")}
-                        </td>
-                        <td>
-                          {row.validities && row.validities.length > 0
-                            ? row.validities.map((v, k) => (
-                                <div key={k} className="small">
-                                  {v.validityFrom || "—"} → {v.validityTo || "—"}
-                                </div>
-                              ))
-                            : <span className="text-muted">Always</span>}
-                        </td>
-                        <td>
-                          {row.isActive
-                            ? <Badge bg="success">Active</Badge>
-                            : <Badge bg="secondary">Inactive</Badge>}
-                        </td>
-                        <td className="text-end pe-3">
-                          <Button size="sm" variant="outline-primary" className="me-2" onClick={() => openEdit(row)}>
-                            <FaEdit />
-                          </Button>
-                          <Button size="sm" variant="outline-danger" onClick={() => handleDelete(row)}>
-                            <FaTrash />
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </Table>
-            </Card.Body>
-          </Card>
+            <Card className="border-0 shadow-sm rounded-4">
+              <Card.Body className="p-0">
+                <Table responsive hover className="mb-0 align-middle">
+                  <thead className="table-light">
+                    <tr>
+                      <th>#</th>
+                      <th>Rate Code</th>
+                      <th>Market</th>
+                      <th>Currency</th>
+                      <th>Base</th>
+                      <th>Child</th>
+                      <th>Infant</th>
+                      <th>Pax</th>
+                      <th>Validity</th>
+                      <th>Active</th>
+                      <th className="text-end pe-3">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading && (
+                      <tr><td colSpan={11} className="text-center text-muted py-4">Loading…</td></tr>
+                    )}
+                    {!loading && rates.length === 0 && (
+                      <tr><td colSpan={11} className="text-center text-muted py-4">No rates yet.</td></tr>
+                    )}
+                    {!loading && rates.map((row, i) => {
+                      const mkt = marketTypes.find((m) => m.id === row.marketTypeId);
+                      return (
+                        <tr key={row.rateId}>
+                          <td>{i + 1}</td>
+                          <td>{row.rateCode || "—"}</td>
+                          <td>{mkt ? (mkt.marketTypeName || mkt.name) : <span className="text-muted">Any</span>}</td>
+                          <td>{row.currency || "AED"}</td>
+                          <td>{row.basePrice ?? "—"}</td>
+                          <td>{row.childPrice ?? "—"}</td>
+                          <td>{row.infantPrice ?? "—"}</td>
+                          <td>
+                            {(row.minPax ?? "—")} – {(row.maxPax ?? "—")}
+                          </td>
+                          <td>
+                            {row.validities && row.validities.length > 0
+                              ? row.validities.map((v, k) => (
+                                  <div key={k} className="small">
+                                    {v.validityFrom || "—"} → {v.validityTo || "—"}
+                                  </div>
+                                ))
+                              : <span className="text-muted">Always</span>}
+                          </td>
+                          <td>
+                            {row.isActive
+                              ? <Badge bg="success">Active</Badge>
+                              : <Badge bg="secondary">Inactive</Badge>}
+                          </td>
+                          <td className="text-end pe-3">
+                            <Button size="sm" variant="outline-primary" className="me-2" onClick={() => openEdit(row)}>
+                              <FaEdit />
+                            </Button>
+                            <Button size="sm" variant="outline-danger" onClick={() => handleDelete(row)}>
+                              <FaTrash />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </Table>
+              </Card.Body>
+            </Card>
+          </div>
         </div>
       </div>
 

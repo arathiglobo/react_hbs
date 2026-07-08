@@ -6,6 +6,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import { FaEdit, FaTrash, FaTimes, FaCheck, FaUndo } from "react-icons/fa";
+import BackButton from "../../components/BackButton";
 
 export default function ItineraryDetails() {
   const [items, setItems] = useState([]);
@@ -299,7 +300,8 @@ export default function ItineraryDetails() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex flex-column flex-sm-row gap-2 justify-content-between align-items-stretch align-items-sm-center">
-              <div>
+              <div className="d-flex align-items-center gap-2">
+                <BackButton fallback="/adminDashboard" />
                 <h4 className="fw-bold text-primary mb-0">Itinerary Details</h4>
                </div>
               <div className="d-flex align-items-center gap-3">

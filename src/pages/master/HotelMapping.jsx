@@ -17,6 +17,7 @@ import Topbar from "../../components/TopBar";
 import Select from "react-select";
 import AsyncSelect from "react-select/async";
 import "../../styles/CityMapping.css";
+import BackButton from "../../components/BackButton";
 
 const HotelMapping = () => {
   const navigate = useNavigate();
@@ -276,7 +277,10 @@ const HotelMapping = () => {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
-          <h3 className="mb-3">Hotel Mapping</h3>
+          <span className="d-flex align-items-center gap-2 mb-3">
+            <BackButton fallback="/adminDashboard" />
+            <h3 className="mb-0">Hotel Mapping</h3>
+          </span>
           <p className="text-muted">
             Map same hotels across countries & cities.
           </p>

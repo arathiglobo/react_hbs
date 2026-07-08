@@ -17,6 +17,7 @@ import Topbar from "../../components/TopBar";
 import AsyncSelect from "react-select/async";
 import { FaUnlink, FaSearch, FaExclamationTriangle } from "react-icons/fa";
 import "../../styles/CityMapping.css";
+import BackButton from "../../components/BackButton";
 
 const UnMappingCity = () => {
   const [loading, setLoading] = useState(false);
@@ -263,7 +264,10 @@ const UnMappingCity = () => {
         <Sidebar />
         <main className="flex-grow-1 p-4">
           <div className="mb-4">
-            <h3 className="fw-bold text-dark mb-1">City Unmapping</h3>
+            <span className="d-flex align-items-center gap-2">
+              <BackButton fallback="/adminDashboard" />
+              <h3 className="fw-bold text-dark mb-1">City Unmapping</h3>
+            </span>
             <p className="text-muted">
               View and remove mapped cities from external API platforms.
             </p>
