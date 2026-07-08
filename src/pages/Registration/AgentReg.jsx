@@ -264,6 +264,10 @@ const AgentReg = () => {
   const [places, setPlaces] = useState([]);
   const [markup, setMarkup] = useState([]);
   const [currency, setCurrency] = useState([]);
+  // Timezones come from the master_timezone table (same public /api/timezone
+  // master /register uses), surfaced as a SearchableSelect for consistency
+  // with the other dropdowns on this form.
+  const [timezones, setTimezones] = useState([]);
   const [formData, setFormData] = useState({
     dateOfBirth: "",
     companyName: "",
@@ -288,6 +292,13 @@ const AgentReg = () => {
     // New agents are registered as Inactive by default (Status field hidden).
     status: "Inactive",
     agentLogo: null,
+    // Trade License + Timezone — mirrors /register (public Register.jsx).
+    tradeLicenseNo: "",
+    /** Raw File object while a new upload is pending; a base64/URL string once loaded from the backend. */
+    tradeLicenseFile: "",
+    tradeLicenseFileName: "",
+    tradeLicenseExpiry: "",
+    timezone: "",
     agentGSTDetailsDTO: {
       agentClassification: "",
       agentGstIn: "",
@@ -339,6 +350,13 @@ const AgentReg = () => {
     // is safe — the backend keeps the stored logo when no new file is
     // uploaded.
     agentLogo: data?.agentLogo || null,
+    // Same "keep the string unless a new File is chosen" contract as
+    // agentLogo above.
+    tradeLicenseNo: data?.tradeLicenseNo || "",
+    tradeLicenseFile: data?.tradeLicenseFile || "",
+    tradeLicenseFileName: "",
+    tradeLicenseExpiry: data?.tradeLicenseExpiry || "",
+    timezone: data?.timezone || "",
     financeManagerName: data?.financeManagerName || "",
     financeManagerContactNo: data?.financeManagerContactNo || "",
     financeManagerEmail: data?.financeManagerEmail || "",
@@ -498,6 +516,29 @@ const AgentReg = () => {
     });
   };
 
+  // Keep the raw File in state — saveAgent/handleEdit convert it to base64
+  // on submit (same contract as agentLogo above).
+  const handleTradeLicenseFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setFormData((prev) => ({ ...prev, tradeLicenseFile: "", tradeLicenseFileName: "" }));
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setValidationErrors((prev) => ({
+        ...prev,
+        tradeLicenseFile: "File too large (max 10 MB).",
+      }));
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      tradeLicenseFile: file,
+      tradeLicenseFileName: file.name,
+    }));
+    setValidationErrors((prev) => ({ ...prev, tradeLicenseFile: "" }));
+  };
+
   const openCreate = () => {
     setEditing(null);
     setBusinessTypeOther(false);
@@ -524,6 +565,11 @@ const AgentReg = () => {
       currency: "",
       status: "Inactive",
       agentLogo: null,
+      tradeLicenseNo: "",
+      tradeLicenseFile: "",
+      tradeLicenseFileName: "",
+      tradeLicenseExpiry: "",
+      timezone: "",
       // GST Details as nested object to match AgentGSTDetailsDTO
       agentGSTDetailsDTO: {
         agentClassification: "",
@@ -676,6 +722,15 @@ const AgentReg = () => {
     }
   };
 
+  const timezoneList = async () => {
+    try {
+      const response = await axiosInstance.get(`/api/timezone`);
+      setTimezones(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      // Silent — dropdown just shows no options if the backend is unreachable.
+    }
+  };
+
   // Debounced server-side country search. Skip the very first fire so we
   // don't double-fetch on mount (the initial countryList() call already
   // populates the dropdown).
@@ -793,6 +848,21 @@ const AgentReg = () => {
         delete agentPayload.agentLogo;
       }
 
+      // Trade license file — same "convert new File, else drop the field so
+      // the backend keeps the existing one" contract as agentLogo above.
+      if (agentPayload.tradeLicenseFile && agentPayload.tradeLicenseFile instanceof File) {
+        try {
+          agentPayload.tradeLicenseFile = await convertToBase64(agentPayload.tradeLicenseFile);
+        } catch (error) {
+          console.error("Error converting trade license file to base64:", error);
+          toast.error("Error processing trade license file");
+          return;
+        }
+      } else {
+        delete agentPayload.tradeLicenseFile;
+      }
+      delete agentPayload.tradeLicenseFileName;
+
       // Ensure numeric fields are properly converted
       if (agentPayload.countryId) {
         agentPayload.countryId = parseInt(agentPayload.countryId);
@@ -873,6 +943,11 @@ const AgentReg = () => {
       agentRegisterstatus: "",
       agentHsncode: "",
       agentLogo: null,
+      tradeLicenseNo: "",
+      tradeLicenseFile: "",
+      tradeLicenseFileName: "",
+      tradeLicenseExpiry: "",
+      timezone: "",
       financeManagerName: "",
       financeManagerContactNo: "",
       financeManagerEmail: "",
@@ -954,6 +1029,7 @@ const AgentReg = () => {
     agentCategoryList();
     markupList();
     currencyList();
+    timezoneList();
   }, []);
 
   // When the agent View page sends the admin back here with `?edit=<id>`,
@@ -1062,6 +1138,8 @@ const AgentReg = () => {
       newErrors.address = "Address is required";
     if (!data.markup) newErrors.markup = "Markup is required";
     if (!data.currency) newErrors.currency = "Currency is required";
+    if (!getStringValue(data.timezone))
+      newErrors.timezone = "Timezone is required";
     // Status field is hidden and system-managed (new agents default to
     // Inactive), so it is no longer a user-required field.
 
@@ -1187,6 +1265,21 @@ const AgentReg = () => {
         // Remove the file object if no file is selected
         delete agentPayload.agentLogo;
       }
+
+      // Trade license file — convert a freshly-picked File to base64;
+      // otherwise drop the field (nothing to upload yet on create).
+      if (agentPayload.tradeLicenseFile && agentPayload.tradeLicenseFile instanceof File) {
+        try {
+          agentPayload.tradeLicenseFile = await convertToBase64(agentPayload.tradeLicenseFile);
+        } catch (error) {
+          console.error("Error converting trade license file to base64:", error);
+          toast.error("Error processing trade license file");
+          return;
+        }
+      } else {
+        delete agentPayload.tradeLicenseFile;
+      }
+      delete agentPayload.tradeLicenseFileName;
 
       // Ensure numeric fields are properly converted
       if (agentPayload.countryId) {
@@ -3002,6 +3095,113 @@ const AgentReg = () => {
                             )}
                           </Form.Group>
                         </Col>
+
+                        {/* Trade License + Timezone — mirrors /register (public Register.jsx) */}
+                        <Row>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>Trade License No</Form.Label>
+                              <Form.Control
+                                value={formData.tradeLicenseNo}
+                                placeholder="Enter trade license number"
+                                maxLength={80}
+                                {...getFormControlProps(
+                                  "tradeLicenseNo",
+                                  (e) =>
+                                    setFormData({
+                                      ...formData,
+                                      tradeLicenseNo: e.target.value,
+                                    }),
+                                  {}
+                                )}
+                              />
+                            </Form.Group>
+                          </Col>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>Trade License Expiry</Form.Label>
+                              <Form.Control
+                                type="date"
+                                value={formData.tradeLicenseExpiry}
+                                {...getFormControlProps(
+                                  "tradeLicenseExpiry",
+                                  (e) =>
+                                    setFormData({
+                                      ...formData,
+                                      tradeLicenseExpiry: e.target.value,
+                                    }),
+                                  {}
+                                )}
+                              />
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                        <Row>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>Trade License File</Form.Label>
+                              <Form.Control
+                                type="file"
+                                accept="application/pdf,image/*"
+                                onChange={isViewMode ? undefined : handleTradeLicenseFile}
+                                disabled={isViewMode}
+                                className={`${validationErrors.tradeLicenseFile ? "is-invalid" : ""} ${isViewMode ? "bg-light" : ""}`}
+                              />
+                              {formData.tradeLicenseFileName && (
+                                <div className="text-muted small mt-1">
+                                  Selected: {formData.tradeLicenseFileName}
+                                </div>
+                              )}
+                              {!formData.tradeLicenseFileName &&
+                                typeof formData.tradeLicenseFile === "string" &&
+                                formData.tradeLicenseFile && (
+                                  <div className="text-muted small mt-1">
+                                    Existing file on record.
+                                  </div>
+                                )}
+                              {validationErrors.tradeLicenseFile && (
+                                <Form.Control.Feedback type="invalid" className="d-block">
+                                  {validationErrors.tradeLicenseFile}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>Timezone</Form.Label>
+                              <SearchableSelect
+                                name="timezone"
+                                value={formData.timezone}
+                                onChange={(e) => {
+                                  setFormData({
+                                    ...formData,
+                                    timezone: e.target.value,
+                                  });
+                                  if (validationErrors.timezone) {
+                                    setValidationErrors((prev) => ({
+                                      ...prev,
+                                      timezone: "",
+                                    }));
+                                  }
+                                }}
+                                placeholder="Search and select timezone"
+                                options={timezones.map((tz) => ({
+                                  id: tz.zoneId,
+                                  name: tz.displayName
+                                    ? `${tz.displayName} (${tz.utcOffset || tz.zoneId})`
+                                    : tz.zoneId,
+                                }))}
+                                isInvalid={!!validationErrors.timezone}
+                                disabled={isViewMode}
+                              />
+                              {validationErrors.timezone && (
+                                <Form.Control.Feedback type="invalid" className="d-block">
+                                  {validationErrors.timezone}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                        </Row>
 
                         {/* Step 4: GST Details (India only) */}
                         {formData.countryId === "1" && (

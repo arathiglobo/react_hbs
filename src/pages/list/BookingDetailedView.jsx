@@ -11,6 +11,10 @@ import {
   Form,
 } from "react-bootstrap";
 import { FaExclamationCircle } from "react-icons/fa";
+import {
+  FaHistory, FaMapMarkerAlt, FaNetworkWired, FaCalendarAlt, FaClock,
+  FaUserAlt, FaPlusCircle, FaCheckCircle, FaSyncAlt, FaTimesCircle,
+} from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
@@ -47,6 +51,18 @@ const BTN_ORANGE = { ...BUTTON_STYLE, backgroundColor: "#f0922b" }; // Resend Ma
 const BTN_ACCENT = { ...BUTTON_STYLE, backgroundColor: "#7c3aed" }; // Booking Remark
 const BTN_NEUTRAL = { ...BUTTON_STYLE, backgroundColor: "#64748b" }; // View / Back / Notes
 const BTN_HISTORY = { ...BUTTON_STYLE, backgroundColor: "#334155" }; // Booking History
+
+// Per-action badge styling for the Booking History modal — colour + icon
+// keyed by the exact label pushed onto `bookingHistory`. Unrecognised
+// actions (shouldn't happen, but keeps the table from breaking) fall back
+// to a neutral slate badge. Mirrors the other dedicated-flow detail views.
+const HISTORY_ACTION_META = {
+  "Booking Created": { bg: "#e6f4ea", fg: "#1e7e34", icon: FaPlusCircle },
+  "Booking Confirmed": { bg: "#e7f1ff", fg: "#1d4ed8", icon: FaCheckCircle },
+  "Booking Reconfirmed": { bg: "#e0f2f1", fg: "#0d9488", icon: FaSyncAlt },
+  "Booking Cancelled": { bg: "#fdecea", fg: "#c0392b", icon: FaTimesCircle },
+};
+const HISTORY_ACTION_FALLBACK = { bg: "#f1f5f9", fg: "#475569", icon: FaHistory };
 
 // Booking types offered by "ADD NEW ITEM" (amendment / sub-booking). Each is
 // launched through its OWN existing create flow with ?parentBookingCode set —
@@ -1189,6 +1205,9 @@ export default function BookingDetailedView() {
         action: "Booking Created",
         at: booking.bookingDate,
         by: creatorLabel,
+        // Captured at create time only — later lifecycle rows show "-".
+        location: booking.bookingLocation,
+        ip: booking.ipAddress,
       });
     }
     if (booking.confirmedDate) {
@@ -2555,56 +2574,196 @@ export default function BookingDetailedView() {
                   show={showHistoryModal}
                   onHide={() => setShowHistoryModal(false)}
                   centered
-                  size="lg"
+                  size="xl"
                   scrollable
+                  contentClassName="hbs-history-modal-content"
                 >
                   <Modal.Header closeButton>
-                    <Modal.Title style={{ fontSize: "1.05rem" }}>
-                      Booking History
-                      {booking?.bookingCode ? ` — ${booking.bookingCode}` : ""}
+                    <Modal.Title
+                      style={{ fontSize: "1.05rem", display: "flex", alignItems: "center", gap: 10 }}
+                    >
+                      <FaHistory size={16} />
+                      <span>
+                        Booking History
+                        {booking?.bookingCode && (
+                          <span style={{ opacity: 0.85, fontWeight: 500 }}>
+                            {` — ${booking.bookingCode}`}
+                          </span>
+                        )}
+                      </span>
                     </Modal.Title>
                   </Modal.Header>
-                  <Modal.Body>
+                  <Modal.Body style={{ backgroundColor: "#f8fafc", padding: "1.25rem 1.5rem" }}>
                     {bookingHistory.length === 0 ? (
-                      <div className="text-muted text-center py-3">
-                        No history available for this booking.
+                      <div className="text-muted text-center py-4">
+                        <FaHistory size={26} style={{ opacity: 0.25, marginBottom: 8 }} />
+                        <div>No history available for this booking.</div>
                       </div>
                     ) : (
-                      <Table
-                        responsive
-                        bordered
-                        hover
-                        size="sm"
-                        className="mb-0"
-                        style={{ fontSize: "0.85rem" }}
+                      <div
+                        style={{
+                          borderRadius: 10,
+                          border: "1px solid #e2e8f0",
+                          boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
+                          backgroundColor: "#fff",
+                        }}
                       >
-                        <thead style={{ backgroundColor: "#f0f0f0" }}>
-                          <tr>
-                            <th style={{ width: "60px" }}>S/N</th>
-                            <th>Action</th>
-                            <th>Performed By</th>
-                            <th>Date</th>
-                            <th>Time</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {bookingHistory.map((ev, idx) => (
-                            <tr key={`${ev.action}-${idx}`}>
-                              <td>{idx + 1}</td>
-                              <td>{ev.action}</td>
-                              <td>{ev.by || "-"}</td>
-                              <td>{formatDate(ev.at)}</td>
-                              <td>{formatTimeOnly(ev.at)}</td>
+                        {/* tableLayout "fixed" + percentage widths: the columns
+                            always share the modal's width, so the popup never
+                            needs a horizontal scrollbar — long values wrap
+                            inside their cell. */}
+                        <table
+                          style={{
+                            width: "100%",
+                            tableLayout: "fixed",
+                            borderCollapse: "collapse",
+                            fontSize: "0.82rem",
+                            marginBottom: 0,
+                          }}
+                        >
+                          <thead>
+                            <tr style={{ backgroundColor: "#f1f5f9" }}>
+                              {[
+                                { label: "S/N", width: "5%" },
+                                { label: "Action", width: "17%" },
+                                { label: "Performed By", icon: FaUserAlt, width: "13%" },
+                                { label: "Location", icon: FaMapMarkerAlt, width: "30%" },
+                                { label: "IP Address", icon: FaNetworkWired, width: "14%" },
+                                { label: "Date", icon: FaCalendarAlt, width: "11%" },
+                                { label: "Time", icon: FaClock, width: "10%" },
+                              ].map((col) => (
+                                <th
+                                  key={col.label}
+                                  style={{
+                                    width: col.width,
+                                    padding: "10px 14px",
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.03em",
+                                    fontSize: "0.72rem",
+                                    fontWeight: 700,
+                                    color: "#475569",
+                                    borderBottom: "1px solid #e2e8f0",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {col.icon ? (
+                                    <span
+                                      style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                                    >
+                                      <col.icon size={11} style={{ opacity: 0.7 }} />
+                                      {col.label}
+                                    </span>
+                                  ) : (
+                                    col.label
+                                  )}
+                                </th>
+                              ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </Table>
+                          </thead>
+                          <tbody>
+                            {bookingHistory.map((ev, idx) => {
+                              const meta =
+                                HISTORY_ACTION_META[ev.action] || HISTORY_ACTION_FALLBACK;
+                              const ActionIcon = meta.icon;
+                              return (
+                                <tr
+                                  key={`${ev.action}-${idx}`}
+                                  style={{ backgroundColor: idx % 2 === 1 ? "#f8fafc" : "#fff" }}
+                                >
+                                  <td
+                                    style={{
+                                      padding: "10px 14px",
+                                      borderBottom: "1px solid #eef2f6",
+                                      color: "#64748b",
+                                    }}
+                                  >
+                                    {idx + 1}
+                                  </td>
+                                  <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>
+                                    <span
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: 6,
+                                        padding: "3px 10px",
+                                        borderRadius: 999,
+                                        backgroundColor: meta.bg,
+                                        color: meta.fg,
+                                        fontWeight: 600,
+                                        fontSize: "0.76rem",
+                                      }}
+                                    >
+                                      <ActionIcon size={10} style={{ flexShrink: 0 }} />
+                                      {ev.action}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>
+                                    {ev.by || "-"}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: "10px 14px",
+                                      borderBottom: "1px solid #eef2f6",
+                                      wordBreak: "break-word",
+                                    }}
+                                  >
+                                    {ev.location ? (
+                                      <span
+                                        style={{ display: "inline-flex", alignItems: "flex-start", gap: 6 }}
+                                      >
+                                        <FaMapMarkerAlt
+                                          size={11}
+                                          style={{ color: "#c0392b", marginTop: 2, flexShrink: 0 }}
+                                        />
+                                        <span>{ev.location}</span>
+                                      </span>
+                                    ) : (
+                                      "-"
+                                    )}
+                                  </td>
+                                  <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>
+                                    {ev.ip ? (
+                                      <span
+                                        style={{
+                                          fontFamily: "'Consolas', 'Courier New', monospace",
+                                          backgroundColor: "#f1f5f9",
+                                          color: "#334155",
+                                          padding: "2px 8px",
+                                          borderRadius: 4,
+                                          fontSize: "0.76rem",
+                                          whiteSpace: "nowrap",
+                                        }}
+                                      >
+                                        {ev.ip}
+                                      </span>
+                                    ) : (
+                                      "-"
+                                    )}
+                                  </td>
+                                  <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>
+                                    {formatDate(ev.at)}
+                                  </td>
+                                  <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>
+                                    {formatTimeOnly(ev.at)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     )}
                   </Modal.Body>
-                  <Modal.Footer>
+                  <Modal.Footer style={{ backgroundColor: "#fff" }}>
                     <Button
                       variant="secondary"
                       onClick={() => setShowHistoryModal(false)}
+                      style={{
+                        borderRadius: 6,
+                        padding: "6px 20px",
+                        fontWeight: 600,
+                        fontSize: "0.85rem",
+                      }}
                     >
                       Close
                     </Button>
