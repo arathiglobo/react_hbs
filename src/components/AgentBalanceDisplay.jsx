@@ -27,8 +27,15 @@ const AgentBalanceDisplay = ({ agentId }) => {
     axiosInstance
       .get(`/api/agent-credit-limit/agent/${agentId}`)
       .then((res) => {
+        // effectiveAvailableCreditLimit = regular available credit + any
+        // currently-Active Temporary Credit Limit. Falls back to
+        // availableCreditLimit for older cached responses.
         if (!cancelled) {
-          setBalance(res?.data?.availableCreditLimit ?? null);
+          setBalance(
+            res?.data?.effectiveAvailableCreditLimit ??
+              res?.data?.availableCreditLimit ??
+              null,
+          );
         }
       })
       .catch(() => {

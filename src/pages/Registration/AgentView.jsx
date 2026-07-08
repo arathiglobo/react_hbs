@@ -768,6 +768,41 @@ const AgentView = () => {
     });
   };
 
+  // Manual Active/Inactive toggle — flips the temporary credit's enabled
+  // flag regardless of its date window (e.g. pre-disable an Upcoming row,
+  // or pause a currently-Active one, without touching its dates).
+  const [tempCreditTogglingId, setTempCreditTogglingId] = useState(null);
+  const handleToggleTempCreditEnabled = async (row) => {
+    const nextEnabled = !row.enabled;
+    setTempCreditTogglingId(row.id);
+    try {
+      await axiosInstance.patch(
+        `/api/agent-credit-limit/temporary/${row.id}/status`,
+        { enabled: nextEnabled }
+      );
+      toast.success(
+        nextEnabled
+          ? "Temporary credit limit activated"
+          : "Temporary credit limit deactivated"
+      );
+      await fetchTempCredits();
+      try {
+        const res = await axiosInstance.get(`/api/agent-credit-limit/agent/${id}`);
+        setEffectiveAvailableCredit(
+          res.data?.effectiveAvailableCreditLimit ?? res.data?.availableCreditLimit ?? null
+        );
+      } catch (_) {
+        /* non-critical refresh */
+      }
+    } catch (e) {
+      toast.error(
+        e.response?.data?.message || "Failed to update temporary credit limit status"
+      );
+    } finally {
+      setTempCreditTogglingId(null);
+    }
+  };
+
   const handleCreditLimitChange = (e) => {
     const { name, value } = e.target;
     setCreditLimitFormData((prev) => ({ ...prev, [name]: value }));
@@ -2119,15 +2154,23 @@ const AgentView = () => {
                                 </td>
                                 <td className="py-2 px-3">{row.remarks || "-"}</td>
                                 <td className="py-2 px-3">
-                                  <span
-                                    className={`badge ${
-                                      row.status === "Active"
-                                        ? "bg-success"
-                                        : "bg-secondary"
-                                    }`}
+                                  <Button
+                                    size="sm"
+                                    variant={
+                                      row.status === "Active" ? "success" : "outline-secondary"
+                                    }
+                                    className="d-inline-flex align-items-center gap-1"
+                                    disabled={tempCreditTogglingId === row.id}
+                                    title={
+                                      row.enabled
+                                        ? "Click to deactivate"
+                                        : "Click to activate"
+                                    }
+                                    onClick={() => handleToggleTempCreditEnabled(row)}
                                   >
+                                    {row.status === "Active" ? <FaToggleOn /> : <FaToggleOff />}
                                     {row.status}
-                                  </span>
+                                  </Button>
                                 </td>
                                 <td className="py-2 px-3">
                                   <div className="d-flex justify-content-center gap-2">

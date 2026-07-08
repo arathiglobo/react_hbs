@@ -774,7 +774,17 @@ const RoomList = ({ force24Hour = false } = {}) => {
     axiosInstance
       .get(`/api/agent-credit-limit/agent/${aId}`)
       .then((res) => {
-        if (!cancelled) setAgentBalance(res?.data?.availableCreditLimit ?? null);
+        // effectiveAvailableCreditLimit = regular available credit + any
+        // currently-Active Temporary Credit Limit (same combined figure the
+        // backend's check-sufficient-credit / booking-create flow use).
+        // Falls back to availableCreditLimit for older cached responses.
+        if (!cancelled) {
+          setAgentBalance(
+            res?.data?.effectiveAvailableCreditLimit ??
+              res?.data?.availableCreditLimit ??
+              null,
+          );
+        }
       })
       .catch(() => {
         if (!cancelled) setAgentBalance(null);

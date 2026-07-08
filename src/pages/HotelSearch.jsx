@@ -436,6 +436,15 @@ export default function HotelSearch({ force24Hour = false } = {}) {
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [nights, setNights] = useState(1);
+  // Longest stay this search form allows. Enforced both when the user types
+  // directly into the Nights field and when they pick a Check-Out date more
+  // than MAX_NIGHTS days after Check-In.
+  const MAX_NIGHTS = 15;
+  const NIGHTS_LIMIT_MESSAGE = `Maximum stay allowed is ${MAX_NIGHTS} nights.`;
+  // Guards the checkIn/checkOut effect below from immediately clearing the
+  // limit error on the render that follows our own auto-corrective
+  // setCheckOut call (see that effect for details).
+  const isAutoCorrectingNights = useRef(false);
   const [agent, setAgent] = useState("");
   const [agentBalance, setAgentBalance] = useState(null);
   const [agentBalanceLoading, setAgentBalanceLoading] = useState(false);
@@ -642,26 +651,58 @@ export default function HotelSearch({ force24Hour = false } = {}) {
 
   useEffect(() => {
     if (checkIn && checkOut) {
+      // Skip the recompute that follows our own corrective setCheckOut call
+      // below — otherwise this second pass would immediately recompute a
+      // within-limit diff and clear the error message before the user sees it.
+      if (isAutoCorrectingNights.current) {
+        isAutoCorrectingNights.current = false;
+        return;
+      }
       const start = new Date(checkIn);
       const end = new Date(checkOut);
       const diff = Math.max(
         1,
         Math.ceil((end - start) / (1000 * 60 * 60 * 24)),
       );
-      setNights(diff);
+      if (diff > MAX_NIGHTS) {
+        const cappedOut = new Date(start);
+        cappedOut.setDate(start.getDate() + MAX_NIGHTS);
+        const iso = new Date(
+          cappedOut.getTime() - cappedOut.getTimezoneOffset() * 60000,
+        )
+          .toISOString()
+          .slice(0, 10);
+        isAutoCorrectingNights.current = true;
+        setNights(MAX_NIGHTS);
+        setCheckOut(iso);
+        setErrors((prev) => ({ ...prev, nights: NIGHTS_LIMIT_MESSAGE }));
+      } else {
+        setNights(diff);
+        clearError("nights");
+      }
     }
   }, [checkIn, checkOut]);
 
   const handleNightsChange = (value) => {
-    const val = Math.max(1, Number(value) || 1);
-    setNights(val);
+    const raw = Math.max(1, Number(value) || 1);
+    const capped = Math.min(raw, MAX_NIGHTS);
+    setNights(capped);
+    if (raw > MAX_NIGHTS) {
+      setErrors((prev) => ({ ...prev, nights: NIGHTS_LIMIT_MESSAGE }));
+    } else {
+      clearError("nights");
+    }
     if (checkIn) {
       const start = new Date(checkIn);
       const out = new Date(start);
-      out.setDate(start.getDate() + val);
+      out.setDate(start.getDate() + capped);
       const iso = new Date(out.getTime() - out.getTimezoneOffset() * 60000)
         .toISOString()
         .slice(0, 10);
+      // Capped means the checkOut we're about to set already reflects
+      // MAX_NIGHTS, so suppress the checkIn/checkOut effect's own recompute
+      // for the same reason as above.
+      if (raw > MAX_NIGHTS) isAutoCorrectingNights.current = true;
       setCheckOut(iso);
     }
   };
@@ -1121,6 +1162,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
     if (!selectedDestination) newErrors.destination = "Destination is required";
     if (!checkIn) newErrors.checkIn = "Check-in date is required";
     if (!checkOut) newErrors.checkOut = "Check-out date is required";
+    if (nights > MAX_NIGHTS) newErrors.nights = NIGHTS_LIMIT_MESSAGE;
     // Agent logins book under themselves (backend forces the agent id and the
     // picker is hidden), so the agent is never set manually — skip this check
     // for them or the search can never pass validation.
@@ -1843,10 +1885,15 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                         className="form-control-modern"
                         type="number"
                         min={1}
-                        max={60}
+                        max={MAX_NIGHTS}
                         value={nights}
                         onChange={(e) => handleNightsChange(e.target.value)}
                       />
+                      {errors.nights && (
+                        <div className="text-danger small mt-1">
+                          {errors.nights}
+                        </div>
+                      )}
                     </Form.Group>
                   </Col>
 

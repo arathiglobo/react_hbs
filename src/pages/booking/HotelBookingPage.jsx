@@ -160,13 +160,23 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
       .get(`/api/agent-credit-limit/agent/${aId}`)
       .then((res) => {
         if (!cancelled) {
-          setAgentAvailableBalance(res?.data?.availableCreditLimit ?? null);
+          // effectiveAvailableCreditLimit = regular available credit + any
+          // currently-Active Temporary Credit Limit — the same combined
+          // figure the backend's check-sufficient-credit / booking-create
+          // flow use, so the Payment Mode selector agrees with what the
+          // Confirm step will actually allow. Falls back to
+          // availableCreditLimit for older cached responses.
+          const combinedBalance =
+            res?.data?.effectiveAvailableCreditLimit ??
+            res?.data?.availableCreditLimit ??
+            null;
+          setAgentAvailableBalance(combinedBalance);
           // Treat the agent as a "Cash Agent" when there is no usable credit
           // available (available balance 0/null) — this covers both agents
           // with no credit facility AND credit agents who've used up their
           // balance. Only a positive available balance counts as a credit
           // agent for the Payment Type rule.
-          const available = Number(res?.data?.availableCreditLimit ?? 0);
+          const available = Number(combinedBalance ?? 0);
           setAgentHasAvailableCredit(
             Number.isFinite(available) && available > 0,
           );
