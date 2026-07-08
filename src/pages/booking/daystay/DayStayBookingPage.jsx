@@ -37,6 +37,50 @@ const PAYMENT_GATEWAYS = [
   { id: "payu", name: "PayU", desc: "Cards & wallets" },
 ];
 
+// Reverse-geocode browser coordinates to a readable address for the
+// Booking History audit trail. Tries OpenStreetMap Nominatim first
+// (street-level detail), then BigDataCloud (locality-level, keyless) —
+// both free, CORS-enabled endpoints. Returns null when neither responds
+// so the caller keeps its IP-derived fallback. Mirrors
+// SeniorCitizenBookingPage / StudentBookingPage / GovEmployeeBookingPage.
+async function reverseGeocode(lat, lon) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=16&addressdetails=1`,
+      { headers: { Accept: "application/json" } }
+    );
+    if (res.ok) {
+      const a = (await res.json())?.address || {};
+      const parts = [
+        a.road,
+        a.neighbourhood || a.suburb,
+        a.village || a.town || a.city || a.municipality,
+        a.state,
+        a.postcode,
+        a.country,
+      ].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255); // DB column is VARCHAR(255)
+    }
+  } catch {
+    // fall through to BigDataCloud
+  }
+  try {
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`
+    );
+    if (res.ok) {
+      const d = await res.json();
+      const parts = [d.locality, d.city, d.principalSubdivision, d.countryName].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255);
+    }
+  } catch {
+    // give up — caller keeps the IP-based fallback
+  }
+  return null;
+}
+
 // Same list HotelBookingPage renders — day-stay uses the identical vocabulary
 // so the FE / BE / reporting stack sees a consistent set of request tags.
 const SPECIAL_REQUEST_OPTIONS = [
@@ -131,6 +175,51 @@ export default function DayStayBookingPage() {
 
   const [remarks, setRemarks] = useState("");
   const [specialRequests, setSpecialRequests] = useState([]);
+
+  // Client location snapshot for the booking-history audit trail, resolved
+  // once on page load and sent on the save payload:
+  //   • Location — browser geolocation (GPS/WiFi) reverse-geocoded to a
+  //     precise readable address; the coarse IP-derived city is only the
+  //     fallback when the permission is denied or the lookup times out.
+  // The IP Address column is NOT resolved here — browsers can only see the
+  // shared public/NAT IP, so the backend stamps each system's unique IPv4
+  // from the save request itself. Mirrors SeniorCitizenBookingPage /
+  // StudentBookingPage / GovEmployeeBookingPage.
+  const [clientNetwork, setClientNetwork] = useState({
+    bookingLocation: null,
+  });
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("https://ipapi.co/json/")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((info) => {
+        if (cancelled || !info) return;
+        setClientNetwork((prev) => ({
+          // Never clobber a precise geolocation result that already landed.
+          bookingLocation:
+            prev.bookingLocation ||
+            [info.city, info.region, info.country_name].filter(Boolean).join(", ") ||
+            null,
+        }));
+      })
+      .catch(() => {});
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async ({ coords }) => {
+          const precise = await reverseGeocode(coords.latitude, coords.longitude);
+          if (!cancelled && precise) {
+            setClientNetwork({ bookingLocation: precise });
+          }
+        },
+        () => {}, // denied / unavailable — keep the IP-derived fallback
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+      );
+    }
+
+    return () => { cancelled = true; };
+  }, []);
   const [bookingConfirmation, setBookingConfirmation] = useState(
     "Book & Voucher",
   );
@@ -833,6 +922,10 @@ export default function DayStayBookingPage() {
 
         remarks: remarks || "",
         specialRequests,
+        // Location column in the detail view's Booking History. The IP
+        // Address column is stamped server-side from the save request
+        // (each system's own IPv4), so it is not sent here.
+        bookingLocation: clientNetwork.bookingLocation,
         // Tourism dirhams isn't collected on day-stay yet but the field
         // is on the shape for parity with HotelBookingPage's payload.
         tourismDirhams: 0,
