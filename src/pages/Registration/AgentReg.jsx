@@ -10,6 +10,7 @@ import {
   Col,
   Alert,
 } from "react-bootstrap";
+import Select from "react-select";
 import { useNavigate, useLocation } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
@@ -247,11 +248,6 @@ const AgentReg = () => {
     };
   };
 
-  // Lock core company-registration fields once the agent already exists (edit
-  // view). `editing` is null on the Create form, so those fields stay fully
-  // editable there. Only the company identity / registration details are
-  // frozen — contact, address, user and other info remain editable.
-  const lockCompanyFields = Boolean(editing?.companyName);
   const [agentCategoryies, setAgentCategoryies] = useState([]);
   const [countries, setCountries] = useState([]);
   // Cached full record for the currently-selected country so the label keeps
@@ -2435,7 +2431,6 @@ const AgentReg = () => {
                             value={formData.shortName}
                             placeholder="Enter short name"
                             isInvalid={!!validationErrors.shortName}
-                            disabled={lockCompanyFields}
                             {...getFormControlProps(
                               "shortName",
                               (e) =>
@@ -2530,7 +2525,7 @@ const AgentReg = () => {
                           )}
                         </Form.Group>
                       </Col>
-                      <Col md={3}>
+                      <Col md={4}>
                         <Form.Group className="mb-3">
                           <Form.Label>Date of Birth</Form.Label>
                           <Form.Control
@@ -2563,7 +2558,7 @@ const AgentReg = () => {
                           )}
                         </Form.Group>
                       </Col>
-                      <Col md={3}>
+                      <Col md={4}>
                         <Form.Group className="mb-3">
                           <Form.Label>
                             Business Type <span className="text-danger">*</span>
@@ -2573,7 +2568,6 @@ const AgentReg = () => {
                               submit / validation logic is untouched. */}
                           <Form.Select
                             name="businessTypeSelect"
-                            disabled={lockCompanyFields}
                             value={
                               businessTypeOther
                                 ? "Others"
@@ -2619,7 +2613,6 @@ const AgentReg = () => {
                             <Form.Control
                               type="text"
                               name="businessType"
-                              disabled={lockCompanyFields}
                               value={formData.businessType}
                               onChange={(e) => {
                                 setFormData({
@@ -2648,12 +2641,12 @@ const AgentReg = () => {
                           )}
                         </Form.Group>
                       </Col>
-                      <Col md={3}>
+                      <Col md={4}>
                         <Form.Group className="mb-3">
                           <Form.Label>Company Type</Form.Label>
                           <Form.Select
                             value={formData.agentCategoryId}
-                            onChange={(isViewMode || lockCompanyFields) ? undefined : (e) => {
+                            onChange={isViewMode ? undefined : (e) => {
                               setFormData({
                                 ...formData,
                                 agentCategoryId: e.target.value,
@@ -2670,9 +2663,9 @@ const AgentReg = () => {
                               validationErrors.agentCategoryId
                                 ? "is-invalid"
                                 : ""
-                            } ${(isViewMode || lockCompanyFields) ? "bg-light" : ""}`}
+                            } ${isViewMode ? "bg-light" : ""}`}
                             isInvalid={!!validationErrors.agentCategoryId}
-                            disabled={isViewMode || lockCompanyFields}
+                            disabled={isViewMode}
                           >
                             <option value="">Select company type</option>
                             {agentCategoryies.map((agent) => (
@@ -2693,14 +2686,13 @@ const AgentReg = () => {
                       </Col>
                     </Row>
                     <Row>
-                      <Col md={3}>
+                      <Col md={4}>
                         <Form.Group className="mb-3">
                           <Form.Label>Company Code</Form.Label>
                           <Form.Control
                             value={formData.companyCode}
                             placeholder="Enter company code"
                             isInvalid={!!validationErrors.companyCode}
-                            disabled={lockCompanyFields}
                             {...getFormControlProps(
                               "companyCode",
                               (e) =>
@@ -2722,7 +2714,7 @@ const AgentReg = () => {
                           )}
                         </Form.Group>
                       </Col>
-                      <Col md={3}>
+                      <Col md={4}>
                         <Form.Group className="mb-3">
                           <Form.Label>Agent URL</Form.Label>
                           <Form.Control
@@ -2750,7 +2742,7 @@ const AgentReg = () => {
                           )}
                         </Form.Group>
                       </Col>
-                      <Col md={3}>
+                      <Col md={4}>
                         <Form.Group className="mb-3">
                           <Form.Label>Company Logo</Form.Label>
                           <Form.Control
@@ -2796,12 +2788,129 @@ const AgentReg = () => {
                         </Form.Group>
                       </Col>
                     </Row>
+                    <Row>
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Markup</Form.Label>
+                          <Form.Select
+                            value={formData.markup}
+                            className={`form-input ${
+                              validationErrors.markup ? "is-invalid" : ""
+                            } ${isViewMode ? "bg-light" : ""}`}
+                            onChange={isViewMode ? undefined : (e) => {
+                              setFormData({
+                                ...formData,
+                                markup: e.target.value,
+                              });
+                              // Clear validation error when user makes selection
+                              if (validationErrors.markup) {
+                                setValidationErrors(prev => ({
+                                  ...prev,
+                                  markup: ""
+                                }));
+                              }
+                            }}
+                            disabled={isViewMode}
+                          >
+                            <option value="">Select Markup</option>
+                            {Array.isArray(markup) &&
+                              markup.map((mar) => (
+                                <option key={mar.id} value={mar.id}>
+                                  {mar.name}
+                                </option>
+                              ))}
+                          </Form.Select>
+                          {validationErrors.markup && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.markup}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Currency</Form.Label>
+                          <Form.Select
+                            value={formData.currency}
+                            className={`form-input ${
+                              validationErrors.currency ? "is-invalid" : ""
+                            } ${isViewMode ? "bg-light" : ""}`}
+                            onChange={isViewMode ? undefined : (e) => {
+                              setFormData({
+                                ...formData,
+                                currency: e.target.value,
+                              });
+                              // Clear validation error when user makes selection
+                              if (validationErrors.currency) {
+                                setValidationErrors(prev => ({
+                                  ...prev,
+                                  currency: ""
+                                }));
+                              }
+                            }}
+                            disabled={isViewMode}
+                          >
+                            <option value="">Select Currency</option>
+                            {Array.isArray(currency) &&
+                              currency.map((curr) => (
+                                <option
+                                  key={curr.currencyId}
+                                  value={curr.currencyId}
+                                >
+                                  {curr.name}
+                                </option>
+                              ))}
+                          </Form.Select>
+                          {validationErrors.currency && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.currency}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+                      </Col>
+                      {/* Status field hidden by request — system-managed
+                          (new agents default to Inactive). Code retained. */}
+                      {false && (
+                      <Col md={3}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Status</Form.Label>
+                          <Form.Select
+                            value={formData.status}
+                            className={`form-input ${
+                              validationErrors.status ? "is-invalid" : ""
+                            } ${isViewMode ? "bg-light" : ""}`}
+                            onChange={isViewMode ? undefined : (e) => {
+                              setFormData({
+                                ...formData,
+                                status: e.target.value,
+                              });
+                              // Clear validation error when user makes selection
+                              if (validationErrors.status) {
+                                setValidationErrors(prev => ({
+                                  ...prev,
+                                  status: ""
+                                }));
+                              }
+                            }}
+                            disabled={isViewMode}
+                          >
+                            <option value="">SELECT</option>
+                            <option value="Active">Active</option>
+                            <option value="Inactive">Inactive</option>
+                          </Form.Select>
+                          {validationErrors.status && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.status}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+                      </Col>
+                      )}
+                    </Row>
                   </Card.Body>
                 </Card>
 
-                <Row>
-                  <Col md={8}>
-                    <Card className="mb-3">
+                <Card className="mb-3">
                       <Card.Header>Contact Details</Card.Header>
                       <Card.Body>
                         <Row>
@@ -3168,14 +3277,45 @@ const AgentReg = () => {
                           </Col>
                           <Col md={6}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Timezone</Form.Label>
-                              <SearchableSelect
+                              <Form.Label>
+                                Timezone <span className="text-danger">*</span>
+                              </Form.Label>
+                              {/* react-select (same as /register's Register.jsx) instead of
+                                  the plain SearchableSelect — gives us a proper dropdown
+                                  chevron and, via menuPortalTarget, renders the option list
+                                  into <body> so it isn't clipped/squashed by the modal. */}
+                              <Select
+                                inputId="agentReg-timezone"
                                 name="timezone"
-                                value={formData.timezone}
-                                onChange={(e) => {
+                                classNamePrefix="reg-select"
+                                isSearchable
+                                isClearable
+                                isDisabled={isViewMode}
+                                placeholder="Search timezone..."
+                                menuPortalTarget={typeof document !== "undefined" ? document.body : null}
+                                menuPosition="fixed"
+                                menuPlacement="auto"
+                                maxMenuHeight={280}
+                                options={timezones.map((tz) => ({
+                                  value: tz.zoneId,
+                                  label: tz.displayName
+                                    ? `${tz.displayName} (${tz.utcOffset || tz.zoneId})`
+                                    : tz.zoneId,
+                                }))}
+                                value={
+                                  timezones
+                                    .map((tz) => ({
+                                      value: tz.zoneId,
+                                      label: tz.displayName
+                                        ? `${tz.displayName} (${tz.utcOffset || tz.zoneId})`
+                                        : tz.zoneId,
+                                    }))
+                                    .find((opt) => String(opt.value) === String(formData.timezone)) || null
+                                }
+                                onChange={(opt) => {
                                   setFormData({
                                     ...formData,
-                                    timezone: e.target.value,
+                                    timezone: opt ? String(opt.value) : "",
                                   });
                                   if (validationErrors.timezone) {
                                     setValidationErrors((prev) => ({
@@ -3184,20 +3324,27 @@ const AgentReg = () => {
                                     }));
                                   }
                                 }}
-                                placeholder="Search and select timezone"
-                                options={timezones.map((tz) => ({
-                                  id: tz.zoneId,
-                                  name: tz.displayName
-                                    ? `${tz.displayName} (${tz.utcOffset || tz.zoneId})`
-                                    : tz.zoneId,
-                                }))}
-                                isInvalid={!!validationErrors.timezone}
-                                disabled={isViewMode}
+                                styles={{
+                                  control: (base, state) => ({
+                                    ...base,
+                                    minHeight: 38,
+                                    borderRadius: 6,
+                                    borderColor: validationErrors.timezone
+                                      ? "#dc3545"
+                                      : (state.isFocused ? "#86b7fe" : "#ced4da"),
+                                    boxShadow: state.isFocused
+                                      ? "0 0 0 0.25rem rgba(13,110,253,.25)"
+                                      : "none",
+                                    fontSize: "0.95rem",
+                                  }),
+                                  menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+                                  menu: (b) => ({ ...b, zIndex: 9999 }),
+                                }}
                               />
                               {validationErrors.timezone && (
-                                <Form.Control.Feedback type="invalid" className="d-block">
+                                <div className="invalid-feedback d-block">
                                   {validationErrors.timezone}
-                                </Form.Control.Feedback>
+                                </div>
                               )}
                             </Form.Group>
                           </Col>
@@ -3284,7 +3431,7 @@ const AgentReg = () => {
                                     value={
                                       formData.agentGSTDetailsDTO.agentGstIn
                                     }
-                                    onChange={(isViewMode || lockCompanyFields) ? undefined : handleGstinChange}
+                                    onChange={isViewMode ? undefined : handleGstinChange}
                                     placeholder="Enter 15-digit GSTIN"
                                     className={`form-input ${
                                       validationErrors[
@@ -3292,7 +3439,7 @@ const AgentReg = () => {
                                       ] || gstinError
                                         ? "is-invalid"
                                         : ""
-                                    } ${(isViewMode || lockCompanyFields) ? "bg-light" : ""}`}
+                                    } ${isViewMode ? "bg-light" : ""}`}
                                     isInvalid={
                                       !!(
                                         validationErrors[
@@ -3302,7 +3449,6 @@ const AgentReg = () => {
                                     }
                                     maxLength={15}
                                     readOnly={isViewMode}
-                                    disabled={lockCompanyFields}
                                   />
                                   {(validationErrors[
                                     "agentGSTDetailsDTO.agentGstIn"
@@ -3926,127 +4072,6 @@ const AgentReg = () => {
                       </Card.Body>
                     </Card>
                     )}
-                  </Col>
-
-                  <Col md={4}>
-                    <Card className="mb-3">
-                      <Card.Header>Settings</Card.Header>
-                      <Card.Body>
-                        <Form.Group className="mb-3">
-                          <Form.Label>Markup</Form.Label>
-                          <Form.Select
-                            value={formData.markup}
-                            className={`form-input ${
-                              validationErrors.markup ? "is-invalid" : ""
-                            } ${isViewMode ? "bg-light" : ""}`}
-                            onChange={isViewMode ? undefined : (e) => {
-                              setFormData({
-                                ...formData,
-                                markup: e.target.value,
-                              });
-                              // Clear validation error when user makes selection
-                              if (validationErrors.markup) {
-                                setValidationErrors(prev => ({
-                                  ...prev,
-                                  markup: ""
-                                }));
-                              }
-                            }}
-                            disabled={isViewMode}
-                          >
-                            <option value="">Select Markup</option>
-                            {Array.isArray(markup) &&
-                              markup.map((mar) => (
-                                <option key={mar.id} value={mar.id}>
-                                  {mar.name}
-                                </option>
-                              ))}
-                          </Form.Select>
-                          {validationErrors.markup && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.markup}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                        <Form.Group className="mb-3">
-                          <Form.Label>Currency</Form.Label>
-                          <Form.Select
-                            value={formData.currency}
-                            className={`form-input ${
-                              validationErrors.currency ? "is-invalid" : ""
-                            } ${isViewMode ? "bg-light" : ""}`}
-                            onChange={isViewMode ? undefined : (e) => {
-                              setFormData({
-                                ...formData,
-                                currency: e.target.value,
-                              });
-                              // Clear validation error when user makes selection
-                              if (validationErrors.currency) {
-                                setValidationErrors(prev => ({
-                                  ...prev,
-                                  currency: ""
-                                }));
-                              }
-                            }}
-                            disabled={isViewMode}
-                          >
-                            <option value="">Select Currency</option>
-                            {Array.isArray(currency) &&
-                              currency.map((curr) => (
-                                <option
-                                  key={curr.currencyId}
-                                  value={curr.currencyId}
-                                >
-                                  {curr.name}
-                                </option>
-                              ))}
-                          </Form.Select>
-                          {validationErrors.currency && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.currency}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                        {/* Status field hidden by request — system-managed
-                            (new agents default to Inactive). Code retained. */}
-                        {false && (
-                        <Form.Group className="mb-3">
-                          <Form.Label>Status</Form.Label>
-                          <Form.Select
-                            value={formData.status}
-                            className={`form-input ${
-                              validationErrors.status ? "is-invalid" : ""
-                            } ${isViewMode ? "bg-light" : ""}`}
-                            onChange={isViewMode ? undefined : (e) => {
-                              setFormData({
-                                ...formData,
-                                status: e.target.value,
-                              });
-                              // Clear validation error when user makes selection
-                              if (validationErrors.status) {
-                                setValidationErrors(prev => ({
-                                  ...prev,
-                                  status: ""
-                                }));
-                              }
-                            }}
-                            disabled={isViewMode}
-                          >
-                            <option value="">SELECT</option>
-                            <option value="Active">Active</option>
-                            <option value="Inactive">Inactive</option>
-                          </Form.Select>
-                          {validationErrors.status && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.status}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                        )}
-                      </Card.Body>
-                    </Card>
-                  </Col>
-                </Row>
                 {error && (
                   <Form.Control.Feedback type="invalid">
                     {error}
