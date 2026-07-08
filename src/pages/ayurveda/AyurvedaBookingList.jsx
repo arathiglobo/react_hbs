@@ -8,7 +8,7 @@ import {
   Pagination,
   Form,
   InputGroup,
-  Modal,
+  Modal, 
   Row,
   Col,
 } from "react-bootstrap";
