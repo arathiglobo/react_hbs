@@ -103,12 +103,6 @@ const RoomList = ({ force24Hour = false } = {}) => {
   const [policyList, setPolicyList] = useState(null);
   const [viewMode, setViewMode] = useState("grid");
   const [agentBalance, setAgentBalance] = useState(null);
-  // Per-agent Card payment gate (Agent.cardPaymentEnabled). Combined with
-  // agentBalance below it decides whether "no viable payment path" is
-  // possible for this agent, in which case Book Now is blocked here on
-  // the room list instead of on the booking page.
-  const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
-  const [showNoPaymentPathModal, setShowNoPaymentPathModal] = useState(false);
   // Filter state
   const [refundFilter, setRefundFilter] = useState({
     refundable: false,
@@ -375,17 +369,7 @@ const RoomList = ({ force24Hour = false } = {}) => {
     // raise a modal — and once the user clicks OK, we re-enter this
     // function with skipCreditCheck=true so the rest of the flow runs
     // unchanged (booking page can then handle online payment).
-    //
-    // Scenario-3 short-circuit: if the agent ALSO has Card payment
-    // disabled, there is no viable payment path — surface the "Booking
-    // Cannot Be Completed" modal here and DON'T proceed to the booking
-    // page. Otherwise fall through to the existing "Insufficient Credit"
-    // popup that lets the user continue and pay online.
     if (!skipCreditCheck && isInsufficientBalance(rate.roomRateBasedOnRoomCount)) {
-      if (!agentCardPaymentEnabled) {
-        setShowNoPaymentPathModal(true);
-        return;
-      }
       setPendingBookingFn(() => () => handleBooking(rate, true));
       setShowInsufficientCreditModal(true);
       return;
@@ -577,16 +561,7 @@ const RoomList = ({ force24Hour = false } = {}) => {
       // as `combinedSelectedRate.rate` below. On insufficient credit we
       // raise the same popup the single-room flow uses; OK re-enters
       // this function with skipCreditCheck=true to continue normally.
-      //
-      // Scenario-3 short-circuit (mirrors handleBooking): if Card
-      // payment is also disabled, block here on the room list with the
-      // "Booking Cannot Be Completed" modal instead of sending the user
-      // to a booking page they can't actually complete.
       if (!skipCreditCheck && isInsufficientBalance(sum("totalRate"))) {
-        if (!agentCardPaymentEnabled) {
-          setShowNoPaymentPathModal(true);
-          return;
-        }
         setPendingBookingFn(() => () => handleProceedBooking(true));
         setShowInsufficientCreditModal(true);
         return;
@@ -788,33 +763,6 @@ const RoomList = ({ force24Hour = false } = {}) => {
       })
       .catch(() => {
         if (!cancelled) setAgentBalance(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [roomData]);
-
-  // Fetch the per-agent "Card" payment-mode gate (Agent.cardPaymentEnabled)
-  // so we can block booking here on the room list when there is neither
-  // credit nor card available. Falls back to false on missing agent id /
-  // failed fetch so a hiccup never silently allows the booking to proceed
-  // into a scenario the booking page would then reject.
-  useEffect(() => {
-    const aId = roomData?.payload?.agentId;
-    if (!aId) {
-      setAgentCardPaymentEnabled(false);
-      return;
-    }
-    let cancelled = false;
-    axiosInstance
-      .get(`/api/agent/${aId}`)
-      .then((res) => {
-        if (!cancelled) {
-          setAgentCardPaymentEnabled(!!res?.data?.cardPaymentEnabled);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setAgentCardPaymentEnabled(false);
       });
     return () => {
       cancelled = true;
@@ -1094,37 +1042,6 @@ const RoomList = ({ force24Hour = false } = {}) => {
                   }}
                 >
                   OK, continue
-                </Button>
-              </Modal.Footer>
-            </Modal>
-            {/* No Payment Path Modal — hard block for scenario 3
-                (insufficient credit AND Card payment disabled). Shown
-                right here on the room list so the user doesn't get
-                pushed into a booking page they can't complete. */}
-            <Modal
-              show={showNoPaymentPathModal}
-              onHide={() => setShowNoPaymentPathModal(false)}
-              centered
-              backdrop="static"
-              keyboard={false}
-            >
-              <Modal.Header closeButton>
-                <Modal.Title>Booking Cannot Be Completed</Modal.Title>
-              </Modal.Header>
-              <Modal.Body>
-                <p className="mb-0">
-                  You do not have sufficient credit limit, and online card
-                  payment is not enabled for your account. Therefore, this
-                  booking cannot be completed. Please contact your account
-                  manager or administrator to enable a payment method.
-                </p>
-              </Modal.Body>
-              <Modal.Footer>
-                <Button
-                  variant="secondary"
-                  onClick={() => setShowNoPaymentPathModal(false)}
-                >
-                  OK
                 </Button>
               </Modal.Footer>
             </Modal>

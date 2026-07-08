@@ -1341,12 +1341,15 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                             slot.nonRefundable === "true";
                           const slotRefundDeadlineLabel =
                             !slotNonRefundable && cancellationDeadline
-                              ? cancellationDeadline.toLocaleDateString(
+                              ? cancellationDeadline.toLocaleString(
                                   "en-GB",
                                   {
                                     day: "2-digit",
                                     month: "short",
                                     year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    hour12: true,
                                   },
                                 )
                               : null;
@@ -1751,8 +1754,8 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                         {hasSufficientCredit === false &&
                           agentCardPaymentEnabled && (
                             <div className="text-danger small mt-2 fw-semibold">
-                              Insufficient credit limit. Please proceed with
-                              online card payment to complete your booking.
+                              Insufficient credit. Pay with credit card before
+                              time limit and reconfirm.
                             </div>
                           )}
                       </>

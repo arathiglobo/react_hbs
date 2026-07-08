@@ -989,8 +989,8 @@ export default function LongStayBookingPage() {
                         {hasSufficientCredit === false &&
                           agentCardPaymentEnabled && (
                             <div className="text-danger small mt-2 fw-semibold">
-                              Insufficient credit limit. Please proceed with
-                              online card payment to complete your booking.
+                              Insufficient credit. Pay with credit card before
+                              time limit and reconfirm.
                             </div>
                           )}
                       </>
