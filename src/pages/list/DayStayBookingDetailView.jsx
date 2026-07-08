@@ -296,8 +296,15 @@ export default function DayStayBookingDetailView() {
   const [bookingNotes, setBookingNotes] = useState([]);
   const [notesLoading, setNotesLoading] = useState(false);
 
-  // Resend Mail to Agent
+  // Resend Mail to Agent — clicking the button opens a preview modal that
+  // shows the Voucher PDF in an iframe and lets the admin confirm / edit
+  // the agent's email before the /resend-mail POST fires.
   const [resendingMail, setResendingMail] = useState(false);
+  const [showResendMailModal, setShowResendMailModal] = useState(false);
+  const [resendMailPdfUrl, setResendMailPdfUrl] = useState("");
+  const [resendMailEmail, setResendMailEmail] = useState("");
+  const [resendMailEmailError, setResendMailEmailError] = useState("");
+  const [resendMailPreparing, setResendMailPreparing] = useState(false);
 
   // Amendment links — cross-supplier children recorded via
   // /api/booking-amendment-link/parent/{code}. Fetched separately from
@@ -979,13 +986,74 @@ export default function DayStayBookingDetailView() {
     });
   })();
 
-  const resendMailToAgent = async () => {
+  /**
+   * Open the RESEND MAIL preview modal. Two parallel calls hydrate the
+   * modal so the admin sees exactly what's about to go out:
+   *   1) /pdf?type=VOUCHER — the same PDF the mail will attach,
+   *      rendered inside an <iframe>.
+   *   2) /api/agent/{agentId} — pulls the agent's personal email so the
+   *      recipient field starts pre-filled and editable.
+   * Errors on either lookup surface as an inline modal warning but do
+   * not block the admin from typing an address manually.
+   */
+  const openResendMailModal = async () => {
+    setResendMailPdfUrl("");
+    setResendMailEmail("");
+    setResendMailEmailError("");
+    setShowResendMailModal(true);
+    setResendMailPreparing(true);
+    try {
+      const agentId = selected?.agentId
+        ? Number(String(selected.agentId).trim())
+        : null;
+      const [docRes, agentRes] = await Promise.all([
+        axiosInstance
+          .get(`/api/day-stay-bookings/${bookingId}/pdf`, {
+            params: { type: "VOUCHER" },
+          })
+          .catch(() => null),
+        agentId
+          ? axiosInstance.get(`/api/agent/${agentId}`).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+      if (
+        docRes?.data?.status === "SUCCESS" &&
+        docRes.data.pdfUrl
+      ) {
+        setResendMailPdfUrl(docRes.data.pdfUrl);
+      }
+      const a = agentRes?.data || {};
+      const email =
+        a.personalEmail ||
+        a.financeManagerEmail ||
+        a.gmEmail ||
+        "";
+      setResendMailEmail(email);
+    } finally {
+      setResendMailPreparing(false);
+    }
+  };
+
+  const submitResendMail = async () => {
+    const email = (resendMailEmail || "").trim();
+    if (!email) {
+      setResendMailEmailError("Recipient email is required");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setResendMailEmailError("Enter a valid email address");
+      return;
+    }
+    setResendMailEmailError("");
     try {
       setResendingMail(true);
       await axiosInstance.post(
-        `/api/day-stay-booking/${bookingId}/resend-mail`
+        `/api/day-stay-booking/${bookingId}/resend-mail`,
+        null,
+        { params: { email } },
       );
       toast.success("Mail resent to agent successfully!");
+      setShowResendMailModal(false);
     } catch (error) {
       toast.error(
         error.response?.data?.message ||
@@ -1792,10 +1860,14 @@ export default function DayStayBookingDetailView() {
 
                   <button
                     style={BTN_ORANGE}
-                    onClick={resendMailToAgent}
-                    disabled={resendingMail}
+                    onClick={openResendMailModal}
+                    disabled={resendingMail || resendMailPreparing}
                   >
-                    {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
+                    {resendingMail
+                      ? "SENDING..."
+                      : resendMailPreparing
+                      ? "LOADING..."
+                      : "RESEND MAIL TO AGENT"}
                   </button>
 
                   {!isAgentRole && (
@@ -2968,6 +3040,106 @@ export default function DayStayBookingDetailView() {
               <>
                 <FaPaperPlane className="me-1" /> Send
               </>
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Resend Mail to Agent — preview + send ────────────────────────
+          Opens on the RESEND MAIL TO AGENT button click. Shows the Voucher
+          PDF the mail will attach inside an <iframe>, and an editable email
+          field pre-populated with the agent's on-file address. The Send
+          button POSTs /api/day-stay-booking/:id/resend-mail?email=…
+          and toasts success/failure. */}
+      <Modal
+        show={showResendMailModal}
+        onHide={() => (resendingMail ? null : setShowResendMailModal(false))}
+        size="xl"
+        centered
+        backdrop="static"
+        keyboard={!resendingMail}
+      >
+        <Modal.Header closeButton={!resendingMail}>
+          <Modal.Title style={{ fontSize: "1rem", fontWeight: 700 }}>
+            Resend Voucher to Agent
+            {selected?.bookingCode ? ` — ${selected.bookingCode}` : ""}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ padding: 0, height: "80vh" }}>
+          {resendMailPreparing ? (
+            <div className="d-flex align-items-center justify-content-center h-100">
+              <Spinner animation="border" variant="primary" />
+              <span className="ms-2 text-muted">
+                Preparing voucher attachment…
+              </span>
+            </div>
+          ) : resendMailPdfUrl ? (
+            <iframe
+              key={resendMailPdfUrl}
+              src={resendMailPdfUrl}
+              title="Voucher preview"
+              style={{
+                width: "100%",
+                height: "100%",
+                border: "none",
+                display: "block",
+              }}
+            />
+          ) : (
+            <div className="d-flex align-items-center justify-content-center h-100 text-muted small px-4 text-center">
+              Voucher preview unavailable. You can still send the mail — the
+              backend will regenerate the attachment on dispatch.
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer className="d-flex align-items-center gap-2 flex-wrap">
+          <Form.Group
+            className="flex-grow-1 me-2"
+            style={{ minWidth: 260, maxWidth: 420 }}
+          >
+            <Form.Label
+              className="fw-semibold mb-1"
+              style={{ fontSize: "0.8rem" }}
+            >
+              Agent Email <span className="text-danger">*</span>
+            </Form.Label>
+            <Form.Control
+              type="email"
+              size="sm"
+              placeholder="name@example.com"
+              value={resendMailEmail}
+              onChange={(e) => {
+                setResendMailEmail(e.target.value);
+                if (resendMailEmailError) setResendMailEmailError("");
+              }}
+              isInvalid={!!resendMailEmailError}
+              disabled={resendingMail || resendMailPreparing}
+            />
+            <Form.Control.Feedback type="invalid">
+              {resendMailEmailError}
+            </Form.Control.Feedback>
+          </Form.Group>
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            onClick={() => setShowResendMailModal(false)}
+            disabled={resendingMail}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={submitResendMail}
+            disabled={resendingMail || resendMailPreparing}
+          >
+            {resendingMail ? (
+              <>
+                <Spinner size="sm" className="me-2" />
+                Sending…
+              </>
+            ) : (
+              "Send"
             )}
           </Button>
         </Modal.Footer>

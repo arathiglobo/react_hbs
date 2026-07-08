@@ -36,6 +36,7 @@ import {
   FaCalendarCheck,
   FaSyncAlt,
   FaChartBar,
+  FaPrayingHands,
 } from "react-icons/fa";
 import { MdWifiOff } from "react-icons/md";
 import TopBar from "../components/TopBar";
@@ -194,14 +195,14 @@ export default function AgentDashboard() {
     { label: "Transfers",          tone: "teal",   icon: <FaCar />,            to: "/new-booking/cab" },
     { label: "Chauffeur & Limo",   tone: "purple", icon: <FaTaxi />,           to: "/new-booking/scheffer-driver" },
     { label: "Tours & Activity",   tone: "green",  icon: <FaGlobeAmericas />,  to: "/new-booking/tours-and-activities" },
-    { label: "Offline",            tone: "gray",   icon: <MdWifiOff />,        to: "/new-booking/offline-search" },
     { label: "Restaurant",         tone: "orange", icon: <FaUtensils />,       to: "/new-booking/restaurant" },
     { label: "Honeymoon Package",  tone: "pink",   icon: <FaHeart />,          to: "/new-booking/honeymoon" },
-    { label: "Meet & Space",       tone: "purple", icon: <FaUserFriends />,    to: "/new-booking/meet-and-space" },
-    { label: "Govt",               tone: "blue",   icon: <FaPlane />,          to: "/new-booking/gov-employee" },
+    { label: "Meeting Space",      tone: "purple", icon: <FaUserFriends />,    to: "/new-booking/meet-and-space" },
+    { label: "Govt/Airline/Hoteliers",               tone: "blue",   icon: <FaPlane />,          to: "/new-booking/gov-employee" },
     { label: "Ayurveda",           tone: "green",  icon: <FaLeaf />,           to: "/new-booking/ayurveda" },
     { label: "Student",            tone: "purple", icon: <FaGraduationCap />,  to: "/new-booking/student" },
     { label: "Senior Citizen",     tone: "orange", icon: <FaUserAlt />,        to: "/new-booking/senior-citizen" },
+    { label: "Religious",     tone: "orange", icon: <FaPrayingHands/>,        to: "/new-booking/senior-citizen" },
   ];
 
   const manageActions = [
@@ -330,6 +331,11 @@ export default function AgentDashboard() {
           line-height: 1.2;
           cursor: pointer;
           transition: border-color .15s, box-shadow .15s, transform .15s, background-color .15s;
+        }
+        .agent-qa-tile > span:last-child {
+          max-width: 100%;
+          overflow-wrap: anywhere;
+          word-break: break-word;
         }
         .agent-qa-tile:hover {
           box-shadow: 0 10px 20px rgba(0,0,0,.10);
