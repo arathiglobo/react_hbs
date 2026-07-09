@@ -1131,15 +1131,14 @@ export default function HotelSearch({ force24Hour = false } = {}) {
     }
   }, [starRating, hotelType, channelType, sortBy]);
 
-  // After a fresh search, jump the viewport to the results so the operator
-  // sees them without having to scroll past the search card. Fires once the
-  // first batch of hotels actually arrives.
+  // After a fresh search, jump the viewport to the very top of the page so
+  // the operator sees the "Hotel / Accommodation" heading and summary strip
+  // first, not just the results list further down. Fires once the first
+  // batch of hotels actually arrives.
   useEffect(() => {
     if (!hasSearched || !isInitialResultsLoaded) return;
     const id = window.setTimeout(() => {
-      if (resultsRef.current) {
-        resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }, 50);
     return () => window.clearTimeout(id);
   }, [hasSearched, isInitialResultsLoaded]);
@@ -1558,6 +1557,22 @@ export default function HotelSearch({ force24Hour = false } = {}) {
         <Sidebar />
 
         <main className="flex-grow-1 p-4 hs-page">
+          {/* ── Results-page heading ──
+              Shown once actual results have arrived (not just on search
+              click — avoids flashing the heading during the loading/poll
+              phase), above the search summary / form. Stays visible whether
+              the summary is collapsed or re-expanded via "Modify Search". */}
+          {showResultsDuringPolling && (
+            <div className="hs-page-heading">
+              <h3 className="hs-page-heading-title">
+                {force24Hour ? "24 Hours" : "Accommodation"}
+              </h3>
+              {/* <p className="hs-page-heading-subtitle">
+                Browse and book hotels, resorts, villas and apartments.
+              </p> */}
+            </div>
+          )}
+
           {/* ── Collapsed sticky search summary strip ──
               Shown once results are on screen. "Modify Search" re-expands
               the full form by flipping isEditingSearch. */}
@@ -1605,15 +1620,21 @@ export default function HotelSearch({ force24Hour = false } = {}) {
           <div className="d-flex gap-3 align-items-start mb-2 hs-search-ads-row">
            <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <Card className="shadow-sm rounded-xl search-card-modern bg-white h-100">
-            <Card.Body className="p-4">
-              <div className="mb-4 text-start d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <Card.Body className={force24Hour ? "p-4 hs24-compact" : "p-4"}>
+              <div
+                className={
+                  force24Hour
+                    ? "mb-2 text-start d-flex justify-content-between align-items-start flex-wrap gap-2"
+                    : "mb-4 text-start d-flex justify-content-between align-items-start flex-wrap gap-2"
+                }
+              >
                 <div>
                   <h2 className="fw-semibold text-primary mb-1">
                     {force24Hour
-                      ? "24 Hour Check-In Booking"
+                      ? "24 Hours"
                       : "Find Your Perfect Stay"}
                   </h2>
-                  <p className="text-muted">
+                  <p className={force24Hour ? "text-muted mb-0" : "text-muted"}>
                     {force24Hour
                       ? "Pick a check-in time — we'll filter to hotels with an active 24-hour config and apply the per-hotel uplift."
                       : "Discover amazing hotels and exclusive deals"}
@@ -1638,9 +1659,12 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                   Row totals stay 12 on lg so the form keeps its
                   responsive feel — first row holds Agent + Destination +
                   Nationality (4/4/4), second row holds Check-In + Nights +
-                  Check-Out + Rooms & Guests (3/2/3/4).
+                  Check-Out + Rooms & Guests (3/2/3/4). On the 24-hour route,
+                  Check-In Time + Check-Out Time join Rooms & Guests as a
+                  third 4/4/4 row (rather than a separate Row below) purely
+                  to cut vertical space so the form fits on screen.
                 */}
-                <Row className="g-4">
+                <Row className={force24Hour ? "g-3" : "g-4"}>
                   {/* 1. Agent */}
                   {!isAgentRole && (
                   <Col lg={4} md={6}>
@@ -1968,6 +1992,55 @@ export default function HotelSearch({ force24Hour = false } = {}) {
 </Button>
                     </div>
                   </Col>
+
+                  {/* ── 24 Hour Check-In time inputs ─────────────────────
+                      Rendered ONLY on the dedicated 24-hour route
+                      (force24Hour=true). Kept as plain columns in the same
+                      Row as the rest of the criteria (rather than a
+                      separate Row below) purely so the form fits on screen
+                      without extra scrolling — same fields, same handlers,
+                      just laid out more compactly. The 24-hour
+                      post-processing / probe call still only runs when
+                      is24HourCheckin is true, which on the normal route
+                      stays false for the entire lifetime of the page. */}
+                  {force24Hour && (
+                    <>
+                      <Col lg={4} md={6}>
+                        <Form.Group>
+                          <Form.Label className="fw-semibold text-dark">
+                            Check-In Time (24-hour)
+                          </Form.Label>
+                          <Form.Control
+                            style={{ height: "42px" }}
+                            className="form-control-modern"
+                            type="time"
+                            value={checkInTime24}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setCheckInTime24(v);
+                              // Auto-bump check-out to the same time → 24h later.
+                              // User can override afterwards.
+                              if (v) setCheckOutTime24(v);
+                            }}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col lg={4} md={6}>
+                        <Form.Group>
+                          <Form.Label className="fw-semibold text-dark">
+                            Check-Out Time
+                          </Form.Label>
+                          <Form.Control
+                            style={{ height: "42px" }}
+                            className="form-control-modern"
+                            type="time"
+                            value={checkOutTime24}
+                            onChange={(e) => setCheckOutTime24(e.target.value)}
+                          />
+                        </Form.Group>
+                      </Col>
+                    </>
+                  )}
                 </Row>
 
                 {roomsOpen && (
@@ -1978,46 +2051,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                   </Row>
                 )}
 
-                {/* ── 24 Hour Check-In time inputs ─────────────────────
-                    Rendered ONLY on the dedicated 24-hour route
-                    (force24Hour=true). The legacy in-page toggle has
-                    been removed — the normal /new-booking/hotel route
-                    is now a clean normal-booking flow. The 24-hour
-                    post-processing / probe call still only runs when
-                    is24HourCheckin is true, which on the normal route
-                    stays false for the entire lifetime of the page. */}
-                {force24Hour && (
-                  <Row className="g-3 mt-2 align-items-end">
-                    <Col md={6}>
-                      <Form.Label className="fw-semibold text-dark mb-1">
-                        Check-In Time (24-hour)
-                      </Form.Label>
-                      <Form.Control
-                        type="time"
-                        value={checkInTime24}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setCheckInTime24(v);
-                          // Auto-bump check-out to the same time → 24h later.
-                          // User can override afterwards.
-                          if (v) setCheckOutTime24(v);
-                        }}
-                      />
-                    </Col>
-                    <Col md={6}>
-                      <Form.Label className="fw-semibold text-dark mb-1">
-                        Check-Out Time
-                      </Form.Label>
-                      <Form.Control
-                        type="time"
-                        value={checkOutTime24}
-                        onChange={(e) => setCheckOutTime24(e.target.value)}
-                      />
-                    </Col>
-                  </Row>
-                )}
-
-                <Row className="mt-3">
+                <Row className={force24Hour ? "mt-2" : "mt-3"}>
                   <Col className="d-flex justify-content-center gap-3">
                     <Button
                       type="submit"
@@ -2038,8 +2072,8 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                         <>
                           <FaSearch className="me-2" />
                           {force24Hour
-                            ? "SEARCH 24-HOUR STAYS"
-                            : "SEARCH HOTELS"}
+                            ? "SEARCH"
+                            : "SEARCH"}
                         </>
                       )}
                     </Button>

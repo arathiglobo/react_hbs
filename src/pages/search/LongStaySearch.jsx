@@ -669,15 +669,14 @@ export default function LongStaySearch() {
     }
   }, [starRating, hotelType, channelType, sortBy]);
 
-  // After a fresh search, jump the viewport to the results so the operator
-  // sees them without having to scroll past the search card. Fires once the
-  // first batch of hotels actually arrives.
+  // After a fresh search, jump the viewport to the very top of the page so
+  // the operator sees the "Long Stay" heading and summary strip first, not
+  // just the results list further down. Fires once the first batch of
+  // hotels actually arrives.
   useEffect(() => {
     if (!hasSearched || !hasSearchResult) return;
     const id = window.setTimeout(() => {
-      if (resultsRef.current) {
-        resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }, 50);
     return () => window.clearTimeout(id);
   }, [hasSearched, hasSearchResult]);
@@ -975,6 +974,16 @@ export default function LongStaySearch() {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4 hs-page">
+          {/* ── Results-page heading ──
+              Shown once actual results have arrived (not just on search
+              click), above the search summary / form. Matches the heading
+              on /new-booking/hotel. */}
+          {hasResultsView && (
+            <div className="hs-page-heading">
+              <h3 className="hs-page-heading-title">Long Stay</h3>
+            </div>
+          )}
+
           {/* ── Collapsed sticky search summary strip ──
               Shown once results are on screen. "Modify Search" re-expands
               the full form by flipping isEditingSearch. */}
@@ -1765,7 +1774,17 @@ export default function LongStaySearch() {
                                             hotelCode: hotel.hotelCode || "",
                                             hotelId: Number(hotel.hotelCode),
                                             nationality: nationalityCode,
-                                            agentId: String(agent),
+                                            // Agent logins never populate
+                                            // `agent` (the picker is hidden
+                                            // for them), so fall back to
+                                            // their own resolved id —
+                                            // otherwise /long-stay-room-list's
+                                            // "Available Balance" (keyed off
+                                            // this field) has no agent id to
+                                            // look up.
+                                            agentId: String(
+                                              isAgentRole ? selfAgentId : agent,
+                                            ),
                                             apiId: 1,
                                             rooms: roomsPayload,
                                             // Optional "Booking Done By"

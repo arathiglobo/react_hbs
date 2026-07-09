@@ -1208,6 +1208,11 @@ export default function DayStayBookingPage() {
         <Sidebar />
         <main className="content-wrapper py-4">
           <Container fluid="xl">
+            {/* Day Stay route heading — UI only, mirrors the heading shown
+                on /new-booking/day-stay once results arrive. */}
+            <div className="hs-page-heading">
+              <h3 className="hs-page-heading-title">Day Stay</h3>
+            </div>
             {/* Agent Available Balance — top-right red strip. Same as
                 HotelBookingPage. */}
             {agentAvailableBalance != null && (

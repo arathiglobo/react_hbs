@@ -630,12 +630,7 @@ export default function DayStaySearch() {
       );
       setResults(Array.isArray(res.data) ? res.data : []);
       setTimeout(() => {
-        if (resultsRef.current) {
-          resultsRef.current.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-          });
-        }
+        window.scrollTo({ top: 0, behavior: "smooth" });
       }, 0);
     } catch (err) {
       console.error(err);
@@ -657,6 +652,16 @@ export default function DayStaySearch() {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4 hs-page">
+          {/* ── Results-page heading ──
+              Shown once the search has actually finished (not just on
+              click), above the search summary / form. Matches the heading
+              on /new-booking/hotel. */}
+          {hasSearched && !isLoading && (
+            <div className="hs-page-heading">
+              <h3 className="hs-page-heading-title">Day Stay</h3>
+            </div>
+          )}
+
           {/* ── Collapsed sticky search summary strip ──
               Shown once results are on screen. "Modify Search" re-expands
               the full form by flipping isEditingSearch. */}
@@ -1670,7 +1675,13 @@ export default function DayStaySearch() {
                                       checkOutTime: cEnd,
                                       windowStart: cStart,
                                       windowEnd: cEnd,
-                                      agentId: agent,
+                                      // Agent logins never populate `agent`
+                                      // (the picker is hidden for them), so
+                                      // fall back to their own resolved id —
+                                      // otherwise /day-stay-room-list's
+                                      // "Available Balance" (keyed off this
+                                      // field) has no agent id to look up.
+                                      agentId: isAgentRole ? selfAgentId : agent,
                                       // Optional "Booking Done By" selection
                                       // — null when the user skipped it.
                                       employeeId:

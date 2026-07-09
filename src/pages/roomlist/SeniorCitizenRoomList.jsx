@@ -656,6 +656,11 @@ export default function SeniorCitizenRoomList() {
           style={{ minWidth: 0, overflowX: "hidden" }}
         >
           <div className="container-fluid" style={{ paddingTop: "10px" }}>
+            {/* Senior Citizen route heading — UI only, mirrors the heading
+                shown on /new-booking/senior-citizen once results arrive. */}
+            <div className="hs-page-heading">
+              <h3 className="hs-page-heading-title">Senior Citizen</h3>
+            </div>
             {/* Top toolbar: Back to Search + agent balance — mirrors
                 RoomList.jsx so the two flows share the same header polish. */}
             <div className="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">

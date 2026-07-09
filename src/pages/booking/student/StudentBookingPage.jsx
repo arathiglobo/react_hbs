@@ -934,6 +934,11 @@ export default function StudentBookingPage() {
                   Price Details + Action bar
               Behavior (verification flow, validation, submit handler,
               modal, payload) is preserved bit-for-bit. */}
+          {/* Student route heading — UI only, mirrors the heading shown
+              on /new-booking/student once results arrive. */}
+          <div className="hs-page-heading">
+            <h3 className="hs-page-heading-title">Student</h3>
+          </div>
           <div className="d-flex justify-content-between align-items-center mb-2">
             <Button
               variant="outline-secondary"

@@ -840,6 +840,11 @@ export default function SeniorCitizenBookingPage() {
         <Sidebar />
         <main className="content-wrapper py-4">
           <Container fluid="xl">
+            {/* Senior Citizen route heading — UI only, mirrors the heading
+                shown on /new-booking/senior-citizen once results arrive. */}
+            <div className="hs-page-heading">
+              <h3 className="hs-page-heading-title">Senior Citizen</h3>
+            </div>
             {agentAvailableBalance != null && (
               <div className="d-flex justify-content-end mb-2">
                 <span className="fw-bold" style={{ color: "#dc3545", fontSize: "0.95rem" }}>

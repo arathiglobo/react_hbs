@@ -553,6 +553,16 @@ export default function LastMinuteBookingPage() {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4 hs-page">
+          {/* ── Results-page heading ──
+              Shown once actual results have arrived (not just on search
+              click), above the search summary / form. Mirrors the heading
+              on /new-booking/hotel. */}
+          {!!results && (
+            <div className="hs-page-heading">
+              <h3 className="hs-page-heading-title">Last Minute</h3>
+            </div>
+          )}
+
           {/* ── Collapsed sticky search summary strip ──
               Shown once results are on screen. "Modify Search" re-expands
               the full form by flipping isEditingSearch. */}
@@ -899,7 +909,11 @@ export default function LastMinuteBookingPage() {
                 checkOut,
                 rooms,
                 nationality: selectedNationality,
-                agent,
+                // Agent logins never populate `agent` (the picker is hidden
+                // for them), so fall back to their own resolved id —
+                // otherwise /last-minute-room-list's "Available Balance"
+                // (keyed off this field) never has an agent id to look up.
+                agent: isAgentRole ? selfAgentId : agent,
                 // Optional "Booking Done By Employee" selection.
                 // null when the user skipped the dropdown.
                 employeeId: selectedEmployee?.value || null,

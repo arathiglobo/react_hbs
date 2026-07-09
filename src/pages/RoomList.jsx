@@ -960,6 +960,14 @@ const RoomList = ({ force24Hour = false } = {}) => {
           style={{ minWidth: 0, overflowX: "hidden" }}
         >
           <div className="container-fluid" style={{ paddingTop: "10px" }}>
+            {/* Results-page heading — UI only, mirrors the heading shown
+                on /new-booking/hotel (or /new-booking/hotel-24hr) once
+                results arrive. */}
+            <div className="hs-page-heading">
+              <h3 className="hs-page-heading-title">
+                {force24Hour ? "24 Hours" : "Accommodation"}
+              </h3>
+            </div>
             {/* Top toolbar: Back to Search + agent balance */}
             <div className="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
               <Button

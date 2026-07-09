@@ -10,6 +10,7 @@ import {
   Col,
   Alert,
 } from "react-bootstrap";
+import Select from "react-select";
 import { useNavigate, useLocation } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
@@ -247,11 +248,6 @@ const AgentReg = () => {
     };
   };
 
-  // Lock core company-registration fields once the agent already exists (edit
-  // view). `editing` is null on the Create form, so those fields stay fully
-  // editable there. Only the company identity / registration details are
-  // frozen — contact, address, user and other info remain editable.
-  const lockCompanyFields = Boolean(editing?.companyName);
   const [agentCategoryies, setAgentCategoryies] = useState([]);
   const [countries, setCountries] = useState([]);
   // Cached full record for the currently-selected country so the label keeps
@@ -264,6 +260,10 @@ const AgentReg = () => {
   const [places, setPlaces] = useState([]);
   const [markup, setMarkup] = useState([]);
   const [currency, setCurrency] = useState([]);
+  // Timezones come from the master_timezone table (same public /api/timezone
+  // master /register uses), surfaced as a SearchableSelect for consistency
+  // with the other dropdowns on this form.
+  const [timezones, setTimezones] = useState([]);
   const [formData, setFormData] = useState({
     dateOfBirth: "",
     companyName: "",
@@ -288,6 +288,13 @@ const AgentReg = () => {
     // New agents are registered as Inactive by default (Status field hidden).
     status: "Inactive",
     agentLogo: null,
+    // Trade License + Timezone — mirrors /register (public Register.jsx).
+    tradeLicenseNo: "",
+    /** Raw File object while a new upload is pending; a base64/URL string once loaded from the backend. */
+    tradeLicenseFile: "",
+    tradeLicenseFileName: "",
+    tradeLicenseExpiry: "",
+    timezone: "",
     agentGSTDetailsDTO: {
       agentClassification: "",
       agentGstIn: "",
@@ -339,6 +346,13 @@ const AgentReg = () => {
     // is safe — the backend keeps the stored logo when no new file is
     // uploaded.
     agentLogo: data?.agentLogo || null,
+    // Same "keep the string unless a new File is chosen" contract as
+    // agentLogo above.
+    tradeLicenseNo: data?.tradeLicenseNo || "",
+    tradeLicenseFile: data?.tradeLicenseFile || "",
+    tradeLicenseFileName: "",
+    tradeLicenseExpiry: data?.tradeLicenseExpiry || "",
+    timezone: data?.timezone || "",
     financeManagerName: data?.financeManagerName || "",
     financeManagerContactNo: data?.financeManagerContactNo || "",
     financeManagerEmail: data?.financeManagerEmail || "",
@@ -498,6 +512,29 @@ const AgentReg = () => {
     });
   };
 
+  // Keep the raw File in state — saveAgent/handleEdit convert it to base64
+  // on submit (same contract as agentLogo above).
+  const handleTradeLicenseFile = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setFormData((prev) => ({ ...prev, tradeLicenseFile: "", tradeLicenseFileName: "" }));
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setValidationErrors((prev) => ({
+        ...prev,
+        tradeLicenseFile: "File too large (max 10 MB).",
+      }));
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      tradeLicenseFile: file,
+      tradeLicenseFileName: file.name,
+    }));
+    setValidationErrors((prev) => ({ ...prev, tradeLicenseFile: "" }));
+  };
+
   const openCreate = () => {
     setEditing(null);
     setBusinessTypeOther(false);
@@ -524,6 +561,11 @@ const AgentReg = () => {
       currency: "",
       status: "Inactive",
       agentLogo: null,
+      tradeLicenseNo: "",
+      tradeLicenseFile: "",
+      tradeLicenseFileName: "",
+      tradeLicenseExpiry: "",
+      timezone: "",
       // GST Details as nested object to match AgentGSTDetailsDTO
       agentGSTDetailsDTO: {
         agentClassification: "",
@@ -676,6 +718,15 @@ const AgentReg = () => {
     }
   };
 
+  const timezoneList = async () => {
+    try {
+      const response = await axiosInstance.get(`/api/timezone`);
+      setTimezones(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      // Silent — dropdown just shows no options if the backend is unreachable.
+    }
+  };
+
   // Debounced server-side country search. Skip the very first fire so we
   // don't double-fetch on mount (the initial countryList() call already
   // populates the dropdown).
@@ -793,6 +844,21 @@ const AgentReg = () => {
         delete agentPayload.agentLogo;
       }
 
+      // Trade license file — same "convert new File, else drop the field so
+      // the backend keeps the existing one" contract as agentLogo above.
+      if (agentPayload.tradeLicenseFile && agentPayload.tradeLicenseFile instanceof File) {
+        try {
+          agentPayload.tradeLicenseFile = await convertToBase64(agentPayload.tradeLicenseFile);
+        } catch (error) {
+          console.error("Error converting trade license file to base64:", error);
+          toast.error("Error processing trade license file");
+          return;
+        }
+      } else {
+        delete agentPayload.tradeLicenseFile;
+      }
+      delete agentPayload.tradeLicenseFileName;
+
       // Ensure numeric fields are properly converted
       if (agentPayload.countryId) {
         agentPayload.countryId = parseInt(agentPayload.countryId);
@@ -873,6 +939,11 @@ const AgentReg = () => {
       agentRegisterstatus: "",
       agentHsncode: "",
       agentLogo: null,
+      tradeLicenseNo: "",
+      tradeLicenseFile: "",
+      tradeLicenseFileName: "",
+      tradeLicenseExpiry: "",
+      timezone: "",
       financeManagerName: "",
       financeManagerContactNo: "",
       financeManagerEmail: "",
@@ -954,6 +1025,7 @@ const AgentReg = () => {
     agentCategoryList();
     markupList();
     currencyList();
+    timezoneList();
   }, []);
 
   // When the agent View page sends the admin back here with `?edit=<id>`,
@@ -1062,6 +1134,8 @@ const AgentReg = () => {
       newErrors.address = "Address is required";
     if (!data.markup) newErrors.markup = "Markup is required";
     if (!data.currency) newErrors.currency = "Currency is required";
+    if (!getStringValue(data.timezone))
+      newErrors.timezone = "Timezone is required";
     // Status field is hidden and system-managed (new agents default to
     // Inactive), so it is no longer a user-required field.
 
@@ -1187,6 +1261,21 @@ const AgentReg = () => {
         // Remove the file object if no file is selected
         delete agentPayload.agentLogo;
       }
+
+      // Trade license file — convert a freshly-picked File to base64;
+      // otherwise drop the field (nothing to upload yet on create).
+      if (agentPayload.tradeLicenseFile && agentPayload.tradeLicenseFile instanceof File) {
+        try {
+          agentPayload.tradeLicenseFile = await convertToBase64(agentPayload.tradeLicenseFile);
+        } catch (error) {
+          console.error("Error converting trade license file to base64:", error);
+          toast.error("Error processing trade license file");
+          return;
+        }
+      } else {
+        delete agentPayload.tradeLicenseFile;
+      }
+      delete agentPayload.tradeLicenseFileName;
 
       // Ensure numeric fields are properly converted
       if (agentPayload.countryId) {
@@ -2342,7 +2431,6 @@ const AgentReg = () => {
                             value={formData.shortName}
                             placeholder="Enter short name"
                             isInvalid={!!validationErrors.shortName}
-                            disabled={lockCompanyFields}
                             {...getFormControlProps(
                               "shortName",
                               (e) =>
@@ -2437,7 +2525,7 @@ const AgentReg = () => {
                           )}
                         </Form.Group>
                       </Col>
-                      <Col md={3}>
+                      <Col md={4}>
                         <Form.Group className="mb-3">
                           <Form.Label>Date of Birth</Form.Label>
                           <Form.Control
@@ -2470,7 +2558,7 @@ const AgentReg = () => {
                           )}
                         </Form.Group>
                       </Col>
-                      <Col md={3}>
+                      <Col md={4}>
                         <Form.Group className="mb-3">
                           <Form.Label>
                             Business Type <span className="text-danger">*</span>
@@ -2480,7 +2568,6 @@ const AgentReg = () => {
                               submit / validation logic is untouched. */}
                           <Form.Select
                             name="businessTypeSelect"
-                            disabled={lockCompanyFields}
                             value={
                               businessTypeOther
                                 ? "Others"
@@ -2526,7 +2613,6 @@ const AgentReg = () => {
                             <Form.Control
                               type="text"
                               name="businessType"
-                              disabled={lockCompanyFields}
                               value={formData.businessType}
                               onChange={(e) => {
                                 setFormData({
@@ -2555,12 +2641,12 @@ const AgentReg = () => {
                           )}
                         </Form.Group>
                       </Col>
-                      <Col md={3}>
+                      <Col md={4}>
                         <Form.Group className="mb-3">
                           <Form.Label>Company Type</Form.Label>
                           <Form.Select
                             value={formData.agentCategoryId}
-                            onChange={(isViewMode || lockCompanyFields) ? undefined : (e) => {
+                            onChange={isViewMode ? undefined : (e) => {
                               setFormData({
                                 ...formData,
                                 agentCategoryId: e.target.value,
@@ -2577,9 +2663,9 @@ const AgentReg = () => {
                               validationErrors.agentCategoryId
                                 ? "is-invalid"
                                 : ""
-                            } ${(isViewMode || lockCompanyFields) ? "bg-light" : ""}`}
+                            } ${isViewMode ? "bg-light" : ""}`}
                             isInvalid={!!validationErrors.agentCategoryId}
-                            disabled={isViewMode || lockCompanyFields}
+                            disabled={isViewMode}
                           >
                             <option value="">Select company type</option>
                             {agentCategoryies.map((agent) => (
@@ -2600,14 +2686,13 @@ const AgentReg = () => {
                       </Col>
                     </Row>
                     <Row>
-                      <Col md={3}>
+                      <Col md={4}>
                         <Form.Group className="mb-3">
                           <Form.Label>Company Code</Form.Label>
                           <Form.Control
                             value={formData.companyCode}
                             placeholder="Enter company code"
                             isInvalid={!!validationErrors.companyCode}
-                            disabled={lockCompanyFields}
                             {...getFormControlProps(
                               "companyCode",
                               (e) =>
@@ -2629,7 +2714,7 @@ const AgentReg = () => {
                           )}
                         </Form.Group>
                       </Col>
-                      <Col md={3}>
+                      <Col md={4}>
                         <Form.Group className="mb-3">
                           <Form.Label>Agent URL</Form.Label>
                           <Form.Control
@@ -2657,7 +2742,7 @@ const AgentReg = () => {
                           )}
                         </Form.Group>
                       </Col>
-                      <Col md={3}>
+                      <Col md={4}>
                         <Form.Group className="mb-3">
                           <Form.Label>Company Logo</Form.Label>
                           <Form.Control
@@ -2703,12 +2788,129 @@ const AgentReg = () => {
                         </Form.Group>
                       </Col>
                     </Row>
+                    <Row>
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Markup</Form.Label>
+                          <Form.Select
+                            value={formData.markup}
+                            className={`form-input ${
+                              validationErrors.markup ? "is-invalid" : ""
+                            } ${isViewMode ? "bg-light" : ""}`}
+                            onChange={isViewMode ? undefined : (e) => {
+                              setFormData({
+                                ...formData,
+                                markup: e.target.value,
+                              });
+                              // Clear validation error when user makes selection
+                              if (validationErrors.markup) {
+                                setValidationErrors(prev => ({
+                                  ...prev,
+                                  markup: ""
+                                }));
+                              }
+                            }}
+                            disabled={isViewMode}
+                          >
+                            <option value="">Select Markup</option>
+                            {Array.isArray(markup) &&
+                              markup.map((mar) => (
+                                <option key={mar.id} value={mar.id}>
+                                  {mar.name}
+                                </option>
+                              ))}
+                          </Form.Select>
+                          {validationErrors.markup && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.markup}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Currency</Form.Label>
+                          <Form.Select
+                            value={formData.currency}
+                            className={`form-input ${
+                              validationErrors.currency ? "is-invalid" : ""
+                            } ${isViewMode ? "bg-light" : ""}`}
+                            onChange={isViewMode ? undefined : (e) => {
+                              setFormData({
+                                ...formData,
+                                currency: e.target.value,
+                              });
+                              // Clear validation error when user makes selection
+                              if (validationErrors.currency) {
+                                setValidationErrors(prev => ({
+                                  ...prev,
+                                  currency: ""
+                                }));
+                              }
+                            }}
+                            disabled={isViewMode}
+                          >
+                            <option value="">Select Currency</option>
+                            {Array.isArray(currency) &&
+                              currency.map((curr) => (
+                                <option
+                                  key={curr.currencyId}
+                                  value={curr.currencyId}
+                                >
+                                  {curr.name}
+                                </option>
+                              ))}
+                          </Form.Select>
+                          {validationErrors.currency && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.currency}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+                      </Col>
+                      {/* Status field hidden by request — system-managed
+                          (new agents default to Inactive). Code retained. */}
+                      {false && (
+                      <Col md={3}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Status</Form.Label>
+                          <Form.Select
+                            value={formData.status}
+                            className={`form-input ${
+                              validationErrors.status ? "is-invalid" : ""
+                            } ${isViewMode ? "bg-light" : ""}`}
+                            onChange={isViewMode ? undefined : (e) => {
+                              setFormData({
+                                ...formData,
+                                status: e.target.value,
+                              });
+                              // Clear validation error when user makes selection
+                              if (validationErrors.status) {
+                                setValidationErrors(prev => ({
+                                  ...prev,
+                                  status: ""
+                                }));
+                              }
+                            }}
+                            disabled={isViewMode}
+                          >
+                            <option value="">SELECT</option>
+                            <option value="Active">Active</option>
+                            <option value="Inactive">Inactive</option>
+                          </Form.Select>
+                          {validationErrors.status && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.status}
+                            </Form.Control.Feedback>
+                          )}
+                        </Form.Group>
+                      </Col>
+                      )}
+                    </Row>
                   </Card.Body>
                 </Card>
 
-                <Row>
-                  <Col md={8}>
-                    <Card className="mb-3">
+                <Card className="mb-3">
                       <Card.Header>Contact Details</Card.Header>
                       <Card.Body>
                         <Row>
@@ -3003,6 +3205,151 @@ const AgentReg = () => {
                           </Form.Group>
                         </Col>
 
+                        {/* Trade License + Timezone — mirrors /register (public Register.jsx) */}
+                        <Row>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>Trade License No</Form.Label>
+                              <Form.Control
+                                value={formData.tradeLicenseNo}
+                                placeholder="Enter trade license number"
+                                maxLength={80}
+                                {...getFormControlProps(
+                                  "tradeLicenseNo",
+                                  (e) =>
+                                    setFormData({
+                                      ...formData,
+                                      tradeLicenseNo: e.target.value,
+                                    }),
+                                  {}
+                                )}
+                              />
+                            </Form.Group>
+                          </Col>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>Trade License Expiry</Form.Label>
+                              <Form.Control
+                                type="date"
+                                value={formData.tradeLicenseExpiry}
+                                {...getFormControlProps(
+                                  "tradeLicenseExpiry",
+                                  (e) =>
+                                    setFormData({
+                                      ...formData,
+                                      tradeLicenseExpiry: e.target.value,
+                                    }),
+                                  {}
+                                )}
+                              />
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                        <Row>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>Trade License File</Form.Label>
+                              <Form.Control
+                                type="file"
+                                accept="application/pdf,image/*"
+                                onChange={isViewMode ? undefined : handleTradeLicenseFile}
+                                disabled={isViewMode}
+                                className={`${validationErrors.tradeLicenseFile ? "is-invalid" : ""} ${isViewMode ? "bg-light" : ""}`}
+                              />
+                              {formData.tradeLicenseFileName && (
+                                <div className="text-muted small mt-1">
+                                  Selected: {formData.tradeLicenseFileName}
+                                </div>
+                              )}
+                              {!formData.tradeLicenseFileName &&
+                                typeof formData.tradeLicenseFile === "string" &&
+                                formData.tradeLicenseFile && (
+                                  <div className="text-muted small mt-1">
+                                    Existing file on record.
+                                  </div>
+                                )}
+                              {validationErrors.tradeLicenseFile && (
+                                <Form.Control.Feedback type="invalid" className="d-block">
+                                  {validationErrors.tradeLicenseFile}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>
+                                Timezone <span className="text-danger">*</span>
+                              </Form.Label>
+                              {/* react-select (same as /register's Register.jsx) instead of
+                                  the plain SearchableSelect — gives us a proper dropdown
+                                  chevron and, via menuPortalTarget, renders the option list
+                                  into <body> so it isn't clipped/squashed by the modal. */}
+                              <Select
+                                inputId="agentReg-timezone"
+                                name="timezone"
+                                classNamePrefix="reg-select"
+                                isSearchable
+                                isClearable
+                                isDisabled={isViewMode}
+                                placeholder="Search timezone..."
+                                menuPortalTarget={typeof document !== "undefined" ? document.body : null}
+                                menuPosition="fixed"
+                                menuPlacement="auto"
+                                maxMenuHeight={280}
+                                options={timezones.map((tz) => ({
+                                  value: tz.zoneId,
+                                  label: tz.displayName
+                                    ? `${tz.displayName} (${tz.utcOffset || tz.zoneId})`
+                                    : tz.zoneId,
+                                }))}
+                                value={
+                                  timezones
+                                    .map((tz) => ({
+                                      value: tz.zoneId,
+                                      label: tz.displayName
+                                        ? `${tz.displayName} (${tz.utcOffset || tz.zoneId})`
+                                        : tz.zoneId,
+                                    }))
+                                    .find((opt) => String(opt.value) === String(formData.timezone)) || null
+                                }
+                                onChange={(opt) => {
+                                  setFormData({
+                                    ...formData,
+                                    timezone: opt ? String(opt.value) : "",
+                                  });
+                                  if (validationErrors.timezone) {
+                                    setValidationErrors((prev) => ({
+                                      ...prev,
+                                      timezone: "",
+                                    }));
+                                  }
+                                }}
+                                styles={{
+                                  control: (base, state) => ({
+                                    ...base,
+                                    minHeight: 38,
+                                    borderRadius: 6,
+                                    borderColor: validationErrors.timezone
+                                      ? "#dc3545"
+                                      : (state.isFocused ? "#86b7fe" : "#ced4da"),
+                                    boxShadow: state.isFocused
+                                      ? "0 0 0 0.25rem rgba(13,110,253,.25)"
+                                      : "none",
+                                    fontSize: "0.95rem",
+                                  }),
+                                  menuPortal: (b) => ({ ...b, zIndex: 9999 }),
+                                  menu: (b) => ({ ...b, zIndex: 9999 }),
+                                }}
+                              />
+                              {validationErrors.timezone && (
+                                <div className="invalid-feedback d-block">
+                                  {validationErrors.timezone}
+                                </div>
+                              )}
+                            </Form.Group>
+                          </Col>
+                        </Row>
+
                         {/* Step 4: GST Details (India only) */}
                         {formData.countryId === "1" && (
                           <div
@@ -3084,7 +3431,7 @@ const AgentReg = () => {
                                     value={
                                       formData.agentGSTDetailsDTO.agentGstIn
                                     }
-                                    onChange={(isViewMode || lockCompanyFields) ? undefined : handleGstinChange}
+                                    onChange={isViewMode ? undefined : handleGstinChange}
                                     placeholder="Enter 15-digit GSTIN"
                                     className={`form-input ${
                                       validationErrors[
@@ -3092,7 +3439,7 @@ const AgentReg = () => {
                                       ] || gstinError
                                         ? "is-invalid"
                                         : ""
-                                    } ${(isViewMode || lockCompanyFields) ? "bg-light" : ""}`}
+                                    } ${isViewMode ? "bg-light" : ""}`}
                                     isInvalid={
                                       !!(
                                         validationErrors[
@@ -3102,7 +3449,6 @@ const AgentReg = () => {
                                     }
                                     maxLength={15}
                                     readOnly={isViewMode}
-                                    disabled={lockCompanyFields}
                                   />
                                   {(validationErrors[
                                     "agentGSTDetailsDTO.agentGstIn"
@@ -3726,127 +4072,6 @@ const AgentReg = () => {
                       </Card.Body>
                     </Card>
                     )}
-                  </Col>
-
-                  <Col md={4}>
-                    <Card className="mb-3">
-                      <Card.Header>Settings</Card.Header>
-                      <Card.Body>
-                        <Form.Group className="mb-3">
-                          <Form.Label>Markup</Form.Label>
-                          <Form.Select
-                            value={formData.markup}
-                            className={`form-input ${
-                              validationErrors.markup ? "is-invalid" : ""
-                            } ${isViewMode ? "bg-light" : ""}`}
-                            onChange={isViewMode ? undefined : (e) => {
-                              setFormData({
-                                ...formData,
-                                markup: e.target.value,
-                              });
-                              // Clear validation error when user makes selection
-                              if (validationErrors.markup) {
-                                setValidationErrors(prev => ({
-                                  ...prev,
-                                  markup: ""
-                                }));
-                              }
-                            }}
-                            disabled={isViewMode}
-                          >
-                            <option value="">Select Markup</option>
-                            {Array.isArray(markup) &&
-                              markup.map((mar) => (
-                                <option key={mar.id} value={mar.id}>
-                                  {mar.name}
-                                </option>
-                              ))}
-                          </Form.Select>
-                          {validationErrors.markup && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.markup}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                        <Form.Group className="mb-3">
-                          <Form.Label>Currency</Form.Label>
-                          <Form.Select
-                            value={formData.currency}
-                            className={`form-input ${
-                              validationErrors.currency ? "is-invalid" : ""
-                            } ${isViewMode ? "bg-light" : ""}`}
-                            onChange={isViewMode ? undefined : (e) => {
-                              setFormData({
-                                ...formData,
-                                currency: e.target.value,
-                              });
-                              // Clear validation error when user makes selection
-                              if (validationErrors.currency) {
-                                setValidationErrors(prev => ({
-                                  ...prev,
-                                  currency: ""
-                                }));
-                              }
-                            }}
-                            disabled={isViewMode}
-                          >
-                            <option value="">Select Currency</option>
-                            {Array.isArray(currency) &&
-                              currency.map((curr) => (
-                                <option
-                                  key={curr.currencyId}
-                                  value={curr.currencyId}
-                                >
-                                  {curr.name}
-                                </option>
-                              ))}
-                          </Form.Select>
-                          {validationErrors.currency && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.currency}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                        {/* Status field hidden by request — system-managed
-                            (new agents default to Inactive). Code retained. */}
-                        {false && (
-                        <Form.Group className="mb-3">
-                          <Form.Label>Status</Form.Label>
-                          <Form.Select
-                            value={formData.status}
-                            className={`form-input ${
-                              validationErrors.status ? "is-invalid" : ""
-                            } ${isViewMode ? "bg-light" : ""}`}
-                            onChange={isViewMode ? undefined : (e) => {
-                              setFormData({
-                                ...formData,
-                                status: e.target.value,
-                              });
-                              // Clear validation error when user makes selection
-                              if (validationErrors.status) {
-                                setValidationErrors(prev => ({
-                                  ...prev,
-                                  status: ""
-                                }));
-                              }
-                            }}
-                            disabled={isViewMode}
-                          >
-                            <option value="">SELECT</option>
-                            <option value="Active">Active</option>
-                            <option value="Inactive">Inactive</option>
-                          </Form.Select>
-                          {validationErrors.status && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.status}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                        )}
-                      </Card.Body>
-                    </Card>
-                  </Col>
-                </Row>
                 {error && (
                   <Form.Control.Feedback type="invalid">
                     {error}
