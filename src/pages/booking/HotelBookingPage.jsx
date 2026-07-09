@@ -617,7 +617,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
           bookingResponse &&
           bookingResponse.status &&
           (bookingResponse.status.toUpperCase() === "CONFIRMED" ||
-            bookingResponse.status.toUpperCase() === "NOT CONFIRMED") &&
+            bookingResponse.status.toUpperCase() === "On Request") &&
           bookingResponse.bookingId != 0
         ) {
           toast.success(

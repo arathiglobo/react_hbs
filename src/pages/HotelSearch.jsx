@@ -15,6 +15,8 @@ import AgentSelect from "../components/AgentSelect";
 import AgentCreditBalance from "../components/AgentCreditBalance";
 import axiosInstance from "../components/AxiosInstance";
 import AdvertisementCarousel from "../components/AdvertisementCarousel";
+import MapModal from "../components/map/MapModal";
+import { ENABLE_MAP_PREVIEW } from "../config/featureFlags";
 import { FaSearch, FaStar, FaInfoCircle } from "react-icons/fa";
 import { useNavigate, useLocation } from "react-router-dom";
 import "../styles/HotelSearch.css";
@@ -485,6 +487,9 @@ export default function HotelSearch({ force24Hour = false } = {}) {
   const [sortBy, setSortBy] = useState("priceAsc");
   const [hotelSearchTerm, setHotelSearchTerm] = useState("");
   const [errors, setErrors] = useState({});
+  // "Explore on Map" modal — shows every currently-visible hotel with
+  // usable coordinates. See components/map/MapModal.jsx.
+  const [showMapModal, setShowMapModal] = useState(false);
 
   // ── Currency conversion (display only) ────────────────────────────────
   // Search rates come back in AED (the base currency). The currency dropdown
@@ -857,6 +862,22 @@ export default function HotelSearch({ force24Hour = false } = {}) {
   }, [allResults, hotelSearchTerm, starRating, hotelType, channelType,
       availableDeals, featureFlagsMap,
       is24HourCheckin, twentyFourHourMap]);
+
+  // "Explore on Map" markers — one per currently-visible (filtered) hotel.
+  // MapModal itself drops any entry whose lat/lng isn't a finite number, so
+  // no need to pre-filter here.
+  const mapMarkers = useMemo(
+    () =>
+      filteredResults.map((hotel) => ({
+        id: hotel.id,
+        name: hotel.name,
+        lat: hotel.latitude,
+        lng: hotel.longitude,
+        address: hotel.address,
+        contactNumber: hotel.contactNumber,
+      })),
+    [filteredResults],
+  );
 
   // Union of active feature labels across hotels currently in view. Order
   // mirrors the backend's canonical ordering (Long Stay → 24 Hour Check-In
@@ -1234,6 +1255,9 @@ export default function HotelSearch({ force24Hour = false } = {}) {
             // "Destination Sales" pill and filter actually work.
             hasDestinationSales: !!hotel.hasDestinationSales,
             flashSale: !!hotel.flashSale,
+            latitude: hotel.latitude,
+            longitude: hotel.longitude,
+            contactNumber: hotel.contactNumber || "",
           }))
         : [];
 
@@ -1424,6 +1448,9 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                 // "Destination Sales" pill + filter actually work.
                 hasDestinationSales: !!hotel.hasDestinationSales,
                 flashSale: !!hotel.flashSale,
+                latitude: hotel.latitude,
+                longitude: hotel.longitude,
+                contactNumber: hotel.contactNumber || "",
               }))
             : [];
 
@@ -2184,9 +2211,15 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                               alt="Map preview"
                               className="map-preview-img"
                             />
-                            <button className="map-overlay-btn">
-                              EXPLORE ON MAP 📍
-                            </button>
+                            {ENABLE_MAP_PREVIEW && (
+                              <button
+                                type="button"
+                                className="map-overlay-btn"
+                                onClick={() => setShowMapModal(true)}
+                              >
+                                EXPLORE ON MAP 📍
+                              </button>
+                            )}
                           </div>
 
                           <Form.Control
@@ -2972,6 +3005,15 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                 </Row>
               </div>
             </div>
+          )}
+
+          {ENABLE_MAP_PREVIEW && (
+            <MapModal
+              show={showMapModal}
+              onHide={() => setShowMapModal(false)}
+              markers={mapMarkers}
+              title="Explore on Map"
+            />
           )}
         </main>
       </div>
