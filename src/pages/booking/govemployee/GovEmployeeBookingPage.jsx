@@ -1030,6 +1030,13 @@ const GovEmployeeBookingPage = () => {
           style={{ minWidth: 0, overflowX: "hidden" }}
         >
           <Container fluid="xl">
+            {/* Gov Employee route heading — UI only, mirrors the heading
+                shown on /new-booking/gov-employee once results arrive. */}
+            <div className="hs-page-heading">
+              <h3 className="hs-page-heading-title">
+                Govt/Airline/Hoteliers
+              </h3>
+            </div>
             {/* Top action bar — Back to Room List + Available Balance.
                 Using navigate(-1) preserves the room-list page's
                 in-memory state (selected dates, agent, occupancy)

@@ -959,6 +959,11 @@ export default function LastMinuteBookingForm() {
   return (
     <Layout>
       <Container fluid="xl">
+        {/* Last Minute route heading — UI only, mirrors the heading shown
+            on /new-booking/last-minute-booking once results arrive. */}
+        <div className="hs-page-heading">
+          <h3 className="hs-page-heading-title">Last Minute</h3>
+        </div>
         <div className="d-flex justify-content-end mb-2">
           <AgentBalanceDisplay agentId={ctx?.agentId} />
         </div>

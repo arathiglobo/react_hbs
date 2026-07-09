@@ -522,6 +522,12 @@ export default function LastMinuteRoomList() {
         <Sidebar />
         <main className="content-wrapper flex-grow-1" style={{ minWidth: 0, overflowX: "hidden" }}>
           <div className="container-fluid" style={{ paddingTop: "10px" }}>
+            {/* Last Minute route heading — UI only, mirrors the heading
+                shown on /new-booking/last-minute-booking once results
+                arrive. */}
+            <div className="hs-page-heading">
+              <h3 className="hs-page-heading-title">Last Minute</h3>
+            </div>
             {/* Top toolbar: Back to Search + agent balance — mirrors
                 RoomList.jsx so the flow shares the same header polish. */}
             <div className="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">

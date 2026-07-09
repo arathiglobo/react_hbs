@@ -623,19 +623,18 @@ export default function GovEmployeeSearch() {
     return Object.keys(e).length === 0;
   };
 
-  // After a fresh search, jump the viewport to the results so the operator
-  // sees them without having to scroll past the search card. Fires only when
-  // results transition from empty → non-empty (handleSearchSubmit clears the
-  // list first, so this only fires once per search round-trip).
+  // After a fresh search, jump the viewport to the very top of the page so
+  // the operator sees the heading and summary strip first, not just the
+  // results list further down. Fires only when results transition from
+  // empty → non-empty (handleSearchSubmit clears the list first, so this
+  // only fires once per search round-trip).
   const prevResultsLenRef = useRef(0);
   useEffect(() => {
     const wasEmpty = prevResultsLenRef.current === 0;
     prevResultsLenRef.current = results.length;
     if (!wasEmpty || results.length === 0) return;
     const id = window.setTimeout(() => {
-      if (resultsRef.current) {
-        resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }, 50);
     return () => window.clearTimeout(id);
   }, [results.length]);
@@ -790,6 +789,18 @@ export default function GovEmployeeSearch() {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4 hs-page">
+          {/* ── Results-page heading ──
+              Shown once actual results have arrived (not just on search
+              click), above the search summary / form. Matches the heading
+              on /new-booking/hotel. */}
+          {hasResultsView && (
+            <div className="hs-page-heading">
+              <h3 className="hs-page-heading-title">
+                Govt/Airline/Hoteliers
+              </h3>
+            </div>
+          )}
+
           {/* ── Search Card + Ads ── */}
           {collapseSearch && (
             <div className="hs-summary-bar">

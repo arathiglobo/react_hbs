@@ -844,6 +844,11 @@ export default function LongStayBookingPage() {
             container and breaks sticky; `clip` still hides horizontal overflow. */}
         <main className="content-wrapper py-4 flex-grow-1" style={{ minWidth: 0, overflowX: "clip" }}>
           <Container fluid="xl">
+            {/* Long Stay route heading — UI only, mirrors the heading shown
+                on /new-booking/long-stay once results arrive. */}
+            <div className="hs-page-heading">
+              <h3 className="hs-page-heading-title">Long Stay</h3>
+            </div>
             <div className="d-flex justify-content-end mb-2">
               <AgentBalanceDisplay agentId={agentId} />
             </div>
