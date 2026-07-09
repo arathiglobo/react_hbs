@@ -416,7 +416,14 @@ export default function BookingDetailedView() {
   const normalizedStatus = String(booking?.confirmationStatus || "")
     .replace(/\s+/g, "")
     .toUpperCase();
-  const isReconfirmed = normalizedStatus === "RECONFIRMED";
+  // A non-On-Request booking that was already "Confirmed" before this
+  // reconfirm gets the compound BE label "Confirmed / ReConfirmed" (see
+  // BookingConfirmationServiceImpl) instead of a bare "ReConfirmed" — so an
+  // exact-equality check here misses it and leaves the RECONFIRM button
+  // showing forever after a legitimate reconfirm. "RECONFIRMED" never
+  // appears as a substring of any other status (CONFIRMED/CANCELLED/
+  // REJECTED/COMPLETED), so .includes is a safe, unambiguous test.
+  const isReconfirmed = normalizedStatus.includes("RECONFIRMED");
   const isCancelled = normalizedStatus === "CANCELLED";
   // When cancelled, surface the status the booking held just before
   // cancellation (e.g. "ReConfirmed/Cancelled" / "Confirmed/Cancelled") so the
@@ -478,7 +485,7 @@ export default function BookingDetailedView() {
   // tentative and these fields don't apply yet.
   const isConfirmedOrLater =
     normalizedStatus === "CONFIRMED" ||
-    normalizedStatus === "RECONFIRMED" ||
+    normalizedStatus.includes("RECONFIRMED") ||
     normalizedStatus === "COMPLETED";
   // A booking still in the pending "On Request" display state is NOT a real
   // confirmation yet — the status engine only stamps it CONFIRMED so it can
