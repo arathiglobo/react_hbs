@@ -35,7 +35,13 @@ export default function AgentCreditBalance() {
       .get("/api/agent-credit-limit/single-agent")
       .then((res) => {
         if (!alive) return;
-        const value = Number(res?.data?.availableCreditLimit);
+        // effectiveAvailableCreditLimit = regular available credit + any
+        // currently-Active Temporary Credit Limit. Falls back to
+        // availableCreditLimit for older cached responses.
+        const value = Number(
+          res?.data?.effectiveAvailableCreditLimit ??
+            res?.data?.availableCreditLimit,
+        );
         setAvailable(Number.isFinite(value) ? value : null);
       })
       .catch((error) => {

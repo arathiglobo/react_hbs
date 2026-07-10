@@ -483,3 +483,29 @@
     max-width: 600px;
   }
 }
+
+/* ── 24-Hour heading ──────────────────────────────────────────────────────
+   Matches the "24 Hours" heading shown on /new-booking/hotel-24hr once
+   results arrive — same red, weight, and letter-spacing, kept here so it
+   renders without depending on HotelSearch.css being loaded. */
+.hs-page-heading {
+  margin: 0 0 16px;
+  animation: hsPageHeadingSlide .26s ease;
+}
+.hs-page-heading-title {
+  font-size: clamp(1.5rem, 1rem + 1.6vw, 2rem) !important;
+  font-weight: 700 !important;
+  letter-spacing: -.038em !important;
+  line-height: 1.12 !important;
+  color: #EC0B43 !important;
+  margin: 0 !important;
+}
+@keyframes hsPageHeadingSlide {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (max-width: 575.98px) {
+  .hs-page-heading {
+    margin: 0 0 12px;
+  }
+}

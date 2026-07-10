@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import BackButton from "../components/BackButton";
 import {
   Card,
   Button,
@@ -479,6 +480,7 @@ export default function CompanyProfile() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex justify-content-between align-items-center">
+              <BackButton/>
               <span className="fw-semibold">Company Profile</span>
               <div className="d-flex gap-3 align-items-center">
                 <Form.Group className="mb-0">

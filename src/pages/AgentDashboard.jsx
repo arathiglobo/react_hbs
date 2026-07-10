@@ -36,6 +36,7 @@ import {
   FaCalendarCheck,
   FaSyncAlt,
   FaChartBar,
+  FaPrayingHands,
 } from "react-icons/fa";
 import { MdWifiOff } from "react-icons/md";
 import TopBar from "../components/TopBar";
@@ -194,14 +195,14 @@ export default function AgentDashboard() {
     { label: "Transfers",          tone: "teal",   icon: <FaCar />,            to: "/new-booking/cab" },
     { label: "Chauffeur & Limo",   tone: "purple", icon: <FaTaxi />,           to: "/new-booking/scheffer-driver" },
     { label: "Tours & Activity",   tone: "green",  icon: <FaGlobeAmericas />,  to: "/new-booking/tours-and-activities" },
-    { label: "Offline",            tone: "gray",   icon: <MdWifiOff />,        to: "/new-booking/offline-search" },
     { label: "Restaurant",         tone: "orange", icon: <FaUtensils />,       to: "/new-booking/restaurant" },
     { label: "Honeymoon Package",  tone: "pink",   icon: <FaHeart />,          to: "/new-booking/honeymoon" },
-    { label: "Meet & Space",       tone: "purple", icon: <FaUserFriends />,    to: "/new-booking/meet-and-space" },
-    { label: "Govt",               tone: "blue",   icon: <FaPlane />,          to: "/new-booking/gov-employee" },
+    { label: "Meeting Space",      tone: "purple", icon: <FaUserFriends />,    to: "/new-booking/meet-and-space" },
+    { label: "Govt/Airline/Hoteliers",               tone: "blue",   icon: <FaPlane />,          to: "/new-booking/gov-employee" },
     { label: "Ayurveda",           tone: "green",  icon: <FaLeaf />,           to: "/new-booking/ayurveda" },
     { label: "Student",            tone: "purple", icon: <FaGraduationCap />,  to: "/new-booking/student" },
     { label: "Senior Citizen",     tone: "orange", icon: <FaUserAlt />,        to: "/new-booking/senior-citizen" },
+    { label: "Religious",     tone: "orange", icon: <FaPrayingHands/>,        to: "/new-booking/senior-citizen" },
   ];
 
   const manageActions = [
@@ -215,7 +216,7 @@ export default function AgentDashboard() {
     {
       label: "Calendar",
       desc: "View & manage calendar events",
-      tone: "purple",
+      tone: "teal",
       icon: <FaCalendarAlt />,
       onClick: () => navigate("/calendar"),
     },
@@ -331,6 +332,11 @@ export default function AgentDashboard() {
           cursor: pointer;
           transition: border-color .15s, box-shadow .15s, transform .15s, background-color .15s;
         }
+        .agent-qa-tile > span:last-child {
+          max-width: 100%;
+          overflow-wrap: anywhere;
+          word-break: break-word;
+        }
         .agent-qa-tile:hover {
           box-shadow: 0 10px 20px rgba(0,0,0,.10);
           transform: translateY(-2px);
@@ -360,16 +366,6 @@ export default function AgentDashboard() {
         .agent-qa-icon.tone-teal   { background: #E3F7F5; color: #14B8A6; }
         .agent-qa-icon.tone-gray   { background: #F0F1F3; color: #9098A8; }
 
-        /* ── Manage + Credit Overview — single row, wraps on narrow screens ── */
-        .agent-manage-row {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: stretch;
-          gap: 10px;
-        }
-        .agent-manage-row .agent-manage-grid { flex: 1.2 1 320px; }
-        .agent-manage-row .agent-credit-panel { flex: 1.4 1 340px; }
-
         /* ── Manage — compact gradient shortcut cards ── */
         .agent-manage-grid {
           display: grid;
@@ -392,6 +388,7 @@ export default function AgentDashboard() {
         .agent-manage-card:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(0,0,0,.14); }
         .agent-manage-card.tone-pink   { background: linear-gradient(135deg, #F0134F 0%, #C90939 100%); }
         .agent-manage-card.tone-purple { background: linear-gradient(135deg, #8B6CF7 0%, #6D4CE0 100%); }
+        .agent-manage-card.tone-teal   { background: linear-gradient(135deg, #2DD4BF 0%, #0D9488 100%); }
         .agent-manage-dots {
           position: absolute; top: 8px; right: 10px; width: 40px; height: 40px;
           background-image: radial-gradient(currentColor 1.2px, transparent 1.2px);
@@ -415,35 +412,40 @@ export default function AgentDashboard() {
         }
         .agent-manage-card.tone-pink .agent-manage-arrow   { color: #EC0B43; }
         .agent-manage-card.tone-purple .agent-manage-arrow { color: #6D4CE0; }
+        .agent-manage-card.tone-teal .agent-manage-arrow   { color: #0D9488; }
 
-        /* ── Credit Overview — stat columns + circular "% used" ring ── */
-        .agent-credit-panel {
-          background: #fff;
-          border: 1px solid rgba(0,0,0,.06);
-          border-radius: 14px;
-          padding: 16px 18px;
-          box-shadow: 0 1px 3px rgba(0,0,0,.05);
+        /* ── Credit Overview — small pill-style strip under the dashboard
+            title, single line, wraps on narrow screens ── */
+        .agent-credit-compact {
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
+          gap: 12px 22px;
+          margin-top: 12px;
+          padding-top: 12px;
+          border-top: 1px dashed #ECECE8;
+          font-size: 15px;
         }
-        .agent-credit-head { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; }
-        .agent-credit-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--color-primary); flex-shrink: 0; }
-        .agent-credit-title { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #1a1d23; }
-        .agent-credit-body { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-        .agent-credit-stats { display: flex; gap: 28px; flex-wrap: wrap; }
-        .agent-credit-stat { display: flex; flex-direction: column; gap: 4px; }
-        .agent-credit-stat-label { font-size: 10.5px; color: #9198a8; }
-        .agent-credit-stat-value { font-size: 16px; font-weight: 700; color: #1a1d23; }
-        .agent-credit-ring {
-          width: 76px; height: 76px; border-radius: 50%; flex-shrink: 0;
-          background: conic-gradient(var(--color-primary) var(--pct), #F0F1F5 0);
-          display: grid; place-items: center;
+        .agent-credit-compact .acc-dot {
+          width: 7px; height: 7px; border-radius: 50%;
+          background: var(--color-primary); flex-shrink: 0;
         }
-        .agent-credit-ring-inner {
-          width: 58px; height: 58px; border-radius: 50%;
-          background: #fff;
-          display: flex; flex-direction: column; align-items: center; justify-content: center;
+        .agent-credit-compact .acc-label {
+          font-size: 13px; font-weight: 700; letter-spacing: .04em;
+          text-transform: uppercase; color: #1a1d23;
         }
-        .agent-credit-ring-value { font-size: 14px; font-weight: 700; color: #1a1d23; line-height: 1; }
-        .agent-credit-ring-label { font-size: 8px; color: #9198a8; text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+        .agent-credit-compact .acc-stat { color: #6B7280; }
+        .agent-credit-compact .acc-stat b { color: #1a1d23; font-weight: 700; }
+        .agent-credit-compact .acc-badge {
+          margin-left: auto;
+          background: var(--color-primary-tint);
+          color: var(--color-primary);
+          font-weight: 700;
+          font-size: 14px;
+          padding: 4px 11px;
+          border-radius: 999px;
+        }
+        .agent-credit-compact .acc-loading { color: var(--color-text-muted); }
 
         /* ── Analytics — collapsible accordion header (mirrors AdminDashboard) ── */
         .agent-analytics-toggle {
@@ -703,6 +705,32 @@ export default function AgentDashboard() {
                         </div>
                       )}
                     </div>
+
+                    {/* ── Credit Overview — kept inside the welcome card,
+                        small single-line strip right under the identity
+                        row instead of a separate full panel. ── */}
+                    <div className="agent-credit-compact">
+                      {loadingCredit ? (
+                        <span className="acc-loading">Loading credit information…</span>
+                      ) : creditSummary ? (
+                        <>
+                          <span className="acc-dot" />
+                          <span className="acc-label">Credit Overview</span>
+                          <span className="acc-stat">
+                            Limit <b>{formatNumber(creditSummary.creditLimit)}</b>
+                          </span>
+                          <span className="acc-stat">
+                            Used <b>{formatNumber(creditSummary.used)}</b>
+                          </span>
+                          <span className="acc-stat">
+                            Available <b style={{ color: "var(--color-primary)" }}>{formatNumber(creditSummary.available)}</b>
+                          </span>
+                          <span className="acc-badge">{creditSummary.usedPercent}% used</span>
+                        </>
+                      ) : (
+                        <span className="acc-loading">No credit information available</span>
+                      )}
+                    </div>
                   </div>
                 </section>
               );
@@ -734,83 +762,28 @@ export default function AgentDashboard() {
               </div>
             </section>
 
-            {/* ── Manage + Credit Overview — one row, side by side ── */}
+            {/* ── Manage — compact gradient shortcut cards ── */}
             <section>
               <p className="qa-label">Manage</p>
-              <div className="agent-manage-row">
-                <div className="agent-manage-grid">
-                  {manageActions.map((a) => (
-                    <button
-                      key={a.label}
-                      type="button"
-                      className={`agent-manage-card tone-${a.tone}`}
-                      onClick={a.onClick}
-                    >
-                      <span className="agent-manage-dots" aria-hidden="true" />
-                      <span className="agent-manage-icon">{a.icon}</span>
-                      <span className="agent-manage-body">
-                        <span className="agent-manage-title">{a.label}</span>
-                        <span className="agent-manage-desc">{a.desc}</span>
-                      </span>
-                      <span className="agent-manage-arrow">
-                        <FaArrowRight size={10} />
-                      </span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Credit summary — header dot + stat columns + a circular
-                    "% used" progress ring on the right ── */}
-                <div className="agent-credit-panel">
-                  <div className="agent-credit-head">
-                    <span className="agent-credit-dot" />
-                    <span className="agent-credit-title">Credit Overview</span>
-                  </div>
-                  {loadingCredit ? (
-                    <div style={{ padding: "8px 0", color: "var(--color-text-muted)", fontSize: "13px" }}>
-                      Loading credit information…
-                    </div>
-                  ) : creditSummary ? (
-                    <div className="agent-credit-body">
-                      <div className="agent-credit-stats">
-                        <div className="agent-credit-stat">
-                          <span className="agent-credit-stat-label">Credit Limit</span>
-                          <span className="agent-credit-stat-value">
-                            {formatNumber(creditSummary.creditLimit)}
-                          </span>
-                        </div>
-                        <div className="agent-credit-stat">
-                          <span className="agent-credit-stat-label">Used</span>
-                          <span className="agent-credit-stat-value">
-                            {formatNumber(creditSummary.used)}
-                          </span>
-                        </div>
-                        <div className="agent-credit-stat">
-                          <span className="agent-credit-stat-label">Available Limit</span>
-                          <span
-                            className="agent-credit-stat-value"
-                            style={{ color: "var(--color-primary)" }}
-                          >
-                            {formatNumber(creditSummary.available)}
-                          </span>
-                        </div>
-                      </div>
-                      <div
-                        className="agent-credit-ring"
-                        style={{ "--pct": `${creditSummary.usedPercent}%` }}
-                      >
-                        <div className="agent-credit-ring-inner">
-                          <span className="agent-credit-ring-value">{creditSummary.usedPercent}%</span>
-                          <span className="agent-credit-ring-label">Used</span>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ padding: "8px 0", color: "var(--color-text-muted)", fontSize: "13px" }}>
-                      No credit information available
-                    </div>
-                  )}
-                </div>
+              <div className="agent-manage-grid">
+                {manageActions.map((a) => (
+                  <button
+                    key={a.label}
+                    type="button"
+                    className={`agent-manage-card tone-${a.tone}`}
+                    onClick={a.onClick}
+                  >
+                    <span className="agent-manage-dots" aria-hidden="true" />
+                    <span className="agent-manage-icon">{a.icon}</span>
+                    <span className="agent-manage-body">
+                      <span className="agent-manage-title">{a.label}</span>
+                      <span className="agent-manage-desc">{a.desc}</span>
+                    </span>
+                    <span className="agent-manage-arrow">
+                      <FaArrowRight size={10} />
+                    </span>
+                  </button>
+                ))}
               </div>
             </section>
 

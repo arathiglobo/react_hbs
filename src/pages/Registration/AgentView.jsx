@@ -149,6 +149,12 @@ const AgentView = () => {
   // ---------- Credit limit modal state -----------------------------
   const [showCreditLimitModal, setShowCreditLimitModal] = useState(false);
   const [creditLimitType, setCreditLimitType] = useState("initial");
+  // Update Credit Limit — whether the entered amount is added to or
+  // subtracted from the current total. The amount field always takes a
+  // positive number; this just flips its sign before it's sent as
+  // additionalCredit, so reducing the limit no longer requires the admin
+  // to type a negative number by hand.
+  const [creditAdjustDirection, setCreditAdjustDirection] = useState("add");
   const [hasInitialCredit, setHasInitialCredit] = useState(false);
   const [creditRowExists, setCreditRowExists] = useState(false);
   const [creditLimitFormData, setCreditLimitFormData] = useState({
@@ -558,6 +564,7 @@ const AgentView = () => {
       paymentMode: "",
     });
     setCreditLimitErrors({ addCreditLimit: "", remarks: "" });
+    setCreditAdjustDirection("add");
     setEffectiveAvailableCredit(null);
     setTempCredits([]);
     setShowTempCreditForm(false);
@@ -617,6 +624,7 @@ const AgentView = () => {
       paymentMode: "",
     });
     setCreditLimitErrors({ addCreditLimit: "", remarks: "" });
+    setCreditAdjustDirection("add");
     setTempCredits([]);
     setEffectiveAvailableCredit(null);
     setShowTempCreditForm(false);
@@ -768,6 +776,41 @@ const AgentView = () => {
     });
   };
 
+  // Manual Active/Inactive toggle — flips the temporary credit's enabled
+  // flag regardless of its date window (e.g. pre-disable an Upcoming row,
+  // or pause a currently-Active one, without touching its dates).
+  const [tempCreditTogglingId, setTempCreditTogglingId] = useState(null);
+  const handleToggleTempCreditEnabled = async (row) => {
+    const nextEnabled = !row.enabled;
+    setTempCreditTogglingId(row.id);
+    try {
+      await axiosInstance.patch(
+        `/api/agent-credit-limit/temporary/${row.id}/status`,
+        { enabled: nextEnabled }
+      );
+      toast.success(
+        nextEnabled
+          ? "Temporary credit limit activated"
+          : "Temporary credit limit deactivated"
+      );
+      await fetchTempCredits();
+      try {
+        const res = await axiosInstance.get(`/api/agent-credit-limit/agent/${id}`);
+        setEffectiveAvailableCredit(
+          res.data?.effectiveAvailableCreditLimit ?? res.data?.availableCreditLimit ?? null
+        );
+      } catch (_) {
+        /* non-critical refresh */
+      }
+    } catch (e) {
+      toast.error(
+        e.response?.data?.message || "Failed to update temporary credit limit status"
+      );
+    } finally {
+      setTempCreditTogglingId(null);
+    }
+  };
+
   const handleCreditLimitChange = (e) => {
     const { name, value } = e.target;
     setCreditLimitFormData((prev) => ({ ...prev, [name]: value }));
@@ -784,6 +827,7 @@ const AgentView = () => {
       remarks: "",
     }));
     setCreditLimitErrors({ addCreditLimit: "", remarks: "" });
+    setCreditAdjustDirection("add");
   };
 
   const validateCreditLimitForm = (data, type) => {
@@ -846,13 +890,18 @@ const AgentView = () => {
           parseFloat(creditLimitFormData.totalCreditLimit) || 0;
         const currentAvailable =
           parseFloat(creditLimitFormData.availableCreditLimit) || 0;
+        // Reduce flips the entered (always-positive) amount negative before
+        // it's applied — same additionalCredit math as before, just no
+        // longer requires typing a "-" by hand.
+        const signedAmount =
+          creditAdjustDirection === "reduce" ? -Math.abs(addAmount) : Math.abs(addAmount);
         response = await axiosInstance.put(
           "/api/agent-credit-limit/update",
           {
             agentId: Number(id),
-            additionalCredit: addAmount,
+            additionalCredit: signedAmount,
             remarks: creditLimitFormData.remarks,
-            totalCreditLimit: currentTotal + addAmount,
+            totalCreditLimit: currentTotal + signedAmount,
             availableCreditLimit: currentAvailable,
             paymentMode: pm,
           }
@@ -1403,25 +1452,39 @@ const AgentView = () => {
               className="fw-bold"
               style={{ fontSize: "1.05rem", color: "#b45309" }}
             >
-              Block Payment Gateway
+              Allow Payment Gateway
             </span>
-            <Form.Check
-              type="switch"
-              id={`agent-card-payment-${id}`}
-              label={
-                cardPaymentUpdating
-                  ? "Updating…"
-                  : Boolean(agent?.cardPaymentEnabled)
-                    ? "Yes"
-                    : "No"
-              }
-              checked={Boolean(agent?.cardPaymentEnabled)}
-              onChange={handleToggleCardPayment}
-              disabled={cardPaymentUpdating}
-              className="d-flex align-items-center fw-semibold"
+            <div
+              className="d-flex align-items-center gap-3 fw-semibold"
               style={{ fontSize: "1rem" }}
-              title="When on, this agent sees the 'Card' option in the booking-page payment-mode dropdown."
-            />
+              title="When Yes, this agent sees the 'Card' option in the booking-page payment-mode dropdown."
+            >
+              <Form.Check
+                inline
+                type="radio"
+                id={`agent-card-payment-yes-${id}`}
+                name={`agent-card-payment-${id}`}
+                label="Yes"
+                checked={Boolean(agent?.cardPaymentEnabled)}
+                onChange={() => handleToggleCardPayment({ target: { checked: true } })}
+                disabled={cardPaymentUpdating}
+                className="mb-0"
+              />
+              <Form.Check
+                inline
+                type="radio"
+                id={`agent-card-payment-no-${id}`}
+                name={`agent-card-payment-${id}`}
+                label="No"
+                checked={!agent?.cardPaymentEnabled}
+                onChange={() => handleToggleCardPayment({ target: { checked: false } })}
+                disabled={cardPaymentUpdating}
+                className="mb-0"
+              />
+              {cardPaymentUpdating && (
+                <span className="text-muted">Updating…</span>
+              )}
+            </div>
           </div>
 
           {/* ------------ Bottom action bar ----------------------- */}
@@ -1856,19 +1919,50 @@ const AgentView = () => {
                   </Row>
                 ) : (
                   <>
+                    <Form.Group className="mb-3">
+                      <Form.Label className="fw-bold d-block">
+                        Add or Reduce
+                      </Form.Label>
+                      <Form.Check
+                        inline
+                        type="radio"
+                        id="credit-adjust-add"
+                        name="creditAdjustDirection"
+                        value="add"
+                        label="Add"
+                        checked={creditAdjustDirection === "add"}
+                        onChange={() => setCreditAdjustDirection("add")}
+                      />
+                      <Form.Check
+                        inline
+                        type="radio"
+                        id="credit-adjust-reduce"
+                        name="creditAdjustDirection"
+                        value="reduce"
+                        label="Reduce"
+                        checked={creditAdjustDirection === "reduce"}
+                        onChange={() => setCreditAdjustDirection("reduce")}
+                      />
+                    </Form.Group>
                     <Row>
                       <Col md={6}>
                         <Form.Group className="mb-3">
                           <Form.Label>
-                            <span className="text-danger">*</span>Add-on Credit
-                            Limit
+                            <span className="text-danger">*</span>
+                            {creditAdjustDirection === "reduce"
+                              ? "Reduce Credit Limit By"
+                              : "Add-on Credit Limit"}
                           </Form.Label>
                           <Form.Control
                             type="number"
                             name="addCreditLimit"
                             value={creditLimitFormData.addCreditLimit}
                             onChange={handleCreditLimitChange}
-                            placeholder="Enter amount to add"
+                            placeholder={
+                              creditAdjustDirection === "reduce"
+                                ? "Enter amount to reduce"
+                                : "Enter amount to add"
+                            }
                             isInvalid={!!creditLimitErrors.addCreditLimit}
                             min="0"
                             step="0.01"
@@ -2119,15 +2213,23 @@ const AgentView = () => {
                                 </td>
                                 <td className="py-2 px-3">{row.remarks || "-"}</td>
                                 <td className="py-2 px-3">
-                                  <span
-                                    className={`badge ${
-                                      row.status === "Active"
-                                        ? "bg-success"
-                                        : "bg-secondary"
-                                    }`}
+                                  <Button
+                                    size="sm"
+                                    variant={
+                                      row.status === "Active" ? "success" : "outline-secondary"
+                                    }
+                                    className="d-inline-flex align-items-center gap-1"
+                                    disabled={tempCreditTogglingId === row.id}
+                                    title={
+                                      row.enabled
+                                        ? "Click to deactivate"
+                                        : "Click to activate"
+                                    }
+                                    onClick={() => handleToggleTempCreditEnabled(row)}
                                   >
+                                    {row.status === "Active" ? <FaToggleOn /> : <FaToggleOff />}
                                     {row.status}
-                                  </span>
+                                  </Button>
                                 </td>
                                 <td className="py-2 px-3">
                                   <div className="d-flex justify-content-center gap-2">
