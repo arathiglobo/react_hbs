@@ -117,9 +117,30 @@ export default function LongStayContract() {
     }
   };
 
-  const filtered = contracts.filter((c) =>
-    (c.rateCode || "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = contracts.filter((c) => {
+    const searchTerm = search.trim().toLowerCase();
+    if (!searchTerm) return true;
+
+    // Rate Code Match
+    const rateCodeMatch = (c.rateCode || "").toLowerCase().includes(searchTerm);
+
+    // Cost Type Match
+    const rawCostType = (c.additionalCostType || "").toUpperCase();
+    const costTypeStr = rawCostType === "WEEKLY"
+      ? "weekly"
+      : (rawCostType === "PRO_RATE" || rawCostType === "PRORATE" ? "pro-rate prorate" : "day-wise daywise");
+    const costTypeMatch = costTypeStr.includes(searchTerm);
+
+    // Status Match — prevent 'active' from matching 'inactive'
+    let statusMatch = false;
+    if ("active".includes(searchTerm) && !searchTerm.startsWith("in")) {
+      statusMatch = c.isLive;
+    } else if ("inactive".includes(searchTerm) && searchTerm.startsWith("in")) {
+      statusMatch = !c.isLive;
+    }
+
+    return rateCodeMatch || costTypeMatch || statusMatch;
+  });
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -155,7 +176,7 @@ export default function LongStayContract() {
               <Form.Group className="hotel-search-bar position-relative">
                 <Form.Control
                   type="search"
-                  placeholder="Search by rate code..."
+                  placeholder="Search by rate code, cost type, status..."
                   className="form-control-modern-sm"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}

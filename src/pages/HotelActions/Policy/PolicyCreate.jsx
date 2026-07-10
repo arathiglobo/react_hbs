@@ -49,7 +49,7 @@ const PolicyCreate = () => {
       nonRefundableFeeType: "PERCENT",
     },
     remarks: "",
-    live: true,
+    live: false,
   });
 
   // ✅ Fetch Market Types

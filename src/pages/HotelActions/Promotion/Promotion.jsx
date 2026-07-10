@@ -40,7 +40,6 @@ const Promotion = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
-  const [searchTimeout, setSearchTimeout] = useState(null);
 
   // View — reuses the existing edit route for the row's promotion type
   // in read-only mode (`?mode=view`). Each edit screen wraps its form
@@ -88,10 +87,20 @@ const Promotion = () => {
         : [];
 
       console.log("🏨 Filtered Promotions for Hotel", id, allPromotions);
-      setPromotions(allPromotions);
+      const uniquePromotions = allPromotions.filter(
+        (promo, index, list) =>
+          index ===
+          list.findIndex(
+            (item) =>
+              item.id === promo.id &&
+              item.promotionType === promo.promotionType
+          )
+      );
+
+      setPromotions(uniquePromotions);
 
       // ✅ Calculate total pages based on data length
-      if (allPromotions.length < 10) {
+      if (uniquePromotions.length < 10) {
         setTotalPages(pageNum + 1);
       } else {
         setTotalPages(Math.max(totalPages, pageNum + 2));
@@ -115,28 +124,11 @@ const Promotion = () => {
 
   // ✅ Debounced search effect (similar to Bank.jsx)
   useEffect(() => {
-    // Clear previous timeout
-    if (searchTimeout) {
-      clearTimeout(searchTimeout);
-    }
+    const timeout = setTimeout(() => {
+      fetchPromotions(0, searchTerm);
+    }, 500);
 
-    // Set new timeout for search
-    if (searchTerm !== "") {
-      const timeout = setTimeout(() => {
-        fetchPromotions(0, searchTerm);
-      }, 500); // 500ms delay
-      setSearchTimeout(timeout);
-    } else if (searchTerm === "") {
-      // If search is cleared, fetch all data
-      fetchPromotions(0, "");
-    }
-
-    // Cleanup timeout on unmount
-    return () => {
-      if (searchTimeout) {
-        clearTimeout(searchTimeout);
-      }
-    };
+    return () => clearTimeout(timeout);
   }, [searchTerm]);
 
   // ✅ Delete promotion
@@ -304,12 +296,10 @@ const Promotion = () => {
                   <div className="position-relative" style={{ width: "260px" }}>
                     <Form.Control
                       type="text"
-                      placeholder="Search promotion..."
+                      placeholder="Search by type, status, or code..."
                       value={searchTerm}
                       onChange={(e) => {
-                        const value = e.target.value;
-                        setSearchTerm(value);
-                        fetchPromotions(0, value); // pass value to API
+                        setSearchTerm(e.target.value);
                       }}
                     />
                     {searchTerm && (
@@ -362,7 +352,7 @@ const Promotion = () => {
                 <tbody>
                   {promotions.length > 0 ? (
                     promotions.map((promo, index) => (
-                      <tr key={promo.id}>
+                      <tr key={`${promo.promotionType || "promotion"}-${promo.id}`}>
                         <td>{page * 10 + index + 1}</td>
                         <td>{promo.promotionType || "—"}</td>
                         <td>

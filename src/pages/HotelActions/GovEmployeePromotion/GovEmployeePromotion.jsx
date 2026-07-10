@@ -82,6 +82,9 @@ export default function GovEmployeePromotion() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [search, setSearch] = useState("");
+  const [searchTimeout, setSearchTimeout] = useState(null);
+
 
   // Status-toggle modal state — mirrors the ContractRate pattern:
   // clicking the Active/Inactive badge opens a small confirmation
@@ -129,17 +132,25 @@ export default function GovEmployeePromotion() {
   };
 
   // ── Load all promotions for this hotel ─────────────────────────────
-  const fetchAll = async () => {
-    setLoading(true);
-    try {
-      const { data } = await axiosInstance.get(`/api/hotel-gov-employee-promotion/hotel/${hotelId}`);
-      setRows(Array.isArray(data) ? data : []);
-    } catch (e) {
-      toast.error("Failed to load promotions");
-    } finally {
-      setLoading(false);
-    }
-  };
+ const fetchAll = async (searchQuery = search) => {
+  setLoading(true);
+  try {
+    const { data } = await axiosInstance.get(
+      `/api/hotel-gov-employee-promotion/hotel/${hotelId}`,
+      {
+        params: {
+          search: searchQuery || undefined
+        }
+      }
+    );
+
+    setRows(Array.isArray(data) ? data : []);
+  } catch (e) {
+    toast.error("Failed to load promotions");
+  } finally {
+    setLoading(false);
+  }
+};
   useEffect(() => {
     if (hotelId) fetchAll();
     // eslint-disable-next-line
@@ -285,6 +296,41 @@ export default function GovEmployeePromotion() {
               >
                 Government Employee Discount
               </span>
+              <div className="d-flex align-items-center gap-2">
+                <div className="position-relative" style={{ width: "260px" }}>
+                  <Form.Control
+                    type="text"
+                    placeholder="Search by date or status..."
+                    value={search}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSearch(value);
+                      fetchAll(value);
+                    }}
+                    className="border-1 bg-light"
+                  />
+                  {search && (
+                    <button
+                      type="button"
+                      className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
+                      style={{
+                        border: "none",
+                        background: "none",
+                        color: "#6c757d",
+                        padding: "0 12px",
+                        zIndex: 10,
+                      }}
+                      onClick={() => {
+                        setSearch("");
+                        fetchAll("");
+                      }}
+                      title="Clear search"
+                    >
+                      <i className="fas fa-times"></i>
+                    </button>
+                  )}
+                </div>
+              </div>
               <Button className="btn-green create-btn" onClick={openCreate}>
                 + Create
               </Button>
