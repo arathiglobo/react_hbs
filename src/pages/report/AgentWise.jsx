@@ -11,6 +11,8 @@ import HotelCategory from "../../components/filters/HotelCategory";
 import HotelTypefilters from "../../components/filters/HotelTypefilters";
 import HotelFilter from "../../components/filters/Hotelfilters";
 import Agent from "../../components/filters/Agent";
+import City from "../../components/filters/City";
+import Country from "../../components/filters/Country";
 
 function AgentWise() {
 
@@ -41,6 +43,8 @@ const [tempSelectedhotelfilter,setTempSelectedHotelfilter]= useState("");
 const [temphoteltype,setTemphoteltype]=useState("");
 const [temphotelCategories,settempHotelCategories]=useState("");
 const [temproomCategory,settempRoomCategory]=useState("");
+const [tempCity,setTempCity]=useState("");
+const [tempCountry,setTempCountry]=useState("");
 const [tempFromDate,setTempFromDate]=useState("");
 const [tempToDate,setTempToDate]=useState("");
 
@@ -50,15 +54,10 @@ const [selectedhotelfilter,setSelectedHotelfilter]= useState("");
 const [hoteltype,setHotelType]=useState("");
 const [hotelcategories,setHotelCategories]=useState("");
 const [roomCategory,setRoomCategory]=useState("");
+const [selectedCity,setSelectedCity]=useState("");
+const [selectedCountry,setSelectedCountry]=useState("");
 const [fromDate,setFromDate]=useState("");
 const [toDate,setToDate]=useState("");
-
-// Store filter options to map IDs to names
-const [agentOptions,setAgentOptions]=useState([]);
-const [hotelfilterOption,setHotelfilterOption]=useState([]);
-const [hotelTypeOptions,setHotelTypeOptions]=useState([]);
-const [hotelCategoriesOptions,setHotelCategoriesOptions]=useState([]);
-const [roomCategoryOptions,setRoomCategoryOptions]=useState([]);
 
 // API filters (for API report type - keeping for backward compatibility)
 const [apiFilters, setApiFilters] = useState({
@@ -79,37 +78,22 @@ useEffect(()=>{
   setApiCurrentPage(1);
 },[searchApiQuery]);
 
-useEffect(()=>{
-  const fetchInhouse= async()=>{
-    try{
-    const response = await axiosInstance.get("/api/reports/agentwise")
-    setInhouseBookings(response.data);
-      }catch(error){
-        console.error("failed to fetch data",error)
-        toast.error("Failed to fetch Data")
-      }
-  };fetchInhouse();
-},[])
+// Fetches the inhouse report; structured filters are applied server-side via query params
+const fetchInhouseReport = async (params = {}) => {
+  try{
+    const response = await axiosInstance.get("/api/reports/agentwise", { params });
+    setInhouseBookings(response.data || []);
+    return true;
+  }catch(error){
+    console.error("failed to fetch data",error)
+    toast.error("Failed to fetch Data")
+    return false;
+  }
+};
 
 useEffect(()=>{
-  const fetchFilterOptions = async ()=>{
-    try{
-      const [agentRes, hotelRes, hotelFilterRes, hotelCategoriesRes, roomCategoryRes] = await Promise.all([
-        axiosInstance.get("/api/agent").catch(()=>({data:[]})),
-        axiosInstance.get("/api/hotels").catch(()=>({data:[]})),
-        axiosInstance.get("/api/hotelType").catch(()=>({data:[]})),
-        axiosInstance.get("/api/hotelcategory").catch(()=>({data:[]})),
-        axiosInstance.get("/api/roomCategory").catch(()=>({data:[]}))
-      ]);
-      setAgentOptions(Array.isArray(agentRes.data) ? agentRes.data.map(a=>({id:a.id || a.agentId, name:a.companyName || a.agentName || a.name})):[]);
-      setHotelfilterOption(Array.isArray(hotelRes.data) ? hotelRes.data.map(h=>({id:h.id,name:h.hotelName})):[]);
-      setHotelTypeOptions(Array.isArray(hotelFilterRes.data) ? hotelFilterRes.data.map(ht=>({id:ht.hotelTypeId,name:ht.name})):[]);
-      setHotelCategoriesOptions(Array.isArray(hotelCategoriesRes.data) ? hotelCategoriesRes.data.map(hc=>({id:hc.hotelCategoryId,name:hc.hotelCategory || hc})):[]);
-      setRoomCategoryOptions(Array.isArray(roomCategoryRes.data) ? roomCategoryRes.data.map(rc=>({id:rc.roomCategoryId,name:rc.roomCategory})):[]);
-    }catch(error){
-      console.error("failed to fetch filter options",error);
-    }
-  };fetchFilterOptions();
+  fetchInhouseReport();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 },[])
 
 const handleSendEmail = async () => {
@@ -129,6 +113,8 @@ const handleSendEmail = async () => {
       hotelType: hoteltype,
       hotelCategory: hotelcategories,
       roomCategory: roomCategory,
+      city: selectedCity,
+      country: selectedCountry,
       fromDate: fromDate,
       toDate: toDate
     } : apiFilters;
@@ -146,7 +132,8 @@ const handleSendEmail = async () => {
     });
 
     if (response.data) {
-      toast.success(`Report with ${filteredCount} record(s) sent successfully!`);
+      const sentCount = response.data.recordCount ?? filteredCount;
+      toast.success(`Report with ${sentCount} record(s) sent successfully!`);
       setShowMailModal(false);
       setEmailAddress("");
     }
@@ -429,147 +416,14 @@ const apiBookings = [
 
 
 
-  // Filtered inhouse bookings using useMemo
+  // Filtered inhouse bookings using useMemo.
+  // Structured filters (agent/hotel/type/category/room/city/country/dates) are applied
+  // SERVER-SIDE when Search is pressed; only the free-text search is applied here.
   const filteredinhousebookings = useMemo(() => {
     return inhouseBookings.filter(a => {
       if (!a) return false;
 
-      // Filter 1: Agent Filter
-      if (selectedAgent) {
-        let matches = false;
-        
-        // First try to match by ID
-        if (a.agentId && String(a.agentId) === String(selectedAgent)) {
-          matches = true;
-        } else {
-          // If ID doesn't match, try matching by name
-          const selectedAgentName = agentOptions.find(opt => String(opt.id) === String(selectedAgent))?.name;
-          if (selectedAgentName) {
-            const agentNameStr = String(a.agentName || '').trim();
-            const selectedAgentNameStr = String(selectedAgentName || '').trim();
-            matches = agentNameStr === selectedAgentNameStr || agentNameStr.includes(selectedAgentNameStr);
-          }
-        }
-        
-        if (!matches) return false;
-      }
-
-      // Filter 2: Hotel Filter
-      if (selectedhotelfilter) {
-        let matches = false;
-        
-        // First try to match by ID (most reliable)
-        if (a.hotelId && String(a.hotelId) === String(selectedhotelfilter)) {
-          matches = true;
-        } else {
-          // If ID doesn't match, try matching by name
-          const selectedHotelName = hotelfilterOption.find(opt => String(opt.id) === String(selectedhotelfilter))?.name;
-          if (selectedHotelName) {
-            const hotelNameStr = String(a.hotelName || '').trim();
-            const selectedHotelNameStr = String(selectedHotelName || '').trim();
-            matches = hotelNameStr === selectedHotelNameStr;
-          }
-        }
-        
-        if (!matches) return false;
-      }
-
-      // Filter 3: Hotel Type Filter
-      if (hoteltype) {
-        let matches = false;
-        
-        // First try to match by ID
-        if (a.hotelTypeId && String(a.hotelTypeId) === String(hoteltype)) {
-          matches = true;
-        } else {
-          // If ID doesn't match, try matching by name
-          const selectedTypeName = hotelTypeOptions.find(opt => String(opt.id) === String(hoteltype))?.name;
-          if (selectedTypeName) {
-            const hotelTypeStr = String(a.hotelType || '').trim();
-            const selectedTypeStr = String(selectedTypeName || '').trim();
-            matches = hotelTypeStr === selectedTypeStr;
-          }
-        }
-        
-        if (!matches) return false;
-      }
-
-      // Filter 4: Hotel Category Filter
-      if (hotelcategories) {
-        let matches = false;
-        
-        // First try to match by ID
-        if (a.hotelCategoryId && String(a.hotelCategoryId) === String(hotelcategories)) {
-          matches = true;
-        } else {
-          // If ID doesn't match, try matching by category name/value
-          const selectedCategory = hotelCategoriesOptions.find(opt => String(opt.id) === String(hotelcategories));
-          if (selectedCategory) {
-            const categoryValue = selectedCategory.name?.hotelCategory || selectedCategory.name;
-            const bookingCategoryStr = String(a.hotelCategory || a.HotelCategory || '').trim();
-            const selectedCategoryStr = String(categoryValue || '').trim();
-            matches = bookingCategoryStr === selectedCategoryStr || 
-                     bookingCategoryStr.includes(selectedCategoryStr) ||
-                     selectedCategoryStr.includes(bookingCategoryStr);
-          }
-        }
-        
-        if (!matches) return false;
-      }
-
-      // Filter 5: Room Category Filter
-      if (roomCategory) {
-        let matches = false;
-        
-        // First try to match by ID
-        if (a.roomCategoryId && String(a.roomCategoryId) === String(roomCategory)) {
-          matches = true;
-        } else {
-          // If ID doesn't match, try matching by name
-          const selectedRoomCategoryName = roomCategoryOptions.find(opt => String(opt.id) === String(roomCategory))?.name;
-          if (selectedRoomCategoryName) {
-            const roomCategoryStr = String(a.roomCategory || '').trim();
-            const selectedRoomCategoryStr = String(selectedRoomCategoryName || '').trim();
-            matches = roomCategoryStr === selectedRoomCategoryStr || 
-                     roomCategoryStr.includes(selectedRoomCategoryStr);
-          }
-        }
-        
-        if (!matches) return false;
-      }
-
-      // Filter 6: Date Range Filter
-      if (fromDate && toDate) {
-        try {
-          const from = new Date(fromDate);
-          const to = new Date(toDate);
-          
-          if (a.checkIn) {
-            // Handle different date formats
-            let itemDate;
-            if (typeof a.checkIn === 'string') {
-              if (a.checkIn.includes('/')) {
-                // Format: DD/MM/YYYY
-                itemDate = new Date(a.checkIn.split('/').reverse().join('-'));
-              } else {
-                itemDate = new Date(a.checkIn);
-              }
-            } else {
-              itemDate = new Date(a.checkIn);
-            }
-            
-            if (isNaN(itemDate.getTime())) return false;
-            if (itemDate < from || itemDate > to) return false;
-          } else {
-            return false;
-          }
-        } catch (error) {
-          console.error("Date parsing error:", error);
-          return false;
-        }
-      }
-
-      // Filter 7: Text Search (using searchInhouseQuery - the applied one)
+      // Text Search (using searchInhouseQuery - the applied one)
       if (searchInhouseQuery && searchInhouseQuery.trim()) {
         const search = searchInhouseQuery.trim().toLowerCase();
         const matchesSearch =
@@ -579,6 +433,8 @@ const apiBookings = [
           (a.hotelCategory && String(a.hotelCategory).toLowerCase().includes(search)) ||
           (a.HotelCategory && String(a.HotelCategory).toLowerCase().includes(search)) ||
           (a.roomCategory && String(a.roomCategory).toLowerCase().includes(search)) ||
+          (a.hotelCity && String(a.hotelCity).toLowerCase().includes(search)) ||
+          (a.hotelCountry && String(a.hotelCountry).toLowerCase().includes(search)) ||
           (a.noOfBooking && String(a.noOfBooking).toLowerCase().includes(search)) ||
           (a.cancelledBooking && String(a.cancelledBooking).toLowerCase().includes(search));
         
@@ -587,7 +443,7 @@ const apiBookings = [
 
       return true; // If all filters pass, include this booking
     });
-  }, [inhouseBookings, selectedAgent, selectedhotelfilter, hoteltype, hotelcategories, roomCategory, fromDate, toDate, searchInhouseQuery, agentOptions, hotelfilterOption, hotelTypeOptions, hotelCategoriesOptions, roomCategoryOptions]);
+  }, [inhouseBookings, searchInhouseQuery]);
 
   // Filtered API bookings using useMemo
   const filteredapiBookings = useMemo(() => {
@@ -665,7 +521,7 @@ const apiBookings = [
   }, [apiBookings, apiFilters, searchApiQuery]);
 
   // Handle search button click
-  const handleSearch = () => {
+  const handleSearch = async () => {
     if (reportType === 'inhouse') {
       // Validate date range for inhouse
       if (tempFromDate && tempToDate) {
@@ -677,12 +533,29 @@ const apiBookings = [
         }
       }
 
-      // Apply temporary filter values to actual filter values
+      // Build query params for server-side filtering (only send non-empty values)
+      const params = {};
+      if (tempAgent) params.agentId = tempAgent;
+      if (tempSelectedhotelfilter) params.hotelId = tempSelectedhotelfilter;
+      if (temphoteltype) params.hotelTypeId = temphoteltype;
+      if (temphotelCategories) params.hotelCategoryId = temphotelCategories;
+      if (temproomCategory) params.roomCategoryId = temproomCategory;
+      if (tempCity) params.cityId = tempCity;
+      if (tempCountry) params.countryId = tempCountry;
+      if (tempFromDate) params.fromDate = tempFromDate;
+      if (tempToDate) params.toDate = tempToDate;
+
+      const ok = await fetchInhouseReport(params);
+      if (!ok) return;
+
+      // Apply temporary filter values to actual filter values (used by the mail payload)
       setSelectedAgent(tempAgent);
       setSelectedHotelfilter(tempSelectedhotelfilter);
       setHotelType(temphoteltype);
       setHotelCategories(temphotelCategories);
       setRoomCategory(temproomCategory);
+      setSelectedCity(tempCity);
+      setSelectedCountry(tempCountry);
       setFromDate(tempFromDate);
       setToDate(tempToDate);
       setSearchInhouseQuery(tempSearchQuery);
@@ -743,6 +616,8 @@ const apiBookings = [
                         setTemphoteltype("");
                         settempHotelCategories("");
                         settempRoomCategory("");
+                        setTempCity("");
+                        setTempCountry("");
                         setTempFromDate("");
                         setTempToDate("");
                         setTempSearchQuery("");
@@ -751,10 +626,13 @@ const apiBookings = [
                         setHotelType("");
                         setHotelCategories("");
                         setRoomCategory("");
+                        setSelectedCity("");
+                        setSelectedCountry("");
                         setFromDate("");
                         setToDate("");
                         setSearchInhouseQuery("");
                         setInhouseCurrentPage(1);
+                        fetchInhouseReport();
                       }}
                     />
                     <Form.Check
@@ -811,6 +689,16 @@ const apiBookings = [
                       <RoomCategory value={temproomCategory} onChange={settempRoomCategory}/>
                     </Col>
 
+                    {/* Country */}
+                    <Col md={2}>
+                      <Country value={tempCountry} onChange={(val)=>{setTempCountry(val); setTempCity("");}}/>
+                    </Col>
+
+                    {/* City (cities of the selected country) */}
+                    <Col md={2}>
+                      <City value={tempCity} onChange={setTempCity} countryId={tempCountry}/>
+                    </Col>
+
                     {/* From Date */}
                     <Col md={3}>
                       <Form.Group className="mb-0">
@@ -865,13 +753,16 @@ const apiBookings = [
                     </Col>
                   </Row>
 
-                  {/* Search Input */}
+                  {/* Search Input (filters live as the user types) */}
                   <Row className="mt-3">
                     <Col className="d-flex justify-content-end">
                       <input
                         type="text"
                         value={tempSearchQuery}
-                        onChange={(e)=>setTempSearchQuery(e.target.value)}
+                        onChange={(e)=>{
+                          setTempSearchQuery(e.target.value);
+                          setSearchInhouseQuery(e.target.value);
+                        }}
                         placeholder="search here"
                         className="form-control form-control-sm w-auto"
                       />
@@ -970,13 +861,16 @@ const apiBookings = [
                     </Col>
                   </Row>
 
-                  {/* Search Input */}
+                  {/* Search Input (filters live as the user types) */}
                   <Row className="mt-3">
                     <Col className="d-flex justify-content-end">
                       <input
                         type="text"
                         value={tempSearchQuery}
-                        onChange={(e)=>setTempSearchQuery(e.target.value)}
+                        onChange={(e)=>{
+                          setTempSearchQuery(e.target.value);
+                          setSearchApiQuery(e.target.value);
+                        }}
                         placeholder="search here"
                         className="form-control form-control-sm w-auto"
                       />
