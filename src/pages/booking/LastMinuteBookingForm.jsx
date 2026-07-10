@@ -1427,14 +1427,14 @@ export default function LastMinuteBookingForm() {
                     <Card.Body className="p-3">
                       <Form.Group>
                         <Form.Label className="fw-semibold">
-                          Are you sure to continue booking?
+                          Are you sure you want to continue with the booking?
                         </Form.Label>
                         <div className="d-flex flex-column gap-2 mt-1">
                           <Form.Check
                             type="radio"
                             id="lm-book-voucher-now"
                             name="lmBookingConfirmation"
-                            label="Book Now & Voucher Now"
+                            label="Book and Pay Now"
                             value="Book & Voucher"
                             checked={bookingConfirmation === "Book & Voucher"}
                             onChange={(e) => setBookingConfirmation(e.target.value)}
@@ -1443,7 +1443,7 @@ export default function LastMinuteBookingForm() {
                             type="radio"
                             id="lm-book-voucher-later"
                             name="lmBookingConfirmation"
-                            label="Book Now & Voucher Later"
+                            label="Hold Room and Pay Later"
                             value="Book Now & Voucher later"
                             checked={bookingConfirmation === "Book Now & Voucher later"}
                             onChange={(e) => setBookingConfirmation(e.target.value)}

@@ -1926,14 +1926,14 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                         <Card.Body className="p-3">
                           <Form.Group className="mb-0">
                             <Form.Label className="mb-2 fw-semibold">
-                              Are you sure to continue booking?
+                              Are you sure you want to continue with the booking?
                             </Form.Label>
                             <div className="d-flex flex-column gap-2 mt-1">
                               <Form.Check
                                 type="radio"
                                 id="book-voucher"
                                 name="bookingConfirmation"
-                                label="Book Now & Voucher Now "
+                                label="Book and Pay Now"
                                 value="Book & Voucher"
                                 checked={
                                   voucherChoiceMade &&
@@ -1950,7 +1950,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                                 type="radio"
                                 id="book-now-voucher-later"
                                 name="bookingConfirmation"
-                                label="Book Now & Voucher Later"
+                                label="Hold Room and Pay Later"
                                 value="Book Now & Voucher later"
                                 checked={
                                   voucherChoiceMade &&

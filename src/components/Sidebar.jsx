@@ -397,6 +397,12 @@ export default function Sidebar() {
       label: "Booking List",
       roles: ["admin", "agent", "staff"],
       children: [
+        // Unified list combining all booking types below into one view
+        // (new, additive page — every other entry here is unchanged).
+        {
+          label: "All Bookings",
+          to: "/booking-details/all-bookings-list",
+        },
         {
           label: "Hotel",
           to: "/booking-details/hotel-booking-list",
