@@ -15,6 +15,8 @@ import AgentSelect from "../components/AgentSelect";
 import AgentCreditBalance from "../components/AgentCreditBalance";
 import axiosInstance from "../components/AxiosInstance";
 import AdvertisementCarousel from "../components/AdvertisementCarousel";
+import MapModal from "../components/map/MapModal";
+import { ENABLE_MAP_PREVIEW } from "../config/featureFlags";
 import { FaSearch, FaStar, FaInfoCircle } from "react-icons/fa";
 import { useNavigate, useLocation } from "react-router-dom";
 import "../styles/HotelSearch.css";
@@ -436,6 +438,15 @@ export default function HotelSearch({ force24Hour = false } = {}) {
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [nights, setNights] = useState(1);
+  // Longest stay this search form allows. Enforced both when the user types
+  // directly into the Nights field and when they pick a Check-Out date more
+  // than MAX_NIGHTS days after Check-In.
+  const MAX_NIGHTS = 15;
+  const NIGHTS_LIMIT_MESSAGE = `Maximum stay allowed is ${MAX_NIGHTS} nights.`;
+  // Guards the checkIn/checkOut effect below from immediately clearing the
+  // limit error on the render that follows our own auto-corrective
+  // setCheckOut call (see that effect for details).
+  const isAutoCorrectingNights = useRef(false);
   const [agent, setAgent] = useState("");
   const [agentBalance, setAgentBalance] = useState(null);
   const [agentBalanceLoading, setAgentBalanceLoading] = useState(false);
@@ -476,6 +487,9 @@ export default function HotelSearch({ force24Hour = false } = {}) {
   const [sortBy, setSortBy] = useState("priceAsc");
   const [hotelSearchTerm, setHotelSearchTerm] = useState("");
   const [errors, setErrors] = useState({});
+  // "Explore on Map" modal — shows every currently-visible hotel with
+  // usable coordinates. See components/map/MapModal.jsx.
+  const [showMapModal, setShowMapModal] = useState(false);
 
   // ── Currency conversion (display only) ────────────────────────────────
   // Search rates come back in AED (the base currency). The currency dropdown
@@ -642,26 +656,58 @@ export default function HotelSearch({ force24Hour = false } = {}) {
 
   useEffect(() => {
     if (checkIn && checkOut) {
+      // Skip the recompute that follows our own corrective setCheckOut call
+      // below — otherwise this second pass would immediately recompute a
+      // within-limit diff and clear the error message before the user sees it.
+      if (isAutoCorrectingNights.current) {
+        isAutoCorrectingNights.current = false;
+        return;
+      }
       const start = new Date(checkIn);
       const end = new Date(checkOut);
       const diff = Math.max(
         1,
         Math.ceil((end - start) / (1000 * 60 * 60 * 24)),
       );
-      setNights(diff);
+      if (diff > MAX_NIGHTS) {
+        const cappedOut = new Date(start);
+        cappedOut.setDate(start.getDate() + MAX_NIGHTS);
+        const iso = new Date(
+          cappedOut.getTime() - cappedOut.getTimezoneOffset() * 60000,
+        )
+          .toISOString()
+          .slice(0, 10);
+        isAutoCorrectingNights.current = true;
+        setNights(MAX_NIGHTS);
+        setCheckOut(iso);
+        setErrors((prev) => ({ ...prev, nights: NIGHTS_LIMIT_MESSAGE }));
+      } else {
+        setNights(diff);
+        clearError("nights");
+      }
     }
   }, [checkIn, checkOut]);
 
   const handleNightsChange = (value) => {
-    const val = Math.max(1, Number(value) || 1);
-    setNights(val);
+    const raw = Math.max(1, Number(value) || 1);
+    const capped = Math.min(raw, MAX_NIGHTS);
+    setNights(capped);
+    if (raw > MAX_NIGHTS) {
+      setErrors((prev) => ({ ...prev, nights: NIGHTS_LIMIT_MESSAGE }));
+    } else {
+      clearError("nights");
+    }
     if (checkIn) {
       const start = new Date(checkIn);
       const out = new Date(start);
-      out.setDate(start.getDate() + val);
+      out.setDate(start.getDate() + capped);
       const iso = new Date(out.getTime() - out.getTimezoneOffset() * 60000)
         .toISOString()
         .slice(0, 10);
+      // Capped means the checkOut we're about to set already reflects
+      // MAX_NIGHTS, so suppress the checkIn/checkOut effect's own recompute
+      // for the same reason as above.
+      if (raw > MAX_NIGHTS) isAutoCorrectingNights.current = true;
       setCheckOut(iso);
     }
   };
@@ -816,6 +862,22 @@ export default function HotelSearch({ force24Hour = false } = {}) {
   }, [allResults, hotelSearchTerm, starRating, hotelType, channelType,
       availableDeals, featureFlagsMap,
       is24HourCheckin, twentyFourHourMap]);
+
+  // "Explore on Map" markers — one per currently-visible (filtered) hotel.
+  // MapModal itself drops any entry whose lat/lng isn't a finite number, so
+  // no need to pre-filter here.
+  const mapMarkers = useMemo(
+    () =>
+      filteredResults.map((hotel) => ({
+        id: hotel.id,
+        name: hotel.name,
+        lat: hotel.latitude,
+        lng: hotel.longitude,
+        address: hotel.address,
+        contactNumber: hotel.contactNumber,
+      })),
+    [filteredResults],
+  );
 
   // Union of active feature labels across hotels currently in view. Order
   // mirrors the backend's canonical ordering (Long Stay → 24 Hour Check-In
@@ -1090,15 +1152,14 @@ export default function HotelSearch({ force24Hour = false } = {}) {
     }
   }, [starRating, hotelType, channelType, sortBy]);
 
-  // After a fresh search, jump the viewport to the results so the operator
-  // sees them without having to scroll past the search card. Fires once the
-  // first batch of hotels actually arrives.
+  // After a fresh search, jump the viewport to the very top of the page so
+  // the operator sees the "Hotel / Accommodation" heading and summary strip
+  // first, not just the results list further down. Fires once the first
+  // batch of hotels actually arrives.
   useEffect(() => {
     if (!hasSearched || !isInitialResultsLoaded) return;
     const id = window.setTimeout(() => {
-      if (resultsRef.current) {
-        resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }, 50);
     return () => window.clearTimeout(id);
   }, [hasSearched, isInitialResultsLoaded]);
@@ -1121,6 +1182,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
     if (!selectedDestination) newErrors.destination = "Destination is required";
     if (!checkIn) newErrors.checkIn = "Check-in date is required";
     if (!checkOut) newErrors.checkOut = "Check-out date is required";
+    if (nights > MAX_NIGHTS) newErrors.nights = NIGHTS_LIMIT_MESSAGE;
     // Agent logins book under themselves (backend forces the agent id and the
     // picker is hidden), so the agent is never set manually — skip this check
     // for them or the search can never pass validation.
@@ -1193,6 +1255,9 @@ export default function HotelSearch({ force24Hour = false } = {}) {
             // "Destination Sales" pill and filter actually work.
             hasDestinationSales: !!hotel.hasDestinationSales,
             flashSale: !!hotel.flashSale,
+            latitude: hotel.latitude,
+            longitude: hotel.longitude,
+            contactNumber: hotel.contactNumber || "",
           }))
         : [];
 
@@ -1383,6 +1448,9 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                 // "Destination Sales" pill + filter actually work.
                 hasDestinationSales: !!hotel.hasDestinationSales,
                 flashSale: !!hotel.flashSale,
+                latitude: hotel.latitude,
+                longitude: hotel.longitude,
+                contactNumber: hotel.contactNumber || "",
               }))
             : [];
 
@@ -1516,6 +1584,22 @@ export default function HotelSearch({ force24Hour = false } = {}) {
         <Sidebar />
 
         <main className="flex-grow-1 p-4 hs-page">
+          {/* ── Results-page heading ──
+              Shown once actual results have arrived (not just on search
+              click — avoids flashing the heading during the loading/poll
+              phase), above the search summary / form. Stays visible whether
+              the summary is collapsed or re-expanded via "Modify Search". */}
+          {showResultsDuringPolling && (
+            <div className="hs-page-heading">
+              <h3 className="hs-page-heading-title">
+                {force24Hour ? "24 Hours" : "Accommodation"}
+              </h3>
+              {/* <p className="hs-page-heading-subtitle">
+                Browse and book hotels, resorts, villas and apartments.
+              </p> */}
+            </div>
+          )}
+
           {/* ── Collapsed sticky search summary strip ──
               Shown once results are on screen. "Modify Search" re-expands
               the full form by flipping isEditingSearch. */}
@@ -1563,15 +1647,21 @@ export default function HotelSearch({ force24Hour = false } = {}) {
           <div className="d-flex gap-3 align-items-start mb-2 hs-search-ads-row">
            <div className="flex-grow-1" style={{ minWidth: 0 }}>
           <Card className="shadow-sm rounded-xl search-card-modern bg-white h-100">
-            <Card.Body className="p-4">
-              <div className="mb-4 text-start d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <Card.Body className={force24Hour ? "p-4 hs24-compact" : "p-4"}>
+              <div
+                className={
+                  force24Hour
+                    ? "mb-2 text-start d-flex justify-content-between align-items-start flex-wrap gap-2"
+                    : "mb-4 text-start d-flex justify-content-between align-items-start flex-wrap gap-2"
+                }
+              >
                 <div>
                   <h2 className="fw-semibold text-primary mb-1">
                     {force24Hour
-                      ? "24 Hour Check-In Booking"
+                      ? "24 Hours"
                       : "Find Your Perfect Stay"}
                   </h2>
-                  <p className="text-muted">
+                  <p className={force24Hour ? "text-muted mb-0" : "text-muted"}>
                     {force24Hour
                       ? "Pick a check-in time — we'll filter to hotels with an active 24-hour config and apply the per-hotel uplift."
                       : "Discover amazing hotels and exclusive deals"}
@@ -1596,9 +1686,12 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                   Row totals stay 12 on lg so the form keeps its
                   responsive feel — first row holds Agent + Destination +
                   Nationality (4/4/4), second row holds Check-In + Nights +
-                  Check-Out + Rooms & Guests (3/2/3/4).
+                  Check-Out + Rooms & Guests (3/2/3/4). On the 24-hour route,
+                  Check-In Time + Check-Out Time join Rooms & Guests as a
+                  third 4/4/4 row (rather than a separate Row below) purely
+                  to cut vertical space so the form fits on screen.
                 */}
-                <Row className="g-4">
+                <Row className={force24Hour ? "g-3" : "g-4"}>
                   {/* 1. Agent */}
                   {!isAgentRole && (
                   <Col lg={4} md={6}>
@@ -1843,10 +1936,15 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                         className="form-control-modern"
                         type="number"
                         min={1}
-                        max={60}
+                        max={MAX_NIGHTS}
                         value={nights}
                         onChange={(e) => handleNightsChange(e.target.value)}
                       />
+                      {errors.nights && (
+                        <div className="text-danger small mt-1">
+                          {errors.nights}
+                        </div>
+                      )}
                     </Form.Group>
                   </Col>
 
@@ -1921,6 +2019,55 @@ export default function HotelSearch({ force24Hour = false } = {}) {
 </Button>
                     </div>
                   </Col>
+
+                  {/* ── 24 Hour Check-In time inputs ─────────────────────
+                      Rendered ONLY on the dedicated 24-hour route
+                      (force24Hour=true). Kept as plain columns in the same
+                      Row as the rest of the criteria (rather than a
+                      separate Row below) purely so the form fits on screen
+                      without extra scrolling — same fields, same handlers,
+                      just laid out more compactly. The 24-hour
+                      post-processing / probe call still only runs when
+                      is24HourCheckin is true, which on the normal route
+                      stays false for the entire lifetime of the page. */}
+                  {force24Hour && (
+                    <>
+                      <Col lg={4} md={6}>
+                        <Form.Group>
+                          <Form.Label className="fw-semibold text-dark">
+                            Check-In Time (24-hour)
+                          </Form.Label>
+                          <Form.Control
+                            style={{ height: "42px" }}
+                            className="form-control-modern"
+                            type="time"
+                            value={checkInTime24}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setCheckInTime24(v);
+                              // Auto-bump check-out to the same time → 24h later.
+                              // User can override afterwards.
+                              if (v) setCheckOutTime24(v);
+                            }}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col lg={4} md={6}>
+                        <Form.Group>
+                          <Form.Label className="fw-semibold text-dark">
+                            Check-Out Time
+                          </Form.Label>
+                          <Form.Control
+                            style={{ height: "42px" }}
+                            className="form-control-modern"
+                            type="time"
+                            value={checkOutTime24}
+                            onChange={(e) => setCheckOutTime24(e.target.value)}
+                          />
+                        </Form.Group>
+                      </Col>
+                    </>
+                  )}
                 </Row>
 
                 {roomsOpen && (
@@ -1931,46 +2078,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                   </Row>
                 )}
 
-                {/* ── 24 Hour Check-In time inputs ─────────────────────
-                    Rendered ONLY on the dedicated 24-hour route
-                    (force24Hour=true). The legacy in-page toggle has
-                    been removed — the normal /new-booking/hotel route
-                    is now a clean normal-booking flow. The 24-hour
-                    post-processing / probe call still only runs when
-                    is24HourCheckin is true, which on the normal route
-                    stays false for the entire lifetime of the page. */}
-                {force24Hour && (
-                  <Row className="g-3 mt-2 align-items-end">
-                    <Col md={6}>
-                      <Form.Label className="fw-semibold text-dark mb-1">
-                        Check-In Time (24-hour)
-                      </Form.Label>
-                      <Form.Control
-                        type="time"
-                        value={checkInTime24}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setCheckInTime24(v);
-                          // Auto-bump check-out to the same time → 24h later.
-                          // User can override afterwards.
-                          if (v) setCheckOutTime24(v);
-                        }}
-                      />
-                    </Col>
-                    <Col md={6}>
-                      <Form.Label className="fw-semibold text-dark mb-1">
-                        Check-Out Time
-                      </Form.Label>
-                      <Form.Control
-                        type="time"
-                        value={checkOutTime24}
-                        onChange={(e) => setCheckOutTime24(e.target.value)}
-                      />
-                    </Col>
-                  </Row>
-                )}
-
-                <Row className="mt-3">
+                <Row className={force24Hour ? "mt-2" : "mt-3"}>
                   <Col className="d-flex justify-content-center gap-3">
                     <Button
                       type="submit"
@@ -1991,8 +2099,8 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                         <>
                           <FaSearch className="me-2" />
                           {force24Hour
-                            ? "SEARCH 24-HOUR STAYS"
-                            : "SEARCH HOTELS"}
+                            ? "SEARCH"
+                            : "SEARCH"}
                         </>
                       )}
                     </Button>
@@ -2103,9 +2211,15 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                               alt="Map preview"
                               className="map-preview-img"
                             />
-                            <button className="map-overlay-btn">
-                              EXPLORE ON MAP 📍
-                            </button>
+                            {ENABLE_MAP_PREVIEW && (
+                              <button
+                                type="button"
+                                className="map-overlay-btn"
+                                onClick={() => setShowMapModal(true)}
+                              >
+                                EXPLORE ON MAP 📍
+                              </button>
+                            )}
                           </div>
 
                           <Form.Control
@@ -2891,6 +3005,15 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                 </Row>
               </div>
             </div>
+          )}
+
+          {ENABLE_MAP_PREVIEW && (
+            <MapModal
+              show={showMapModal}
+              onHide={() => setShowMapModal(false)}
+              markers={mapMarkers}
+              title="Explore on Map"
+            />
           )}
         </main>
       </div>

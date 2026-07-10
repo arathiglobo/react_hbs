@@ -587,15 +587,14 @@ export default function SeniorCitizenSearch() {
     }
   };
 
-  // After a fresh search, jump the viewport to the results so the operator
-  // sees them without having to scroll past the search card. Fires once the
-  // first batch of hotels actually arrives.
+  // After a fresh search, jump the viewport to the very top of the page so
+  // the operator sees the heading and summary strip first, not just the
+  // results list further down. Fires once the first batch of hotels
+  // actually arrives.
   useEffect(() => {
     if (!hasSearched || !hasSearchResult) return;
     const id = window.setTimeout(() => {
-      if (resultsRef.current) {
-        resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }, 50);
     return () => window.clearTimeout(id);
   }, [hasSearched, hasSearchResult]);
@@ -850,6 +849,16 @@ export default function SeniorCitizenSearch() {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4 hs-page">
+          {/* ── Results-page heading ──
+              Shown once actual results have arrived (not just on search
+              click), above the search summary / form. Matches the heading
+              on /new-booking/hotel. */}
+          {hasResultsView && (
+            <div className="hs-page-heading">
+              <h3 className="hs-page-heading-title">Senior Citizen</h3>
+            </div>
+          )}
+
           {/* ── Search Card + Ads ── */}
           {collapseSearch && (
             <div className="hs-summary-bar">

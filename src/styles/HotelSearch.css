@@ -1233,6 +1233,16 @@
   background: #fff !important; backdrop-filter: none !important;
   padding: 32px 32px 28px !important;
 }
+/* 24-hour route only — tighter padding/heading so the criteria (including
+   the Check-In/Check-Out Time row) fit on screen without extra scrolling.
+   Scoped to .hs24-compact so the normal /new-booking/hotel route keeps its
+   original spacing untouched. */
+.hs-page .search-card-modern .card-body.hs24-compact {
+  padding: 22px 28px 20px !important;
+}
+.hs-page .search-card-modern .card-body.hs24-compact h2 {
+  font-size: clamp(1.4rem, 1rem + 1.2vw, 1.8rem) !important;
+}
 
 /* Friendly hero headline */
 .hs-page .search-card-modern h2 {
@@ -1326,6 +1336,34 @@
 }
 .hs-search-ads-row > .flex-grow-1 > .search-card-modern {
   height: 100%;
+}
+
+/* ── Results-page heading ────────────────────────────────────────────────
+   "Hotel / Accommodation" + subtitle, shown above the search summary once
+   a search has been performed. Matches the search card's hero typography
+   (same red, same weight/letter-spacing) so it reads as one system. */
+.hs-page-heading {
+  margin: 0 0 16px;
+  animation: hsSummarySlide .26s ease;
+}
+.hs-page-heading-title {
+  font-size: clamp(1.5rem, 1rem + 1.6vw, 2rem) !important;
+  font-weight: 700 !important;
+  letter-spacing: -.038em !important;
+  line-height: 1.12 !important;
+  color: #EC0B43 !important;
+  margin: 0 0 4px !important;
+}
+.hs-page-heading-subtitle {
+  color: #6B7280 !important;
+  font-size: .98rem !important;
+  letter-spacing: -.01em !important;
+  margin: 0 !important;
+}
+@media (max-width: 575.98px) {
+  .hs-page-heading {
+    margin: 0 0 12px;
+  }
 }
 
 /* ── Collapsed sticky search summary strip ──────────────────────────────

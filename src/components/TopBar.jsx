@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import React, { useState, useEffect, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import {
   Navbar,
   Container,
@@ -13,7 +13,7 @@ import {
   Row,
   Col,
   Spinner,
-  Form
+  Form,
 } from "react-bootstrap";
 import {
   FaKey,
@@ -29,12 +29,29 @@ import {
   FaChild,
   FaInfoCircle,
   FaArrowLeft,
+  FaHotel,
+  FaClock,
+  FaFire,
+  FaBriefcase,
+  FaSun,
+  FaBoxOpen,
+  FaGift,
+  FaCar,
+  FaTaxi,
+  FaGlobeAmericas,
+  FaUtensils,
+  FaHeart,
+  FaUserFriends,
+  FaPlane,
+  FaLeaf,
+  FaGraduationCap,
+  FaUserAlt,
+  FaPrayingHands,
 } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
 import { toast } from "react-hot-toast";
 
 export default function TopBar() {
-  const navigate = useNavigate();
   const location = useLocation();
   // "Back to Dashboard" shortcut shown on every page except the dashboards
   // themselves, so a click on any Quick Actions tile (or any other nav) can
@@ -58,6 +75,63 @@ export default function TopBar() {
   const backToDashboardPath = DASHBOARD_BY_ROLE[currentRole];
   const showBackToDashboard =
     !!backToDashboardPath && location.pathname !== backToDashboardPath;
+
+  // Clicking the Globosoft brand mark opens this accordion for agent logins
+  // only — same Quick Actions tile set as AgentDashboard.jsx's bookingActions,
+  // so an agent can jump to a New Booking page from anywhere, not just the
+  // dashboard. Rendered as a fixed glass overlay above the sidebar + page
+  // content (not inline), so it never pushes the layout down. navHeight is
+  // measured off the sticky navbar so the overlay starts right below it
+  // regardless of the navbar's actual rendered height.
+  const [showQuickActions, setShowQuickActions] = useState(false);
+  const navRef = useRef(null);
+  const [navHeight, setNavHeight] = useState(64);
+  useEffect(() => {
+    const measure = () => {
+      if (navRef.current) setNavHeight(navRef.current.offsetHeight);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+  // Left offset so the overlay starts AFTER the sidebar instead of covering
+  // it — the sidebar (and its collapse toggle) stays visible/usable while
+  // the panel is open. Measured straight off the DOM (Sidebar.jsx renders
+  // <aside className="sidebar"> only when expanded and only on desktop),
+  // so it's naturally 0 when the sidebar is collapsed or hidden on mobile.
+  const [sidebarOffset, setSidebarOffset] = useState(0);
+  const measureSidebarOffset = () =>
+    typeof document !== "undefined"
+      ? document.querySelector(".sidebar")?.offsetWidth || 0
+      : 0;
+  useEffect(() => {
+    if (!showQuickActions) return undefined;
+    const measure = () => setSidebarOffset(measureSidebarOffset());
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [showQuickActions]);
+  const quickActions = [
+    { label: "Hotel",              tone: "pink",   icon: <FaHotel />,          to: "/new-booking/hotel" },
+    { label: "24 Hour",            tone: "pink",   icon: <FaClock />,          to: "/new-booking/hotel-24hr" },
+    { label: "Last Minute",        tone: "orange", icon: <FaFire />,           to: "/new-booking/last-minute-booking" },
+    { label: "Long Stay",          tone: "purple", icon: <FaBriefcase />,      to: "/new-booking/long-stay" },
+    { label: "Day Stay",           tone: "blue",   icon: <FaSun />,            to: "/new-booking/day-stay" },
+    { label: "Build Your Own Pkg", tone: "green",  icon: <FaBoxOpen />,        to: "/new-booking/make-your-own-package-v2" },
+    { label: "Package",            tone: "orange", icon: <FaGift />,           to: "/new-booking/package-search" },
+    { label: "Transfers",          tone: "teal",   icon: <FaCar />,            to: "/new-booking/cab" },
+    { label: "Chauffeur & Limo",   tone: "purple", icon: <FaTaxi />,           to: "/new-booking/scheffer-driver" },
+    { label: "Tours & Activity",   tone: "green",  icon: <FaGlobeAmericas />,  to: "/new-booking/tours-and-activities" },
+    { label: "Restaurant",         tone: "orange", icon: <FaUtensils />,       to: "/new-booking/restaurant" },
+    { label: "Honeymoon Package",  tone: "pink",   icon: <FaHeart />,          to: "/new-booking/honeymoon" },
+    { label: "Meeting Space",      tone: "purple", icon: <FaUserFriends />,    to: "/new-booking/meet-and-space" },
+    { label: "Govt/Airline/Hoteliers", tone: "blue", icon: <FaPlane />,        to: "/new-booking/gov-employee" },
+    { label: "Ayurveda",           tone: "green",  icon: <FaLeaf />,           to: "/new-booking/ayurveda" },
+    { label: "Student",            tone: "purple", icon: <FaGraduationCap />,  to: "/new-booking/student" },
+    { label: "Senior Citizen",     tone: "orange", icon: <FaUserAlt />,        to: "/new-booking/senior-citizen" },
+    { label: "Religious",          tone: "orange", icon: <FaPrayingHands />,   to: "/new-booking/senior-citizen" },
+  ];
+
   const [showCartModal, setShowCartModal] = useState(false);
   const [cartItems, setCartItems] = useState([]);
   const [cartLoading, setCartLoading] = useState(false);
@@ -655,14 +729,29 @@ export default function TopBar() {
     };
   }, []);
 
+  // AgentDashboard.jsx already shows Quick Actions inline on the page
+  // itself, so the Globosoft-icon overlay would just be a redundant
+  // duplicate there — only wire it up on every OTHER page.
+  const showQuickActionsOnThisPage =
+    currentRole === "agent" && location.pathname !== "/agentDashboard";
+
   return (
-    <Navbar className="topbar shadow-sm" expand="lg" sticky="top">
+    <>
+    <Navbar ref={navRef} className="topbar shadow-sm" expand="lg" sticky="top">
       <Container fluid className="px-3">
        <Navbar.Brand
   href="#"
+  onClick={(e) => {
+    if (showQuickActionsOnThisPage) {
+      e.preventDefault();
+      setShowQuickActions((o) => !o);
+    }
+  }}
+  aria-expanded={showQuickActionsOnThisPage ? showQuickActions : undefined}
   className="d-flex align-items-center gap-2"
   style={{
-    marginLeft: window.innerWidth <= 991 ? "40px" : "0px"
+    marginLeft: window.innerWidth <= 991 ? "40px" : "0px",
+    cursor: showQuickActionsOnThisPage ? "pointer" : undefined,
   }}
 >
   <div className="logo-placeholder">GS</div>
@@ -849,8 +938,119 @@ export default function TopBar() {
         </Modal.Footer>
       </Modal>
     </Navbar>
+    {showQuickActionsOnThisPage && showQuickActions && (
+      <>
+        <style>{topbarQuickActionsCss}</style>
+        {/* Glass backdrop — fixed over the page content only (not the
+            sidebar, which stays visible/usable via sidebarOffset). Click
+            anywhere outside a tile to dismiss, same as a dropdown/modal. */}
+        <div
+          className="topbar-qa-backdrop"
+          style={{ top: navHeight, left: sidebarOffset }}
+          onClick={() => setShowQuickActions(false)}
+        >
+          <Container fluid className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+            <div className="topbar-qa-grid">
+              {quickActions.map((a, i) => (
+                <button
+                  key={`${a.label}-${i}`}
+                  type="button"
+                  className={`topbar-qa-tile tone-${a.tone}`}
+                  onClick={() => {
+                    setShowQuickActions(false);
+                    window.open(a.to, "_blank", "noopener,noreferrer");
+                  }}
+                >
+                  <span className={`topbar-qa-icon tone-${a.tone}`}>{a.icon}</span>
+                  <span>{a.label}</span>
+                </button>
+              ))}
+            </div>
+          </Container>
+        </div>
+      </>
+    )}
+    </>
   );
 }
+
+const topbarQuickActionsCss = `
+  /* Fixed over the page content (left offset by sidebarOffset so the
+     sidebar itself stays visible) — a frosted "glass" sheet sized to fit
+     the tile grid only (not stretched down the full page), not an inline
+     panel, so it never pushes the layout down. */
+  .topbar-qa-backdrop {
+    position: fixed;
+    left: 0;
+    right: 0;
+    max-height: calc(100vh - 200px);
+    z-index: 1040;
+    /* The dashboard behind is mostly plain white, so blurring alone barely
+       reads as "glass" — a visible frosted edge (border + inner highlight +
+       soft shadow) is what actually sells the effect, on top of a more
+       transparent, slightly tinted fill. */
+    background: linear-gradient(135deg, rgba(255,255,255,.45) 0%, rgba(236,11,67,.06) 50%, rgba(20,184,166,.08) 100%);
+    backdrop-filter: blur(18px) saturate(1.6);
+    -webkit-backdrop-filter: blur(18px) saturate(1.6);
+    border: 1px solid rgba(255,255,255,.6);
+    border-top: none;
+    box-shadow: 0 16px 32px rgba(31,38,135,.14), inset 0 1px 0 rgba(255,255,255,.7);
+    border-bottom-left-radius: 16px;
+    border-bottom-right-radius: 16px;
+    overflow-y: auto;
+    animation: topbarQaFadeIn .18s ease-out;
+  }
+  @keyframes topbarQaFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .topbar-qa-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+    gap: 6px;
+  }
+  .topbar-qa-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 6px;
+    min-height: 80px;
+    background: #fff;
+    border: 1px solid rgba(0,0,0,.08);
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #1a1d23;
+    text-align: center;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: border-color .15s, box-shadow .15s, transform .15s, background-color .15s;
+  }
+  .topbar-qa-tile > span:last-child {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .topbar-qa-tile:hover {
+    box-shadow: 0 10px 20px rgba(0,0,0,.10);
+    transform: translateY(-2px);
+  }
+  .topbar-qa-icon {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+  .topbar-qa-icon.tone-pink   { background: #FDE7ED; color: #EC0B43; }
+  .topbar-qa-icon.tone-orange { background: #FFF1E0; color: #F59E0B; }
+  .topbar-qa-icon.tone-purple { background: #F1EAFB; color: #8B5CF6; }
+  .topbar-qa-icon.tone-blue   { background: #E7F3FE; color: #0EA5E9; }
+  .topbar-qa-icon.tone-green  { background: #E8F8EE; color: #10B981; }
+  .topbar-qa-icon.tone-teal   { background: #E3F7F5; color: #14B8A6; }
+`;
 
 const ProfileToggle = React.forwardRef(({ onClick }, ref) => {
   const [userName, setUserName] = React.useState("");

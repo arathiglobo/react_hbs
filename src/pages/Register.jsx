@@ -305,6 +305,7 @@ const Register = () => {
       if (formData.mobileNumber && !/^\+?\d{10,15}$/.test(formData.mobileNumber.replace(/\s/g, ""))) {
         newErrors.mobileNumber = "Mobile Number must be 10-15 digits";
       }
+      if (!formData.timezone) newErrors.timezone = "Timezone is required.";
     } else if (currentStep === 3) {
       if (!formData.countryId) newErrors.countryId = "Country is required";
       if (!formData.provinceId) newErrors.provinceId = "City is required";
@@ -394,6 +395,7 @@ const Register = () => {
       newErrors.mobileNumber = "Mobile Number is required";
     if (!formData.personalEmail.trim())
       newErrors.personalEmail = "Email ID is required";
+    if (!formData.timezone) newErrors.timezone = "Timezone is required.";
     if (!formData.countryId) newErrors.countryId = "Country is required";
     if (!formData.provinceId) newErrors.provinceId = "Province is required";
     if (!formData.placeId) newErrors.placeId = "City is required";
@@ -1063,7 +1065,9 @@ const Register = () => {
 
                           <Col md={6}>
                             <Form.Group>
-                              <Form.Label className="form-label">Timezone</Form.Label>
+                              <Form.Label className="form-label">
+                                Timezone <span className="required">*</span>
+                              </Form.Label>
                               {/* Searchable timezone dropdown. react-select's
                                   built-in filter matches on the visible label
                                   (display name / IANA id / offset), so a user
@@ -1109,13 +1113,14 @@ const Register = () => {
                                     target: { name: "timezone", value: opt ? String(opt.value) : "" },
                                   })
                                 }
+                                className={errors.timezone ? "is-invalid" : ""}
                                 styles={{
                                   control: (base, state) => ({
                                     ...base,
                                     minHeight: 44,
                                     borderRadius: 11,
                                     borderWidth: 1.5,
-                                    borderColor: state.isFocused ? "#EC0B43" : "#E5E5E1",
+                                    borderColor: errors.timezone ? "#EC0B43" : (state.isFocused ? "#EC0B43" : "#E5E5E1"),
                                     backgroundColor: state.isFocused ? "#fff" : "#FAFAF8",
                                     boxShadow: state.isFocused
                                       ? "0 0 0 4px rgba(236, 11, 67, .12)"
@@ -1138,6 +1143,9 @@ const Register = () => {
                                   }),
                                 }}
                               />
+                              {errors.timezone && (
+                                <div className="invalid-feedback d-block">{errors.timezone}</div>
+                              )}
                             </Form.Group>
                           </Col>
                         </Row>

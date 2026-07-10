@@ -160,13 +160,23 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
       .get(`/api/agent-credit-limit/agent/${aId}`)
       .then((res) => {
         if (!cancelled) {
-          setAgentAvailableBalance(res?.data?.availableCreditLimit ?? null);
+          // effectiveAvailableCreditLimit = regular available credit + any
+          // currently-Active Temporary Credit Limit — the same combined
+          // figure the backend's check-sufficient-credit / booking-create
+          // flow use, so the Payment Mode selector agrees with what the
+          // Confirm step will actually allow. Falls back to
+          // availableCreditLimit for older cached responses.
+          const combinedBalance =
+            res?.data?.effectiveAvailableCreditLimit ??
+            res?.data?.availableCreditLimit ??
+            null;
+          setAgentAvailableBalance(combinedBalance);
           // Treat the agent as a "Cash Agent" when there is no usable credit
           // available (available balance 0/null) — this covers both agents
           // with no credit facility AND credit agents who've used up their
           // balance. Only a positive available balance counts as a credit
           // agent for the Payment Type rule.
-          const available = Number(res?.data?.availableCreditLimit ?? 0);
+          const available = Number(combinedBalance ?? 0);
           setAgentHasAvailableCredit(
             Number.isFinite(available) && available > 0,
           );
@@ -607,7 +617,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
           bookingResponse &&
           bookingResponse.status &&
           (bookingResponse.status.toUpperCase() === "CONFIRMED" ||
-            bookingResponse.status.toUpperCase() === "NOT CONFIRMED") &&
+            bookingResponse.status.toUpperCase() === "On Request") &&
           bookingResponse.bookingId != 0
         ) {
           toast.success(
@@ -1235,6 +1245,14 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
         <Sidebar />
         <main className="content-wrapper py-4">
           <Container fluid="xl">
+            {/* Results-page heading — UI only, mirrors the heading shown
+                on /new-booking/hotel (or /new-booking/hotel-24hr) once
+                results arrive. */}
+            <div className="hs-page-heading">
+              <h3 className="hs-page-heading-title">
+                {force24Hour ? "24 Hours" : "Accommodation"}
+              </h3>
+            </div>
             {agentAvailableBalance != null && (
               <div className="d-flex justify-content-end mb-2">
                 <span
@@ -1331,12 +1349,15 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                             slot.nonRefundable === "true";
                           const slotRefundDeadlineLabel =
                             !slotNonRefundable && cancellationDeadline
-                              ? cancellationDeadline.toLocaleDateString(
+                              ? cancellationDeadline.toLocaleString(
                                   "en-GB",
                                   {
                                     day: "2-digit",
                                     month: "short",
                                     year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    hour12: true,
                                   },
                                 )
                               : null;
@@ -1741,8 +1762,8 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                         {hasSufficientCredit === false &&
                           agentCardPaymentEnabled && (
                             <div className="text-danger small mt-2 fw-semibold">
-                              Insufficient credit limit. Please proceed with
-                              online card payment to complete your booking.
+                              Insufficient credit. Pay with credit card before
+                              time limit and reconfirm.
                             </div>
                           )}
                       </>

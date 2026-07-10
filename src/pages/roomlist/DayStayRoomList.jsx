@@ -741,6 +741,11 @@ export default function DayStayRoomList() {
         <Sidebar />
         <main className="content-wrapper flex-grow-1" style={{ minWidth: 0, overflowX: "hidden" }}>
           <div className="container-fluid" style={{ paddingTop: "10px" }}>
+            {/* Day Stay route heading — UI only, mirrors the heading shown
+                on /new-booking/day-stay once results arrive. */}
+            <div className="hs-page-heading">
+              <h3 className="hs-page-heading-title">Day Stay</h3>
+            </div>
             {/* Agent available balance — top-right red indicator */}
             {agentBalance != null && (
               <div

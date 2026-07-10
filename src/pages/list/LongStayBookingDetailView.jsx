@@ -33,6 +33,10 @@ import {
 } from "react-bootstrap";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { FaExclamationCircle } from "react-icons/fa";
+import {
+  FaHistory, FaMapMarkerAlt, FaNetworkWired, FaCalendarAlt, FaClock,
+  FaUserAlt, FaPlusCircle, FaCheckCircle, FaSyncAlt, FaTimesCircle,
+} from "react-icons/fa";
 import axiosInstance from "../../components/AxiosInstance";
 import { formatDateTime } from "../../utils/dateUtils";
 import Sidebar from "../../components/Sidebar";
@@ -72,6 +76,18 @@ const BTN_ORANGE = { ...BUTTON_STYLE, backgroundColor: "#f0922b" }; // Resend Ma
 const BTN_ACCENT = { ...BUTTON_STYLE, backgroundColor: "#7c3aed" }; // Booking Remark
 const BTN_NEUTRAL = { ...BUTTON_STYLE, backgroundColor: "#64748b" }; // View / Back / Notes
 const BTN_HISTORY = { ...BUTTON_STYLE, backgroundColor: "#334155" }; // Booking History
+
+// Per-action badge styling for the Booking History modal — colour + icon
+// keyed by the exact label pushed onto `bookingHistory`. Unrecognised
+// actions (shouldn't happen, but keeps the table from breaking) fall back
+// to a neutral slate badge. Mirrors the other dedicated-flow detail views.
+const HISTORY_ACTION_META = {
+  "Booking Created": { bg: "#e6f4ea", fg: "#1e7e34", icon: FaPlusCircle },
+  "Booking Confirmed": { bg: "#e7f1ff", fg: "#1d4ed8", icon: FaCheckCircle },
+  "Booking Reconfirmed": { bg: "#e0f2f1", fg: "#0d9488", icon: FaSyncAlt },
+  "Booking Cancelled": { bg: "#fdecea", fg: "#c0392b", icon: FaTimesCircle },
+};
+const HISTORY_ACTION_FALLBACK = { bg: "#f1f5f9", fg: "#475569", icon: FaHistory };
 
 // Same booking-type catalogue as the hotel view's ADD NEW ITEM modal so an
 // operator can attach cross-type sub-bookings under a long-stay parent too.
@@ -252,8 +268,15 @@ export default function LongStayBookingDetailView() {
   const [bookingNotes, setBookingNotes] = useState([]);
   const [notesLoading, setNotesLoading] = useState(false);
 
-  // Resend Mail to Agent
+  // Resend Mail to Agent — clicking the button opens a preview modal that
+  // shows the Voucher PDF in an iframe and lets the admin confirm / edit
+  // the agent's email before the /resend-mail POST fires.
   const [resendingMail, setResendingMail] = useState(false);
+  const [showResendMailModal, setShowResendMailModal] = useState(false);
+  const [resendMailPdfUrl, setResendMailPdfUrl] = useState("");
+  const [resendMailEmail, setResendMailEmail] = useState("");
+  const [resendMailEmailError, setResendMailEmailError] = useState("");
+  const [resendMailPreparing, setResendMailPreparing] = useState(false);
 
   // PDF generation feedback + in-page preview (iframe modal).
   const [generatingPdfType, setGeneratingPdfType] = useState(null);
@@ -763,13 +786,74 @@ export default function LongStayBookingDetailView() {
   };
 
   // ── Resend Mail to Agent ───────────────────────────────────────────
-  const resendMailToAgent = async () => {
+  /**
+   * Open the RESEND MAIL preview modal. Two parallel calls hydrate the
+   * modal so the admin sees exactly what's about to go out:
+   *   1) /pdf?type=VOUCHER — the same PDF the mail will attach,
+   *      rendered inside an <iframe>.
+   *   2) /api/agent/{agentId} — pulls the agent's personal email so the
+   *      recipient field starts pre-filled and editable.
+   * Errors on either lookup surface as an inline modal warning but do
+   * not block the admin from typing an address manually.
+   */
+  const openResendMailModal = async () => {
+    setResendMailPdfUrl("");
+    setResendMailEmail("");
+    setResendMailEmailError("");
+    setShowResendMailModal(true);
+    setResendMailPreparing(true);
+    try {
+      const agentId = detail?.agentId
+        ? Number(String(detail.agentId).trim())
+        : null;
+      const [docRes, agentRes] = await Promise.all([
+        axiosInstance
+          .get(`/api/longStayBooking/${bookingId}/pdf`, {
+            params: { type: "VOUCHER" },
+          })
+          .catch(() => null),
+        agentId
+          ? axiosInstance.get(`/api/agent/${agentId}`).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+      if (
+        docRes?.data?.status === "SUCCESS" &&
+        docRes.data.pdfUrl
+      ) {
+        setResendMailPdfUrl(docRes.data.pdfUrl);
+      }
+      const a = agentRes?.data || {};
+      const email =
+        a.personalEmail ||
+        a.financeManagerEmail ||
+        a.gmEmail ||
+        "";
+      setResendMailEmail(email);
+    } finally {
+      setResendMailPreparing(false);
+    }
+  };
+
+  const submitResendMail = async () => {
+    const email = (resendMailEmail || "").trim();
+    if (!email) {
+      setResendMailEmailError("Recipient email is required");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setResendMailEmailError("Enter a valid email address");
+      return;
+    }
+    setResendMailEmailError("");
     try {
       setResendingMail(true);
       await axiosInstance.post(
-        `/api/longStayBooking/${bookingId}/resend-mail`
+        `/api/longStayBooking/${bookingId}/resend-mail`,
+        null,
+        { params: { email } },
       );
       toast.success("Mail resent to agent successfully!");
+      setShowResendMailModal(false);
     } catch (error) {
       toast.error(
         error.response?.data?.message ||
@@ -824,6 +908,9 @@ export default function LongStayBookingDetailView() {
         action: "Booking Created",
         at: detail.bookingDateTime,
         by: creatorLabel,
+        // Captured at create time only — later lifecycle rows show "-".
+        location: detail.bookingLocation,
+        ip: detail.ipAddress,
       });
     }
     if (detail.confirmedDate) {
@@ -1441,10 +1528,14 @@ export default function LongStayBookingDetailView() {
 
                     <button
                       style={BTN_ORANGE}
-                      onClick={resendMailToAgent}
-                      disabled={resendingMail}
+                      onClick={openResendMailModal}
+                      disabled={resendingMail || resendMailPreparing}
                     >
-                      {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
+                      {resendingMail
+                        ? "SENDING..."
+                        : resendMailPreparing
+                        ? "LOADING..."
+                        : "RESEND MAIL TO AGENT"}
                     </button>
 
                     {!isAgentRole && (
@@ -1603,10 +1694,14 @@ export default function LongStayBookingDetailView() {
 
                     <button
                       style={BTN_ORANGE}
-                      onClick={resendMailToAgent}
-                      disabled={resendingMail}
+                      onClick={openResendMailModal}
+                      disabled={resendingMail || resendMailPreparing}
                     >
-                      {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
+                      {resendingMail
+                        ? "SENDING..."
+                        : resendMailPreparing
+                        ? "LOADING..."
+                        : "RESEND MAIL TO AGENT"}
                     </button>
 
                     {!isAgentRole && (
@@ -1711,56 +1806,196 @@ export default function LongStayBookingDetailView() {
                   show={showHistoryModal}
                   onHide={() => setShowHistoryModal(false)}
                   centered
-                  size="lg"
+                  size="xl"
                   scrollable
+                  contentClassName="hbs-history-modal-content"
                 >
                   <Modal.Header closeButton>
-                    <Modal.Title style={{ fontSize: "1.05rem" }}>
-                      Booking History
-                      {detail?.bookingCode ? ` — ${detail.bookingCode}` : ""}
+                    <Modal.Title
+                      style={{ fontSize: "1.05rem", display: "flex", alignItems: "center", gap: 10 }}
+                    >
+                      <FaHistory size={16} />
+                      <span>
+                        Booking History
+                        {detail?.bookingCode && (
+                          <span style={{ opacity: 0.85, fontWeight: 500 }}>
+                            {` — ${detail.bookingCode}`}
+                          </span>
+                        )}
+                      </span>
                     </Modal.Title>
                   </Modal.Header>
-                  <Modal.Body>
+                  <Modal.Body style={{ backgroundColor: "#f8fafc", padding: "1.25rem 1.5rem" }}>
                     {bookingHistory.length === 0 ? (
-                      <div className="text-muted text-center py-3">
-                        No history available for this booking.
+                      <div className="text-muted text-center py-4">
+                        <FaHistory size={26} style={{ opacity: 0.25, marginBottom: 8 }} />
+                        <div>No history available for this booking.</div>
                       </div>
                     ) : (
-                      <Table
-                        responsive
-                        bordered
-                        hover
-                        size="sm"
-                        className="mb-0"
-                        style={{ fontSize: "0.85rem" }}
+                      <div
+                        style={{
+                          borderRadius: 10,
+                          border: "1px solid #e2e8f0",
+                          boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
+                          backgroundColor: "#fff",
+                        }}
                       >
-                        <thead style={{ backgroundColor: "#f0f0f0" }}>
-                          <tr>
-                            <th style={{ width: "60px" }}>S/N</th>
-                            <th>Action</th>
-                            <th>Performed By</th>
-                            <th>Date</th>
-                            <th>Time</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {bookingHistory.map((ev, idx) => (
-                            <tr key={`${ev.action}-${idx}`}>
-                              <td>{idx + 1}</td>
-                              <td>{ev.action}</td>
-                              <td>{ev.by || "-"}</td>
-                              <td>{formatDateOnly(ev.at)}</td>
-                              <td>{formatTimeOnly(ev.at)}</td>
+                        {/* tableLayout "fixed" + percentage widths: the columns
+                            always share the modal's width, so the popup never
+                            needs a horizontal scrollbar — long values wrap
+                            inside their cell. */}
+                        <table
+                          style={{
+                            width: "100%",
+                            tableLayout: "fixed",
+                            borderCollapse: "collapse",
+                            fontSize: "0.82rem",
+                            marginBottom: 0,
+                          }}
+                        >
+                          <thead>
+                            <tr style={{ backgroundColor: "#f1f5f9" }}>
+                              {[
+                                { label: "S/N", width: "5%" },
+                                { label: "Action", width: "17%" },
+                                { label: "Performed By", icon: FaUserAlt, width: "13%" },
+                                { label: "Location", icon: FaMapMarkerAlt, width: "30%" },
+                                { label: "IP Address", icon: FaNetworkWired, width: "14%" },
+                                { label: "Date", icon: FaCalendarAlt, width: "11%" },
+                                { label: "Time", icon: FaClock, width: "10%" },
+                              ].map((col) => (
+                                <th
+                                  key={col.label}
+                                  style={{
+                                    width: col.width,
+                                    padding: "10px 14px",
+                                    textTransform: "uppercase",
+                                    letterSpacing: "0.03em",
+                                    fontSize: "0.72rem",
+                                    fontWeight: 700,
+                                    color: "#475569",
+                                    borderBottom: "1px solid #e2e8f0",
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {col.icon ? (
+                                    <span
+                                      style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
+                                    >
+                                      <col.icon size={11} style={{ opacity: 0.7 }} />
+                                      {col.label}
+                                    </span>
+                                  ) : (
+                                    col.label
+                                  )}
+                                </th>
+                              ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </Table>
+                          </thead>
+                          <tbody>
+                            {bookingHistory.map((ev, idx) => {
+                              const meta =
+                                HISTORY_ACTION_META[ev.action] || HISTORY_ACTION_FALLBACK;
+                              const ActionIcon = meta.icon;
+                              return (
+                                <tr
+                                  key={`${ev.action}-${idx}`}
+                                  style={{ backgroundColor: idx % 2 === 1 ? "#f8fafc" : "#fff" }}
+                                >
+                                  <td
+                                    style={{
+                                      padding: "10px 14px",
+                                      borderBottom: "1px solid #eef2f6",
+                                      color: "#64748b",
+                                    }}
+                                  >
+                                    {idx + 1}
+                                  </td>
+                                  <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>
+                                    <span
+                                      style={{
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: 6,
+                                        padding: "3px 10px",
+                                        borderRadius: 999,
+                                        backgroundColor: meta.bg,
+                                        color: meta.fg,
+                                        fontWeight: 600,
+                                        fontSize: "0.76rem",
+                                      }}
+                                    >
+                                      <ActionIcon size={10} style={{ flexShrink: 0 }} />
+                                      {ev.action}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>
+                                    {ev.by || "-"}
+                                  </td>
+                                  <td
+                                    style={{
+                                      padding: "10px 14px",
+                                      borderBottom: "1px solid #eef2f6",
+                                      wordBreak: "break-word",
+                                    }}
+                                  >
+                                    {ev.location ? (
+                                      <span
+                                        style={{ display: "inline-flex", alignItems: "flex-start", gap: 6 }}
+                                      >
+                                        <FaMapMarkerAlt
+                                          size={11}
+                                          style={{ color: "#c0392b", marginTop: 2, flexShrink: 0 }}
+                                        />
+                                        <span>{ev.location}</span>
+                                      </span>
+                                    ) : (
+                                      "-"
+                                    )}
+                                  </td>
+                                  <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>
+                                    {ev.ip ? (
+                                      <span
+                                        style={{
+                                          fontFamily: "'Consolas', 'Courier New', monospace",
+                                          backgroundColor: "#f1f5f9",
+                                          color: "#334155",
+                                          padding: "2px 8px",
+                                          borderRadius: 4,
+                                          fontSize: "0.76rem",
+                                          whiteSpace: "nowrap",
+                                        }}
+                                      >
+                                        {ev.ip}
+                                      </span>
+                                    ) : (
+                                      "-"
+                                    )}
+                                  </td>
+                                  <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>
+                                    {formatDateOnly(ev.at)}
+                                  </td>
+                                  <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>
+                                    {formatTimeOnly(ev.at)}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     )}
                   </Modal.Body>
-                  <Modal.Footer>
+                  <Modal.Footer style={{ backgroundColor: "#fff" }}>
                     <Button
                       variant="secondary"
                       onClick={() => setShowHistoryModal(false)}
+                      style={{
+                        borderRadius: 6,
+                        padding: "6px 20px",
+                        fontWeight: 600,
+                        fontSize: "0.85rem",
+                      }}
                     >
                       Close
                     </Button>
@@ -2630,6 +2865,106 @@ export default function LongStayBookingDetailView() {
             onClick={() => setPdfPreview(null)}
           >
             Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Resend Mail to Agent — preview + send ────────────────────────
+          Opens on the RESEND MAIL TO AGENT button click. Shows the Voucher
+          PDF the mail will attach inside an <iframe>, and an editable email
+          field pre-populated with the agent's on-file address. The Send
+          button POSTs /api/longStayBooking/:id/resend-mail?email=…
+          and toasts success/failure. */}
+      <Modal
+        show={showResendMailModal}
+        onHide={() => (resendingMail ? null : setShowResendMailModal(false))}
+        size="xl"
+        centered
+        backdrop="static"
+        keyboard={!resendingMail}
+      >
+        <Modal.Header closeButton={!resendingMail}>
+          <Modal.Title style={{ fontSize: "1rem", fontWeight: 700 }}>
+            Resend Voucher to Agent
+            {detail?.bookingCode ? ` — ${detail.bookingCode}` : ""}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ padding: 0, height: "80vh" }}>
+          {resendMailPreparing ? (
+            <div className="d-flex align-items-center justify-content-center h-100">
+              <Spinner animation="border" variant="primary" />
+              <span className="ms-2 text-muted">
+                Preparing voucher attachment…
+              </span>
+            </div>
+          ) : resendMailPdfUrl ? (
+            <iframe
+              key={resendMailPdfUrl}
+              src={resendMailPdfUrl}
+              title="Voucher preview"
+              style={{
+                width: "100%",
+                height: "100%",
+                border: "none",
+                display: "block",
+              }}
+            />
+          ) : (
+            <div className="d-flex align-items-center justify-content-center h-100 text-muted small px-4 text-center">
+              Voucher preview unavailable. You can still send the mail — the
+              backend will regenerate the attachment on dispatch.
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer className="d-flex align-items-center gap-2 flex-wrap">
+          <Form.Group
+            className="flex-grow-1 me-2"
+            style={{ minWidth: 260, maxWidth: 420 }}
+          >
+            <Form.Label
+              className="fw-semibold mb-1"
+              style={{ fontSize: "0.8rem" }}
+            >
+              Agent Email <span className="text-danger">*</span>
+            </Form.Label>
+            <Form.Control
+              type="email"
+              size="sm"
+              placeholder="name@example.com"
+              value={resendMailEmail}
+              onChange={(e) => {
+                setResendMailEmail(e.target.value);
+                if (resendMailEmailError) setResendMailEmailError("");
+              }}
+              isInvalid={!!resendMailEmailError}
+              disabled={resendingMail || resendMailPreparing}
+            />
+            <Form.Control.Feedback type="invalid">
+              {resendMailEmailError}
+            </Form.Control.Feedback>
+          </Form.Group>
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            onClick={() => setShowResendMailModal(false)}
+            disabled={resendingMail}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={submitResendMail}
+            disabled={resendingMail || resendMailPreparing}
+          >
+            {resendingMail ? (
+              <>
+                <Spinner size="sm" className="me-2" />
+                Sending…
+              </>
+            ) : (
+              "Send"
+            )}
           </Button>
         </Modal.Footer>
       </Modal>

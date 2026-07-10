@@ -24,7 +24,9 @@ import {
   FaKey,
   FaToggleOn,
   FaToggleOff,
+  FaPlus,
 } from "react-icons/fa";
+import { formatDateTimeDisplay } from "../../utils/dateUtils";
 
 /**
  * Read-only details page for a single agent. Opened from the Agent list
@@ -147,6 +149,12 @@ const AgentView = () => {
   // ---------- Credit limit modal state -----------------------------
   const [showCreditLimitModal, setShowCreditLimitModal] = useState(false);
   const [creditLimitType, setCreditLimitType] = useState("initial");
+  // Update Credit Limit — whether the entered amount is added to or
+  // subtracted from the current total. The amount field always takes a
+  // positive number; this just flips its sign before it's sent as
+  // additionalCredit, so reducing the limit no longer requires the admin
+  // to type a negative number by hand.
+  const [creditAdjustDirection, setCreditAdjustDirection] = useState("add");
   const [hasInitialCredit, setHasInitialCredit] = useState(false);
   const [creditRowExists, setCreditRowExists] = useState(false);
   const [creditLimitFormData, setCreditLimitFormData] = useState({
@@ -163,6 +171,24 @@ const AgentView = () => {
     addCreditLimit: "",
     remarks: "",
   });
+
+  // ---------- Temporary Credit Limit state (extends the Credit Limit
+  // section above — not a separate section) ------------------------
+  const [tempCredits, setTempCredits] = useState([]);
+  const [tempCreditsLoading, setTempCreditsLoading] = useState(false);
+  // Combined "regular available + active temporary" figure surfaced by the
+  // backend on the same GET the base credit-limit fields come from.
+  const [effectiveAvailableCredit, setEffectiveAvailableCredit] = useState(null);
+  const [showTempCreditForm, setShowTempCreditForm] = useState(false);
+  const [editingTempCreditId, setEditingTempCreditId] = useState(null);
+  const [tempCreditFormData, setTempCreditFormData] = useState({
+    amount: "",
+    startDateTime: "",
+    endDateTime: "",
+    remarks: "",
+  });
+  const [tempCreditErrors, setTempCreditErrors] = useState({});
+  const [tempCreditSaving, setTempCreditSaving] = useState(false);
 
   // ---------- Exclusion modal state --------------------------------
   const [showExclusionModal, setShowExclusionModal] = useState(false);
@@ -512,6 +538,22 @@ const AgentView = () => {
   // ===================================================================
   // Credit limit modal
   // ===================================================================
+  // Re-fetches just the temporary-credit list (used after add/edit/delete so
+  // the modal doesn't need a full close/reopen round-trip).
+  const fetchTempCredits = async () => {
+    setTempCreditsLoading(true);
+    try {
+      const res = await axiosInstance.get(
+        `/api/agent-credit-limit/temporary/agent/${id}`
+      );
+      setTempCredits(Array.isArray(res.data) ? res.data : []);
+    } catch (_) {
+      setTempCredits([]);
+    } finally {
+      setTempCreditsLoading(false);
+    }
+  };
+
   const handleCreditLimit = async () => {
     setCreditLimitFormData({
       addCreditLimit: "",
@@ -522,6 +564,11 @@ const AgentView = () => {
       paymentMode: "",
     });
     setCreditLimitErrors({ addCreditLimit: "", remarks: "" });
+    setCreditAdjustDirection("add");
+    setEffectiveAvailableCredit(null);
+    setTempCredits([]);
+    setShowTempCreditForm(false);
+    setEditingTempCreditId(null);
 
     try {
       const response = await axiosInstance.get(
@@ -542,6 +589,14 @@ const AgentView = () => {
           // when the modal reopens.
           paymentMode: creditData.paymentMode || "",
         }));
+        setEffectiveAvailableCredit(
+          creditData.effectiveAvailableCreditLimit ?? creditData.availableCreditLimit ?? null
+        );
+        // Temporary credit only ever applies once a regular credit limit
+        // exists (mirrors the backend guard) — no point fetching otherwise.
+        if (initialDone) {
+          fetchTempCredits();
+        }
       } else {
         setCreditRowExists(false);
         setHasInitialCredit(false);
@@ -569,6 +624,191 @@ const AgentView = () => {
       paymentMode: "",
     });
     setCreditLimitErrors({ addCreditLimit: "", remarks: "" });
+    setCreditAdjustDirection("add");
+    setTempCredits([]);
+    setEffectiveAvailableCredit(null);
+    setShowTempCreditForm(false);
+    setEditingTempCreditId(null);
+    setTempCreditFormData({ amount: "", startDateTime: "", endDateTime: "", remarks: "" });
+    setTempCreditErrors({});
+  };
+
+  // ===================================================================
+  // Temporary Credit Limit — Add / Edit / Delete
+  // ===================================================================
+  const openAddTempCreditForm = () => {
+    setEditingTempCreditId(null);
+    setTempCreditFormData({ amount: "", startDateTime: "", endDateTime: "", remarks: "" });
+    setTempCreditErrors({});
+    setShowTempCreditForm(true);
+  };
+
+  // datetime-local inputs need "yyyy-MM-ddTHH:mm" (no seconds/zone); the
+  // backend returns a plain LocalDateTime ISO string ("...THH:mm:ss").
+  const toDatetimeLocalValue = (value) => (value ? String(value).slice(0, 16) : "");
+
+  const openEditTempCreditForm = (row) => {
+    setEditingTempCreditId(row.id);
+    setTempCreditFormData({
+      amount: row.amount ?? "",
+      startDateTime: toDatetimeLocalValue(row.startDateTime),
+      endDateTime: toDatetimeLocalValue(row.endDateTime),
+      remarks: row.remarks || "",
+    });
+    setTempCreditErrors({});
+    setShowTempCreditForm(true);
+  };
+
+  const closeTempCreditForm = () => {
+    setShowTempCreditForm(false);
+    setEditingTempCreditId(null);
+    setTempCreditFormData({ amount: "", startDateTime: "", endDateTime: "", remarks: "" });
+    setTempCreditErrors({});
+  };
+
+  const handleTempCreditFormChange = (e) => {
+    const { name, value } = e.target;
+    setTempCreditFormData((prev) => ({ ...prev, [name]: value }));
+    if (tempCreditErrors[name]) {
+      setTempCreditErrors((prev) => ({ ...prev, [name]: "" }));
+    }
+  };
+
+  const validateTempCreditForm = (data) => {
+    const errors = {};
+    if (!data.amount.toString().trim()) {
+      errors.amount = "Amount is required";
+    } else if (isNaN(data.amount) || Number(data.amount) <= 0) {
+      errors.amount = "Amount must be a positive number";
+    }
+    if (!data.startDateTime) {
+      errors.startDateTime = "Start date & time is required";
+    }
+    if (!data.endDateTime) {
+      errors.endDateTime = "End date & time is required";
+    }
+    if (
+      data.startDateTime &&
+      data.endDateTime &&
+      new Date(data.endDateTime) <= new Date(data.startDateTime)
+    ) {
+      errors.endDateTime = "End date & time must be after the start date & time";
+    }
+    return errors;
+  };
+
+  const handleTempCreditSubmit = async () => {
+    const errors = validateTempCreditForm(tempCreditFormData);
+    if (Object.keys(errors).length > 0) {
+      setTempCreditErrors(errors);
+      return;
+    }
+    setTempCreditSaving(true);
+    try {
+      const payload = {
+        amount: Number(tempCreditFormData.amount),
+        startDateTime: tempCreditFormData.startDateTime,
+        endDateTime: tempCreditFormData.endDateTime,
+        remarks: tempCreditFormData.remarks || undefined,
+      };
+      if (editingTempCreditId) {
+        await axiosInstance.put(
+          `/api/agent-credit-limit/temporary/${editingTempCreditId}`,
+          payload
+        );
+        toast.success("Temporary credit limit updated successfully!");
+      } else {
+        await axiosInstance.post("/api/agent-credit-limit/temporary", {
+          agentId: Number(id),
+          ...payload,
+        });
+        toast.success("Temporary credit limit added successfully!");
+      }
+      closeTempCreditForm();
+      await fetchTempCredits();
+      // Refresh the combined "Total Available Credit" figure so it reflects
+      // the newly added/edited temporary credit immediately.
+      try {
+        const res = await axiosInstance.get(`/api/agent-credit-limit/agent/${id}`);
+        setEffectiveAvailableCredit(
+          res.data?.effectiveAvailableCreditLimit ?? res.data?.availableCreditLimit ?? null
+        );
+      } catch (_) {
+        /* non-critical refresh */
+      }
+    } catch (e) {
+      toast.error(
+        e.response?.data?.message || "Failed to save temporary credit limit"
+      );
+    } finally {
+      setTempCreditSaving(false);
+    }
+  };
+
+  const handleDeleteTempCredit = (row) => {
+    Swal.fire({
+      title: "Delete this temporary credit limit?",
+      html: `Amount: <b>${row.amount}</b><br/>This removes it immediately — it will no longer count toward the agent's available credit.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete",
+    }).then(async (result) => {
+      if (!result.isConfirmed) return;
+      try {
+        await axiosInstance.delete(`/api/agent-credit-limit/temporary/${row.id}`);
+        toast.success("Temporary credit limit deleted");
+        await fetchTempCredits();
+        try {
+          const res = await axiosInstance.get(`/api/agent-credit-limit/agent/${id}`);
+          setEffectiveAvailableCredit(
+            res.data?.effectiveAvailableCreditLimit ?? res.data?.availableCreditLimit ?? null
+          );
+        } catch (_) {
+          /* non-critical refresh */
+        }
+      } catch (e) {
+        toast.error(
+          e.response?.data?.message || "Failed to delete temporary credit limit"
+        );
+      }
+    });
+  };
+
+  // Manual Active/Inactive toggle — flips the temporary credit's enabled
+  // flag regardless of its date window (e.g. pre-disable an Upcoming row,
+  // or pause a currently-Active one, without touching its dates).
+  const [tempCreditTogglingId, setTempCreditTogglingId] = useState(null);
+  const handleToggleTempCreditEnabled = async (row) => {
+    const nextEnabled = !row.enabled;
+    setTempCreditTogglingId(row.id);
+    try {
+      await axiosInstance.patch(
+        `/api/agent-credit-limit/temporary/${row.id}/status`,
+        { enabled: nextEnabled }
+      );
+      toast.success(
+        nextEnabled
+          ? "Temporary credit limit activated"
+          : "Temporary credit limit deactivated"
+      );
+      await fetchTempCredits();
+      try {
+        const res = await axiosInstance.get(`/api/agent-credit-limit/agent/${id}`);
+        setEffectiveAvailableCredit(
+          res.data?.effectiveAvailableCreditLimit ?? res.data?.availableCreditLimit ?? null
+        );
+      } catch (_) {
+        /* non-critical refresh */
+      }
+    } catch (e) {
+      toast.error(
+        e.response?.data?.message || "Failed to update temporary credit limit status"
+      );
+    } finally {
+      setTempCreditTogglingId(null);
+    }
   };
 
   const handleCreditLimitChange = (e) => {
@@ -587,6 +827,7 @@ const AgentView = () => {
       remarks: "",
     }));
     setCreditLimitErrors({ addCreditLimit: "", remarks: "" });
+    setCreditAdjustDirection("add");
   };
 
   const validateCreditLimitForm = (data, type) => {
@@ -649,13 +890,18 @@ const AgentView = () => {
           parseFloat(creditLimitFormData.totalCreditLimit) || 0;
         const currentAvailable =
           parseFloat(creditLimitFormData.availableCreditLimit) || 0;
+        // Reduce flips the entered (always-positive) amount negative before
+        // it's applied — same additionalCredit math as before, just no
+        // longer requires typing a "-" by hand.
+        const signedAmount =
+          creditAdjustDirection === "reduce" ? -Math.abs(addAmount) : Math.abs(addAmount);
         response = await axiosInstance.put(
           "/api/agent-credit-limit/update",
           {
             agentId: Number(id),
-            additionalCredit: addAmount,
+            additionalCredit: signedAmount,
             remarks: creditLimitFormData.remarks,
-            totalCreditLimit: currentTotal + addAmount,
+            totalCreditLimit: currentTotal + signedAmount,
             availableCreditLimit: currentAvailable,
             paymentMode: pm,
           }
@@ -1206,25 +1452,39 @@ const AgentView = () => {
               className="fw-bold"
               style={{ fontSize: "1.05rem", color: "#b45309" }}
             >
-              Block Payment Gateway
+              Allow Payment Gateway
             </span>
-            <Form.Check
-              type="switch"
-              id={`agent-card-payment-${id}`}
-              label={
-                cardPaymentUpdating
-                  ? "Updating…"
-                  : Boolean(agent?.cardPaymentEnabled)
-                    ? "Yes"
-                    : "No"
-              }
-              checked={Boolean(agent?.cardPaymentEnabled)}
-              onChange={handleToggleCardPayment}
-              disabled={cardPaymentUpdating}
-              className="d-flex align-items-center fw-semibold"
+            <div
+              className="d-flex align-items-center gap-3 fw-semibold"
               style={{ fontSize: "1rem" }}
-              title="When on, this agent sees the 'Card' option in the booking-page payment-mode dropdown."
-            />
+              title="When Yes, this agent sees the 'Card' option in the booking-page payment-mode dropdown."
+            >
+              <Form.Check
+                inline
+                type="radio"
+                id={`agent-card-payment-yes-${id}`}
+                name={`agent-card-payment-${id}`}
+                label="Yes"
+                checked={Boolean(agent?.cardPaymentEnabled)}
+                onChange={() => handleToggleCardPayment({ target: { checked: true } })}
+                disabled={cardPaymentUpdating}
+                className="mb-0"
+              />
+              <Form.Check
+                inline
+                type="radio"
+                id={`agent-card-payment-no-${id}`}
+                name={`agent-card-payment-${id}`}
+                label="No"
+                checked={!agent?.cardPaymentEnabled}
+                onChange={() => handleToggleCardPayment({ target: { checked: false } })}
+                disabled={cardPaymentUpdating}
+                className="mb-0"
+              />
+              {cardPaymentUpdating && (
+                <span className="text-muted">Updating…</span>
+              )}
+            </div>
           </div>
 
           {/* ------------ Bottom action bar ----------------------- */}
@@ -1576,7 +1836,7 @@ const AgentView = () => {
             show={showCreditLimitModal}
             onHide={closeCreditLimitModal}
             centered
-            size="md"
+            size="xl"
             backdrop="static"
             keyboard={false}
           >
@@ -1659,19 +1919,50 @@ const AgentView = () => {
                   </Row>
                 ) : (
                   <>
+                    <Form.Group className="mb-3">
+                      <Form.Label className="fw-bold d-block">
+                        Add or Reduce
+                      </Form.Label>
+                      <Form.Check
+                        inline
+                        type="radio"
+                        id="credit-adjust-add"
+                        name="creditAdjustDirection"
+                        value="add"
+                        label="Add"
+                        checked={creditAdjustDirection === "add"}
+                        onChange={() => setCreditAdjustDirection("add")}
+                      />
+                      <Form.Check
+                        inline
+                        type="radio"
+                        id="credit-adjust-reduce"
+                        name="creditAdjustDirection"
+                        value="reduce"
+                        label="Reduce"
+                        checked={creditAdjustDirection === "reduce"}
+                        onChange={() => setCreditAdjustDirection("reduce")}
+                      />
+                    </Form.Group>
                     <Row>
                       <Col md={6}>
                         <Form.Group className="mb-3">
                           <Form.Label>
-                            <span className="text-danger">*</span>Add-on Credit
-                            Limit
+                            <span className="text-danger">*</span>
+                            {creditAdjustDirection === "reduce"
+                              ? "Reduce Credit Limit By"
+                              : "Add-on Credit Limit"}
                           </Form.Label>
                           <Form.Control
                             type="number"
                             name="addCreditLimit"
                             value={creditLimitFormData.addCreditLimit}
                             onChange={handleCreditLimitChange}
-                            placeholder="Enter amount to add"
+                            placeholder={
+                              creditAdjustDirection === "reduce"
+                                ? "Enter amount to reduce"
+                                : "Enter amount to add"
+                            }
                             isInvalid={!!creditLimitErrors.addCreditLimit}
                             min="0"
                             step="0.01"
@@ -1752,6 +2043,218 @@ const AgentView = () => {
                         </Form.Group>
                       </Col>
                     </Row>
+                  </>
+                )}
+
+                {/* ---- Temporary Credit Limit — extends this same Credit
+                    Limit section; only available once a regular credit
+                    limit exists. ---- */}
+                {hasInitialCredit && (
+                  <>
+                    <hr className="my-3" />
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                      <span className="fw-bold">Temporary Credit Limit</span>
+                      {!showTempCreditForm && (
+                        <Button
+                          size="sm"
+                          variant="outline-primary"
+                          className="d-inline-flex align-items-center gap-1"
+                          onClick={openAddTempCreditForm}
+                        >
+                          <FaPlus size={11} /> Add Temporary Credit
+                        </Button>
+                      )}
+                    </div>
+
+                    {showTempCreditForm ? (
+                      <div className="border rounded p-3 mb-3 bg-light">
+                        <Row>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>
+                                <span className="text-danger">*</span>Temporary
+                                Credit Limit Amount
+                              </Form.Label>
+                              <Form.Control
+                                type="number"
+                                name="amount"
+                                value={tempCreditFormData.amount}
+                                onChange={handleTempCreditFormChange}
+                                placeholder="Enter amount"
+                                isInvalid={!!tempCreditErrors.amount}
+                                min="0"
+                                step="0.01"
+                              />
+                              <Form.Control.Feedback type="invalid">
+                                {tempCreditErrors.amount}
+                              </Form.Control.Feedback>
+                            </Form.Group>
+                          </Col>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>Remarks</Form.Label>
+                              <Form.Control
+                                type="text"
+                                name="remarks"
+                                value={tempCreditFormData.remarks}
+                                onChange={handleTempCreditFormChange}
+                                placeholder="Optional"
+                              />
+                            </Form.Group>
+                          </Col>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>
+                                <span className="text-danger">*</span>Start Date
+                                &amp; Time
+                              </Form.Label>
+                              <Form.Control
+                                type="datetime-local"
+                                name="startDateTime"
+                                value={tempCreditFormData.startDateTime}
+                                onChange={handleTempCreditFormChange}
+                                isInvalid={!!tempCreditErrors.startDateTime}
+                              />
+                              <Form.Control.Feedback type="invalid">
+                                {tempCreditErrors.startDateTime}
+                              </Form.Control.Feedback>
+                            </Form.Group>
+                          </Col>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>
+                                <span className="text-danger">*</span>End Date &amp;
+                                Time
+                              </Form.Label>
+                              <Form.Control
+                                type="datetime-local"
+                                name="endDateTime"
+                                value={tempCreditFormData.endDateTime}
+                                onChange={handleTempCreditFormChange}
+                                isInvalid={!!tempCreditErrors.endDateTime}
+                              />
+                              <Form.Control.Feedback type="invalid">
+                                {tempCreditErrors.endDateTime}
+                              </Form.Control.Feedback>
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                        <div className="d-flex justify-content-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline-secondary"
+                            onClick={closeTempCreditForm}
+                            disabled={tempCreditSaving}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={handleTempCreditSubmit}
+                            disabled={tempCreditSaving}
+                          >
+                            {tempCreditSaving
+                              ? "Saving..."
+                              : editingTempCreditId
+                                ? "Update"
+                                : "Save"}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : tempCreditsLoading ? (
+                      <div className="text-center py-3">
+                        <Spinner animation="border" size="sm" />
+                      </div>
+                    ) : tempCredits.length === 0 ? (
+                      <div className="text-muted small mb-3">
+                        No temporary credit limits added yet.
+                      </div>
+                    ) : (
+                      <div
+                        className="table-responsive mb-3 border rounded"
+                        style={{ minWidth: 0 }}
+                      >
+                        <table
+                          className="table align-middle mb-0"
+                          style={{ minWidth: "760px" }}
+                        >
+                          <thead>
+                            <tr
+                              style={{
+                                fontSize: "0.75rem",
+                                backgroundColor: "#f8f9fa",
+                              }}
+                            >
+                              <th className="py-3 px-3">Amount</th>
+                              <th className="py-3 px-3">Available</th>
+                              <th className="py-3 px-3">Start</th>
+                              <th className="py-3 px-3">End</th>
+                              <th className="py-3 px-3">Remarks</th>
+                              <th className="py-3 px-3">Status</th>
+                              <th
+                                className="py-3 px-3 text-center"
+                                style={{ width: "160px" }}
+                              >
+                                Actions
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody style={{ fontSize: "0.82rem" }}>
+                            {tempCredits.map((row) => (
+                              <tr key={row.id}>
+                                <td className="py-2 px-3">{row.amount}</td>
+                                <td className="py-2 px-3">{row.availableAmount}</td>
+                                <td className="py-2 px-3 text-nowrap">
+                                  {formatDateTimeDisplay(row.startDateTime)}
+                                </td>
+                                <td className="py-2 px-3 text-nowrap">
+                                  {formatDateTimeDisplay(row.endDateTime)}
+                                </td>
+                                <td className="py-2 px-3">{row.remarks || "-"}</td>
+                                <td className="py-2 px-3">
+                                  <Button
+                                    size="sm"
+                                    variant={
+                                      row.status === "Active" ? "success" : "outline-secondary"
+                                    }
+                                    className="d-inline-flex align-items-center gap-1"
+                                    disabled={tempCreditTogglingId === row.id}
+                                    title={
+                                      row.enabled
+                                        ? "Click to deactivate"
+                                        : "Click to activate"
+                                    }
+                                    onClick={() => handleToggleTempCreditEnabled(row)}
+                                  >
+                                    {row.status === "Active" ? <FaToggleOn /> : <FaToggleOff />}
+                                    {row.status}
+                                  </Button>
+                                </td>
+                                <td className="py-2 px-3">
+                                  <div className="d-flex justify-content-center gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline-primary"
+                                      onClick={() => openEditTempCreditForm(row)}
+                                    >
+                                      Edit
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline-danger"
+                                      onClick={() => handleDeleteTempCredit(row)}
+                                    >
+                                      Delete
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </>
                 )}
               </Form>
