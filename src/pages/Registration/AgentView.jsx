@@ -1903,7 +1903,7 @@ const AgentView = () => {
                     </Col>
                     <Col md={6}>
                       <Form.Group className="mb-3">
-                        <Form.Label>Payment Mode</Form.Label>
+                        <Form.Label>Paid Through</Form.Label>
                         <Form.Select
                           name="paymentMode"
                           value={creditLimitFormData.paymentMode}
@@ -1993,7 +1993,7 @@ const AgentView = () => {
                       </Col>
                       <Col md={6}>
                         <Form.Group className="mb-3">
-                          <Form.Label>Payment Mode</Form.Label>
+                          <Form.Label>Paid Through</Form.Label>
                           <Form.Select
                             name="paymentMode"
                             value={creditLimitFormData.paymentMode}

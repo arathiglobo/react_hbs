@@ -683,7 +683,8 @@ function NotificationCell({ booking: b }) {
   const showConfirmIcon = isNotConfirmed;
 
   const isOnRequestRoom = /^on\s*request$/i.test(String(b.roomStatus || "").trim());
-  if (isOnRequestRoom && isConfirmed) {
+  const isOnRequestStillPending = isOnRequestRoom && !b.onRequestConfirmed;
+  if (isOnRequestStillPending && isConfirmed) {
     return (
       <span style={{ color: "#e67e22", padding: "0.32rem 0.6rem", fontSize: "0.82rem", fontWeight: "600", borderRadius: "0.375rem", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
         On Request
