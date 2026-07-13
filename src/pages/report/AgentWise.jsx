@@ -13,6 +13,7 @@ import HotelFilter from "../../components/filters/Hotelfilters";
 import Agent from "../../components/filters/Agent";
 import City from "../../components/filters/City";
 import Country from "../../components/filters/Country";
+import Supplier from "../../components/filters/Supplier";
 
 function AgentWise() {
 
@@ -59,6 +60,34 @@ const [selectedCountry,setSelectedCountry]=useState("");
 const [fromDate,setFromDate]=useState("");
 const [toDate,setToDate]=useState("");
 
+// Booking-level search filters (sent to the API on Search). Service Date,
+// Service Name and City are covered by the existing From/To Date, Hotel and
+// City filters, so they are not repeated here.
+const initialBookingFilters = {
+  bookingDateFrom: "",
+  bookingDateTo: "",
+  deadlineDateFrom: "",
+  deadlineDateTo: "",
+  reconfirmDateFrom: "",
+  reconfirmDateTo: "",
+  cancelDateFrom: "",
+  cancelDateTo: "",
+  bookingReference: "",
+  supplierReference: "",
+  guestName: "",
+  branch: "",
+  status: "",
+  supplierId: "",
+  bookingType: "",
+};
+const [tempBookingFilters, setTempBookingFilters] = useState(initialBookingFilters);
+
+// Branch dropdown options (distinct booking locations)
+const [branchOptions, setBranchOptions] = useState([]);
+
+const updateBookingFilter = (field, value) =>
+  setTempBookingFilters((prev) => ({ ...prev, [field]: value }));
+
 // API filters (for API report type - keeping for backward compatibility)
 const [apiFilters, setApiFilters] = useState({
   agent: '',
@@ -93,6 +122,17 @@ const fetchInhouseReport = async (params = {}) => {
 
 useEffect(()=>{
   fetchInhouseReport();
+
+  // Branch dropdown options come from the distinct booking locations
+  const fetchBranches = async ()=>{
+    try{
+      const response = await axiosInstance.get("/api/report/bookings/branches");
+      setBranchOptions(Array.isArray(response.data) ? response.data : []);
+    }catch(error){
+      console.error("Branch options fetch error", error);
+    }
+  };
+  fetchBranches();
   // eslint-disable-next-line react-hooks/exhaustive-deps
 },[])
 
@@ -545,6 +585,14 @@ const apiBookings = [
       if (tempFromDate) params.fromDate = tempFromDate;
       if (tempToDate) params.toDate = tempToDate;
 
+      // Booking-level filters — only send the ones that carry a value
+      Object.entries(tempBookingFilters).forEach(([key, value]) => {
+        const trimmed = typeof value === "string" ? value.trim() : value;
+        if (trimmed !== "" && trimmed !== null && trimmed !== undefined) {
+          params[key] = trimmed;
+        }
+      });
+
       const ok = await fetchInhouseReport(params);
       if (!ok) return;
 
@@ -573,6 +621,33 @@ const apiBookings = [
       setSearchApiQuery(tempSearchQuery);
       setApiCurrentPage(1);
     }
+  };
+
+  // Clear every filter (existing + booking-level) and reload the full report
+  const handleReset = async () => {
+    setTempBookingFilters(initialBookingFilters);
+    setTempAgent("");
+    setTempSelectedHotelfilter("");
+    setTemphoteltype("");
+    settempHotelCategories("");
+    settempRoomCategory("");
+    setTempCity("");
+    setTempCountry("");
+    setTempFromDate("");
+    setTempToDate("");
+    setTempSearchQuery("");
+    setSelectedAgent("");
+    setSelectedHotelfilter("");
+    setHotelType("");
+    setHotelCategories("");
+    setRoomCategory("");
+    setSelectedCity("");
+    setSelectedCountry("");
+    setFromDate("");
+    setToDate("");
+    setSearchInhouseQuery("");
+    setInhouseCurrentPage(1);
+    await fetchInhouseReport();
   };
 
   // Pagination calculations for Inhouse
@@ -611,6 +686,7 @@ const apiBookings = [
                       name="reportType"
                       onChange={() => {
                         setReportType('inhouse');
+                        setTempBookingFilters(initialBookingFilters);
                         setTempAgent("");
                         setTempSelectedHotelfilter("");
                         setTemphoteltype("");
@@ -661,7 +737,128 @@ const apiBookings = [
               {/* When reportType is 'inhouse' - show Inhouse filters */}
               {reportType === 'inhouse' && (
                 <>
-                  <Row className="align-items-end g-4 mt-3">
+                  <h6 className="fw-bold text-primary mb-0 mt-4">Booking Details</h6>
+                  <Row className="align-items-end g-4 mt-0 mb-2">
+
+                    {/* Row 1 — Booking / Cancellation Deadline / Reconfirm dates */}
+                    <Col md={4}>
+                      <Form.Group className="mb-0">
+                        <Form.Label className="small mb-2">Booking Date</Form.Label>
+                        <div className="d-flex gap-2">
+                          <Form.Control type="date" size="sm" title="From"
+                            value={tempBookingFilters.bookingDateFrom}
+                            onChange={(e) => updateBookingFilter("bookingDateFrom", e.target.value)} />
+                          <Form.Control type="date" size="sm" title="To"
+                            value={tempBookingFilters.bookingDateTo}
+                            onChange={(e) => updateBookingFilter("bookingDateTo", e.target.value)} />
+                        </div>
+                      </Form.Group>
+                    </Col>
+                    <Col md={4}>
+                      <Form.Group className="mb-0">
+                        <Form.Label className="small mb-2">Cancellation Deadline Date</Form.Label>
+                        <div className="d-flex gap-2">
+                          <Form.Control type="date" size="sm" title="From"
+                            value={tempBookingFilters.deadlineDateFrom}
+                            onChange={(e) => updateBookingFilter("deadlineDateFrom", e.target.value)} />
+                          <Form.Control type="date" size="sm" title="To"
+                            value={tempBookingFilters.deadlineDateTo}
+                            onChange={(e) => updateBookingFilter("deadlineDateTo", e.target.value)} />
+                        </div>
+                      </Form.Group>
+                    </Col>
+                    <Col md={4}>
+                      <Form.Group className="mb-0">
+                        <Form.Label className="small mb-2">Reconfirm Date</Form.Label>
+                        <div className="d-flex gap-2">
+                          <Form.Control type="date" size="sm" title="From"
+                            value={tempBookingFilters.reconfirmDateFrom}
+                            onChange={(e) => updateBookingFilter("reconfirmDateFrom", e.target.value)} />
+                          <Form.Control type="date" size="sm" title="To"
+                            value={tempBookingFilters.reconfirmDateTo}
+                            onChange={(e) => updateBookingFilter("reconfirmDateTo", e.target.value)} />
+                        </div>
+                      </Form.Group>
+                    </Col>
+
+                    {/* Row 2 — Cancel date */}
+                    <Col md={4}>
+                      <Form.Group className="mb-0">
+                        <Form.Label className="small mb-2">Cancel Date</Form.Label>
+                        <div className="d-flex gap-2">
+                          <Form.Control type="date" size="sm" title="From"
+                            value={tempBookingFilters.cancelDateFrom}
+                            onChange={(e) => updateBookingFilter("cancelDateFrom", e.target.value)} />
+                          <Form.Control type="date" size="sm" title="To"
+                            value={tempBookingFilters.cancelDateTo}
+                            onChange={(e) => updateBookingFilter("cancelDateTo", e.target.value)} />
+                        </div>
+                      </Form.Group>
+                    </Col>
+                    <Col md={8} />
+
+                    {/* Row 3 — reference / guest text filters */}
+                    <Col md={4}>
+                      <Form.Control size="sm" placeholder="Booking Reference"
+                        value={tempBookingFilters.bookingReference}
+                        onChange={(e) => updateBookingFilter("bookingReference", e.target.value)} />
+                    </Col>
+                    <Col md={4}>
+                      <Form.Control size="sm" placeholder="Supplier Reference No."
+                        value={tempBookingFilters.supplierReference}
+                        onChange={(e) => updateBookingFilter("supplierReference", e.target.value)} />
+                    </Col>
+                    <Col md={4}>
+                      <Form.Control size="sm" placeholder="Guest Name"
+                        value={tempBookingFilters.guestName}
+                        onChange={(e) => updateBookingFilter("guestName", e.target.value)} />
+                    </Col>
+
+                    {/* Row 4 — branch / status / supplier */}
+                    <Col md={4}>
+                      <Form.Select size="sm"
+                        value={tempBookingFilters.branch}
+                        onChange={(e) => updateBookingFilter("branch", e.target.value)}>
+                        <option value="">Select Branch</option>
+                        {branchOptions.map((branch) => (
+                          <option key={branch} value={branch}>{branch}</option>
+                        ))}
+                      </Form.Select>
+                    </Col>
+                    <Col md={4}>
+                      <Form.Select size="sm"
+                        value={tempBookingFilters.status}
+                        onChange={(e) => updateBookingFilter("status", e.target.value)}>
+                        <option value="">ALL</option>
+                        <option value="REQUESTED">Requested</option>
+                        <option value="CONFIRMED">Confirmed</option>
+                        <option value="RECONFIRMED">ReConfirmed</option>
+                        <option value="SOLD_OUT">Sold Out</option>
+                        <option value="CANCELLED">Cancelled</option>
+                      </Form.Select>
+                    </Col>
+                    <Col md={4}>
+                      <Supplier
+                        value={tempBookingFilters.supplierId}
+                        onChange={(id) => updateBookingFilter("supplierId", String(id))}
+                      />
+                    </Col>
+
+                    {/* Row 5 — service type */}
+                    <Col md={4}>
+                      <Form.Select size="sm"
+                        value={tempBookingFilters.bookingType}
+                        onChange={(e) => updateBookingFilter("bookingType", e.target.value)}>
+                        <option value="">All Services</option>
+                        <option value="NORMAL">Normal</option>
+                        <option value="LAST_MINUTE">Last Minute</option>
+                      </Form.Select>
+                    </Col>
+                    <Col md={8} />
+                  </Row>
+
+                  <h6 className="fw-bold text-primary mb-0 mt-2">Stay Details</h6>
+                  <Row className="align-items-end g-4 mt-0">
                     {/* Agent */}
                     {!isAgentRole && (
                     <Col md={2}>
@@ -727,10 +924,13 @@ const apiBookings = [
                       </Form.Group>
                     </Col>
 
-                    {/* Search Button */}
-                    <Col md={12} className="d-flex justify-content-end mt-3">
+                    {/* Search / Reset Buttons */}
+                    <Col md={12} className="d-flex justify-content-end gap-2 mt-3">
                       <Button variant="success" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}>
                         <i className="fas fa-search me-1"></i>Search
+                      </Button>
+                      <Button variant="outline-secondary" size="sm" onClick={handleReset}>
+                        <i className="fas fa-undo me-1"></i>Reset
                       </Button>
                     </Col>
                   </Row>

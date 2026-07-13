@@ -7,6 +7,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import HotelFilter from "../../components/filters/Hotelfilters";
 import axiosInstance from "../../components/AxiosInstance";
+import Supplier from "../../components/filters/Supplier";
+import DestinationCity from "../../components/filters/DestinationCity";
 
 export default function ContractExpiryReport() {
 
@@ -28,24 +30,77 @@ const [fromDate,setFromDate]=useState("");
 const [toDate,setToDate]=useState("");
 const [selectedHotel,setSelectedHotel]=useState("");
 
+// Booking-level search filters (sent to /api/report/contractrates on
+// Search) — a contract is listed when its hotel has at least one matching
+// booking. Service Name is covered by the existing Hotel filter, so it is
+// not repeated. The existing From/To Date filters the contract expiration
+// date, which is a different dimension than the Service (check-in) Date.
+const initialBookingFilters = {
+  serviceDateFrom: "",
+  serviceDateTo: "",
+  bookingDateFrom: "",
+  bookingDateTo: "",
+  deadlineDateFrom: "",
+  deadlineDateTo: "",
+  reconfirmDateFrom: "",
+  reconfirmDateTo: "",
+  cancelDateFrom: "",
+  cancelDateTo: "",
+  bookingReference: "",
+  supplierReference: "",
+  city: "",
+  guestName: "",
+  branch: "",
+  status: "",
+  supplierId: "",
+  bookingType: "",
+};
+const [tempBookingFilters, setTempBookingFilters] = useState(initialBookingFilters);
+
+// Branch dropdown options (distinct booking locations)
+const [branchOptions, setBranchOptions] = useState([]);
+
+const updateBookingFilter = (field, value) =>
+  setTempBookingFilters((prev) => ({ ...prev, [field]: value }));
+
 // Store filter options to map IDs to names
 const [hotelOptions,setHotelOptions]=useState([]);
 
+const fetchContracts = async (filters = {}) => {
+  try {
+    // Only send filters that actually carry a value
+    const params = {};
+    Object.entries(filters).forEach(([key, value]) => {
+      const trimmed = typeof value === "string" ? value.trim() : value;
+      if (trimmed !== "" && trimmed !== null && trimmed !== undefined) {
+        params[key] = trimmed;
+      }
+    });
+    const response = await axiosInstance.get("/api/report/contractrates", { params });
+    setContractList(Array.isArray(response.data) ? response.data : []);
+  } catch (error) {
+    console.error("error fetching data", error);
+    toast.error("Failed to load contract data");
+  }
+};
 
 useEffect(()=>{
   setCurrentPage(1);
 },[tableSearch]);
 
 useEffect(()=>{
-  const fetchcontract = async ()=>{
+  fetchContracts();
+
+  // Branch dropdown options come from the distinct booking locations
+  const fetchBranches = async ()=>{
     try{
-      const response = await axiosInstance.get("/api/report/contractrates")
-      setContractList(response.data || [])
+      const response = await axiosInstance.get("/api/report/bookings/branches");
+      setBranchOptions(Array.isArray(response.data) ? response.data : []);
     }catch(error){
-      console.error("error fetching data",error)
-      toast.error("Failed to load contract data");
-    }};
-  fetchcontract();
+      console.error("Branch options fetch error", error);
+    }
+  };
+  fetchBranches();
 },[])
 
 useEffect(()=>{
@@ -60,29 +115,38 @@ useEffect(()=>{
   fetchFilterOptions();
 },[])
 
+// Parse an expiration date that may arrive as ISO "YYYY-MM-DD" (what the
+// API sends) or legacy "DD/MM/YYYY". Returns a Date at start of day, or
+// null when unparseable.
+const parseExpirationDate = (value) => {
+  if (!value) return null;
+  const str = String(value);
+  let date;
+  if (str.includes('/')) {
+    const parts = str.split('/');
+    if (parts.length !== 3) return null;
+    const day = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10);
+    const year = parseInt(parts[2], 10);
+    if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+    date = new Date(year, month - 1, day);
+  } else {
+    date = new Date(str);
+  }
+  if (isNaN(date.getTime())) return null;
+  date.setHours(0, 0, 0, 0);
+  return date;
+};
+
 // Function to calculate status based on expiration date
 const getContractStatus = (expirationDate) => {
-  try {
-    const expirationParts = expirationDate.split('/');
-    if (expirationParts.length !== 3) return "Inactive";
-    
-    const day = parseInt(expirationParts[0], 10);
-    const month = parseInt(expirationParts[1], 10);
-    const year = parseInt(expirationParts[2], 10);
-    
-    if (isNaN(day) || isNaN(month) || isNaN(year)) return "Inactive";
-    
-    const expiryDate = new Date(year, month - 1, day);
-    const today = new Date();
-    
-    // Set time to start of day for accurate comparison
-    expiryDate.setHours(0, 0, 0, 0);
-    today.setHours(0, 0, 0, 0);
-    
-    return expiryDate >= today ? "Live" : "Inactive";
-  } catch (error) {
-    return "Inactive";
-  }
+  const expiryDate = parseExpirationDate(expirationDate);
+  if (!expiryDate) return "Inactive";
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return expiryDate >= today ? "Live" : "Inactive";
 };
 
 
@@ -111,60 +175,35 @@ const filteredContracts = useMemo(() => {
       if (!matches) return false;
     }
 
-    // Filter 2: Date Range Filter
+    // Filter 2: Date Range Filter (on the contract expiration date)
     if ((fromDate && fromDate.trim()) || (toDate && toDate.trim())) {
-      try {
-        // Check if item has expiration date
-        if (!item.expirationDate) {
-          return false;
-        }
-        
-        // Convert expiration date from DD/MM/YYYY to Date object
-        const expirationParts = item.expirationDate.split('/');
-        if (!expirationParts || expirationParts.length !== 3) {
-          return false;
-        }
-        
-        const day = parseInt(expirationParts[0], 10);
-        const month = parseInt(expirationParts[1], 10);
-        const year = parseInt(expirationParts[2], 10);
-        
-        if (isNaN(day) || isNaN(month) || isNaN(year)) {
-          return false;
-        }
-        
-        const itemDate = new Date(year, month - 1, day);
-        if (isNaN(itemDate.getTime())) {
+      const itemDate = parseExpirationDate(item.expirationDate);
+      if (!itemDate) {
+        return false;
+      }
+
+      // Filter by fromDate if provided
+      if (fromDate && fromDate.trim()) {
+        const fromDateObj = new Date(fromDate);
+        if (isNaN(fromDateObj.getTime())) {
           return false; // Invalid date
         }
-        itemDate.setHours(0, 0, 0, 0);
-        
-        // Filter by fromDate if provided
-        if (fromDate && fromDate.trim()) {
-          const fromDateObj = new Date(fromDate);
-          if (isNaN(fromDateObj.getTime())) {
-            return false; // Invalid date
-          }
-          fromDateObj.setHours(0, 0, 0, 0);
-          if (itemDate < fromDateObj) {
-            return false;
-          }
+        fromDateObj.setHours(0, 0, 0, 0);
+        if (itemDate < fromDateObj) {
+          return false;
         }
-        
-        // Filter by toDate if provided
-        if (toDate && toDate.trim()) {
-          const toDateObj = new Date(toDate);
-          if (isNaN(toDateObj.getTime())) {
-            return false; // Invalid date
-          }
-          toDateObj.setHours(23, 59, 59, 999);
-          if (itemDate > toDateObj) {
-            return false;
-          }
+      }
+
+      // Filter by toDate if provided
+      if (toDate && toDate.trim()) {
+        const toDateObj = new Date(toDate);
+        if (isNaN(toDateObj.getTime())) {
+          return false; // Invalid date
         }
-      } catch (error) {
-        console.error('Error filtering by date:', error, item);
-        return false;
+        toDateObj.setHours(23, 59, 59, 999);
+        if (itemDate > toDateObj) {
+          return false;
+        }
       }
     }
 
@@ -196,18 +235,20 @@ const endIndex = useMemo(() => startIndex + itemsPerPage, [startIndex, itemsPerP
 const currentContracts = useMemo(() => finalFilteredData.slice(startIndex, endIndex), [finalFilteredData, startIndex, endIndex]);
 
 // Handle search button click
-const handleSearch = () => {
+const handleSearch = async () => {
   // Apply temporary filter values to actual filter values
-  console.log('Applying filters:', { fromDate: tempFromDate, toDate: tempToDate, hotel: tempSelectedHotel });
   setFromDate(tempFromDate || "");
   setToDate(tempToDate || "");
   setSelectedHotel(tempSelectedHotel || "");
   setTableSearch("");
   setCurrentPage(1);
+  // Booking-level filters are applied server-side
+  await fetchContracts(tempBookingFilters);
 };
 
 // Handle reset/clear filters
-const handleReset = () => {
+const handleReset = async () => {
+  setTempBookingFilters(initialBookingFilters);
   setTempFromDate("");
   setTempToDate("");
   setTempSelectedHotel("");
@@ -216,6 +257,7 @@ const handleReset = () => {
   setSelectedHotel("");
   setTableSearch("");
   setCurrentPage(1);
+  await fetchContracts();
 };
 
 const handleSendEmail = async () => {
@@ -394,13 +436,153 @@ const handleSendEmail = async () => {
 
             {/* Filters Section */}
             <div className="p-4 bg-light border-bottom">
+              <h6 className="fw-bold text-primary mb-3">Booking Details</h6>
+              <Row className="align-items-end g-4 mb-4">
+
+                {/* Row 1 — Service / Booking / Cancellation Deadline dates */}
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Service Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempBookingFilters.serviceDateFrom}
+                        onChange={(e) => updateBookingFilter("serviceDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempBookingFilters.serviceDateTo}
+                        onChange={(e) => updateBookingFilter("serviceDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Booking Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempBookingFilters.bookingDateFrom}
+                        onChange={(e) => updateBookingFilter("bookingDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempBookingFilters.bookingDateTo}
+                        onChange={(e) => updateBookingFilter("bookingDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Cancellation Deadline Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempBookingFilters.deadlineDateFrom}
+                        onChange={(e) => updateBookingFilter("deadlineDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempBookingFilters.deadlineDateTo}
+                        onChange={(e) => updateBookingFilter("deadlineDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+
+                {/* Row 2 — Reconfirm / Cancel dates */}
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Reconfirm Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempBookingFilters.reconfirmDateFrom}
+                        onChange={(e) => updateBookingFilter("reconfirmDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempBookingFilters.reconfirmDateTo}
+                        onChange={(e) => updateBookingFilter("reconfirmDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Cancel Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempBookingFilters.cancelDateFrom}
+                        onChange={(e) => updateBookingFilter("cancelDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempBookingFilters.cancelDateTo}
+                        onChange={(e) => updateBookingFilter("cancelDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4} />
+
+                {/* Row 3 — reference / guest text filters */}
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Booking Reference"
+                    value={tempBookingFilters.bookingReference}
+                    onChange={(e) => updateBookingFilter("bookingReference", e.target.value)} />
+                </Col>
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Supplier Reference No."
+                    value={tempBookingFilters.supplierReference}
+                    onChange={(e) => updateBookingFilter("supplierReference", e.target.value)} />
+                </Col>
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Guest Name"
+                    value={tempBookingFilters.guestName}
+                    onChange={(e) => updateBookingFilter("guestName", e.target.value)} />
+                </Col>
+
+                {/* Row 4 — city / branch / status */}
+                <Col md={4}>
+                  <DestinationCity
+                    value={tempBookingFilters.city}
+                    onChange={(cityName) => updateBookingFilter("city", cityName)}
+                  />
+                </Col>
+                <Col md={4}>
+                  <Form.Select size="sm"
+                    value={tempBookingFilters.branch}
+                    onChange={(e) => updateBookingFilter("branch", e.target.value)}>
+                    <option value="">Select Branch</option>
+                    {branchOptions.map((branch) => (
+                      <option key={branch} value={branch}>{branch}</option>
+                    ))}
+                  </Form.Select>
+                </Col>
+                <Col md={4}>
+                  <Form.Select size="sm"
+                    value={tempBookingFilters.status}
+                    onChange={(e) => updateBookingFilter("status", e.target.value)}>
+                    <option value="">ALL</option>
+                    <option value="REQUESTED">Requested</option>
+                    <option value="CONFIRMED">Confirmed</option>
+                    <option value="RECONFIRMED">ReConfirmed</option>
+                    <option value="SOLD_OUT">Sold Out</option>
+                    <option value="CANCELLED">Cancelled</option>
+                  </Form.Select>
+                </Col>
+
+                {/* Row 5 — supplier / service type */}
+                <Col md={4}>
+                  <Supplier
+                    value={tempBookingFilters.supplierId}
+                    onChange={(id) => updateBookingFilter("supplierId", String(id))}
+                  />
+                </Col>
+                <Col md={4}>
+                  <Form.Select size="sm"
+                    value={tempBookingFilters.bookingType}
+                    onChange={(e) => updateBookingFilter("bookingType", e.target.value)}>
+                    <option value="">All Services</option>
+                    <option value="NORMAL">Normal</option>
+                    <option value="LAST_MINUTE">Last Minute</option>
+                  </Form.Select>
+                </Col>
+                <Col md={4} />
+              </Row>
+
+              <h6 className="fw-bold text-primary mb-3">Contract Details</h6>
               <Row className="align-items-end g-4">
                 <Col md={2}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">From Date</Form.Label>
-                    <Form.Control 
-                      type="date" 
-                      size="sm" 
+                    <Form.Control
+                      type="date"
+                      size="sm"
                       value={tempFromDate}
                       onChange={(e) => setTempFromDate(e.target.value)}
                     />

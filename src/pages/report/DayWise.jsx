@@ -9,6 +9,8 @@ import autoTable from 'jspdf-autotable';
 import HotelTypefilters from "../../components/filters/HotelTypefilters";
 import RoomCategory from "../../components/filters/RoomCategory";
 import HotelFilter from "../../components/filters/Hotelfilters";
+import Supplier from "../../components/filters/Supplier";
+import DestinationCity from "../../components/filters/DestinationCity";
 
 
 function DayWise() {
@@ -50,6 +52,53 @@ function DayWise() {
    const[fromDate,setFromDate]=useState("");
    const[toDate,setToDate]=useState("");
 
+   // Booking-level search filters (sent to /api/report/daywise on Search).
+   // Service Date and Service Name are covered by the existing From/To Date
+   // and Hotel filters, so they are not repeated here.
+   const initialBookingFilters = {
+    bookingDateFrom: "",
+    bookingDateTo: "",
+    deadlineDateFrom: "",
+    deadlineDateTo: "",
+    reconfirmDateFrom: "",
+    reconfirmDateTo: "",
+    cancelDateFrom: "",
+    cancelDateTo: "",
+    bookingReference: "",
+    supplierReference: "",
+    city: "",
+    guestName: "",
+    branch: "",
+    status: "",
+    supplierId: "",
+    bookingType: "",
+   };
+   const [tempBookingFilters, setTempBookingFilters] = useState(initialBookingFilters);
+
+   // Branch dropdown options (distinct booking locations)
+   const [branchOptions, setBranchOptions] = useState([]);
+
+   const updateBookingFilter = (field, value) =>
+    setTempBookingFilters((prev) => ({ ...prev, [field]: value }));
+
+   const fetchInhouse = async (filters = {}) => {
+    try {
+      // Only send filters that actually carry a value
+      const params = {};
+      Object.entries(filters).forEach(([key, value]) => {
+        const trimmed = typeof value === "string" ? value.trim() : value;
+        if (trimmed !== "" && trimmed !== null && trimmed !== undefined) {
+          params[key] = trimmed;
+        }
+      });
+      const response = await axiosInstance.get("/api/report/daywise", { params });
+      setInhouseBookings(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error("Error Fetching Data", error);
+      toast.error("Fetching Data Failed");
+    }
+   };
+
    useEffect(()=>{
     setApiCurrentPage(1);
    },[apiSearchQuery])
@@ -59,15 +108,18 @@ function DayWise() {
    },[inHouseSearchQuery])
 
    useEffect(()=>{
-    const fetchInhouse = async ()=>{
+    fetchInhouse();
+
+    // Branch dropdown options come from the distinct booking locations
+    const fetchBranches = async ()=>{
       try{
-      const response = await axiosInstance.get("/api/report/daywise");
-      setInhouseBookings(response.data);
+        const response = await axiosInstance.get("/api/report/bookings/branches");
+        setBranchOptions(Array.isArray(response.data) ? response.data : []);
       }catch(error){
-        console.error("Error Fetching Data", error);
-        toast.error("Fetching Data Failed")
+        console.error("Branch options fetch error", error);
       }
-    };fetchInhouse();
+    };
+    fetchBranches();
    },[])
 
    useEffect(()=>{
@@ -293,15 +345,34 @@ const handleExcel = () => {
   window.URL.revokeObjectURL(url);
 };
 
-const handleSearch = () => {
+const handleSearch = async () => {
   // Apply temporary filter values to actual filter values
   setSelectedHotel(tempSelectedhotel);
   setSelectedHoteltype(tempSelectedhoteltype);
   setRoomCategory(tempRoomCategory);
   setFromDate(tempFromDate);
-setToDate(tempToDate);
-setInhouseCurrentPage(1);
-setApiCurrentPage(1);
+  setToDate(tempToDate);
+  setInhouseCurrentPage(1);
+  setApiCurrentPage(1);
+  // Booking-level filters are applied server-side
+  await fetchInhouse(tempBookingFilters);
+ };
+
+const handleReset = async () => {
+  setTempBookingFilters(initialBookingFilters);
+  setTempSelectedHotel("");
+  setTempSelectedHoteltype("");
+  setTempRoomCategory("");
+  setTempFromDate("");
+  setTempToDate("");
+  setSelectedHotel("");
+  setSelectedHoteltype("");
+  setRoomCategory("");
+  setFromDate("");
+  setToDate("");
+  setInHouseSearchQuery("");
+  setInhouseCurrentPage(1);
+  await fetchInhouse();
  };
 
 
@@ -538,13 +609,140 @@ const filteredinhouseBookings = useMemo(() => {
   {/* When reportType is 'inhouse' - show Inhouse filters */}
   {reportType === 'inhouse' && (
   <>
-    <Row className="align-items-end g-4 mt-3">
+    <h6 className="fw-bold text-primary mb-0 mt-4">Booking Details</h6>
+    <Row className="align-items-end g-4 mt-0 mb-2">
+
+      {/* Row 1 — Booking / Cancellation Deadline / Reconfirm dates */}
+      <Col md={4}>
+        <Form.Group className="mb-0">
+          <Form.Label className="small mb-2">Booking Date</Form.Label>
+          <div className="d-flex gap-2">
+            <Form.Control type="date" size="sm" title="From"
+              value={tempBookingFilters.bookingDateFrom}
+              onChange={(e) => updateBookingFilter("bookingDateFrom", e.target.value)} />
+            <Form.Control type="date" size="sm" title="To"
+              value={tempBookingFilters.bookingDateTo}
+              onChange={(e) => updateBookingFilter("bookingDateTo", e.target.value)} />
+          </div>
+        </Form.Group>
+      </Col>
+      <Col md={4}>
+        <Form.Group className="mb-0">
+          <Form.Label className="small mb-2">Cancellation Deadline Date</Form.Label>
+          <div className="d-flex gap-2">
+            <Form.Control type="date" size="sm" title="From"
+              value={tempBookingFilters.deadlineDateFrom}
+              onChange={(e) => updateBookingFilter("deadlineDateFrom", e.target.value)} />
+            <Form.Control type="date" size="sm" title="To"
+              value={tempBookingFilters.deadlineDateTo}
+              onChange={(e) => updateBookingFilter("deadlineDateTo", e.target.value)} />
+          </div>
+        </Form.Group>
+      </Col>
+      <Col md={4}>
+        <Form.Group className="mb-0">
+          <Form.Label className="small mb-2">Reconfirm Date</Form.Label>
+          <div className="d-flex gap-2">
+            <Form.Control type="date" size="sm" title="From"
+              value={tempBookingFilters.reconfirmDateFrom}
+              onChange={(e) => updateBookingFilter("reconfirmDateFrom", e.target.value)} />
+            <Form.Control type="date" size="sm" title="To"
+              value={tempBookingFilters.reconfirmDateTo}
+              onChange={(e) => updateBookingFilter("reconfirmDateTo", e.target.value)} />
+          </div>
+        </Form.Group>
+      </Col>
+
+      {/* Row 2 — Cancel date */}
+      <Col md={4}>
+        <Form.Group className="mb-0">
+          <Form.Label className="small mb-2">Cancel Date</Form.Label>
+          <div className="d-flex gap-2">
+            <Form.Control type="date" size="sm" title="From"
+              value={tempBookingFilters.cancelDateFrom}
+              onChange={(e) => updateBookingFilter("cancelDateFrom", e.target.value)} />
+            <Form.Control type="date" size="sm" title="To"
+              value={tempBookingFilters.cancelDateTo}
+              onChange={(e) => updateBookingFilter("cancelDateTo", e.target.value)} />
+          </div>
+        </Form.Group>
+      </Col>
+      <Col md={8} />
+
+      {/* Row 3 — reference / guest text filters */}
+      <Col md={4}>
+        <Form.Control size="sm" placeholder="Booking Reference"
+          value={tempBookingFilters.bookingReference}
+          onChange={(e) => updateBookingFilter("bookingReference", e.target.value)} />
+      </Col>
+      <Col md={4}>
+        <Form.Control size="sm" placeholder="Supplier Reference No."
+          value={tempBookingFilters.supplierReference}
+          onChange={(e) => updateBookingFilter("supplierReference", e.target.value)} />
+      </Col>
+      <Col md={4}>
+        <Form.Control size="sm" placeholder="Guest Name"
+          value={tempBookingFilters.guestName}
+          onChange={(e) => updateBookingFilter("guestName", e.target.value)} />
+      </Col>
+
+      {/* Row 4 — city / branch / status */}
+      <Col md={4}>
+        <DestinationCity
+          value={tempBookingFilters.city}
+          onChange={(cityName) => updateBookingFilter("city", cityName)}
+        />
+      </Col>
+      <Col md={4}>
+        <Form.Select size="sm"
+          value={tempBookingFilters.branch}
+          onChange={(e) => updateBookingFilter("branch", e.target.value)}>
+          <option value="">Select Branch</option>
+          {branchOptions.map((branch) => (
+            <option key={branch} value={branch}>{branch}</option>
+          ))}
+        </Form.Select>
+      </Col>
+      <Col md={4}>
+        <Form.Select size="sm"
+          value={tempBookingFilters.status}
+          onChange={(e) => updateBookingFilter("status", e.target.value)}>
+          <option value="">ALL</option>
+          <option value="REQUESTED">Requested</option>
+          <option value="CONFIRMED">Confirmed</option>
+          <option value="RECONFIRMED">ReConfirmed</option>
+          <option value="SOLD_OUT">Sold Out</option>
+          <option value="CANCELLED">Cancelled</option>
+        </Form.Select>
+      </Col>
+
+      {/* Row 5 — supplier / service type */}
+      <Col md={4}>
+        <Supplier
+          value={tempBookingFilters.supplierId}
+          onChange={(id) => updateBookingFilter("supplierId", String(id))}
+        />
+      </Col>
+      <Col md={4}>
+        <Form.Select size="sm"
+          value={tempBookingFilters.bookingType}
+          onChange={(e) => updateBookingFilter("bookingType", e.target.value)}>
+          <option value="">All Services</option>
+          <option value="NORMAL">Normal</option>
+          <option value="LAST_MINUTE">Last Minute</option>
+        </Form.Select>
+      </Col>
+      <Col md={4} />
+    </Row>
+
+    <h6 className="fw-bold text-primary mb-0 mt-2">Stay Details</h6>
+    <Row className="align-items-end g-4 mt-0">
       {/* From Date */}
       <Col md={3}>
         <Form.Group className="mb-0">
           <Form.Label className="small mb-2">From Date</Form.Label>
-          <Form.Control type="date" size="sm" 
-           value={tempFromDate}  
+          <Form.Control type="date" size="sm"
+           value={tempFromDate}
                     onChange={(e)=>setTempFromDate(e.target.value)} />
         </Form.Group>
       </Col>
@@ -583,11 +781,16 @@ const filteredinhouseBookings = useMemo(() => {
                   />
       </Col>
 
-      {/* Search Button */}
+      {/* Search / Reset Buttons */}
       <Col md={3}>
-        <Button variant="success" className="w-100" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}>
-          <i className="fas fa-search me-1"></i>Search
-        </Button>
+        <div className="d-flex gap-2">
+          <Button variant="success" className="w-50" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}>
+            <i className="fas fa-search me-1"></i>Search
+          </Button>
+          <Button variant="outline-secondary" className="w-50" size="sm" onClick={handleReset}>
+            <i className="fas fa-undo me-1"></i>Reset
+          </Button>
+        </div>
       </Col>
     </Row>
 
