@@ -1148,12 +1148,16 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
       // can stamp. Case 5 (no-credit + Voucher Later) lands on
       // confirmationStatus="Confirmed" — already matched by the existing
       // "CONFIRMED" check; "NOT CONFIRMED" covers the engine's Not
-      // Confirmed label used by other branches.
+      // Confirmed label used by other branches; "ON REQUEST" covers an
+      // On-Request room's creation status (previously unmatched here, so
+      // a successfully-created On-Request booking fell through to the
+      // toast.error branch below and never redirected to the list).
       if (
         bookingResponse &&
         bookingResponse.status &&
         (bookingResponse.status.toUpperCase() === "CONFIRMED" ||
-          bookingResponse.status.toUpperCase() === "NOT CONFIRMED") &&
+          bookingResponse.status.toUpperCase() === "NOT CONFIRMED" ||
+          bookingResponse.status.toUpperCase() === "ON REQUEST") &&
         bookingResponse.bookingId != 0
       ) {
         toast.success(bookingResponse.message);
