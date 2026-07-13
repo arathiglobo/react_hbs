@@ -29,9 +29,6 @@ function DayWise() {
    const [isSending, setIsSending] = useState(false);
    const [reportType,setReportType] = useState(null);
 
-   const [tempSearchQuery, setTempSearchQuery] = useState("");
-const [searchQuery, setSearchQuery] = useState("");
-
     // Temporary filter states (what user sees/edits)
      const [tempSelectedhotel,setTempSelectedHotel]= useState("");
      const [tempSelectedhoteltype,setTempSelectedHoteltype]= useState("");
@@ -301,7 +298,6 @@ const handleSearch = () => {
   setSelectedHotel(tempSelectedhotel);
   setSelectedHoteltype(tempSelectedhoteltype);
   setRoomCategory(tempRoomCategory);
-  setSearchQuery(tempSearchQuery);
   setFromDate(tempFromDate);
 setToDate(tempToDate);
 setInhouseCurrentPage(1);
@@ -405,8 +401,8 @@ const filteredinhouseBookings = useMemo(() => {
         // If ID doesn't match, try matching by name
         const selectedHotelName = hotelOptions.find(opt => String(opt.id) === String(selectedhotel))?.name;
         if (selectedHotelName) {
-          const hotelNameStr = String(a.hotelName || '').trim();
-          const selectedHotelNameStr = String(selectedHotelName || '').trim();
+          const hotelNameStr = String(a.hotelName || '').trim().toLowerCase();
+          const selectedHotelNameStr = String(selectedHotelName || '').trim().toLowerCase();
           matches = hotelNameStr === selectedHotelNameStr;
         }
       }
@@ -425,8 +421,8 @@ const filteredinhouseBookings = useMemo(() => {
         // If ID doesn't match, try matching by name
         const selectedTypeName = hotelTypeOptions.find(opt => String(opt.id) === String(selectedhoteltype))?.name;
         if (selectedTypeName) {
-          const hotelTypeStr = String(a.hotelType || '').trim();
-          const selectedTypeStr = String(selectedTypeName || '').trim();
+          const hotelTypeStr = String(a.hotelType || '').trim().toLowerCase();
+          const selectedTypeStr = String(selectedTypeName || '').trim().toLowerCase();
           matches = hotelTypeStr === selectedTypeStr;
         }
       }
@@ -467,9 +463,9 @@ const filteredinhouseBookings = useMemo(() => {
       if (!matches) return false;
     }
 
-    // Filter 5: Text Search (using searchQuery - the applied one)
-    if (searchQuery && searchQuery.trim()) {
-      const search = searchQuery.trim().toLowerCase();
+    // Filter 5: Text Search (live, from the "search here" input)
+    if (inHouseSearchQuery && inHouseSearchQuery.trim()) {
+      const search = inHouseSearchQuery.trim().toLowerCase();
       const matchesSearch =
         (a.hotelName && String(a.hotelName).toLowerCase().includes(search)) ||
         (a.checkIn && String(a.checkIn).toLowerCase().includes(search)) ||
@@ -484,7 +480,7 @@ const filteredinhouseBookings = useMemo(() => {
 
     return true; // If all filters pass, include this booking
   });
-}, [inhouseBookings, fromDate, toDate, selectedhotel, selectedhoteltype, roomCategory, searchQuery, hotelOptions, hotelTypeOptions, roomCategoryOptions]);
+}, [inhouseBookings, fromDate, toDate, selectedhotel, selectedhoteltype, roomCategory, inHouseSearchQuery, hotelOptions, hotelTypeOptions, roomCategoryOptions]);
 
 
 
