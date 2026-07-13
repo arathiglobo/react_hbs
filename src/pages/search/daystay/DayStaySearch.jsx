@@ -456,6 +456,7 @@ export default function DayStaySearch() {
           value: city.id,
           label: `${city.stateName}, ${city.country}`,
           countryId: city.countryId,
+          code: city.countryCode,
         }));
         setDestinationOptions(options);
       } catch {
@@ -518,6 +519,7 @@ export default function DayStaySearch() {
         value: city.id,
         label: `${city.stateName},${city.country}`,
         countryId: city.countryId,
+        code: city.countryCode,
       }));
       setDestinationOptions(options);
     } catch {
@@ -829,6 +831,19 @@ export default function DayStaySearch() {
                           {errors.destination}
                         </div>
                       )}
+                      {/* Surface UAE-resident status when the selected
+                          destination city belongs to the UAE so the operator
+                          can apply the resident rate. Matched on the city's
+                          country code "AE" (from master_country) so a label
+                          change can't break the rule. */}
+                      {selectedDestination?.code === "AE" && (
+                        <div
+                          className="mt-1 small fw-semibold"
+                          style={{ color: "#0f7a3a" }}
+                        >
+                          Select "United Arab Emirates" if guest resident of UAE
+                        </div>
+                      )}
                     </Form.Group>
                   </Col>
 
@@ -867,18 +882,9 @@ export default function DayStaySearch() {
                           {errors.nationality}
                         </div>
                       )}
-                      {/* Surface UAE-resident status to the operator so
-                          they can apply the resident rate. Matched on
-                          country code "AE" so a label change can't
-                          break the rule. */}
-                      {selectedNationality?.code === "AE" && (
-                        <div
-                          className="mt-1 small fw-semibold"
-                          style={{ color: "#0f7a3a" }}
-                        >
-                          Select "United Arab Emirates" if guest resident of UAE
-                        </div>
-                      )}
+                      {/* UAE-resident hint moved to the Destination field —
+                          it now triggers on a UAE destination city, not on the
+                          selected nationality. */}
                     </Form.Group>
                   </Col>
 

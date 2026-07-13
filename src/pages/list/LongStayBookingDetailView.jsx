@@ -1027,10 +1027,24 @@ export default function LongStayBookingDetailView() {
                         )}
                       </Col>
                       <Col md={6}>
+                        <InfoRow label="Agent" value={detail.agentName} />
                         {detail.employeeName && (
                           <InfoRow
                             label="Booked By Employee"
                             value={detail.employeeName}
+                          />
+                        )}
+                        {/* Contact — "Booking done for" value entered on the
+                            booking page, shown as "<value>/<agentName>". Only
+                            rendered when a value was entered. */}
+                        {detail.bookingDoneFor && (
+                          <InfoRow
+                            label="Contact"
+                            value={
+                              detail.agentName
+                                ? `${detail.bookingDoneFor}/${detail.agentName}`
+                                : detail.bookingDoneFor
+                            }
                           />
                         )}
                         <InfoRow
@@ -1143,27 +1157,11 @@ export default function LongStayBookingDetailView() {
                               .join(" ")
                               .trim() || "-"}
                           />
-                          <InfoRow
-                            label="Email"
-                            value={detail.primaryGuestDetails.email}
-                          />
-                          <InfoRow
-                            label="Phone"
-                            value={detail.primaryGuestDetails.phone}
-                          />
                         </Col>
                         <Col md={6}>
                           <InfoRow
-                            label="Passport No"
-                            value={detail.primaryGuestDetails.passportNo}
-                          />
-                          <InfoRow
                             label="Nationality"
                             value={detail.primaryGuestDetails.nationality}
-                          />
-                          <InfoRow
-                            label="Gender"
-                            value={detail.primaryGuestDetails.gender}
                           />
                         </Col>
                       </Row>
@@ -1174,16 +1172,8 @@ export default function LongStayBookingDetailView() {
                             label="Name"
                             value={detail.primaryGuestName}
                           />
-                          <InfoRow
-                            label="Email"
-                            value={detail.primaryGuestEmail}
-                          />
                         </Col>
                         <Col md={6}>
-                          <InfoRow
-                            label="Phone"
-                            value={detail.primaryGuestPhone}
-                          />
                           <InfoRow
                             label="Nationality"
                             value={detail.nationality}

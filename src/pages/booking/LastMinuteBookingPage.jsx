@@ -337,6 +337,7 @@ export default function LastMinuteBookingPage() {
         value: c.id,
         label: `${c.stateName},${c.country}`,
         countryId: c.countryId,
+        code: c.countryCode,
       }));
       setDestinationOptions(opts);
     } catch {
@@ -354,6 +355,7 @@ export default function LastMinuteBookingPage() {
           value: c.id,
           label: `${c.stateName},${c.country}`,
           countryId: c.countryId,
+          code: c.countryCode,
         })));
       } catch {
         // silent
@@ -682,6 +684,19 @@ export default function LastMinuteBookingPage() {
                         }}
                       />
                       {errors.destination && <div className="text-danger small mt-1">{errors.destination}</div>}
+                      {/* Surface UAE-resident status when the selected
+                          destination city belongs to the UAE so the operator
+                          can apply the resident rate. Matched on the city's
+                          country code "AE" (from master_country) so a label
+                          change can't break the rule. */}
+                      {selectedDestination?.code === "AE" && (
+                        <div
+                          className="mt-1 small fw-semibold"
+                          style={{ color: "#0f7a3a" }}
+                        >
+                          Select "United Arab Emirates" if guest resident of UAE
+                        </div>
+                      )}
                     </Form.Group>
                   </Col>
 
@@ -706,18 +721,9 @@ export default function LastMinuteBookingPage() {
                         }}
                       />
                       {errors.nationality && <div className="text-danger small mt-1">{errors.nationality}</div>}
-                      {/* Surface UAE-resident status to the operator so
-                          they can apply the resident rate. Matched on
-                          country code "AE" so a label change can't
-                          break the rule. */}
-                      {selectedNationality?.code === "AE" && (
-                        <div
-                          className="mt-1 small fw-semibold"
-                          style={{ color: "#0f7a3a" }}
-                        >
-                          Select "United Arab Emirates" if guest resident of UAE
-                        </div>
-                      )}
+                      {/* UAE-resident hint moved to the Destination field —
+                          it now triggers on a UAE destination city, not on the
+                          selected nationality. */}
                     </Form.Group>
                   </Col>
 

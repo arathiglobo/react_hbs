@@ -171,6 +171,12 @@ export default function LongStayBookingPage() {
   const [tourismDirham, setTourismDirham] = useState("");
   // Selected special requests — same checklist as HotelBookingPage.
   const [specialRequests, setSpecialRequests] = useState([]);
+  // Optional "Booking done for" free-text. When set, the detail view + voucher
+  // render it as "Contact: <value>/<agentName>". The input is ADMIN-only.
+  const [bookingDoneFor, setBookingDoneFor] = useState("");
+  const isAdmin =
+    String(localStorage.getItem("currentActiveRole") || "").toUpperCase() ===
+    "ADMIN";
 
   const handleSpecialRequestToggle = (request) => {
     setSpecialRequests((prev) =>
@@ -658,8 +664,14 @@ export default function LongStayBookingPage() {
         primaryGuestName: fullName,
         primaryGuestEmail: "",
         primaryGuestPhone: "",
-        nationality: null,
+        // Nationality (country code, e.g. "AE") selected during search and
+        // carried on the draft — persisted on the booking and shown on the
+        // detail view + voucher.
+        nationality: draft?.nationality || null,
         remarks: remarks || null,
+        // Optional "Booking done for" free-text (admin-only field) → shown as
+        // "Contact: <value>/<agentName>" on the detail view + voucher.
+        bookingDoneFor: bookingDoneFor.trim() || null,
         // Selected special-request labels — persisted server-side and
         // surfaced on the detail view + voucher (mirrors HotelBookingPage).
         specialRequests: specialRequests,
@@ -707,7 +719,7 @@ export default function LongStayBookingPage() {
           email: "",
           phone: "",
           passportNo: null,
-          nationality: null,
+          nationality: draft?.nationality || null,
           gender: leadGuest.gender || null,
         },
         rooms: rooms.map((room, rIdx) => ({
@@ -1094,6 +1106,26 @@ export default function LongStayBookingPage() {
                   <Card className="p-4 mb-2 shadow-sm border-0">
                     <h5 className="mb-3 fw-bold">Special Requests</h5>
                     <Row className="g-3">
+                      {/* Booking Done For — optional free-text, ADMIN logins
+                          only (hidden for all other logins). Persisted and
+                          shown as "Contact: <value>/<agentName>" on the detail
+                          view + voucher. */}
+                      {isAdmin && (
+                        <Col md={12}>
+                          <Form.Group className="mb-2">
+                            <Form.Label className="fw-semibold">
+                              Booking Done For{" "}
+                              <span className="text-muted small">(optional)</span>
+                            </Form.Label>
+                            <Form.Control
+                              type="text"
+                              value={bookingDoneFor}
+                              onChange={(e) => setBookingDoneFor(e.target.value)}
+                              placeholder="Name of the person this booking is done for"
+                            />
+                          </Form.Group>
+                        </Col>
+                      )}
                       <Col md={12}>
                         <Form.Group className="mb-0">
                           <div className="special-request-grid">
@@ -1737,6 +1769,7 @@ export default function LongStayBookingPage() {
                                       year: "numeric",
                                     },
                                   )}
+                                  , 02:00 PM (UAE)
                                 </span>
                                 {isOutsideDeadline ? (
                                   <span

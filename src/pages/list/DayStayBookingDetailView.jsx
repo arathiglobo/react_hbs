@@ -1200,6 +1200,19 @@ export default function DayStayBookingDetailView() {
                           label="Agent"
                           value={selected.agentName || selected.agentId}
                         />
+                        {/* Contact — "Booking done for" value entered on the
+                            booking page, shown as "<value>/<agentName>". Only
+                            rendered when a value was entered. */}
+                        {selected.bookingDoneFor && (
+                          <InfoRow
+                            label="Contact"
+                            value={
+                              selected.agentName
+                                ? `${selected.bookingDoneFor}/${selected.agentName}`
+                                : selected.bookingDoneFor
+                            }
+                          />
+                        )}
                         {selected.employeeName && (
                           <InfoRow
                             label="Booked By Employee"
@@ -1221,7 +1234,7 @@ export default function DayStayBookingDetailView() {
                               <span
                                 style={{ color: "#dc2626", fontWeight: 600 }}
                               >
-                                {String(selected.deadlineDate).replace("T", " ")}
+                                {`${String(selected.deadlineDate).slice(0, 10)} 02:00 PM (UAE)`}
                               </span>
                             ) : (
                               "-"
@@ -1336,36 +1349,77 @@ export default function DayStayBookingDetailView() {
                     </span>
                   </div>
                   <div style={{ padding: "8px 16px 12px" }}>
-                    <Table
-                      bordered
-                      size="sm"
-                      style={{ fontSize: "0.82rem", marginBottom: 0 }}
-                    >
-                      <thead style={{ backgroundColor: "#f8f8f8" }}>
-                        <tr>
-                          <th>#</th>
-                          <th>Category</th>
-                          <th>Meal Plan</th>
-                          <th>Adults</th>
-                          <th>Children</th>
-                          <th className="text-end">Rate</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(selected.rooms || []).map((r, i) => (
-                          <tr key={i}>
-                            <td>{r.roomNo}</td>
-                            <td>{r.roomCategory}</td>
-                            <td>{r.mealPlan}</td>
-                            <td>{r.adults}</td>
-                            <td>{r.children}</td>
-                            <td className="text-end">
-                              AED {Number(r.rate || 0).toFixed(2)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </Table>
+                    {(selected.rooms || []).map((r, i) => (
+                      <div
+                        key={i}
+                        className={i > 0 ? "mt-3 pt-3 border-top" : ""}
+                      >
+                        <div
+                          className="fw-semibold mb-2"
+                          style={{ color: "#c0392b", fontSize: "0.88rem" }}
+                        >
+                          Room {r.roomNo ?? i + 1}
+                        </div>
+                        <Table
+                          bordered
+                          size="sm"
+                          style={{ fontSize: "0.82rem", marginBottom: "8px" }}
+                        >
+                          <thead style={{ backgroundColor: "#f8f8f8" }}>
+                            <tr>
+                              <th>Category</th>
+                              <th>Meal Plan</th>
+                              <th>Adults</th>
+                              <th>Children</th>
+                              <th className="text-end">Rate</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td>{r.roomCategory}</td>
+                              <td>{r.mealPlan}</td>
+                              <td>{r.adults}</td>
+                              <td>{r.children}</td>
+                              <td className="text-end">
+                                AED {Number(r.rate || 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </Table>
+                        {r.guests && r.guests.length > 0 && (
+                          <Table
+                            bordered
+                            size="sm"
+                            style={{ fontSize: "0.8rem", marginBottom: 0 }}
+                          >
+                            <thead style={{ backgroundColor: "#f8f8f8" }}>
+                              <tr>
+                                <th>#</th>
+                                <th>Name</th>
+                                <th>Type</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {r.guests.map((g, gi) => (
+                                <tr key={gi}>
+                                  <td>{gi + 1}</td>
+                                  <td>
+                                    {[g.salutation, g.firstName, g.lastName]
+                                      .filter(Boolean)
+                                      .join(" ") || "-"}
+                                  </td>
+                                  <td>
+                                    {g.isChild
+                                      ? `Child (Age: ${g.childAge ?? "-"})`
+                                      : "Adult"}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </Table>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
 

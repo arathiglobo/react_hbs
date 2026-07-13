@@ -166,6 +166,11 @@ const GovEmployeeBookingPage = () => {
   // and is read straight into the create payload below.
   const [remarks, setRemarks] = useState("");
   const [specialRequests, setSpecialRequests] = useState([]);
+  // Optional "Booking done for" free-text. When set, the detail view + voucher
+  // render it as "Contact: <value>/<agentName>". The input is ADMIN-only.
+  const [bookingDoneFor, setBookingDoneFor] = useState("");
+  const isAdmin =
+    String(activeUserRole || "").toUpperCase() === "ADMIN";
   // Payment Mode — defaults to Credit Limit; rides on the create payload
   // (same field as StudentBookingPage / SeniorCitizenBookingPage). Only
   // Credit Limit / Cash / Card are exposed per business decision.
@@ -785,6 +790,11 @@ const GovEmployeeBookingPage = () => {
           lastName: g.lastName,
           gender: g.gender,
           isChild: !!g.isChild,
+          // Per-guest child age (from the room's childAges list). Persisted
+          // and shown on the detail view + voucher. Null for adults.
+          childAge: g.isChild
+            ? room.childAges?.[gi - room.adults] ?? null
+            : null,
           // Mark the lead guest so the backend knows who the primary
           // contact is on the booking.
           isLead:
@@ -830,6 +840,9 @@ const GovEmployeeBookingPage = () => {
       primaryGuest,
       rooms: allRooms,
       remarks,
+      // Optional "Booking done for" free-text (admin-only field) → shown as
+      // "Contact: <value>/<agentName>" on the detail view + voucher.
+      bookingDoneFor: bookingDoneFor.trim() || null,
       specialRequests,
       paymentMode,
       // ── Booking-flow status inputs (mirror HotelBookingPage) ──
@@ -1227,21 +1240,46 @@ const GovEmployeeBookingPage = () => {
                             eventKey={String(roomIndex)}
                           >
                             <Accordion.Header>
-                              <span className="fw-bold">
+                              <span className="fw-bold w-100 d-flex flex-wrap align-items-center gap-2">
                                 {/* Per-room label from roomBreakdown when
                                     present (multi-room flow); else the
                                     combined selectedRate (legacy single-room).
-                                    Shows room category + meal plan, matching
-                                    the booking summary. */}
+                                    Shows room category + meal plan + the
+                                    cancellation deadline (date + static 2 PM
+                                    UAE) for refundable rooms. */}
                                 {(() => {
                                   const slot =
                                     bookingData.roomBreakdown?.[roomIndex] ||
                                     selectedRate;
                                   const cat = slot.roomCategory || "—";
                                   const meal = slot.mealPlan;
-                                  return `Room ${roomIndex + 1} — ${cat}${
-                                    meal ? ` · ${meal}` : ""
-                                  }`;
+                                  // The gov booking always stamps a
+                                  // deadlineDate (end of the check-in day), so
+                                  // show it here whenever it resolves — this
+                                  // covers On-Request / non-refundable rooms too.
+                                  const deadlineLabel = cancellationDeadline
+                                    ? `${cancellationDeadline.toLocaleDateString(
+                                        "en-GB",
+                                        {
+                                          day: "2-digit",
+                                          month: "short",
+                                          year: "numeric",
+                                        },
+                                      )}, 02:00 PM (UAE)`
+                                    : null;
+                                  return (
+                                    <>
+                                      <span>
+                                        Room {roomIndex + 1} — {cat}
+                                        {meal ? ` · ${meal}` : ""}
+                                      </span>
+                                      {deadlineLabel && (
+                                        <span className="small fw-normal text-muted">
+                                          | Deadline: {deadlineLabel}
+                                        </span>
+                                      )}
+                                    </>
+                                  );
                                 })()}
                               </span>
                             </Accordion.Header>
@@ -1273,7 +1311,11 @@ const GovEmployeeBookingPage = () => {
                                         {guest.isChild
                                           ? `Child ${
                                               guestIndex - room.adults + 1
-                                            }`
+                                            } (Age: ${
+                                              room.childAges?.[
+                                                guestIndex - room.adults
+                                              ] ?? "-"
+                                            })`
                                           : `Adult ${guestIndex + 1}`}
                                       </span>
                                     </Col>
@@ -1384,6 +1426,25 @@ const GovEmployeeBookingPage = () => {
                     <h6 className="mb-2 fw-bold text-primary">
                       Special Requests
                     </h6>
+                    {/* Booking Done For — optional free-text, ADMIN logins only
+                        (hidden for all other logins). Persisted and shown as
+                        "Contact: <value>/<agentName>" on the detail view +
+                        voucher. */}
+                    {isAdmin && (
+                      <Form.Group className="mb-3">
+                        <Form.Label className="fw-semibold small">
+                          Booking Done For{" "}
+                          <span className="text-muted small">(optional)</span>
+                        </Form.Label>
+                        <Form.Control
+                          size="sm"
+                          type="text"
+                          value={bookingDoneFor}
+                          onChange={(e) => setBookingDoneFor(e.target.value)}
+                          placeholder="Name of the person this booking is done for"
+                        />
+                      </Form.Group>
+                    )}
                     <div className="mb-2 d-flex flex-wrap gap-2">
                       {SPECIAL_REQUEST_OPTIONS.map((req) => (
                         <Form.Check
@@ -2005,6 +2066,7 @@ const GovEmployeeBookingPage = () => {
                                       year: "numeric",
                                     },
                                   )}
+                                  , 02:00 PM (UAE)
                                 </span>
                                 {isOutsideDeadline ? (
                                   <span
