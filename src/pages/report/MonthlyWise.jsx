@@ -26,8 +26,6 @@ const [emailAddress, setEmailAddress] = useState("");
 const [isSending, setIsSending] = useState(false);
 const [reportType,setReportType] = useState(null);
 
-const [tempSearchQuery, setTempSearchQuery] = useState("");
-
  // Temporary filter states (what user sees/edits)
      const [tempmonth,setTempmonth]= useState("");
      const [tempSelectedhotelfilter,setTempSelectedHotelfilter]= useState("");
@@ -308,8 +306,6 @@ const handleSearch = () => {
   setSelectedHotelfilter(tempSelectedhotelfilter);
   setHotelType(temphoteltype);
   setHotelCategories(temphotelCategories);
-  setSearchInhouseQuery(tempSearchQuery);
-  setSearchApiQuery(tempSearchQuery);
   setInhouseCurrentPage(1);
   setApiCurrentPage(1);
 };
@@ -388,8 +384,8 @@ const filteredinhousebookings = useMemo(() => {
         // If ID doesn't match, try matching by name
         const selectedHotelName = hotelfilterOption.find(opt => String(opt.id) === String(selectedhotelfilter))?.name;
         if (selectedHotelName) {
-          const hotelNameStr = String(a.hotelName || '').trim();
-          const selectedHotelNameStr = String(selectedHotelName || '').trim();
+          const hotelNameStr = String(a.hotelName || '').trim().toLowerCase();
+          const selectedHotelNameStr = String(selectedHotelName || '').trim().toLowerCase();
           matches = hotelNameStr === selectedHotelNameStr;
         }
       }
@@ -408,8 +404,8 @@ const filteredinhousebookings = useMemo(() => {
         // If ID doesn't match, try matching by name
         const selectedTypeName = hotelTypeOptions.find(opt => String(opt.id) === String(hoteltype))?.name;
         if (selectedTypeName) {
-          const hotelTypeStr = String(a.hotelType || '').trim();
-          const selectedTypeStr = String(selectedTypeName || '').trim();
+          const hotelTypeStr = String(a.hotelType || '').trim().toLowerCase();
+          const selectedTypeStr = String(selectedTypeName || '').trim().toLowerCase();
           matches = hotelTypeStr === selectedTypeStr;
         }
       }
@@ -577,8 +573,8 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                     <Col className="d-flex justify-content-end">
                       <input
                         type="text"
-                        value={tempSearchQuery}
-                        onChange={(e)=>setTempSearchQuery(e.target.value)}
+                        value={searchInhouseQuery}
+                        onChange={(e)=>setSearchInhouseQuery(e.target.value)}
                         placeholder="search here"
                         className="form-control form-control-sm w-auto"
                       />
@@ -630,8 +626,8 @@ const currentApibooking = filteredapiBookings.slice(apiStartIndex,apiEndIndex);
                     <Col className="d-flex justify-content-end">
                       <input
                         type="text"
-                        value={tempSearchQuery}
-                        onChange={(e)=>setTempSearchQuery(e.target.value)}
+                        value={searchApiQuery}
+                        onChange={(e)=>setSearchApiQuery(e.target.value)}
                         placeholder="search here"
                         className="form-control form-control-sm w-auto"
                       />
