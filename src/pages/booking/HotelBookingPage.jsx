@@ -1242,12 +1242,16 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
       // can stamp. Case 5 (no-credit + Voucher Later) lands on
       // confirmationStatus="Confirmed" — already matched by the existing
       // "CONFIRMED" check; "NOT CONFIRMED" covers the engine's Not
-      // Confirmed label used by other branches.
+      // Confirmed label used by other branches; "ON REQUEST" covers an
+      // On-Request room's creation status (previously unmatched here, so
+      // a successfully-created On-Request booking fell through to the
+      // toast.error branch below and never redirected to the list).
       if (
         bookingResponse &&
         bookingResponse.status &&
         (bookingResponse.status.toUpperCase() === "CONFIRMED" ||
-          bookingResponse.status.toUpperCase() === "NOT CONFIRMED") &&
+          bookingResponse.status.toUpperCase() === "NOT CONFIRMED" ||
+          bookingResponse.status.toUpperCase() === "ON REQUEST") &&
         bookingResponse.bookingId != 0
       ) {
         toast.success(bookingResponse.message);
@@ -2020,14 +2024,14 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                         <Card.Body className="p-3">
                           <Form.Group className="mb-0">
                             <Form.Label className="mb-2 fw-semibold">
-                              Are you sure to continue booking?
+                              Are you sure you want to continue with the booking?
                             </Form.Label>
                             <div className="d-flex flex-column gap-2 mt-1">
                               <Form.Check
                                 type="radio"
                                 id="book-voucher"
                                 name="bookingConfirmation"
-                                label="Book Now & Voucher Now "
+                                label="Book and Pay Now"
                                 value="Book & Voucher"
                                 checked={
                                   voucherChoiceMade &&
@@ -2044,7 +2048,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                                 type="radio"
                                 id="book-now-voucher-later"
                                 name="bookingConfirmation"
-                                label="Book Now & Voucher Later"
+                                label="Hold Room and Pay Later"
                                 value="Book Now & Voucher later"
                                 checked={
                                   voucherChoiceMade &&

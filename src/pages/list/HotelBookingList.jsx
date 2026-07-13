@@ -1878,8 +1878,8 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
 
                                     // "On Request" bookings are stamped
                                     // CONFIRMED by the status engine so they can
-                                    // follow the reconfirm flow, but until they
-                                    // are actually reconfirmed they must DISPLAY
+                                    // follow the reconfirm flow, but until Step-1
+                                    // Confirm actually happens they must DISPLAY
                                     // as "On Request" (orange) — only genuinely
                                     // confirmed bookings show "Confirmed". This
                                     // is display-only; the underlying status that
@@ -1887,7 +1887,9 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
                                     const isOnRequestRoom = /^on\s*request$/i.test(
                                       String(b.roomStatus || "").trim(),
                                     );
-                                    if (isOnRequestRoom && isConfirmed) {
+                                    const isOnRequestStillPending =
+                                      isOnRequestRoom && !b.onRequestConfirmed;
+                                    if (isOnRequestStillPending && isConfirmed) {
                                       return (
                                         <span
                                           style={{

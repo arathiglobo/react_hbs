@@ -25,6 +25,7 @@ import HotelSearch24Hour from "./pages/HotelSearch24Hour";
 import RoomList from "./pages/RoomList";
 import HotelBookingList from "./pages/list/HotelBookingList";
 import HotelBookingList24Hour from "./pages/list/HotelBookingList24Hour";
+import AllBookingsList from "./pages/list/AllBookingsList";
 // Last Minute Booking — list page (Phase 4)
 import LastMinuteBookingList from "./pages/list/LastMinuteBookingList";
 import LastMinuteBookingDetailView from "./pages/list/LastMinuteBookingDetailView";
@@ -468,6 +469,10 @@ export default function App() {
         <Route path="/new-booking/make-your-own-package-v3" element={<PrivateRoute><MakePkgV3Form /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package-v3/results" element={<PrivateRoute><MakePkgV3Results /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package-v3/booking" element={<PrivateRoute><MakePkgV3BookingPage /></PrivateRoute>} />
+        {/* Unified "All Bookings" list — new, additive page + endpoint;
+            combines all 8 booking types into one list, does not touch
+            any existing per-type list route below. */}
+        <Route path="/booking-details/all-bookings-list" element={<PrivateRoute><AllBookingsList /> </PrivateRoute>}/>
         <Route path="/booking-details/hotel-booking-list" element={<PrivateRoute><HotelBookingList /> </PrivateRoute>}/>
         {/* Dedicated 24-Hour Check-In booking list — same component as
             /booking-details/hotel-booking-list but with `force24HourOnly`

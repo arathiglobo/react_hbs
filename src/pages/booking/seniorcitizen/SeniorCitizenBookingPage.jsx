@@ -1242,7 +1242,7 @@ export default function SeniorCitizenBookingPage() {
                           type="radio"
                           id="sc-book-voucher-now"
                           name="scBookingConfirmation"
-                          label="Book Now & Voucher Now"
+                          label="Book and Pay Now"
                           value="Book & Voucher"
                           checked={bookingConfirmation === "Book & Voucher"}
                           onChange={(e) => setBookingConfirmation(e.target.value)}
@@ -1251,7 +1251,7 @@ export default function SeniorCitizenBookingPage() {
                           type="radio"
                           id="sc-book-voucher-later"
                           name="scBookingConfirmation"
-                          label="Book Now & Voucher Later"
+                          label="Hold Room and Pay Later"
                           value="Book Now & Voucher later"
                           checked={bookingConfirmation === "Book Now & Voucher later"}
                           onChange={(e) => setBookingConfirmation(e.target.value)}
