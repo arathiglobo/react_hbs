@@ -1366,6 +1366,44 @@ export default function LongStayBookingDetailView() {
                   </div>
                 </div>
 
+                {/* ── Special Requests ──────────────────────────────── */}
+                <div style={card}>
+                  <div style={SECTION_HEADER}>
+                    Special Requests{" "}
+                    <span style={{ fontSize: "1rem", color: "#555" }}>⊟</span>
+                  </div>
+                  <div
+                    style={{
+                      padding: "10px 16px",
+                      fontSize: "0.83rem",
+                      color: "#333",
+                    }}
+                  >
+                    {Array.isArray(detail.specialRequests) &&
+                    detail.specialRequests.length > 0 ? (
+                      <div className="d-flex flex-wrap gap-2">
+                        {detail.specialRequests.map((sr, i) => (
+                          <span
+                            key={i}
+                            className="badge rounded-pill"
+                            style={{
+                              background: "#EEF2FF",
+                              color: "#3730A3",
+                              fontWeight: 600,
+                              fontSize: "0.75rem",
+                              padding: "6px 12px",
+                            }}
+                          >
+                            {sr}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-muted">No special requests.</span>
+                    )}
+                  </div>
+                </div>
+
                 {/* ── Related Notes ─────────────────────────────────── */}
                 <div style={card}>
                   <div style={SECTION_HEADER}>

@@ -257,6 +257,14 @@ export default function GovEmployeeSearch() {
     ? activeRole === "AGENT"
     : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
 
+  // Logged-in agent's name — for agent logins the booking is done by the
+  // agent themselves, so the "Booking Done By Employee" picker is hidden and
+  // this name is shown instead. Empty for admin/staff.
+  const loggedInAgentName =
+    localStorage.getItem("UserName") ||
+    sessionStorage.getItem("UserName") ||
+    "";
+
   // ── form state ───────────────────────────────────────────────────
   const [destinationOptions, setDestinationOptions] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState(null);
@@ -999,32 +1007,50 @@ export default function GovEmployeeSearch() {
                     </Form.Group>
                   </Col>
 
-                  {/* Booking Done By Employee — OPTIONAL.
-                      Replaces the same Card that used to live on the
-                      booking page. Threaded through to the create
-                      payload as employeeId. No validation. */}
-                  <Col lg={4} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        Booking Done By Employee{" "}
-                        <span className="text-muted small">(optional)</span>
-                      </Form.Label>
-                      <Select
-                        options={employees.map((e) => ({
-                          value: e.employeeId,
-                          label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
-                        }))}
-                        value={selectedEmployee}
-                        onChange={(opt) => setSelectedEmployee(opt)}
-                        placeholder="Select employee"
-                        isSearchable
-                        isClearable
-                        className="modern-select"
-                        menuPortalTarget={document.body}
-                        styles={SELECT_STYLES}
-                      />
-                    </Form.Group>
-                  </Col>
+                  {/* Booking Done By — agent logins book under themselves, so
+                      the staff-employee picker is hidden and the agent's own
+                      name is shown (read-only). Admin/staff keep the optional
+                      dropdown exactly as before. */}
+                  {isAgentRole ? (
+                    <Col lg={4} md={6}>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold text-dark">
+                          Booking Done By
+                        </Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={loggedInAgentName || "—"}
+                          readOnly
+                          disabled
+                          className="form-control-modern"
+                          style={{ height: "42px" }}
+                        />
+                      </Form.Group>
+                    </Col>
+                  ) : (
+                    <Col lg={4} md={6}>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold text-dark">
+                          Booking Done By Employee{" "}
+                          <span className="text-muted small">(optional)</span>
+                        </Form.Label>
+                        <Select
+                          options={employees.map((e) => ({
+                            value: e.employeeId,
+                            label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
+                          }))}
+                          value={selectedEmployee}
+                          onChange={(opt) => setSelectedEmployee(opt)}
+                          placeholder="Select employee"
+                          isSearchable
+                          isClearable
+                          className="modern-select"
+                          menuPortalTarget={document.body}
+                          styles={SELECT_STYLES}
+                        />
+                      </Form.Group>
+                    </Col>
+                  )}
 
                   {/* 4. Check-In */}
                   <Col lg={3} md={6}>
