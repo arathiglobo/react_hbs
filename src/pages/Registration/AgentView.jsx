@@ -1236,6 +1236,7 @@ const AgentView = () => {
                 <InfoRow label="Status" value={agent.status} />
                 <InfoRow label="Agent ID" value={agent.id} />
                 <InfoRow label="Timezone" value={agent.timezone} />
+                <InfoRow label="VAT Number" value={agent.vatNumber} />
               </Col>
             </Row>
           </Section>

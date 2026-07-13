@@ -414,16 +414,21 @@ export default function AgentDashboard() {
         .agent-manage-card.tone-purple .agent-manage-arrow { color: #6D4CE0; }
         .agent-manage-card.tone-teal .agent-manage-arrow   { color: #0D9488; }
 
-        /* ── Credit Overview — small pill-style strip under the dashboard
-            title, single line, wraps on narrow screens ── */
+        /* ── Credit Overview — highlighted brand-tinted card so the
+            limit / used / available figures stand out from the rest of
+            the welcome card. Single line, wraps on narrow screens ── */
         .agent-credit-compact {
           display: flex;
           align-items: center;
           flex-wrap: wrap;
           gap: 12px 22px;
-          margin-top: 12px;
-          padding-top: 12px;
-          border-top: 1px dashed #ECECE8;
+          margin-top: 14px;
+          padding: 13px 16px;
+          border: 1px solid rgba(236, 11, 67, .20);
+          border-left: 4px solid var(--color-primary);
+          background: linear-gradient(135deg, #FFF1F5 0%, #FFFFFF 65%);
+          border-radius: 12px;
+          box-shadow: 0 2px 10px rgba(236, 11, 67, .07);
           font-size: 15px;
         }
         .agent-credit-compact .acc-dot {
@@ -431,11 +436,15 @@ export default function AgentDashboard() {
           background: var(--color-primary); flex-shrink: 0;
         }
         .agent-credit-compact .acc-label {
-          font-size: 13px; font-weight: 700; letter-spacing: .04em;
-          text-transform: uppercase; color: #1a1d23;
+          font-size: 15.5px; font-weight: 800; letter-spacing: .04em;
+          text-transform: uppercase; color: var(--color-primary);
         }
-        .agent-credit-compact .acc-stat { color: #6B7280; }
-        .agent-credit-compact .acc-stat b { color: #1a1d23; font-weight: 700; }
+        .agent-credit-compact .acc-stat {
+          color: #15171C; font-weight: 600;
+        }
+        .agent-credit-compact .acc-stat b {
+          color: #15171C; font-weight: 800;
+        }
         .agent-credit-compact .acc-badge {
           margin-left: auto;
           background: var(--color-primary-tint);
