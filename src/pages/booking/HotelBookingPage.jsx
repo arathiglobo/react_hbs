@@ -104,6 +104,11 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
   let activeUserRole = localStorage.getItem("currentActiveRole");
   console.log("currentActiveRole::", activeUserRole);
 
+  // "Booking Done For" is an internal/admin-facing field — shown to ADMIN
+  // logins only and hidden for every other login (mirrors the isAdmin gate
+  // used in BookingDetailedView). Visibility only; no flow/API change.
+  const isAdmin = String(activeUserRole || "").toUpperCase() === "ADMIN";
+
   const [bookingData, setBookingData] = useState(null);
   const [agentAvailableBalance, setAgentAvailableBalance] = useState(null);
   // Whether the selected agent has usable credit available right now.
@@ -169,6 +174,9 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
   const [tourismDirhams, setTourismDirhams] = useState("0");
   const [remarks, setRemarks] = useState("");
   const [specialRequests, setSpecialRequests] = useState([]);
+  // Optional "Booking done for" free-text. When set, the detail view + voucher
+  // render it as "Contact: <value>/<agentName>".
+  const [bookingDoneFor, setBookingDoneFor] = useState("");
 
   // Client location snapshot for the booking-history audit trail, resolved
   // once on page load and sent on the create payload:
@@ -1084,6 +1092,12 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
               lastName: guest.lastName,
               gender: guest.gender,
               isChild: guest.isChild,
+              // Per-guest child age (from the room's childAges list). Persisted
+              // on HotelGuestDetails and shown on the detail view + voucher.
+              // Null for adults.
+              childAge: guest.isChild
+                ? room.childAges?.[gi - room.adults] ?? null
+                : null,
               // Lead flag mirrors the gov / SC / Student flows.
               // Backend ignores unknown fields, so this stays
               // backward-compatible with /api/hotel-booking/create.
@@ -1100,6 +1114,9 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
         // (each system's own IPv4), so it is not sent here.
         bookingLocation: clientNetwork.bookingLocation,
         specialRequests: specialRequests,
+        // Optional "Booking done for" free-text → persisted and shown as
+        // "Contact: <value>/<agentName>" on the detail view + voucher.
+        bookingDoneFor: bookingDoneFor.trim() || null,
         tourismDirhams: parseFloat(tourismDirhams) || 0,
         bookingConfirmation: bookingConfirmation || "Book & Voucher",
         // Resolved status the booking should land on, per the
@@ -1447,17 +1464,14 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                             slot.nonRefundable === "true";
                           const slotRefundDeadlineLabel =
                             !slotNonRefundable && cancellationDeadline
-                              ? cancellationDeadline.toLocaleString(
+                              ? `${cancellationDeadline.toLocaleDateString(
                                   "en-GB",
                                   {
                                     day: "2-digit",
                                     month: "short",
                                     year: "numeric",
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                    hour12: true,
                                   },
-                                )
+                                )}, 02:00 PM (UAE)`
                               : null;
                           return (
                             <Accordion.Item
@@ -1704,6 +1718,26 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                   <Card className="p-4 mb-2 shadow-sm border-0">
                     <h5 className="mb-3 fw-bold">Special Requests</h5>
                     <Row className="g-3">
+                      {/* Booking Done For — optional free-text, ADMIN logins
+                          only (hidden for all other logins). Persisted and
+                          shown as "Contact: <value>/<agentName>" on the detail
+                          view + voucher. */}
+                      {isAdmin && (
+                        <Col md={12}>
+                          <Form.Group className="mb-2">
+                            <Form.Label className="fw-semibold">
+                              Booking Done For{" "}
+                              <span className="text-muted small">(optional)</span>
+                            </Form.Label>
+                            <Form.Control
+                              type="text"
+                              value={bookingDoneFor}
+                              onChange={(e) => setBookingDoneFor(e.target.value)}
+                              placeholder="Name of the person this booking is done for"
+                            />
+                          </Form.Group>
+                        </Col>
+                      )}
                       {/* <Col md={6}>
                         <Form.Group className="mb-3">
                           <Form.Label>Tourism Dirhams (AED)</Form.Label>
@@ -2479,6 +2513,7 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                                       year: "numeric",
                                     },
                                   )}
+                                  , 02:00 PM (UAE)
                                 </span>
                                 {isOutsideDeadline ? (
                                   <span

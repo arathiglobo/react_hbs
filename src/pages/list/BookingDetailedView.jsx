@@ -1418,6 +1418,19 @@ export default function BookingDetailedView() {
                       </Col>
                       <Col md={6}>
                         <InfoRow label="Agent" value={booking.agentName} />
+                        {/* Contact — "Booking done for" value entered on the
+                            booking page, shown as "<value>/<agentName>". Only
+                            rendered when a value was entered. */}
+                        {booking.bookingDoneFor && (
+                          <InfoRow
+                            label="Contact"
+                            value={
+                              booking.agentName
+                                ? `${booking.bookingDoneFor}/${booking.agentName}`
+                                : booking.bookingDoneFor
+                            }
+                          />
+                        )}
                         {/* <InfoRow label="Source" value={booking.source} />
                         <InfoRow label="Created By" value={booking.createdByRole} /> */}
                         {/* "Booking Done By Employee" picked in
@@ -1452,7 +1465,7 @@ export default function BookingDetailedView() {
                           value={
                             booking.deadlineDate ? (
                               <span style={{ color: "#dc2626", fontWeight: 600 }}>
-                                {booking.deadlineDate.replace("T", " ")}
+                                {`${booking.deadlineDate.slice(0, 10)} 02:00 PM (UAE)`}
                               </span>
                             ) : (
                               "-"
