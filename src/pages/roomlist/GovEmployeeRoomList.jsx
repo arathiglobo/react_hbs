@@ -414,6 +414,15 @@ const GovEmployeeRoomList = () => {
       // same payload-source pattern HotelBookingPage uses.
       payload: {
         ...roomData.payload,
+        // The room-search request drops per-room child ages (childAges: []);
+        // re-attach them from the search context so the booking page can pass
+        // childAge per guest and persist it.
+        rooms: (roomData.payload?.rooms || []).map((r, i) => ({
+          ...r,
+          childAges: ctx.roomConfigurations?.[i]?.childAges?.length
+            ? ctx.roomConfigurations[i].childAges
+            : r.childAges || [],
+        })),
         employeeId: ctx.employeeId || null,
         parentBookingCode: ctx.parentBookingCode || null,
       },
@@ -565,6 +574,14 @@ const GovEmployeeRoomList = () => {
         // Same employeeId forwarding as the single-room flow above.
         payload: {
         ...roomData.payload,
+        // Re-attach per-room child ages from the search context (the search
+        // request drops them) so the booking page can pass childAge per guest.
+        rooms: (roomData.payload?.rooms || []).map((r, i) => ({
+          ...r,
+          childAges: ctx.roomConfigurations?.[i]?.childAges?.length
+            ? ctx.roomConfigurations[i].childAges
+            : r.childAges || [],
+        })),
         employeeId: ctx.employeeId || null,
         parentBookingCode: ctx.parentBookingCode || null,
       },
@@ -915,7 +932,7 @@ const GovEmployeeRoomList = () => {
                                         {!isMultiRoom && (
                                           <div className="indivial-price-per-room-noofroom">
                                             <div className="text-muted small">
-                                              {formatPrice(rate.totalRate || 0)} × {rate.numberOfRooms || 1} rooms
+                                              {formatPrice(applyDiscount(rate.totalRate || 0))} × {rate.numberOfRooms || 1} rooms
                                             </div>
                                           </div>
                                         )}

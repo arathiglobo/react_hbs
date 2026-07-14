@@ -7,6 +7,8 @@ import axiosInstance from "../../components/AxiosInstance";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import HotelFilter from "../../components/filters/Hotelfilters";
+import Supplier from "../../components/filters/Supplier";
+import DestinationCity from "../../components/filters/DestinationCity";
 
 export default function Stopsalereport() {
  
@@ -29,16 +31,57 @@ export default function Stopsalereport() {
     const [selectedHotel, setSelectedHotel] = useState("");
     const [isLoading, setIsLoading] = useState(false);
 
+    // Booking-level search filters (sent to /api/report/stopsale on Search)
+    // — a stop sale is listed when its hotel has at least one matching
+    // booking. Service Name is covered by the existing Hotel filter; the
+    // existing From/To Date filters the stop-sale validity, which is a
+    // different dimension than the Service (check-in) Date.
+    const initialBookingFilters = {
+      serviceDateFrom: "",
+      serviceDateTo: "",
+      bookingDateFrom: "",
+      bookingDateTo: "",
+      deadlineDateFrom: "",
+      deadlineDateTo: "",
+      reconfirmDateFrom: "",
+      reconfirmDateTo: "",
+      cancelDateFrom: "",
+      cancelDateTo: "",
+      bookingReference: "",
+      supplierReference: "",
+      city: "",
+      guestName: "",
+      branch: "",
+      status: "",
+      supplierId: "",
+      bookingType: "",
+    };
+    const [tempBookingFilters, setTempBookingFilters] = useState(initialBookingFilters);
+
+    // Branch dropdown options (distinct booking locations)
+    const [branchOptions, setBranchOptions] = useState([]);
+
+    const updateBookingFilter = (field, value) =>
+      setTempBookingFilters((prev) => ({ ...prev, [field]: value }));
+
    // ============================================
    // FILTERING LOGIC - FETCH DATA (ONLY ON SEARCH)
    // ============================================
-   // Removed initial fetch - data will only load when user clicks Search
-   const fetchsale = async()=>{
+   // No initial fetch by design - data loads when the user clicks Search.
+   // Booking-level filters are applied server-side; validity dates and the
+   // hotel keep filtering client-side as before.
+   const fetchsale = async(filters = {})=>{
     setIsLoading(true);
     try{
-      // Fetch all data without filters (frontend filtering)
-      const response = await axiosInstance.get("/api/report/stopsale?page=0&limit=1000");
-      setStopSale(response.data || []);
+      const params = {};
+      Object.entries(filters).forEach(([key, value]) => {
+        const trimmed = typeof value === "string" ? value.trim() : value;
+        if (trimmed !== "" && trimmed !== null && trimmed !== undefined) {
+          params[key] = trimmed;
+        }
+      });
+      const response = await axiosInstance.get("/api/report/stopsale", { params });
+      setStopSale(Array.isArray(response.data) ? response.data : []);
     }catch(error){
       console.error("error while fetching data",error);
       toast.error("Failed to load stop sale data");
@@ -51,6 +94,19 @@ export default function Stopsalereport() {
     useEffect(()=>{
       setCurrentPage(1);
     },[searchQuery])
+
+    // Branch dropdown options come from the distinct booking locations
+    useEffect(()=>{
+      const fetchBranches = async ()=>{
+        try{
+          const response = await axiosInstance.get("/api/report/bookings/branches");
+          setBranchOptions(Array.isArray(response.data) ? response.data : []);
+        }catch(error){
+          console.error("Branch options fetch error", error);
+        }
+      };
+      fetchBranches();
+    },[])
 
   // Function to format validityList array to string
   const formatValidity = (validityList) => {
@@ -223,24 +279,27 @@ export default function Stopsalereport() {
   // FILTERING LOGIC - CLIENT-SIDE FILTERING
   // ============================================
   const handleSearch = async () => {
-    // Update applied filters
+    // Update applied filters (validity dates + hotel filter client-side)
     setFromDate(tempFromDate);
     setToDate(tempToDate);
     setSelectedHotel(tempSelectedHotel);
     setCurrentPage(1);
-    
-    // Fetch data when search is clicked
-    setIsLoading(true);
-    try{
-      const response = await axiosInstance.get("/api/report/stopsale?page=0&limit=1000");
-      setStopSale(response.data || []);
-    }catch(error){
-      console.error("error while fetching data",error);
-      toast.error("Failed to load stop sale data");
-      setStopSale([]);
-    } finally {
-      setIsLoading(false);
-    }
+
+    // Fetch data when search is clicked; booking-level filters server-side
+    await fetchsale(tempBookingFilters);
+  };
+
+  const handleReset = async () => {
+    setTempBookingFilters(initialBookingFilters);
+    setTempFromDate("");
+    setTempToDate("");
+    setTempSelectedHotel("");
+    setFromDate("");
+    setToDate("");
+    setSelectedHotel("");
+    setSearchQuery("");
+    setCurrentPage(1);
+    await fetchsale();
   };
 
   const filteredstopsale = useMemo(() => {
@@ -259,14 +318,11 @@ export default function Stopsalereport() {
         if (!matchesSearch) return false;
       }
 
-      // Hotel filter
+      // Hotel filter — the API now returns hotelId on every row
       if (selectedHotel) {
-        // Assuming hotelId is in the data, adjust field name as needed
-        if (s.hotelId && String(s.hotelId) !== String(selectedHotel)) {
+        if (!s.hotelId || String(s.hotelId) !== String(selectedHotel)) {
           return false;
         }
-        // If hotelId not available, try matching by hotel name
-        // You may need to adjust this based on your data structure
       }
 
       // Date range filter - handle three cases:
@@ -347,13 +403,153 @@ const currentStopSale = filteredstopsale.slice(startindex,endIndex);
 
             {/* Filters Section */}
             <div className="p-4 bg-light border-bottom">
+              <h6 className="fw-bold text-primary mb-3">Booking Details</h6>
+              <Row className="align-items-end g-4 mb-4">
+
+                {/* Row 1 — Service / Booking / Cancellation Deadline dates */}
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Service Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempBookingFilters.serviceDateFrom}
+                        onChange={(e) => updateBookingFilter("serviceDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempBookingFilters.serviceDateTo}
+                        onChange={(e) => updateBookingFilter("serviceDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Booking Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempBookingFilters.bookingDateFrom}
+                        onChange={(e) => updateBookingFilter("bookingDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempBookingFilters.bookingDateTo}
+                        onChange={(e) => updateBookingFilter("bookingDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Cancellation Deadline Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempBookingFilters.deadlineDateFrom}
+                        onChange={(e) => updateBookingFilter("deadlineDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempBookingFilters.deadlineDateTo}
+                        onChange={(e) => updateBookingFilter("deadlineDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+
+                {/* Row 2 — Reconfirm / Cancel dates */}
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Reconfirm Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempBookingFilters.reconfirmDateFrom}
+                        onChange={(e) => updateBookingFilter("reconfirmDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempBookingFilters.reconfirmDateTo}
+                        onChange={(e) => updateBookingFilter("reconfirmDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Cancel Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempBookingFilters.cancelDateFrom}
+                        onChange={(e) => updateBookingFilter("cancelDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempBookingFilters.cancelDateTo}
+                        onChange={(e) => updateBookingFilter("cancelDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4} />
+
+                {/* Row 3 — reference / guest text filters */}
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Booking Reference"
+                    value={tempBookingFilters.bookingReference}
+                    onChange={(e) => updateBookingFilter("bookingReference", e.target.value)} />
+                </Col>
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Supplier Reference No."
+                    value={tempBookingFilters.supplierReference}
+                    onChange={(e) => updateBookingFilter("supplierReference", e.target.value)} />
+                </Col>
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Guest Name"
+                    value={tempBookingFilters.guestName}
+                    onChange={(e) => updateBookingFilter("guestName", e.target.value)} />
+                </Col>
+
+                {/* Row 4 — city / branch / status */}
+                <Col md={4}>
+                  <DestinationCity
+                    value={tempBookingFilters.city}
+                    onChange={(cityName) => updateBookingFilter("city", cityName)}
+                  />
+                </Col>
+                <Col md={4}>
+                  <Form.Select size="sm"
+                    value={tempBookingFilters.branch}
+                    onChange={(e) => updateBookingFilter("branch", e.target.value)}>
+                    <option value="">Select Branch</option>
+                    {branchOptions.map((branch) => (
+                      <option key={branch} value={branch}>{branch}</option>
+                    ))}
+                  </Form.Select>
+                </Col>
+                <Col md={4}>
+                  <Form.Select size="sm"
+                    value={tempBookingFilters.status}
+                    onChange={(e) => updateBookingFilter("status", e.target.value)}>
+                    <option value="">ALL</option>
+                    <option value="REQUESTED">Requested</option>
+                    <option value="CONFIRMED">Confirmed</option>
+                    <option value="RECONFIRMED">ReConfirmed</option>
+                    <option value="SOLD_OUT">Sold Out</option>
+                    <option value="CANCELLED">Cancelled</option>
+                  </Form.Select>
+                </Col>
+
+                {/* Row 5 — supplier / service type */}
+                <Col md={4}>
+                  <Supplier
+                    value={tempBookingFilters.supplierId}
+                    onChange={(id) => updateBookingFilter("supplierId", String(id))}
+                  />
+                </Col>
+                <Col md={4}>
+                  <Form.Select size="sm"
+                    value={tempBookingFilters.bookingType}
+                    onChange={(e) => updateBookingFilter("bookingType", e.target.value)}>
+                    <option value="">All Services</option>
+                    <option value="NORMAL">Normal</option>
+                    <option value="LAST_MINUTE">Last Minute</option>
+                  </Form.Select>
+                </Col>
+                <Col md={4} />
+              </Row>
+
+              <h6 className="fw-bold text-primary mb-3">Stop Sale Details</h6>
               <Row className="align-items-end g-4">
                 <Col md={3}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">From Date</Form.Label>
-                    <Form.Control 
-                      type="date" 
-                      size="sm" 
+                    <Form.Control
+                      type="date"
+                      size="sm"
                       value={tempFromDate}
                       onChange={(e) => setTempFromDate(e.target.value)}
                     />
@@ -362,9 +558,9 @@ const currentStopSale = filteredstopsale.slice(startindex,endIndex);
                 <Col md={3}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">To Date</Form.Label>
-                    <Form.Control 
-                      type="date" 
-                      size="sm" 
+                    <Form.Control
+                      type="date"
+                      size="sm"
                       value={tempToDate}
                       onChange={(e) => setTempToDate(e.target.value)}
                       min={tempFromDate || undefined}
@@ -372,20 +568,32 @@ const currentStopSale = filteredstopsale.slice(startindex,endIndex);
                   </Form.Group>
                 </Col>
                 <Col md={3}>
-                 <HotelFilter 
-                   value={tempSelectedHotel} 
-                   onChange={setTempSelectedHotel} 
+                 <HotelFilter
+                   value={tempSelectedHotel}
+                   onChange={setTempSelectedHotel}
                  />
                 </Col>
                 <Col md={3}>
-                  <Button 
-                    variant="success" 
-                    className="w-100" 
-                    size="sm"
-                    style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}
-                  >
-                    <i className="fas fa-search me-1"></i>Search
-                  </Button>
+                  <div className="d-flex gap-2">
+                    <Button
+                      variant="success"
+                      className="w-50"
+                      size="sm"
+                      style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}
+                      disabled={isLoading}
+                    >
+                      <i className="fas fa-search me-1"></i>Search
+                    </Button>
+                    <Button
+                      variant="outline-secondary"
+                      className="w-50"
+                      size="sm"
+                      onClick={handleReset}
+                      disabled={isLoading}
+                    >
+                      <i className="fas fa-undo me-1"></i>Reset
+                    </Button>
+                  </div>
                 </Col>
               </Row>
 

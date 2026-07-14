@@ -113,6 +113,19 @@ function BookingDetailBody({ booking: b }) {
               <small className="text-muted d-block">Booking Date</small>
               <span>{fmtDt(b.bookingDate)}</span>
             </Col>
+            {/* Contact — "Booking done for" value entered on the booking
+                form, shown as "<value>/<agentName>". Only rendered when a
+                value was entered. */}
+            {b.bookingDoneFor && (
+              <Col md={4} className="mt-2">
+                <small className="text-muted d-block">Contact</small>
+                <span>
+                  {b.agentName
+                    ? `${b.bookingDoneFor}/${b.agentName}`
+                    : b.bookingDoneFor}
+                </span>
+              </Col>
+            )}
           </Row>
         </Card.Body>
       </Card>
@@ -226,42 +239,79 @@ function BookingDetailBody({ booking: b }) {
         </Card.Header>
         <Card.Body>
           {b.rooms && b.rooms.length > 0 ? (
-            <Table size="sm" bordered className="mb-0">
-              <thead className="table-light">
-                <tr>
-                  <th>#</th>
-                  <th>Category</th>
-                  <th>Meal Plan</th>
-                  <th>Adults</th>
-                  <th>Children</th>
-                  <th>Rate</th>
-                  <th>Refund</th>
-                </tr>
-              </thead>
-              <tbody>
-                {b.rooms.map((r, i) => (
-                  <tr key={i}>
-                    <td>{r.roomNo ?? i + 1}</td>
-                    <td>{fmt(r.roomCategory)}</td>
-                    <td>{fmt(r.mealPlan)}</td>
-                    <td>{fmt(r.adults)}</td>
-                    <td>{fmt(r.children)}</td>
-                    <td>
-                      {r.rate != null
-                        ? `${curCode} ${conv(r.rate).toFixed(2)}`
-                        : "—"}
-                    </td>
-                    <td>
-                      {r.nonRefundable ? (
-                        <Badge bg="danger">Non-Refundable</Badge>
-                      ) : (
-                        <Badge bg="success">Flexible</Badge>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </Table>
+            b.rooms.map((r, i) => (
+              <div
+                key={i}
+                className={i > 0 ? "mt-3 pt-3 border-top" : ""}
+              >
+                <div
+                  className="fw-semibold mb-2"
+                  style={{ color: "#c0392b", fontSize: "0.88rem" }}
+                >
+                  Room {r.roomNo ?? i + 1}
+                </div>
+                <Table size="sm" bordered className="mb-2">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Category</th>
+                      <th>Meal Plan</th>
+                      <th>Adults</th>
+                      <th>Children</th>
+                      <th>Rate</th>
+                      <th>Refund</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>{fmt(r.roomCategory)}</td>
+                      <td>{fmt(r.mealPlan)}</td>
+                      <td>{fmt(r.adults)}</td>
+                      <td>{fmt(r.children)}</td>
+                      <td>
+                        {r.rate != null
+                          ? `${curCode} ${conv(r.rate).toFixed(2)}`
+                          : "—"}
+                      </td>
+                      <td>
+                        {r.nonRefundable ? (
+                          <Badge bg="danger">Non-Refundable</Badge>
+                        ) : (
+                          <Badge bg="success">Flexible</Badge>
+                        )}
+                      </td>
+                    </tr>
+                  </tbody>
+                </Table>
+                {r.guests && r.guests.length > 0 && (
+                  <Table size="sm" bordered className="mb-0">
+                    <thead className="table-light">
+                      <tr>
+                        <th>#</th>
+                        <th>Name</th>
+                        <th>Type</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {r.guests.map((g, gi) => (
+                        <tr key={gi}>
+                          <td>{gi + 1}</td>
+                          <td>
+                            {[g.salutation, g.firstName, g.lastName]
+                              .filter(Boolean)
+                              .join(" ") || "—"}
+                          </td>
+                          <td>
+                            {g.isChild
+                              ? `Child (Age: ${g.childAge ?? "-"})`
+                              : "Adult"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </Table>
+                )}
+              </div>
+            ))
           ) : (
             <p className="text-muted small mb-0">No rooms on this booking.</p>
           )}

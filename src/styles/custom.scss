@@ -111,6 +111,26 @@ body{
   justify-content: center;
   font-weight: 700;
 }
+.sidebar-toggle-btn{
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: #fff;
+  color: $brand-red;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color .15s, transform .1s;
+}
+.sidebar-toggle-btn:hover{
+  background: $brand-red-tint;
+}
+.sidebar-toggle-btn:active{
+  transform: scale(.94);
+}
 .profile-toggle:hover{
   opacity: .9;
 }

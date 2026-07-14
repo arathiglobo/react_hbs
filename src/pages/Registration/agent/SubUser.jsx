@@ -317,6 +317,7 @@ export default function SubUser() {
                             >
                               <FaEdit /> Edit
                             </Button>
+                            {/* Delete hidden per request — kept for easy restore.
                             <Button
                               variant="outline-danger"
                               size="sm"
@@ -325,6 +326,7 @@ export default function SubUser() {
                             >
                               <FaTrash /> Delete
                             </Button>
+                            */}
                           </div>
                         </td>
                       </tr>

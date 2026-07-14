@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axiosInstance from "../AxiosInstance";
 import { Form } from "react-bootstrap";
+import chevronStyle from "./dropdownChevron";
 
 export default function Supplier({ value, onChange }) {
   const [suppliers, setSuppliers] = useState([]);
@@ -31,6 +32,7 @@ export default function Supplier({ value, onChange }) {
       <div className="position-relative">
         <Form.Control
           size="sm"
+          style={chevronStyle}
           value={isOpen ? searchTerm : selectedOption?.apiCode || ""}
           onChange={(e) => {
             setSearchTerm(e.target.value);

@@ -218,6 +218,12 @@ export default function LastMinuteBookingForm() {
 
   const [remarks, setRemarks] = useState("");
   const [specialRequests, setSpecialRequests] = useState([]);
+  // Optional "Booking done for" free-text. When set, the detail view + voucher
+  // render it as "Contact: <value>/<agentName>". The input is ADMIN-only.
+  const [bookingDoneFor, setBookingDoneFor] = useState("");
+  const isAdmin =
+    String(localStorage.getItem("currentActiveRole") || "").toUpperCase() ===
+    "ADMIN";
 
   // Client location snapshot for the booking-history audit trail, resolved
   // once on page load and sent on the create payload:
@@ -651,8 +657,9 @@ export default function LastMinuteBookingForm() {
           errs[`room_${ri}_guest_${gi}_lastName`] = "Required";
         // Gender validation removed — the field has been hidden
         // from the Guest Details grid per spec.
-        if (g.isChild && (g.childAge == null || g.childAge === ""))
-          errs[`room_${ri}_guest_${gi}_childAge`] = "Required";
+        // Child-age validation removed — the age is captured at search
+        // time and shown inline in the Passenger label (no editable field),
+        // mirroring HotelBookingPage. `g.childAge` still rides the payload.
       });
     });
 
@@ -828,6 +835,9 @@ export default function LastMinuteBookingForm() {
         [remarks, specialRequests.length ? `Requests: ${specialRequests.join(", ")}` : null]
           .filter(Boolean)
           .join("\n") || null,
+      // Optional "Booking done for" free-text (admin-only field) → shown as
+      // "Contact: <value>/<agentName>" on the detail view + voucher.
+      bookingDoneFor: bookingDoneFor.trim() || null,
       // Location column in the detail view's Booking History. The IP
       // Address column is stamped server-side from the create request
       // (each system's own IPv4), so it is not sent here.
@@ -1057,7 +1067,9 @@ export default function LastMinuteBookingForm() {
                                 <Col md={2}>
                                   <span className="fw-semibold text-muted small">
                                     {g.isChild
-                                      ? `Child ${gIdx - r.adults + 1}`
+                                      ? `Child ${gIdx - r.adults + 1} (Age: ${
+                                          g.childAge ?? "-"
+                                        })`
                                       : `Adult ${gIdx + 1}`}
                                   </span>
                                 </Col>
@@ -1141,31 +1153,11 @@ export default function LastMinuteBookingForm() {
                                   />
                                 </Col>
                               </Row>
-                              {/* Child age — only shown for children.
-                                  Kept as a tiny inline follow-up row
-                                  below the guest row so the validation
-                                  + alignment stay intact. */}
-                              {g.isChild && (
-                                <Row className="align-items-center g-2 mt-1">
-                                  <Col md={{ offset: 2, span: 3 }}>
-                                    <Form.Control
-                                      size="sm"
-                                      type="number"
-                                      min="0"
-                                      max="17"
-                                      placeholder="Child age *"
-                                      value={g.childAge || ""}
-                                      isInvalid={!!validationErrors[`room_${roomIdx}_guest_${gIdx}_childAge`]}
-                                      onChange={(e) =>
-                                        setGuestField(roomIdx, gIdx, "childAge", e.target.value)
-                                      }
-                                    />
-                                    <Form.Control.Feedback type="invalid">
-                                      {validationErrors[`room_${roomIdx}_guest_${gIdx}_childAge`]}
-                                    </Form.Control.Feedback>
-                                  </Col>
-                                </Row>
-                              )}
+                              {/* Child age is captured at search time and shown
+                                  inline in the Passenger label above (e.g.
+                                  "Child 1 (Age: 5)") — no separate input here,
+                                  mirroring HotelBookingPage. `g.childAge` still
+                                  rides on the create payload. */}
                             </div>
                             );
                           })}
@@ -1188,6 +1180,26 @@ export default function LastMinuteBookingForm() {
               <Card className="p-4 mb-2 shadow-sm border-0">
                 <h5 className="mb-3 fw-bold">Special Requests</h5>
                 <Row className="g-3">
+                  {/* Booking Done For — optional free-text, ADMIN logins only
+                      (hidden for all other logins). Persisted and shown as
+                      "Contact: <value>/<agentName>" on the detail view +
+                      voucher. */}
+                  {isAdmin && (
+                    <Col md={12}>
+                      <Form.Group className="mb-2">
+                        <Form.Label className="fw-semibold">
+                          Booking Done For{" "}
+                          <span className="text-muted small">(optional)</span>
+                        </Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={bookingDoneFor}
+                          onChange={(e) => setBookingDoneFor(e.target.value)}
+                          placeholder="Name of the person this booking is done for"
+                        />
+                      </Form.Group>
+                    </Col>
+                  )}
                   {/* Tourism Dirhams (AED) input hidden per request. The
                       `tourismDirham` state stays at its default ("") so the
                       create payload sends null and downstream totals are
@@ -1776,6 +1788,7 @@ export default function LastMinuteBookingForm() {
                             month: "short",
                             year: "numeric",
                           })}
+                          , 02:00 PM (UAE)
                         </span>
                         {isOutsideDeadline ? (
                           <span

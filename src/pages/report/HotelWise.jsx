@@ -23,11 +23,59 @@ import Region from "../../components/filters/Region";
 import Country from "../../components/filters/Country";
 import State from "../../components/filters/State";
 import Place from "../../components/filters/place";
+import Supplier from "../../components/filters/Supplier";
 
 export default function HotelWise() {
 
   const [hotels,setHotels]= useState([]);
-  
+
+  // Booking-level search filters (sent to /api/hotelWiseReport/report on
+  // Search) — a hotel is listed when it has at least one matching booking.
+  const initialBookingFilters = {
+    serviceDateFrom: "",
+    serviceDateTo: "",
+    bookingDateFrom: "",
+    bookingDateTo: "",
+    deadlineDateFrom: "",
+    deadlineDateTo: "",
+    reconfirmDateFrom: "",
+    reconfirmDateTo: "",
+    cancelDateFrom: "",
+    cancelDateTo: "",
+    bookingReference: "",
+    supplierReference: "",
+    guestName: "",
+    branch: "",
+    status: "",
+    supplierId: "",
+    bookingType: "",
+  };
+  const [tempBookingFilters, setTempBookingFilters] = useState(initialBookingFilters);
+
+  // Branch dropdown options (distinct booking locations)
+  const [branchOptions, setBranchOptions] = useState([]);
+
+  const updateBookingFilter = (field, value) =>
+    setTempBookingFilters((prev) => ({ ...prev, [field]: value }));
+
+  const fetchHotels = async (filters = {}) => {
+    try {
+      // Only send filters that actually carry a value
+      const params = {};
+      Object.entries(filters).forEach(([key, value]) => {
+        const trimmed = typeof value === "string" ? value.trim() : value;
+        if (trimmed !== "" && trimmed !== null && trimmed !== undefined) {
+          params[key] = trimmed;
+        }
+      });
+      const response = await axiosInstance.get("/api/hotelWiseReport/report", { params });
+      setHotels(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error("HotelWise fetch error", error);
+      toast.error("Failed to load data");
+    }
+  };
+
   // Temporary filter states (what user sees/edits)
   const [tempSelectedhotel,setTempSelectedHotel]= useState("");
   const [tempSelectedhoteltype,setTempSelectedHoteltype]= useState("");
@@ -69,16 +117,18 @@ export default function HotelWise() {
   
 
   useEffect(()=>{
-     const fetchData = async ()=>{
+     fetchHotels();
+
+     // Branch dropdown options come from the distinct booking locations
+     const fetchBranches = async ()=>{
       try{
-        const response =await axiosInstance.get("/api/hotelWiseReport/report");
-        setHotels(response.data);
+        const response = await axiosInstance.get("/api/report/bookings/branches");
+        setBranchOptions(Array.isArray(response.data) ? response.data : []);
       }catch(error){
-        console.error("HotelWise fetch error", error)
-        toast.error("Failed to load data")
+        console.error("Branch options fetch error", error);
       }
-     } 
-     fetchData();
+     };
+     fetchBranches();
   },[])
 
   // Fetch filter options to map IDs to names
@@ -279,7 +329,7 @@ export default function HotelWise() {
     window.URL.revokeObjectURL(url);
   };
 
-const handleSearch = () => {
+const handleSearch = async () => {
   // Apply temporary filter values to actual filter values
   setSelectedHotel(tempSelectedhotel);
   setSelectedHoteltype(tempSelectedhoteltype);
@@ -291,6 +341,32 @@ const handleSearch = () => {
   setPlace(tempPlace);
   setSearchQuery(tempSearchQuery);
   setCurrentPage(1);
+  // Booking-level filters are applied server-side
+  await fetchHotels(tempBookingFilters);
+ };
+
+const handleReset = async () => {
+  setTempBookingFilters(initialBookingFilters);
+  setTempSelectedHotel("");
+  setTempSelectedHoteltype("");
+  setTempCategory("");
+  setTempRoomCategory("");
+  setTempCountry("");
+  setTempRegion("");
+  setTempState("");
+  setTempPlace("");
+  setTempSearchQuery("");
+  setSelectedHotel("");
+  setSelectedHoteltype("");
+  setCategory("");
+  setRoomCategory("");
+  setCountry("");
+  setRegion("");
+  setState("");
+  setPlace("");
+  setSearchQuery("");
+  setCurrentPage(1);
+  await fetchHotels();
  };
 
 
@@ -566,6 +642,136 @@ const filteredhotels = useMemo(() => {
 
             {/* Filters Section */}
             <div className="p-4 bg-light border-bottom" style={{ overflow: 'visible' }}>
+              <h6 className="fw-bold text-primary mb-3">Booking Details</h6>
+              <Row className="align-items-end g-4 mb-4">
+
+                {/* Row 1 — Service / Booking / Cancellation Deadline dates */}
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Service Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempBookingFilters.serviceDateFrom}
+                        onChange={(e) => updateBookingFilter("serviceDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempBookingFilters.serviceDateTo}
+                        onChange={(e) => updateBookingFilter("serviceDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Booking Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempBookingFilters.bookingDateFrom}
+                        onChange={(e) => updateBookingFilter("bookingDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempBookingFilters.bookingDateTo}
+                        onChange={(e) => updateBookingFilter("bookingDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Cancellation Deadline Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempBookingFilters.deadlineDateFrom}
+                        onChange={(e) => updateBookingFilter("deadlineDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempBookingFilters.deadlineDateTo}
+                        onChange={(e) => updateBookingFilter("deadlineDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+
+                {/* Row 2 — Reconfirm / Cancel dates */}
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Reconfirm Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempBookingFilters.reconfirmDateFrom}
+                        onChange={(e) => updateBookingFilter("reconfirmDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempBookingFilters.reconfirmDateTo}
+                        onChange={(e) => updateBookingFilter("reconfirmDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Cancel Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempBookingFilters.cancelDateFrom}
+                        onChange={(e) => updateBookingFilter("cancelDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempBookingFilters.cancelDateTo}
+                        onChange={(e) => updateBookingFilter("cancelDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4} />
+
+                {/* Row 3 — reference / guest text filters */}
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Booking Reference"
+                    value={tempBookingFilters.bookingReference}
+                    onChange={(e) => updateBookingFilter("bookingReference", e.target.value)} />
+                </Col>
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Supplier Reference No."
+                    value={tempBookingFilters.supplierReference}
+                    onChange={(e) => updateBookingFilter("supplierReference", e.target.value)} />
+                </Col>
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Guest Name"
+                    value={tempBookingFilters.guestName}
+                    onChange={(e) => updateBookingFilter("guestName", e.target.value)} />
+                </Col>
+
+                {/* Row 4 — status / branch / supplier / service type */}
+                <Col md={3}>
+                  <Form.Select size="sm"
+                    value={tempBookingFilters.status}
+                    onChange={(e) => updateBookingFilter("status", e.target.value)}>
+                    <option value="">ALL</option>
+                    <option value="REQUESTED">Requested</option>
+                    <option value="CONFIRMED">Confirmed</option>
+                    <option value="RECONFIRMED">ReConfirmed</option>
+                    <option value="SOLD_OUT">Sold Out</option>
+                    <option value="CANCELLED">Cancelled</option>
+                  </Form.Select>
+                </Col>
+                <Col md={3}>
+                  <Form.Select size="sm"
+                    value={tempBookingFilters.branch}
+                    onChange={(e) => updateBookingFilter("branch", e.target.value)}>
+                    <option value="">Select Branch</option>
+                    {branchOptions.map((branch) => (
+                      <option key={branch} value={branch}>{branch}</option>
+                    ))}
+                  </Form.Select>
+                </Col>
+                <Col md={3}>
+                  <Supplier
+                    value={tempBookingFilters.supplierId}
+                    onChange={(id) => updateBookingFilter("supplierId", String(id))}
+                  />
+                </Col>
+                <Col md={3}>
+                  <Form.Select size="sm"
+                    value={tempBookingFilters.bookingType}
+                    onChange={(e) => updateBookingFilter("bookingType", e.target.value)}>
+                    <option value="">All Services</option>
+                    <option value="NORMAL">Normal</option>
+                    <option value="LAST_MINUTE">Last Minute</option>
+                  </Form.Select>
+                </Col>
+              </Row>
+
               <h6 className="fw-bold text-primary mb-3">Basic Details</h6>
               <Row className="g-4 mb-4">
 
@@ -640,6 +846,9 @@ const filteredhotels = useMemo(() => {
                   <div className="d-flex gap-2 justify-content-end">
                     <Button variant="success" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}>
                       <i className="fas fa-search me-1"></i>Search
+                    </Button>
+                    <Button variant="outline-secondary" size="sm" onClick={handleReset}>
+                      <i className="fas fa-undo me-1"></i>Reset
                     </Button>
                     <Button variant="outline-primary" size="sm" onClick={() => setShowMailModal(true)}>
                       <i className="fas fa-envelope me-1"></i>Mail

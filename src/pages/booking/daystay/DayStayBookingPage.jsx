@@ -175,6 +175,11 @@ export default function DayStayBookingPage() {
 
   const [remarks, setRemarks] = useState("");
   const [specialRequests, setSpecialRequests] = useState([]);
+  // Optional "Booking done for" free-text. When set, the detail view + voucher
+  // render it as "Contact: <value>/<agentName>". The input is ADMIN-only.
+  const [bookingDoneFor, setBookingDoneFor] = useState("");
+  const isAdmin =
+    String(activeUserRole || "").toUpperCase() === "ADMIN";
 
   // Client location snapshot for the booking-history audit trail, resolved
   // once on page load and sent on the save payload:
@@ -915,12 +920,20 @@ export default function DayStayBookingPage() {
             lastName: guest.lastName,
             gender: guest.gender || "",
             isChild: guest.isChild,
+            // Per-guest child age (from the room's childAges list). Persisted
+            // and shown on the detail view + voucher. Null for adults.
+            childAge: guest.isChild
+              ? room.childAges?.[gi - room.adults] ?? null
+              : null,
             isLead:
               roomIndex === leadIndex.roomIdx && gi === leadIndex.guestIdx,
           })),
         })),
 
         remarks: remarks || "",
+        // Optional "Booking done for" free-text (admin-only field) → shown as
+        // "Contact: <value>/<agentName>" on the detail view + voucher.
+        bookingDoneFor: bookingDoneFor.trim() || null,
         specialRequests,
         // Location column in the detail view's Booking History. The IP
         // Address column is stamped server-side from the save request
@@ -1267,14 +1280,14 @@ export default function DayStayBookingPage() {
                           const slotNonRefundable = room.nonRefundable === true;
                           const slotRefundDeadlineLabel =
                             !slotNonRefundable && cancellationDeadline
-                              ? cancellationDeadline.toLocaleDateString(
+                              ? `${cancellationDeadline.toLocaleDateString(
                                   "en-GB",
                                   {
                                     day: "2-digit",
                                     month: "short",
                                     year: "numeric",
                                   },
-                                )
+                                )}, 02:00 PM (UAE)`
                               : null;
                           return (
                           <Accordion.Item
@@ -1505,6 +1518,26 @@ export default function DayStayBookingPage() {
                   <Card className="p-4 mb-2 shadow-sm border-0">
                     <h5 className="mb-3 fw-bold">Special Requests</h5>
                     <Row className="g-3">
+                      {/* Booking Done For — optional free-text, ADMIN logins
+                          only (hidden for all other logins). Persisted and
+                          shown as "Contact: <value>/<agentName>" on the detail
+                          view + voucher. */}
+                      {isAdmin && (
+                        <Col md={12}>
+                          <Form.Group className="mb-2">
+                            <Form.Label className="fw-semibold">
+                              Booking Done For{" "}
+                              <span className="text-muted small">(optional)</span>
+                            </Form.Label>
+                            <Form.Control
+                              type="text"
+                              value={bookingDoneFor}
+                              onChange={(e) => setBookingDoneFor(e.target.value)}
+                              placeholder="Name of the person this booking is done for"
+                            />
+                          </Form.Group>
+                        </Col>
+                      )}
                       <Col md={12}>
                         <Form.Group className="mb-3">
                           <div className="special-request-grid">
@@ -2176,6 +2209,7 @@ export default function DayStayBookingPage() {
                                       year: "numeric",
                                     },
                                   )}
+                                  , 02:00 PM (UAE)
                                 </span>
                                 {isOutsideDeadline ? (
                                   <span

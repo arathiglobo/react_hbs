@@ -8,7 +8,7 @@ export default function Country({ value, onChange }) {
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
-    axiosInstance.get("/api/country")
+    axiosInstance.get("/api/country?page=0&limit=500")
       .then((res) => setCategory(res.data || []))
       .catch((err) => console.log(err));
   }, []);

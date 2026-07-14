@@ -404,6 +404,15 @@ export default function HotelSearch({ force24Hour = false } = {}) {
     ? activeRole === "AGENT"
     : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
 
+  // Logged-in agent's name — for agent logins the booking is "done by" the
+  // agent themselves, so the "Booking Done By Employee" picker is hidden and
+  // this name is shown (and sent) instead. Same source the payload's
+  // agentName uses for agent logins. Empty for admin/staff.
+  const loggedInAgentName =
+    localStorage.getItem("UserName") ||
+    sessionStorage.getItem("UserName") ||
+    "";
+
   // When user came here via "Edit -> Book Again" from a booking detail page,
   // parentBookingCode is in the URL (e.g. ?parentBookingCode=GLBIN37). It is
   // threaded through to HotelBookingPage so the new booking is saved as a
@@ -530,6 +539,19 @@ export default function HotelSearch({ force24Hour = false } = {}) {
 
   const [allResults, setAllResults] = useState([]);
   const [finalHotelSearchTerm, setFinalHotelSearchTerm] = useState("");
+  // Mirror of finalHotelSearchTerm so the poll callback (a closure captured
+  // at handleSearchSubmit-time) can read the live value and skip its merge
+  // while a name filter is active. Without this the poll keeps repopulating
+  // allResults with unfiltered rows, undoing /filter-by-name mid-poll.
+  const finalHotelSearchTermRef = useRef("");
+  useEffect(() => {
+    finalHotelSearchTermRef.current = finalHotelSearchTerm;
+  }, [finalHotelSearchTerm]);
+  // Sequence guard for /filter-by-name — an older response can arrive after
+  // a newer one (500 ms debounce, no XHR cancel) and stomp results for the
+  // wrong term. Only the response whose seq matches the latest issued call
+  // is allowed to write to state.
+  const nameSearchSeqRef = useRef(0);
   const [agents, setAgents] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
   // When results are on screen the big search form collapses into a sticky
@@ -638,6 +660,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
           value: city.id,
           label: `${city.stateName}, ${city.country}`,
           countryId: city.countryId,
+          code: city.countryCode,
         }));
         setDestinationOptions(options);
       } catch {
@@ -1006,6 +1029,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
         // label: `${city.name}, ${city.state} , ${city.country}`,
          label: `${city.stateName},${city.country}`,
         countryId: city.countryId,
+        code: city.countryCode,
       }));
       setDestinationOptions(options);
     } catch {
@@ -1201,6 +1225,10 @@ export default function HotelSearch({ force24Hour = false } = {}) {
   const fetchHotels = async (page, sid, agentId, nameSearch = "") => {
     try {
       const isNameSearching = !!nameSearch.trim();
+      // Capture a per-call seq only for name-search. Basic (unfiltered)
+      // fetches don't need this — the poll loop is already the sole writer
+      // for them and never races with itself.
+      const mySeq = isNameSearching ? ++nameSearchSeqRef.current : null;
       const endpoint = isNameSearching
         ? `/api/hotel-search/results/${sid}/filter-by-name`
         : `/api/hotel-search/results/${sid}`;
@@ -1230,6 +1258,12 @@ export default function HotelSearch({ force24Hour = false } = {}) {
       const res = await axiosInstance.get(endpoint, {
         params,
       });
+
+      // Drop stale name-search responses so an older term can't overwrite
+      // results for the term the user is actually looking at.
+      if (isNameSearching && mySeq !== nameSearchSeqRef.current) {
+        return res.data;
+      }
 
       const mappedResults = Array.isArray(res.data.result)
         ? res.data.result.map((hotel, index) => ({
@@ -1454,11 +1488,19 @@ export default function HotelSearch({ force24Hour = false } = {}) {
               }))
             : [];
 
-          setAllResults((prev) => {
-            const map = new Map(prev.map((h) => [h.id, h]));
-            mappedResults.forEach((h) => map.set(h.id, h));
-            return Array.from(map.values());
-          });
+          // When a hotel-name filter is active, /filter-by-name owns
+          // allResults. Merging the poll's unfiltered payload here would
+          // repopulate the list with non-matching hotels every 2 s and
+          // undo the filter. Clearing the box unblocks this branch on the
+          // next poll tick, and the poll returns the full Redis payload so
+          // the unfiltered list rebuilds naturally.
+          if (!finalHotelSearchTermRef.current.trim()) {
+            setAllResults((prev) => {
+              const map = new Map(prev.map((h) => [h.id, h]));
+              mappedResults.forEach((h) => map.set(h.id, h));
+              return Array.from(map.values());
+            });
+          }
 
           const currentStatuses = data.status || {};
           expectedChannels.forEach((ch) => {
@@ -1481,15 +1523,21 @@ export default function HotelSearch({ force24Hour = false } = {}) {
             }
           }
 
-          setTotalElements(Number(data.totalResults) || mappedResults.length);
-          setTotalPages(
-            Math.max(
-              1,
-              Math.ceil(
-                (Number(data.totalResults) || mappedResults.length) / pageSize,
+          // Same reason as the setAllResults guard above — while a name
+          // filter is active the /filter-by-name response owns the paging
+          // counts; the unfiltered poll totals would flash the wrong page
+          // count next to a filtered list.
+          if (!finalHotelSearchTermRef.current.trim()) {
+            setTotalElements(Number(data.totalResults) || mappedResults.length);
+            setTotalPages(
+              Math.max(
+                1,
+                Math.ceil(
+                  (Number(data.totalResults) || mappedResults.length) / pageSize,
+                ),
               ),
-            ),
-          );
+            );
+          }
         },
         2000,
         20000,
@@ -1560,7 +1608,14 @@ export default function HotelSearch({ force24Hour = false } = {}) {
 
   useEffect(() => {
     if (!searchId || !hasSearched) return;
-    if (pollStatus === "IN_PROGRESS") return;
+    // Gate basic (unfiltered) fetches until polling finishes so we don't
+    // double-write allResults alongside the poll's merge. Name-search
+    // (/filter-by-name) is exempt — it targets a separate endpoint,
+    // REPLACES allResults on its own, and is protected from stale-response
+    // races by nameSearchSeqRef. Without this exemption, typing a hotel
+    // name during the initial supplier poll silently no-ops until poll
+    // completes, which is the "sometimes it doesn't work" symptom.
+    if (pollStatus === "IN_PROGRESS" && !finalHotelSearchTerm.trim()) return;
     setIsLoading(true);
     fetchHotels(pageIndex, searchId, agent, finalHotelSearchTerm).finally(() =>
       setIsLoading(false),
@@ -1798,6 +1853,19 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                           {errors.destination}
                         </div>
                       )}
+                      {/* Surface UAE-resident status when the selected
+                          destination city belongs to the UAE so the operator
+                          can apply the resident rate. Matched on the city's
+                          country code "AE" (from master_country) so a label
+                          change can't break the rule. */}
+                      {selectedDestination?.code === "AE" && (
+                        <div
+                          className="mt-1 small fw-semibold"
+                          style={{ color: "#0f7a3a" }}
+                        >
+                          Select "United Arab Emirates" if guest resident of UAE
+                        </div>
+                      )}
                     </Form.Group>
                   </Col>
 
@@ -1836,59 +1904,62 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                           {errors.nationality}
                         </div>
                       )}
-                      {/* Tagging UAE nationals as resident — surfaces to
-                          the operator so they know to apply the resident
-                          rate / inventory when picking rooms. Matched by
-                          country code "AE" so the label can change
-                          (United Arab Emirates / UAE / U.A.E.) without
-                          breaking the rule. */}
-                      {selectedNationality?.code === "AE" && (
-                        <div
-                          className="mt-1 small fw-semibold"
-                          style={{ color: "#0f7a3a" }}
-                        >
-                          Select "United Arab Emirates" if guest resident of UAE
-                        </div>
-                      )}
                     </Form.Group>
                   </Col>
 
-                  {/* Booking Done By Employee — OPTIONAL.
-                      Moved here from HotelBookingPage at the user's
-                      request; rides through the payload to the
-                      booking-create endpoint so it persists on the
-                      HotelBooking row. No validation: leaving it blank
-                      is a legitimate choice. */}
-                  <Col lg={4} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        Booking Done By Employee{" "}
-                        <span className="text-muted small">(optional)</span>
-                      </Form.Label>
-                      <Select
-                        options={employees.map((e) => ({
-                          value: e.employeeId,
-                          label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
-                        }))}
-                        value={selectedEmployee}
-                        onChange={(option) => setSelectedEmployee(option)}
-                        placeholder="Select employee"
-                        isSearchable
-                        isClearable
-                        className="modern-select"
-                        menuPortalTarget={document.body}
-                        styles={{
-                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                          control: (base) => ({
-                            ...base,
-                            minHeight: "42px",
-                            border: "1px solid #dee2e6",
-                            "&:hover": { borderColor: "#86b7fe" },
-                          }),
-                        }}
-                      />
-                    </Form.Group>
-                  </Col>
+                  {/* Booking Done By — for AGENT logins the booking is done
+                      by the logged-in agent, so the staff-employee picker is
+                      hidden and the agent's own name is shown (read-only) and
+                      carried on the payload. Admin/staff keep the optional
+                      employee dropdown exactly as before. */}
+                  {isAgentRole ? (
+                    <Col lg={4} md={6}>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold text-dark">
+                          Booking Done By
+                        </Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={loggedInAgentName || "—"}
+                          readOnly
+                          disabled
+                          className="form-control-modern"
+                          style={{ height: "42px" }}
+                        />
+                      </Form.Group>
+                    </Col>
+                  ) : (
+                    <Col lg={4} md={6}>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold text-dark">
+                          Booking Done By Employee{" "}
+                          <span className="text-muted small">(optional)</span>
+                        </Form.Label>
+                        <Select
+                          options={employees.map((e) => ({
+                            value: e.employeeId,
+                            label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
+                          }))}
+                          value={selectedEmployee}
+                          onChange={(option) => setSelectedEmployee(option)}
+                          placeholder="Select employee"
+                          isSearchable
+                          isClearable
+                          className="modern-select"
+                          menuPortalTarget={document.body}
+                          styles={{
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                            control: (base) => ({
+                              ...base,
+                              minHeight: "42px",
+                              border: "1px solid #dee2e6",
+                              "&:hover": { borderColor: "#86b7fe" },
+                            }),
+                          }}
+                        />
+                      </Form.Group>
+                    </Col>
+                  )}
 
                   {/* 4. Check-In */}
                   <Col lg={3} md={6}>
@@ -2847,8 +2918,14 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                               selectedDestination?.label || "",
                                             nationalityLabel:
                                               selectedNationality?.label || "",
-                                            employeeName:
-                                              selectedEmployee?.label || null,
+                                            // Agent logins: booking is done by
+                                            // the logged-in agent, so carry the
+                                            // agent's own name (no staff
+                                            // employee is picked). Admin/staff:
+                                            // the selected employee's label.
+                                            employeeName: isAgentRole
+                                              ? agentName || null
+                                              : selectedEmployee?.label || null,
                                             nightsCount: nights,
                                             apiId,
                                             rooms: roomsPayload,
@@ -2860,9 +2937,12 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                             // Flows through RoomList ->
                                             // HotelBookingPage unchanged
                                             // (those layers spread payload
-                                            // through transparently).
-                                            employeeId:
-                                              selectedEmployee?.value || null,
+                                            // through transparently). Agent
+                                            // logins never pick a staff
+                                            // employee, so this stays null.
+                                            employeeId: isAgentRole
+                                              ? null
+                                              : selectedEmployee?.value || null,
                                             // 24 Hour Check-In flags — only
                                             // populated when the user opted
                                             // in. RoomList / HotelBookingPage

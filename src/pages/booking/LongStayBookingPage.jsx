@@ -41,6 +41,24 @@ const PAYMENT_GATEWAYS = [
   { id: "payu", name: "PayU", desc: "Cards & wallets" },
 ];
 
+// Special-request checklist — mirrors HotelBookingPage so the long-stay
+// flow offers the same options. The selected labels ride along on the
+// create payload (specialRequests), are persisted server-side, and show
+// on the detail view + voucher.
+const SPECIAL_REQUEST_OPTIONS = [
+  "Early Check-In",
+  "Non-Smoking Rooms",
+  "High Floor",
+  "VIP Client",
+  "Late Check-In",
+  "Inter-connecting rooms",
+  "Low Floor",
+  "Room with Bathtub",
+  "Late check-Out",
+  "Honeymooners / Anniversary",
+  "Smoking Room",
+];
+
 // Reverse-geocode browser coordinates to a readable address for the
 // Booking History audit trail. Tries OpenStreetMap Nominatim first
 // (street-level detail), then BigDataCloud (locality-level, keyless) —
@@ -151,6 +169,22 @@ export default function LongStayBookingPage() {
 
   const [remarks, setRemarks] = useState("");
   const [tourismDirham, setTourismDirham] = useState("");
+  // Selected special requests — same checklist as HotelBookingPage.
+  const [specialRequests, setSpecialRequests] = useState([]);
+  // Optional "Booking done for" free-text. When set, the detail view + voucher
+  // render it as "Contact: <value>/<agentName>". The input is ADMIN-only.
+  const [bookingDoneFor, setBookingDoneFor] = useState("");
+  const isAdmin =
+    String(localStorage.getItem("currentActiveRole") || "").toUpperCase() ===
+    "ADMIN";
+
+  const handleSpecialRequestToggle = (request) => {
+    setSpecialRequests((prev) =>
+      prev.includes(request)
+        ? prev.filter((item) => item !== request)
+        : [...prev, request],
+    );
+  };
 
   // Client location snapshot for the booking-history audit trail, resolved
   // once on page load and sent on the create payload:
@@ -630,8 +664,17 @@ export default function LongStayBookingPage() {
         primaryGuestName: fullName,
         primaryGuestEmail: "",
         primaryGuestPhone: "",
-        nationality: null,
+        // Nationality (country code, e.g. "AE") selected during search and
+        // carried on the draft — persisted on the booking and shown on the
+        // detail view + voucher.
+        nationality: draft?.nationality || null,
         remarks: remarks || null,
+        // Optional "Booking done for" free-text (admin-only field) → shown as
+        // "Contact: <value>/<agentName>" on the detail view + voucher.
+        bookingDoneFor: bookingDoneFor.trim() || null,
+        // Selected special-request labels — persisted server-side and
+        // surfaced on the detail view + voucher (mirrors HotelBookingPage).
+        specialRequests: specialRequests,
         // Location column in the detail view's Booking History. The IP
         // Address column is stamped server-side from the create request
         // (each system's own IPv4), so it is not sent here.
@@ -676,7 +719,7 @@ export default function LongStayBookingPage() {
           email: "",
           phone: "",
           passportNo: null,
-          nationality: null,
+          nationality: draft?.nationality || null,
           gender: leadGuest.gender || null,
         },
         rooms: rooms.map((room, rIdx) => ({
@@ -1056,6 +1099,54 @@ export default function LongStayBookingPage() {
                       `tourismDirham` state stays at its default ("") so the
                       create payload sends null and downstream totals are
                       unaffected. */}
+
+                  {/* Special Requests — same checklist as HotelBookingPage.
+                      Selected labels ride along on the create payload and are
+                      persisted / shown on the detail view + voucher. */}
+                  <Card className="p-4 mb-2 shadow-sm border-0">
+                    <h5 className="mb-3 fw-bold">Special Requests</h5>
+                    <Row className="g-3">
+                      {/* Booking Done For — optional free-text, ADMIN logins
+                          only (hidden for all other logins). Persisted and
+                          shown as "Contact: <value>/<agentName>" on the detail
+                          view + voucher. */}
+                      {isAdmin && (
+                        <Col md={12}>
+                          <Form.Group className="mb-2">
+                            <Form.Label className="fw-semibold">
+                              Booking Done For{" "}
+                              <span className="text-muted small">(optional)</span>
+                            </Form.Label>
+                            <Form.Control
+                              type="text"
+                              value={bookingDoneFor}
+                              onChange={(e) => setBookingDoneFor(e.target.value)}
+                              placeholder="Name of the person this booking is done for"
+                            />
+                          </Form.Group>
+                        </Col>
+                      )}
+                      <Col md={12}>
+                        <Form.Group className="mb-0">
+                          <div className="special-request-grid">
+                            {SPECIAL_REQUEST_OPTIONS.map((request) => (
+                              <Form.Check
+                                key={request}
+                                type="checkbox"
+                                id={`ls-special-request-${request.replace(/[^a-zA-Z0-9]/g, "-")}`}
+                                label={request}
+                                checked={specialRequests.includes(request)}
+                                onChange={() =>
+                                  handleSpecialRequestToggle(request)
+                                }
+                                className="mb-2 special-request-check"
+                              />
+                            ))}
+                          </div>
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                  </Card>
 
                   {/* Payment Mode — mirrors HotelBookingPage's three-scenario UI:
                         1. Sufficient credit           → Credit Limit only
@@ -1678,6 +1769,7 @@ export default function LongStayBookingPage() {
                                       year: "numeric",
                                     },
                                   )}
+                                  , 02:00 PM (UAE)
                                 </span>
                                 {isOutsideDeadline ? (
                                   <span

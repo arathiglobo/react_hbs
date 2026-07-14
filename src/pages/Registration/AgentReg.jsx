@@ -295,6 +295,8 @@ const AgentReg = () => {
     tradeLicenseFileName: "",
     tradeLicenseExpiry: "",
     timezone: "",
+    // Optional VAT registration number (free text).
+    vatNumber: "",
     agentGSTDetailsDTO: {
       agentClassification: "",
       agentGstIn: "",
@@ -353,6 +355,7 @@ const AgentReg = () => {
     tradeLicenseFileName: "",
     tradeLicenseExpiry: data?.tradeLicenseExpiry || "",
     timezone: data?.timezone || "",
+    vatNumber: data?.vatNumber || "",
     financeManagerName: data?.financeManagerName || "",
     financeManagerContactNo: data?.financeManagerContactNo || "",
     financeManagerEmail: data?.financeManagerEmail || "",
@@ -566,6 +569,7 @@ const AgentReg = () => {
       tradeLicenseFileName: "",
       tradeLicenseExpiry: "",
       timezone: "",
+      vatNumber: "",
       // GST Details as nested object to match AgentGSTDetailsDTO
       agentGSTDetailsDTO: {
         agentClassification: "",
@@ -944,6 +948,7 @@ const AgentReg = () => {
       tradeLicenseFileName: "",
       tradeLicenseExpiry: "",
       timezone: "",
+      vatNumber: "",
       financeManagerName: "",
       financeManagerContactNo: "",
       financeManagerEmail: "",
@@ -3346,6 +3351,27 @@ const AgentReg = () => {
                                   {validationErrors.timezone}
                                 </div>
                               )}
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                        <Row>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>VAT Number</Form.Label>
+                              <Form.Control
+                                value={formData.vatNumber}
+                                placeholder="Enter VAT number"
+                                maxLength={80}
+                                {...getFormControlProps(
+                                  "vatNumber",
+                                  (e) =>
+                                    setFormData({
+                                      ...formData,
+                                      vatNumber: e.target.value,
+                                    }),
+                                  {}
+                                )}
+                              />
                             </Form.Group>
                           </Col>
                         </Row>

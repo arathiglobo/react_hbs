@@ -1027,10 +1027,24 @@ export default function LongStayBookingDetailView() {
                         )}
                       </Col>
                       <Col md={6}>
+                        <InfoRow label="Agent" value={detail.agentName} />
                         {detail.employeeName && (
                           <InfoRow
                             label="Booked By Employee"
                             value={detail.employeeName}
+                          />
+                        )}
+                        {/* Contact — "Booking done for" value entered on the
+                            booking page, shown as "<value>/<agentName>". Only
+                            rendered when a value was entered. */}
+                        {detail.bookingDoneFor && (
+                          <InfoRow
+                            label="Contact"
+                            value={
+                              detail.agentName
+                                ? `${detail.bookingDoneFor}/${detail.agentName}`
+                                : detail.bookingDoneFor
+                            }
                           />
                         )}
                         <InfoRow
@@ -1143,27 +1157,11 @@ export default function LongStayBookingDetailView() {
                               .join(" ")
                               .trim() || "-"}
                           />
-                          <InfoRow
-                            label="Email"
-                            value={detail.primaryGuestDetails.email}
-                          />
-                          <InfoRow
-                            label="Phone"
-                            value={detail.primaryGuestDetails.phone}
-                          />
                         </Col>
                         <Col md={6}>
                           <InfoRow
-                            label="Passport No"
-                            value={detail.primaryGuestDetails.passportNo}
-                          />
-                          <InfoRow
                             label="Nationality"
                             value={detail.primaryGuestDetails.nationality}
-                          />
-                          <InfoRow
-                            label="Gender"
-                            value={detail.primaryGuestDetails.gender}
                           />
                         </Col>
                       </Row>
@@ -1174,16 +1172,8 @@ export default function LongStayBookingDetailView() {
                             label="Name"
                             value={detail.primaryGuestName}
                           />
-                          <InfoRow
-                            label="Email"
-                            value={detail.primaryGuestEmail}
-                          />
                         </Col>
                         <Col md={6}>
-                          <InfoRow
-                            label="Phone"
-                            value={detail.primaryGuestPhone}
-                          />
                           <InfoRow
                             label="Nationality"
                             value={detail.nationality}
@@ -1362,6 +1352,44 @@ export default function LongStayBookingDetailView() {
                       <p style={{ marginBottom: 0 }}>{detail.remarks}</p>
                     ) : (
                       <span className="text-muted">No remarks.</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Special Requests ──────────────────────────────── */}
+                <div style={card}>
+                  <div style={SECTION_HEADER}>
+                    Special Requests{" "}
+                    <span style={{ fontSize: "1rem", color: "#555" }}>⊟</span>
+                  </div>
+                  <div
+                    style={{
+                      padding: "10px 16px",
+                      fontSize: "0.83rem",
+                      color: "#333",
+                    }}
+                  >
+                    {Array.isArray(detail.specialRequests) &&
+                    detail.specialRequests.length > 0 ? (
+                      <div className="d-flex flex-wrap gap-2">
+                        {detail.specialRequests.map((sr, i) => (
+                          <span
+                            key={i}
+                            className="badge rounded-pill"
+                            style={{
+                              background: "#EEF2FF",
+                              color: "#3730A3",
+                              fontWeight: 600,
+                              fontSize: "0.75rem",
+                              padding: "6px 12px",
+                            }}
+                          >
+                            {sr}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-muted">No special requests.</span>
                     )}
                   </div>
                 </div>
