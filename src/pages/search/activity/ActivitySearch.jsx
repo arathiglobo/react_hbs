@@ -377,6 +377,7 @@ const ActivitySearch = () => {
           value: city.id,
           label: `${city.stateName}, ${city.country}`,
           countryId: city.countryId,
+          code: city.countryCode,
           type: "State"
         }));
         setDestinationOptions(options);
@@ -457,6 +458,7 @@ const ActivitySearch = () => {
         value: city.id,
         label: `${city.stateName}, ${city.country}`,
         countryId: city.countryId,
+        code: city.countryCode,
         type: "State"
       }));
       setDestinationOptions(options);
@@ -992,6 +994,21 @@ const ActivitySearch = () => {
         {searchErrors.destinations && (
           <div className="text-danger small mt-1">{searchErrors.destinations}</div>
         )}
+        {/* Surface UAE-resident status when any selected destination city
+            belongs to the UAE so the operator can apply the resident rate.
+            Destinations is a multi-select — `.some` catches the case where
+            the UAE city is one of several picks. Matched on the city's
+            country code "AE" (from master_country) so a label change can't
+            break the rule. */}
+        {Array.isArray(destinations) &&
+          destinations.some((d) => d?.code === "AE") && (
+            <div
+              className="mt-1 small"
+              style={{ color: "#0f7a3a", lineHeight: 1.25 }}
+            >
+              For UAE resident holders, please mention the nationality as United Arab Emirates regardless of the actual nationality.
+            </div>
+          )}
       </Col>
 
         <Col md={4}>
@@ -1024,33 +1041,6 @@ const ActivitySearch = () => {
         {searchErrors.nationality && (
           <div className="text-danger small mt-1">{searchErrors.nationality}</div>
         )}
-        {/* Surface UAE-resident status to the operator so they can
-            apply the resident rate. Matches ISO-2 "AE", ISO-3 "ARE",
-            shorthand "UAE", and falls back to label text. */}
-        {(() => {
-          const code = (nationality?.code || "")
-            .toString()
-            .trim()
-            .toUpperCase();
-          const label = (nationality?.label || "")
-            .toString()
-            .trim()
-            .toLowerCase();
-          const isUAE =
-            code === "AE" ||
-            code === "ARE" ||
-            code === "UAE" ||
-            label.includes("united arab emirates") ||
-            label === "uae";
-          return isUAE ? (
-            <div
-              className="mt-1 small fw-semibold"
-              style={{ color: "#0f7a3a" }}
-            >
-              Select "United Arab Emirates" if guest resident of UAE
-            </div>
-          ) : null;
-        })()}
       </Col>
 
     </Row>
