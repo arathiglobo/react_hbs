@@ -54,6 +54,8 @@ const Register = () => {
     tradeLicenseFileName: "",
     tradeLicenseExpiry: "",
     timezone: "",
+    // Optional VAT registration number (free text).
+    vatNumber: "",
   });
 
   const [showPassword, setShowPassword] = useState(false);
@@ -1059,6 +1061,21 @@ const Register = () => {
                                 value={formData.tradeLicenseExpiry}
                                 onChange={handleChange}
                                 className="form-input"
+                              />
+                            </Form.Group>
+                          </Col>
+
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="form-label">VAT Number</Form.Label>
+                              <Form.Control
+                                type="text"
+                                name="vatNumber"
+                                value={formData.vatNumber}
+                                onChange={handleChange}
+                                placeholder="Enter VAT number"
+                                className="form-input"
+                                maxLength={80}
                               />
                             </Form.Group>
                           </Col>

@@ -257,6 +257,14 @@ export default function GovEmployeeSearch() {
     ? activeRole === "AGENT"
     : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
 
+  // Logged-in agent's name — for agent logins the booking is done by the
+  // agent themselves, so the "Booking Done By Employee" picker is hidden and
+  // this name is shown instead. Empty for admin/staff.
+  const loggedInAgentName =
+    localStorage.getItem("UserName") ||
+    sessionStorage.getItem("UserName") ||
+    "";
+
   // ── form state ───────────────────────────────────────────────────
   const [destinationOptions, setDestinationOptions] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState(null);
@@ -557,6 +565,7 @@ export default function GovEmployeeSearch() {
             value: city.id ?? city.provinceId,
             label: `${city.stateName ?? city.name ?? ""}, ${city.country ?? ""}`,
             countryId: city.countryId,
+            code: city.countryCode,
           })),
         );
       } catch (e) {
@@ -950,6 +959,19 @@ export default function GovEmployeeSearch() {
                           {errors.destination}
                         </div>
                       )}
+                      {/* Surface UAE-resident status when the selected
+                          destination city belongs to the UAE so the operator
+                          can apply the resident rate. Matched on the city's
+                          country code "AE" (from master_country) so a label
+                          change can't break the rule. */}
+                      {selectedDestination?.code === "AE" && (
+                        <div
+                          className="mt-1 small fw-semibold"
+                          style={{ color: "#0f7a3a" }}
+                        >
+                          Select "United Arab Emirates" if guest resident of UAE
+                        </div>
+                      )}
                     </Form.Group>
                   </Col>
 
@@ -984,47 +1006,56 @@ export default function GovEmployeeSearch() {
                           {errors.nationality}
                         </div>
                       )}
-                      {/* Tagging UAE nationals as resident — surfaces to the
-                          operator so they know to apply the resident rate /
-                          inventory when picking rooms. Matched by country
-                          code "AE". Mirrors /new-booking/hotel. */}
-                      {selectedNationality?.code === "AE" && (
-                        <div
-                          className="mt-1 small fw-semibold"
-                          style={{ color: "#0f7a3a" }}
-                        >
-                          Select "United Arab Emirates" if guest resident of UAE
-                        </div>
-                      )}
+                      {/* UAE-resident hint moved to the Destination field —
+                          it now triggers on a UAE destination city, not on the
+                          selected nationality. */}
                     </Form.Group>
                   </Col>
 
-                  {/* Booking Done By Employee — OPTIONAL.
-                      Replaces the same Card that used to live on the
-                      booking page. Threaded through to the create
-                      payload as employeeId. No validation. */}
-                  <Col lg={4} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        Booking Done By Employee{" "}
-                        <span className="text-muted small">(optional)</span>
-                      </Form.Label>
-                      <Select
-                        options={employees.map((e) => ({
-                          value: e.employeeId,
-                          label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
-                        }))}
-                        value={selectedEmployee}
-                        onChange={(opt) => setSelectedEmployee(opt)}
-                        placeholder="Select employee"
-                        isSearchable
-                        isClearable
-                        className="modern-select"
-                        menuPortalTarget={document.body}
-                        styles={SELECT_STYLES}
-                      />
-                    </Form.Group>
-                  </Col>
+                  {/* Booking Done By — agent logins book under themselves, so
+                      the staff-employee picker is hidden and the agent's own
+                      name is shown (read-only). Admin/staff keep the optional
+                      dropdown exactly as before. */}
+                  {isAgentRole ? (
+                    <Col lg={4} md={6}>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold text-dark">
+                          Booking Done By
+                        </Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={loggedInAgentName || "—"}
+                          readOnly
+                          disabled
+                          className="form-control-modern"
+                          style={{ height: "42px" }}
+                        />
+                      </Form.Group>
+                    </Col>
+                  ) : (
+                    <Col lg={4} md={6}>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold text-dark">
+                          Booking Done By Employee{" "}
+                          <span className="text-muted small">(optional)</span>
+                        </Form.Label>
+                        <Select
+                          options={employees.map((e) => ({
+                            value: e.employeeId,
+                            label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
+                          }))}
+                          value={selectedEmployee}
+                          onChange={(opt) => setSelectedEmployee(opt)}
+                          placeholder="Select employee"
+                          isSearchable
+                          isClearable
+                          className="modern-select"
+                          menuPortalTarget={document.body}
+                          styles={SELECT_STYLES}
+                        />
+                      </Form.Group>
+                    </Col>
+                  )}
 
                   {/* 4. Check-In */}
                   <Col lg={3} md={6}>

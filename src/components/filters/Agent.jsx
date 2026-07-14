@@ -1,6 +1,7 @@
 import { useEffect,useState } from "react";
 import { Form } from "react-bootstrap";
 import axiosInstance from "../AxiosInstance";
+import chevronStyle from "./dropdownChevron";
 
 export default function Agent({value, onChange}){
 
@@ -22,7 +23,8 @@ export default function Agent({value, onChange}){
         <Form.Group>
             <Form.Label>Agent</Form.Label>
             <div className="position-relative">
-                <Form.Control size="sm" 
+                <Form.Control size="sm"
+                style={chevronStyle}
                 value={isOpen ? searchTerm : (selectedOption?.companyName ||"")}
                 onChange={(e)=>{setSearchTerm(e.target.value);
                     if (!isOpen) setIsOpen(true);}}

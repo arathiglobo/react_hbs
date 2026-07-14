@@ -1,7 +1,1 @@
-/* The hamburger toggle is positioned inline in Sidebar.jsx
-   (position:fixed, top/left, white) and hidden on desktop via
-   .d-lg-none, so no extra positioning is needed here. */
-.hamburger{
-    border: none;
-}
 

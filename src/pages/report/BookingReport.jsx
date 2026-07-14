@@ -15,14 +15,12 @@ import {
   Pagination,
   Modal,
 } from "react-bootstrap";
-import Country from "../../components/filters/Country";
+import Supplier from "../../components/filters/Supplier";
+import DestinationCity from "../../components/filters/DestinationCity";
 
 export default function BookingReport() {
 
   const [bookings,setBookings] = useState([]);
-
-  // Store country options to map IDs to names/codes
-  const [countryOptions, setCountryOptions] = useState([]);
 
   const [currentPage,setCurrentPage]=useState(1);
   const [itemsPerPage,setItemsPerPage]=useState(10);
@@ -31,53 +29,85 @@ export default function BookingReport() {
   const [emailAddress, setEmailAddress] = useState("");
   const [isSending, setIsSending] = useState(false);
 
-  // Temporary filter state (what user sees/edits)
-const [tempCountry, setTempCountry] = useState("");
-const [tempFromDate, setTempFromDate] = useState("");
-const [tempToDate, setTempToDate] = useState("");
+  // Server-side search filters (sent to /api/report/bookings on Search)
+const initialFilters = {
+  serviceDateFrom: "",
+  serviceDateTo: "",
+  bookingDateFrom: "",
+  bookingDateTo: "",
+  deadlineDateFrom: "",
+  deadlineDateTo: "",
+  reconfirmDateFrom: "",
+  reconfirmDateTo: "",
+  cancelDateFrom: "",
+  cancelDateTo: "",
+  bookingReference: "",
+  supplierReference: "",
+  city: "",
+  guestName: "",
+  serviceName: "",
+  branch: "",
+  status: "",
+  supplierId: "",
+  bookingType: "",
+};
 
-// Applied filter states (used for actual filtering)
-const [country, setCountry] = useState("");
-const [fromDate, setFromDate] = useState("");
-const [toDate, setToDate] = useState("");
+// Temporary filter state (what user sees/edits)
+const [tempFilters, setTempFilters] = useState(initialFilters);
 
+// Branch dropdown options, collected from the unfiltered booking list
+const [branchOptions, setBranchOptions] = useState([]);
 
+const updateFilter = (field, value) =>
+  setTempFilters((prev) => ({ ...prev, [field]: value }));
+
+const fetchBookings = async (filters = {}) => {
+  try {
+    // Only send filters that actually carry a value
+    const params = {};
+    Object.entries(filters).forEach(([key, value]) => {
+      const trimmed = typeof value === "string" ? value.trim() : value;
+      if (trimmed !== "" && trimmed !== null && trimmed !== undefined) {
+        params[key] = trimmed;
+      }
+    });
+    const response = await axiosInstance.get("/api/report/bookings", { params });
+    const data = Array.isArray(response.data) ? response.data : [];
+    setBookings(data);
+    return data;
+  } catch (error) {
+    console.error("Booking Report fetch error", error);
+    toast.error("failed to load booking data");
+    return [];
+  }
+};
 
   useEffect(()=>{
   setCurrentPage(1);
   },[searchQuery]);
 
   useEffect(()=>{
-   const fetchBookings = async ()=>{
-    try{
-      const response = await axiosInstance.get("/api/report/bookings");
-      setBookings(response.data);
-    }catch(error){
-      console.error("Booking Report fetch error",error)
-      toast.error("failed to load booking data")
-    }
+   const loadInitial = async ()=>{
+    const data = await fetchBookings();
+    // Distinct booking locations feed the Branch dropdown
+    const branches = [...new Set(
+      data.map((b) => (b.branch || "").trim()).filter(Boolean)
+    )].sort();
+    setBranchOptions(branches);
    };
-   fetchBookings();
+   loadInitial();
   },[])
 
-  useEffect(() => {
-  const fetchCountryOptions = async () => {
-    try {
-      const response = await axiosInstance.get("/api/country").catch(() => ({ data: [] }));
-      setCountryOptions(Array.isArray(response.data) ? response.data.map(c => ({ id: c.id || c.Id, name: c.name })) : []);
-    } catch (error) {
-      console.error("Error fetching country options:", error);
-    }
-  };
-  fetchCountryOptions();
-}, []);
-
-
-const handleSearch = () => {
-  setCountry(tempCountry);
-  setFromDate(tempFromDate);
-  setToDate(tempToDate);
+const handleSearch = async () => {
   setCurrentPage(1);
+  await fetchBookings(tempFilters);
+};
+
+const handleReset = async () => {
+  setTempFilters(initialFilters);
+  setSearchQuery("");
+  setCurrentPage(1);
+  await fetchBookings();
 };
 
 
@@ -285,46 +315,9 @@ const handleSearch = () => {
       if (!matchesSearch) return false;
     }
 
-    if (country) {
-      let matches = false;
-
-      const selectedCountryOption = countryOptions.find(
-        opt => String(opt.id) === String(country)
-      );
-      const selectedCountryName = selectedCountryOption?.name;
-
-      if (selectedCountryName) {
-        const bookingCountryCode = String(b.nativeCountry || '').trim();
-        const selectedCode = String(selectedCountryName || '').trim();
-
-        // Match country code (e.g. IN, US)
-        matches = bookingCountryCode === selectedCode;
-      }
-
-      // Fallback: match using countryId
-      if (!matches && b.countryId && String(b.countryId) === String(country)) {
-        matches = true;
-      }
-
-      if (!matches) return false;
-    }
-    if (fromDate || toDate) {
-      const bookingDateStr = b.bookingDate
-        ? b.bookingDate.split("T")[0]
-        : "";
-
-      if (fromDate && bookingDateStr < fromDate) {
-        return false;
-      }
-
-      if (toDate && bookingDateStr > toDate) {
-        return false;
-      }
-    }
-
     return true; // keep booking
   });
-}, [bookings, searchQuery, country, fromDate, toDate, countryOptions]);
+}, [bookings, searchQuery]);
 
 
 const totalPages = useMemo(() => Math.ceil(filteredbookings.length / itemsPerPage), [filteredbookings.length, itemsPerPage]);
@@ -346,37 +339,155 @@ const currentBookings = useMemo(() => filteredbookings.slice(startIndex, endInde
             {/* Filters Section */}
             <div className="p-4 bg-light border-bottom">
               <Row className="align-items-end g-4">
-              
 
-
-               
-                <Col md={3}>
+                {/* Row 1 — Service / Booking / Cancellation Deadline dates */}
+                <Col md={4}>
                   <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">From Date</Form.Label>
-                    <Form.Control type="date" size="sm"
-                    value={tempFromDate}  
-                    onChange={(e)=>setTempFromDate(e.target.value)} />
+                    <Form.Label className="small mb-2">Service Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempFilters.serviceDateFrom}
+                        onChange={(e) => updateFilter("serviceDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempFilters.serviceDateTo}
+                        onChange={(e) => updateFilter("serviceDateTo", e.target.value)} />
+                    </div>
                   </Form.Group>
                 </Col>
-                <Col md={3}>
+                <Col md={4}>
                   <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">To Date</Form.Label>
-                    <Form.Control type="date" size="sm" 
-                    value={tempToDate}
-                    onChange={(e)=>setTempToDate(e.target.value)}/>
+                    <Form.Label className="small mb-2">Booking Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempFilters.bookingDateFrom}
+                        onChange={(e) => updateFilter("bookingDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempFilters.bookingDateTo}
+                        onChange={(e) => updateFilter("bookingDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Cancellation Deadline Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempFilters.deadlineDateFrom}
+                        onChange={(e) => updateFilter("deadlineDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempFilters.deadlineDateTo}
+                        onChange={(e) => updateFilter("deadlineDateTo", e.target.value)} />
+                    </div>
                   </Form.Group>
                 </Col>
 
-
-                <Col md={3}>
-                 <Country
-                 value={tempCountry}
-                 onChange={setTempCountry}
-                 />
+                {/* Row 2 — Reconfirm / Cancel dates */}
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Reconfirm Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempFilters.reconfirmDateFrom}
+                        onChange={(e) => updateFilter("reconfirmDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempFilters.reconfirmDateTo}
+                        onChange={(e) => updateFilter("reconfirmDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
                 </Col>
-                <Col md={3}>
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Cancel Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempFilters.cancelDateFrom}
+                        onChange={(e) => updateFilter("cancelDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempFilters.cancelDateTo}
+                        onChange={(e) => updateFilter("cancelDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4} />
+
+                {/* Row 3 — reference / city text filters */}
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Booking Reference"
+                    value={tempFilters.bookingReference}
+                    onChange={(e) => updateFilter("bookingReference", e.target.value)} />
+                </Col>
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Supplier Reference No."
+                    value={tempFilters.supplierReference}
+                    onChange={(e) => updateFilter("supplierReference", e.target.value)} />
+                </Col>
+                <Col md={4}>
+                  <DestinationCity
+                    value={tempFilters.city}
+                    onChange={(cityName) => updateFilter("city", cityName)}
+                  />
+                </Col>
+
+                {/* Row 4 — guest / service / branch */}
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Guest Name"
+                    value={tempFilters.guestName}
+                    onChange={(e) => updateFilter("guestName", e.target.value)} />
+                </Col>
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Service Name"
+                    value={tempFilters.serviceName}
+                    onChange={(e) => updateFilter("serviceName", e.target.value)} />
+                </Col>
+                <Col md={4}>
+                  <Form.Select size="sm"
+                    value={tempFilters.branch}
+                    onChange={(e) => updateFilter("branch", e.target.value)}>
+                    <option value="">Select Branch</option>
+                    {branchOptions.map((branch) => (
+                      <option key={branch} value={branch}>{branch}</option>
+                    ))}
+                  </Form.Select>
+                </Col>
+
+                {/* Row 5 — status / supplier / service type */}
+                <Col md={4}>
+                  <Form.Select size="sm"
+                    value={tempFilters.status}
+                    onChange={(e) => updateFilter("status", e.target.value)}>
+                    <option value="">ALL</option>
+                    <option value="REQUESTED">Requested</option>
+                    <option value="CONFIRMED">Confirmed</option>
+                    <option value="RECONFIRMED">ReConfirmed</option>
+                    <option value="SOLD_OUT">Sold Out</option>
+                    <option value="CANCELLED">Cancelled</option>
+                  </Form.Select>
+                </Col>
+                <Col md={4}>
+                  <Supplier
+                    value={tempFilters.supplierId}
+                    onChange={(id) => updateFilter("supplierId", String(id))}
+                  />
+                </Col>
+                <Col md={4}>
+                  <Form.Select size="sm"
+                    value={tempFilters.bookingType}
+                    onChange={(e) => updateFilter("bookingType", e.target.value)}>
+                    <option value="">All Services</option>
+                    <option value="NORMAL">Normal</option>
+                    <option value="LAST_MINUTE">Last Minute</option>
+                  </Form.Select>
+                </Col>
+
+                {/* Row 6 — actions */}
+                <Col md={4}>
                   <Button variant="success" className="w-100" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}>
                     <i className="fas fa-search me-1"></i>Search
+                  </Button>
+                </Col>
+                <Col md={4}>
+                  <Button variant="outline-secondary" className="w-100" size="sm" onClick={handleReset}>
+                    <i className="fas fa-undo me-1"></i>Reset
                   </Button>
                 </Col>
 

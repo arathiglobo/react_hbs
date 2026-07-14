@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import axiosInstance from "../AxiosInstance";
 import { Form } from "react-bootstrap";
+import chevronStyle from "./dropdownChevron";
 
 export default function Staff({ value, onChange }) {
   const [staff, setStaff] = useState([]);
@@ -38,6 +39,7 @@ const getDisplayName =(employee)=>{
       <div className="position-relative">
         <Form.Control
           size="sm"
+          style={chevronStyle}
           value={isOpen ? searchTerm : (selectedOption ? getDisplayName(selectedOption) : "")}
           onChange={(e) => {
             setSearchTerm(e.target.value);

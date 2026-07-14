@@ -1,4 +1,4 @@
-import React, { useEffect, useState,useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import {
@@ -14,64 +14,109 @@ import Agent from "../../components/filters/Agent";
 import Staff from "../../components/filters/Staff";
 import axiosInstance from "../../components/AxiosInstance";
 import Supplier from "../../components/filters/Supplier";
+import DestinationCity from "../../components/filters/DestinationCity";
+import { toast } from "react-hot-toast";
 
 export default function OfflineBookingDailySalesStatement() {
- 
-  const [agentsList,setAgentList] = useState([]);
-  const [employeesList,setEmployeesList]=useState([]);
-  const [searchQuery,setSearchQuery]=useState("");
-  const [currentPage,setCurrentPage]=useState(1);
-  const [itemsPerPage,setItemsPerPage]=useState(10);
 
-  const [tempSupplier,setTempSupplier]=useState("");
-  const [tempStaff,setTempStaff] =useState("");
-  const [tempAgent,setTempAgent] = useState("");
-  const [tempFromDate,setTempFromDate]=useState("");
-  const [tempToDate,setTempToDate]=useState("");
+  const [sales, setSales] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  const [supplier,setSupplier]=useState("");
-  const [staff,setStaff]=useState("");
-  const [agent,setAgent] = useState("");
-  const [fromDate,setFromDate]=useState("");
-  const [toDate,setToDate]=useState("");
+  // Server-side search filters (sent to /api/report/offline-daily-sales on
+  // Search). From/To Date filters the booking (sales) date, so the standard
+  // Booking Date range is not repeated; the Supplier dropdown already exists.
+  const initialFilters = {
+    // Sales Details
+    fromDate: "",
+    toDate: "",
+    agentId: "",
+    staffId: "",
+    supplierId: "",
+    // Booking Details
+    serviceDateFrom: "",
+    serviceDateTo: "",
+    deadlineDateFrom: "",
+    deadlineDateTo: "",
+    reconfirmDateFrom: "",
+    reconfirmDateTo: "",
+    cancelDateFrom: "",
+    cancelDateTo: "",
+    bookingReference: "",
+    supplierReference: "",
+    city: "",
+    guestName: "",
+    serviceName: "",
+    branch: "",
+    status: "",
+    bookingType: "",
+  };
+  const [tempFilters, setTempFilters] = useState(initialFilters);
+
+  // Branch dropdown options (distinct booking locations)
+  const [branchOptions, setBranchOptions] = useState([]);
+
+  const updateFilter = (field, value) =>
+    setTempFilters((prev) => ({ ...prev, [field]: value }));
 
   const activeRole = (localStorage.getItem("currentActiveRole") || "").trim().toUpperCase();
   const storedRoles = (localStorage.getItem("userRole") || "").toUpperCase();
   const isAgentRole = activeRole ? activeRole === "AGENT" : (storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN"));
 
+  const fetchSales = async (filters = {}) => {
+    try {
+      // Only send filters that actually carry a value
+      const params = {};
+      Object.entries(filters).forEach(([key, value]) => {
+        const trimmed = typeof value === "string" ? value.trim() : value;
+        if (trimmed !== "" && trimmed !== null && trimmed !== undefined) {
+          params[key] = trimmed;
+        }
+      });
+      const response = await axiosInstance.get("/api/report/offline-daily-sales", { params });
+      setSales(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error("Offline daily sales fetch error", error);
+      toast.error("Failed to load sales data");
+      setSales([]);
+    }
+  };
 
-  useEffect(()=>{
-    const fetchAgents = async ()=>{
-      try{
-        const response = await axiosInstance.get("/api/agents")
-        setAgentList(response.data ||[])
-      }catch(error){
-        console.error("error while fetchin",error)
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    fetchSales();
+
+    // Branch dropdown options come from the distinct booking locations
+    const fetchBranches = async () => {
+      try {
+        const response = await axiosInstance.get("/api/report/bookings/branches");
+        setBranchOptions(Array.isArray(response.data) ? response.data : []);
+      } catch (error) {
+        console.error("Branch options fetch error", error);
       }
-    };fetchAgents();
-  },[])
+    };
+    fetchBranches();
+  }, []);
 
-  useEffect(()=>{
-    const fetchEmployees = async ()=>{
-      try{
-        const response = await axiosInstance.get("/api/employee")
-        setEmployeesList(response.data || [])
-      }catch(error){
-        console.error("error while fetching",error)
-      }
-    }; fetchEmployees();
-  },[])
+  const handleSearch = async () => {
+    setCurrentPage(1);
+    await fetchSales(tempFilters);
+  };
 
-  const handleSearch = () =>{
-  setAgent(tempAgent);
-  setStaff(tempStaff);
-  setSupplier(tempSupplier);
-  setFromDate(tempFromDate);
-  setToDate(tempToDate);
-  setCurrentPage(1);
-}
+  const handleReset = async () => {
+    setTempFilters(initialFilters);
+    setSearchQuery("");
+    setCurrentPage(1);
+    await fetchSales();
+  };
 
- const handlePrint = () => {
+  const formatDate = (value) => (value ? String(value).split("T")[0] : "_");
+
+  const handlePrint = () => {
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
       <html>
@@ -83,6 +128,7 @@ export default function OfflineBookingDailySalesStatement() {
             th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
             th { background-color: #f2f2f2; font-weight: bold; }
             h1 { text-align: center; margin-bottom: 20px; }
+            td.details { white-space: pre-line; }
           </style>
         </head>
         <body>
@@ -107,13 +153,13 @@ export default function OfflineBookingDailySalesStatement() {
               ${filteredsales.map((s, index) => `
                 <tr>
                   <td>${index + 1}</td>
-                  <td>${s.date}</td>
-                  <td>${s.invoiceNumber}</td>
-                  <td>${s.supplier}</td>
-                  <td>${s.agent}</td>
-                  <td>${s.bookingBy}</td>
-                  <td>${s.reference}</td>
-                  <td>${s.details}</td>
+                  <td>${formatDate(s.date)}</td>
+                  <td>${s.invoiceNumber || ''}</td>
+                  <td>${s.supplier || ''}</td>
+                  <td>${s.agent || ''}</td>
+                  <td>${s.bookingBy || ''}</td>
+                  <td>${s.reference || ''}</td>
+                  <td class="details">${s.details || ''}</td>
                    <td>${s.sellingPrice}</td>
                    <td>${s.netPrice}</td>
                    <td>${s.profit}</td>
@@ -128,9 +174,9 @@ export default function OfflineBookingDailySalesStatement() {
     printWindow.print();
   };
 
-    const handleExcel = () => {
-    const headers = ['Sl.No', 'Date', 'Invoice No', 'Supplier', 'Agent', 'Booking By','Reference','Details','Selling Price','Net Profit','Profit'];
-    
+  const handleExcel = () => {
+    const headers = ['Sl.No', 'Date', 'Invoice No', 'Supplier', 'Agent', 'Booking By', 'Reference', 'Details', 'Selling Price', 'Net Price', 'Profit'];
+
     // Create CSV content with proper escaping
     const escapeCSV = (value) => {
       if (value === null || value === undefined) return '';
@@ -141,14 +187,15 @@ export default function OfflineBookingDailySalesStatement() {
       }
       return stringValue;
     };
-    
+
     const csvContent = [
       headers.map(escapeCSV).join(','),
       ...filteredsales.map((s, index) => [
         index + 1,
-        s.date,
+        formatDate(s.date),
         s.invoiceNumber,
         s.supplier,
+        s.agent,
         s.bookingBy,
         s.reference,
         s.details,
@@ -169,178 +216,31 @@ export default function OfflineBookingDailySalesStatement() {
     window.URL.revokeObjectURL(url);
   };
 
+  // Structured filters are applied server-side; only the quick text search
+  // filters client-side.
+  const filteredsales = useMemo(() => {
+    return sales.filter(s => {
+      if (!searchQuery || !searchQuery.trim()) return true;
+      const search = searchQuery.trim().toLowerCase();
+      return (
+        String(s.date || '').toLowerCase().includes(search) ||
+        String(s.invoiceNumber || '').toLowerCase().includes(search) ||
+        String(s.supplier || '').toLowerCase().includes(search) ||
+        String(s.agent || '').toLowerCase().includes(search) ||
+        String(s.bookingBy || '').toLowerCase().includes(search) ||
+        String(s.reference || '').toLowerCase().includes(search) ||
+        String(s.details || '').toLowerCase().includes(search) ||
+        String(s.sellingPrice || '').toLowerCase().includes(search) ||
+        String(s.netPrice || '').toLowerCase().includes(search) ||
+        String(s.profit || '').toLowerCase().includes(search)
+      );
+    });
+  }, [sales, searchQuery]);
 
-  // Dummy data
-  const sales = [
-    {
-      id: 1,
-      date: "2025-06-12",
-      invoiceNumber: "INV-CNF-0106",
-      supplier: "Connect World Tours",
-      agent: "Direct Client",
-      bookingBy: "Rajesh Mathew",
-      reference: "RM-CNF-1002",
-      details: `SupplierType Name: TEST HOTEL (ONLY FOR TESTING)
-Customer Name: TEST TEST
-Check-In: 2025-06-17
-Check-Out: 2025-06-21
-Total Pax: 2 adult(s) and child(ren)`,
-      sellingPrice: "1600.0",
-      netPrice: "1200.0",
-      profit: "400.0",
-    },
-    {
-      id: 2,
-      date: "2024-12-11",
-      invoiceNumber: "INV-CNF-0105",
-      supplier: "Connect World Tours",
-      agent: "Direct Client",
-      bookingBy: "Twinkle Pahwa",
-      reference: "TPCNF0105",
-      details: `SupplierType Name: One and Only Royal Mirage
-Customer Name: Mr. Musa Sabir`,
-      sellingPrice: "68612.0",
-      netPrice: "65856.0",
-      profit: "756.0",
-    },
-    {
-      id: 1,
-      date: "2025-06-12",
-      invoiceNumber: "INV-CNF-0106",
-      supplier: "Connect World Tours",
-      agent: "Direct Client",
-      bookingBy: "Rajesh Mathew",
-      reference: "RM-CNF-1002",
-      details: `SupplierType Name: TEST HOTEL (ONLY FOR TESTING)
-Customer Name: TEST TEST
-Check-In: 2025-06-17
-Check-Out: 2025-06-21
-Total Pax: 2 adult(s) and child(ren)`,
-      sellingPrice: "1600.0",
-      netPrice: "1200.0",
-      profit: "400.0",
-    },
-    {
-      id: 1,
-      date: "2025-06-12",
-      invoiceNumber: "INV-CNF-0106",
-      supplier: "Connect World Tours",
-      agent: "Direct Client",
-      bookingBy: "Rajesh Mathew",
-      reference: "RM-CNF-1002",
-      details: `SupplierType Name: TEST HOTEL (ONLY FOR TESTING)
-Customer Name: TEST TEST
-Check-In: 2025-06-17
-Check-Out: 2025-06-21
-Total Pax: 2 adult(s) and child(ren)`,
-      sellingPrice: "1600.0",
-      netPrice: "1200.0",
-      profit: "400.0",
-    }
-  ];
-
-  // const filteredsales = sales.filter(s=>{
-  //   const search = searchQuery.toLowerCase();
-  //   return(
-  //     String(s.date).toLowerCase().includes(search)||
-  //     String(s.invoiceNumber).toLowerCase().includes(search)||
-  //     String(s.supplier).toLowerCase().includes(search)||
-  //     String(s.agent).toLowerCase().includes(search)||
-  //     String(s.bookingBy).toLowerCase().includes(search)||
-  //     String(s.reference).toLowerCase().includes(search)||
-  //     String(s.details).toLowerCase().includes(search)||
-  //     String(s.sellingPrice).toLowerCase().includes(search)||
-  //     String(s.netPrice).toLowerCase().includes(search)||
-  //     String(s.profit).toLowerCase().includes(search)
-  //   )
-  //  })
-
-  const filteredsales = useMemo(()=>{
-    return sales.filter(s=>{
-      if(searchQuery && searchQuery.trim()){
-        const search = searchQuery.trim().toLowerCase();
-        const matchesSearch =
-      String(s.date).toLowerCase().includes(search)||
-      String(s.invoiceNumber).toLowerCase().includes(search)||
-      String(s.supplier).toLowerCase().includes(search)||
-      String(s.agent).toLowerCase().includes(search)||
-      String(s.bookingBy).toLowerCase().includes(search)||
-      String(s.reference).toLowerCase().includes(search)||
-      String(s.details).toLowerCase().includes(search)||
-      String(s.sellingPrice).toLowerCase().includes(search)||
-      String(s.netPrice).toLowerCase().includes(search)||
-      String(s.profit).toLowerCase().includes(search)
-      if(!matchesSearch) return false;
-      }
-
-      //SUPPLIER
-      if(supplier && supplier.trim()){
-        const selectedSupplier = String(supplier).trim();
-        const reportSupplier = String(supplier || '').trim();
-        if(selectedSupplier.toLowerCase() !== reportSupplier.toLowerCase()){
-          return false;
-        }
-      }
-      //agent
-      if(agent){
-        let matches = false;
-        if(agent.agentId && String(agent.agentId)===String(agent)){
-          matches = true;
-        }else{
-           const selectedAgentOption = agentsList.find(opt =>
-            String(opt.id || opt.agentId) === String(agent)
-           )
-           if(selectedAgentOption){
-            const selectedAgentName= String(selectedAgentOption.companyName || '').trim();
-            const reportAgentName = String(agent.agent || '').trim();
-            matches = selectedAgentName.toLowerCase()=== reportAgentName.toLowerCase()||
-            reportAgentName.toLowerCase().includes(selectedAgentName.toLowerCase())
-           }
-        }
-        if(!matches) return false;
-      }
-
-      if(Staff){
-        let matches = false;
-        if(s.employeeId && String(s.employeeId)===String(staff)){
-          matches = true;
-        }else if(s.staffId && String(s.staffId)===String(staff)){
-          matches = true;
-        }else{
-          const selectedEmployeeOption = employeesList.find(opt =>
-           String(opt.employeeId) === String(staff)
-          );
-          if(selectedEmployeeOption){
-            const employeeFullName = `${selectedEmployeeOption.firstName || ''} ${selectedEmployeeOption.lastname || ''}`.trim();
-            const reportBookingBy = String(s.bookingBy || '').trim();
-
-            matches = employeeFullName.toLowerCase().includes(employeeFullName.toLowerCase())||
-                      reportBookingBy.toLowerCase().includes(employeeFullName.toLowerCase())||
-                      employeeFullName.toLowerCase().includes(reportBookingBy.toLowerCase())
-          }
-        }
-        if(!matches) return false;
-      }
-        if(fromDate || toDate){
-          const bookingDateStr = s.bookDate
-          ? s.bookDate.split("T")[0]
-          :"";
-          if(fromDate && bookingDateStr <fromDate){
-            return false;
-          }
-          if(toDate && bookingDateStr > toDate){
-            return false;
-          }
-        }
-        return true;
-    })
-  },[sales,searchQuery,fromDate,supplier,toDate,agent,staff,agentsList,employeesList])
-
-         
-    const totalPages = useMemo(() => Math.ceil(filteredsales.length / itemsPerPage), [filteredsales.length,itemsPerPage]);
-    const startIndex = useMemo(() => (currentPage -1)* itemsPerPage, [currentPage, itemsPerPage]);
-    const endIndex = useMemo(() => startIndex + itemsPerPage, [startIndex, itemsPerPage]);
-    const currentLogin = useMemo(() => filteredsales.slice(startIndex,endIndex), [filteredsales, startIndex,endIndex]);
+  const totalPages = useMemo(() => Math.ceil(filteredsales.length / itemsPerPage), [filteredsales.length, itemsPerPage]);
+  const startIndex = useMemo(() => (currentPage - 1) * itemsPerPage, [currentPage, itemsPerPage]);
+  const endIndex = useMemo(() => startIndex + itemsPerPage, [startIndex, itemsPerPage]);
+  const currentSales = useMemo(() => filteredsales.slice(startIndex, endIndex), [filteredsales, startIndex, endIndex]);
 
   return (
     <div className="bg-light d-flex flex-column" style={{ minHeight: "100vh" }}>
@@ -356,50 +256,173 @@ Total Pax: 2 adult(s) and child(ren)`,
 
             {/* Filters Section */}
             <div className="p-4 bg-light border-bottom">
+              <h6 className="fw-bold text-primary mb-3">Booking Details</h6>
+              <Row className="align-items-end g-4 mb-4">
+
+                {/* Row 1 — Service / Cancellation Deadline / Reconfirm dates */}
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Service Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempFilters.serviceDateFrom}
+                        onChange={(e) => updateFilter("serviceDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempFilters.serviceDateTo}
+                        onChange={(e) => updateFilter("serviceDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Cancellation Deadline Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempFilters.deadlineDateFrom}
+                        onChange={(e) => updateFilter("deadlineDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempFilters.deadlineDateTo}
+                        onChange={(e) => updateFilter("deadlineDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Reconfirm Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempFilters.reconfirmDateFrom}
+                        onChange={(e) => updateFilter("reconfirmDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempFilters.reconfirmDateTo}
+                        onChange={(e) => updateFilter("reconfirmDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+
+                {/* Row 2 — Cancel date */}
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Cancel Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempFilters.cancelDateFrom}
+                        onChange={(e) => updateFilter("cancelDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempFilters.cancelDateTo}
+                        onChange={(e) => updateFilter("cancelDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={8} />
+
+                {/* Row 3 — reference / guest text filters */}
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Booking Reference"
+                    value={tempFilters.bookingReference}
+                    onChange={(e) => updateFilter("bookingReference", e.target.value)} />
+                </Col>
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Supplier Reference No."
+                    value={tempFilters.supplierReference}
+                    onChange={(e) => updateFilter("supplierReference", e.target.value)} />
+                </Col>
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Guest Name"
+                    value={tempFilters.guestName}
+                    onChange={(e) => updateFilter("guestName", e.target.value)} />
+                </Col>
+
+                {/* Row 4 — service / city / branch */}
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Service Name"
+                    value={tempFilters.serviceName}
+                    onChange={(e) => updateFilter("serviceName", e.target.value)} />
+                </Col>
+                <Col md={4}>
+                  <DestinationCity
+                    value={tempFilters.city}
+                    onChange={(cityName) => updateFilter("city", cityName)}
+                  />
+                </Col>
+                <Col md={4}>
+                  <Form.Select size="sm"
+                    value={tempFilters.branch}
+                    onChange={(e) => updateFilter("branch", e.target.value)}>
+                    <option value="">Select Branch</option>
+                    {branchOptions.map((branch) => (
+                      <option key={branch} value={branch}>{branch}</option>
+                    ))}
+                  </Form.Select>
+                </Col>
+
+                {/* Row 5 — status / service type */}
+                <Col md={4}>
+                  <Form.Select size="sm"
+                    value={tempFilters.status}
+                    onChange={(e) => updateFilter("status", e.target.value)}>
+                    <option value="">ALL</option>
+                    <option value="REQUESTED">Requested</option>
+                    <option value="CONFIRMED">Confirmed</option>
+                    <option value="RECONFIRMED">ReConfirmed</option>
+                    <option value="SOLD_OUT">Sold Out</option>
+                    <option value="CANCELLED">Cancelled</option>
+                  </Form.Select>
+                </Col>
+                <Col md={4}>
+                  <Form.Select size="sm"
+                    value={tempFilters.bookingType}
+                    onChange={(e) => updateFilter("bookingType", e.target.value)}>
+                    <option value="">All Services</option>
+                    <option value="NORMAL">Normal</option>
+                    <option value="LAST_MINUTE">Last Minute</option>
+                  </Form.Select>
+                </Col>
+                <Col md={4} />
+              </Row>
+
+              <h6 className="fw-bold text-primary mb-3">Sales Details</h6>
               <Row className="align-items-end g-4">
                 <Col md={2}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">From Date</Form.Label>
-                    <Form.Control type="date" size="sm" 
-                    value={tempFromDate}
-                    onChange={(e)=>setTempFromDate(e.target.value)} />
+                    <Form.Control type="date" size="sm"
+                    value={tempFilters.fromDate}
+                    onChange={(e) => updateFilter("fromDate", e.target.value)} />
                   </Form.Group>
                 </Col>
                 <Col md={2}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">To Date</Form.Label>
-                    <Form.Control type="date" size="sm" 
-                    value={tempToDate}
-                    onChange={(e)=>setTempToDate(e.target.value)}/>
+                    <Form.Control type="date" size="sm"
+                    value={tempFilters.toDate}
+                    onChange={(e) => updateFilter("toDate", e.target.value)} />
                   </Form.Group>
                 </Col>
                 {!isAgentRole && (
                 <Col md={3}>
                  <Agent
-                 value={tempAgent}
-                 onChange={setTempAgent}/>
+                 value={tempFilters.agentId}
+                 onChange={(id) => updateFilter("agentId", String(id))}/>
                 </Col>
                 )}
                 <Col md={3}>
                  <Staff
-                 value={tempStaff}
-                 onChange={setTempStaff}/>
+                 value={tempFilters.staffId}
+                 onChange={(id) => updateFilter("staffId", String(id))}/>
                 </Col>
                 <Col md={2}>
-                  <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Supplier</Form.Label>
-                    <Form.Select size="sm"
-                    value={tempSupplier}
-                    onChange={setTempSupplier}>
-                      <option>Select</option>
-                      <option>Darina Holidays</option>
-                      <option>Connect World Tours</option>
-                    </Form.Select>
-                  </Form.Group>
+                  <Supplier
+                    value={tempFilters.supplierId}
+                    onChange={(id) => updateFilter("supplierId", String(id))}
+                  />
                 </Col>
-                <Col md={12} className="d-flex justify-content-end mt-3">
+                <Col md={12} className="d-flex justify-content-end gap-2 mt-3">
                   <Button variant="success" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}>
                     <i className="fas fa-search me-1"></i>Search
+                  </Button>
+                  <Button variant="outline-secondary" size="sm" onClick={handleReset}>
+                    <i className="fas fa-undo me-1"></i>Reset
                   </Button>
                 </Col>
               </Row>
@@ -465,11 +488,11 @@ Total Pax: 2 adult(s) and child(ren)`,
                   </tr>
                 </thead>
                 <tbody>
-                  {currentLogin.length > 0 ? (
-                    currentLogin.map((s, index) => (
-                      <tr key={s.id}>
+                  {currentSales.length > 0 ? (
+                    currentSales.map((s, index) => (
+                      <tr key={s.bookingId}>
                         <td>{startIndex + index + 1}</td>
-                        <td>{s.date}</td>
+                        <td>{formatDate(s.date)}</td>
                         <td>{s.invoiceNumber}</td>
                         <td>{s.supplier}</td>
                         <td>{s.agent}</td>

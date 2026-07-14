@@ -981,7 +981,9 @@ export default function GovEmployeeBookingDetailView() {
                       <Col md={6}>
                         <InfoRow label="Booking Code" value={booking.bookingCode} />
                         <InfoRow label="Hotel Name" value={booking.hotelName} />
-                        <InfoRow label="Address" value={booking.address} />
+                        <InfoRow label="City" value={booking.city} />
+                        <InfoRow label="Hotel Address" value={booking.address} />
+                        <InfoRow label="Tel No" value={booking.telNo} />
                         <InfoRow
                           label="Star Rating"
                           value={booking.starRating ? `${booking.starRating} Star` : "-"}
@@ -992,9 +994,28 @@ export default function GovEmployeeBookingDetailView() {
                           label="No. of Nights"
                           value={booking.nights ? `${booking.nights} Nights` : "-"}
                         />
+                        {booking.bookingDate && (
+                          <InfoRow
+                            label="Booking Date"
+                            value={formatDateTime(booking.bookingDate)}
+                          />
+                        )}
                       </Col>
                       <Col md={6}>
                         <InfoRow label="Agent" value={booking.agentName || booking.agentId} />
+                        {/* Contact — "Booking done for" value entered on the
+                            booking page, shown as "<value>/<agentName>". Only
+                            rendered when a value was entered. */}
+                        {booking.bookingDoneFor && (
+                          <InfoRow
+                            label="Contact"
+                            value={
+                              booking.agentName
+                                ? `${booking.bookingDoneFor}/${booking.agentName}`
+                                : booking.bookingDoneFor
+                            }
+                          />
+                        )}
                         {booking.employeeName && (
                           <InfoRow label="Booked By Employee" value={booking.employeeName} />
                         )}
@@ -1003,7 +1024,7 @@ export default function GovEmployeeBookingDetailView() {
                           value={
                             booking.deadlineDate ? (
                               <span style={{ color: "#dc3545", fontWeight: 600 }}>
-                                {booking.deadlineDate.replace("T", " ")}
+                                {`${booking.deadlineDate.slice(0, 10)} 02:00 PM (UAE)`}
                               </span>
                             ) : (
                               "-"
@@ -1019,6 +1040,17 @@ export default function GovEmployeeBookingDetailView() {
                           <InfoRow label="Confirmation No." value={booking.confirmationNumber} />
                         )}
                         <InfoRow label="Refund Status" value={booking.refundStatus} />
+                        <InfoRow
+                          label="Payment Mode"
+                          value={
+                            booking.paymentMode === "CREDITLIMIT"
+                              ? "Credit Limit"
+                              : booking.paymentMode === "CARD" ||
+                                  booking.paymentMode === "ONLINE"
+                                ? "Online Payment"
+                                : booking.paymentMode || "-"
+                          }
+                        />
                         <InfoRow label="Voucher" value={booking.voucherGenerated} />
                         <InfoRow label="Total" value={money(booking.totalRate)} />
                         <InfoRow label="Status" value={<StatusBadge />} />
@@ -1134,20 +1166,45 @@ export default function GovEmployeeBookingDetailView() {
                         )}
                       </tbody>
                     </Table>
-                    {/* Per-room guests */}
+                    {/* Per-room guests — with child age (Type column). */}
                     {rooms.some((r) => Array.isArray(r.guests) && r.guests.length > 0) && (
                       <div style={{ fontSize: "0.8rem" }}>
                         {rooms.map((r, idx) =>
                           Array.isArray(r.guests) && r.guests.length > 0 ? (
-                            <div key={r.roomBookingId || idx} className="mb-1">
-                              <span style={INFO_LABEL}>Room {r.roomNo || idx + 1} Guests</span>
-                              <span style={INFO_VALUE}>
-                                {r.guests
-                                  .map((g) =>
-                                    [g.salutation, g.firstName, g.lastName].filter(Boolean).join(" "),
-                                  )
-                                  .join(", ")}
-                              </span>
+                            <div key={r.roomBookingId || idx} className="mb-2">
+                              <div style={INFO_LABEL} className="mb-1">
+                                Room {r.roomNo || idx + 1} Guests
+                              </div>
+                              <Table
+                                bordered
+                                size="sm"
+                                style={{ fontSize: "0.78rem", marginBottom: 8 }}
+                              >
+                                <thead style={{ backgroundColor: "#f8f9fa" }}>
+                                  <tr>
+                                    <th>#</th>
+                                    <th>Name</th>
+                                    <th>Type</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {r.guests.map((g, gi) => (
+                                    <tr key={g.guestId || gi}>
+                                      <td>{gi + 1}</td>
+                                      <td>
+                                        {[g.salutation, g.firstName, g.lastName]
+                                          .filter(Boolean)
+                                          .join(" ") || "-"}
+                                      </td>
+                                      <td>
+                                        {g.isChild
+                                          ? `Child (Age: ${g.childAge ?? "-"})`
+                                          : "Adult"}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </Table>
                             </div>
                           ) : null,
                         )}

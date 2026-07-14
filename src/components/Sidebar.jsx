@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Nav, Button, Offcanvas } from "react-bootstrap";
+import { Nav, Offcanvas } from "react-bootstrap";
 import { Link, useLocation } from "react-router-dom";
 import "./Sidebar.css";
 import {
@@ -166,6 +166,37 @@ export default function Sidebar() {
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
+
+  // TopBar renders the open toggle button (next to the Globosoft logo)
+  // and broadcasts this event on click, since TopBar and Sidebar are
+  // separate sibling components with no shared parent to wire a prop
+  // through. Below the lg breakpoint the offcanvas menu opens; at/above
+  // it, the desktop collapsed flag flips instead.
+  useEffect(() => {
+    const handleToggleRequest = () => {
+      if (window.innerWidth <= 991) {
+        setShow((s) => !s);
+      } else {
+        toggleCollapsed();
+      }
+    };
+
+    window.addEventListener("sidebarToggleRequest", handleToggleRequest);
+
+    return () => {
+      window.removeEventListener("sidebarToggleRequest", handleToggleRequest);
+    };
+  }, []);
+
+  // Tell TopBar whether the desktop sidebar is collapsed so it can show
+  // its logo-side toggle button only while the sidebar is closed. When the
+  // sidebar is open the collapse control lives inside the sidebar itself
+  // (the « button below), matching the previous UI.
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("sidebarCollapsedChange", { detail: { collapsed } }),
+    );
+  }, [collapsed]);
 
 
   console.log("currentRole in sidebar::", currentRole);
@@ -397,6 +428,12 @@ export default function Sidebar() {
       label: "Booking List",
       roles: ["admin", "agent", "staff"],
       children: [
+        // Unified list combining all booking types below into one view
+        // (new, additive page — every other entry here is unchanged).
+        {
+          label: "All Bookings",
+          to: "/booking-details/all-bookings-list",
+        },
         {
           label: "Hotel",
           to: "/booking-details/hotel-booking-list",
@@ -781,67 +818,6 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Hamburger for small screens */}
-
-      <header className="top-navbar d-flex align-items-center">
-        {!show && ( // ✅ hide when offcanvas is open
-          <Button
-            variant="link"
-            className="hamburger d-lg-none"
-            onClick={handleShow}
-            aria-label="Open menu"
-            style={{
-              // Pin to the top-left, vertically centered within the red
-              // TopBar (which is sticky at top:0, ~56px tall). White so it
-              // is visible on the red bar; above it via z-index. The TopBar
-              // brand has a 40px left margin on mobile to clear this button.
-              position: "fixed",
-              top: 10,
-              left: 10,
-              zIndex: 4000,
-              color: "#fff",
-              fontSize: 26,
-              lineHeight: 1,
-              padding: "2px 8px",
-              textDecoration: "none",
-            }}
-          >
-            ☰
-          </Button>
-        )}
-      </header>
-
-      {/* Floating button to re-open the sidebar when collapsed (desktop) */}
-      {collapsed && (
-        <button
-          type="button"
-          className="d-none d-lg-flex"
-          onClick={toggleCollapsed}
-          aria-label="Open sidebar"
-          title="Open sidebar"
-          style={{
-            position: "fixed",
-            top: 70,
-            left: 8,
-            zIndex: 1500,
-            border: "1px solid var(--color-border, #e5e7eb)",
-            background: "#fff",
-            color: "#EC0B43",
-            width: 34,
-            height: 34,
-            borderRadius: 8,
-            cursor: "pointer",
-            alignItems: "center",
-            justifyContent: "center",
-            boxShadow: "0 2px 8px rgba(0,0,0,.12)",
-            fontSize: 18,
-            lineHeight: 1,
-          }}
-        >
-          ☰
-        </button>
-      )}
-
       {/* Sidebar for large screens */}
       {!collapsed && (
       <aside
@@ -858,8 +834,8 @@ export default function Sidebar() {
         }}
       >
         {/* Collapse control — pinned to the top-right corner of the sidebar
-            so it no longer reserves an empty row above the menu. The <aside>
-            is position:sticky, which anchors this absolutely-positioned button. */}
+            (previous UI). Closing the sidebar hands the toggle back to the
+            button next to the Globosoft logo in TopBar. */}
         <button
           type="button"
           onClick={toggleCollapsed}
@@ -873,14 +849,15 @@ export default function Sidebar() {
             border: "1px solid var(--color-border, #e5e7eb)",
             background: "#fff",
             color: "#EC0B43",
-            width: 28,
-            height: 28,
+            width: 30,
+            height: 30,
             borderRadius: 8,
             cursor: "pointer",
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
-            fontSize: 16,
+            fontSize: 18,
+            fontWeight: 700,
             lineHeight: 1,
           }}
         >

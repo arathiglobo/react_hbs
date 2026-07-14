@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import {
@@ -15,9 +15,13 @@ import { toast } from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { main } from "@popperjs/core";
+import Agent from "../../components/filters/Agent";
+import Supplier from "../../components/filters/Supplier";
+import DestinationCity from "../../components/filters/DestinationCity";
 
 export default function Accounts() {
+
+  const [accounts, setAccounts] = useState([]);
 
   const [currentPage,setCurrentPage] = useState(1);
   const [itemsPerPage,setItemsPerPage] =useState(10);
@@ -25,6 +29,107 @@ export default function Accounts() {
   const [emailAddress, setEmailAddress] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [searchQuery,setSearchQuery]=useState("");
+
+  // Server-side search filters (sent to /api/report/accounts on Search).
+  // The booking-level filters narrow the report to payments of agents that
+  // have at least one booking matching all of them.
+  const initialFilters = {
+    // Booking Details
+    serviceDateFrom: "",
+    serviceDateTo: "",
+    bookingDateFrom: "",
+    bookingDateTo: "",
+    deadlineDateFrom: "",
+    deadlineDateTo: "",
+    reconfirmDateFrom: "",
+    reconfirmDateTo: "",
+    cancelDateFrom: "",
+    cancelDateTo: "",
+    bookingReference: "",
+    supplierReference: "",
+    city: "",
+    guestName: "",
+    serviceName: "",
+    branch: "",
+    status: "",
+    supplierId: "",
+    bookingType: "",
+    // Payment Details
+    fromDate: "",
+    toDate: "",
+    agentId: "",
+    paymentMode: "",
+  };
+  const [tempFilters, setTempFilters] = useState(initialFilters);
+
+  // Payment Mode dropdown options, collected from the unfiltered list
+  const [paymentModeOptions, setPaymentModeOptions] = useState([]);
+
+  // Branch dropdown options (distinct booking locations)
+  const [branchOptions, setBranchOptions] = useState([]);
+
+  const updateFilter = (field, value) =>
+    setTempFilters((prev) => ({ ...prev, [field]: value }));
+
+  const fetchAccounts = async (filters = {}) => {
+    try {
+      // Only send filters that actually carry a value
+      const params = {};
+      Object.entries(filters).forEach(([key, value]) => {
+        const trimmed = typeof value === "string" ? value.trim() : value;
+        if (trimmed !== "" && trimmed !== null && trimmed !== undefined) {
+          params[key] = trimmed;
+        }
+      });
+      const response = await axiosInstance.get("/api/report/accounts", { params });
+      const data = Array.isArray(response.data) ? response.data : [];
+      setAccounts(data);
+      return data;
+    } catch (error) {
+      console.error("Accounts Report fetch error", error);
+      toast.error("Failed to load accounts data");
+      return [];
+    }
+  };
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const loadInitial = async () => {
+      const data = await fetchAccounts();
+      // Distinct payment modes feed the Payment Mode dropdown
+      const modes = [...new Set(
+        data.map((a) => (a.paymentMode || "").trim()).filter(Boolean)
+      )].sort();
+      setPaymentModeOptions(modes);
+    };
+    loadInitial();
+
+    // Branch dropdown options come from the distinct booking locations
+    const fetchBranches = async () => {
+      try {
+        const response = await axiosInstance.get("/api/report/bookings/branches");
+        setBranchOptions(Array.isArray(response.data) ? response.data : []);
+      } catch (error) {
+        console.error("Branch options fetch error", error);
+      }
+    };
+    fetchBranches();
+  }, []);
+
+  const handleSearch = async () => {
+    setCurrentPage(1);
+    await fetchAccounts(tempFilters);
+  };
+
+  const handleReset = async () => {
+    setTempFilters(initialFilters);
+    setSearchQuery("");
+    setCurrentPage(1);
+    await fetchAccounts();
+  };
 
   const handleSendEmail = async () => {
     // Validate email
@@ -40,7 +145,10 @@ export default function Accounts() {
         email: emailAddress,
         reportType: 'accounts',
         filters: {
-          // add your filter data here
+          fromDate: String(tempFilters.fromDate || ''),
+          toDate: String(tempFilters.toDate || ''),
+          agentId: String(tempFilters.agentId || ''),
+          paymentMode: String(tempFilters.paymentMode || ''),
         }
       });
 
@@ -55,6 +163,8 @@ export default function Accounts() {
       setIsSending(false);
     }
   };
+
+  const formatDate = (value) => (value ? String(value).split('T')[0] : '_');
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
@@ -87,11 +197,11 @@ export default function Accounts() {
               ${currentBookings.map((a, index) => `
                 <tr>
                   <td>${index + 1}</td>
-                  <td>${a.company}</td>
-                  <td>${a.paymentDate}</td>
+                  <td>${a.companyName}</td>
+                  <td>${formatDate(a.paymentDate)}</td>
                   <td>${a.creditLimit}</td>
                   <td>${a.amountPaid}</td>
-                  <td>${a.remarks}</td>
+                  <td>${a.remarks || ''}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -105,31 +215,31 @@ export default function Accounts() {
 
   const handlePDF = () => {
     const doc = new jsPDF();
-    
+
     // Add title
     doc.text('Accounts Report', 20, 20);
-    
+
     // Add table
     autoTable(doc, {
       head: [['Sl.No', 'Company Name', 'Payment Date', 'Credit Limit', 'Amount Paid', 'Remarks']],
       body: currentBookings.map((a, index) => [
         index + 1,
-        a.company,
-        a.paymentDate,
+        a.companyName,
+        formatDate(a.paymentDate),
         a.creditLimit,
         a.amountPaid,
-        a.remarks
+        a.remarks || ''
       ]),
       startY: 30,
     });
-    
+
     // Download PDF
     doc.save('accounts-report.pdf');
   };
 
   const handleExcel = () => {
     const headers = ['Sl.No', 'Company Name', 'Payment Date', 'Credit Limit', 'Amount Paid', 'Remarks'];
-    
+
     // Create CSV content with proper escaping
     const escapeCSV = (value) => {
       if (value === null || value === undefined) return '';
@@ -140,16 +250,16 @@ export default function Accounts() {
       }
       return stringValue;
     };
-    
+
     const csvContent = [
       headers.map(escapeCSV).join(','),
       ...currentBookings.map((a, index) => [
         index + 1,
-        a.company,
-        a.paymentDate,
+        a.companyName,
+        formatDate(a.paymentDate),
         a.creditLimit,
         a.amountPaid,
-        a.remarks
+        a.remarks || ''
       ].map(escapeCSV).join(','))
     ].join('\n');
 
@@ -164,37 +274,20 @@ export default function Accounts() {
     window.URL.revokeObjectURL(url);
   };
 
-  // Dummy data
-  const accounts = [
-    {
-      id: 1,
-      company: "Direct Client",
-      paymentDate: "2023-07-21",
-      creditLimit: 0,
-      amountPaid: 1800,
-      remarks: "paid",
-    },
-    {
-      id: 2,
-      company: "Globo",
-      paymentDate: "2023-07-21",
-      creditLimit: 10000,
-      amountPaid: 1800,
-      remarks: "paid",
-    },
-    
-  ];
-
-  const filteredaccounts = accounts.filter(a=>{
-    const search=searchQuery.toLowerCase();
-    return(
-      String(a.company).toLowerCase().includes(search)||
-      String(a.paymentDate).toLowerCase().includes(search)||
-      String(a.creditLimit).toLowerCase().includes(search)||
-      String(a.amountPaid).toLowerCase().includes(search)||
-      String(a.remarks).toLowerCase().includes(search)
-    )
-  })
+  const filteredaccounts = useMemo(() => {
+    return accounts.filter(a => {
+      if (!searchQuery || !searchQuery.trim()) return true;
+      const search = searchQuery.trim().toLowerCase();
+      return (
+        String(a.companyName || '').toLowerCase().includes(search) ||
+        String(a.paymentDate || '').toLowerCase().includes(search) ||
+        String(a.creditLimit || '').toLowerCase().includes(search) ||
+        String(a.amountPaid || '').toLowerCase().includes(search) ||
+        String(a.paymentMode || '').toLowerCase().includes(search) ||
+        String(a.remarks || '').toLowerCase().includes(search)
+      );
+    });
+  }, [accounts, searchQuery]);
 
   const totalPages = Math.ceil(filteredaccounts.length/itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -214,32 +307,194 @@ export default function Accounts() {
 
             {/* Filters Section */}
             <div className="p-4 bg-light border-bottom">
+              <h6 className="fw-bold text-primary mb-3">Booking Details</h6>
+              <Row className="align-items-end g-4 mb-4">
+
+                {/* Row 1 — Service / Booking / Cancellation Deadline dates */}
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Service Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempFilters.serviceDateFrom}
+                        onChange={(e) => updateFilter("serviceDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempFilters.serviceDateTo}
+                        onChange={(e) => updateFilter("serviceDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Booking Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempFilters.bookingDateFrom}
+                        onChange={(e) => updateFilter("bookingDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempFilters.bookingDateTo}
+                        onChange={(e) => updateFilter("bookingDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Cancellation Deadline Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempFilters.deadlineDateFrom}
+                        onChange={(e) => updateFilter("deadlineDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempFilters.deadlineDateTo}
+                        onChange={(e) => updateFilter("deadlineDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+
+                {/* Row 2 — Reconfirm / Cancel dates */}
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Reconfirm Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempFilters.reconfirmDateFrom}
+                        onChange={(e) => updateFilter("reconfirmDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempFilters.reconfirmDateTo}
+                        onChange={(e) => updateFilter("reconfirmDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4}>
+                  <Form.Group className="mb-0">
+                    <Form.Label className="small mb-2">Cancel Date</Form.Label>
+                    <div className="d-flex gap-2">
+                      <Form.Control type="date" size="sm" title="From"
+                        value={tempFilters.cancelDateFrom}
+                        onChange={(e) => updateFilter("cancelDateFrom", e.target.value)} />
+                      <Form.Control type="date" size="sm" title="To"
+                        value={tempFilters.cancelDateTo}
+                        onChange={(e) => updateFilter("cancelDateTo", e.target.value)} />
+                    </div>
+                  </Form.Group>
+                </Col>
+                <Col md={4} />
+
+                {/* Row 3 — reference / guest text filters */}
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Booking Reference"
+                    value={tempFilters.bookingReference}
+                    onChange={(e) => updateFilter("bookingReference", e.target.value)} />
+                </Col>
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Supplier Reference No."
+                    value={tempFilters.supplierReference}
+                    onChange={(e) => updateFilter("supplierReference", e.target.value)} />
+                </Col>
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Guest Name"
+                    value={tempFilters.guestName}
+                    onChange={(e) => updateFilter("guestName", e.target.value)} />
+                </Col>
+
+                {/* Row 4 — service / city / branch */}
+                <Col md={4}>
+                  <Form.Control size="sm" placeholder="Service Name"
+                    value={tempFilters.serviceName}
+                    onChange={(e) => updateFilter("serviceName", e.target.value)} />
+                </Col>
+                <Col md={4}>
+                  <DestinationCity
+                    value={tempFilters.city}
+                    onChange={(cityName) => updateFilter("city", cityName)}
+                  />
+                </Col>
+                <Col md={4}>
+                  <Form.Select size="sm"
+                    value={tempFilters.branch}
+                    onChange={(e) => updateFilter("branch", e.target.value)}>
+                    <option value="">Select Branch</option>
+                    {branchOptions.map((branch) => (
+                      <option key={branch} value={branch}>{branch}</option>
+                    ))}
+                  </Form.Select>
+                </Col>
+
+                {/* Row 5 — status / supplier / service type */}
+                <Col md={4}>
+                  <Form.Select size="sm"
+                    value={tempFilters.status}
+                    onChange={(e) => updateFilter("status", e.target.value)}>
+                    <option value="">ALL</option>
+                    <option value="REQUESTED">Requested</option>
+                    <option value="CONFIRMED">Confirmed</option>
+                    <option value="RECONFIRMED">ReConfirmed</option>
+                    <option value="SOLD_OUT">Sold Out</option>
+                    <option value="CANCELLED">Cancelled</option>
+                  </Form.Select>
+                </Col>
+                <Col md={4}>
+                  <Supplier
+                    value={tempFilters.supplierId}
+                    onChange={(id) => updateFilter("supplierId", String(id))}
+                  />
+                </Col>
+                <Col md={4}>
+                  <Form.Select size="sm"
+                    value={tempFilters.bookingType}
+                    onChange={(e) => updateFilter("bookingType", e.target.value)}>
+                    <option value="">All Services</option>
+                    <option value="NORMAL">Normal</option>
+                    <option value="LAST_MINUTE">Last Minute</option>
+                  </Form.Select>
+                </Col>
+              </Row>
+
+              <h6 className="fw-bold text-primary mb-3">Payment Details</h6>
               <Row className="align-items-end g-4">
                 <Col md={3}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">From Date</Form.Label>
-                    <Form.Control type="date" size="sm" />
+                    <Form.Control type="date" size="sm"
+                      value={tempFilters.fromDate}
+                      onChange={(e) => updateFilter("fromDate", e.target.value)} />
                   </Form.Group>
                 </Col>
                 <Col md={3}>
                   <Form.Group className="mb-0">
                     <Form.Label className="small mb-2">To Date</Form.Label>
-                    <Form.Control type="date" size="sm" />
+                    <Form.Control type="date" size="sm"
+                      value={tempFilters.toDate}
+                      onChange={(e) => updateFilter("toDate", e.target.value)} />
                   </Form.Group>
                 </Col>
                 <Col md={3}>
+                  <Agent
+                    value={tempFilters.agentId}
+                    onChange={(id) => updateFilter("agentId", String(id))}
+                  />
+                </Col>
+                <Col md={3}>
                   <Form.Group className="mb-0">
-                    <Form.Label className="small mb-2">Agent</Form.Label>
-                    <Form.Select size="sm">
-                      <option>Select</option>
-                      <option>Direct Client</option>
-                      <option>Globo</option>
+                    <Form.Label className="small mb-2">Payment Mode</Form.Label>
+                    <Form.Select size="sm"
+                      value={tempFilters.paymentMode}
+                      onChange={(e) => updateFilter("paymentMode", e.target.value)}>
+                      <option value="">All Payment Modes</option>
+                      {paymentModeOptions.map((mode) => (
+                        <option key={mode} value={mode}>{mode}</option>
+                      ))}
                     </Form.Select>
                   </Form.Group>
                 </Col>
                 <Col md={3}>
-                  <Button variant="success" className="w-100" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767" }}>
+                  <Button variant="success" className="w-100" size="sm" style={{ backgroundColor: "#676767", borderColor: "#676767" }} onClick={handleSearch}>
                     <i className="fas fa-search me-1"></i>Search
+                  </Button>
+                </Col>
+                <Col md={3}>
+                  <Button variant="outline-secondary" className="w-100" size="sm" onClick={handleReset}>
+                    <i className="fas fa-undo me-1"></i>Reset
                   </Button>
                 </Col>
                 <Col md={12} className="mt-4">
@@ -269,7 +524,7 @@ export default function Accounts() {
               />
             </div>
             </div>
-          
+
             <Card.Body className="p-0 mt-1">
               <Table responsive hover striped className="mb-0 align-middle">
                 <thead>
@@ -285,10 +540,10 @@ export default function Accounts() {
                 <tbody>
                   {currentBookings.length > 0 ? (
                     currentBookings.map((a, index) => (
-                      <tr key={a.id}>
-                        <td>{index + 1}</td>
-                        <td>{a.company}</td>
-                        <td>{a.paymentDate}</td>
+                      <tr key={a.paymentId}>
+                        <td>{startIndex + index + 1}</td>
+                        <td>{a.companyName}</td>
+                        <td>{formatDate(a.paymentDate)}</td>
                         <td>{a.creditLimit}</td>
                         <td>{a.amountPaid}</td>
                         <td>{a.remarks}</td>
@@ -313,7 +568,7 @@ Showing {filteredaccounts . length > 0 ? startIndex + 1 :0} to {Math.min(endInde
                 </div>
                 <div>
                   <Pagination className="mb-0">
-                    <Pagination.Prev onClick={()=>setCurrentPage(prev =>Math.ceil(1,prev-1))}
+                    <Pagination.Prev onClick={()=>setCurrentPage(prev =>Math.max(1,prev-1))}
                     disabled={currentPage ===1} />
 
                     {Array.from({length:totalPages},(_,i)=>i+1).map((pageNum)=>{
@@ -340,7 +595,7 @@ Showing {filteredaccounts . length > 0 ? startIndex + 1 :0} to {Math.min(endInde
                         return null;
                     })}
 
-                  
+
 
                     <Pagination.Next onClick={()=>setCurrentPage(prev => Math.min(totalPages,prev+1))}
                       disabled={currentPage === totalPages||totalPages === 0}/>

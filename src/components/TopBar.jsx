@@ -16,6 +16,7 @@ import {
   Form,
 } from "react-bootstrap";
 import {
+  FaBars,
   FaKey,
   FaUser,
   FaSignOutAlt,
@@ -735,11 +736,48 @@ export default function TopBar() {
   const showQuickActionsOnThisPage =
     currentRole === "agent" && location.pathname !== "/agentDashboard";
 
+  // Sidebar lives in a separate component (Sidebar.jsx) rendered as a
+  // sibling on every page, not a child of TopBar — there's no shared
+  // parent/props to wire this through. Broadcast instead; Sidebar listens
+  // for this event and opens the mobile offcanvas or flips the desktop
+  // collapsed flag depending on the current breakpoint.
+  const handleSidebarToggle = () => {
+    window.dispatchEvent(new Event("sidebarToggleRequest"));
+  };
+
+  // This logo-side toggle only shows the "open" affordance: on desktop it
+  // appears only while the sidebar is collapsed (when the sidebar is open,
+  // its own « button — the previous UI — handles collapsing). On mobile
+  // there is no persistent sidebar, so it stays visible to open the
+  // offcanvas. Sidebar broadcasts sidebarCollapsedChange so we can track
+  // the collapsed flag it owns.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      localStorage.getItem("sidebarCollapsed") === "true",
+  );
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window === "undefined" || window.innerWidth > 991,
+  );
+  useEffect(() => {
+    const onCollapsedChange = (e) =>
+      setSidebarCollapsed(!!e.detail?.collapsed);
+    const onResize = () => setIsDesktop(window.innerWidth > 991);
+    window.addEventListener("sidebarCollapsedChange", onCollapsedChange);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("sidebarCollapsedChange", onCollapsedChange);
+      window.removeEventListener("resize", onResize);
+    };
+  }, []);
+  const showSidebarToggle = !isDesktop || sidebarCollapsed;
+
   return (
     <>
     <Navbar ref={navRef} className="topbar shadow-sm" expand="lg" sticky="top">
       <Container fluid className="px-3">
-       <Navbar.Brand
+       <div className="d-flex align-items-center gap-2">
+         <Navbar.Brand
   href="#"
   onClick={(e) => {
     if (showQuickActionsOnThisPage) {
@@ -748,16 +786,27 @@ export default function TopBar() {
     }
   }}
   aria-expanded={showQuickActionsOnThisPage ? showQuickActions : undefined}
-  className="d-flex align-items-center gap-2"
+  className="d-flex align-items-center gap-2 mb-0"
   style={{
-    marginLeft: window.innerWidth <= 991 ? "40px" : "0px",
     cursor: showQuickActionsOnThisPage ? "pointer" : undefined,
   }}
 >
   <div className="logo-placeholder">GS</div>
   <span className="fw-semibold">Globosoft</span>
 </Navbar.Brand>
-       
+         {showSidebarToggle && (
+           <button
+             type="button"
+             className="sidebar-toggle-btn"
+             onClick={handleSidebarToggle}
+             aria-label="Open sidebar"
+             title="Open sidebar"
+           >
+             <FaBars size={14} />
+           </button>
+         )}
+       </div>
+
         <Nav className="ms-auto d-flex flex-row align-items-center gap-2 gap-md-3 flex-nowrap">
   {/* Cart Button — hidden in the v3 flow (no Redis cart there;
        selection is held in component state on /results) */}

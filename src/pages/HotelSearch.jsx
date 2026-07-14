@@ -404,6 +404,15 @@ export default function HotelSearch({ force24Hour = false } = {}) {
     ? activeRole === "AGENT"
     : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
 
+  // Logged-in agent's name — for agent logins the booking is "done by" the
+  // agent themselves, so the "Booking Done By Employee" picker is hidden and
+  // this name is shown (and sent) instead. Same source the payload's
+  // agentName uses for agent logins. Empty for admin/staff.
+  const loggedInAgentName =
+    localStorage.getItem("UserName") ||
+    sessionStorage.getItem("UserName") ||
+    "";
+
   // When user came here via "Edit -> Book Again" from a booking detail page,
   // parentBookingCode is in the URL (e.g. ?parentBookingCode=GLBIN37). It is
   // threaded through to HotelBookingPage so the new booking is saved as a
@@ -1853,42 +1862,59 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                     </Form.Group>
                   </Col>
 
-                  {/* Booking Done By Employee — OPTIONAL.
-                      Moved here from HotelBookingPage at the user's
-                      request; rides through the payload to the
-                      booking-create endpoint so it persists on the
-                      HotelBooking row. No validation: leaving it blank
-                      is a legitimate choice. */}
-                  <Col lg={4} md={6}>
-                    <Form.Group>
-                      <Form.Label className="fw-semibold text-dark">
-                        Booking Done By Employee{" "}
-                        <span className="text-muted small">(optional)</span>
-                      </Form.Label>
-                      <Select
-                        options={employees.map((e) => ({
-                          value: e.employeeId,
-                          label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
-                        }))}
-                        value={selectedEmployee}
-                        onChange={(option) => setSelectedEmployee(option)}
-                        placeholder="Select employee"
-                        isSearchable
-                        isClearable
-                        className="modern-select"
-                        menuPortalTarget={document.body}
-                        styles={{
-                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                          control: (base) => ({
-                            ...base,
-                            minHeight: "42px",
-                            border: "1px solid #dee2e6",
-                            "&:hover": { borderColor: "#86b7fe" },
-                          }),
-                        }}
-                      />
-                    </Form.Group>
-                  </Col>
+                  {/* Booking Done By — for AGENT logins the booking is done
+                      by the logged-in agent, so the staff-employee picker is
+                      hidden and the agent's own name is shown (read-only) and
+                      carried on the payload. Admin/staff keep the optional
+                      employee dropdown exactly as before. */}
+                  {isAgentRole ? (
+                    <Col lg={4} md={6}>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold text-dark">
+                          Booking Done By
+                        </Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={loggedInAgentName || "—"}
+                          readOnly
+                          disabled
+                          className="form-control-modern"
+                          style={{ height: "42px" }}
+                        />
+                      </Form.Group>
+                    </Col>
+                  ) : (
+                    <Col lg={4} md={6}>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold text-dark">
+                          Booking Done By Employee{" "}
+                          <span className="text-muted small">(optional)</span>
+                        </Form.Label>
+                        <Select
+                          options={employees.map((e) => ({
+                            value: e.employeeId,
+                            label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
+                          }))}
+                          value={selectedEmployee}
+                          onChange={(option) => setSelectedEmployee(option)}
+                          placeholder="Select employee"
+                          isSearchable
+                          isClearable
+                          className="modern-select"
+                          menuPortalTarget={document.body}
+                          styles={{
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                            control: (base) => ({
+                              ...base,
+                              minHeight: "42px",
+                              border: "1px solid #dee2e6",
+                              "&:hover": { borderColor: "#86b7fe" },
+                            }),
+                          }}
+                        />
+                      </Form.Group>
+                    </Col>
+                  )}
 
                   {/* 4. Check-In */}
                   <Col lg={3} md={6}>
@@ -2847,8 +2873,14 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                               selectedDestination?.label || "",
                                             nationalityLabel:
                                               selectedNationality?.label || "",
-                                            employeeName:
-                                              selectedEmployee?.label || null,
+                                            // Agent logins: booking is done by
+                                            // the logged-in agent, so carry the
+                                            // agent's own name (no staff
+                                            // employee is picked). Admin/staff:
+                                            // the selected employee's label.
+                                            employeeName: isAgentRole
+                                              ? agentName || null
+                                              : selectedEmployee?.label || null,
                                             nightsCount: nights,
                                             apiId,
                                             rooms: roomsPayload,
@@ -2860,9 +2892,12 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                             // Flows through RoomList ->
                                             // HotelBookingPage unchanged
                                             // (those layers spread payload
-                                            // through transparently).
-                                            employeeId:
-                                              selectedEmployee?.value || null,
+                                            // through transparently). Agent
+                                            // logins never pick a staff
+                                            // employee, so this stays null.
+                                            employeeId: isAgentRole
+                                              ? null
+                                              : selectedEmployee?.value || null,
                                             // 24 Hour Check-In flags — only
                                             // populated when the user opted
                                             // in. RoomList / HotelBookingPage

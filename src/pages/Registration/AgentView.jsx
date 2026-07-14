@@ -1236,6 +1236,7 @@ const AgentView = () => {
                 <InfoRow label="Status" value={agent.status} />
                 <InfoRow label="Agent ID" value={agent.id} />
                 <InfoRow label="Timezone" value={agent.timezone} />
+                <InfoRow label="VAT Number" value={agent.vatNumber} />
               </Col>
             </Row>
           </Section>
@@ -1903,7 +1904,7 @@ const AgentView = () => {
                     </Col>
                     <Col md={6}>
                       <Form.Group className="mb-3">
-                        <Form.Label>Payment Mode</Form.Label>
+                        <Form.Label>Paid Through</Form.Label>
                         <Form.Select
                           name="paymentMode"
                           value={creditLimitFormData.paymentMode}
@@ -1993,7 +1994,7 @@ const AgentView = () => {
                       </Col>
                       <Col md={6}>
                         <Form.Group className="mb-3">
-                          <Form.Label>Payment Mode</Form.Label>
+                          <Form.Label>Paid Through</Form.Label>
                           <Form.Select
                             name="paymentMode"
                             value={creditLimitFormData.paymentMode}
