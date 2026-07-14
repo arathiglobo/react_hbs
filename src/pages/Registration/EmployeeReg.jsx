@@ -1211,7 +1211,7 @@ const EmployeeReg = () => {
                     <Row>
                       <Col md={4}>
                         <Form.Group className="mb-3">
-                          <Form.Label>Employee Code</Form.Label>
+                          <Form.Label>Employee Code <span className="text-danger">*</span></Form.Label>
                           <Form.Control
                             value={formData.employeeCode}
                             placeholder="Enter Employee name"
@@ -1250,7 +1250,7 @@ const EmployeeReg = () => {
                       </Col>
                        <Col md={4}>
                         <Form.Group className="mb-3">
-                          <Form.Label>First Name</Form.Label>
+                          <Form.Label>First Name <span className="text-danger">*</span></Form.Label>
                           <Form.Control
                             value={formData.firstName}
                             placeholder="Enter first name"
@@ -1286,7 +1286,7 @@ const EmployeeReg = () => {
                       </Col>
                       <Col md={4}>
                         <Form.Group className="mb-3">
-                          <Form.Label>Last Name</Form.Label>
+                          <Form.Label>Last Name <span className="text-danger">*</span></Form.Label>
                           <Form.Control
                             value={formData.lastName}
                             placeholder="Enter last name"
@@ -1324,7 +1324,7 @@ const EmployeeReg = () => {
                     <Row>
                       <Col md={4}>
                         <Form.Group className="mb-3">
-                          <Form.Label>Designation</Form.Label>
+                          <Form.Label>Designation <span className="text-danger">*</span></Form.Label>
                           <Form.Control
                             value={formData.designation}
                             placeholder="Enter designation"
@@ -1417,7 +1417,7 @@ const EmployeeReg = () => {
                         <Row>
                           <Col md={6}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Employee Email</Form.Label>
+                              <Form.Label>Employee Email <span className="text-danger">*</span></Form.Label>
                               <Form.Control
                                 value={formData.email}
                                 placeholder="Enter email"
@@ -1475,7 +1475,7 @@ const EmployeeReg = () => {
                         <Row>
                           <Col md={6}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Mobile Number</Form.Label>
+                              <Form.Label>Mobile Number <span className="text-danger">*</span></Form.Label>
                               <Form.Control
                                 value={formData.mobileNumber}
                                 placeholder="Enter mobile number"
@@ -1553,7 +1553,7 @@ const EmployeeReg = () => {
 
                         <Col md={12}>
                           <Form.Group className="mb-3">
-                            <Form.Label>Address</Form.Label>
+                            <Form.Label>Address <span className="text-danger">*</span></Form.Label>
                             <Form.Control
                               as="textarea"
                               rows={3}

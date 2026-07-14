@@ -124,8 +124,8 @@ const HotelList = () => {
   };
 
   // Trigger delete confirmation modal
-  const confirmDelete = (hotelId) => {
-    setHotelToDelete(hotelId);
+  const confirmDelete = (hotel) => {
+    setHotelToDelete(hotel);
     setShowDeleteModal(true);
   };
 
@@ -135,7 +135,7 @@ const HotelList = () => {
 
     try {
       setIsDeleting(true);
-      const response = await axiosInstance.delete(`/api/hotels/${hotelToDelete}`);
+      const response = await axiosInstance.delete(`/api/hotels/${hotelToDelete.id}`);
 
       console.log("Hotel deleted:", response.data);
 
@@ -144,7 +144,7 @@ const HotelList = () => {
 
       // ✅ Remove deleted hotel from UI instantly
       setFilteredHotels((prevHotels) =>
-        prevHotels.filter((hotel) => hotel.id !== hotelToDelete),
+        prevHotels.filter((hotel) => hotel.id !== hotelToDelete.id),
       );
 
       // ✅ Optional: update totalElements (if pagination used)
@@ -153,7 +153,11 @@ const HotelList = () => {
       setHotelToDelete(null);
     } catch (error) {
       console.error("Error while deleting hotel:", error);
-      toast.error("Failed to delete hotel");
+      const backendMsg =
+        error?.response?.data && typeof error.response.data === "string"
+          ? error.response.data
+          : error?.response?.data?.message;
+      toast.error(backendMsg || "Failed to delete hotel");
     } finally {
       setIsDeleting(false);
     }
@@ -365,7 +369,7 @@ const HotelList = () => {
                                   size="sm"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    confirmDelete(hotel.id);
+                                    confirmDelete(hotel);
                                   }}
                                   className="flex-fill rounded-pill"
                                 >
@@ -423,13 +427,23 @@ const HotelList = () => {
         onHide={() => !isDeleting && setShowDeleteModal(false)}
         centered
       >
-        <Modal.Header closeButton className="border-0">
-          <Modal.Title className="text-danger h5 d-flex align-items-center">
+        <Modal.Header closeButton closeVariant="white" className="border-0">
+          <Modal.Title className="text-white h5 fw-bold d-flex align-items-center">
             <FaExclamationTriangle className="me-2" /> Confirm Deletion
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body className="py-0">
-          <p className="mb-0">Are u sure u want delete this hotel</p>
+        <Modal.Body className="pt-2">
+          <p className="mb-2">
+            Are you sure you want to delete
+            {hotelToDelete?.name ? (
+              <> the hotel <strong>"{hotelToDelete.name}"</strong>?</>
+            ) : (
+              <> this hotel?</>
+            )}
+          </p>
+          <p className="text-muted small mb-0">
+            This action cannot be undone. All associated data will be permanently removed.
+          </p>
         </Modal.Body>
         <Modal.Footer className="border-0">
           <Button
@@ -452,7 +466,10 @@ const HotelList = () => {
                 Deleting...
               </>
             ) : (
-              "Yes"
+              <>
+                <FaTrash className="me-2" />
+                Delete
+              </>
             )}
           </Button>
         </Modal.Footer>
