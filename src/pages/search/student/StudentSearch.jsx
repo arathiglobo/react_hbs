@@ -514,6 +514,7 @@ export default function StudentSearch() {
             value: city.id ?? city.provinceId,
             label: `${city.stateName ?? city.name ?? ""}, ${city.country ?? ""}`,
             countryId: city.countryId,
+            code: city.countryCode,
           })),
         );
       } catch (e) {
@@ -875,6 +876,19 @@ export default function StudentSearch() {
                         {errors.destination}
                       </div>
                     )}
+                    {/* Surface UAE-resident status when the selected
+                        destination city belongs to the UAE so the operator
+                        can apply the resident rate. Matched on the city's
+                        country code "AE" (from master_country) so a label
+                        change can't break the rule. */}
+                    {selectedDestination?.code === "AE" && (
+                      <div
+                        className="mt-1 small fw-semibold"
+                        style={{ color: "#0f7a3a" }}
+                      >
+                        Select "United Arab Emirates" if guest resident of UAE
+                      </div>
+                    )}
                   </Form.Group>
                 </Col>
 
@@ -906,18 +920,6 @@ export default function StudentSearch() {
                     {errors.nationality && (
                       <div className="text-danger small mt-1">
                         {errors.nationality}
-                      </div>
-                    )}
-                    {/* Tagging UAE nationals as resident — surfaces to the
-                        operator so they know to apply the resident rate /
-                        inventory when picking rooms. Matched by country code
-                        "AE". Mirrors /new-booking/hotel. */}
-                    {selectedNationality?.code === "AE" && (
-                      <div
-                        className="mt-1 small fw-semibold"
-                        style={{ color: "#0f7a3a" }}
-                      >
-                        Select "United Arab Emirates" if guest is UAE resident
                       </div>
                     )}
                   </Form.Group>
