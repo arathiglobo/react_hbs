@@ -527,9 +527,10 @@ export default function HotelBookingHistory() {
                       onClick={fetchHistory}
                       disabled={isLoading}
                       className="w-50 shadow-sm"
+                      style={{ backgroundColor: "#676767", borderColor: "#676767" }}
                     >
-                      <i className="fas fa-sync me-1"></i>
-                      {isLoading ? "..." : "Refresh"}
+                      <i className="fas fa-search me-1"></i>
+                      {isLoading ? "..." : "Search"}
                     </Button>
                     <Button
                       variant="outline-secondary"
