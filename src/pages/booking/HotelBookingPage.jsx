@@ -685,8 +685,11 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
   //     this URL with a stale flag can't replay an old payload.
   //   • The credit-check step in confirmBooking() is intentionally skipped
   //     — the operator has already paid via the gateway. Everything else
-  //     mirrors the existing success path (same endpoint, same status
-  //     checks, same toast).
+  //     mirrors the existing success path (same endpoint, same toast), plus
+  //     "RECONFIRMED" in the accepted status list since that's what this
+  //     path's bookings (Non-Refundable / Voucher-Now, insufficient credit)
+  //     actually come back as — without it, the redirect to the Booking List
+  //     below never ran even though the booking was created successfully.
   useEffect(() => {
     if (!location.state?.resumeCreate) return;
     const stored = sessionStorage.getItem("hbpPendingCreatePayload");
@@ -715,7 +718,9 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
           bookingResponse &&
           bookingResponse.status &&
           (bookingResponse.status.toUpperCase() === "CONFIRMED" ||
-            bookingResponse.status.toUpperCase() === "On Request") &&
+            bookingResponse.status.toUpperCase() === "RECONFIRMED" ||
+            bookingResponse.status.toUpperCase() === "NOT CONFIRMED" ||
+            bookingResponse.status.toUpperCase() === "ON REQUEST") &&
           bookingResponse.bookingId != 0
         ) {
           toast.success(

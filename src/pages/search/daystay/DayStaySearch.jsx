@@ -838,10 +838,10 @@ export default function DayStaySearch() {
                           change can't break the rule. */}
                       {selectedDestination?.code === "AE" && (
                         <div
-                          className="mt-1 small fw-semibold"
-                          style={{ color: "#0f7a3a" }}
+                          className="mt-1 small"
+                          style={{ color: "#0f7a3a", lineHeight: 1.25 }}
                         >
-                          Select "United Arab Emirates" if guest resident of UAE
+                          For UAE resident holders, please mention the nationality as United Arab Emirates regardless of the actual nationality.
                         </div>
                       )}
                     </Form.Group>

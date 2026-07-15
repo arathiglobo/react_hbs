@@ -468,6 +468,38 @@ export const SchefferDriverSearch = () => {
                         {validationErrors.city && (
                           <div className="text-danger small mt-1">{validationErrors.city}</div>
                         )}
+                        {/* Surface UAE-resident status when the picked city
+                            is a UAE emirate / city. The rental lookup DTO
+                            only carries {id, name} (no country code), so we
+                            match on the well-known emirate names — the set
+                            of cities returned by the endpoint is small and
+                            master-controlled, so a name check is safe here. */}
+                        {(() => {
+                          const name = (city?.label || "")
+                            .toString()
+                            .trim()
+                            .toLowerCase()
+                            .replace(/[-_]/g, " ")
+                            .replace(/\s+/g, " ");
+                          const isUAE = [
+                            "dubai",
+                            "abu dhabi",
+                            "sharjah",
+                            "ajman",
+                            "fujairah",
+                            "ras al khaimah",
+                            "umm al quwain",
+                            "al ain",
+                          ].some((c) => name.includes(c));
+                          return isUAE ? (
+                            <div
+                              className="mt-1 small"
+                              style={{ color: "#0f7a3a", lineHeight: 1.25 }}
+                            >
+                              For UAE resident holders, please mention the nationality as United Arab Emirates regardless of the actual nationality.
+                            </div>
+                          ) : null;
+                        })()}
                       </Col>
 
                       <Col md={3}>
@@ -672,37 +704,6 @@ export const SchefferDriverSearch = () => {
                         {validationErrors.nationality && (
                           <div className="text-danger small mt-1">{validationErrors.nationality}</div>
                         )}
-                        {/* Surface UAE-resident status to the operator
-                            so they can apply the resident rate. Matches
-                            both the ISO-2 ("AE"), ISO-3 ("ARE") and
-                            common shorthand ("UAE") country codes, and
-                            falls back to a label-text check so the note
-                            still fires if the backend leaves the code
-                            blank. */}
-                        {(() => {
-                          const code = (nationality?.code || "")
-                            .toString()
-                            .trim()
-                            .toUpperCase();
-                          const label = (nationality?.label || "")
-                            .toString()
-                            .trim()
-                            .toLowerCase();
-                          const isUAE =
-                            code === "AE" ||
-                            code === "ARE" ||
-                            code === "UAE" ||
-                            label.includes("united arab emirates") ||
-                            label === "uae";
-                          return isUAE ? (
-                            <div
-                              className="mt-1 small fw-semibold"
-                              style={{ color: "#0f7a3a" }}
-                            >
-                              Select "United Arab Emirates" if guest resident of UAE
-                            </div>
-                          ) : null;
-                        })()}
                       </Col>
                       {!isAgentRole && (
                         <Col md={4}>

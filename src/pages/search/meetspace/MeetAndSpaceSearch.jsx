@@ -143,6 +143,7 @@ export default function MeetAndSpaceSearch() {
               value: c.id,
               label: `${c.stateName}${c.country ? `, ${c.country}` : ""}`,
               countryId: c.countryId,
+              code: c.countryCode,
             }))
           );
         } catch {
@@ -163,6 +164,7 @@ export default function MeetAndSpaceSearch() {
             value: c.id,
             label: `${c.stateName}${c.country ? `, ${c.country}` : ""}`,
             countryId: c.countryId,
+            code: c.countryCode,
           }))
         );
       } catch {
@@ -229,6 +231,7 @@ export default function MeetAndSpaceSearch() {
             value: c.id,
             label: `${c.stateName}${c.country ? `, ${c.country}` : ""}`,
             countryId: c.countryId,
+            code: c.countryCode,
           }))
         );
       })
@@ -522,6 +525,19 @@ export default function MeetAndSpaceSearch() {
                       {errors.destination && (
                         <div className="text-danger small mt-1">
                           {errors.destination}
+                        </div>
+                      )}
+                      {/* Surface UAE-resident status when the selected
+                          destination city belongs to the UAE so the operator
+                          can apply the resident rate. Matched on the city's
+                          country code "AE" (from master_country) so a label
+                          change can't break the rule. */}
+                      {selectedDestination?.code === "AE" && (
+                        <div
+                          className="mt-1 small"
+                          style={{ color: "#0f7a3a", lineHeight: 1.25 }}
+                        >
+                          For UAE resident holders, please mention the nationality as United Arab Emirates regardless of the actual nationality.
                         </div>
                       )}
                     </Form.Group>
