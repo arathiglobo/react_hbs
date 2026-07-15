@@ -556,6 +556,25 @@ const RoomList = ({ force24Hour = false } = {}) => {
           0,
         );
 
+      // Overall booking type must consider EVERY selected room, not just
+      // the first — priority: On Request > Non-Refundable > Flexible.
+      const anyRoomOnRequest = selectedRooms.some(
+        (r) => r.selectedRate?.roomStatus === "On Request",
+      );
+      const anyRoomNonRefundable = selectedRooms.some(
+        (r) =>
+          r.selectedRate?.nonRefundable === true ||
+          r.selectedRate?.nonRefundable === "true",
+      );
+      // When no room is On Request, fall back to the primary room's own
+      // status string rather than a hardcoded value — preserves prior
+      // behavior exactly for the single-room case and avoids assuming
+      // "Available" is the only other possible status value.
+      const overallRoomStatus = anyRoomOnRequest
+        ? "On Request"
+        : primary.roomStatus;
+      const overallNonRefundable = anyRoomNonRefundable;
+
       // Multi-room credit gate. Each slot is ONE room, so sum(totalRate)
       // across slots is the full payable amount — matches what we send
       // as `combinedSelectedRate.rate` below. On insufficient credit we
@@ -582,12 +601,12 @@ const RoomList = ({ force24Hour = false } = {}) => {
           .filter(Boolean)
           .join(" + "),
         contractLabel: primary.contractLabel,
-        nonRefundable: primary.nonRefundable,
+        nonRefundable: overallNonRefundable,
         rate: sum("totalRate"),
         rateWithoutMarkup: sum("totalRateWithoutMarkup"),
         currency: "AED",
         cancellationPolicy: hotelsdetail.cancellationPolicies,
-        roomStatus: primary.roomStatus,
+        roomStatus: overallRoomStatus,
         // IMPORTANT: each rate's `roomRateBasedOnRoomCount` is already
         // (totalRate × numberOfRooms) for the WHOLE search (e.g. 214 × 2
         // = 428 when the user searched for 2 rooms). Summing that across
