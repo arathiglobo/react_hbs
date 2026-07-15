@@ -1,22 +1,32 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
-import { Row, Col, Spinner, Form } from "react-bootstrap";
+import { Row, Col, Spinner, Form, Modal, Button } from "react-bootstrap";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
-import { FaChevronLeft, FaCreditCard } from "react-icons/fa";
+import {
+  FaChevronLeft,
+  FaCreditCard,
+  FaCheckCircle,
+  FaShieldAlt,
+  FaRegClock,
+  FaTimesCircle,
+  FaFileContract,
+} from "react-icons/fa";
 
-import BasicDetails from "./tabs/BasicDetails";
 import HotelsTab from "./tabs/HotelsTab";
 import CabsTab from "./tabs/CabsTab";
 import ActivitiesTab from "./tabs/ActivitiesTab";
 import PaxInformation from "./tabs/PaxInformation";
+// Basic Details step removed — package category is now resolved from the
+// occupancy chosen on the Package Search page, and Pax passport moved to the
+// Pax Info step. BasicDetails.jsx is intentionally no longer imported.
 
 import "../../../styles/PackageBooking_Stepper.css";
 
-const STEPS = ["Basic Details", "Hotels", "Pax Info"];
+const STEPS = ["Package Details", "Pax Info"];
 
 // Mode of payment options — rendered in the right sidebar on the Pax Info
 // step (moved from the Hotels step). Stored on bookingData.programme.modeOfPayment.
@@ -61,6 +71,24 @@ const PackageBooking = () => {
     stateData.searchRate != null
       ? stateData.searchRate
       : urlParams.get("searchRate");
+  // Rooms & Guests selection carried over from the Package Search page
+  // (?adultCount=&childCount=&childAges=). Seeds the initial pax counts so
+  // the booking defaults to what was chosen on the search screen; the user
+  // can still adjust them, and picking a package category still overrides
+  // them (see BasicDetails.jsx).
+  const searchAdultCount =
+    stateData.adultCount ?? urlParams.get("adultCount");
+  const searchChildCount =
+    stateData.childCount ?? urlParams.get("childCount");
+  const searchChildAges =
+    stateData.childAges ?? urlParams.get("childAges");
+  // Category resolved by the search page for the chosen occupancy — replaces
+  // the removed Basic Details category picker. Drives the Hotels fetch and the
+  // Total Price sharing multiplier.
+  const searchPackageCategory =
+    stateData.packageCategory ?? urlParams.get("packageCategory");
+  const searchPackageCategoryName =
+    stateData.packageCategoryName ?? urlParams.get("packageCategoryName");
   const { mode, bookingId } = stateData;
   const isEditMode = mode === "edit" && bookingId;
 
@@ -83,12 +111,13 @@ const PackageBooking = () => {
     searchParams: {
       packageId: id,
       travelDate: new Date().toISOString().split("T")[0],
-      adultCount: 1,
-      childCount: 0,
+      adultCount: Number(searchAdultCount) > 0 ? Number(searchAdultCount) : 1,
+      childCount: Number(searchChildCount) >= 0 ? Number(searchChildCount) : 0,
       infantCount: 0,
-      childAge: "",
+      childAge: searchChildAges || "",
       infantAge: "",
-      packageCategory: "",
+      packageCategory: searchPackageCategory || "",
+      packageCategoryName: searchPackageCategoryName || "",
       paxPassport: null,
       nativeCountry: "",
       agentId: agentId || "",
@@ -114,6 +143,9 @@ const PackageBooking = () => {
       checkInDate: "",
       flightDetails: "",
       modeOfPayment: "",
+      // "Book & Voucher" (Book and Pay Now) | "Book Now & Voucher later"
+      // (Hold Room and Pay Later). Empty = no choice yet (required on confirm).
+      bookingConfirmation: "",
       termsAccepted: false,
     },
   });
@@ -142,6 +174,62 @@ const PackageBooking = () => {
     };
     if (id) fetchPackageDetails();
   }, [id]);
+
+  // Full package view — supplies the cancellation policy + Terms & Conditions
+  // shown in the "Cancellation Policies & Terms & Conditions" popup opened from
+  // the Total Price card. Same endpoint the Package Details step uses.
+  const [packageView, setPackageView] = useState(null);
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/TravelPackage/view/${id}`)
+      .then((res) => {
+        if (!cancelled) setPackageView(res.data || null);
+      })
+      .catch(() => {
+        if (!cancelled) setPackageView(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  // Default the Mode of payment based on the agent's available credit:
+  //  • has credit limit available → "Agent credit limit" (CREDIT)
+  //  • no credit available (0 / unavailable) → "Card payment" (CARD)
+  // Only seeds the default when nothing is chosen yet, so it never overrides a
+  // user's manual pick. Skipped in edit mode (the saved value is loaded).
+  useEffect(() => {
+    if (isEditMode || !agentId) return;
+    let cancelled = false;
+    const applyDefault = (mode) => {
+      if (cancelled) return;
+      setBookingData((prev) =>
+        prev.programme.modeOfPayment
+          ? prev
+          : { ...prev, programme: { ...prev.programme, modeOfPayment: mode } },
+      );
+    };
+    axiosInstance
+      .get(`/api/agent-credit-limit/agent/${agentId}`)
+      .then((res) => {
+        const avail =
+          res?.data?.effectiveAvailableCreditLimit ??
+          res?.data?.availableCreditLimit ??
+          null;
+        const hasCredit = avail != null && Number(avail) > 0;
+        applyDefault(hasCredit ? "CREDIT" : "CARD");
+      })
+      .catch(() => {
+        // Credit info unavailable → treat as no credit limit → card payment.
+        applyDefault("CARD");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId, isEditMode]);
 
   // Edit mode — fetch the existing booking and hydrate state so the user
   // can amend any tab and submit via PUT. Runs once on mount.
@@ -208,6 +296,7 @@ const PackageBooking = () => {
             checkInDate: b.checkInDate || "",
             flightDetails: b.flightDetails || "",
             modeOfPayment: b.modeOfPayment || "",
+            bookingConfirmation: b.bookingConfirmation || "",
             termsAccepted: !!b.termsAccepted,
           },
         }));
@@ -243,9 +332,6 @@ const PackageBooking = () => {
     setTotalPrice(effectiveBase * categoryMultiplier + cabPrice + activityPrice);
   }, [bookingData.selections, bookingData.searchParams.packageCategoryName, packageData, searchRate]);
 
-  const updateSearchParams = (params) =>
-    setBookingData((prev) => ({ ...prev, searchParams: { ...prev.searchParams, ...params } }));
-
   const updateSelections = (selections) =>
     setBookingData((prev) => ({ ...prev, selections: { ...prev.selections, ...selections } }));
 
@@ -265,24 +351,67 @@ const PackageBooking = () => {
     }
   };
 
-  const progressWidth = `${(currentStep - 1) * 50}%`;
+  // Two steps now (Basic Details removed): the track fills fully at step 2.
+  const progressWidth = `${(currentStep - 1) * 100}%`;
+
+  // Cancellation policy + Terms & Conditions for the popup. Same derivation as
+  // the Package Details step's cancellation card, kept in sync.
+  const termsList = Array.isArray(packageView?.termsAndConditions)
+    ? packageView.termsAndConditions
+    : [];
+  const cancellationParts = (() => {
+    const free = packageView?.cancellationDaysFree;
+    const withCharge = packageView?.cancellationDaysWithCharge;
+    const type = packageView?.cancellationChargeType;
+    const value = packageView?.cancellationChargeValue;
+    if (free == null && withCharge == null && !value) {
+      return [
+        {
+          tone: "muted",
+          text: "Cancellation policy will be confirmed by the supplier.",
+        },
+      ];
+    }
+    const parts = [];
+    if (free != null) {
+      parts.push({
+        tone: "ok",
+        text: `Free cancellation up to ${free} day${free === 1 ? "" : "s"} before travel.`,
+      });
+    }
+    if (withCharge != null) {
+      let chargeText = "";
+      if (value) {
+        chargeText =
+          type && type.toLowerCase() === "percent" ? `${value}%` : value;
+      }
+      parts.push({
+        tone: "warn",
+        text: `Within ${withCharge} day${withCharge === 1 ? "" : "s"} of travel${
+          chargeText
+            ? `, ${chargeText} cancellation charge applies`
+            : ", cancellation charge applies"
+        }.`,
+      });
+    }
+    return parts;
+  })();
 
   const renderStep = () => {
     switch (currentStep) {
-      case 1: return <BasicDetails data={bookingData.searchParams} updateData={updateSearchParams} onNext={() => setCurrentStep(2)} />;
-      case 2: return <HotelsTab
+      case 1: return <HotelsTab
                         searchParams={bookingData.searchParams}
                         bookingData={bookingData.selections}
                         programme={bookingData.programme}
                         updateData={updateSelections}
                         updateProgramme={updateProgramme}
-                        onPrev={() => setCurrentStep(1)}
-                        onNext={() => setCurrentStep(3)} />;
-      case 3: return <PaxInformation
+                        onPrev={() => navigate("/new-booking/package-search")}
+                        onNext={() => setCurrentStep(2)} />;
+      case 2: return <PaxInformation
                         searchParams={bookingData.searchParams}
                         bookingData={bookingData}
                         updateData={setBookingData}
-                        onPrev={() => setCurrentStep(2)}
+                        onPrev={() => setCurrentStep(1)}
                         onFinish={handleFinish}
                         packageData={packageData}
                         totalPrice={totalPrice}
@@ -308,7 +437,15 @@ const PackageBooking = () => {
   }
 
   return (
-    <div className="min-vh-100 d-flex flex-column" style={{ background: "#f0f4f8" }}>
+    <div
+      className="min-vh-100 d-flex flex-column"
+      // Soft rose hero band fading into the neutral page background —
+      // mirrors the Package Search page's branded feel.
+      style={{
+        background:
+          "linear-gradient(180deg, #FFE9F0 0%, #FDF3F6 160px, #F0F4F8 420px)",
+      }}
+    >
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
@@ -375,6 +512,9 @@ const PackageBooking = () => {
 
             {/* ── Price sidebar ── */}
             <Col lg={3}>
+              {/* One sticky wrapper so Total Price + Mode of payment move and
+                  pin together when scrolling, just below the header. */}
+              <div className="sidebar-sticky">
               <div className="price-sidebar-card">
                 <div className="price-sidebar-label">Total Price</div>
                 <div className="price-sidebar-amount">
@@ -424,13 +564,23 @@ const PackageBooking = () => {
                 <div style={{ fontSize: "0.72rem", color: "#94a3b8", textAlign: "center" }}>
                   Step {currentStep} of {STEPS.length} &mdash; {STEPS[currentStep - 1]}
                 </div>
+
+                {/* Cancellation Policies & Terms — opens the policy popup. */}
+                <hr className="price-divider" />
+                <button
+                  type="button"
+                  className="price-policy-link"
+                  onClick={() => setShowPolicyModal(true)}
+                >
+                  <FaShieldAlt className="me-2" />
+                  Cancellation Policies &amp; Terms &amp; Conditions
+                </button>
               </div>
 
-              {/* Mode of payment — only shown on the Pax Info step (3).
-                  Was previously rendered in the Hotels-step footer; moved
-                  here so it sits next to the Total Price the user is about
-                  to commit to. */}
-              {currentStep === 3 && (
+              {/* Mode of payment — only shown on the Pax Info step (now
+                  step 2 after Basic Details was removed). Sits next to the
+                  Total Price the user is about to commit to. */}
+              {currentStep === 2 && (
                 <div className="sidebar-pay-card">
                   <div className="sidebar-pay-title">
                     <FaCreditCard className="me-2" />
@@ -454,6 +604,50 @@ const PackageBooking = () => {
                   </Form.Select>
                 </div>
               )}
+
+              {/* Mandatory booking-continuation choice — mirrors the hotel
+                  booking page's "Book and Pay Now / Hold Room and Pay Later"
+                  option. Gated by the Confirm booking button in PaxInformation. */}
+              {currentStep === 2 && (
+                <div className="sidebar-pay-card">
+                  <div className="sidebar-pay-title">
+                    <FaCheckCircle className="me-2" />
+                    Are you sure you want to continue with the booking?
+                    <span className="sidebar-pay-required">required</span>
+                  </div>
+                  <div className="d-flex flex-column gap-2 mt-1">
+                    <Form.Check
+                      type="radio"
+                      id="pkg-book-pay-now"
+                      name="pkgBookingConfirmation"
+                      label="Book and Pay Now"
+                      value="Book & Voucher"
+                      checked={
+                        bookingData.programme.bookingConfirmation ===
+                        "Book & Voucher"
+                      }
+                      onChange={(e) =>
+                        updateProgramme({ bookingConfirmation: e.target.value })
+                      }
+                    />
+                    <Form.Check
+                      type="radio"
+                      id="pkg-hold-pay-later"
+                      name="pkgBookingConfirmation"
+                      label="Hold Package and Pay Later"
+                      value="Book Now & Voucher later"
+                      checked={
+                        bookingData.programme.bookingConfirmation ===
+                        "Book Now & Voucher later"
+                      }
+                      onChange={(e) =>
+                        updateProgramme({ bookingConfirmation: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
+              )}
+              </div>
 
               <style>{`
                 .sidebar-pay-card {
@@ -494,11 +688,127 @@ const PackageBooking = () => {
                   border-color: #2563eb !important;
                   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
                 }
+                /* Red "Cancellation Policies & Terms" link under Total Price */
+                .price-policy-link {
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                  gap: 2px;
+                  width: 100%;
+                  border: none;
+                  background: transparent;
+                  color: #EC0B43;
+                  font-weight: 700;
+                  font-size: 0.82rem;
+                  line-height: 1.35;
+                  text-decoration: underline;
+                  text-align: center;
+                  cursor: pointer;
+                  padding: 2px 0;
+                  transition: color 0.15s ease;
+                }
+                .price-policy-link:hover { color: #b3082f; }
               `}</style>
             </Col>
           </Row>
         </main>
       </div>
+
+      {/* ── Cancellation Policies & Terms & Conditions popup ──
+          Opened from the red link under the Total Price card. Shows the same
+          cancellation policy that appears at the bottom of the Package Details
+          step, plus the package's Terms & Conditions. */}
+      <Modal
+        show={showPolicyModal}
+        onHide={() => setShowPolicyModal(false)}
+        centered
+        size="lg"
+        scrollable
+      >
+        <Modal.Header closeButton style={{ background: "#f8fafc" }}>
+          <Modal.Title
+            className="d-flex align-items-center"
+            style={{ fontSize: "1.05rem" }}
+          >
+            <FaShieldAlt className="me-2" style={{ color: "#EC0B43" }} />
+            Cancellation Policies &amp; Terms &amp; Conditions
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="p-4">
+          {/* Cancellation policy */}
+          <h6
+            className="fw-bold d-flex align-items-center mb-2"
+            style={{ color: "#92400e" }}
+          >
+            <FaRegClock className="me-2" /> Cancellation Policy
+          </h6>
+          <div className="mb-2">
+            {cancellationParts.map((p, i) => (
+              <div
+                key={i}
+                className="small mb-2 p-2 rounded"
+                style={{
+                  background:
+                    p.tone === "ok"
+                      ? "rgba(16,185,129,0.12)"
+                      : p.tone === "warn"
+                        ? "rgba(249,115,22,0.14)"
+                        : "rgba(148,163,184,0.15)",
+                  color:
+                    p.tone === "ok"
+                      ? "#065f46"
+                      : p.tone === "warn"
+                        ? "#9a3412"
+                        : "#475569",
+                }}
+              >
+                {p.text}
+              </div>
+            ))}
+            <div
+              className="small mt-2 p-2 rounded d-flex align-items-center"
+              style={{ background: "rgba(239,68,68,0.1)", color: "#b91c1c" }}
+            >
+              <FaShieldAlt className="me-2 flex-shrink-0" />
+              <span>
+                This is a <strong>NON-REFUNDABLE</strong> package within the
+                charge window.
+              </span>
+            </div>
+          </div>
+
+          {/* Terms & Conditions */}
+          <h6
+            className="fw-bold d-flex align-items-center mb-2 mt-4"
+            style={{ color: "#1e293b" }}
+          >
+            <FaFileContract className="me-2 text-danger" /> Terms &amp; Conditions
+          </h6>
+          {termsList.length > 0 ? (
+            <ul className="small mb-0 ps-3">
+              {termsList.map((t) => (
+                <li key={t.otherId} className="mb-2">
+                  {t.description}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="small text-muted fst-italic mb-0">
+              No specific terms were attached to this package. By proceeding you
+              confirm you have read the cancellation window and accept the
+              standard package conditions.
+            </p>
+          )}
+        </Modal.Body>
+        <Modal.Footer style={{ background: "#f1f5f9" }}>
+          <Button
+            variant="outline-secondary"
+            onClick={() => setShowPolicyModal(false)}
+          >
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 };

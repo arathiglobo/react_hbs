@@ -32,13 +32,22 @@ import {
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import {
   FaEye,
-  FaTrash,
   FaFileAlt,
   FaEdit,
   FaEnvelope,
   FaDownload,
   FaExclamationCircle,
   FaExclamationTriangle,
+  FaHistory,
+  FaPlusCircle,
+  FaCheckCircle,
+  FaTimesCircle,
+  FaSyncAlt,
+  FaCalendarAlt,
+  FaClock,
+  FaUserAlt,
+  FaMapMarkerAlt,
+  FaNetworkWired,
 } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
@@ -55,6 +64,51 @@ const BUTTON_STYLE = {
   cursor: "pointer",
   letterSpacing: "0.4px",
   whiteSpace: "nowrap",
+};
+
+// Per-action button colours — mirror the Hotel booking detail view
+// (BookingDetailedView.jsx) so both detail screens share one palette.
+const BTN_PRIMARY = { ...BUTTON_STYLE, backgroundColor: "#2563eb" }; // Add New Item
+const BTN_DANGER = { ...BUTTON_STYLE, backgroundColor: "#dc2626" }; // Cancel
+const BTN_TEAL = { ...BUTTON_STYLE, backgroundColor: "#0d9488" }; // Voucher
+const BTN_INFO = { ...BUTTON_STYLE, backgroundColor: "#0891b2" }; // Invoice
+const BTN_SKY = { ...BUTTON_STYLE, backgroundColor: "#3ba2e8" }; // Add Agent Reference
+const BTN_INDIGO = { ...BUTTON_STYLE, backgroundColor: "#6366f1" }; // Confirmation No.
+const BTN_ORANGE = { ...BUTTON_STYLE, backgroundColor: "#f0922b" }; // Resend Mail
+const BTN_ACCENT = { ...BUTTON_STYLE, backgroundColor: "#7c3aed" }; // Booking Remark
+const BTN_NEUTRAL = { ...BUTTON_STYLE, backgroundColor: "#64748b" }; // Notes
+const BTN_HISTORY = { ...BUTTON_STYLE, backgroundColor: "#334155" }; // History
+
+// Colour + icon per Booking History action (keyed by the exact label pushed
+// onto `bookingHistory`). Unknown actions fall back to a neutral slate badge.
+const HISTORY_ACTION_META = {
+  "Booking Created": { bg: "#e6f4ea", fg: "#1e7e34", icon: FaPlusCircle },
+  "Booking Confirmed": { bg: "#e7f1ff", fg: "#1d4ed8", icon: FaCheckCircle },
+  "Booking Reconfirmed": { bg: "#e0f2f1", fg: "#0d9488", icon: FaSyncAlt },
+  "Booking Cancelled": { bg: "#fdecea", fg: "#c0392b", icon: FaTimesCircle },
+};
+const HISTORY_ACTION_FALLBACK = { bg: "#f1f5f9", fg: "#475569", icon: FaHistory };
+
+// Date / time helpers for the History modal. Accept "yyyy-MM-ddTHH:mm:ss" or
+// "yyyy-MM-dd HH:mm:ss"; return "-" when unparseable so the table stays tidy.
+const parseHistoryDate = (v) => {
+  if (!v) return null;
+  const d = new Date(String(v).replace(" ", "T"));
+  return isNaN(d.getTime()) ? null : d;
+};
+const formatHistoryDate = (v) => {
+  const d = parseHistoryDate(v);
+  if (!d) return "-";
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+const formatHistoryTime = (v) => {
+  const d = parseHistoryDate(v);
+  if (!d) return "-";
+  return d.toLocaleTimeString("en-GB", { hour12: false });
 };
 
 // Style tokens mirror BookingDetailedView.jsx (the Hotel booking
@@ -162,6 +216,7 @@ export default function PackageBookingDetailView() {
   const [savingRemark, setSavingRemark] = useState(false);
 
   const [showNotesModal, setShowNotesModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [noteInput, setNoteInput] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [bookingNotes, setBookingNotes] = useState([]);
@@ -672,6 +727,55 @@ export default function PackageBookingDetailView() {
   // The Edit / Voucher / Cancel actions are hidden when the booking is
   // already cancelled. Mirrors the row icon visibility on the list.
   const isCancellable = listStatus !== "cancelled";
+
+  // Booking lifecycle events for the History modal — built from the detail
+  // already loaded (no extra API call). Mirrors the Hotel booking detail
+  // view: only events with a recorded timestamp are listed, sorted
+  // chronologically, with per-action "Performed By" plus (for Created) the
+  // capture location / IP. Package bookings don't record a confirm /
+  // reconfirm step or location / IP, so those rows/columns stay empty — the
+  // logic is kept identical to the hotel view for parity.
+  const bookingHistory = (() => {
+    if (!bookingDetails) return [];
+    const events = [];
+    if (bookingDetails.bookingDate) {
+      events.push({
+        action: "Booking Created",
+        at: bookingDetails.bookingDate,
+        by: bookingDetails.createdBy || "-",
+        location: bookingDetails.bookingLocation,
+        ip: bookingDetails.ipAddress,
+      });
+    }
+    if (bookingDetails.confirmedDate) {
+      events.push({
+        action: "Booking Confirmed",
+        at: bookingDetails.confirmedDate,
+        by: bookingDetails.confirmedBy || "-",
+      });
+    }
+    if (bookingDetails.reconfirmedDate) {
+      events.push({
+        action: "Booking Reconfirmed",
+        at: bookingDetails.reconfirmedDate,
+        by: bookingDetails.reconfirmedBy || "-",
+      });
+    }
+    const cancelled =
+      bookingDetails.isCancelled === true || listStatus === "cancelled";
+    if (cancelled && bookingDetails.cancelledDate) {
+      events.push({
+        action: "Booking Cancelled",
+        at: bookingDetails.cancelledDate,
+        by: bookingDetails.cancelledBy || "-",
+      });
+    }
+    return events.sort((a, b) => {
+      const da = parseHistoryDate(a.at)?.getTime() ?? 0;
+      const db = parseHistoryDate(b.at)?.getTime() ?? 0;
+      return da - db;
+    });
+  })();
 
   // ── Derived enrichment from packageView ──
   const itineraries = Array.isArray(packageView?.itineraries)
@@ -1407,98 +1511,328 @@ export default function PackageBookingDetailView() {
                 >
                   {isCancellable && (
                     <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
+                      style={BTN_PRIMARY}
                       onClick={handleEditClick}
                       title="Add a new sub-booking under this booking"
                     >
                       ADD NEW ITEM
                     </button>
                   )}
-                  <button
-                    style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                    onClick={() => window.print()}
-                  >
-                    PRINT PREVIEW
-                  </button>
                   {isCancellable && (
                     <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                      onClick={openVoucher}
-                      title="Voucher"
-                    >
-                      <FaFileAlt style={{ marginRight: "6px" }} />
-                      VOUCHER
-                    </button>
-                  )}
-                  {isCancellable && (
-                    <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                      onClick={openInvoice}
-                      title="Invoice"
-                    >
-                      <FaFileAlt style={{ marginRight: "6px" }} />
-                      INVOICE
-                    </button>
-                  )}
-                  {isCancellable && (
-                    <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
+                      style={BTN_DANGER}
                       onClick={() => setShowCancelModal(true)}
                       title="Cancel booking"
                     >
-                      <FaTrash style={{ marginRight: "6px" }} />
                       CANCEL
                     </button>
                   )}
                   {isCancellable && (
-                    <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                      onClick={openAgentRefModal}
-                    >
+                    <button style={BTN_TEAL} onClick={openVoucher} title="Voucher">
+                      VOUCHER
+                    </button>
+                  )}
+                  {isCancellable && (
+                    <button style={BTN_INFO} onClick={openInvoice} title="Invoice">
+                      INVOICE
+                    </button>
+                  )}
+                  {isCancellable && (
+                    <button style={BTN_SKY} onClick={openAgentRefModal}>
                       ADD AGENT REFERENCE
                     </button>
                   )}
                   {isCancellable && (
-                    <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                      onClick={openConfirmationNoModal}
-                    >
+                    <button style={BTN_INDIGO} onClick={openConfirmationNoModal}>
                       CONFIRMATION NO.
                     </button>
                   )}
                   {isCancellable && (
                     <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
+                      style={BTN_ORANGE}
                       onClick={resendMailToAgent}
                       disabled={resendingMail}
                     >
-                      {resendingMail
-                        ? "SENDING..."
-                        : "RESEND MAIL TO AGENT"}
+                      {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
                     </button>
                   )}
                   {isCancellable && (
-                    <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                      onClick={openRemarkModal}
-                    >
+                    <button style={BTN_ACCENT} onClick={openRemarkModal}>
                       BOOKING REMARK
                     </button>
                   )}
                   {isCancellable && (
-                    <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                      onClick={openNotesModal}
-                    >
+                    <button style={BTN_NEUTRAL} onClick={openNotesModal}>
                       NOTES
                     </button>
                   )}
+                  {/* HISTORY is always available (read-only), including for
+                      cancelled bookings. */}
+                  <button
+                    style={BTN_HISTORY}
+                    onClick={() => setShowHistoryModal(true)}
+                    title="Booking history"
+                  >
+                    HISTORY
+                  </button>
                 </div>
               </>
             )}
           </Container>
         </main>
       </div>
+
+      {/* ── Booking History Modal ───────────────────────────────────────
+          Read-only timeline built from the loaded detail (no extra API
+          call). Only events with a recorded timestamp are listed. */}
+      <Modal
+        show={showHistoryModal}
+        onHide={() => setShowHistoryModal(false)}
+        centered
+        size="xl"
+        scrollable
+      >
+        <Modal.Header closeButton>
+          <Modal.Title
+            style={{
+              fontSize: "1.05rem",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <FaHistory size={16} />
+            <span>
+              Booking History
+              {bookingDetails?.confirmationCode && (
+                <span style={{ opacity: 0.85, fontWeight: 500 }}>
+                  {` — ${bookingDetails.confirmationCode}`}
+                </span>
+              )}
+            </span>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body
+          style={{ backgroundColor: "#f8fafc", padding: "1.25rem 1.5rem" }}
+        >
+          {bookingHistory.length === 0 ? (
+            <div className="text-muted text-center py-4">
+              <FaHistory
+                size={26}
+                style={{ opacity: 0.25, marginBottom: 8 }}
+              />
+              <div>No history available for this booking.</div>
+            </div>
+          ) : (
+            <div
+              style={{
+                borderRadius: 10,
+                border: "1px solid #e2e8f0",
+                boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
+                backgroundColor: "#fff",
+                overflow: "hidden",
+              }}
+            >
+              <table
+                style={{
+                  width: "100%",
+                  tableLayout: "fixed",
+                  borderCollapse: "collapse",
+                  fontSize: "0.82rem",
+                  marginBottom: 0,
+                }}
+              >
+                <thead>
+                  <tr style={{ backgroundColor: "#f1f5f9" }}>
+                    {[
+                      { label: "S/N", width: "5%" },
+                      { label: "Action", width: "17%" },
+                      { label: "Performed By", icon: FaUserAlt, width: "13%" },
+                      { label: "Location", icon: FaMapMarkerAlt, width: "30%" },
+                      { label: "IP Address", icon: FaNetworkWired, width: "14%" },
+                      { label: "Date", icon: FaCalendarAlt, width: "11%" },
+                      { label: "Time", icon: FaClock, width: "10%" },
+                    ].map((col) => (
+                      <th
+                        key={col.label}
+                        style={{
+                          width: col.width,
+                          padding: "10px 14px",
+                          textAlign: "left",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.03em",
+                          fontSize: "0.72rem",
+                          fontWeight: 700,
+                          color: "#475569",
+                          borderBottom: "1px solid #e2e8f0",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {col.icon ? (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
+                          >
+                            <col.icon size={11} style={{ opacity: 0.7 }} />
+                            {col.label}
+                          </span>
+                        ) : (
+                          col.label
+                        )}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {bookingHistory.map((ev, idx) => {
+                    const meta =
+                      HISTORY_ACTION_META[ev.action] ||
+                      HISTORY_ACTION_FALLBACK;
+                    const ActionIcon = meta.icon;
+                    return (
+                      <tr
+                        key={`${ev.action}-${idx}`}
+                        style={{
+                          backgroundColor: idx % 2 === 1 ? "#f8fafc" : "#fff",
+                        }}
+                      >
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                            color: "#64748b",
+                          }}
+                        >
+                          {idx + 1}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "3px 10px",
+                              borderRadius: 999,
+                              backgroundColor: meta.bg,
+                              color: meta.fg,
+                              fontWeight: 600,
+                              fontSize: "0.76rem",
+                            }}
+                          >
+                            <ActionIcon size={10} style={{ flexShrink: 0 }} />
+                            {ev.action}
+                          </span>
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {ev.by || "-"}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {ev.location ? (
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "flex-start",
+                                gap: 6,
+                              }}
+                            >
+                              <FaMapMarkerAlt
+                                size={11}
+                                style={{
+                                  color: "#c0392b",
+                                  marginTop: 2,
+                                  flexShrink: 0,
+                                }}
+                              />
+                              <span>{ev.location}</span>
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          {ev.ip ? (
+                            <span
+                              style={{
+                                fontFamily:
+                                  "'Consolas', 'Courier New', monospace",
+                                backgroundColor: "#f1f5f9",
+                                color: "#334155",
+                                padding: "2px 8px",
+                                borderRadius: 4,
+                                fontSize: "0.76rem",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {ev.ip}
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          {formatHistoryDate(ev.at)}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          {formatHistoryTime(ev.at)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer style={{ backgroundColor: "#fff" }}>
+          <Button
+            variant="secondary"
+            onClick={() => setShowHistoryModal(false)}
+            style={{
+              borderRadius: 6,
+              padding: "6px 20px",
+              fontWeight: 600,
+              fontSize: "0.85rem",
+            }}
+          >
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       {/* ── Cancellation Modal ──────────────────────────────────────── */}
       <Modal

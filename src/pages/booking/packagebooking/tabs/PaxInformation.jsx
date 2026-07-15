@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Row, Col, Form, Modal, Button, Table } from "react-bootstrap";
+import AsyncSelect from "react-select/async";
 import axiosInstance from "../../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -14,6 +15,54 @@ import {
   FaTimesCircle,
   FaInfoCircle,
 } from "react-icons/fa";
+
+// Reverse-geocode browser coordinates to a readable address for the Booking
+// History audit trail. Tries OpenStreetMap Nominatim first (street-level),
+// then BigDataCloud (locality-level, keyless) — both free, CORS-enabled.
+// Returns null when neither responds so the caller keeps its IP-derived
+// fallback. Mirrors the other booking pages (DayStay / Student / etc.).
+async function reverseGeocode(lat, lon) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=16&addressdetails=1`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (res.ok) {
+      const a = (await res.json())?.address || {};
+      const parts = [
+        a.road,
+        a.neighbourhood || a.suburb,
+        a.village || a.town || a.city || a.municipality,
+        a.state,
+        a.postcode,
+        a.country,
+      ].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255); // DB column is VARCHAR(255)
+    }
+  } catch {
+    // fall through to BigDataCloud
+  }
+  try {
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`,
+    );
+    if (res.ok) {
+      const d = await res.json();
+      const parts = [
+        d.locality,
+        d.city,
+        d.principalSubdivision,
+        d.countryName,
+      ].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255);
+    }
+  } catch {
+    // give up — caller keeps the IP-based fallback
+  }
+  return null;
+}
 
 const PaxInformation = ({
   searchParams,
@@ -35,6 +84,49 @@ const PaxInformation = ({
   const [showSummary, setShowSummary] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tourismDirham, setTourismDirham] = useState("");
+
+  // Client location snapshot for the Booking History audit trail, resolved
+  // once on this step and sent on the /book payload. Location comes from
+  // browser geolocation (reverse-geocoded), with a coarse IP-derived city as
+  // the fallback. The IP Address column is NOT resolved here — the backend
+  // stamps each system's unique IPv4 from the request itself.
+  const [clientNetwork, setClientNetwork] = useState({ bookingLocation: null });
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("https://ipapi.co/json/")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((info) => {
+        if (cancelled || !info) return;
+        setClientNetwork((prev) => ({
+          // Never clobber a precise geolocation result that already landed.
+          bookingLocation:
+            prev.bookingLocation ||
+            [info.city, info.region, info.country_name]
+              .filter(Boolean)
+              .join(", ") ||
+            null,
+        }));
+      })
+      .catch(() => {});
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async ({ coords }) => {
+          const precise = await reverseGeocode(coords.latitude, coords.longitude);
+          if (!cancelled && precise) {
+            setClientNetwork({ bookingLocation: precise });
+          }
+        },
+        () => {}, // denied / unavailable — keep the IP-derived fallback
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
+      );
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Terms acceptance — moved off the Hotels step. After Confirm booking
   // is clicked we open a popup with the package's full T&C text and a
@@ -221,6 +313,33 @@ const PaxInformation = ({
 
   const primary = localData.travellers && localData.travellers[0];
 
+  // Pax passport — moved here from the removed Basic Details step. Updates the
+  // shared searchParams so the submit payload's nativeCountry is populated.
+  const loadPassportOptions = async (inputValue) => {
+    try {
+      const response = await axiosInstance.get(
+        `/api/country?page=0&limit=20&search=${encodeURIComponent(inputValue)}`,
+      );
+      return (response.data || []).map((country) => ({
+        value: country.id,
+        label: country.name,
+      }));
+    } catch {
+      return [];
+    }
+  };
+
+  const setPaxPassport = (option) => {
+    updateData((prev) => ({
+      ...prev,
+      searchParams: {
+        ...prev.searchParams,
+        paxPassport: option,
+        nativeCountry: option ? option.value : "",
+      },
+    }));
+  };
+
   const validatePaxData = () => {
     if (!primary) {
       toast.error("No travellers configured.");
@@ -257,6 +376,8 @@ const PaxInformation = ({
         travelDate: searchParams.travelDate,
         packageCategory: searchParams.packageCategory,
         nativeCountry: searchParams.nativeCountry,
+        // Booking History audit — client location (backend stamps the IP).
+        bookingLocation: clientNetwork.bookingLocation,
         // Amend → child-booking lineage. Backend uses this to compute
         // "{parent}/{n}" for the new booking's code.
         parentBookingCode: parentBookingCode || null,
@@ -301,6 +422,7 @@ const PaxInformation = ({
         checkInDate: bookingData.programme?.checkInDate || null,
         flightDetails: bookingData.programme?.flightDetails || null,
         modeOfPayment: bookingData.programme?.modeOfPayment || null,
+        bookingConfirmation: bookingData.programme?.bookingConfirmation || null,
         termsAccepted: !!bookingData.programme?.termsAccepted,
       };
 
@@ -493,6 +615,37 @@ const PaxInformation = ({
         );
       })}
 
+      {/* Travel details — Pax passport sits after the travellers, just before
+          the add-extra controls. Feeds searchParams.nativeCountry for submit. */}
+      <p className="tab-section-title mt-3">Travel details</p>
+      <Row className="g-3 mb-2">
+        <Col md={4}>
+          <Form.Group>
+            <Form.Label className="booking-field-label">
+              Pax passport <span className="required-dot">*</span>
+            </Form.Label>
+            <AsyncSelect
+              cacheOptions
+              defaultOptions
+              loadOptions={loadPassportOptions}
+              value={searchParams.paxPassport || null}
+              onChange={setPaxPassport}
+              placeholder="Select country"
+              className="modern-select"
+              classNamePrefix="react-select"
+              isDisabled={isViewMode}
+              // Render the menu in a body-level portal so it isn't clipped or
+              // covered by the sticky Previous/Confirm nav row directly below.
+              menuPortalTarget={
+                typeof document !== "undefined" ? document.body : null
+              }
+              menuPosition="fixed"
+              styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
+            />
+          </Form.Group>
+        </Col>
+      </Row>
+
       {/* Add-extra controls — the Adult button is always rendered (cap is
           guaranteed >= 2 above); the Child button only renders when the
           package category actually allows children. Both buttons disable
@@ -548,6 +701,12 @@ const PaxInformation = ({
               toast.error("Please select a mode of payment.");
               return;
             }
+            // Mandatory "continue with the booking?" choice (Book and Pay Now /
+            // Hold Room and Pay Later) — mirrors the hotel booking page.
+            if (!bookingData?.programme?.bookingConfirmation) {
+              toast.error("Please select a booking option to continue.");
+              return;
+            }
             // Prime the popup with whatever was previously accepted so a
             // user who reopens it doesn't have to re-tick the box.
             setTermsCheck(!!bookingData?.programme?.termsAccepted);
@@ -580,6 +739,29 @@ const PaxInformation = ({
             to the order summary.
           </p>
 
+          {/* Time-period reminder — the package dates/duration must be
+              verified against the traveller's schedule before proceeding,
+              since they are locked once the booking is confirmed. */}
+          <div
+            className="d-flex align-items-start gap-2 p-3 mb-3 rounded"
+            style={{
+              border: "1px solid #fcd34d",
+              background: "#fffbeb",
+              color: "#92400e",
+            }}
+          >
+            <FaCalendarAlt style={{ marginTop: 2, flexShrink: 0 }} />
+            <div className="small">
+              <strong>Confirm the package time period.</strong> Before
+              proceeding, please make sure the package's time period — the
+              travel dates and duration (number of nights / days) — has been
+              reviewed and confirmed against the traveller's arrival and
+              departure schedule. Once the booking is confirmed these dates
+              are locked, and the cancellation charges below will apply to any
+              changes.
+            </div>
+          </div>
+
           <div
             className="terms-scroll p-3 mb-3 rounded border bg-light"
             style={{ maxHeight: 260, overflowY: "auto" }}
@@ -606,7 +788,7 @@ const PaxInformation = ({
             id="pax-terms-accept"
             checked={termsCheck}
             onChange={(e) => setTermsCheck(e.target.checked)}
-            label="I have read and accept the Terms & Conditions and cancellation policy."
+            label="I have read and accept the Terms & Conditions and cancellation policy, and I confirm the package time period (travel dates and duration) has been checked."
           />
         </Modal.Body>
         <Modal.Footer

@@ -81,6 +81,9 @@ const BasicDetails = ({ data, updateData, onNext }) => {
       <p className="tab-section-title">Travel details</p>
 
       <Row className="g-2 mb-3">
+        {/* Travel date field hidden per requirement. The value still defaults
+            to today's date from PackageBooking.jsx's initial searchParams, so
+            the booking payload keeps a valid travelDate.
         <Col md={4}>
           <Form.Group>
             <Form.Label className="booking-field-label">
@@ -94,6 +97,7 @@ const BasicDetails = ({ data, updateData, onNext }) => {
             />
           </Form.Group>
         </Col>
+        */}
 
         <Col md={4}>
           <Form.Group>
