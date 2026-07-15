@@ -202,7 +202,7 @@ export default function AgentDashboard() {
     { label: "Ayurveda",           tone: "green",  icon: <FaLeaf />,           to: "/new-booking/ayurveda" },
     { label: "Students",            tone: "purple", icon: <FaGraduationCap />,  to: "/new-booking/student" },
     { label: "Senior Citizens",     tone: "orange", icon: <FaUserAlt />,        to: "/new-booking/senior-citizen" },
-    { label: "Religious",     tone: "orange", icon: <FaPrayingHands/>,        to: "/new-booking/senior-citizen" },
+    { label: "Religious",     tone: "orange", icon: <FaPrayingHands/>,        to: "/new-booking/religious" },
   ];
 
   const manageActions = [

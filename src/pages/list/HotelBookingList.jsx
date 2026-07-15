@@ -128,7 +128,17 @@ const isCancellationAllowed = (booking) => {
 // `is24HourCheckin === true`, and tweaks the heading. The regular
 // /booking-details/hotel-booking-list route renders this component
 // with no prop and therefore stays unchanged.
-const HotelBookingList = ({ force24HourOnly = false } = {}) => {
+//
+// `religiousOnly` is the same shape opt-in for the Religious Booking
+// List (/booking-details/religious-booking-list). When true the page
+// keeps only rows where `isReligiousBooking === true` and updates the
+// heading; when false the regular list also EXCLUDES religious rows so
+// they don't appear in two places (mirrors how force24HourOnly toggles
+// the 24-hour rows in/out of the standard list).
+const HotelBookingList = ({
+  force24HourOnly = false,
+  religiousOnly = false,
+} = {}) => {
   const navigate = useNavigate();
   const [role, setRole] = useState(() => {
     return localStorage.getItem("currentActiveRole")?.toLowerCase() || null;
@@ -918,25 +928,42 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
         currentBookings = [];
     }
 
-    // 24-hour-only menu: the server now filters to 24-hour rows when
-    // is24HourCheckin=true is passed, so pagination + totals are authoritative.
-    // The client-side filter below is kept as a defensive safety net for the
-    // unlikely case the server hasn't been upgraded; in the upgraded path it's
-    // a no-op since every row already matches.
-    if (force24HourOnly) {
-      const filtered = (currentBookings || []).filter(
-        (b) => b && (b.is24HourCheckin || b.Is24HourCheckin)
-      );
+    // Small helpers keep the four presentation filters (24h/religious ×
+    // in/out) readable. `is24H` / `isRel` guard against both camelCase
+    // and PascalCase spellings some legacy list rows carried.
+    const is24H = (b) => !!(b && (b.is24HourCheckin || b.Is24HourCheckin));
+    // Jackson strips the "is" prefix from a `isReligiousBooking()` getter, so
+    // list rows actually carry `religiousBooking: true` in the JSON — accept
+    // that plus the historical camelCase / PascalCase spellings as safety.
+    const isRel = (b) =>
+      !!(b && (b.religiousBooking || b.isReligiousBooking || b.IsReligiousBooking));
+
+    if (religiousOnly) {
+      // Religious Booking List: keep ONLY religious rows. Pagination is
+      // still server-side today (no is_religious_booking filter on the
+      // API), so the client-side filter is both the primary gate and the
+      // safety net. Totals reflect the filtered visible count.
+      const filtered = (currentBookings || []).filter(isRel);
+      setBookings(filtered);
+      setTotalPages(paginationMeta.totalPages || 0);
+      setTotalElements(filtered.length);
+    } else if (force24HourOnly) {
+      // 24-hour-only menu: the server now filters to 24-hour rows when
+      // is24HourCheckin=true is passed, so pagination + totals are authoritative.
+      // The client-side filter below is kept as a defensive safety net for the
+      // unlikely case the server hasn't been upgraded; in the upgraded path it's
+      // a no-op since every row already matches.
+      const filtered = (currentBookings || []).filter(is24H);
       setBookings(filtered);
       setTotalPages(paginationMeta.totalPages || 0);
       setTotalElements(paginationMeta.totalElements || 0);
     } else {
-      // Regular Hotel Bookings list: exclude 24-hour-checkin rows — those
-      // belong to the dedicated 24-Hour Booking List page. Presentational
-      // filter only (pagination stays server-side); totals reflect the
-      // filtered count so the footer/empty-state match what's shown.
+      // Regular Hotel Bookings list: exclude 24-hour-checkin rows AND
+      // religious rows — those belong to their dedicated list pages.
+      // Presentational filter only (pagination stays server-side); totals
+      // reflect the filtered count so the footer/empty-state match.
       const filtered = (currentBookings || []).filter(
-        (b) => !(b && (b.is24HourCheckin || b.Is24HourCheckin))
+        (b) => !is24H(b) && !isRel(b),
       );
       setBookings(filtered);
       setTotalPages(paginationMeta.totalPages || 0);
@@ -1212,7 +1239,11 @@ const HotelBookingList = ({ force24HourOnly = false } = {}) => {
             <div className="d-flex justify-content-between align-items-end mb-3 hbl-header">
               <div className="hbl-header-left">
                 <h3 className="fw-bold text-dark mb-2">
-                  {force24HourOnly ? "24 Hour Check-In Bookings" : "Hotel Bookings"}
+                  {religiousOnly
+                    ? "Religious Bookings"
+                    : force24HourOnly
+                      ? "24 Hour Check-In Bookings"
+                      : "Hotel Bookings"}
                 </h3>
                 <InputGroup className="hbl-search" style={{ height: "40px", width: "300px" }}>
                   <InputGroup.Text

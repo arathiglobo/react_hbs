@@ -412,6 +412,11 @@ export default function Sidebar() {
           label: "Senior Citizen",
           to: "/new-booking/senior-citizen",
         },
+        // Religious flow — same HotelSearch, destination locked to Mecca/Medina.
+        {
+          label: "Religious",
+          to: "/new-booking/religious",
+        },
       ],
     },
     {
@@ -443,6 +448,12 @@ export default function Sidebar() {
         {
           label: "24 Hour",
           to: "/booking-details/24hr-booking-list",
+        },
+        // Dedicated Religious booking list — same page wrapped with
+        // religiousOnly so only isReligiousBooking=true rows are shown.
+        {
+          label: "Religious",
+          to: "/booking-details/religious-booking-list",
         },
         // Last Minute Booking list — Phase 4 entry
         {
