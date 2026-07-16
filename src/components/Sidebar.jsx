@@ -84,6 +84,17 @@ export default function Sidebar() {
     storedRoles[0] ||
     "";
 
+  // Sub-account (sub-agent / sub-user) logins use a "prefix.mainAgent"
+  // username, which always contains a dot; main-agent login usernames are
+  // validated to letters/digits/underscore only (no dot). Sub-accounts must
+  // not see the agent "Registration" menu — they can't create their own
+  // sub-users / sub-agents. Only affects agent-role logins; every other role
+  // is unchanged.
+  const loginUserName =
+    localStorage.getItem("UserName") || sessionStorage.getItem("UserName") || "";
+  const isSubAccountAgent =
+    currentRole === "agent" && loginUserName.includes(".");
+
   // Re-sync the stored active role with the dashboard context so the
   // role-guarded routes (PrivateRoute roles=[...]) agree with the menu.
   useEffect(() => {
@@ -340,6 +351,9 @@ export default function Sidebar() {
     {
       label: "Registration",
       roles: ["agent"],
+      // Hidden for sub-account logins (sub-agent / sub-user) — only a main
+      // agent may register sub-users / sub-agents.
+      subAccountHidden: true,
       children: [
         { label: "Sub User", to: "/agent-registration/sub-user" },
         { label: "Sub Agent", to: "/agent-registration/sub-agent" },
@@ -735,7 +749,11 @@ export default function Sidebar() {
   // to every role that can see the parent.
   const roleAllows = (entry) => !entry.roles || entry.roles.includes(currentRole);
 
-  const filteredItems = items.filter(roleAllows).map((item) => {
+  const filteredItems = items
+    .filter(roleAllows)
+    // Drop the agent Registration menu for sub-account logins.
+    .filter((entry) => !(entry.subAccountHidden && isSubAccountAgent))
+    .map((item) => {
     const next = { ...item };
     if (Array.isArray(item.children)) {
       next.children = item.children.filter(roleAllows);
