@@ -299,6 +299,15 @@ import SchefferDriverBookingNotesPage from "./pages/list/SchefferDriverBookingNo
 import DayStayBookingNotesPage from "./pages/list/DayStayBookingNotesPage";
 import HotelBookingHistory from "./pages/report/HotelBookingHistory";
 
+// Super Admin — API access control (external clients + per-endpoint permissions)
+import ApiEndpointCatalog from "./pages/superadmin/apiaccess/ApiEndpointCatalog";
+import ApiClientList from "./pages/superadmin/apiaccess/ApiClientList";
+import ApiClientPermissionMatrix from "./pages/superadmin/apiaccess/ApiClientPermissionMatrix";
+
+// Super Admin — encrypted credential vault (SUPER_ADMIN only on backend)
+import CredentialGroupList from "./pages/superadmin/credentialvault/CredentialGroupList";
+import CredentialGroupDetail from "./pages/superadmin/credentialvault/CredentialGroupDetail";
+
 
 export default function App() {
   return (
@@ -415,6 +424,19 @@ export default function App() {
         <Route path="/report/online-daily-sales" element={<OnlineDailySalesReport />} />
         <Route path="/report/time-limit-daily-sales" element={<TimeLimitOnlineDailySalesReport />} />
         <Route path="/report/hotel-booking-history" element={<PrivateRoute roles={["admin"]}><HotelBookingHistory /></PrivateRoute>} />
+
+        {/* Super Admin — API access control for external clients */}
+        <Route path="/super-admin/api-access/endpoints" element={<PrivateRoute roles={["admin"]}><ApiEndpointCatalog /></PrivateRoute>} />
+        <Route path="/super-admin/api-access/clients" element={<PrivateRoute roles={["admin"]}><ApiClientList /></PrivateRoute>} />
+        <Route path="/super-admin/api-access/clients/:clientId/permissions" element={<PrivateRoute roles={["admin"]}><ApiClientPermissionMatrix /></PrivateRoute>} />
+
+        {/* Super Admin — encrypted Credential Vault. Backend enforces strict
+            SUPER_ADMIN via SuperAdminOnlyGuard; PrivateRoute here uses "admin"
+            so the pages render (and the backend returns 403 if the role is
+            insufficient). Tighten to roles={["super_admin"]} once your JWT
+            actually issues the SUPER_ADMIN authority. */}
+        <Route path="/super-admin/credential-vault" element={<PrivateRoute roles={["admin"]}><CredentialGroupList /></PrivateRoute>} />
+        <Route path="/super-admin/credential-vault/groups/:groupId" element={<PrivateRoute roles={["admin"]}><CredentialGroupDetail /></PrivateRoute>} />
 
        {/* New Booking */}
         <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} /> 

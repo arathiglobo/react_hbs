@@ -22,6 +22,7 @@ import {
   Trophy,
   Award,
   BadgeCheck,
+  KeyRound,
 } from "lucide-react";
 import { FaAd, FaBrain, FaBullhorn, FaBullseye, FaFileAlt, FaImages, FaRobot, FaTags, FaUser } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
@@ -310,6 +311,25 @@ export default function Sidebar() {
       to: "/company-profile",
       roles: ["admin"],
       children: [],
+    },
+    {
+      // Super Admin — controls which of our APIs each external client
+      // may call. Endpoint Catalog registers the endpoints eligible for
+      // external exposure; API Clients issues keys and manages per-client
+      // permission matrices. Visible to admin today (see SuperAdminGuard
+      // in backend for role notes); tighten to super_admin once that
+      // login flow exists.
+      label: "API Access",
+      roles: ["admin"],
+      children: [
+        { label: "Endpoint Catalog", to: "/super-admin/api-access/endpoints" },
+        { label: "API Clients", to: "/super-admin/api-access/clients" },
+        // Encrypted vault — backend enforces strict SUPER_ADMIN via
+        // SuperAdminOnlyGuard, so ADMIN accounts see the menu item but hit
+        // 403 on the API. Menu is left visible for admins so a SUPER_ADMIN
+        // account (once created) discovers it under the same group.
+        { label: "Credential Vault", to: "/super-admin/credential-vault" },
+      ],
     },
     {
       label: "Approvals",
@@ -1157,6 +1177,9 @@ function getIcon(label) {
 
     case "Company Profile":
       return <Building2 {...iconProps} />;
+
+    case "API Access":
+      return <KeyRound {...iconProps} />;
 
     case "Approvals":
       return <BadgeCheck {...iconProps} />;
