@@ -754,7 +754,24 @@ export default function PackageBookingDetailView() {
         by: bookingDetails.confirmedBy || "-",
       });
     }
-    if (bookingDetails.reconfirmedDate) {
+    // Packages don't record a separate reconfirmation timestamp (there's no
+    // deadline flow like the hotel side has), but a "Book & Voucher" choice
+    // maps to RECONFIRMED at create time. Surface it as its own history row
+    // using the same audit trail so users see the lifecycle transition.
+    if (
+      String(bookingDetails.bookingStatus || "").trim().toUpperCase() ===
+        "RECONFIRMED" &&
+      bookingDetails.bookingDate
+    ) {
+      events.push({
+        action: "Booking Reconfirmed",
+        at: bookingDetails.reconfirmedDate || bookingDetails.bookingDate,
+        by:
+          bookingDetails.reconfirmedBy ||
+          bookingDetails.createdBy ||
+          "-",
+      });
+    } else if (bookingDetails.reconfirmedDate) {
       events.push({
         action: "Booking Reconfirmed",
         at: bookingDetails.reconfirmedDate,
@@ -849,8 +866,33 @@ export default function PackageBookingDetailView() {
   // Plain status label — Confirmed / Cancelled — colored inline only
   // (matches the Hotel detail page's StatusBadge approach of using
   // text color to convey state, no pill or background).
-  const statusLabel = listStatus === "cancelled" ? "Cancelled" : "Confirmed";
-  const statusColor = listStatus === "cancelled" ? "#dc2626" : "#16a34a";
+  // Mirrors the hotel booking flow: Cancelled → red, ReConfirmed → blue,
+  // Confirmed → green. Cancellation takes precedence over the persisted
+  // bookingStatus so a cancelled-then-uncancelled row still reads correctly.
+  const derivedStatus = (() => {
+    if (listStatus === "cancelled" || bookingDetails?.isCancelled === true) {
+      return "Cancelled";
+    }
+    const raw = String(bookingDetails?.bookingStatus || "").trim().toUpperCase();
+    if (raw === "RECONFIRMED") return "ReConfirmed";
+    if (raw === "CONFIRMED") return "Confirmed";
+    if (raw === "CANCELLED") return "Cancelled";
+    // Legacy fallback — reconstruct from the booking-confirmation choice.
+    if (bookingDetails?.bookingConfirmation === "Book Now & Voucher later") {
+      return "Confirmed";
+    }
+    if (bookingDetails?.bookingConfirmation === "Book & Voucher") {
+      return "ReConfirmed";
+    }
+    return "Confirmed";
+  })();
+  const statusLabel = derivedStatus;
+  const statusColor =
+    derivedStatus === "Cancelled"
+      ? "#dc2626"
+      : derivedStatus === "ReConfirmed"
+        ? "#1d4ed8"
+        : "#16a34a";
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">

@@ -572,8 +572,10 @@ const PackageBooking = () => {
                   className="price-policy-link"
                   onClick={() => setShowPolicyModal(true)}
                 >
-                  <FaShieldAlt className="me-2" />
-                  Cancellation Policies &amp; Terms &amp; Conditions
+                  <FaShieldAlt className="policy-link-icon" />
+                  <span className="policy-link-text">
+                    Cancellation Policies &amp; Terms &amp; Conditions
+                  </span>
                 </button>
               </div>
 
@@ -620,7 +622,7 @@ const PackageBooking = () => {
                       type="radio"
                       id="pkg-book-pay-now"
                       name="pkgBookingConfirmation"
-                      label="Book and Pay Now"
+                      label="Book Package and Pay Now"
                       value="Book & Voucher"
                       checked={
                         bookingData.programme.bookingConfirmation ===
@@ -688,12 +690,14 @@ const PackageBooking = () => {
                   border-color: #2563eb !important;
                   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
                 }
-                /* Red "Cancellation Policies & Terms" link under Total Price */
+                /* Red "Cancellation Policies & Terms" link under Total Price.
+                   The outer button just centers a compact inline group so the
+                   shield sits IMMEDIATELY next to the text — even when the
+                   label wraps to two lines. */
                 .price-policy-link {
                   display: flex;
-                  align-items: center;
+                  align-items: flex-start;
                   justify-content: center;
-                  gap: 2px;
                   width: 100%;
                   border: none;
                   background: transparent;
@@ -701,13 +705,22 @@ const PackageBooking = () => {
                   font-weight: 700;
                   font-size: 0.82rem;
                   line-height: 1.35;
-                  text-decoration: underline;
-                  text-align: center;
                   cursor: pointer;
                   padding: 2px 0;
                   transition: color 0.15s ease;
                 }
                 .price-policy-link:hover { color: #b3082f; }
+                .policy-link-icon {
+                  flex-shrink: 0;
+                  margin-right: 6px;
+                  margin-top: 3px; /* aligns with the first line of text */
+                  font-size: 0.9em;
+                }
+                .policy-link-text {
+                  text-decoration: underline;
+                  text-underline-offset: 2px;
+                  text-align: center;
+                }
               `}</style>
             </Col>
           </Row>
