@@ -2887,5 +2887,5 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
     </div>
   );
 };
-
+ 
 export default HotelBookingPage;
