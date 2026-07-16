@@ -130,7 +130,7 @@ export default function TopBar() {
     { label: "Ayurveda",           tone: "green",  icon: <FaLeaf />,           to: "/new-booking/ayurveda" },
     { label: "Student",            tone: "purple", icon: <FaGraduationCap />,  to: "/new-booking/student" },
     { label: "Senior Citizen",     tone: "orange", icon: <FaUserAlt />,        to: "/new-booking/senior-citizen" },
-    { label: "Religious",          tone: "orange", icon: <FaPrayingHands />,   to: "/new-booking/senior-citizen" },
+    { label: "Religious",          tone: "orange", icon: <FaPrayingHands />,   to: "/new-booking/religious" },
   ];
 
   const [showCartModal, setShowCartModal] = useState(false);

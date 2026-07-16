@@ -93,11 +93,20 @@ async function reverseGeocode(lat, lon) {
  * /booking-details/hotel-booking-list so the dedicated 24-hour
  * Check-In flow lands on its own booking list. Defaults to false so
  * the legacy /hotel-booking-page flow is unchanged.
+ *
+ * Optional `religiousMode` prop — set by the thin HotelBookingPageReligious
+ * wrapper. When true the post-booking redirect goes to
+ * /booking-details/religious-booking-list, and the /api/hotel-booking/create
+ * payload carries `isReligiousBooking: true` so the persisted row is
+ * tagged and the Religious Booking List can filter it. Defaults to
+ * false so the legacy /hotel-booking-page flow is unchanged.
  */
-const HotelBookingPage = ({ force24Hour = false } = {}) => {
-  const postBookingListRoute = force24Hour
-    ? "/booking-details/24hr-booking-list"
-    : "/booking-details/hotel-booking-list";
+const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) => {
+  const postBookingListRoute = religiousMode
+    ? "/booking-details/religious-booking-list"
+    : force24Hour
+      ? "/booking-details/24hr-booking-list"
+      : "/booking-details/hotel-booking-list";
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -1143,6 +1152,10 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
         is24HourCheckin: !!bookingData.payload.is24HourCheckin,
         checkInTime: bookingData.payload.checkInTime || null,
         checkOutTime: bookingData.payload.checkOutTime || null,
+        // ── Religious flow: forward the marker set on bookingData by
+        //    RoomList when religiousMode is on. Wrapper-only opt-in —
+        //    every other flow sends nothing (backend defaults to false).
+        isReligiousBooking: religiousMode || !!bookingData.isReligiousBooking,
         // ── Display currency ────────────────────────────────────────────
         // The currency the operator chose on the search page. `rate` is the
         // AED→target factor; the backend stores the code and computes the
@@ -1369,8 +1382,17 @@ const HotelBookingPage = ({ force24Hour = false } = {}) => {
                 on /new-booking/hotel (or /new-booking/hotel-24hr) once
                 results arrive. */}
             <div className="hs-page-heading">
-              <h3 className="hs-page-heading-title">
+              <h3 className="hs-page-heading-title d-inline-flex align-items-center gap-2">
                 {force24Hour ? "24 Hours" : "Accommodation"}
+                {religiousMode && (
+                  <span
+                    className="badge bg-warning-subtle text-warning border border-warning-subtle"
+                    style={{ fontSize: "0.6em", padding: "3px 9px" }}
+                    title="Religious flow — Mecca / Medina bookings"
+                  >
+                    Religious
+                  </span>
+                )}
               </h3>
             </div>
             {agentAvailableBalance != null && (

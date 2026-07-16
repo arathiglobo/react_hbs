@@ -74,11 +74,21 @@ function AccordionToggleButton({ eventKey, isActive }) {
  * so the dedicated 24-hour Check-In flow can render its own booking
  * page (and redirect to the 24-hour booking list after success).
  * Defaults to false so the legacy /room-list flow is unchanged.
+ *
+ * Optional `religiousMode` prop — set by the thin RoomListReligious
+ * wrapper. When true, the same actions route to /religious-booking-page
+ * so the Religious flow lands on its own booking page and, after
+ * success, its own Religious Booking List. Also tags the persisted
+ * bookingData with `isReligiousBooking: true` so HotelBookingPage can
+ * forward that flag to the create endpoint. Defaults to false so the
+ * legacy /room-list flow is unchanged.
  */
-const RoomList = ({ force24Hour = false } = {}) => {
-  const bookingPageRoute = force24Hour
-    ? "/hotel-booking-page-24hr"
-    : "/hotel-booking-page";
+const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
+  const bookingPageRoute = religiousMode
+    ? "/religious-booking-page"
+    : force24Hour
+      ? "/hotel-booking-page-24hr"
+      : "/hotel-booking-page";
   const [roomData, setRoomData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -475,6 +485,12 @@ const RoomList = ({ force24Hour = false } = {}) => {
           // Display currency chosen on the search page — forwarded so the
           // booking page shows + persists the same currency. Rates stay AED.
           currency: displayCurrency,
+          // Religious-flow marker — read by HotelBookingPage's create
+          // path and forwarded on the /api/hotel-booking/create payload
+          // so the persisted row is tagged is_religious_booking=true.
+          // Undefined for every other flow, so bookingData shape is
+          // unchanged in the normal path.
+          isReligiousBooking: religiousMode || undefined,
         };
 
         // console.log("Booking data for direct redirect:", bookingData);
@@ -641,6 +657,9 @@ const RoomList = ({ force24Hour = false } = {}) => {
         payload,
         // Display currency chosen on the search page (see single-room path).
         currency: displayCurrency,
+        // Religious-flow marker (see single-room path). Undefined outside
+        // the religious flow keeps this payload shape unchanged.
+        isReligiousBooking: religiousMode || undefined,
       };
 
       sessionStorage.setItem("bookingData", JSON.stringify(bookingData));
@@ -2211,7 +2230,14 @@ const RoomList = ({ force24Hour = false } = {}) => {
               try {
                 sessionStorage.setItem(
                   "bookingData",
-                  JSON.stringify({ selectedRate, hotelStaticData, payload }),
+                  JSON.stringify({
+                    selectedRate,
+                    hotelStaticData,
+                    payload,
+                    // Religious flow marker — same reasoning as the other
+                    // bookingData writes above.
+                    isReligiousBooking: religiousMode || undefined,
+                  }),
                 );
               } catch (e) {
                 console.error("Error storing bookingData:", e);

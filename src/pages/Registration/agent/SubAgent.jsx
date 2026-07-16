@@ -520,7 +520,12 @@ export default function SubAgent() {
           setShowLoginModal(false);
         }
       } catch (error) {
-        toast.error("Failed to save login credentials");
+        const serverMsg =
+          error.response?.data?.message ||
+          error.response?.data?.error ||
+          error.message ||
+          "Failed to save login credentials";
+        toast.error(serverMsg);
       } finally {
         setIsLoading(false);
       }
