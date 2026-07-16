@@ -234,6 +234,14 @@ const PackageReg = () => {
 
   const [packageOthersDTOList, setPackageOthersDTOList] = useState([]);
 
+  const [packageValidityDTOList, setPackageValidityDTOList] = useState([
+    { validityFrom: "", validityTo: "" },
+  ]);
+
+  const [packageCancellationPolicyDTOList, setPackageCancellationPolicyDTOList] = useState([
+    { cancellationFee: "", cancellationFeeType: "PERCENT", noOfNights: "" },
+  ]);
+
   const [selectedOthers, setSelectedOthers] = useState([]);
   const [countries, setCountries] = useState([]);
   const [places, setPlaces] = useState([]);
@@ -401,6 +409,10 @@ const PackageReg = () => {
     ]);
     setSelectedOthers([]);
     setPlaces([]);
+    setPackageValidityDTOList([{ validityFrom: "", validityTo: "" }]);
+    setPackageCancellationPolicyDTOList([
+      { cancellationFee: "", cancellationFeeType: "PERCENT", noOfNights: "" },
+    ]);
 
     // Reset packageOthersDTOList to all items selected (not deleted)
     if (termsAndConditions.length > 0) {
@@ -521,6 +533,41 @@ const PackageReg = () => {
       formDataPayload.append(`packageOthersDTOList[${index}].otherId`, other.otherId);
       formDataPayload.append(`packageOthersDTOList[${index}].type`, other.type || "");
       formDataPayload.append(`packageOthersDTOList[${index}].isDeleted`, other.isDeleted ? "true" : "false");
+    });
+
+    packageValidityDTOList.forEach((validity, index) => {
+      if (!validity.validityFrom && !validity.validityTo) return;
+      // Match the hotel-policy edit page: send yyyy-MM-ddTHH:mm:ss so the
+      // backend can parse it as a LocalDateTime-shaped string.
+      const from = validity.validityFrom
+        ? (validity.validityFrom.length === 16 ? `${validity.validityFrom}:00` : validity.validityFrom)
+        : "";
+      const to = validity.validityTo
+        ? (validity.validityTo.length === 16 ? `${validity.validityTo}:00` : validity.validityTo)
+        : "";
+      formDataPayload.append(`packageValidityDTOList[${index}].validityFrom`, from);
+      formDataPayload.append(`packageValidityDTOList[${index}].validityTo`, to);
+    });
+
+    packageCancellationPolicyDTOList.forEach((cp, index) => {
+      if (
+        (cp.cancellationFee === "" || cp.cancellationFee === null || cp.cancellationFee === undefined) &&
+        (cp.noOfNights === "" || cp.noOfNights === null || cp.noOfNights === undefined)
+      ) {
+        return;
+      }
+      formDataPayload.append(
+        `packageCancellationPolicyDTOList[${index}].cancellationFee`,
+        cp.cancellationFee ?? ""
+      );
+      formDataPayload.append(
+        `packageCancellationPolicyDTOList[${index}].cancellationFeeType`,
+        cp.cancellationFeeType || "PERCENT"
+      );
+      formDataPayload.append(
+        `packageCancellationPolicyDTOList[${index}].noOfNights`,
+        cp.noOfNights ?? ""
+      );
     });
 
     formDataPayload.append("liveStatus", formData.status === "true" ? 1 : 0);
@@ -815,6 +862,10 @@ const PackageReg = () => {
     setEditing(null);
     setIsViewMode(false);
     setPackageCategoryDropdownOpen(false);
+    setPackageValidityDTOList([{ validityFrom: "", validityTo: "" }]);
+    setPackageCancellationPolicyDTOList([
+      { cancellationFee: "", cancellationFeeType: "PERCENT", noOfNights: "" },
+    ]);
   };
 
   // CRUD Operations
@@ -872,6 +923,37 @@ const PackageReg = () => {
         setPackageItinearyDTOList(updatedItinerary);
       } else {
         setPackageItinearyDTOList([{ day: 1, heading: "", placeId: "", dayActivities: "", packageItinearyImage: null }]);
+      }
+
+      // Load validity list
+      if (data.packageValidityDTOList && Array.isArray(data.packageValidityDTOList) && data.packageValidityDTOList.length > 0) {
+        setPackageValidityDTOList(
+          data.packageValidityDTOList.map((v) => ({
+            validityFrom: v.validityFrom || "",
+            validityTo: v.validityTo || "",
+          }))
+        );
+      } else {
+        setPackageValidityDTOList([{ validityFrom: "", validityTo: "" }]);
+      }
+
+      // Load cancellation policy list
+      if (
+        data.packageCancellationPolicyDTOList &&
+        Array.isArray(data.packageCancellationPolicyDTOList) &&
+        data.packageCancellationPolicyDTOList.length > 0
+      ) {
+        setPackageCancellationPolicyDTOList(
+          data.packageCancellationPolicyDTOList.map((c) => ({
+            cancellationFee: c.cancellationFee ?? "",
+            cancellationFeeType: c.cancellationFeeType || "PERCENT",
+            noOfNights: c.noOfNights ?? "",
+          }))
+        );
+      } else {
+        setPackageCancellationPolicyDTOList([
+          { cancellationFee: "", cancellationFeeType: "PERCENT", noOfNights: "" },
+        ]);
       }
 
       // Load others data
@@ -1074,6 +1156,75 @@ const PackageReg = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Policy Details: Validity + Cancellation Policy handlers.
+  // Mirrors the hotel-policy edit page so behaviour matches what an
+  // agent already knows from /hotel-actions/{id}/hotel-policy/{id}/edit.
+  const normalisePolicyDateTime = (value) => {
+    if (!value) return "";
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return value;
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return "";
+    const pad = (n) => String(n).padStart(2, "0");
+    return (
+      `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+      `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+    );
+  };
+
+  const getMinValidityToDate = (fromDate) => {
+    if (!fromDate) return "";
+    const date = new Date(fromDate);
+    if (isNaN(date.getTime())) return "";
+    date.setMinutes(date.getMinutes() + 1);
+    return date.toISOString().slice(0, 16);
+  };
+
+  const addValidity = () => {
+    setPackageValidityDTOList([
+      ...packageValidityDTOList,
+      { validityFrom: "", validityTo: "" },
+    ]);
+  };
+
+  const removeValidity = (index) => {
+    if (packageValidityDTOList.length > 1) {
+      setPackageValidityDTOList(
+        packageValidityDTOList.filter((_, i) => i !== index)
+      );
+    }
+  };
+
+  const updateValidity = (index, field, value) => {
+    setPackageValidityDTOList(
+      packageValidityDTOList.map((item, i) =>
+        i === index ? { ...item, [field]: value } : item
+      )
+    );
+  };
+
+  const addCancellation = () => {
+    setPackageCancellationPolicyDTOList([
+      ...packageCancellationPolicyDTOList,
+      { cancellationFee: "", cancellationFeeType: "PERCENT", noOfNights: "" },
+    ]);
+  };
+
+  const removeCancellation = (index) => {
+    if (packageCancellationPolicyDTOList.length > 1) {
+      setPackageCancellationPolicyDTOList(
+        packageCancellationPolicyDTOList.filter((_, i) => i !== index)
+      );
+    }
+  };
+
+  const updateCancellation = (index, field, value) => {
+    setPackageCancellationPolicyDTOList(
+      packageCancellationPolicyDTOList.map((item, i) =>
+        i === index ? { ...item, [field]: value } : item
+      )
+    );
   };
 
   // Itinerary management functions
@@ -2280,6 +2431,160 @@ const PackageReg = () => {
                         ));
                       })()
                     )}
+                  </div>
+                </Tab>
+
+                <Tab
+                  eventKey="policyDetails"
+                  title={
+                    <span>
+                      Policy Details
+                    </span>
+                  }
+                >
+                  <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+                    {/* Validity List */}
+                    <div className="mb-4">
+                      <h6 className="fw-bold text-dark mb-3">Validity List</h6>
+                      {packageValidityDTOList.map((v, index) => (
+                        <Row key={index} className="align-items-end mb-2 g-2">
+                          <Col md={5}>
+                            <Form.Label className="small text-secondary">
+                              Validity From
+                            </Form.Label>
+                            <Form.Control
+                              type="datetime-local"
+                              className="rounded-3"
+                              value={normalisePolicyDateTime(v.validityFrom)}
+                              onChange={(e) =>
+                                updateValidity(index, "validityFrom", e.target.value)
+                              }
+                              disabled={isViewMode}
+                            />
+                          </Col>
+                          <Col md={5}>
+                            <Form.Label className="small text-secondary">
+                              Validity To
+                            </Form.Label>
+                            <Form.Control
+                              type="datetime-local"
+                              className="rounded-3"
+                              value={normalisePolicyDateTime(v.validityTo)}
+                              min={getMinValidityToDate(v.validityFrom)}
+                              onChange={(e) =>
+                                updateValidity(index, "validityTo", e.target.value)
+                              }
+                              disabled={isViewMode}
+                            />
+                          </Col>
+                          <Col md={2} className="text-end">
+                            {packageValidityDTOList.length > 1 && (
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                className="rounded-circle"
+                                onClick={() => removeValidity(index)}
+                                disabled={isViewMode}
+                              >
+                                <FaTrash />
+                              </Button>
+                            )}
+                          </Col>
+                        </Row>
+                      ))}
+                      {!isViewMode && (
+                        <Button
+                          size="sm"
+                          variant="outline-primary"
+                          className="mt-2"
+                          onClick={addValidity}
+                        >
+                          <FaPlus className="me-1" /> Add Validity
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Cancellation Policy */}
+                    <div className="border-top pt-4 mt-4">
+                      <h6 className="fw-bold text-dark mb-3">Cancellation Policy</h6>
+                      {packageCancellationPolicyDTOList.map((c, index) => (
+                        <Row
+                          key={index}
+                          className="align-items-center mb-3 bg-light p-3 rounded-3"
+                        >
+                          <Col md={12}>
+                            <Form.Label className="fw-semibold small">
+                              Cancellation fee of
+                            </Form.Label>
+                            <div className="d-flex align-items-center flex-wrap gap-2 mt-1">
+                              <Form.Control
+                                type="number"
+                                min="0"
+                                onKeyDown={(e) => {
+                                  if (e.key === "-" || e.key === "e" || e.key === "E") e.preventDefault();
+                                }}
+                                style={{ width: "120px" }}
+                                value={c.cancellationFee}
+                                onChange={(e) =>
+                                  updateCancellation(index, "cancellationFee", e.target.value)
+                                }
+                                disabled={isViewMode}
+                              />
+                              <Form.Select
+                                style={{ width: "90px" }}
+                                value={c.cancellationFeeType}
+                                onChange={(e) =>
+                                  updateCancellation(index, "cancellationFeeType", e.target.value)
+                                }
+                                disabled={isViewMode}
+                              >
+                                <option value="PERCENT">%</option>
+                                <option value="AMOUNT">Amt</option>
+                              </Form.Select>
+                              <span className="text-muted small">
+                                of total booking if cancelled less than
+                              </span>
+                              <Form.Control
+                                type="number"
+                                min="0"
+                                onKeyDown={(e) => {
+                                  if (e.key === "-" || e.key === "e" || e.key === "E") e.preventDefault();
+                                }}
+                                style={{ width: "90px" }}
+                                value={c.noOfNights}
+                                onChange={(e) =>
+                                  updateCancellation(index, "noOfNights", e.target.value)
+                                }
+                                disabled={isViewMode}
+                              />
+                              <span className="text-muted small">
+                                days prior to arrival
+                              </span>
+                              {!isViewMode && (
+                                <Button
+                                  size="sm"
+                                  variant="outline-primary"
+                                  className="rounded-circle"
+                                  onClick={addCancellation}
+                                >
+                                  <FaPlus />
+                                </Button>
+                              )}
+                              {!isViewMode && packageCancellationPolicyDTOList.length > 1 && (
+                                <Button
+                                  size="sm"
+                                  variant="outline-danger"
+                                  className="rounded-circle"
+                                  onClick={() => removeCancellation(index)}
+                                >
+                                  <FaTrash />
+                                </Button>
+                              )}
+                            </div>
+                          </Col>
+                        </Row>
+                      ))}
+                    </div>
                   </div>
                 </Tab>
 

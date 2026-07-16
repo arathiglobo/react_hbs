@@ -38,7 +38,7 @@ const COLUMN_WIDTHS = {
   bookingCode: "100px",
   bookDate: "95px",
   bookingDetails: "240px",
-  nights: "70px",
+  deadlineDate: "110px",
   paymentMode: "140px",
   status: "110px",
   action: "70px",
@@ -77,6 +77,21 @@ const formatShortDate = (dateString) => {
   const day = String(d.getDate()).padStart(2, "0");
   const month = String(d.getMonth() + 1).padStart(2, "0");
   return `${day}/${month}/${d.getFullYear()}`;
+};
+
+// Deadline Date column uses ISO-style yyyy-MM-dd. Kept separate from
+// formatShortDate so the other columns (Book Date / Travel Date) still
+// render as dd/mm/yyyy.
+const formatIsoDate = (dateString) => {
+  if (!dateString) return "";
+  const normalized = String(dateString).includes("T")
+    ? dateString
+    : `${dateString}T00:00:00`;
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return `${d.getFullYear()}-${month}-${day}`;
 };
 
 // Package-booking lifecycle — now mirrors the hotel flow with three states:
@@ -647,7 +662,7 @@ const PackageBookingList = () => {
                           }}
                         >
                           <tr>
-                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.sn }}>
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.sn, whiteSpace: "nowrap" }}>
                               S.N
                             </th>
                             <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.agentName, whiteSpace: "nowrap" }}>
@@ -665,8 +680,8 @@ const PackageBookingList = () => {
                             <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingDetails }}>
                               Booking Details
                             </th>
-                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.nights }}>
-                              Nights
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.deadlineDate }}>
+                              Deadline Date
                             </th>
                             <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentMode }}>
                               Payment Mode
@@ -750,11 +765,10 @@ const PackageBookingList = () => {
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "center",
-                                    fontFamily: "monospace",
-                                    width: COLUMN_WIDTHS.nights,
+                                    width: COLUMN_WIDTHS.deadlineDate,
                                   }}
                                 >
-                                  {b.nights ?? "-"}
+                                  {formatIsoDate(b.deadlineDate) || "-"}
                                 </td>
                                 <td
                                   style={{
