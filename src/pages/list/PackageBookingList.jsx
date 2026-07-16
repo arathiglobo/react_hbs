@@ -33,14 +33,36 @@ const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 // so all list tables render at the same widths under the shared hbl-modern skin.
 const COLUMN_WIDTHS = {
   sn: "40px",
+  agentName: "90px",
   customerName: "150px",
   bookingCode: "100px",
   bookDate: "95px",
   bookingDetails: "240px",
   nights: "70px",
-  total: "110px",
+  paymentMode: "140px",
   status: "110px",
   action: "70px",
+};
+
+// Human-readable label for the persisted `modeOfPayment` value. Codes come
+// from the booking wizard's PAYMENT_MODES; unknown values (legacy rows,
+// admin edits) fall back to a title-cased, underscore-stripped version so
+// the cell is never blank when a value exists.
+const PAYMENT_MODE_LABELS = {
+  CREDIT: "Credit Limit Payment",
+  CARD: "Card payment",
+  BANK_TRANSFER: "Bank transfer",
+  CASH: "Cash",
+};
+const formatPaymentMode = (mode) => {
+  if (mode === null || mode === undefined) return "-";
+  const key = String(mode).trim().toUpperCase();
+  if (!key) return "-";
+  if (PAYMENT_MODE_LABELS[key]) return PAYMENT_MODE_LABELS[key];
+  return key
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/(^|\s)\S/g, (c) => c.toUpperCase());
 };
 
 // "dd/mm/yyyy" — matches the last-minute list's date shape so the two tables
@@ -82,32 +104,31 @@ const deriveDisplayStatus = (b) => {
   return "Confirmed";
 };
 
+// Plain colored bold text — matches the hotel-booking-list notification cell
+// (green for Confirmed / ReConfirmed, red for Cancelled) instead of a filled
+// pill with a dot. Preserves the `meta` prop shape so callers stay unchanged.
 const StatusPill = ({ meta, raw }) => {
-  if (!meta) return <span className="text-muted">{raw || "-"}</span>;
+  const label = meta?.label || raw || "-";
+  const normalized = String(label).replace(/\s+/g, "").toLowerCase();
+  let color = "#6c757d";
+  if (normalized === "confirmed" || normalized === "reconfirmed") color = "#06a301";
+  else if (normalized === "cancelled") color = "#dc3545";
+  else if (normalized === "onrequest") color = "#e67e22";
   return (
     <span
-      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
       style={{
-        backgroundColor: meta.bg,
-        color: meta.color,
-        fontSize: "0.7rem",
+        color,
+        padding: "0.32rem 0.6rem",
+        fontSize: "0.82rem",
         fontWeight: 600,
-        lineHeight: 1,
+        borderRadius: "0.375rem",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.35rem",
         whiteSpace: "nowrap",
       }}
     >
-      {meta.dot && (
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            backgroundColor: meta.dot,
-            display: "inline-block",
-          }}
-        />
-      )}
-      {meta.label}
+      {label}
     </span>
   );
 };
@@ -629,6 +650,9 @@ const PackageBookingList = () => {
                             <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.sn }}>
                               S.N
                             </th>
+                            <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.agentName, whiteSpace: "nowrap" }}>
+                              Agent Name
+                            </th>
                             <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.customerName }}>
                               Customer Name
                             </th>
@@ -644,11 +668,11 @@ const PackageBookingList = () => {
                             <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.nights }}>
                               Nights
                             </th>
-                            <th style={{ ...baseHeaderStyle, textAlign: "right", width: COLUMN_WIDTHS.total }}>
-                              Total
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentMode }}>
+                              Payment Mode
                             </th>
                             <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
-                              Status
+                              Notification
                             </th>
                             <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.action }}>
                               Action
@@ -666,6 +690,13 @@ const PackageBookingList = () => {
                                   style={{ ...baseCellStyle, textAlign: "center", color: "#6c757d", width: COLUMN_WIDTHS.sn }}
                                 >
                                   {(page - 1) * perPage + idx + 1}
+                                </td>
+                                {/* Agent Name — pulled from the DTO, populated
+                                    by the service via AgentRepository lookup. */}
+                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.agentName }}>
+                                  <span className="fw-medium text-dark">
+                                    {b.agentName || "-"}
+                                  </span>
                                 </td>
                                 {/* Customer Name — matches the FaUser layout on
                                     the last-minute list. */}
@@ -728,15 +759,13 @@ const PackageBookingList = () => {
                                 <td
                                   style={{
                                     ...baseCellStyle,
-                                    textAlign: "right",
-                                    width: COLUMN_WIDTHS.total,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.paymentMode,
                                     whiteSpace: "nowrap",
                                   }}
                                 >
                                   <span className="fw-semibold text-dark">
-                                    {b.totalPrice != null
-                                      ? `AED ${Number(b.totalPrice).toFixed(2)}`
-                                      : "-"}
+                                    {formatPaymentMode(b.modeOfPayment)}
                                   </span>
                                 </td>
                                 <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>

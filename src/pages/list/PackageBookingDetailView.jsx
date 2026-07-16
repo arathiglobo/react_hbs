@@ -70,6 +70,7 @@ const BUTTON_STYLE = {
 // (BookingDetailedView.jsx) so both detail screens share one palette.
 const BTN_PRIMARY = { ...BUTTON_STYLE, backgroundColor: "#2563eb" }; // Add New Item
 const BTN_DANGER = { ...BUTTON_STYLE, backgroundColor: "#dc2626" }; // Cancel
+const BTN_RECONFIRM = { ...BUTTON_STYLE, backgroundColor: "#16a34a" }; // Reconfirm
 const BTN_TEAL = { ...BUTTON_STYLE, backgroundColor: "#0d9488" }; // Voucher
 const BTN_INFO = { ...BUTTON_STYLE, backgroundColor: "#0891b2" }; // Invoice
 const BTN_SKY = { ...BUTTON_STYLE, backgroundColor: "#3ba2e8" }; // Add Agent Reference
@@ -269,6 +270,8 @@ export default function PackageBookingDetailView() {
   // Cancellation state
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [showReconfirmModal, setShowReconfirmModal] = useState(false);
+  const [isReconfirming, setIsReconfirming] = useState(false);
 
   const [showVoucherModal, setShowVoucherModal] = useState(false);
   const [voucherEmail, setVoucherEmail] = useState("");
@@ -419,13 +422,44 @@ export default function PackageBookingDetailView() {
     }
   };
 
+  // Reconfirm a held (Confirmed) booking → ReConfirmed. Mirrors the hotel
+  // detail view's RECONFIRM: the backend flips the status AND settles the
+  // agent's deferred credit (blocking if credit is insufficient). On success
+  // we re-fetch so the buttons switch to the final Voucher / Invoice.
+  const confirmReconfirmBooking = async () => {
+    if (!bookingId) return;
+    try {
+      setIsReconfirming(true);
+      const response = await axiosInstance.put(
+        `/api/v1/package-booking/reconfirm/${bookingId}`,
+      );
+      if (response.data && response.data.status === "success") {
+        toast.success(
+          response.data.message || "Booking reconfirmed successfully",
+        );
+        setShowReconfirmModal(false);
+        await fetchDetails();
+      } else {
+        toast.error(response.data?.message || "Failed to reconfirm booking");
+      }
+    } catch (error) {
+      console.error("Error reconfirming booking:", error);
+      toast.error(
+        error.response?.data?.message ||
+          "Failed to reconfirm booking. Please try again.",
+      );
+    } finally {
+      setIsReconfirming(false);
+    }
+  };
+
   const loadVoucherPdf = async () => {
     if (!bookingId) return;
     setIsLoadingVoucherPdf(true);
     try {
       const response = await axiosInstance.get(
         `/api/package-bookings/${bookingId}/pdf`,
-        { params: { type: "VOUCHER" } }
+        { params: { type: "VOUCHER", proforma: derivedStatus === "Confirmed" } }
       );
       if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
         setVoucherPdfUrl(response.data.pdfUrl);
@@ -469,7 +503,7 @@ export default function PackageBookingDetailView() {
       if (!url) {
         const response = await axiosInstance.get(
           `/api/package-bookings/${bookingId}/pdf`,
-          { params: { type: "VOUCHER" } }
+          { params: { type: "VOUCHER", proforma: derivedStatus === "Confirmed" } }
         );
         if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
           url = response.data.pdfUrl;
@@ -497,7 +531,7 @@ export default function PackageBookingDetailView() {
     try {
       const response = await axiosInstance.get(
         `/api/package-bookings/${bookingId}/pdf`,
-        { params: { type: "INVOICE" } }
+        { params: { type: "INVOICE", proforma: derivedStatus === "Confirmed" } }
       );
       if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
         setInvoicePdfUrl(response.data.pdfUrl);
@@ -533,7 +567,7 @@ export default function PackageBookingDetailView() {
       if (!url) {
         const response = await axiosInstance.get(
           `/api/package-bookings/${bookingId}/pdf`,
-          { params: { type: "INVOICE" } }
+          { params: { type: "INVOICE", proforma: derivedStatus === "Confirmed" } }
         );
         if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
           url = response.data.pdfUrl;
@@ -1569,14 +1603,32 @@ export default function PackageBookingDetailView() {
                       CANCEL
                     </button>
                   )}
+                  {/* RECONFIRM — shown only for a held (Confirmed) booking.
+                      Flips it to ReConfirmed and settles the agent's deferred
+                      credit. A ReConfirmed booking shows no reconfirm button. */}
+                  {isCancellable && derivedStatus === "Confirmed" && (
+                    <button
+                      style={BTN_RECONFIRM}
+                      onClick={() => setShowReconfirmModal(true)}
+                      title="Reconfirm this held booking"
+                    >
+                      RECONFIRM
+                    </button>
+                  )}
+                  {/* Confirmed (held) → draft Proforma docs; ReConfirmed →
+                      final Voucher / Invoice. */}
                   {isCancellable && (
                     <button style={BTN_TEAL} onClick={openVoucher} title="Voucher">
-                      VOUCHER
+                      {derivedStatus === "Confirmed"
+                        ? "PROFORMA VOUCHER"
+                        : "VOUCHER"}
                     </button>
                   )}
                   {isCancellable && (
                     <button style={BTN_INFO} onClick={openInvoice} title="Invoice">
-                      INVOICE
+                      {derivedStatus === "Confirmed"
+                        ? "PROFORMA INVOICE"
+                        : "INVOICE"}
                     </button>
                   )}
                   {isCancellable && (
@@ -1872,6 +1924,58 @@ export default function PackageBookingDetailView() {
             }}
           >
             Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Reconfirm Modal ─────────────────────────────────────────────
+          Confirms the CONFIRMED → RECONFIRMED transition. Warns that the
+          agent's credit will be debited (deferred from the Hold + Pay Later
+          choice). */}
+      <Modal
+        show={showReconfirmModal}
+        onHide={() => !isReconfirming && setShowReconfirmModal(false)}
+        centered
+        backdrop="static"
+        keyboard={false}
+      >
+        <Modal.Header closeButton={!isReconfirming} className="border-0">
+          <Modal.Title className="fw-bold d-flex align-items-center">
+            <FaCheckCircle className="me-2" style={{ color: "#16a34a" }} />
+            <span>Reconfirm Booking</span>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="mb-2">
+            Reconfirming moves this booking from{" "}
+            <strong>Confirmed</strong> (held) to <strong>ReConfirmed</strong>,
+            and the payable total{" "}
+            {bookingDetails?.totalPrice != null && (
+              <strong>
+                AED {Number(bookingDetails.totalPrice).toFixed(2)}
+              </strong>
+            )}{" "}
+            will be debited from the agent's credit balance now.
+          </p>
+          <p className="mb-0 text-muted small">
+            If the agent's available credit is insufficient, the
+            reconfirmation will be declined.
+          </p>
+        </Modal.Body>
+        <Modal.Footer className="border-0">
+          <Button
+            variant="outline-secondary"
+            onClick={() => setShowReconfirmModal(false)}
+            disabled={isReconfirming}
+          >
+            Cancel
+          </Button>
+          <Button
+            style={{ backgroundColor: "#16a34a", border: "none" }}
+            onClick={confirmReconfirmBooking}
+            disabled={isReconfirming}
+          >
+            {isReconfirming ? "Reconfirming..." : "Reconfirm & Pay"}
           </Button>
         </Modal.Footer>
       </Modal>
