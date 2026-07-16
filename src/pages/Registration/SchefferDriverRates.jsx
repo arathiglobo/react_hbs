@@ -73,6 +73,21 @@ const SchefferDriverRates = () => {
   const [formData, setFormData] = useState(emptyHeader);
   const [packageRows, setPackageRows] = useState([newPackageRow(1)]);
 
+  // ── Terms & Conditions / Cancellation Policies state ──────────────
+  // Two independent dynamic lists, edited as textarea rows in the modal
+  // and sent back to the API as `termsAndConditions` / `cancellationPolicies`
+  // arrays of strings on the rental rate DTO. Empty rows are dropped at
+  // save-time (backend defends too). Mirrors the pattern in /cab-rates.
+  const newPolicyRow = (id) => ({ id, value: "" });
+  const [termsRows, setTermsRows] = useState([newPolicyRow(1)]);
+  const [cancellationRows, setCancellationRows] = useState([newPolicyRow(1)]);
+  const addPolicyRow = (setter) =>
+    setter((prev) => [...prev, newPolicyRow(Date.now())]);
+  const removePolicyRow = (setter, id) =>
+    setter((prev) => (prev.length > 1 ? prev.filter((r) => r.id !== id) : prev));
+  const updatePolicyRow = (setter, id, value) =>
+    setter((prev) => prev.map((r) => (r.id === id ? { ...r, value } : r)));
+
   // ---- Intercity charges ----
   const [intercityList, setIntercityList] = useState([]);
   const emptyIntercity = {
@@ -257,6 +272,8 @@ const SchefferDriverRates = () => {
     setValidationErrors({});
     setFormData(emptyHeader);
     setPackageRows([newPackageRow(1)]);
+    setTermsRows([newPolicyRow(1)]);
+    setCancellationRows([newPolicyRow(1)]);
     setShowModal(true);
   };
 
@@ -267,6 +284,8 @@ const SchefferDriverRates = () => {
     setValidationErrors({});
     setFormData(emptyHeader);
     setPackageRows([newPackageRow(1)]);
+    setTermsRows([newPolicyRow(1)]);
+    setCancellationRows([newPolicyRow(1)]);
   };
 
   const validateForm = () => {
@@ -309,6 +328,14 @@ const SchefferDriverRates = () => {
       airportDropCharge: num(r.airportDropCharge),
       isActive: Boolean(r.isActive),
     })),
+    // Drop empty rows here so the backend never sees a blank policy line;
+    // backend also guards but this keeps the payload tidy.
+    termsAndConditions: termsRows
+      .map((r) => (r.value || "").trim())
+      .filter((v) => v.length > 0),
+    cancellationPolicies: cancellationRows
+      .map((r) => (r.value || "").trim())
+      .filter((v) => v.length > 0),
   });
 
   const saveRate = async () => {
@@ -383,6 +410,14 @@ const SchefferDriverRates = () => {
           }))
         : [newPackageRow(1)];
     setPackageRows(pkgs);
+    // Seed the T&C / cancellation rows from the saved lists. Empty lists
+    // fall back to a single blank row so the Add button pattern still works.
+    const seedPolicies = (arr) =>
+      Array.isArray(arr) && arr.length > 0
+        ? arr.map((v, i) => ({ id: i + 1, value: v || "" }))
+        : [newPolicyRow(1)];
+    setTermsRows(seedPolicies(rate.termsAndConditions));
+    setCancellationRows(seedPolicies(rate.cancellationPolicies));
     setShowModal(true);
   };
 
@@ -1028,6 +1063,109 @@ const SchefferDriverRates = () => {
                       </tbody>
                     </Table>
                   </div>
+                </div>
+
+                {/* ── Terms & Conditions ────────────────────────────────
+                    Dynamic list of free-form sentences saved per rate.
+                    Mirrors the /cab-rates pattern. Empty rows are dropped
+                    at save-time (frontend + backend defend). */}
+                <div className="border-top pt-3 mt-3">
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <h6 className="text-muted mb-0">Terms &amp; Conditions</h6>
+                    {!isViewMode && (
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        onClick={() => addPolicyRow(setTermsRows)}
+                        title="Add Terms &amp; Conditions"
+                      >
+                        <FaPlus className="me-2" />
+                        Add
+                      </Button>
+                    )}
+                  </div>
+                  {termsRows.map((row, idx) => (
+                    <Row key={row.id} className="mb-2">
+                      <Col md={10}>
+                        <Form.Control
+                          as="textarea"
+                          rows={2}
+                          value={row.value}
+                          placeholder={`Term ${idx + 1} — e.g. "Driver waiting time is 30 mins"`}
+                          onChange={(e) =>
+                            updatePolicyRow(setTermsRows, row.id, e.target.value)
+                          }
+                          disabled={isViewMode}
+                        />
+                      </Col>
+                      {!isViewMode && (
+                        <Col md={2}>
+                          <div className="d-flex gap-1">
+                            {termsRows.length > 1 && (
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                onClick={() => removePolicyRow(setTermsRows, row.id)}
+                                title="Remove"
+                              >
+                                <FaTrash size={10} />
+                              </Button>
+                            )}
+                          </div>
+                        </Col>
+                      )}
+                    </Row>
+                  ))}
+                </div>
+
+                {/* ── Cancellation Policies ───────────────────────────── */}
+                <div className="border-top pt-3 mt-3">
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <h6 className="text-muted mb-0">Cancellation Policies</h6>
+                    {!isViewMode && (
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        onClick={() => addPolicyRow(setCancellationRows)}
+                        title="Add Cancellation Policy"
+                      >
+                        <FaPlus className="me-2" />
+                        Add
+                      </Button>
+                    )}
+                  </div>
+                  {cancellationRows.map((row, idx) => (
+                    <Row key={row.id} className="mb-2">
+                      <Col md={10}>
+                        <Form.Control
+                          as="textarea"
+                          rows={2}
+                          value={row.value}
+                          placeholder={`Policy ${idx + 1} — e.g. "Free cancellation before 24 hours"`}
+                          onChange={(e) =>
+                            updatePolicyRow(setCancellationRows, row.id, e.target.value)
+                          }
+                          disabled={isViewMode}
+                        />
+                      </Col>
+                      {!isViewMode && (
+                        <Col md={2}>
+                          <div className="d-flex gap-1">
+                            {cancellationRows.length > 1 && (
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                onClick={() => removePolicyRow(setCancellationRows, row.id)}
+                                title="Remove"
+                              >
+                                <FaTrash size={10} />
+                              </Button>
+                            )}
+                          </div>
+                        </Col>
+                      )}
+                    </Row>
+                  ))}
                 </div>
               </Form>
             </Modal.Body>

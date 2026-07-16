@@ -776,7 +776,24 @@ export default function SchefferDriverBookingDetailView() {
                           {details.guests.map((g, idx) => (
                             <tr key={g.id || idx}>
                               <td>{idx + 1}</td>
-                              <td>{g.isChild ? "Child" : "Adult"}</td>
+                              <td>
+                                {g.isChild ? "Child" : "Adult"}
+                                {g.isLead && !g.isChild && (
+                                  <span
+                                    style={{
+                                      marginLeft: 6,
+                                      padding: "1px 6px",
+                                      background: "#0d6efd",
+                                      color: "#fff",
+                                      borderRadius: 4,
+                                      fontSize: "0.7rem",
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    Lead
+                                  </span>
+                                )}
+                              </td>
                               <td>
                                 {[
                                   g.salutation,

@@ -237,6 +237,7 @@ export default function Sidebar() {
             { label: "Assign Menu", to: "/masters/assign-menu" },
             { label: "Contact Type", to: "/masters/contact-type" },
             { label: "Markup Type", to: "/masters/markup-type" },
+            { label: "Cab Type", to: "/masters/cab-type" },
             { label: "Currency", to: "/masters/currency" },
           ],
         },

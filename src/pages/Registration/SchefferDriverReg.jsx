@@ -438,6 +438,25 @@ const SchefferDriverReg = () => {
   const [hotelOptionList, setHotelOptionList] = useState([]);
   const [airportOptionList, setAirportOptionList] = useState([]);
 
+  // Cab-type master, feeds the Cab Type dropdown. Fetched once on mount and on
+  // modal open so a freshly-added type at /masters/cab-type is picked up.
+  // Each row: { id, name, adultCount, childCount }.
+  const [cabTypeOptions, setCabTypeOptions] = useState([]);
+  const fetchCabTypeOptions = async () => {
+    try {
+      const res = await axiosInstance.get("/api/masterCabType?page=0&limit=200");
+      const arr = Array.isArray(res.data)
+        ? res.data
+        : res.data?.content || [];
+      setCabTypeOptions(arr);
+    } catch {
+      setCabTypeOptions([]);
+    }
+  };
+  useEffect(() => {
+    fetchCabTypeOptions();
+  }, []);
+
   const fetchHotelOptionList = async () => {
     try {
       const res = await axiosInstance.get("/api/hotels?page=0&limit=20");
@@ -1943,10 +1962,11 @@ const SchefferDriverReg = () => {
                             }
                           >
                             <option value="">Select type</option>
-                            <option value="Sedan">Sedan</option>
-                            <option value="SUV">SUV</option>
-                            <option value="Luxury">Luxury</option>
-                            <option value="Van">Van</option>
+                            {cabTypeOptions.map((ct) => (
+                              <option key={ct.id} value={ct.name}>
+                                {ct.name} (Adults: {ct.adultCount ?? 0}, Children: {ct.childCount ?? 0})
+                              </option>
+                            ))}
                           </Form.Select>
                             </Form.Group>
                           </Col>
