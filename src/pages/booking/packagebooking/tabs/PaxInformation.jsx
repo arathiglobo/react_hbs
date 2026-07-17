@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Row, Col, Form, Modal, Button, Table } from "react-bootstrap";
 import AsyncSelect from "react-select/async";
 import axiosInstance from "../../../../components/AxiosInstance";
@@ -84,6 +84,18 @@ const PaxInformation = ({
   const [showSummary, setShowSummary] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tourismDirham, setTourismDirham] = useState("");
+
+  // Edit mode: the parent loads the saved booking asynchronously, so
+  // bookingData.tourismDirham may arrive after this component mounts. Sync it
+  // in once, without clobbering user input made in the meantime. Prevents
+  // the amend flow from silently dropping the previously-entered TD.
+  const hasHydratedTD = useRef(false);
+  useEffect(() => {
+    if (!hasHydratedTD.current && bookingData?.tourismDirham != null) {
+      setTourismDirham(String(bookingData.tourismDirham));
+      hasHydratedTD.current = true;
+    }
+  }, [bookingData?.tourismDirham]);
 
   // Client location snapshot for the Booking History audit trail, resolved
   // once on this step and sent on the /book payload. Location comes from
@@ -263,7 +275,10 @@ const PaxInformation = ({
     if (!localData.travellers || localData.travellers.length === 0) {
       const seeded = { ...localData, travellers: [makeTraveller("Adult")] };
       setLocalData(seeded);
-      updateData({ ...bookingData, paxInfo: seeded });
+      // Functional setter — spreading the `bookingData` prop directly would
+      // capture a stale snapshot and wipe any concurrent parent updates
+      // (e.g. the async agent-credit-limit hook seeding modeOfPayment).
+      updateData((prev) => ({ ...prev, paxInfo: seeded }));
       return;
     }
     const adults = localData.travellers.filter((t) => t.type === "Adult");
@@ -274,7 +289,7 @@ const PaxInformation = ({
       const merged = [...trimmedAdults, ...trimmedChildren];
       const updated = { ...localData, travellers: merged };
       setLocalData(updated);
-      updateData({ ...bookingData, paxInfo: updated });
+      updateData((prev) => ({ ...prev, paxInfo: updated }));
     }
   }, [maxAdults, maxChildren]);
 
@@ -283,7 +298,11 @@ const PaxInformation = ({
     updatedTravellers[index] = { ...updatedTravellers[index], [field]: value };
     const updated = { ...localData, travellers: updatedTravellers };
     setLocalData(updated);
-    updateData({ ...bookingData, paxInfo: updated });
+    // Functional setter avoids stale-closure bugs — see comment in the seed
+    // effect above. A raw `{ ...bookingData, paxInfo }` spread here caused
+    // every keystroke to revert whatever the parent had just set (payment
+    // mode, hotel selection, etc.).
+    updateData((prev) => ({ ...prev, paxInfo: updated }));
   };
 
   const addExtraTraveller = (type) => {
@@ -299,7 +318,7 @@ const PaxInformation = ({
       : [...adults, ...children, newRow];
     const updated = { ...localData, travellers: merged };
     setLocalData(updated);
-    updateData({ ...bookingData, paxInfo: updated });
+    updateData((prev) => ({ ...prev, paxInfo: updated }));
   };
 
   const removeTraveller = (index) => {
@@ -308,7 +327,7 @@ const PaxInformation = ({
     const newList = localData.travellers.filter((_, i) => i !== index);
     const updated = { ...localData, travellers: newList };
     setLocalData(updated);
-    updateData({ ...bookingData, paxInfo: updated });
+    updateData((prev) => ({ ...prev, paxInfo: updated }));
   };
 
   const primary = localData.travellers && localData.travellers[0];
@@ -381,6 +400,12 @@ const PaxInformation = ({
         // Amend → child-booking lineage. Backend uses this to compute
         // "{parent}/{n}" for the new booking's code.
         parentBookingCode: parentBookingCode || null,
+        // NOTE: totalPrice is the package BASE (before Tourism Dirham). The
+        // backend stores base+TD as the row's total_price, so the Grand Total
+        // shown in Order Summary (Number(totalPrice)+Number(tourismDirham))
+        // matches what ends up persisted. Do NOT change this to
+        // "totalPrice: totalPrice + tourismDirham" — the backend would then
+        // add TD a second time, silently inflating every booking's total.
         totalPrice: totalPrice,
         tourismDirham:
           tourismDirham !== "" && !isNaN(Number(tourismDirham))
@@ -440,9 +465,18 @@ const PaxInformation = ({
             payload,
           );
 
-      if (response.data?.status === "success") {
+      // Trust the HTTP layer: axios throws for non-2xx, so reaching this
+      // line already means the request succeeded. Requiring
+      // `data.status === "success"` used to silently swallow any 2xx that
+      // omitted or renamed the status field — the button re-enabled with no
+      // toast, and users re-clicked, creating duplicate bookings. We now
+      // treat 2xx as success unless the body explicitly says otherwise.
+      const httpOk =
+        response && response.status >= 200 && response.status < 300;
+      const bodyErrored = response?.data?.status === "error";
+      if (httpOk && !bodyErrored) {
         toast.success(
-          response.data.message ||
+          response.data?.message ||
             (editingBookingId
               ? "Booking amended successfully!"
               : "Booking confirmed successfully!"),
@@ -463,6 +497,13 @@ const PaxInformation = ({
         } else {
           navigate("/booking-details/package-booking-list");
         }
+      } else {
+        // 2xx with an explicit error body — surface it so the user knows
+        // the submission was rejected and doesn't try again.
+        toast.error(
+          response?.data?.message ||
+            "Booking was not confirmed. Please try again.",
+        );
       }
     } catch (error) {
       console.error("Booking submission error:", error);
@@ -1097,17 +1138,32 @@ const PaxInformation = ({
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td className="text-muted">Package Base</td>
-                  <td>Included Services</td>
-                  <td className="text-end">AED {packageData?.rate || 0}</td>
-                </tr>
+                {/*
+                  Hotel selection uses REPLACEMENT semantics — the hotel's
+                  totalRateWithMarkup (already sized to the searched category +
+                  pax count on the backend) becomes the package total, it is
+                  NOT added on top of packageData.rate. So the "Package Base"
+                  row is shown only when no hotel has been picked. Without this
+                  guard the summary showed "Base + Hotel = 2500" but the Grand
+                  Total (which comes from the sidebar total = hotel only) said
+                  1500 — rows didn't sum to the total.
+                */}
+                {(!bookingData.selections.selectedHotels ||
+                  bookingData.selections.selectedHotels.length === 0) && (
+                  <tr>
+                    <td className="text-muted">Package Base</td>
+                    <td>Included Services</td>
+                    <td className="text-end">
+                      AED {Number(packageData?.rate || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                )}
                 {bookingData.selections.selectedHotels && bookingData.selections.selectedHotels.map((hotel, idx) => (
                   <tr key={hotel.hotelId || idx}>
                     <td className="text-muted">Hotel {bookingData.selections.selectedHotels.length > 1 ? idx + 1 : ""}</td>
                     <td>{hotel.hotelName}</td>
                     <td className="text-end">
-                      + AED {hotel.totalRateWithMarkup || 0}
+                      AED {Number(hotel.totalRateWithMarkup || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                   </tr>
                 ))}

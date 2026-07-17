@@ -247,6 +247,10 @@ const PackageBooking = () => {
         // what is sent in handleSubmitBooking() so a round-trip works.
         setBookingData((prev) => ({
           ...prev,
+          // Preserve the saved Tourism Dirham so the amend flow doesn't
+          // silently drop it (or, if the FE were to resend the stored total
+          // that already includes it, get it double-added on save).
+          tourismDirham: b.tourismDirham != null ? b.tourismDirham : null,
           searchParams: {
             ...prev.searchParams,
             packageId: b.packageId || prev.searchParams.packageId,
@@ -318,18 +322,19 @@ const PackageBooking = () => {
         : Number(packageData?.rate) || 0;
     const { hotelPrice, cabPrice, activityPrice } = bookingData.selections;
 
-    // If hotelPrice is present (meaning hotels were fetched and have a markup rate),
-    // it should be the new base for the package total.
-    const effectiveBase = hotelPrice > 0 ? hotelPrice : baseRate;
-
-    // Apply the sharing-category multiplier (single = 2x, twin = 1.4x,
-    // triple = 1x, quadruple = 0.8x). Name is pushed up from BasicDetails
-    // when the user picks a category; falls back to 1x while empty.
+    // The sharing-category multiplier (single = 2x, twin = 1.4x, triple = 1x,
+    // quadruple = 0.8x) applies only to the *package* base rate. The hotel
+    // search response's totalRateWithMarkup is already sized to the searched
+    // pax count on the backend (perAdultRate * adultCount +
+    // perChildRate * childCount), so multiplying it again here would
+    // double-count the sharing math.
     const categoryMultiplier = getCategoryPriceMultiplier(
       bookingData.searchParams.packageCategoryName,
     );
+    const packageTotal =
+      hotelPrice > 0 ? hotelPrice : baseRate * categoryMultiplier;
 
-    setTotalPrice(effectiveBase * categoryMultiplier + cabPrice + activityPrice);
+    setTotalPrice(packageTotal + cabPrice + activityPrice);
   }, [bookingData.selections, bookingData.searchParams.packageCategoryName, packageData, searchRate]);
 
   const updateSelections = (selections) =>
