@@ -540,7 +540,7 @@ const PaxInformation = ({
             <Col md={3}>
               <Form.Group>
                 <Form.Label className="booking-field-label">
-                  First name
+                  First name <span className="text-danger">*</span>
                 </Form.Label>
                 <Form.Control
                   value={pax.firstName}
@@ -566,7 +566,7 @@ const PaxInformation = ({
             <Col md={4}>
               <Form.Group>
                 <Form.Label className="booking-field-label">
-                  Last name
+                  Last name <span className="text-danger">*</span>
                 </Form.Label>
                 <Form.Control
                   value={pax.lastName}

@@ -80,6 +80,22 @@ const BTN_ACCENT = { ...BUTTON_STYLE, backgroundColor: "#7c3aed" }; // Booking R
 const BTN_NEUTRAL = { ...BUTTON_STYLE, backgroundColor: "#64748b" }; // Notes
 const BTN_HISTORY = { ...BUTTON_STYLE, backgroundColor: "#334155" }; // History
 
+// Sub-booking types offered by "ADD NEW ITEM". Mirrors the Hotel detail view
+// (BookingDetailedView.jsx): each entry launches its OWN existing create flow
+// with ?parentBookingCode set so the child is stamped "{parent}/{n}" on the
+// backend. The Package option is included so an operator can also amend with
+// another package (the previous behaviour on this screen).
+const ADD_NEW_ITEM_TYPES = [
+  { key: "HOTEL", label: "Hotel Booking", route: "/new-booking/hotel" },
+  { key: "HOTEL_24HR", label: "24 Hour Check-In", route: "/new-booking/hotel-24hr" },
+  { key: "LONG_STAY", label: "Long Stay Booking", route: "/new-booking/long-stay" },
+  { key: "DAY_STAY", label: "Day Stay Check-In", route: "/new-booking/day-stay" },
+  { key: "GOV_EMPLOYEE", label: "Government Employee", route: "/new-booking/gov-employee" },
+  { key: "STUDENT", label: "Student Booking", route: "/new-booking/student" },
+  { key: "SENIOR_CITIZEN", label: "Senior Citizen Booking", route: "/new-booking/senior-citizen" },
+  { key: "PACKAGE", label: "Package Booking", route: "/new-booking/package-search" },
+];
+
 // Colour + icon per Booking History action (keyed by the exact label pushed
 // onto `bookingHistory`). Unknown actions fall back to a neutral slate badge.
 const HISTORY_ACTION_META = {
@@ -273,6 +289,15 @@ export default function PackageBookingDetailView() {
   const [showReconfirmModal, setShowReconfirmModal] = useState(false);
   const [isReconfirming, setIsReconfirming] = useState(false);
 
+  // ── Add New Item (amendment) picker — same flow as hotel detail view.
+  // Opens a modal listing every sub-booking type; the chosen type's create
+  // flow is launched with ?parentBookingCode so the backend chains children
+  // under this booking's code.
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [selectedAddItemType, setSelectedAddItemType] = useState(
+    ADD_NEW_ITEM_TYPES[0].key,
+  );
+
   const [showVoucherModal, setShowVoucherModal] = useState(false);
   const [voucherEmail, setVoucherEmail] = useState("");
   const [isSendingVoucher, setIsSendingVoucher] = useState(false);
@@ -368,29 +393,37 @@ export default function PackageBookingDetailView() {
   }, [bookingDetails?.packageId, rowStub?.packageId]);
 
 
-  // ── ADD NEW ITEM handler ───────────────────────────────────────────
-  // Mirrors the Hotel "ADD NEW ITEM" pattern in BookingDetailedView.jsx:
-  // navigate to the PACKAGE SEARCH page (not directly to a specific
-  // package's booking flow) with a parentBookingCode query param. The
-  // user picks any package; PackageSearch forwards parentBookingCode into
-  // the booking page; on submit the backend stamps a child code
-  // "{parent}/{n}" — e.g. GPKG-4 yields GPKG-4/1, GPKG-4/2, etc.
-  //
-  // Previously this jumped straight to /new-booking/package-booking/{id}
-  // which locked the user into re-booking the same package; the hotel
-  // flow opens a search so any item can be added.
-  const handleEditClick = () => {
+  // ── ADD NEW ITEM handlers ──────────────────────────────────────────
+  // Mirrors the Hotel "ADD NEW ITEM" pattern in BookingDetailedView.jsx: the
+  // button opens a picker modal listing every sub-booking type; the chosen
+  // type's own create flow is launched with ?parentBookingCode set. Walking
+  // up to the root parent means amendments of amendments still chain to the
+  // original code (GPKG-4 → GPKG-4/1 → GPKG-4/2, not GPKG-4/1/1).
+  const openAddItemModal = () => {
     const source = bookingDetails || rowStub || {};
-    // Walk up to the original parent so amendments of amendments still
-    // chain to the root code (e.g. amending GPKG-4/1 → GPKG-4/2, not
-    // GPKG-4/1/1). Mirrors the Hotel pattern.
     const parent = source.parentBookingCode || source.confirmationCode;
     if (!parent) {
       toast.error("Cannot add new item — booking code missing");
       return;
     }
+    setSelectedAddItemType(ADD_NEW_ITEM_TYPES[0].key);
+    setShowAddItemModal(true);
+  };
+
+  const submitAddItem = () => {
+    const chosen = ADD_NEW_ITEM_TYPES.find(
+      (t) => t.key === selectedAddItemType,
+    );
+    if (!chosen) return;
+    const source = bookingDetails || rowStub || {};
+    const parent = source.parentBookingCode || source.confirmationCode;
+    if (!parent) {
+      toast.error("Cannot add new item — booking code missing");
+      return;
+    }
+    setShowAddItemModal(false);
     navigate(
-      `/new-booking/package-search?parentBookingCode=${encodeURIComponent(parent)}`,
+      `${chosen.route}?parentBookingCode=${encodeURIComponent(parent)}`,
     );
   };
 
@@ -459,7 +492,7 @@ export default function PackageBookingDetailView() {
     try {
       const response = await axiosInstance.get(
         `/api/package-bookings/${bookingId}/pdf`,
-        { params: { type: "VOUCHER", proforma: derivedStatus === "Confirmed" } }
+        { params: { type: "VOUCHER", proforma: !showsFinalDocs } }
       );
       if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
         setVoucherPdfUrl(response.data.pdfUrl);
@@ -503,7 +536,7 @@ export default function PackageBookingDetailView() {
       if (!url) {
         const response = await axiosInstance.get(
           `/api/package-bookings/${bookingId}/pdf`,
-          { params: { type: "VOUCHER", proforma: derivedStatus === "Confirmed" } }
+          { params: { type: "VOUCHER", proforma: !showsFinalDocs } }
         );
         if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
           url = response.data.pdfUrl;
@@ -531,7 +564,7 @@ export default function PackageBookingDetailView() {
     try {
       const response = await axiosInstance.get(
         `/api/package-bookings/${bookingId}/pdf`,
-        { params: { type: "INVOICE", proforma: derivedStatus === "Confirmed" } }
+        { params: { type: "INVOICE", proforma: !showsFinalDocs } }
       );
       if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
         setInvoicePdfUrl(response.data.pdfUrl);
@@ -567,7 +600,7 @@ export default function PackageBookingDetailView() {
       if (!url) {
         const response = await axiosInstance.get(
           `/api/package-bookings/${bookingId}/pdf`,
-          { params: { type: "INVOICE", proforma: derivedStatus === "Confirmed" } }
+          { params: { type: "INVOICE", proforma: !showsFinalDocs } }
         );
         if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
           url = response.data.pdfUrl;
@@ -758,9 +791,14 @@ export default function PackageBookingDetailView() {
     toast.success("Note added successfully");
   };
 
-  // The Edit / Voucher / Cancel actions are hidden when the booking is
-  // already cancelled. Mirrors the row icon visibility on the list.
-  const isCancellable = listStatus !== "cancelled";
+  // Live-only actions (Add New Item / Cancel / Reconfirm) are hidden once
+  // the booking is cancelled. listStatus alone isn't enough — it's read
+  // from location.state and is missing when the page is opened by direct
+  // URL, so we also consult the fetched bookingDetails.isCancelled flag.
+  // A booking is treated as live only when NEITHER source reports it
+  // cancelled.
+  const isCancellable =
+    listStatus !== "cancelled" && bookingDetails?.isCancelled !== true;
 
   // Booking lifecycle events for the History modal — built from the detail
   // already loaded (no extra API call). Mirrors the Hotel booking detail
@@ -927,6 +965,16 @@ export default function PackageBookingDetailView() {
       : derivedStatus === "ReConfirmed"
         ? "#1d4ed8"
         : "#16a34a";
+
+  // Voucher / Invoice variant. The raw bookingStatus survives cancellation
+  // (only isCancelled flips), so a cancelled-from-Confirmed booking still
+  // reports "CONFIRMED" here — same rule the hotel detail view uses via
+  // cancelledFromStatus. Only a booking that was actually ReConfirmed (live
+  // or before cancel) gets the final Voucher / Invoice; everything else
+  // stays on the Proforma equivalents.
+  const showsFinalDocs =
+    String(bookingDetails?.bookingStatus || "").trim().toUpperCase() ===
+    "RECONFIRMED";
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -1577,23 +1625,35 @@ export default function PackageBookingDetailView() {
                     </div>
                   )}
 
-                {/* Bottom action buttons (left-aligned) — mirrors the
-                    Edit / Voucher / Cancel row icons. Same status gate
-                    (hidden when the booking is in the "cancelled"
-                    bucket) and same handlers as the original list. */}
+                {/* Bottom action buttons (left-aligned).
+                    Visibility rules mirror the Hotel detail view
+                    (BookingDetailedView.jsx):
+                      • Live booking (not cancelled) → full toolbar
+                        (Add New Item, Cancel, Reconfirm, docs, admin
+                        actions, History).
+                      • Cancelled booking → only the docs + admin follow-up
+                        buttons remain (Voucher, Invoice, Agent Reference,
+                        Confirmation No., Resend Mail, Remark, Notes,
+                        History). Add New Item / Cancel / Reconfirm are
+                        hidden because they don't apply once cancelled.
+                    Proforma vs Final labels come from showsFinalDocs so a
+                    booking cancelled while still "Confirmed" keeps the
+                    Proforma labels the operator saw pre-cancel. */}
                 <div
                   className="d-flex gap-2 justify-content-start flex-wrap"
                   style={{ marginTop: "16px", marginBottom: "20px" }}
                 >
-                  {isCancellable && (
-                    <button
-                      style={BTN_PRIMARY}
-                      onClick={handleEditClick}
-                      title="Add a new sub-booking under this booking"
-                    >
-                      ADD NEW ITEM
-                    </button>
-                  )}
+                  {isCancellable &&
+                    (derivedStatus === "Confirmed" ||
+                      derivedStatus === "ReConfirmed") && (
+                      <button
+                        style={BTN_PRIMARY}
+                        onClick={openAddItemModal}
+                        title="Add a new sub-booking under this booking"
+                      >
+                        ADD NEW ITEM
+                      </button>
+                    )}
                   {isCancellable && (
                     <button
                       style={BTN_DANGER}
@@ -1615,51 +1675,41 @@ export default function PackageBookingDetailView() {
                       RECONFIRM
                     </button>
                   )}
-                  {/* Confirmed (held) → draft Proforma docs; ReConfirmed →
-                      final Voucher / Invoice. */}
-                  {isCancellable && (
-                    <button style={BTN_TEAL} onClick={openVoucher} title="Voucher">
-                      {derivedStatus === "Confirmed"
-                        ? "PROFORMA VOUCHER"
-                        : "VOUCHER"}
-                    </button>
-                  )}
-                  {isCancellable && (
-                    <button style={BTN_INFO} onClick={openInvoice} title="Invoice">
-                      {derivedStatus === "Confirmed"
-                        ? "PROFORMA INVOICE"
-                        : "INVOICE"}
-                    </button>
-                  )}
-                  {isCancellable && (
-                    <button style={BTN_SKY} onClick={openAgentRefModal}>
-                      ADD AGENT REFERENCE
-                    </button>
-                  )}
-                  {isCancellable && (
-                    <button style={BTN_INDIGO} onClick={openConfirmationNoModal}>
-                      CONFIRMATION NO.
-                    </button>
-                  )}
-                  {isCancellable && (
+                  {/* Hide the final "VOUCHER" button once the booking is
+                      cancelled — no live voucher is offered post-cancellation.
+                      A cancelled-from-Confirmed booking still surfaces the
+                      "PROFORMA VOUCHER" variant. */}
+                  {!(derivedStatus === "Cancelled" && showsFinalDocs) && (
                     <button
-                      style={BTN_ORANGE}
-                      onClick={resendMailToAgent}
-                      disabled={resendingMail}
+                      style={BTN_TEAL}
+                      onClick={openVoucher}
+                      title="Voucher"
                     >
-                      {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
+                      {showsFinalDocs ? "VOUCHER" : "PROFORMA VOUCHER"}
                     </button>
                   )}
-                  {isCancellable && (
-                    <button style={BTN_ACCENT} onClick={openRemarkModal}>
-                      BOOKING REMARK
-                    </button>
-                  )}
-                  {isCancellable && (
-                    <button style={BTN_NEUTRAL} onClick={openNotesModal}>
-                      NOTES
-                    </button>
-                  )}
+                  <button style={BTN_INFO} onClick={openInvoice} title="Invoice">
+                    {showsFinalDocs ? "INVOICE" : "PROFORMA INVOICE"}
+                  </button>
+                  <button style={BTN_SKY} onClick={openAgentRefModal}>
+                    ADD AGENT REFERENCE
+                  </button>
+                  <button style={BTN_INDIGO} onClick={openConfirmationNoModal}>
+                    CONFIRMATION NO.
+                  </button>
+                  <button
+                    style={BTN_ORANGE}
+                    onClick={resendMailToAgent}
+                    disabled={resendingMail}
+                  >
+                    {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
+                  </button>
+                  <button style={BTN_ACCENT} onClick={openRemarkModal}>
+                    BOOKING REMARK
+                  </button>
+                  <button style={BTN_NEUTRAL} onClick={openNotesModal}>
+                    NOTES
+                  </button>
                   {/* HISTORY is always available (read-only), including for
                       cancelled bookings. */}
                   <button
@@ -1976,6 +2026,58 @@ export default function PackageBookingDetailView() {
             disabled={isReconfirming}
           >
             {isReconfirming ? "Reconfirming..." : "Reconfirm & Pay"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Add New Item (Amendment) booking-type picker ──────────────
+          Mirrors the Hotel detail view's picker: choose any sub-booking
+          type, then jump into that flow with ?parentBookingCode set so
+          the backend chains the child code under this booking. */}
+      <Modal
+        show={showAddItemModal}
+        onHide={() => setShowAddItemModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title style={{ fontSize: "1.05rem" }}>
+            Add New Item
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div style={{ marginBottom: "10px", color: "#555" }}>
+            Select a booking type to add as a sub-booking of{" "}
+            <strong>
+              {bookingDetails?.parentBookingCode ||
+                bookingDetails?.confirmationCode}
+            </strong>
+            .
+          </div>
+          <Form>
+            {ADD_NEW_ITEM_TYPES.map((t) => (
+              <Form.Check
+                key={t.key}
+                type="radio"
+                name="addNewItemType"
+                id={`add-item-${t.key}`}
+                label={t.label}
+                value={t.key}
+                checked={selectedAddItemType === t.key}
+                onChange={() => setSelectedAddItemType(t.key)}
+                style={{ marginBottom: "6px" }}
+              />
+            ))}
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setShowAddItemModal(false)}
+          >
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={submitAddItem}>
+            Continue
           </Button>
         </Modal.Footer>
       </Modal>

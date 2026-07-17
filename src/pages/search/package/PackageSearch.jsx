@@ -299,6 +299,19 @@ const PackageSearch = () => {
     };
   };
 
+  // Add one calendar day to a datetime-local string (yyyy-MM-ddTHH:mm),
+  // preserving the time-of-day. Used to auto-fill Departure from Arrival.
+  const addOneDayLocal = (dtLocal) => {
+    if (!dtLocal) return "";
+    const d = new Date(dtLocal);
+    if (Number.isNaN(d.getTime())) return "";
+    d.setDate(d.getDate() + 1);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+      d.getDate(),
+    )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
   // ─────────────────────────────────────────────
   // Progress Bar Helpers
   // ─────────────────────────────────────────────
@@ -394,12 +407,12 @@ const PackageSearch = () => {
     const newErrors = {};
     if (!selectedDestination) newErrors.destination = "Destination is required";
     if (!agentId) newErrors.agent = "Agent is required";
-    // Flight Details are optional, but if the user starts filling them in the
-    // pair must be complete and in the correct order.
-    if (arrivalDateTime && !departureDateTime)
-      newErrors.departureDateTime = "Departure date & time is required";
-    if (departureDateTime && !arrivalDateTime)
+    // Flight Details are mandatory — both ends must be provided and the
+    // departure must be strictly after the arrival.
+    if (!arrivalDateTime)
       newErrors.arrivalDateTime = "Arrival date & time is required";
+    if (!departureDateTime)
+      newErrors.departureDateTime = "Departure date & time is required";
     if (
       arrivalDateTime &&
       departureDateTime &&
@@ -740,15 +753,15 @@ const PackageSearch = () => {
                 )}
 
                 {/* Flight Details filter — arrival & departure date/time.
-                    Optional; when both are set the backend flags packages
-                    whose itinerary is longer than this travel window so the
-                    user is warned before booking. */}
+                    Mandatory: both ends must be set. The backend flags
+                    packages whose itinerary is longer than this travel
+                    window so the user is warned before booking. */}
                 <Row className="mt-3">
                   <Col xs={12}>
                     <div className="flight-details-group">
                       <div className="flight-details-title">
                         <FaPlaneDeparture className="me-2" />
-                        Flight Details
+                        Flight Details <span className="text-danger">*</span>
                         <span className="flight-details-hint">
                           Filter packages that fit your travel window
                         </span>
@@ -756,18 +769,37 @@ const PackageSearch = () => {
                       <Row className="g-3">
                         <Col md={6}>
                           <Form.Group>
-                            <Form.Label>Arrival (Date &amp; Time)</Form.Label>
+                            <Form.Label>
+                              Arrival (Date &amp; Time){" "}
+                              <span className="text-danger">*</span>
+                            </Form.Label>
                             <Form.Control
                               type="datetime-local"
                               className="form-control-modern"
                               value={arrivalDateTime}
                               onChange={(e) => {
-                                setArrivalDateTime(e.target.value);
+                                const newArrival = e.target.value;
+                                setArrivalDateTime(newArrival);
                                 setErrors((prev) => ({
                                   ...prev,
                                   arrivalDateTime: null,
                                   departureDateTime: null,
                                 }));
+                                // Auto-fill Departure with the next day at the
+                                // same time when it's empty or no longer after
+                                // the new Arrival. Leaves a valid later value
+                                // the user picked themselves alone.
+                                if (newArrival) {
+                                  const nextDay = addOneDayLocal(newArrival);
+                                  setDepartureDateTime((prev) => {
+                                    if (!prev) return nextDay;
+                                    if (
+                                      new Date(prev) <= new Date(newArrival)
+                                    )
+                                      return nextDay;
+                                    return prev;
+                                  });
+                                }
                               }}
                             />
                             {errors.arrivalDateTime && (
@@ -780,7 +812,8 @@ const PackageSearch = () => {
                         <Col md={6}>
                           <Form.Group>
                             <Form.Label>
-                              Departure (Date &amp; Time)
+                              Departure (Date &amp; Time){" "}
+                              <span className="text-danger">*</span>
                             </Form.Label>
                             <Form.Control
                               type="datetime-local"
