@@ -19,6 +19,7 @@ import { toast } from "react-hot-toast";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
+import "../../styles/SchefferDriverBookingPage.css";
 
 const formatDateToDDMMYYYY = (dateString) => {
   if (!dateString) return "";
@@ -48,7 +49,47 @@ const SchefferDriverBookingPage = () => {
   const [contactDetails, setContactDetails] = useState({
     contactNumber: "",
     emailId: "",
+    // Free-text landmark for the pickup location (e.g. "Near Al Wasl Mall,
+    // behind the ADNOC station"). Optional. Kept alongside the other
+    // contact-level fields so the same handleContactChange/validation
+    // shape covers it — no separate state slice needed.
+    pickupLandmark: "",
   });
+
+  // Intercity surcharge disclosure — heads-up shown after Contact Details.
+  // The card is only rendered when this cab provider actually has intercity
+  // charges configured (managed in /scheffer-driver-rates → Supplementary
+  // Charges); providers with no rows never see the section. Fetched eagerly
+  // when the booking page mounts so the presence/absence is known before
+  // first paint of the left column.
+  //   intercityCharges  – the provider's active rows (used to decide whether
+  //                       to render the card at all).
+  //   intercityDeclared – "yes" / "no" radio state (default "no").
+  //   selectedIntercityId – radio-selected route id (display-only, no payload).
+  const [intercityDeclared, setIntercityDeclared] = useState("no");
+  const [intercityCharges, setIntercityCharges] = useState([]);
+  const [selectedIntercityId, setSelectedIntercityId] = useState("");
+
+  useEffect(() => {
+    const providerId = cab?.cabProviderId;
+    if (!providerId) return;
+    let cancelled = false;
+    axiosInstance
+      .get("/api/scheffer-rental-rates/intercity", { params: { providerId } })
+      .then((res) => {
+        if (cancelled) return;
+        const list = Array.isArray(res?.data) ? res.data : [];
+        // Only keep active rows — inactive rows exist for internal admin
+        // use and shouldn't be quoted to guests.
+        setIntercityCharges(list.filter((c) => c.isActive !== false));
+      })
+      .catch(() => {
+        if (!cancelled) setIntercityCharges([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cab]);
 
   // Payment mode selector — mirrors the /hotel-booking-page pattern.
   // Default keeps the legacy behaviour (CREDITLIMIT) so existing callers
@@ -608,7 +649,22 @@ const SchefferDriverBookingPage = () => {
         <main className="flex-grow-1 p-4">
           <Container fluid className="px-0">
             <div className="d-flex justify-content-between align-items-center mb-2">
-              <h4 className="fw-bold mb-0 text-primary">Cab Booking Checkout</h4>
+              {/* Top Back button — same handler as the Back button in the
+                  Booking Summary column, so both do the exact same thing
+                  (mirrors /hotel-booking-page's inline "← Back" next to
+                  the section heading). */}
+              <div className="d-flex align-items-center">
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={handleBackToSearch}
+                  disabled={isSubmitting}
+                  className="me-3"
+                >
+                  ← Back
+                </Button>
+                <h4 className="fw-bold mb-0 text-primary">Cab Booking Checkout</h4>
+              </div>
               <AgentBalanceDisplay
                 agentId={
                   sessionStorage.getItem("makeYourOwnPackageAgentId") ||
@@ -792,6 +848,27 @@ const SchefferDriverBookingPage = () => {
                           </Form.Control.Feedback>
                         </Form.Group>
                       </Col>
+                      {/* Pickup Landmark — optional free-text address /
+                          landmark for the pickup location (e.g. "Near Al Wasl
+                          Mall, behind the ADNOC station"). Full-width row of
+                          its own so long text stays readable. */}
+                      <Col xs={12}>
+                        <Form.Group>
+                          <Form.Label className="small text-muted fw-semibold">
+                            Pickup Landmark / Address
+                          </Form.Label>
+                          <Form.Control
+                            as="textarea"
+                            rows={2}
+                            placeholder="e.g. Near Al Wasl Mall, behind the ADNOC station"
+                            className="rounded-3 shadow-sm"
+                            value={contactDetails.pickupLandmark}
+                            onChange={(e) =>
+                              handleContactChange("pickupLandmark", e.target.value)
+                            }
+                          />
+                        </Form.Group>
+                      </Col>
                     </Row>
                   </Card.Body>
                 </Card>
@@ -799,6 +876,137 @@ const SchefferDriverBookingPage = () => {
                 {/* Transporter & Driver Details card removed — replaced
                     with the Payment Mode selector below. Price details
                     are now shown only in the Booking Summary. */}
+
+                {/* ── Supplementary Charges Disclosure ─────────────────
+                     Optional Yes / No prompt reminding the operator that
+                     supplementary charges apply when the trip crosses into
+                     another city. Choosing "Yes" surfaces the current cab
+                     provider's intercity routes (managed in
+                     /scheffer-driver-rates → Supplementary Charges) as a
+                     radio list. The whole card is hidden when this cab
+                     provider has no intercity charges configured, so the
+                     section never appears empty. Display-only — no booking
+                     payload change. */}
+                {intercityCharges.length > 0 && (
+                  <Card className="shadow border-0 rounded-4 mb-4">
+                    <Card.Header className="bg-white border-0 pt-4 px-4">
+                      <h5 className="fw-semibold text-dark d-flex align-items-center mb-0">
+                        <FaMapMarkerAlt className="me-2 text-primary" />
+                        Supplementary Charges
+                      </h5>
+                    </Card.Header>
+                    <Card.Body className="px-4 pb-4">
+                      <div className="small text-muted fw-semibold mb-2">
+                        In case of travel to another city, supplementary
+                        charges will apply.
+                      </div>
+                      <Form.Group>
+                        <div className="d-flex gap-4 mt-1">
+                          <Form.Check
+                            type="radio"
+                            id="sdbp-intercity-yes"
+                            name="sdbp-intercity"
+                            label="Yes"
+                            value="yes"
+                            checked={intercityDeclared === "yes"}
+                            onChange={(e) =>
+                              setIntercityDeclared(e.target.value)
+                            }
+                          />
+                          <Form.Check
+                            type="radio"
+                            id="sdbp-intercity-no"
+                            name="sdbp-intercity"
+                            label="No"
+                            value="no"
+                            checked={intercityDeclared === "no"}
+                            onChange={(e) => {
+                              setIntercityDeclared(e.target.value);
+                              // Reset selection when flipping back to No.
+                              setSelectedIntercityId("");
+                            }}
+                          />
+                        </div>
+                      </Form.Group>
+
+                      {intercityDeclared === "yes" && (
+                        <div className="mt-3">
+                          <Form.Group>
+                            <Form.Label className="small text-muted fw-semibold d-block mb-2">
+                              Select intercity route
+                            </Form.Label>
+                            {/* Grid of clickable radio "cards" — one per
+                                intercity row, 3-up on desktop, 2-up on
+                                tablets, stacked on mobile. Each card is a
+                                labelled radio wrapping the whole tile so
+                                clicking anywhere selects the route. */}
+                            <Row className="g-2">
+                              {intercityCharges.map((c) => {
+                                const val = String(c.intercityChargeId);
+                                const selected = selectedIntercityId === val;
+                                return (
+                                  <Col xs={12} key={val}>
+                                    <label
+                                      htmlFor={`sdbp-intercity-route-${val}`}
+                                      className="w-100 h-100 d-flex align-items-center gap-2 p-2 rounded-3"
+                                      style={{
+                                        cursor: "pointer",
+                                        border: `1px solid ${
+                                          selected ? "#0d6efd" : "#dee2e6"
+                                        }`,
+                                        backgroundColor: selected
+                                          ? "#eaf3ff"
+                                          : "#fff",
+                                        transition:
+                                          "border-color 0.15s, background-color 0.15s",
+                                      }}
+                                    >
+                                      <input
+                                        type="radio"
+                                        id={`sdbp-intercity-route-${val}`}
+                                        name="sdbp-intercity-route"
+                                        value={val}
+                                        checked={selected}
+                                        onChange={(e) =>
+                                          setSelectedIntercityId(
+                                            e.target.value,
+                                          )
+                                        }
+                                        // Native radios can't be un-checked
+                                        // by clicking the same option again;
+                                        // this click-handler adds that
+                                        // toggle behaviour so the operator
+                                        // can clear their selection without
+                                        // having to switch to another route
+                                        // or flip the Yes/No radios above.
+                                        onClick={(e) => {
+                                          if (selected) {
+                                            e.preventDefault();
+                                            setSelectedIntercityId("");
+                                          }
+                                        }}
+                                        className="form-check-input mt-1"
+                                      />
+                                      <div className="d-flex flex-grow-1 align-items-center justify-content-between gap-2">
+                                        <span className="fw-semibold text-dark">
+                                          {c.fromCityName || "-"} →{" "}
+                                          {c.toCityName || "-"}
+                                        </span>
+                                        <span className="fw-semibold text-primary">
+                                          AED {c.additionalCharge}
+                                        </span>
+                                      </div>
+                                    </label>
+                                  </Col>
+                                );
+                              })}
+                            </Row>
+                          </Form.Group>
+                        </div>
+                      )}
+                    </Card.Body>
+                  </Card>
+                )}
 
                 {/* ── Payment Mode ────────────────────────────────────
                      Mirrors /hotel-booking-page. Three-scenario UI:
@@ -859,8 +1067,12 @@ const SchefferDriverBookingPage = () => {
 
               {/* Right Column: Booking Summary — mirrors the two-card
                   layout used on /hotel-booking-page (Booking Summary +
-                  Price Details) so the two flows look uniform. */}
+                  Price Details) so the two flows look uniform. The
+                  .sdbp-sticky-summary wrapper (see SchefferDriverBookingPage.css)
+                  pins this column while the left form scrolls, matching the
+                  hotel page's .hbp-sticky-summary behaviour. */}
               <Col lg={4}>
+                <div className="sdbp-sticky-summary">
                 {/* ── Booking Summary card ─────────────────────────── */}
                 <Card className="shadow-sm rounded-3 mb-3 border-0 overflow-hidden">
                   <Card.Header className="bg-primary text-white py-2 rounded-top">
@@ -1042,8 +1254,7 @@ const SchefferDriverBookingPage = () => {
                 <div className="mb-3 d-flex gap-2">
                   <Button
                     variant="outline-secondary"
-                    className="py-3 rounded-3 fw-bold fs-6 d-flex align-items-center justify-content-center gap-2"
-                    style={{ flex: "0 0 35%" }}
+                    className="flex-grow-1 d-flex align-items-center justify-content-center gap-2"
                     onClick={handleBackToSearch}
                     disabled={isSubmitting}
                   >
@@ -1052,7 +1263,7 @@ const SchefferDriverBookingPage = () => {
                   </Button>
                   <Button
                     variant="success"
-                    className="py-3 rounded-3 fw-bold fs-5 shadow d-flex align-items-center justify-content-center gap-2 flex-grow-1"
+                    className="flex-grow-1 d-flex align-items-center justify-content-center gap-2"
                     onClick={handleConfirmClick}
                     disabled={isSubmitting || noPaymentPathAvailable}
                     title={
@@ -1077,6 +1288,7 @@ const SchefferDriverBookingPage = () => {
                 <p className="text-center text-muted small mt-1 mb-3">
                   By confirming, you agree to the Terms and Conditions.
                 </p>
+                </div>
               </Col>
             </Row>
           </Container>
@@ -1199,7 +1411,7 @@ const SchefferDriverBookingPage = () => {
         <Modal.Header closeButton={!isSubmitting}>
           <Modal.Title>
             <FaCar className="me-2 text-primary" />
-            Order Summary — please review
+            Order Summary 
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
@@ -1413,7 +1625,7 @@ const SchefferDriverBookingPage = () => {
                 )}
                 <hr className="my-2" />
                 <div className="d-flex justify-content-between align-items-center">
-                  <span className="fw-semibold">Grand Total</span>
+                  <span className="fw-semibold">Total Payable Amount</span>
                   <span className="fs-4 fw-bold text-success">
                     AED {(totalBase + tdNum).toFixed(2)}
                   </span>
@@ -1446,7 +1658,7 @@ const SchefferDriverBookingPage = () => {
             ) : (
               <>
                 <FaCheckCircle className="me-2" />
-                Confirm &amp; Book
+                Confirm
               </>
             )}
           </Button>

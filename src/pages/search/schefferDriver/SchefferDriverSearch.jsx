@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Card, Row, Col, Form, Button, Spinner, Badge } from "react-bootstrap";
-import { FaCar, FaSearch, FaClock, FaRoad, FaUsers } from "react-icons/fa";
+import { FaCar, FaSearch, FaClock, FaRoad } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
 import Select from "react-select";
 import axiosInstance from "../../../components/AxiosInstance";
@@ -440,6 +440,77 @@ export const SchefferDriverSearch = () => {
                   <Card className="border-0 shadow-sm rounded-4 bg-white mb-4">
                 <Card.Body>
                   <Form onSubmit={handleSearch}>
+                    {/* Row 1 — Identity: Agent (admin-only) + Nationality.
+                        Grouped at the top so admins pick who's booking and
+                        the guest's nationality before anything else. For
+                        agent logins the Agent field is hidden (they can
+                        only book for themselves), so Nationality sits alone
+                        on this row. */}
+                    <Row className="g-3 mb-3">
+                      {!isAgentRole && (
+                        <Col md={6}>
+                          <Form.Label className="fw-semibold">
+                            Agent <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Select
+                            style={{ height: "46px" }}
+                            value={agent}
+                            isInvalid={!!validationErrors.agent}
+                            onChange={(e) => {
+                              setAgent(e.target.value);
+                              if (e.target.value) clearError("agent");
+                            }}
+                          >
+                            <option value="">Select Agent</option>
+                            {agents.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.companyName}
+                              </option>
+                            ))}
+                          </Form.Select>
+                          {validationErrors.agent && (
+                            <div className="text-danger small mt-1">
+                              {validationErrors.agent}
+                            </div>
+                          )}
+                          {agent && <AgentBalanceDisplay agentId={agent} />}
+                        </Col>
+                      )}
+                      <Col md={6}>
+                        <Form.Label className="fw-semibold">
+                          Nationality<span className="text-danger">*</span>
+                        </Form.Label>
+                        <Select
+                          options={nationalityList}
+                          value={nationality}
+                          onChange={(opt) => {
+                            setNationality(opt);
+                            if (opt) clearError("nationality");
+                          }}
+                          onInputChange={(val) => {
+                            if (val && val.length >= 2) debouncedCountrySearch(val);
+                          }}
+                          isLoading={isNationalityLoading}
+                          placeholder="Search Nationality"
+                          isSearchable
+                          isClearable
+                          menuPortalTarget={document.body}
+                          styles={{
+                            ...customSelectStyles,
+                            control: (base) => ({
+                              ...customSelectStyles.control(base),
+                              borderColor: validationErrors.nationality ? "#dc3545" : base.borderColor,
+                            }),
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          }}
+                        />
+                        {validationErrors.nationality && (
+                          <div className="text-danger small mt-1">{validationErrors.nationality}</div>
+                        )}
+                      </Col>
+                    </Row>
+
+                    {/* Row 2 — Destination: City + Hours (original widths). */}
                     <Row className="g-3 mb-3">
                       <Col md={6}>
                         <Form.Label className="fw-semibold">
@@ -672,69 +743,9 @@ export const SchefferDriverSearch = () => {
                       </Col>
                     </Row>
 
-                    <Row className="g-3 mb-3">
-                      <Col md={4}>
-                        <Form.Label className="fw-semibold">
-                          Nationality<span className="text-danger">*</span>
-                        </Form.Label>
-                        <Select
-                          options={nationalityList}
-                          value={nationality}
-                          onChange={(opt) => {
-                            setNationality(opt);
-                            if (opt) clearError("nationality");
-                          }}
-                          onInputChange={(val) => {
-                            if (val && val.length >= 2) debouncedCountrySearch(val);
-                          }}
-                          isLoading={isNationalityLoading}
-                          placeholder="Search Nationality"
-                          isSearchable
-                          isClearable
-                          menuPortalTarget={document.body}
-                          styles={{
-                            ...customSelectStyles,
-                            control: (base) => ({
-                              ...customSelectStyles.control(base),
-                              borderColor: validationErrors.nationality ? "#dc3545" : base.borderColor,
-                            }),
-                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                          }}
-                        />
-                        {validationErrors.nationality && (
-                          <div className="text-danger small mt-1">{validationErrors.nationality}</div>
-                        )}
-                      </Col>
-                      {!isAgentRole && (
-                        <Col md={4}>
-                          <Form.Label className="fw-semibold">
-                            Agent <span className="text-danger">*</span>
-                          </Form.Label>
-                          <Form.Select
-                            style={{ height: "46px" }}
-                            value={agent}
-                            isInvalid={!!validationErrors.agent}
-                            onChange={(e) => {
-                              setAgent(e.target.value);
-                              if (e.target.value) clearError("agent");
-                            }}
-                          >
-                            <option value="">Select Agent</option>
-                            {agents.map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {a.companyName}
-                              </option>
-                            ))}
-                          </Form.Select>
-                          {validationErrors.agent && (
-                            <div className="text-danger small mt-1">
-                              {validationErrors.agent}
-                            </div>
-                          )}
-                          {agent && <AgentBalanceDisplay agentId={agent} />}
-                        </Col>
-                      )}
-                    </Row>
+                    {/* Nationality moved to the top identity row (paired
+                        with Agent). Agent field was also moved out — see
+                        the first Row of this form. */}
 
                     {children > 0 && (
                       <Row className="g-2 mb-3">
@@ -833,11 +844,17 @@ export const SchefferDriverSearch = () => {
                         card.basePriceWithMarkup != null
                           ? card.basePriceWithMarkup
                           : card.basePrice;
+                      // Airport Pickup / Airport Drop are now stored as
+                      // boolean flags (1 = included, 0 = not) on the rate
+                      // editor. Extra Hour / Extra KM / Night were removed
+                      // from the editor entirely, so the base rate IS the
+                      // total the operator sees. Only the Waiting surcharge
+                      // remains a numeric charge; keep that block visible
+                      // only when it applies.
+                      const airportPickupIncluded = Number(card.airportPickupCharge) > 0;
+                      const airportDropIncluded = Number(card.airportDropCharge) > 0;
                       const hasSurcharges =
-                        (card.nightCharge && card.nightCharge > 0) ||
-                        (card.waitingCharge && card.waitingCharge > 0) ||
-                        (card.airportPickupCharge && card.airportPickupCharge > 0) ||
-                        (card.airportDropCharge && card.airportDropCharge > 0);
+                        card.waitingCharge && card.waitingCharge > 0;
                       return (
                         <Col md={6} lg={4} key={`${card.rentalRateId}-${card.packageId}-${idx}`}>
                           <Card className="h-100 shadow-sm border-0 rounded-4 overflow-hidden">
@@ -878,29 +895,27 @@ export const SchefferDriverSearch = () => {
                                   <strong className="text-dark">{card.kmIncluded ?? "—"}</strong>{" "}
                                   km included
                                 </li>
-                                <li className="mb-1">
-                                  <FaUsers className="me-2 text-secondary" />
-                                  Extra Hour: <strong className="text-dark">{money(card.extraHourRate)}</strong>{" "}
-                                  · Extra KM:{" "}
-                                  <strong className="text-dark">{money(card.extraKmRate)}</strong>
-                                </li>
                               </ul>
+
+                              {(airportPickupIncluded || airportDropIncluded) && (
+                                <div className="d-flex flex-wrap gap-1 mb-2">
+                                  {airportPickupIncluded && (
+                                    <Badge bg="success-subtle" text="success">
+                                      ✓ Airport Pickup
+                                    </Badge>
+                                  )}
+                                  {airportDropIncluded && (
+                                    <Badge bg="success-subtle" text="success">
+                                      ✓ Airport Drop
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
 
                               {hasSurcharges && (
                                 <div className="border-top pt-2 mb-2 small text-muted">
                                   <div className="mb-1 fw-semibold text-dark">Surcharges</div>
-                                  {card.nightCharge > 0 && (
-                                    <div>Night: {money(card.nightCharge)}</div>
-                                  )}
-                                  {card.waitingCharge > 0 && (
-                                    <div>Waiting: {money(card.waitingCharge)}</div>
-                                  )}
-                                  {card.airportPickupCharge > 0 && (
-                                    <div>Airport Pickup: {money(card.airportPickupCharge)}</div>
-                                  )}
-                                  {card.airportDropCharge > 0 && (
-                                    <div>Airport Drop: {money(card.airportDropCharge)}</div>
-                                  )}
+                                  <div>Waiting: {money(card.waitingCharge)}</div>
                                 </div>
                               )}
 
@@ -912,7 +927,7 @@ export const SchefferDriverSearch = () => {
 
                               <div className="mt-auto">
                                 <div className="d-flex justify-content-between align-items-end mb-2">
-                                  <span className="text-muted small">Package price</span>
+                                  <span className="text-muted small">Total</span>
                                   <span className="fw-bold fs-5 text-success">
                                     {money(price)}
                                   </span>

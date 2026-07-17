@@ -7,7 +7,9 @@
  * of this page as buttons, alongside the booking-action row (mirrors the
  * Long Stay detail view). All existing endpoints / behavior are unchanged:
  *   - Booking detail:  GET    /api/scheffer/booking/{id}
- *   - Voucher PDF:     GET    /api/scheffer/{id}/voucher          (blob)
+ *   - Document PDFs:   GET    /api/scheffer_booking/{id}/pdf?type=...
+ *                        type ∈ { PROFORMA_VOUCHER, PROFORMA_INVOICE,
+ *                                 VOUCHER, INVOICE } → PdfGenerationResponseDTO
  *   - Cancel:          DELETE /api/scheffer/delete/{id}?reason=
  *   - Record usage:    PUT    /api/scheffer/{id}/usage
  *
@@ -19,9 +21,11 @@
  *   - POST  /api/scheffer/{id}/resend-mail
  *   - GET / POST /api/scheffer/{id}/notes
  *
- * NOTE: the Scheffer module exposes only a single blob Voucher endpoint —
- * there is no proforma/invoice PDF generator — so the Proforma / Final
- * Voucher & Invoice buttons from Long Stay are intentionally omitted here.
+ * DOCUMENTS: mirrors /booking-details/hotel-booking/{id} — while the booking
+ * is Confirmed (not yet reconfirmed) the Proforma Voucher / Proforma Invoice
+ * buttons show; after Reconfirm (or Completed) they switch to the final
+ * Voucher / Invoice. The backend returns a ready pdfUrl which is rendered
+ * inline in the preview modal (no blob).
  *
  * Booking summary is passed via location.state when the user clicks the
  * eye icon; on hard refresh we re-fetch from /booking/{id}.
@@ -47,12 +51,10 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   FaCar,
   FaTrash,
-  FaFileAlt,
   FaRoad,
   FaMapMarkerAlt,
   FaPhoneAlt,
   FaEnvelope,
-  FaIdCard,
   FaExclamationCircle,
 } from "react-icons/fa";
 import { toast } from "react-hot-toast";
@@ -74,6 +76,21 @@ const BUTTON_STYLE = {
   letterSpacing: "0.4px",
   whiteSpace: "nowrap",
 };
+
+// Purpose-based colour variants for the action buttons — identical palette to
+// the Hotel Booking detail view (BookingDetailedView.jsx) so the two flows
+// look uniform. Each reuses the exact BUTTON_STYLE shape (size / padding /
+// radius / white text); only the background colour changes. No behaviour,
+// handler, or guard is affected.
+const BTN_TEAL = { ...BUTTON_STYLE, backgroundColor: "#0d9488" }; // Reconfirm
+const BTN_DANGER = { ...BUTTON_STYLE, backgroundColor: "#dc2626" }; // Cancel
+const BTN_PRIMARY = { ...BUTTON_STYLE, backgroundColor: "#2563eb" }; // Record Usage
+const BTN_SKY = { ...BUTTON_STYLE, backgroundColor: "#3ba2e8" }; // Add Agent Reference
+const BTN_INDIGO = { ...BUTTON_STYLE, backgroundColor: "#6366f1" }; // Confirmation No.
+const BTN_INFO = { ...BUTTON_STYLE, backgroundColor: "#0891b2" }; // Voucher / Invoice docs
+const BTN_ORANGE = { ...BUTTON_STYLE, backgroundColor: "#f0922b" }; // Resend Mail
+const BTN_ACCENT = { ...BUTTON_STYLE, backgroundColor: "#7c3aed" }; // Booking Remark
+const BTN_NEUTRAL = { ...BUTTON_STYLE, backgroundColor: "#64748b" }; // Back / Notes
 
 const SECTION_HEADER = {
   backgroundColor: "#f0f0f0",
@@ -174,10 +191,12 @@ export default function SchefferDriverBookingDetailView() {
   const [cancelling, setCancelling] = useState(false);
   const [cancellationReason, setCancellationReason] = useState("");
 
-  // Voucher (PDF) modal
-  const [showPdf, setShowPdf] = useState(false);
-  const [pdfUrl, setPdfUrl] = useState(null);
-  const [loadingPdf, setLoadingPdf] = useState(false);
+  // Document preview modal (Proforma/Final Voucher & Invoice). Mirrors the
+  // Hotel Booking detail view: the backend returns a JSON DTO carrying a
+  // ready pdfUrl, which we render directly in an iframe (no blob). `pdfPreview`
+  // holds { url, label, type }; `generatingPdfType` gates the button spinner.
+  const [pdfPreview, setPdfPreview] = useState(null);
+  const [generatingPdfType, setGeneratingPdfType] = useState(null);
 
   // Actual-usage modal
   const [showUsage, setShowUsage] = useState(false);
@@ -319,34 +338,45 @@ export default function SchefferDriverBookingDetailView() {
     }
   };
 
-  // ── Voucher PDF ─────────────────────────────────────────────────
-  const onVoucher = async () => {
+  // ── Document PDF gateway ─────────────────────────────────────────
+  // Shared by Proforma Voucher / Proforma Invoice / Voucher / Invoice.
+  // `type` matches the backend enum (PROFORMA_VOUCHER | PROFORMA_INVOICE |
+  // VOUCHER | INVOICE). The controller returns a PdfGenerationResponseDTO
+  // { status, message, pdfUrl }; we render pdfUrl directly in the preview
+  // modal. Mirrors BookingDetailedView.jsx's handleDownloadPdf so the two
+  // flows behave identically. Note: the Scheffer final-invoice type is
+  // INVOICE (the Hotel flow uses COMPLETED) — see SchefferBookingPdfController.
+  const handleDownloadPdf = async (type, label) => {
     if (!bookingId) return;
-    setShowPdf(true);
-    setLoadingPdf(true);
-    setPdfUrl(null);
     try {
-      const res = await axiosInstance.get(`api/scheffer_booking/${bookingId}/pdf`, {
-        responseType: "blob",
-        // params: { type: type.toUpperCase() },
-        params: { type: "VOUCHER" },
-      });
-
-    
-      const blob = new Blob([res.data], { type: "application/pdf" });
-      setPdfUrl(URL.createObjectURL(blob));
+      setGeneratingPdfType(type);
+      const response = await axiosInstance.get(
+        `/api/scheffer_booking/${bookingId}/pdf`,
+        { params: { type: type.toUpperCase() } },
+      );
+      if (
+        response.data &&
+        response.data.status === "SUCCESS" &&
+        response.data.pdfUrl
+      ) {
+        setPdfPreview({
+          url: response.data.pdfUrl,
+          label: label || type,
+          type: type.toUpperCase(),
+        });
+      } else {
+        toast.error(
+          response.data?.message || `Failed to generate ${label || type}.`,
+        );
+      }
     } catch (e) {
-      console.error("Voucher error:", e);
-      toast.error("Failed to generate voucher");
+      console.error(`Error generating ${type} PDF:`, e);
+      toast.error(
+        e.response?.data?.message || `Error generating ${label || type}.`,
+      );
     } finally {
-      setLoadingPdf(false);
+      setGeneratingPdfType(null);
     }
-  };
-
-  const closePdf = () => {
-    setShowPdf(false);
-    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
-    setPdfUrl(null);
   };
 
   // ── Record Actual Usage ─────────────────────────────────────────
@@ -602,7 +632,7 @@ export default function SchefferDriverBookingDetailView() {
             {/* Back button + title + booking code */}
             <div className="mb-3 d-flex align-items-center flex-wrap gap-2">
               <button
-                style={{ ...BUTTON_STYLE, backgroundColor: "#555" }}
+                style={BTN_NEUTRAL}
                 onClick={() => navigate(-1)}
               >
                 ← Back
@@ -768,8 +798,6 @@ export default function SchefferDriverBookingDetailView() {
                             <th>#</th>
                             <th>Type</th>
                             <th>Name</th>
-                            <th>Age</th>
-                            <th>Passport</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -804,8 +832,6 @@ export default function SchefferDriverBookingDetailView() {
                                   .filter(Boolean)
                                   .join(" ") || "-"}
                               </td>
-                              <td>{g.age ?? "-"}</td>
-                              <td>{g.passportNo || "-"}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -863,14 +889,6 @@ export default function SchefferDriverBookingDetailView() {
                         />
                       </Col>
                       <Col md={6}>
-                        <InfoRow
-                          label={
-                            <>
-                              <FaIdCard /> Passport
-                            </>
-                          }
-                          value={details.custPassport || "-"}
-                        />
                         {details.custAgentLpo && (
                           <InfoRow
                             label="Agent LPO"
@@ -1053,19 +1071,69 @@ export default function SchefferDriverBookingDetailView() {
                     flexWrap: "wrap",
                   }}
                 >
-                  <button
-                    style={BUTTON_STYLE}
-                    onClick={onVoucher}
-                    title="Voucher"
-                  >
-                    <FaFileAlt style={{ marginRight: "6px" }} />
-                    VOUCHER
-                  </button>
-                       
+                  {/* Documents — mirrors /booking-details/hotel-booking/{id}:
+                       while the booking is still Confirmed (not reconfirmed)
+                       show the PROFORMA Voucher / Invoice; once it has been
+                       reconfirmed (or completed) show the final Voucher /
+                       Invoice. The backend's proforma endpoints skip the
+                       confirmed-status guard, and the final ones require
+                       Confirmed/ReConfirmed/Completed/Cancelled, so this stays
+                       consistent with the button that's shown. */}
+                  {!showsFinalDocs ? (
+                    <>
+                      <button
+                        style={BTN_INFO}
+                        disabled={generatingPdfType === "PROFORMA_VOUCHER"}
+                        onClick={() =>
+                          handleDownloadPdf("PROFORMA_VOUCHER", "Proforma Voucher")
+                        }
+                        title="Proforma Voucher"
+                      >
+                        {generatingPdfType === "PROFORMA_VOUCHER"
+                          ? "GENERATING..."
+                          : "PROFORMA VOUCHER"}
+                      </button>
+                      <button
+                        style={BTN_INFO}
+                        disabled={generatingPdfType === "PROFORMA_INVOICE"}
+                        onClick={() =>
+                          handleDownloadPdf("PROFORMA_INVOICE", "Proforma Invoice")
+                        }
+                        title="Proforma Invoice"
+                      >
+                        {generatingPdfType === "PROFORMA_INVOICE"
+                          ? "GENERATING..."
+                          : "PROFORMA INVOICE"}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        style={BTN_INFO}
+                        disabled={generatingPdfType === "VOUCHER"}
+                        onClick={() => handleDownloadPdf("VOUCHER", "Voucher")}
+                        title="Voucher"
+                      >
+                        {generatingPdfType === "VOUCHER"
+                          ? "GENERATING..."
+                          : "VOUCHER"}
+                      </button>
+                      <button
+                        style={BTN_INFO}
+                        disabled={generatingPdfType === "INVOICE"}
+                        onClick={() => handleDownloadPdf("INVOICE", "Invoice")}
+                        title="Invoice"
+                      >
+                        {generatingPdfType === "INVOICE"
+                          ? "GENERATING..."
+                          : "INVOICE"}
+                      </button>
+                    </>
+                  )}
 
                   {details.packageName && !isCancelled && (
                     <button
-                      style={BUTTON_STYLE}
+                      style={BTN_PRIMARY}
                       onClick={openUsage}
                       title="Record actual usage"
                     >
@@ -1076,7 +1144,7 @@ export default function SchefferDriverBookingDetailView() {
 
                   {!isCancelled && (
                     <button
-                      style={BUTTON_STYLE}
+                      style={BTN_DANGER}
                       onClick={openCancelModal}
                       title="Cancel"
                     >
@@ -1086,13 +1154,13 @@ export default function SchefferDriverBookingDetailView() {
                   )}
 
                   {!showsFinalDocs && !isCancelled && (
-                    <button style={BUTTON_STYLE} onClick={openConfirmModal}>
+                    <button style={BTN_TEAL} onClick={openConfirmModal}>
                       RECONFIRM
                     </button>
                   )}
 
                   <button
-                    style={BUTTON_STYLE}
+                    style={BTN_SKY}
                     onClick={() => {
                       if (!isConfirmedOrLater) {
                         toast.error(
@@ -1107,7 +1175,7 @@ export default function SchefferDriverBookingDetailView() {
                   </button>
 
                   <button
-                    style={BUTTON_STYLE}
+                    style={BTN_INDIGO}
                     onClick={() => {
                       if (!isConfirmedOrLater) {
                         toast.error(
@@ -1122,19 +1190,19 @@ export default function SchefferDriverBookingDetailView() {
                   </button>
 
                   <button
-                    style={BUTTON_STYLE}
+                    style={BTN_ORANGE}
                     onClick={resendMailToAgent}
                     disabled={resendingMail}
                   >
                     {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
                   </button>
 
-                  <button style={BUTTON_STYLE} onClick={openRemarkModal}>
+                  <button style={BTN_ACCENT} onClick={openRemarkModal}>
                     BOOKING REMARK
                   </button>
 
                   <button
-                    style={BUTTON_STYLE}
+                    style={BTN_NEUTRAL}
                     onClick={() =>
                       navigate(
                         `/booking-details/scheffer-driver-booking/${bookingId}/notes`,
@@ -1248,15 +1316,18 @@ export default function SchefferDriverBookingDetailView() {
         </Modal.Footer>
       </Modal>
 
-      {/* Voucher PDF modal */}
+      {/* Document preview modal — Proforma/Final Voucher & Invoice.
+          Mirrors the Hotel Booking detail view: renders the ready pdfUrl
+          returned by the backend directly in an iframe (no blob), with
+          Open-in-new-tab / Download / Close affordances. */}
       <Modal
-        show={showPdf}
-        onHide={closePdf}
+        show={!!pdfPreview}
+        onHide={() => setPdfPreview(null)}
         size="xl"
         centered
         scrollable
         backdrop="static"
-        keyboard={false}
+        keyboard
       >
         <Modal.Header
           closeButton
@@ -1266,27 +1337,23 @@ export default function SchefferDriverBookingDetailView() {
           }}
         >
           <Modal.Title style={{ fontSize: "1rem", fontWeight: 700 }}>
-            Voucher{" "}
-            {details?.bookingCode ? "— " + details.bookingCode : ""}
+            {pdfPreview?.label || "Document"}
+            {details?.bookingCode ? " — " + details.bookingCode : ""}
           </Modal.Title>
         </Modal.Header>
         <Modal.Body style={{ padding: 0, height: "80vh" }}>
-          {loadingPdf ? (
-            <div className="h-100 d-flex flex-column align-items-center justify-content-center">
-              <Spinner animation="border" style={{ color: "#c0392b" }} />
-              <p className="mt-2 text-muted">Generating Voucher...</p>
-            </div>
-          ) : pdfUrl ? (
+          {pdfPreview?.url ? (
             <iframe
-              src={`${pdfUrl}#toolbar=0`}
+              key={pdfPreview.url}
+              src={pdfPreview.url}
               width="100%"
               height="100%"
-              title="scheffer-driver-voucher"
+              title={pdfPreview.label || "PDF preview"}
               style={{ border: "none", display: "block" }}
             />
           ) : (
             <div className="h-100 d-flex align-items-center justify-content-center">
-              <p className="text-danger">Failed to load PDF.</p>
+              <p className="text-muted mb-0">No PDF loaded.</p>
             </div>
           )}
         </Modal.Body>
@@ -1296,16 +1363,35 @@ export default function SchefferDriverBookingDetailView() {
             borderTop: "1px solid #dee2e6",
           }}
         >
-          {pdfUrl && (
-            <Button
-              variant="outline-primary"
-              size="sm"
-              onClick={() => window.open(pdfUrl, "_blank")}
-            >
-              Download
-            </Button>
+          {pdfPreview?.url && (
+            <>
+              <Button
+                variant="outline-secondary"
+                size="sm"
+                onClick={() =>
+                  window.open(pdfPreview.url, "_blank", "noopener,noreferrer")
+                }
+              >
+                Open in new tab
+              </Button>
+              <Button
+                variant="outline-primary"
+                size="sm"
+                as="a"
+                href={pdfPreview.url}
+                download={`Scheffer_${bookingId}_${
+                  pdfPreview.type || "document"
+                }.pdf`}
+              >
+                Download
+              </Button>
+            </>
           )}
-          <Button variant="secondary" size="sm" onClick={closePdf}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setPdfPreview(null)}
+          >
             Close
           </Button>
         </Modal.Footer>

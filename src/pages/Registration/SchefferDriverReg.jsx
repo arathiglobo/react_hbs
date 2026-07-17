@@ -1951,7 +1951,7 @@ const SchefferDriverReg = () => {
                               />
                             </Form.Group>
                           </Col>
-                      <Col md={3}>
+                      <Col md={6}>
                             <Form.Group className="mb-3">
                           <Form.Label>Cab Type</Form.Label>
                               <Form.Select
