@@ -76,6 +76,10 @@ export default function Sidebar() {
     "/agentDashboard": "agent",
     "/staffDashboard": "staff",
     "/extranetDashboard": "extranet",
+    // Super admin — same landing surface as admin (reuses AdminDashboard)
+    // but this path pins the active role to super_admin so the sidebar
+    // filter shows the SUPER_ADMIN-only groups (API Access, Credential Vault).
+    "/superAdminDashboard": "super_admin",
   };
   const pathRole = dashboardRoleByPath[pathname];
 
@@ -208,6 +212,9 @@ export default function Sidebar() {
   if (currentRole === "admin") {
     dashboardPath = "/adminDashboard";
     labelForDashboard = "Admin Dashboard";
+  } else if (currentRole === "super_admin") {
+    dashboardPath = "/superAdminDashboard";
+    labelForDashboard = "Super Admin Dashboard";
   } else if (currentRole === "agent") {
     dashboardPath = "/agentDashboard";
     labelForDashboard = "Agent Dashboard";
@@ -223,7 +230,7 @@ export default function Sidebar() {
     {
       label: labelForDashboard,
       to: dashboardPath,
-      roles: ["admin", "agent", "staff", "extranet"],
+      roles: ["admin", "agent", "staff", "extranet", "super_admin"],
     },
     {
       label: "Manage Masters",
@@ -313,21 +320,20 @@ export default function Sidebar() {
       children: [],
     },
     {
-      // Super Admin — controls which of our APIs each external client
-      // may call. Endpoint Catalog registers the endpoints eligible for
-      // external exposure; API Clients issues keys and manages per-client
-      // permission matrices. Visible to admin today (see SuperAdminGuard
-      // in backend for role notes); tighten to super_admin once that
-      // login flow exists.
-      label: "API Access",
-      roles: ["admin"],
+      // SUPER_ADMIN-only group. Controls which of our APIs each external
+      // client may call, plus the encrypted Credential Vault. Restricted
+      // to super_admin so an ADMIN login never sees this group. Backend
+      // guards (SuperAdminGuard / SuperAdminOnlyGuard) still enforce the
+      // same restriction at the API layer.
+      //
+      // Group label deliberately named "Access Control" — describes the
+      // contents (API surface + client keys + secrets vault) rather than
+      // repeating the "Super Admin Dashboard" title above.
+      label: "Access Control",
+      roles: ["super_admin"],
       children: [
         { label: "Endpoint Catalog", to: "/super-admin/api-access/endpoints" },
         { label: "API Clients", to: "/super-admin/api-access/clients" },
-        // Encrypted vault — backend enforces strict SUPER_ADMIN via
-        // SuperAdminOnlyGuard, so ADMIN accounts see the menu item but hit
-        // 403 on the API. Menu is left visible for admins so a SUPER_ADMIN
-        // account (once created) discovers it under the same group.
         { label: "Credential Vault", to: "/super-admin/credential-vault" },
       ],
     },
@@ -742,7 +748,16 @@ export default function Sidebar() {
   // Filter menu based on allowed roles. Child items (and items inside
   // groups) may also carry a `roles` key — those without one stay visible
   // to every role that can see the parent.
-  const roleAllows = (entry) => !entry.roles || entry.roles.includes(currentRole);
+  //
+  // super_admin inherits every menu that admin can see so a SUPER_ADMIN
+  // login keeps every admin tool (Manage Masters, Reports, Registration,
+  // …) and additionally sees SUPER_ADMIN-only groups (roles: ["super_admin"]).
+  const roleAllows = (entry) => {
+    if (!entry.roles) return true;
+    if (entry.roles.includes(currentRole)) return true;
+    if (currentRole === "super_admin" && entry.roles.includes("admin")) return true;
+    return false;
+  };
 
   const filteredItems = items.filter(roleAllows).map((item) => {
     const next = { ...item };
@@ -1178,7 +1193,10 @@ function getIcon(label) {
     case "Company Profile":
       return <Building2 {...iconProps} />;
 
-    case "API Access":
+    // SUPER_ADMIN-only group housing API surface + client keys + secrets
+    // vault. Renamed from "API Access"; label must stay in sync with the
+    // sidebar items array above (roles: ["super_admin"]).
+    case "Access Control":
       return <KeyRound {...iconProps} />;
 
     case "Approvals":

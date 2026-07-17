@@ -331,6 +331,19 @@ export default function App() {
   }
 />
 
+        {/* Super Admin dashboard — same landing surface as admin (reuses
+            AdminDashboard) so a SUPER_ADMIN login has every admin tool plus
+            the SUPER_ADMIN-only screens (Credential Vault, API Access) in
+            the sidebar. Backend guards do the actual permission enforcement. */}
+        <Route
+          path="/superAdminDashboard"
+          element={
+            <PrivateRoute roles={["super_admin"]}>
+              <AdminDashboard />
+            </PrivateRoute>
+          }
+        />
+
         <Route
           path="/agentDashboard"
           element={
@@ -425,18 +438,20 @@ export default function App() {
         <Route path="/report/time-limit-daily-sales" element={<TimeLimitOnlineDailySalesReport />} />
         <Route path="/report/hotel-booking-history" element={<PrivateRoute roles={["admin"]}><HotelBookingHistory /></PrivateRoute>} />
 
-        {/* Super Admin — API access control for external clients */}
-        <Route path="/super-admin/api-access/endpoints" element={<PrivateRoute roles={["admin"]}><ApiEndpointCatalog /></PrivateRoute>} />
-        <Route path="/super-admin/api-access/clients" element={<PrivateRoute roles={["admin"]}><ApiClientList /></PrivateRoute>} />
-        <Route path="/super-admin/api-access/clients/:clientId/permissions" element={<PrivateRoute roles={["admin"]}><ApiClientPermissionMatrix /></PrivateRoute>} />
+        {/* Super Admin — API access control for external clients. Restricted
+            to super_admin so an ADMIN login can neither see the menu (Sidebar)
+            nor reach the route. Backend SuperAdminGuard still runs as a
+            second layer of enforcement. */}
+        <Route path="/super-admin/api-access/endpoints" element={<PrivateRoute roles={["super_admin"]}><ApiEndpointCatalog /></PrivateRoute>} />
+        <Route path="/super-admin/api-access/clients" element={<PrivateRoute roles={["super_admin"]}><ApiClientList /></PrivateRoute>} />
+        <Route path="/super-admin/api-access/clients/:clientId/permissions" element={<PrivateRoute roles={["super_admin"]}><ApiClientPermissionMatrix /></PrivateRoute>} />
 
-        {/* Super Admin — encrypted Credential Vault. Backend enforces strict
-            SUPER_ADMIN via SuperAdminOnlyGuard; PrivateRoute here uses "admin"
-            so the pages render (and the backend returns 403 if the role is
-            insufficient). Tighten to roles={["super_admin"]} once your JWT
-            actually issues the SUPER_ADMIN authority. */}
-        <Route path="/super-admin/credential-vault" element={<PrivateRoute roles={["admin"]}><CredentialGroupList /></PrivateRoute>} />
-        <Route path="/super-admin/credential-vault/groups/:groupId" element={<PrivateRoute roles={["admin"]}><CredentialGroupDetail /></PrivateRoute>} />
+        {/* Super Admin — encrypted Credential Vault. Strictly SUPER_ADMIN on
+            both sides: backend SuperAdminOnlyGuard rejects ADMIN with 403,
+            and PrivateRoute now blocks the client route the same way so an
+            ADMIN never even sees the shell. */}
+        <Route path="/super-admin/credential-vault" element={<PrivateRoute roles={["super_admin"]}><CredentialGroupList /></PrivateRoute>} />
+        <Route path="/super-admin/credential-vault/groups/:groupId" element={<PrivateRoute roles={["super_admin"]}><CredentialGroupDetail /></PrivateRoute>} />
 
        {/* New Booking */}
         <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} /> 
