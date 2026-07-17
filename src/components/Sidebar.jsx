@@ -320,6 +320,22 @@ export default function Sidebar() {
       children: [],
     },
     {
+      // Admin-side API access — per-API on/off overlay + Test/Live
+      // credential management. Only APIs super_admin enabled for this
+      // admin's company show up on the page; toggles here are subtractive.
+      //
+      // Explicitly excluded from super_admin's inheritance because
+      // super_admin manages API access at a different layer
+      // (Access Control → API Clients + Admin Management) and having
+      // this admin-scoped entry visible in super_admin's sidebar would
+      // land them on an empty page (super_admin has no company_profile_id).
+      label: "API Access",
+      to: "/admin/api-access",
+      roles: ["admin"],
+      excludeRoles: ["super_admin"],
+      children: [],
+    },
+    {
       // SUPER_ADMIN-only group. Controls which of our APIs each external
       // client may call, plus the encrypted Credential Vault. Restricted
       // to super_admin so an ADMIN login never sees this group. Backend
@@ -335,7 +351,11 @@ export default function Sidebar() {
         { label: "Endpoint Catalog", to: "/super-admin/api-access/endpoints" },
         { label: "API Clients", to: "/super-admin/api-access/clients" },
         { label: "Admin Management", to: "/super-admin/admins" },
-        { label: "Credential Vault", to: "/super-admin/credential-vault" },
+        // Credential Vault deliberately hidden — companies now manage
+        // per-API credentials from the admin login (/admin/api-access),
+        // and super_admin no longer needs a separate encrypted store.
+        // Routes in App.jsx are left intact so a direct URL still works
+        // (and this line can be uncommented if the vault is needed later).
       ],
     },
     {
@@ -753,8 +773,14 @@ export default function Sidebar() {
   // super_admin inherits every menu that admin can see so a SUPER_ADMIN
   // login keeps every admin tool (Manage Masters, Reports, Registration,
   // …) and additionally sees SUPER_ADMIN-only groups (roles: ["super_admin"]).
+  //
+  // `excludeRoles` opts individual items OUT of that inheritance — used for
+  // screens where admin's context (their own company) makes sense but
+  // super_admin's "sees everything" model doesn't (e.g., the per-company
+  // API access page super_admin governs via a different super_admin screen).
   const roleAllows = (entry) => {
     if (!entry.roles) return true;
+    if (Array.isArray(entry.excludeRoles) && entry.excludeRoles.includes(currentRole)) return false;
     if (entry.roles.includes(currentRole)) return true;
     if (currentRole === "super_admin" && entry.roles.includes("admin")) return true;
     return false;

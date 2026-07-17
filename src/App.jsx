@@ -311,6 +311,9 @@ import CredentialGroupDetail from "./pages/superadmin/credentialvault/Credential
 // Super Admin — Admin Management (bind ADMIN login → company)
 import AdminList from "./pages/superadmin/adminmanagement/AdminList";
 
+// Admin — per-API on/off + Test/Live credentials (scoped to admin's own company)
+import AdminApiAccess from "./pages/admin/apiaccess/AdminApiAccess";
+
 
 export default function App() {
   return (
@@ -460,6 +463,11 @@ export default function App() {
             creates inherit the company on their own UserAccount, driving
             the per-company supplier restriction at hotel-search time. */}
         <Route path="/super-admin/admins" element={<PrivateRoute roles={["super_admin"]}><AdminList /></PrivateRoute>} />
+
+        {/* Admin — per-API on/off overlay + Test/Live credentials. The
+            backend AdminApiAccessGuard also runs, so a direct URL from a
+            non-ADMIN account gets 403 even if this PrivateRoute passes. */}
+        <Route path="/admin/api-access" element={<PrivateRoute roles={["admin"]}><AdminApiAccess /></PrivateRoute>} />
 
        {/* New Booking */}
         <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} /> 

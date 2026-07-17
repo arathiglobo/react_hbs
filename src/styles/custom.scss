@@ -970,13 +970,24 @@ top: auto;
 .sidebar .nav-item-custom .nav-link:hover .caret,
 .sidebar .nav-item-custom.nav-item-has-children:hover > .nav-link .caret{ color: #fff !important; }
 
-/* Active / expanded top-level item → red text + tint row + red left border */
+/* Active / expanded top-level item → red text + tint row + red left border.
+ * box-sizing: border-box + max-width:100% keep the 3px left border and any
+ * Bootstrap padding from pushing the highlight past the sidebar's right
+ * edge — that was the visible "red bleed outside the sidebar" bug. Applies
+ * to every role — this was never role-specific, just more visible on the
+ * super_admin dashboard because it has fewer sidebar entries. */
 .sidebar .nav-item-custom .nav-link.rw-active{
   color: $brand-red !important;
   background: $brand-red-tint !important;
   border-left: 3px solid $brand-red !important;
+  box-sizing: border-box;
+  max-width: 100%;
 }
 .sidebar .nav-link.rw-active .sidebar-icon{ color: $brand-red !important; }
+
+/* Same width safeguard on the row wrapper so the highlight can't outgrow
+ * the sidebar column even on wider labels. */
+.sidebar .nav-item-custom{ max-width: 100%; }
 
 /* Submenu links → slate, solid red on hover */
 .sidebar .submenu .submenu-link:hover{
@@ -988,7 +999,16 @@ top: auto;
   color: $brand-red !important;
   background: $brand-red-tint !important;
   border-left: 3px solid $brand-red !important;
+  box-sizing: border-box;
+  max-width: 100%;
 }
+
+/* Note: no `overflow-x: hidden` on `.sidebar` here — its submenus render
+ * as absolutely-positioned flyouts that intentionally sit JUST past the
+ * sidebar's right edge (x = sidebar-width + 1). Clipping horizontal
+ * overflow would hide those flyouts and break every top-level menu click.
+ * The box-sizing + max-width rules above already contain the .rw-active
+ * highlight without needing a container-level clip. */
 
 /* ── Misc brand accents ── */
 .btn-search-large{ box-shadow: 0 6px 14px rgba(236,11,67,.2); }
