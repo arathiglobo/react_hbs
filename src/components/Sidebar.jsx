@@ -334,6 +334,7 @@ export default function Sidebar() {
       children: [
         { label: "Endpoint Catalog", to: "/super-admin/api-access/endpoints" },
         { label: "API Clients", to: "/super-admin/api-access/clients" },
+        { label: "Admin Management", to: "/super-admin/admins" },
         { label: "Credential Vault", to: "/super-admin/credential-vault" },
       ],
     },

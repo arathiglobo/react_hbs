@@ -308,6 +308,9 @@ import ApiClientPermissionMatrix from "./pages/superadmin/apiaccess/ApiClientPer
 import CredentialGroupList from "./pages/superadmin/credentialvault/CredentialGroupList";
 import CredentialGroupDetail from "./pages/superadmin/credentialvault/CredentialGroupDetail";
 
+// Super Admin — Admin Management (bind ADMIN login → company)
+import AdminList from "./pages/superadmin/adminmanagement/AdminList";
+
 
 export default function App() {
   return (
@@ -452,6 +455,11 @@ export default function App() {
             ADMIN never even sees the shell. */}
         <Route path="/super-admin/credential-vault" element={<PrivateRoute roles={["super_admin"]}><CredentialGroupList /></PrivateRoute>} />
         <Route path="/super-admin/credential-vault/groups/:groupId" element={<PrivateRoute roles={["super_admin"]}><CredentialGroupDetail /></PrivateRoute>} />
+
+        {/* Super Admin — bind ADMIN logins to a company. Agents the admin
+            creates inherit the company on their own UserAccount, driving
+            the per-company supplier restriction at hotel-search time. */}
+        <Route path="/super-admin/admins" element={<PrivateRoute roles={["super_admin"]}><AdminList /></PrivateRoute>} />
 
        {/* New Booking */}
         <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} /> 

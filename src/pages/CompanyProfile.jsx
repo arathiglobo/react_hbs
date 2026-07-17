@@ -511,6 +511,7 @@ export default function CompanyProfile() {
                 <thead>
                   <tr>
                     <th style={{ width: 80 }}>S/N</th>
+                    <th style={{ width: 140 }}>Company Code</th>
                     <th>Company Name</th>
                     <th>Address</th>
                     <th>Authorized Person</th>
@@ -521,6 +522,13 @@ export default function CompanyProfile() {
                   {items.map((item, index) => (
                     <tr key={item.companyProfileId}>
                       <td>{index + 1 + page * 20}</td>
+                      <td>
+                        {item.companyCode ? (
+                          <code>{item.companyCode}</code>
+                        ) : (
+                          <span className="text-muted small">—</span>
+                        )}
+                      </td>
                       <td>{item.companyName}</td>
                       <td>{item.address}</td>
                       <td>{item.authorizedPerson}</td>
@@ -548,7 +556,7 @@ export default function CompanyProfile() {
                   ))}
                   {isLoading && items.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="text-center text-muted py-4">
+                      <td colSpan={6} className="text-center text-muted py-4">
                         <div
                           className="spinner-border spinner-border-sm me-2"
                           role="status"
@@ -561,7 +569,7 @@ export default function CompanyProfile() {
                   )}
                   {items.length === 0 && !isLoading && (
                     <tr>
-                      <td colSpan={5} className="text-center text-muted py-4">
+                      <td colSpan={6} className="text-center text-muted py-4">
                         No company profiles found.
                       </td>
                     </tr>
@@ -1014,6 +1022,12 @@ export default function CompanyProfile() {
                           <h4 className="mb-1 fw-bold text-indigo">
                             {viewData.companyName}
                           </h4>
+                          {viewData.companyCode && (
+                            <p className="mb-1 small text-muted d-flex align-items-center gap-2">
+                              Company Code:{" "}
+                              <code>{viewData.companyCode}</code>
+                            </p>
+                          )}
                           <p className="mb-0 text-muted d-flex align-items-center gap-2">
                             <i className="bi bi-person-check"></i> Authorized:{" "}
                             <strong>{viewData.authorizedPerson}</strong>

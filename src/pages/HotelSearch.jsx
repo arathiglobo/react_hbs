@@ -24,16 +24,24 @@ import "../styles/HotelSearch.css";
 // ─────────────────────────────────────────────
 // Search Progress Bar
 // ─────────────────────────────────────────────
-function SearchProgressBar({ pollStatus, completedChannels }) {
-  const channels = [
-    "inhouse",
-   "iwtx",
-   "x3",
-   "ratehawk",
-   "darina",
-   "atharva",
-   "jumeirah",
-  ];
+// Default supplier list — used when the caller has no company restriction
+// or when the parent hasn't computed a narrower list yet. Kept out of
+// component body so its identity is stable across renders.
+const DEFAULT_PROGRESS_CHANNELS = [
+  "inhouse",
+  "iwtx",
+  "x3",
+  "ratehawk",
+  "darina",
+  "atharva",
+  "jumeirah",
+];
+
+function SearchProgressBar({ pollStatus, completedChannels, channels }) {
+  const effectiveChannels =
+    Array.isArray(channels) && channels.length > 0
+      ? channels
+      : DEFAULT_PROGRESS_CHANNELS;
   const [progress, setProgress] = useState(0);
   const [visible, setVisible] = useState(false);
 
@@ -42,7 +50,9 @@ function SearchProgressBar({ pollStatus, completedChannels }) {
       setVisible(true);
       const done = completedChannels.size;
       const target =
-        done === 0 ? 12 : Math.min(90, 12 + (done / channels.length) * 78);
+        done === 0
+          ? 12
+          : Math.min(90, 12 + (done / effectiveChannels.length) * 78);
       setProgress(target);
     } else if (pollStatus === "COMPLETED") {
       setProgress(100);
@@ -490,6 +500,17 @@ export default function HotelSearch({ force24Hour = false } = {}) {
   const [starRating, setStarRating] = useState(null);
   const [hotelType, setHotelType] = useState([]);
   const [channelType, setChannelType] = useState([]);
+  // Per-company supplier allow-list — populated once on mount from
+  // /api/hotel-search/my-allowed-suppliers. When `channelsUnrestricted`
+  // is true (no company assigned or no picks made yet) the sidebar
+  // channel filter keeps every option visible. Otherwise it narrows to
+  // the codes in `allowedChannels` so admins/agents only see the
+  // suppliers the super_admin has actually enabled for their company.
+  //
+  // Purely presentational — the server-side HotelApiCallerContext is
+  // still the authoritative gate on which suppliers are queried.
+  const [allowedChannels, setAllowedChannels] = useState(new Set());
+  const [channelsUnrestricted, setChannelsUnrestricted] = useState(true);
   // Available Deals multi-select filter (array of option values).
   // Empty array = no filter. Matching is OR across selected options.
   const [availableDeals, setAvailableDeals] = useState([]);
@@ -547,6 +568,37 @@ export default function HotelSearch({ force24Hour = false } = {}) {
   useEffect(() => {
     finalHotelSearchTermRef.current = finalHotelSearchTerm;
   }, [finalHotelSearchTerm]);
+
+  // Fetch the caller's per-company supplier allow-list once on mount so
+  // the Channel sidebar filter can show only the suppliers the caller is
+  // actually allowed to hit. Fail-open: any error keeps every channel
+  // visible (matches the server-side "empty allow-list = no restriction"
+  // rule) so a transient DB hiccup never accidentally narrows the UI.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await axiosInstance.get(
+          "/api/hotel-search/my-allowed-suppliers",
+        );
+        if (cancelled) return;
+        const unrestricted = res?.data?.unrestricted !== false;
+        const codes = Array.isArray(res?.data?.codes) ? res.data.codes : [];
+        setChannelsUnrestricted(unrestricted);
+        setAllowedChannels(
+          new Set(codes.map((c) => String(c || "").toLowerCase())),
+        );
+      } catch (_) {
+        if (!cancelled) {
+          setChannelsUnrestricted(true);
+          setAllowedChannels(new Set());
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   // Sequence guard for /filter-by-name — an older response can arrive after
   // a newer one (500 ms debounce, no XHR cancel) and stomp results for the
   // wrong term. Only the response whose seq matches the latest issued call
@@ -596,6 +648,19 @@ export default function HotelSearch({ force24Hour = false } = {}) {
      { value: "ratehawk", label: "Ratehawk" },
      { value: "darina", label: "Darina" },
   ];
+
+  // Narrows the Channel sidebar filter (and the SearchProgressBar pills)
+  // to the suppliers this caller's company has enabled. When the caller
+  // is unrestricted — no company assignment, or the allow-list is empty —
+  // every option stays visible, so no existing flow is affected.
+  const visibleChannelTypeOptions = channelsUnrestricted
+    ? channelTypeOptions
+    : channelTypeOptions.filter((o) => allowedChannels.has(o.value));
+  const visibleProgressChannels = channelsUnrestricted
+    ? undefined // let SearchProgressBar keep its own default
+    : channelTypeOptions
+        .filter((o) => allowedChannels.has(o.value))
+        .map((o) => o.value);
 
   // Available Deals filter options. Each option maps to a per-hotel
   // predicate evaluated against the feature-flag map and the search
@@ -2196,6 +2261,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
           <SearchProgressBar
             pollStatus={pollStatus}
             completedChannels={completedChannels}
+            channels={visibleProgressChannels}
           />
 
           {/* ── Loading skeleton ──
@@ -2401,7 +2467,7 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                   Channel
                                 </Form.Label>
                                 <div className="filter-checkbox-list">
-                                  {channelTypeOptions.map((item) => (
+                                  {visibleChannelTypeOptions.map((item) => (
                                     <Form.Check
                                       key={item.value}
                                       type="checkbox"
