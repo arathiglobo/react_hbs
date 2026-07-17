@@ -239,49 +239,11 @@ export default function PackageBookingDetailView() {
   const [bookingNotes, setBookingNotes] = useState([]);
   const [notesLoading, setNotesLoading] = useState(true);
 
-  // ── Client-side persistence for Agent Reference / Confirmation No.
-  //    / Remarks / Notes. The Hotel detail page hits dedicated backend
-  //    endpoints (e.g. /api/hotel-booking/{id}/remark) that don't exist
-  //    yet for package bookings. Until they do, we persist these values
-  //    in localStorage keyed by bookingId so the buttons FEEL identical
-  //    to the Hotel flow — save, success toast, value sticks across
-  //    reloads. Backend calls below remain best-effort: if the server
-  //    accepts them, great; if not, we still keep the local copy.
-  const EXTRAS_KEY = bookingId ? `pkg-booking-extras:${bookingId}` : null;
-  const [extras, setExtras] = useState({
-    agentReference: "",
-    confirmationNumber: "",
-    remarks: "",
-    notes: [],
-  });
-
-  useEffect(() => {
-    if (!EXTRAS_KEY) return;
-    try {
-      const raw = localStorage.getItem(EXTRAS_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setExtras({
-          agentReference: parsed.agentReference || "",
-          confirmationNumber: parsed.confirmationNumber || "",
-          remarks: parsed.remarks || "",
-          notes: Array.isArray(parsed.notes) ? parsed.notes : [],
-        });
-      }
-    } catch {
-      /* ignore — localStorage may be unavailable or corrupt */
-    }
-  }, [EXTRAS_KEY]);
-
-  const persistExtras = (next) => {
-    setExtras(next);
-    if (!EXTRAS_KEY) return;
-    try {
-      localStorage.setItem(EXTRAS_KEY, JSON.stringify(next));
-    } catch {
-      /* ignore */
-    }
-  };
+  // Agent Reference / Confirmation No. / Booking Remark are read directly
+  // from bookingDetails (backed by the package_booking row). Notes are
+  // fetched separately into bookingNotes below. Saves POST to dedicated
+  // backend endpoints and then re-fetch, so values persist across sessions,
+  // devices, and backend restarts.
 
   // Cancellation state
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -339,35 +301,35 @@ export default function PackageBookingDetailView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingId]);
 
-  // Try to fetch server-side notes the same way BookingDetailedView
-  // does. If the endpoint isn't implemented (404/error), we silently
-  // fall through to the locally-persisted notes carried by `extras`.
-  useEffect(() => {
-    let alive = true;
-    if (!bookingId) return undefined;
-    setNotesLoading(true);
-    axiosInstance
-      .get(`/api/v1/package-booking/booking/${bookingId}/notes`)
-      .then((res) => {
-        if (!alive) return;
-        const list = Array.isArray(res.data?.notes)
-          ? res.data.notes
-          : Array.isArray(res.data)
-            ? res.data
-            : [];
-        setBookingNotes(list);
-      })
-      .catch(() => alive && setBookingNotes([]))
-      .finally(() => alive && setNotesLoading(false));
-    return () => {
-      alive = false;
-    };
-  }, [bookingId]);
+  // Backend is now the single source of truth for notes.
+  const mergedNotes = bookingNotes;
 
-  // Merge backend-returned notes with the locally-persisted ones so the
-  // Notes section and the modal both reflect everything the user has
-  // added on this device.
-  const mergedNotes = [...extras.notes, ...bookingNotes];
+  const fetchBookingNotes = async () => {
+    if (!bookingId) return;
+    try {
+      setNotesLoading(true);
+      const res = await axiosInstance.get(
+        `/api/v1/package-booking/booking/${bookingId}/notes`,
+      );
+      const list = Array.isArray(res.data?.notes)
+        ? res.data.notes
+        : Array.isArray(res.data)
+          ? res.data
+          : [];
+      setBookingNotes(list);
+    } catch {
+      setBookingNotes([]);
+    } finally {
+      setNotesLoading(false);
+    }
+  };
+
+  // Fetch server-side notes on mount / bookingId change. Individual saves
+  // call fetchBookingNotes() directly to refresh after appending.
+  useEffect(() => {
+    fetchBookingNotes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingId]);
 
   // Once we have the booking row, lazy-fetch the underlying package's
   // programme so the page can render the itinerary, inclusions,
@@ -660,22 +622,9 @@ export default function PackageBookingDetailView() {
   //    follow the existing /api/v1/package-booking/booking/{id}/...
   //    convention used by the rest of this page.
 
-  // Best-effort backend ping. The package-booking variants of these
-  // endpoints don't exist yet, so a 404/405/network error is expected;
-  // we swallow it. The localStorage-backed `extras` state is the real
-  // source of truth — backend persistence kicks in automatically the
-  // day those endpoints ship, with no further wiring needed.
-  const bestEffortPost = async (url, body) => {
-    try {
-      await axiosInstance.post(url, body);
-    } catch {
-      /* ignore — backend may not implement this endpoint yet */
-    }
-  };
-
   // Agent Reference
   const openAgentRefModal = () => {
-    setAgentRefInput(extras.agentReference || "");
+    setAgentRefInput(bookingDetails?.agentReference || "");
     setAgentRefError("");
     setShowAgentRefModal(true);
   };
@@ -687,20 +636,31 @@ export default function PackageBookingDetailView() {
       return;
     }
     setAgentRefError("");
-    setSavingAgentRef(true);
-    persistExtras({ ...extras, agentReference: value });
-    await bestEffortPost(
-      `/api/v1/package-booking/booking/${bookingId}/agent-reference`,
-      { agentReference: value },
-    );
-    setSavingAgentRef(false);
-    setShowAgentRefModal(false);
-    toast.success("Agent Reference saved successfully");
+    try {
+      setSavingAgentRef(true);
+      const res = await axiosInstance.post(
+        `/api/v1/package-booking/booking/${bookingId}/agent-reference`,
+        { agentReference: value },
+      );
+      if (res.data?.success !== false) {
+        setShowAgentRefModal(false);
+        toast.success(res.data?.message || "Agent Reference saved successfully");
+        await fetchDetails();
+      } else {
+        toast.error(res.data?.message || "Failed to save Agent Reference");
+      }
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message || "Failed to save Agent Reference",
+      );
+    } finally {
+      setSavingAgentRef(false);
+    }
   };
 
   // Confirmation Number
   const openConfirmationNoModal = () => {
-    setConfirmationNoInput(extras.confirmationNumber || "");
+    setConfirmationNoInput(bookingDetails?.confirmationNumber || "");
     setConfirmationNoError("");
     setShowConfirmationNoModal(true);
   };
@@ -712,15 +672,28 @@ export default function PackageBookingDetailView() {
       return;
     }
     setConfirmationNoError("");
-    setSavingConfirmationNo(true);
-    persistExtras({ ...extras, confirmationNumber: value });
-    await bestEffortPost(
-      `/api/v1/package-booking/booking/${bookingId}/confirmation-number`,
-      { confirmationNumber: value },
-    );
-    setSavingConfirmationNo(false);
-    setShowConfirmationNoModal(false);
-    toast.success("Confirmation Number saved successfully");
+    try {
+      setSavingConfirmationNo(true);
+      const res = await axiosInstance.post(
+        `/api/v1/package-booking/booking/${bookingId}/confirmation-number`,
+        { confirmationNumber: value },
+      );
+      if (res.data?.success !== false) {
+        setShowConfirmationNoModal(false);
+        toast.success(
+          res.data?.message || "Confirmation Number saved successfully",
+        );
+        await fetchDetails();
+      } else {
+        toast.error(res.data?.message || "Failed to save Confirmation Number");
+      }
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message || "Failed to save Confirmation Number",
+      );
+    } finally {
+      setSavingConfirmationNo(false);
+    }
   };
 
   // Resend mail to agent — best-effort. Surfaces a generic success
@@ -729,17 +702,21 @@ export default function PackageBookingDetailView() {
   // delivery.
   const resendMailToAgent = async () => {
     setResendingMail(true);
-    await bestEffortPost(
-      `/api/v1/package-booking/booking/${bookingId}/resend-mail`,
-      {},
-    );
+    try {
+      await axiosInstance.post(
+        `/api/v1/package-booking/booking/${bookingId}/resend-mail`,
+        {},
+      );
+    } catch {
+      /* ignore — backend may not implement this endpoint yet */
+    }
     setResendingMail(false);
     toast.success("Mail resent to agent successfully!");
   };
 
   // Booking Remark
   const openRemarkModal = () => {
-    setRemarkInput(extras.remarks || bookingDetails?.remarks || "");
+    setRemarkInput(bookingDetails?.remarks || "");
     setShowRemarkModal(true);
   };
 
@@ -749,19 +726,27 @@ export default function PackageBookingDetailView() {
       toast.error("Remark cannot be empty");
       return;
     }
-    setSavingRemark(true);
-    persistExtras({ ...extras, remarks: text });
-    await bestEffortPost(
-      `/api/v1/package-booking/booking/${bookingId}/remark`,
-      { remarks: text },
-    );
-    setSavingRemark(false);
-    setShowRemarkModal(false);
-    toast.success("Remark saved successfully");
+    try {
+      setSavingRemark(true);
+      const res = await axiosInstance.post(
+        `/api/v1/package-booking/booking/${bookingId}/remark`,
+        { remarks: text },
+      );
+      if (res.data?.success !== false) {
+        setShowRemarkModal(false);
+        toast.success(res.data?.message || "Remark saved successfully");
+        await fetchDetails();
+      } else {
+        toast.error(res.data?.message || "Failed to save remark");
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to save remark");
+    } finally {
+      setSavingRemark(false);
+    }
   };
 
-  // Notes — appended client-side. createdAt stays a stable string
-  // we can render later (no Date.now needed in this codebase).
+  // Notes — persisted server-side, listed newest-first via GET /notes.
   const openNotesModal = () => {
     setNoteInput("");
     setShowNotesModal(true);
@@ -773,22 +758,29 @@ export default function PackageBookingDetailView() {
       toast.error("Note cannot be empty");
       return;
     }
-    setSavingNote(true);
-    const newNote = {
-      noteId: `n-${extras.notes.length + 1}-${text.slice(0, 6)}`,
-      noteText: text,
-      createdBy: localStorage.getItem("username") || "You",
-      createdAt: new Date().toISOString().replace("T", " ").slice(0, 19),
-    };
-    const nextNotes = [newNote, ...extras.notes];
-    persistExtras({ ...extras, notes: nextNotes });
-    await bestEffortPost(
-      `/api/v1/package-booking/booking/${bookingId}/notes`,
-      { noteText: text },
-    );
-    setSavingNote(false);
-    setNoteInput("");
-    toast.success("Note added successfully");
+    try {
+      setSavingNote(true);
+      const createdBy =
+        localStorage.getItem("UserName") ||
+        localStorage.getItem("username") ||
+        sessionStorage.getItem("UserName") ||
+        "unknown";
+      const res = await axiosInstance.post(
+        `/api/v1/package-booking/booking/${bookingId}/notes`,
+        { noteText: text, createdBy },
+      );
+      if (res.data?.success !== false) {
+        toast.success(res.data?.message || "Note added successfully");
+        setNoteInput("");
+        await fetchBookingNotes();
+      } else {
+        toast.error(res.data?.message || "Failed to save note");
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to save note");
+    } finally {
+      setSavingNote(false);
+    }
   };
 
   // Live-only actions (Add New Item / Cancel / Reconfirm) are hidden once
@@ -1104,7 +1096,6 @@ export default function PackageBookingDetailView() {
                         <InfoRow
                           label="Agent Reference"
                           value={
-                            extras.agentReference ||
                             bookingDetails.agentReference ||
                             bookingDetails.agentLpo
                           }
@@ -1112,7 +1103,6 @@ export default function PackageBookingDetailView() {
                         <InfoRow
                           label="Confirmation No."
                           value={
-                            extras.confirmationNumber ||
                             bookingDetails.confirmationNumber ||
                             bookingDetails.confirmationNo
                           }
@@ -1433,9 +1423,9 @@ export default function PackageBookingDetailView() {
                       color: "#222",
                     }}
                   >
-                    {extras.remarks || bookingDetails.remarks ? (
+                    {bookingDetails.remarks ? (
                       <div style={{ whiteSpace: "pre-line" }}>
-                        {extras.remarks || bookingDetails.remarks}
+                        {bookingDetails.remarks}
                       </div>
                     ) : (
                       <span style={{ color: "#888", fontStyle: "italic" }}>
