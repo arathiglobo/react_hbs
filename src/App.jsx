@@ -314,6 +314,9 @@ import AdminList from "./pages/superadmin/adminmanagement/AdminList";
 // Admin — per-API on/off + Test/Live credentials (scoped to admin's own company)
 import AdminApiAccess from "./pages/admin/apiaccess/AdminApiAccess";
 
+// Super Admin — per-role sidebar visibility (Assign Menu)
+import AssignMenu from "./pages/master/AssignMenu";
+
 
 export default function App() {
   return (
@@ -468,6 +471,11 @@ export default function App() {
             backend AdminApiAccessGuard also runs, so a direct URL from a
             non-ADMIN account gets 403 even if this PrivateRoute passes. */}
         <Route path="/admin/api-access" element={<PrivateRoute roles={["admin"]}><AdminApiAccess /></PrivateRoute>} />
+
+        {/* Super Admin — per-role sidebar visibility. Backend guards with
+            SuperAdminOnlyGuard so a direct URL from a non-super_admin
+            account gets 403 even if this PrivateRoute passes. */}
+        <Route path="/masters/assign-menu" element={<PrivateRoute roles={["super_admin"]}><AssignMenu /></PrivateRoute>} />
 
        {/* New Booking */}
         <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} /> 
