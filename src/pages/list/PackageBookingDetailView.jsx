@@ -275,7 +275,17 @@ export default function PackageBookingDetailView() {
   const [confirmationNoError, setConfirmationNoError] = useState("");
   const [savingConfirmationNo, setSavingConfirmationNo] = useState(false);
 
+  // Resend Mail to Agent — clicking the button opens a preview modal that
+  // shows the voucher PDF the mail will attach and lets the admin edit the
+  // agent's email before the /resend-mail POST fires. Mirrors the hotel
+  // detail view (BookingDetailedView.jsx) so the flow is consistent across
+  // Confirmed, ReConfirmed, and Cancelled bookings.
   const [resendingMail, setResendingMail] = useState(false);
+  const [showResendMailModal, setShowResendMailModal] = useState(false);
+  const [resendMailPdfUrl, setResendMailPdfUrl] = useState("");
+  const [resendMailEmail, setResendMailEmail] = useState("");
+  const [resendMailEmailError, setResendMailEmailError] = useState("");
+  const [resendMailPreparing, setResendMailPreparing] = useState(false);
 
   const [showRemarkModal, setShowRemarkModal] = useState(false);
   const [remarkInput, setRemarkInput] = useState("");
@@ -810,20 +820,77 @@ export default function PackageBookingDetailView() {
     }
   };
 
-  // Resend mail to agent — backend resolves the owning agent's email
-  // (personalEmail → financeManagerEmail → gmEmail) and re-sends the
-  // voucher. Show the actual outcome; never fake success.
-  const resendMailToAgent = async () => {
-    setResendingMail(true);
+  // Open the RESEND MAIL preview modal. Two parallel calls hydrate the
+  // modal so the admin sees exactly what's about to go out:
+  //   1) /api/package-bookings/{id}/pdf?type=VOUCHER — the same PDF the
+  //      mail will attach, rendered inside an <iframe>. The proforma flag
+  //      mirrors the Voucher / Proforma Voucher distinction shown
+  //      elsewhere on this page (final voucher only once RECONFIRMED).
+  //   2) /api/agent/{agentId} — pulls the agent's personal email so the
+  //      recipient field starts pre-filled and editable.
+  // Errors on either lookup surface as an inline modal warning but do
+  // not block the admin from typing an address manually.
+  const openResendMailModal = async () => {
+    setResendMailPdfUrl("");
+    setResendMailEmail("");
+    setResendMailEmailError("");
+    setShowResendMailModal(true);
+    setResendMailPreparing(true);
     try {
+      const agentId = bookingDetails?.agentId
+        ? Number(String(bookingDetails.agentId).trim())
+        : null;
+      const [docRes, agentRes] = await Promise.all([
+        axiosInstance
+          .get(`/api/package-bookings/${bookingId}/pdf`, {
+            params: { type: "VOUCHER", proforma: !showsFinalDocs },
+          })
+          .catch(() => null),
+        agentId
+          ? axiosInstance.get(`/api/agent/${agentId}`).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+      if (docRes?.data?.status === "SUCCESS" && docRes.data.pdfUrl) {
+        setResendMailPdfUrl(docRes.data.pdfUrl);
+      }
+      const a = agentRes?.data || {};
+      const email =
+        a.personalEmail || a.financeManagerEmail || a.gmEmail || "";
+      setResendMailEmail(email);
+    } finally {
+      setResendMailPreparing(false);
+    }
+  };
+
+  // Fire the actual /resend-mail POST using whatever address the admin
+  // left in the modal's email field. Backend re-validates and falls back
+  // to the agent's on-file address if the field is blank; here we keep
+  // it strict so the preview matches what actually gets sent.
+  const submitResendMail = async () => {
+    const email = (resendMailEmail || "").trim();
+    if (!email) {
+      setResendMailEmailError("Recipient email is required");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setResendMailEmailError("Enter a valid email address");
+      return;
+    }
+    setResendMailEmailError("");
+    try {
+      setResendingMail(true);
       const res = await axiosInstance.post(
         `/api/v1/package-booking/booking/${bookingId}/resend-mail`,
-        {},
+        null,
+        { params: { email } },
       );
       if (res.data?.success === false) {
         toast.error(res.data?.message || "Failed to resend mail to agent");
       } else {
-        toast.success(res.data?.message || "Mail resent to agent successfully!");
+        toast.success(
+          res.data?.message || "Mail resent to agent successfully!",
+        );
+        setShowResendMailModal(false);
       }
     } catch (err) {
       toast.error(
@@ -1825,10 +1892,14 @@ export default function PackageBookingDetailView() {
                   </button>
                   <button
                     style={BTN_ORANGE}
-                    onClick={resendMailToAgent}
-                    disabled={resendingMail}
+                    onClick={openResendMailModal}
+                    disabled={resendingMail || resendMailPreparing}
                   >
-                    {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
+                    {resendingMail
+                      ? "SENDING..."
+                      : resendMailPreparing
+                        ? "PREPARING..."
+                        : "RESEND MAIL TO AGENT"}
                   </button>
                   <button style={BTN_ACCENT} onClick={openRemarkModal}>
                     BOOKING REMARK
@@ -2777,6 +2848,114 @@ export default function PackageBookingDetailView() {
         <Modal.Footer className="border-0">
           <Button variant="secondary" onClick={closeInvoice}>
             Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Resend Mail to Agent — preview + send ────────────────────────
+          Opens on the RESEND MAIL TO AGENT button click. Shows the Voucher
+          PDF the mail will attach inside an <iframe>, and an editable
+          email field pre-populated with the agent's on-file address, so
+          the operator sees which file goes out and who receives it before
+          confirming. The Send button POSTs
+          /api/v1/package-booking/booking/:id/resend-mail?email=…
+          and toasts success/failure. Applies to Confirmed, ReConfirmed,
+          and Cancelled bookings alike — same button, same modal. */}
+      <Modal
+        show={showResendMailModal}
+        onHide={() =>
+          resendingMail ? null : setShowResendMailModal(false)
+        }
+        size="xl"
+        centered
+        backdrop="static"
+        keyboard={!resendingMail}
+      >
+        <Modal.Header closeButton={!resendingMail}>
+          <Modal.Title style={{ fontSize: "1rem", fontWeight: 700 }}>
+            Resend {showsFinalDocs ? "Voucher" : "Proforma Voucher"} to
+            Agent
+            {bookingDetails?.confirmationCode
+              ? ` — ${bookingDetails.confirmationCode}`
+              : ""}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ padding: 0, height: "80vh" }}>
+          {resendMailPreparing ? (
+            <div className="d-flex align-items-center justify-content-center h-100">
+              <Spinner animation="border" variant="primary" />
+              <span className="ms-2 text-muted">
+                Preparing voucher attachment…
+              </span>
+            </div>
+          ) : resendMailPdfUrl ? (
+            <iframe
+              key={resendMailPdfUrl}
+              src={resendMailPdfUrl}
+              title="Voucher preview"
+              style={{
+                width: "100%",
+                height: "100%",
+                border: "none",
+                display: "block",
+              }}
+            />
+          ) : (
+            <div className="d-flex align-items-center justify-content-center h-100 text-muted small px-4 text-center">
+              Voucher preview unavailable. You can still send the mail —
+              the backend will regenerate the attachment on dispatch.
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer className="d-flex align-items-center gap-2 flex-wrap">
+          <Form.Group
+            className="flex-grow-1 me-2"
+            style={{ minWidth: 260, maxWidth: 420 }}
+          >
+            <Form.Label
+              className="fw-semibold mb-1"
+              style={{ fontSize: "0.8rem" }}
+            >
+              Agent Email <span className="text-danger">*</span>
+            </Form.Label>
+            <Form.Control
+              type="email"
+              size="sm"
+              placeholder="name@example.com"
+              value={resendMailEmail}
+              onChange={(e) => {
+                setResendMailEmail(e.target.value);
+                if (resendMailEmailError) setResendMailEmailError("");
+              }}
+              isInvalid={!!resendMailEmailError}
+              disabled={resendingMail || resendMailPreparing}
+            />
+            <Form.Control.Feedback type="invalid">
+              {resendMailEmailError}
+            </Form.Control.Feedback>
+          </Form.Group>
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            onClick={() => setShowResendMailModal(false)}
+            disabled={resendingMail}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={submitResendMail}
+            disabled={resendingMail || resendMailPreparing}
+          >
+            {resendingMail ? (
+              <>
+                <Spinner size="sm" className="me-2" />
+                Sending…
+              </>
+            ) : (
+              "Send"
+            )}
           </Button>
         </Modal.Footer>
       </Modal>
