@@ -37,20 +37,6 @@ const PAYMENT_MODES = [
   { value: "CASH", label: "Cash" },
 ];
 
-// Per-person price multiplier based on the package's sharing category.
-// The searched rate is treated as the Triple Sharing baseline (1.0x);
-// fewer people sharing a room costs more per person, more sharing costs
-// less. Matches standard hotel/package pricing convention.
-const getCategoryPriceMultiplier = (categoryName) => {
-  const name = String(categoryName || "").trim().toLowerCase();
-  if (!name) return 1;
-  if (name.includes("single")) return 2.0;
-  if (name.includes("twin") || name.includes("double")) return 1.4;
-  if (name.includes("triple")) return 1.0;
-  if (name.includes("quad")) return 0.8;
-  return 1;
-};
-
 const PackageBooking = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -322,20 +308,18 @@ const PackageBooking = () => {
         : Number(packageData?.rate) || 0;
     const { hotelPrice, cabPrice, activityPrice } = bookingData.selections;
 
-    // The sharing-category multiplier (single = 2x, twin = 1.4x, triple = 1x,
-    // quadruple = 0.8x) applies only to the *package* base rate. The hotel
-    // search response's totalRateWithMarkup is already sized to the searched
-    // pax count on the backend (perAdultRate * adultCount +
-    // perChildRate * childCount), so multiplying it again here would
-    // double-count the sharing math.
-    const categoryMultiplier = getCategoryPriceMultiplier(
-      bookingData.searchParams.packageCategoryName,
-    );
-    const packageTotal =
-      hotelPrice > 0 ? hotelPrice : baseRate * categoryMultiplier;
+    // Show the package rate exactly as it appeared on the search card until
+    // the user actually picks a hotel. Applying any category- or pax-based
+    // multiplier here would make the sidebar disagree with the number the
+    // user clicked "Book Now" on for their package. Once a hotel IS
+    // selected, its totalRateWithMarkup is the authoritative charge
+    // (already pax-sized by the backend as
+    // perAdultRate*adultCount + perChildRate*childCount + markup), so it
+    // takes over directly.
+    const packageTotal = hotelPrice > 0 ? hotelPrice : baseRate;
 
     setTotalPrice(packageTotal + cabPrice + activityPrice);
-  }, [bookingData.selections, bookingData.searchParams.packageCategoryName, packageData, searchRate]);
+  }, [bookingData.selections, packageData, searchRate]);
 
   const updateSelections = (selections) =>
     setBookingData((prev) => ({ ...prev, selections: { ...prev.selections, ...selections } }));

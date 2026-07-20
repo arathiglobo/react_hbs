@@ -54,6 +54,55 @@ import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 
+// Reverse-geocode browser coordinates to a readable address for the Booking
+// History audit trail — used when the user reconfirms a held booking so the
+// Reconfirmed row's Location column can show a precise street-level address.
+// Tries OpenStreetMap Nominatim first (street-level), then BigDataCloud
+// (locality-level, keyless). Returns null when neither responds so the caller
+// keeps its IP-derived fallback. Mirrors PaxInformation.jsx's helper.
+async function reverseGeocode(lat, lon) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=16&addressdetails=1`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (res.ok) {
+      const a = (await res.json())?.address || {};
+      const parts = [
+        a.road,
+        a.neighbourhood || a.suburb,
+        a.village || a.town || a.city || a.municipality,
+        a.state,
+        a.postcode,
+        a.country,
+      ].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255); // DB column is VARCHAR(255)
+    }
+  } catch {
+    // fall through to BigDataCloud
+  }
+  try {
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`,
+    );
+    if (res.ok) {
+      const d = await res.json();
+      const parts = [
+        d.locality,
+        d.city,
+        d.principalSubdivision,
+        d.countryName,
+      ].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255);
+    }
+  } catch {
+    // give up — caller keeps the IP-based fallback
+  }
+  return null;
+}
+
 const BUTTON_STYLE = {
   color: "#fff",
   border: "none",
@@ -250,6 +299,12 @@ export default function PackageBookingDetailView() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [showReconfirmModal, setShowReconfirmModal] = useState(false);
   const [isReconfirming, setIsReconfirming] = useState(false);
+  // Client location captured when the user opens the Reconfirm / Cancel
+  // modal, sent with the corresponding request so the History modal's
+  // "Booking Reconfirmed" / "Booking Cancelled" rows can show it. IP
+  // address is stamped server-side from the HTTP request.
+  const [reconfirmLocation, setReconfirmLocation] = useState(null);
+  const [cancelLocation, setCancelLocation] = useState(null);
 
   // ── Add New Item (amendment) picker — same flow as hotel detail view.
   // Opens a modal listing every sub-booking type; the chosen type's create
@@ -390,12 +445,16 @@ export default function PackageBookingDetailView() {
   };
 
   // ── Cancel handlers ─────────────────────────────────────────────────
+  // Sends the resolved client location alongside the cancel request so the
+  // backend can stamp cancelled_booking_location / cancelled_ip_address —
+  // the IP is resolved server-side from the HTTP request itself.
   const confirmCancelBooking = async () => {
     if (!bookingId) return;
     try {
       setIsCancelling(true);
       const response = await axiosInstance.put(
-        `/api/v1/package-booking/cancel/${bookingId}`
+        `/api/v1/package-booking/cancel/${bookingId}`,
+        { bookingLocation: cancelLocation },
       );
       if (response.data && response.data.status === "success") {
         toast.success(
@@ -417,16 +476,71 @@ export default function PackageBookingDetailView() {
     }
   };
 
+  // Kick off client-location resolution and feed the result into the given
+  // setter. IP-derived coarse fallback fires first so that even if the user
+  // denies geolocation we have SOMETHING to show; browser geolocation, when
+  // granted, overrides with a precise reverse-geocoded address. Shared
+  // between the Reconfirm and Cancel modal openers so both capture the same
+  // audit snapshot with identical fallback behaviour.
+  const resolveClientLocation = (setter) => {
+    fetch("https://ipapi.co/json/")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((info) => {
+        if (!info) return;
+        const line = [info.city, info.region, info.country_name]
+          .filter(Boolean)
+          .join(", ");
+        if (!line) return;
+        setter((prev) => prev || line);
+      })
+      .catch(() => {});
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async ({ coords }) => {
+          const precise = await reverseGeocode(coords.latitude, coords.longitude);
+          if (precise) setter(precise);
+        },
+        () => {}, // denied / unavailable — keep the IP-derived fallback
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
+      );
+    }
+  };
+
+  // Open the Reconfirm modal AND kick off client-location resolution so the
+  // reconfirm submit has an address ready to send. Deferring resolution
+  // until the user opens the modal avoids pinging geolocation on every
+  // detail-page view — the prompt only appears when the user actually
+  // intends to reconfirm.
+  const openReconfirmModal = () => {
+    setReconfirmLocation(null);
+    setShowReconfirmModal(true);
+    resolveClientLocation(setReconfirmLocation);
+  };
+
+  // Open the Cancel modal AND kick off client-location resolution so the
+  // cancel submit has an address ready to send. Same pattern as the
+  // reconfirm opener above — geolocation prompt only appears when the user
+  // actually intends to cancel, and the result feeds the History modal's
+  // "Booking Cancelled" row Location column.
+  const openCancelModal = () => {
+    setCancelLocation(null);
+    setShowCancelModal(true);
+    resolveClientLocation(setCancelLocation);
+  };
+
   // Reconfirm a held (Confirmed) booking → ReConfirmed. Mirrors the hotel
   // detail view's RECONFIRM: the backend flips the status AND settles the
   // agent's deferred credit (blocking if credit is insufficient). On success
-  // we re-fetch so the buttons switch to the final Voucher / Invoice.
+  // we re-fetch so the buttons switch to the final Voucher / Invoice, and so
+  // the History modal picks up the freshly-captured reconfirm location + IP.
   const confirmReconfirmBooking = async () => {
     if (!bookingId) return;
     try {
       setIsReconfirming(true);
       const response = await axiosInstance.put(
         `/api/v1/package-booking/reconfirm/${bookingId}`,
+        { bookingLocation: reconfirmLocation },
       );
       if (response.data && response.data.status === "success") {
         toast.success(
@@ -696,22 +810,28 @@ export default function PackageBookingDetailView() {
     }
   };
 
-  // Resend mail to agent — best-effort. Surfaces a generic success
-  // toast because the user just wants confirmation that the action
-  // was triggered; the backend (when wired up) controls the actual
-  // delivery.
+  // Resend mail to agent — backend resolves the owning agent's email
+  // (personalEmail → financeManagerEmail → gmEmail) and re-sends the
+  // voucher. Show the actual outcome; never fake success.
   const resendMailToAgent = async () => {
     setResendingMail(true);
     try {
-      await axiosInstance.post(
+      const res = await axiosInstance.post(
         `/api/v1/package-booking/booking/${bookingId}/resend-mail`,
         {},
       );
-    } catch {
-      /* ignore — backend may not implement this endpoint yet */
+      if (res.data?.success === false) {
+        toast.error(res.data?.message || "Failed to resend mail to agent");
+      } else {
+        toast.success(res.data?.message || "Mail resent to agent successfully!");
+      }
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message || "Failed to resend mail to agent",
+      );
+    } finally {
+      setResendingMail(false);
     }
-    setResendingMail(false);
-    toast.success("Mail resent to agent successfully!");
   };
 
   // Booking Remark
@@ -795,10 +915,8 @@ export default function PackageBookingDetailView() {
   // Booking lifecycle events for the History modal — built from the detail
   // already loaded (no extra API call). Mirrors the Hotel booking detail
   // view: only events with a recorded timestamp are listed, sorted
-  // chronologically, with per-action "Performed By" plus (for Created) the
-  // capture location / IP. Package bookings don't record a confirm /
-  // reconfirm step or location / IP, so those rows/columns stay empty — the
-  // logic is kept identical to the hotel view for parity.
+  // chronologically, with per-action "Performed By" plus (for Created /
+  // Reconfirmed) the capture location / IP.
   const bookingHistory = (() => {
     if (!bookingDetails) return [];
     const events = [];
@@ -821,7 +939,11 @@ export default function PackageBookingDetailView() {
     // Packages don't record a separate reconfirmation timestamp (there's no
     // deadline flow like the hotel side has), but a "Book & Voucher" choice
     // maps to RECONFIRMED at create time. Surface it as its own history row
-    // using the same audit trail so users see the lifecycle transition.
+    // using the same audit trail so users see the lifecycle transition. The
+    // reconfirm location / IP mirror the Created row's fields when the
+    // RECONFIRM button was clicked; older bookings without those fields fall
+    // back to whatever create-time location / IP was captured, so the row is
+    // never empty when data exists.
     if (
       String(bookingDetails.bookingStatus || "").trim().toUpperCase() ===
         "RECONFIRMED" &&
@@ -834,12 +956,24 @@ export default function PackageBookingDetailView() {
           bookingDetails.reconfirmedBy ||
           bookingDetails.createdBy ||
           "-",
+        location:
+          bookingDetails.reconfirmedBookingLocation ||
+          bookingDetails.bookingLocation,
+        ip:
+          bookingDetails.reconfirmedIpAddress ||
+          bookingDetails.ipAddress,
       });
     } else if (bookingDetails.reconfirmedDate) {
       events.push({
         action: "Booking Reconfirmed",
         at: bookingDetails.reconfirmedDate,
         by: bookingDetails.reconfirmedBy || "-",
+        location:
+          bookingDetails.reconfirmedBookingLocation ||
+          bookingDetails.bookingLocation,
+        ip:
+          bookingDetails.reconfirmedIpAddress ||
+          bookingDetails.ipAddress,
       });
     }
     const cancelled =
@@ -849,6 +983,8 @@ export default function PackageBookingDetailView() {
         action: "Booking Cancelled",
         at: bookingDetails.cancelledDate,
         by: bookingDetails.cancelledBy || "-",
+        location: bookingDetails.cancelledBookingLocation,
+        ip: bookingDetails.cancelledIpAddress,
       });
     }
     return events.sort((a, b) => {
@@ -1647,7 +1783,7 @@ export default function PackageBookingDetailView() {
                   {isCancellable && (
                     <button
                       style={BTN_DANGER}
-                      onClick={() => setShowCancelModal(true)}
+                      onClick={openCancelModal}
                       title="Cancel booking"
                     >
                       CANCEL
@@ -1659,7 +1795,7 @@ export default function PackageBookingDetailView() {
                   {isCancellable && derivedStatus === "Confirmed" && (
                     <button
                       style={BTN_RECONFIRM}
-                      onClick={() => setShowReconfirmModal(true)}
+                      onClick={openReconfirmModal}
                       title="Reconfirm this held booking"
                     >
                       RECONFIRM
