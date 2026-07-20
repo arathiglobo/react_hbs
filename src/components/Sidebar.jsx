@@ -98,6 +98,17 @@ export default function Sidebar() {
     storedRoles[0] ||
     "";
 
+  // Sub-account (sub-agent / sub-user) logins use a "prefix.mainAgent"
+  // username, which always contains a dot; main-agent login usernames are
+  // validated to letters/digits/underscore only (no dot). Sub-accounts must
+  // not see the agent "Registration" menu — they can't create their own
+  // sub-users / sub-agents. Only affects agent-role logins; every other role
+  // is unchanged.
+  const loginUserName =
+    localStorage.getItem("UserName") || sessionStorage.getItem("UserName") || "";
+  const isSubAccountAgent =
+    currentRole === "agent" && loginUserName.includes(".");
+
   // Re-sync the stored active role with the dashboard context so the
   // role-guarded routes (PrivateRoute roles=[...]) agree with the menu.
   useEffect(() => {
@@ -428,6 +439,9 @@ export default function Sidebar() {
       code: "top_registration", // same visibility bucket — agent variant of the same top-level slot
       label: "Registration",
       roles: ["agent"],
+      // Hidden for sub-account logins (sub-agent / sub-user) — only a main
+      // agent may register sub-users / sub-agents.
+      subAccountHidden: true,
       children: [
         { label: "Sub User", to: "/agent-registration/sub-user" },
         { label: "Sub Agent", to: "/agent-registration/sub-agent" },
@@ -472,6 +486,11 @@ export default function Sidebar() {
           label: "Senior Citizen",
           to: "/new-booking/senior-citizen",
         },
+        // Religious flow — same HotelSearch, destination locked to Mecca/Medina.
+        {
+          label: "Religious",
+          to: "/new-booking/religious",
+        },
       ],
     },
     {
@@ -494,7 +513,12 @@ export default function Sidebar() {
         // (new, additive page — every other entry here is unchanged).
         { code: "bl_all",         label: "All Bookings",  to: "/booking-details/all-bookings-list" },
         { code: "bl_hotel",       label: "Hotel",         to: "/booking-details/hotel-booking-list" },
+        // Dedicated 24-Hour Check-In list — same page wrapped with
+        // force24HourOnly so only is24HourCheckin=true rows are shown.
         { code: "bl_24hr",        label: "24 Hour",       to: "/booking-details/24hr-booking-list" },
+        // Dedicated Religious booking list — same page wrapped with
+        // religiousOnly so only isReligiousBooking=true rows are shown.
+        { code: "bl_religious",   label: "Religious",     to: "/booking-details/religious-booking-list" },
         { code: "bl_last_minute", label: "Last Minute",   to: "/booking-details/last-minute-booking-list" },
         { code: "bl_long_stay",   label: "Long Stay",     to: "/booking-details/long-stay-booking-list" },
         { code: "bl_day_stay",    label: "Day Stay",      to: "/booking-details/day-stay-booking-list" },
@@ -777,7 +801,11 @@ export default function Sidebar() {
     return false;
   };
 
-  const filteredItems = items.filter(roleAllows).map((item) => {
+  const filteredItems = items
+    .filter(roleAllows)
+    // Drop the agent Registration menu for sub-account logins.
+    .filter((entry) => !(entry.subAccountHidden && isSubAccountAgent))
+    .map((item) => {
     const next = { ...item };
     if (Array.isArray(item.children)) {
       next.children = item.children.filter(roleAllows);

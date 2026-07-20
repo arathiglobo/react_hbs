@@ -442,6 +442,7 @@ export const CabSearch = () => {
       }`,
       countryId: p.countryId || null,
       stateName: p.stateName || p.name || "",
+      code: p.countryCode,
     }));
   };
 
@@ -1421,14 +1422,20 @@ export const CabSearch = () => {
                           5. Arrival time
                           6. Drop type + dependent facility
                           7. Pax (Adults + Children + Child ages) */}
-                    {/* Row 1 — Agent / City / Transfer Date
-                        align-items-start keeps all three labels on the same
-                        baseline; the "Change drop off city?" checkbox under
-                        the City Select just hangs below without pushing the
-                        Agent / Transfer Date controls down. */}
+                    {/* Row 1 — Agent / City / Nationality
+                        align-items-start keeps all labels on the same baseline;
+                        the "Change drop off city?" checkbox under the City
+                        Select just hangs below without pushing the neighbouring
+                        controls down.
+                        Column widths total 12 in both roles:
+                          • admin/staff — Agent 4 · City 4 · Nationality 4
+                          • agent login — City 6 · Nationality 6 (no agent col)
+                        Transfer Date has been moved to its own row below so the
+                        traveller-identity fields sit together up top and the
+                        date field gets more visual weight. */}
                     <Row className="g-3 mb-3 align-items-start">
                       {!isAgentRole && (
-                        <Col md={3}>
+                        <Col md={4}>
                           <Form.Label className="fw-semibold">
                             Agent <span className="text-danger">*</span>
                           </Form.Label>
@@ -1449,7 +1456,7 @@ export const CabSearch = () => {
                           {agent && <AgentBalanceDisplay agentId={agent} />}
                         </Col>
                       )}
-                      <Col md={isAgentRole ? 9 : 6}>
+                      <Col md={isAgentRole ? 6 : 4}>
                         <Form.Label className="fw-semibold">
                           City <span className="text-danger">*</span>
                         </Form.Label>
@@ -1497,6 +1504,19 @@ export const CabSearch = () => {
                             {validationErrors.city}
                           </div>
                         )}
+                        {/* Surface UAE-resident status when the selected
+                            city belongs to the UAE so the operator can apply
+                            the resident rate. Matched on the city's country
+                            code "AE" (from master_country) so a label change
+                            can't break the rule. */}
+                        {city?.code === "AE" && (
+                          <div
+                            className="mt-1 small"
+                            style={{ color: "#0f7a3a", lineHeight: 1.25 }}
+                          >
+                            For UAE resident holders, please mention the nationality as United Arab Emirates regardless of the actual nationality.
+                          </div>
+                        )}
                         {/* Toggle that reveals the optional Drop City
                             selector (rendered in its own row below) so the
                             operator can search a route that ends in a
@@ -1519,7 +1539,42 @@ export const CabSearch = () => {
                           }}
                         />
                       </Col>
-                      <Col md={3}>
+                      {/* Nationality — moved into Row 1 (was previously in
+                          Row 4 next to Adults / Children) so the operator
+                          sees the traveller-identity fields grouped with
+                          Agent + City up top. Shares the same state as the
+                          rest of the form. */}
+                      <Col md={isAgentRole ? 6 : 4}>
+                        <Form.Label className="fw-semibold">
+                          Nationality
+                        </Form.Label>
+                        <Select
+                          options={nationalityList}
+                          value={nationality}
+                          onChange={(opt) => {
+                            setNationality(opt);
+                            if (opt) clearError("nationality");
+                          }}
+                          onInputChange={handleCountryInputChange}
+                          isLoading={isNationalityLoading}
+                          placeholder="Search Nationality"
+                          isSearchable
+                          isClearable
+                          menuPortalTarget={document.body}
+                          styles={{
+                            ...customSelectStyles,
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          }}
+                        />
+                      </Col>
+                    </Row>
+
+                    {/* Row 2 — Transfer Date on its own line so it isn't
+                        squeezed against Row 1's identity fields. md=4 keeps
+                        it a comfortable width without stretching all the way
+                        across; the extra space on the right stays clean. */}
+                    <Row className="g-3 mb-3 align-items-end">
+                      <Col md={4}>
                         <Form.Label className="fw-semibold">
                           Transfer Date{" "}
                           <span className="text-danger">*</span>
@@ -1847,7 +1902,9 @@ export const CabSearch = () => {
                       )}
                     </Row>
 
-                    {/* Row 4 — Adults / Children / Nationality */}
+                    {/* Row 4 — Adults / Children.
+                        Nationality was moved into Row 1 next to Agent / City,
+                        so this row now only carries the passenger counts. */}
                     <Row className="g-3 mb-3 align-items-end">
                       <Col md={3}>
                         <Form.Label className="fw-semibold">Adults</Form.Label>
@@ -1886,70 +1943,17 @@ export const CabSearch = () => {
                           ))}
                         </Form.Select>
                       </Col>
-
-                      {/* Nationality — reuses the existing nationalityList +
-                          debouncedCountrySearch hooks that were already wired
-                          for the legacy form (kept invisible until now). The
-                          dropdown is sourced from /api/country?limit=50 on
-                          mount and re-queried as the user types. */}
-                      <Col md={6}>
-                        <Form.Label className="fw-semibold">
-                          Nationality
-                        </Form.Label>
-                        <Select
-                          options={nationalityList}
-                          value={nationality}
-                          onChange={(opt) => {
-                            setNationality(opt);
-                            if (opt) clearError("nationality");
-                          }}
-                          onInputChange={handleCountryInputChange}
-                          isLoading={isNationalityLoading}
-                          placeholder="Search Nationality"
-                          isSearchable
-                          isClearable
-                          menuPortalTarget={document.body}
-                          styles={{
-                            ...customSelectStyles,
-                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                          }}
-                        />
-                        {/* Surface UAE-resident status to the operator
-                            so they can apply the resident rate. Matches
-                            ISO-2 "AE", ISO-3 "ARE", shorthand "UAE",
-                            and falls back to label text. */}
-                        {(() => {
-                          const code = (nationality?.code || "")
-                            .toString()
-                            .trim()
-                            .toUpperCase();
-                          const label = (nationality?.label || "")
-                            .toString()
-                            .trim()
-                            .toLowerCase();
-                          const isUAE =
-                            code === "AE" ||
-                            code === "ARE" ||
-                            code === "UAE" ||
-                            label.includes("united arab emirates") ||
-                            label === "uae";
-                          return isUAE ? (
-                            <div
-                              className="mt-1 small fw-semibold"
-                              style={{ color: "#0f7a3a" }}
-                            >
-                              Select "United Arab Emirates" if guest resident of UAE
-                            </div>
-                          ) : null;
-                        })()}
-                      </Col>
                     </Row>
 
                     {/* Row 5 — Currency selector (currencyCode-only). The
                         chosen code is carried forward to the booking page
                         for downstream conversion; the search payload is
-                        unchanged. */}
-                    <Row className="g-3 mb-3 align-items-end">
+                        unchanged.
+                        Hidden per product decision — the state remains so
+                        the payload still carries `currencyCode: null` (a
+                        value the booking page already tolerates) and the
+                        row can be un-hidden by dropping the `d-none`. */}
+                    <Row className="d-none g-3 mb-3 align-items-end">
                       <Col md={3}>
                         <Form.Label className="fw-semibold">
                           Currency
@@ -2270,34 +2274,6 @@ export const CabSearch = () => {
                             {validationErrors.nationality}
                           </div>
                         )}
-                        {/* Surface UAE-resident status to the operator
-                            so they can apply the resident rate. Matches
-                            ISO-2 "AE", ISO-3 "ARE", shorthand "UAE",
-                            and falls back to label text. */}
-                        {(() => {
-                          const code = (nationality?.code || "")
-                            .toString()
-                            .trim()
-                            .toUpperCase();
-                          const label = (nationality?.label || "")
-                            .toString()
-                            .trim()
-                            .toLowerCase();
-                          const isUAE =
-                            code === "AE" ||
-                            code === "ARE" ||
-                            code === "UAE" ||
-                            label.includes("united arab emirates") ||
-                            label === "uae";
-                          return isUAE ? (
-                            <div
-                              className="mt-1 small fw-semibold"
-                              style={{ color: "#0f7a3a" }}
-                            >
-                              Select "United Arab Emirates" if guest resident of UAE
-                            </div>
-                          ) : null;
-                        })()}
                       </Col>
                       {!isAgentRole && (
                       <Col md={4}>

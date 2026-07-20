@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Card,
   Button,
@@ -30,6 +30,17 @@ import {
 } from "react-icons/fa";
 import "../../styles/HotelList.css";
 
+// Same 300ms debounce shape used by DestinationCity.jsx. Local copy keeps
+// this page self-contained — no new shared util, no risk of touching other
+// callers of any existing helper.
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
+}
+
 const HotelList = () => {
   const [filteredHotels, setFilteredHotels] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -39,6 +50,25 @@ const HotelList = () => {
   const [hotelToDelete, setHotelToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Country / City (state) filters. countryId/cityId hold the APPLIED
+  // filter values (empty string = no filter). selectedCountry/selectedCity
+  // carry the display objects so the input can show a chosen label without
+  // a second lookup. The *SearchTerm / is*Open pieces drive the searchable
+  // dropdown UI — typing there refetches the endpoint with search=<text>,
+  // matching how DestinationCity.jsx works.
+  const [countries, setCountries] = useState([]);
+  const [cities, setCities] = useState([]);
+  const [countryId, setCountryId] = useState("");
+  const [cityId, setCityId] = useState("");
+  const [selectedCountry, setSelectedCountry] = useState(null);
+  const [selectedCity, setSelectedCity] = useState(null);
+  const [countrySearchTerm, setCountrySearchTerm] = useState("");
+  const [citySearchTerm, setCitySearchTerm] = useState("");
+  const [isCountryOpen, setIsCountryOpen] = useState(false);
+  const [isCityOpen, setIsCityOpen] = useState(false);
+  const [isLoadingCountries, setIsLoadingCountries] = useState(false);
+  const [isLoadingCities, setIsLoadingCities] = useState(false);
+
   // Pagination states
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -47,8 +77,15 @@ const HotelList = () => {
 
   const navigate = useNavigate();
 
-  // Load hotels from API with pagination
-  const loadHotels = async (page = 0, search = searchTerm) => {
+  // Load hotels from API with pagination + optional Country/City filters.
+  // Positional defaults keep prior call sites (which only pass page or
+  // page+search) working — the extra params are opt-in.
+  const loadHotels = async (
+    page = 0,
+    search = searchTerm,
+    country = countryId,
+    city = cityId,
+  ) => {
     try {
       setIsLoading(true);
       const params = new URLSearchParams({
@@ -58,6 +95,12 @@ const HotelList = () => {
 
       if (search.trim()) {
         params.append("search", search.trim());
+      }
+      if (country) {
+        params.append("countryId", country);
+      }
+      if (city) {
+        params.append("stateId", city);
       }
 
       const response = await axiosInstance.get(
@@ -100,12 +143,108 @@ const HotelList = () => {
     const value = e.target.value;
     setSearchTerm(value);
     // Reset to first page on search
-    loadHotels(0, value);
+    loadHotels(0, value, countryId, cityId);
   };
 
-  // Load hotels on component mount
+  // Country fetch — server-side search. Called on focus (empty term for the
+  // initial page) and on typing (via the debounced ref below). The search
+  // string is passed straight through to the endpoint's `search` param, so
+  // typing "Ind" hits /api/country?search=Ind and the backend returns the
+  // narrowed set — that's the piece that was missing before.
+  const loadCountries = async (search = "") => {
+    setIsLoadingCountries(true);
+    try {
+      const res = await axiosInstance.get(
+        `/api/country?page=0&limit=20&search=${encodeURIComponent(search)}`,
+      );
+      const list = Array.isArray(res.data) ? res.data : [];
+      setCountries(list.filter((c) => !c.isDeleted));
+    } catch (err) {
+      console.error("Failed to load countries", err);
+      setCountries([]);
+    } finally {
+      setIsLoadingCountries(false);
+    }
+  };
+
+  // Debounced by 300ms so we don't spam the endpoint on every keystroke.
+  // Kept in a ref so the same debounced instance survives re-renders.
+  const debouncedCountrySearch = useRef(
+    debounce((text) => loadCountries(text), 300),
+  ).current;
+
+  const handleCountryInput = (text) => {
+    setCountrySearchTerm(text);
+    if (!isCountryOpen) setIsCountryOpen(true);
+    debouncedCountrySearch(text);
+  };
+
+  // "All Countries" row is a special sentinel — id="" clears the applied
+  // filter (and the dependent city).
+  const selectCountry = (country) => {
+    const id = country ? String(country.id) : "";
+    setSelectedCountry(country);
+    setCountryId(id);
+    // Changing country invalidates any prior city selection.
+    setSelectedCity(null);
+    setCityId("");
+    setCities([]);
+    setCitySearchTerm("");
+    setIsCountryOpen(false);
+    setCountrySearchTerm("");
+    loadHotels(0, searchTerm, id, "");
+  };
+
+  // City fetch — same server-search pattern, scoped to the currently-selected
+  // country. Guarded by a `runId` so a slow response for an older country
+  // can't overwrite the current list.
+  const cityFetchIdRef = useRef(0);
+  const loadCities = async (forCountryId, search = "") => {
+    if (!forCountryId) {
+      setCities([]);
+      return;
+    }
+    const myId = ++cityFetchIdRef.current;
+    setIsLoadingCities(true);
+    try {
+      const res = await axiosInstance.get(
+        `/api/province/countryId?countryId=${forCountryId}&page=0&limit=50&search=${encodeURIComponent(search)}`,
+      );
+      if (myId !== cityFetchIdRef.current) return;
+      const list = Array.isArray(res.data) ? res.data : [];
+      setCities(list);
+    } catch (err) {
+      if (myId !== cityFetchIdRef.current) return;
+      console.error("Failed to load cities", err);
+      setCities([]);
+    } finally {
+      if (myId === cityFetchIdRef.current) setIsLoadingCities(false);
+    }
+  };
+
+  const debouncedCitySearch = useRef(
+    debounce((countryIdArg, text) => loadCities(countryIdArg, text), 300),
+  ).current;
+
+  const handleCityInput = (text) => {
+    setCitySearchTerm(text);
+    if (!isCityOpen) setIsCityOpen(true);
+    debouncedCitySearch(countryId, text);
+  };
+
+  const selectCity = (city) => {
+    const id = city ? String(city.id) : "";
+    setSelectedCity(city);
+    setCityId(id);
+    setIsCityOpen(false);
+    setCitySearchTerm("");
+    loadHotels(0, searchTerm, countryId, id);
+  };
+
+  // Load hotels on component mount + prime the country dropdown.
   useEffect(() => {
     loadHotels();
+    loadCountries("");
   }, []);
 
   // Handle create new hotel
@@ -236,6 +375,212 @@ const HotelList = () => {
                 </div>
               </Card.Header>
               <Card.Body className="p-4">
+                {/* Country / City filter row. Searchable dropdowns — typing
+                    debounces a fetch that passes the text through as the
+                    endpoint's `search` param, so the backend narrows the list
+                    instead of us receiving the full page and dropping the
+                    filter. City is disabled until Country is chosen because
+                    /api/province/countryId requires it. Selecting the "All ..."
+                    sentinel row clears the filter (empty id). */}
+                <Row className="g-3 mb-4">
+                  <Col md={4}>
+                    <Form.Label className="small text-muted mb-1">
+                      Country
+                    </Form.Label>
+                    <div className="position-relative">
+                      <Form.Control
+                        size="sm"
+                        value={
+                          isCountryOpen
+                            ? countrySearchTerm
+                            : selectedCountry?.name || ""
+                        }
+                        onChange={(e) => handleCountryInput(e.target.value)}
+                        onFocus={() => {
+                          setIsCountryOpen(true);
+                          if (countries.length === 0) loadCountries("");
+                        }}
+                        placeholder="All Countries"
+                        autoComplete="off"
+                        className="rounded-pill"
+                      />
+                      {isCountryOpen && (
+                        <>
+                          <div
+                            className="position-absolute w-100 bg-white border shadow-lg"
+                            style={{
+                              zIndex: 1050,
+                              maxHeight: "220px",
+                              overflowY: "auto",
+                              top: "100%",
+                            }}
+                          >
+                            <div
+                              className="px-3 py-2 text-muted small"
+                              style={{ cursor: "pointer" }}
+                              onMouseEnter={(e) =>
+                                (e.currentTarget.style.backgroundColor =
+                                  "#f8f9fa")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.backgroundColor =
+                                  "white")
+                              }
+                              onClick={() => selectCountry(null)}
+                            >
+                              All Countries
+                            </div>
+                            {isLoadingCountries ? (
+                              <div className="px-3 py-2 text-muted">
+                                Loading...
+                              </div>
+                            ) : countries.length > 0 ? (
+                              countries.map((c) => (
+                                <div
+                                  key={c.id}
+                                  className="px-3 py-2"
+                                  style={{ cursor: "pointer" }}
+                                  onMouseEnter={(e) =>
+                                    (e.currentTarget.style.backgroundColor =
+                                      "#f8f9fa")
+                                  }
+                                  onMouseLeave={(e) =>
+                                    (e.currentTarget.style.backgroundColor =
+                                      "white")
+                                  }
+                                  onClick={() => selectCountry(c)}
+                                >
+                                  {c.name}
+                                </div>
+                              ))
+                            ) : (
+                              <div className="px-3 py-2 text-muted">
+                                No countries found
+                              </div>
+                            )}
+                          </div>
+                          <div
+                            className="position-fixed"
+                            style={{
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              zIndex: 1040,
+                            }}
+                            onClick={() => {
+                              setIsCountryOpen(false);
+                              setCountrySearchTerm("");
+                            }}
+                          />
+                        </>
+                      )}
+                    </div>
+                  </Col>
+                  <Col md={4}>
+                    <Form.Label className="small text-muted mb-1">
+                      City
+                    </Form.Label>
+                    <div className="position-relative">
+                      <Form.Control
+                        size="sm"
+                        value={
+                          isCityOpen
+                            ? citySearchTerm
+                            : selectedCity?.stateName ||
+                              selectedCity?.name ||
+                              ""
+                        }
+                        onChange={(e) => handleCityInput(e.target.value)}
+                        onFocus={() => {
+                          if (!countryId) return;
+                          setIsCityOpen(true);
+                          if (cities.length === 0) loadCities(countryId, "");
+                        }}
+                        placeholder={
+                          !countryId
+                            ? "Select a country first"
+                            : "All Cities"
+                        }
+                        disabled={!countryId}
+                        autoComplete="off"
+                        className="rounded-pill"
+                      />
+                      {isCityOpen && (
+                        <>
+                          <div
+                            className="position-absolute w-100 bg-white border shadow-lg"
+                            style={{
+                              zIndex: 1050,
+                              maxHeight: "220px",
+                              overflowY: "auto",
+                              top: "100%",
+                            }}
+                          >
+                            <div
+                              className="px-3 py-2 text-muted small"
+                              style={{ cursor: "pointer" }}
+                              onMouseEnter={(e) =>
+                                (e.currentTarget.style.backgroundColor =
+                                  "#f8f9fa")
+                              }
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.backgroundColor =
+                                  "white")
+                              }
+                              onClick={() => selectCity(null)}
+                            >
+                              All Cities
+                            </div>
+                            {isLoadingCities ? (
+                              <div className="px-3 py-2 text-muted">
+                                Loading...
+                              </div>
+                            ) : cities.length > 0 ? (
+                              cities.map((s) => (
+                                <div
+                                  key={s.id}
+                                  className="px-3 py-2"
+                                  style={{ cursor: "pointer" }}
+                                  onMouseEnter={(e) =>
+                                    (e.currentTarget.style.backgroundColor =
+                                      "#f8f9fa")
+                                  }
+                                  onMouseLeave={(e) =>
+                                    (e.currentTarget.style.backgroundColor =
+                                      "white")
+                                  }
+                                  onClick={() => selectCity(s)}
+                                >
+                                  {s.stateName || s.name}
+                                </div>
+                              ))
+                            ) : (
+                              <div className="px-3 py-2 text-muted">
+                                No cities found
+                              </div>
+                            )}
+                          </div>
+                          <div
+                            className="position-fixed"
+                            style={{
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              zIndex: 1040,
+                            }}
+                            onClick={() => {
+                              setIsCityOpen(false);
+                              setCitySearchTerm("");
+                            }}
+                          />
+                        </>
+                      )}
+                    </div>
+                  </Col>
+                </Row>
+
                 {isLoading ? (
                   <div className="text-center py-5">
                     <Spinner animation="border" variant="primary" size="lg" />
@@ -256,25 +601,30 @@ const HotelList = () => {
                 ) : filteredHotels.length === 0 ? (
                   <div className="text-center py-5">
                     <FaHotel size={64} className="mb-3 text-muted opacity-50" />
-                    <h5 className="mb-2 text-muted">
-                      {searchTerm ? "No Hotels Found" : "No Hotels Found"}
-                    </h5>
+                    <h5 className="mb-2 text-muted">No Hotels Found</h5>
                     <p className="text-muted mb-4">
-                      {searchTerm
-                        ? `No hotels found matching "${searchTerm}". Try a different search term.`
+                      {searchTerm || countryId || cityId
+                        ? "No hotels match the current filters. Try adjusting Hotel Name, Country, or City."
                         : "Start by creating your first hotel."}
                     </p>
-                    {searchTerm ? (
+                    {searchTerm || countryId || cityId ? (
                       <Button
                         variant="outline-primary"
                         onClick={() => {
                           setSearchTerm("");
-                          loadHotels(0, "");
+                          setCountryId("");
+                          setCityId("");
+                          setSelectedCountry(null);
+                          setSelectedCity(null);
+                          setCitySearchTerm("");
+                          setCountrySearchTerm("");
+                          setCities([]);
+                          loadHotels(0, "", "", "");
                         }}
                         className="d-flex align-items-center gap-2 mx-auto px-4 py-2 rounded-pill"
                       >
                         <FaSearch />
-                        Clear Search
+                        Clear Filters
                       </Button>
                     ) : (
                       <Button
@@ -346,7 +696,7 @@ const HotelList = () => {
                                   className="flex-fill rounded-pill"
                                 >
                                   <FaEye className="me-1" />
-                                  View
+                                  View Rates
                                 </Button>
                                 <Button
                                   variant="outline-warning"

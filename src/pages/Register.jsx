@@ -29,6 +29,11 @@ const Register = () => {
     agentHsncode: "",
     agentStatus: "yes",
     currency: "",
+    // Agent-level markup — matches the admin AgentReg field. Was missing on
+    // this public form so agents registered here landed with markup_id=null,
+    // which then breaks their room-list search (some agent works / some
+    // doesn't, depending on whether markup was set later via admin).
+    markup: "",
     // Finance Manager + GM details (required by backend, mirrors AgentReg).
     financeManagerName: "",
     financeManagerContactNo: "",
@@ -111,6 +116,7 @@ const Register = () => {
   const [places, setPlaces] = useState("");
   const [agentCategoryies, setAgentCategoryies] = useState([]);
   const [currencies, setCurrencies] = useState([]);
+  const [markupList, setMarkupList] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -203,6 +209,22 @@ const Register = () => {
     currencyList(); // Call currencyList on component mount
   }, []);
 
+  // Public markup master. Same shape as the admin AgentReg fetch — silent
+  // on failure so the field simply shows the placeholder if the backend
+  // is unreachable (mirrors the other public master lookups here).
+  const markupTypeList = async () => {
+    try {
+      const response = await axiosInstance.get("/api/markupType");
+      setMarkupList(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.log("axios call error for markup list : ", error);
+    }
+  };
+
+  useEffect(() => {
+    markupTypeList();
+  }, []);
+
   useEffect(() => {
     if (formData.countryId) {
       setProvinces([]); // Reset states when country changes
@@ -293,6 +315,7 @@ const Register = () => {
       if (!formData.businessType.trim()) newErrors.businessType = "Business Type is required";
       if (!formData.agentCategoryId) newErrors.agentCategoryId = "Company Type is required";
       if (!formData.currency) newErrors.currency = "Currency is required";
+      if (!formData.markup) newErrors.markup = "Markup is required";
 
     } else if (currentStep === 2) {
       if (!formData.firstName.trim()) newErrors.firstName = "First Name is required";
@@ -390,6 +413,7 @@ const Register = () => {
     if (!formData.agentCategoryId)
       newErrors.agentCategoryId = "Company Type or Agent category is required";
     if (!formData.currency) newErrors.currency = "Currency is required";
+    if (!formData.markup) newErrors.markup = "Markup is required";
     if (!formData.firstName.trim())
       newErrors.firstName = "First Name is required";
     if (!formData.lastName.trim()) newErrors.lastName = "Last Name is required";
@@ -501,6 +525,14 @@ const Register = () => {
          accept it. */
       const { repassword: _rp, ...payload } = formData;
 
+      // Coerce markup to a plain integer (matches the admin AgentReg
+      // submit — line 880 there. Backend AgentServiceImpl.registerAgent
+      // calls Long.parseLong on request.getMarkup() and Jackson coerces
+      // the number-shaped value to the String DTO field.)
+      if (payload.markup) {
+        payload.markup = parseInt(payload.markup, 10);
+      }
+
       // When the operator picked a trade-license file, upgrade the request to
       // multipart so the backend can save the raw bytes via
       // FileStorageService (same route HotelReg.jsx image360 uses). Otherwise
@@ -576,6 +608,7 @@ const Register = () => {
         agentRegisterstatus: "",
         agentHsncode: "",
         currency: "",
+        markup: "",
         agentStatus: "yes",
         financeManagerName: "",
         financeManagerContactNo: "",
@@ -864,6 +897,66 @@ const Register = () => {
                               {errors.agentCategoryId && (
                                 <Form.Control.Feedback type="invalid">
                                   {errors.agentCategoryId}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                        </Row>
+
+                        {/* Currency + Markup — mirrors the admin AgentReg
+                            layout. Both were previously loaded silently but
+                            never rendered, leaving new agents with
+                            currency_id/markup_id null on the DB row, which
+                            broke downstream room-list searches for anyone
+                            registered through this page. */}
+                        <Row>
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="form-label">
+                                Currency <span className="required">*</span>
+                              </Form.Label>
+                              <Form.Select
+                                name="currency"
+                                value={formData.currency}
+                                onChange={handleChange}
+                                className={`form-input ${errors.currency ? 'is-invalid' : ''}`}
+                              >
+                                <option value="">Select currency</option>
+                                {Array.isArray(currencies) && currencies.map((c) => (
+                                  <option key={c.currencyId} value={c.currencyId}>
+                                    {c.currencyCode ? `${c.currencyCode} — ${c.name || ''}`.trim() : c.name}
+                                  </option>
+                                ))}
+                              </Form.Select>
+                              {errors.currency && (
+                                <Form.Control.Feedback type="invalid">
+                                  {errors.currency}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="form-label">
+                                Markup <span className="required">*</span>
+                              </Form.Label>
+                              <Form.Select
+                                name="markup"
+                                value={formData.markup}
+                                onChange={handleChange}
+                                className={`form-input ${errors.markup ? 'is-invalid' : ''}`}
+                              >
+                                <option value="">Select markup</option>
+                                {Array.isArray(markupList) && markupList.map((m) => (
+                                  <option key={m.id} value={m.id}>
+                                    {m.name}
+                                  </option>
+                                ))}
+                              </Form.Select>
+                              {errors.markup && (
+                                <Form.Control.Feedback type="invalid">
+                                  {errors.markup}
                                 </Form.Control.Feedback>
                               )}
                             </Form.Group>

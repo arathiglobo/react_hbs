@@ -100,6 +100,21 @@ const SearchableSelect = ({ label, name, value, options, onChange, placeholder, 
   );
 };
 
+// Build the Markup Type dropdown label. The /api/markupType master returns
+// { name, markup, markupType } where markupType is "Percent" | "Amount", so
+// "Gold" (markup 6, Percent) renders as "Gold - 6%" and an Amount type like
+// "Discovery" (markup 1) as "Discovery - 1". Falls back to just the name when
+// the markup value is missing.
+const formatMarkupOption = (m) => {
+  if (!m) return "";
+  const value = m.markup;
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return m.name || "";
+  }
+  const isPercent = String(m.markupType || "").toLowerCase() === "percent";
+  return `${m.name || ""} - ${value}${isPercent ? "%" : ""}`;
+};
+
 export default function SubAgent() {
   const [items, setItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -114,6 +129,12 @@ export default function SubAgent() {
   const [places, setPlaces] = useState([]);
   const [currencies, setCurrencies] = useState([]);
   const [markupTypes, setMarkupTypes] = useState([]);
+  // The logged-in MAIN agent's currency. A sub-agent must inherit it and
+  // cannot pick a different one, so the Currency field is locked to this
+  // single value. Resolved once on mount (personalProfile -> own agent id ->
+  // /api/agent/{id}); stays null (field shows a placeholder) if it can't be
+  // resolved. Shape: { id, code }.
+  const [mainAgentCurrency, setMainAgentCurrency] = useState(null);
   
   const [isDataLoading, setIsDataLoading] = useState({
     countries: false,
@@ -260,10 +281,38 @@ export default function SubAgent() {
     }
   };
 
+  // Resolve the logged-in main agent's currency so the sub-agent Currency
+  // field can be locked to it. Best-effort: any failure leaves the field
+  // empty rather than blocking registration (currency is optional on submit).
+  const resolveMainAgentCurrency = async () => {
+    try {
+      const uname = localStorage.getItem("UserName");
+      if (!uname) return;
+      const prof = await axiosInstance.get(`/api/personalProfile/${uname}`);
+      const agentId = prof?.data?.id;
+      if (agentId == null) return;
+      const agentRes = await axiosInstance.get(`/api/agent/${agentId}`);
+      const currId = agentRes?.data?.currency;
+      if (currId == null) return;
+      setMainAgentCurrency({ id: currId, code: agentRes?.data?.currencyCode || "" });
+    } catch (err) {
+      console.error("Could not resolve main agent currency", err);
+    }
+  };
+
   useEffect(() => {
     fetchSubAgents();
     fetchInitialMasterData();
+    resolveMainAgentCurrency();
   }, []);
+
+  // Keep the form's currency pinned to the main agent's currency once it
+  // resolves — the sub-agent inherits it and the field is not editable.
+  useEffect(() => {
+    if (mainAgentCurrency?.id != null) {
+      setFormData((prev) => ({ ...prev, currency: String(mainAgentCurrency.id) }));
+    }
+  }, [mainAgentCurrency]);
 
   useEffect(() => {
     if (formData.countryId) {
@@ -323,7 +372,9 @@ export default function SubAgent() {
         countryId: parseInt(formData.countryId),
         provinceId: parseInt(formData.provinceId),
         placeId: parseInt(formData.placeId),
-        currency: formData.currency ? parseInt(formData.currency) : null,
+        currency: mainAgentCurrency?.id != null
+          ? Number(mainAgentCurrency.id)
+          : (formData.currency ? parseInt(formData.currency) : null),
         markup: formData.markup ? parseInt(formData.markup) : null,
       };
 
@@ -350,7 +401,9 @@ export default function SubAgent() {
         countryId: parseInt(formData.countryId),
         provinceId: parseInt(formData.provinceId),
         placeId: parseInt(formData.placeId),
-        currency: formData.currency ? parseInt(formData.currency) : null,
+        currency: mainAgentCurrency?.id != null
+          ? Number(mainAgentCurrency.id)
+          : (formData.currency ? parseInt(formData.currency) : null),
       };
 
       await axiosInstance.put(`/api/sub-agent/${editing.id}`, payload);
@@ -426,7 +479,12 @@ export default function SubAgent() {
           countryId: String(data.countryId || ""),
           provinceId: String(data.provinceId || ""),
           placeId: String(data.placeId || ""),
-          currency: data.currency ? String(data.currency) : "",
+          // Currency is inherited from the main agent, not editable — always
+          // pin it to the main agent's currency (fall back to the stored value
+          // only if the main agent's currency hasn't resolved yet).
+          currency: mainAgentCurrency?.id != null
+            ? String(mainAgentCurrency.id)
+            : (data.currency ? String(data.currency) : ""),
           markup: data.markup ? String(data.markup) : "",
         });
       } catch (err) {
@@ -435,7 +493,10 @@ export default function SubAgent() {
       }
     } else {
       setEditing(null);
-      setFormData(initialFormState);
+      setFormData({
+        ...initialFormState,
+        currency: mainAgentCurrency?.id != null ? String(mainAgentCurrency.id) : "",
+      });
     }
     setValidationErrors({});
     setShowModal(true);
@@ -520,7 +581,12 @@ export default function SubAgent() {
           setShowLoginModal(false);
         }
       } catch (error) {
-        toast.error("Failed to save login credentials");
+        const serverMsg =
+          error.response?.data?.message ||
+          error.response?.data?.error ||
+          error.message ||
+          "Failed to save login credentials";
+        toast.error(serverMsg);
       } finally {
         setIsLoading(false);
       }
@@ -646,7 +712,19 @@ export default function SubAgent() {
     setCreditLimitType(e.target.value);
   };
 
-  const filteredItems = items.filter(item => 
+  // Display label for the (locked) main-agent currency — "AED - UAE dirham"
+  // when the name is resolvable from the currency master, else just the code.
+  const mainAgentCurrencyLabel = () => {
+    if (!mainAgentCurrency) return "";
+    const match = currencies.find(
+      (c) => String(c.currencyId || c.id) === String(mainAgentCurrency.id),
+    );
+    const code = mainAgentCurrency.code || match?.currencyCode || match?.code || "";
+    const name = (match?.name || match?.currencyName || "").trim();
+    return name ? `${code} - ${name}` : code || `#${mainAgentCurrency.id}`;
+  };
+
+  const filteredItems = items.filter(item =>
     item.companyName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.lastName?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -1087,7 +1165,7 @@ export default function SubAgent() {
                             <option value="">SELECT</option>
                             {markupTypes.map(m => (
                               <option key={m.id} value={m.id}>
-                                {m.name}
+                                {formatMarkupOption(m)}
                               </option>
                             ))}
                           </Form.Select>
@@ -1099,19 +1177,30 @@ export default function SubAgent() {
                         </Form.Group>
                         <Form.Group className="mb-3">
                           <Form.Label className="form-label-custom">Currency</Form.Label>
-                          <Form.Select 
-                            name="currency" 
-                            value={formData.currency} 
-                            onChange={handleChange}
+                          {/* Locked to the main agent's currency — a sub-agent
+                              inherits it and cannot select a different one. */}
+                          <Form.Select
+                            name="currency"
+                            value={
+                              mainAgentCurrency?.id != null
+                                ? String(mainAgentCurrency.id)
+                                : (formData.currency || "")
+                            }
+                            disabled
                             style={selectStyle}
+                            title="Sub agents inherit the main agent's currency"
                           >
-                            <option value="">SELECT</option>
-                            {currencies.map(curr => (
-                              <option key={curr.currencyId || curr.id} value={curr.currencyId || curr.id}>
-                                {curr.code || curr.currencyCode} - {curr.name || curr.currencyName}
+                            {mainAgentCurrency?.id != null ? (
+                              <option value={String(mainAgentCurrency.id)}>
+                                {mainAgentCurrencyLabel()}
                               </option>
-                            ))}
+                            ) : (
+                              <option value="">—</option>
+                            )}
                           </Form.Select>
+                          <div className="text-muted" style={{ fontSize: '0.7rem', marginTop: 2 }}>
+                            Inherited from the main agent
+                          </div>
                         </Form.Group>
                         <Form.Group className="mb-3">
                           <Form.Label className="form-label-custom"><span className="text-danger">* </span>Status</Form.Label>
