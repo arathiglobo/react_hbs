@@ -20,6 +20,7 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
+import TimeApplyPicker from "../../../components/TimeApplyPicker";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
 
 function LazyImage({ src, alt, className }) {
@@ -1349,23 +1350,11 @@ export const CabSearch = () => {
         <Sidebar />
 
         <main className="flex-grow-1 p-4 hs-page">
-          <Card className="shadow-sm rounded-xl mb-4 border-0">
-            <Card.Body>
-              {/* 🔷 Header */}
-              <div className="mb-4 d-flex justify-content-between align-items-start flex-wrap gap-2">
-                <div>
-                  <h4 className="fw-bold text-primary mb-1">
-                    Transfers Search
-                  </h4>
-                  <p className="text-muted small mb-0">
-                    Search and compare available transfer options
-                  </p>
-                </div>
-                {/* Agent logins see their available credit balance at the
-                    right end of the heading row (renders nothing for other
-                    roles). */}
-                <AgentCreditBalance />
-              </div>
+          {/* Outer wrapping Card removed to match /new-booking/hotel — the
+              search-card-modern (below) is now the single visual container,
+              same as HotelSearch. Kept every child block in place; only the
+              double-card chrome was dropped. The header moves into the
+              search card just below (HotelSearch pattern). */}
 
               {/* ── Collapsed sticky search summary strip ──
                   Shown once results are on screen. "Modify Search" re-expands
@@ -1409,9 +1398,30 @@ export const CabSearch = () => {
               {!collapseSearch && (
               <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
                 <div className="flex-grow-1" style={{ minWidth: 0 }}>
-              {/* 🔷 Search Card */}
-              <Card className="border-0 shadow-sm rounded-4 bg-white h-100">
-                <Card.Body>
+              {/* 🔷 Search Card — matches /new-booking/hotel's search-card-modern
+                  (same class, same rounded-xl + shadow + bg), so the .hs-page
+                  styling in HotelSearch.css picks it up and both pages share
+                  identical card chrome, field polish, and CTA look. */}
+              <Card className="shadow-sm rounded-xl search-card-modern bg-white h-100">
+                <Card.Body className="p-4">
+                  {/* Header lifted into the card body (HotelSearch pattern) —
+                      h2 + fw-semibold + regular text-muted description, so the
+                      typography matches Find-Your-Perfect-Stay side-by-side. */}
+                  <div className="mb-4 text-start d-flex justify-content-between align-items-start flex-wrap gap-2">
+                    <div>
+                      <h2 className="fw-semibold text-primary mb-1">
+                        Transfers Search
+                      </h2>
+                      <p className="text-muted mb-0">
+                        Search and compare available transfer options
+                      </p>
+                    </div>
+                    {/* Agent logins see their available credit balance at the
+                        right end of the heading row (renders nothing for other
+                        roles). */}
+                    <AgentCreditBalance />
+                  </div>
+
                   <Form onSubmit={handleTransferSearchSubmit}>
                     {/* ── Simplified Transfer search criteria ───────────────
                         Layout per spec:
@@ -1756,19 +1766,47 @@ export const CabSearch = () => {
                           Arrival Time{" "}
                           <span className="text-danger">*</span>
                         </Form.Label>
-                        <Form.Control
-                          style={{ height: "46px" }}
-                          type="time"
+                        {/* Same OK/Cancel + AM/PM picker used on
+                            /new-booking/hotel-24hr — value stays "HH:MM"
+                            24-hour, so the arrivalTime payload is unchanged. */}
+                        <TimeApplyPicker
                           value={arrivalTime}
                           isInvalid={!!validationErrors.arrivalTime}
-                          onChange={(e) => {
-                            setArrivalTime(e.target.value);
-                            if (e.target.value) clearError("arrivalTime");
+                          onApply={(v) => {
+                            setArrivalTime(v);
+                            if (v) clearError("arrivalTime");
                           }}
+                          placeholder="Select arrival time"
                         />
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.arrivalTime}
-                        </Form.Control.Feedback>
+                        {validationErrors.arrivalTime && (
+                          <div className="invalid-feedback d-block">
+                            {validationErrors.arrivalTime}
+                          </div>
+                        )}
+                      </Col>
+
+                      {/* Adults moved into the pickup row's empty tail (was
+                          in its own row below with Children) to remove the
+                          otherwise mostly-empty Pax row and tighten vertical
+                          space. Row totals 12: Pickup 3 + Facility 3 +
+                          Arrival 3 + Adults 3. */}
+                      <Col md={3}>
+                        <Form.Label className="fw-semibold">Adults</Form.Label>
+                        <Form.Select
+                          style={{ height: "46px" }}
+                          value={transferAdults}
+                          onChange={(e) =>
+                            setTransferAdults(parseInt(e.target.value) || 1)
+                          }
+                        >
+                          {Array.from({ length: 9 }, (_, i) => i + 1).map(
+                            (num) => (
+                              <option key={num} value={num}>
+                                {num} Adult{num > 1 ? "s" : ""}
+                              </option>
+                            ),
+                          )}
+                        </Form.Select>
                       </Col>
                     </Row>
 
@@ -1882,49 +1920,28 @@ export const CabSearch = () => {
 
                       {/* Departure Time is hidden when the drop is an
                           Accommodation — a hotel drop has no onward
-                          departure time to capture. Widens to md=6 so the
-                          row stays balanced now that Adults / Children
-                          have moved to their own row below. */}
+                          departure time to capture. md=3 mirrors Arrival
+                          Time on the pickup row above so both time fields
+                          have identical widths. */}
                       {dropoffKind !== "HOTEL" && (
-                        <Col md={6}>
+                        <Col md={3}>
                           <Form.Label className="fw-semibold">
                             Departure Time
                           </Form.Label>
-                          <Form.Control
-                            style={{ height: "46px" }}
-                            type="time"
+                          <TimeApplyPicker
                             value={dropDepartureTime}
-                            onChange={(e) =>
-                              setDropDepartureTime(e.target.value)
-                            }
+                            onApply={(v) => setDropDepartureTime(v)}
+                            placeholder="Select departure time"
                           />
                         </Col>
                       )}
-                    </Row>
 
-                    {/* Row 4 — Adults / Children.
-                        Nationality was moved into Row 1 next to Agent / City,
-                        so this row now only carries the passenger counts. */}
-                    <Row className="g-3 mb-3 align-items-end">
-                      <Col md={3}>
-                        <Form.Label className="fw-semibold">Adults</Form.Label>
-                        <Form.Select
-                          style={{ height: "46px" }}
-                          value={transferAdults}
-                          onChange={(e) =>
-                            setTransferAdults(parseInt(e.target.value) || 1)
-                          }
-                        >
-                          {Array.from({ length: 9 }, (_, i) => i + 1).map(
-                            (num) => (
-                              <option key={num} value={num}>
-                                {num} Adult{num > 1 ? "s" : ""}
-                              </option>
-                            ),
-                          )}
-                        </Form.Select>
-                      </Col>
-
+                      {/* Children moved into the drop row's tail — same
+                          consolidation as Adults on the pickup row above.
+                          Row totals: Drop 3 + Facility 3 + Departure 3
+                          (when shown) + Children 3 = 12; when Departure is
+                          hidden for HOTEL drops the row collapses to 9,
+                          leaving the space where Departure would be blank. */}
                       <Col md={3}>
                         <Form.Label className="fw-semibold">
                           Children
@@ -2189,11 +2206,14 @@ export const CabSearch = () => {
                             ? "Flight time"
                             : "Pickup time"}
                         </Form.Label>
-                        <Form.Control
-                          style={{ height: "46px" }}
-                          type="time"
+                        <TimeApplyPicker
                           value={departureTime}
-                          onChange={(e) => setDepartureTime(e.target.value)}
+                          onApply={(v) => setDepartureTime(v)}
+                          placeholder={
+                            timeType === "FLIGHT_TIME"
+                              ? "Select flight time"
+                              : "Select pickup time"
+                          }
                         />
                       </Col>
 
@@ -2222,12 +2242,15 @@ export const CabSearch = () => {
                             ? "Flight time"
                             : "Pickup time"}
                         </Form.Label>
-                        <Form.Control
-                          style={{ height: "46px" }}
-                          type="time"
+                        <TimeApplyPicker
                           value={returnTime}
                           disabled={tripType === "ONE_WAY"}
-                          onChange={(e) => setReturnTime(e.target.value)}
+                          onApply={(v) => setReturnTime(v)}
+                          placeholder={
+                            timeType === "FLIGHT_TIME"
+                              ? "Select flight time"
+                              : "Select pickup time"
+                          }
                         />
                       </Col>
                     </Row>
@@ -2580,22 +2603,23 @@ export const CabSearch = () => {
                             Pickup Time{" "}
                             {pickupType === "AIRPORT" ? "*" : "(optional)"}
                           </Form.Label>
-                          <Form.Control
-                            style={{ height: "46px" }}
-                            type="time"
-                            // Only meaningful for airport pickups; disabled otherwise
-                            // so the form stays clean.
+                          {/* Only meaningful for airport pickups; disabled
+                              otherwise so the form stays clean. */}
+                          <TimeApplyPicker
                             disabled={pickupType !== "AIRPORT"}
                             value={pickupTime}
                             isInvalid={!!validationErrors.pickupTime}
-                            onChange={(e) => {
-                              setPickupTime(e.target.value);
-                              if (e.target.value) clearError("pickupTime");
+                            onApply={(v) => {
+                              setPickupTime(v);
+                              if (v) clearError("pickupTime");
                             }}
+                            placeholder="Select pickup time"
                           />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.pickupTime}
-                          </Form.Control.Feedback>
+                          {validationErrors.pickupTime && (
+                            <div className="invalid-feedback d-block">
+                              {validationErrors.pickupTime}
+                            </div>
+                          )}
                         </Col>
                       </Row>
 
@@ -2708,27 +2732,63 @@ export const CabSearch = () => {
                           <Form.Label className="fw-semibold">
                             Dropoff Time (optional)
                           </Form.Label>
-                          <Form.Control
-                            style={{ height: "46px" }}
-                            type="time"
-                            // Per spec, drop-off time is optional even for airport
-                            // drops. Disabled until a type is chosen for clarity.
+                          {/* Per spec, drop-off time is optional even for
+                              airport drops. Disabled until a type is chosen
+                              for clarity. */}
+                          <TimeApplyPicker
                             disabled={!dropoffType}
                             value={dropoffTime}
-                            onChange={(e) => setDropoffTime(e.target.value)}
+                            onApply={(v) => setDropoffTime(v)}
+                            placeholder="Select dropoff time"
                           />
                         </Col>
                       </Row>
                     </div>
                     </div>
 
+                    {/* Child Ages — moved above the Search button so it
+                        follows the natural top-to-bottom form order (inputs
+                        then CTA). Only rendered when there is at least one
+                        child to enter an age for. */}
+                    {transferChildren > 0 && (
+                      <Row className="g-2 mb-3">
+                        <Col md={12}>
+                          <Form.Label className="mb-2 fw-semibold">
+                            Child Ages
+                          </Form.Label>
+                          <div className="d-flex flex-wrap gap-2">
+                            {transferChildAges.map((age, index) => (
+                              <Form.Control
+                                key={index}
+                                type="number"
+                                min="0"
+                                max="17"
+                                placeholder={`Child ${index + 1}`}
+                                value={age}
+                                style={{ width: "100px", height: "46px" }}
+                                onChange={(e) =>
+                                  handleTransferChildAgeChange(
+                                    index,
+                                    e.target.value,
+                                  )
+                                }
+                              />
+                            ))}
+                          </div>
+                        </Col>
+                      </Row>
+                    )}
+
                     <Row className="justify-content-center">
                       <Col
                         md={4}
                         className="d-flex justify-content-center mt-3"
                       >
+                        {/* Red to keep the CTA color uniform with the other
+                            /new-booking/* search pages (HotelSearch's search
+                            button, etc.), which use the brand red family. */}
                         <Button
-                          variant="warning"
+                          variant="danger"
                           className="px-5 py-2 fw-bold"
                           type="submit"
                           disabled={transferLoading}
@@ -2750,36 +2810,6 @@ export const CabSearch = () => {
                         </Button>
                       </Col>
                     </Row>
-
-                    {/* Child Ages */}
-                    {transferChildren > 0 && (
-                      <Row className="g-2 mt-3">
-                        <Col md={12}>
-                          <Form.Label className="mb-2 fw-semibold">
-                            Child Ages
-                          </Form.Label>
-                          <div className="d-flex flex-wrap gap-2">
-                            {transferChildAges.map((age, index) => (
-                              <Form.Control
-                                key={index}
-                                type="number"
-                                min="0"
-                                max="17"
-                                placeholder="Age"
-                                value={age}
-                                style={{ width: "80px" }}
-                                onChange={(e) =>
-                                  handleTransferChildAgeChange(
-                                    index,
-                                    e.target.value,
-                                  )
-                                }
-                              />
-                            ))}
-                          </div>
-                        </Col>
-                      </Row>
-                    )}
                   </Form>
                 </Card.Body>
               </Card>
@@ -3328,8 +3358,6 @@ export const CabSearch = () => {
                     </p>
                   </div>
                 )}
-            </Card.Body>
-          </Card>
         </main>
       </div>
 

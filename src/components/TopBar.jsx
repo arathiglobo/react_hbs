@@ -64,6 +64,7 @@ export default function TopBar() {
     agent: "/agentDashboard",
     staff: "/staffDashboard",
     extranet: "/extranetDashboard",
+    super_admin: "/superAdminDashboard",
   };
   const storedRoles = (localStorage.getItem("userRole") || "")
     .split(",")

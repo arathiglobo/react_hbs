@@ -2914,5 +2914,5 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
     </div>
   );
 };
-
+ 
 export default HotelBookingPage;
