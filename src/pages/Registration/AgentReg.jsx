@@ -426,6 +426,14 @@ const AgentReg = () => {
   const [search, setSearch] = useState("");
   const [searchTimeout, setSearchTimeout] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  // Column sort for the agent list. null = no explicit sort (backend keeps
+  // its historical order). First click on a sortable header sets desc
+  // (newest first for Registered Date), second click toggles to asc,
+  // subsequent clicks keep toggling. Only Registered Date is sortable
+  // today — extend `sortField` acceptance in the backend controller +
+  // wire another clickable header here to add more columns.
+  const [sortField, setSortField] = useState(null);
+  const [sortDir, setSortDir] = useState("desc");
   const [showLoginModal, setShowLoginModal] = useState(false);
   // True when /auth/checkRegisteredUserExist already returns a user for the
   // agent. In that case the modal switches to a read-only "Registered
@@ -969,7 +977,12 @@ const AgentReg = () => {
     setError("");
   };
 
-  const fetchAgentList = async (pageNum = 0, searchTerm = search) => {
+  const fetchAgentList = async (
+    pageNum = 0,
+    searchTerm = search,
+    sortOverride = sortField,
+    dirOverride = sortDir,
+  ) => {
     setIsLoading(true);
     try {
       const params = new URLSearchParams({
@@ -979,6 +992,14 @@ const AgentReg = () => {
 
       if (searchTerm && searchTerm.trim()) {
         params.append("search", searchTerm.trim());
+      }
+
+      // Only forward sort params when the operator has explicitly picked
+      // a sortable column, so unrelated callers of /api/agent aren't
+      // affected. Backend maps "registeredDate" → entity `createdDate`.
+      if (sortOverride) {
+        params.append("sort", sortOverride);
+        params.append("direction", dirOverride || "desc");
       }
 
       const res = await axiosInstance.get(`/api/agent?${params.toString()}`);
@@ -2255,7 +2276,76 @@ const AgentReg = () => {
                   <tr>
                     <th style={{ width: 100 }}>S/N</th>
                     <th>Agent Name</th>
-                    <th style={{ width: 140 }}>Registered Date</th>
+                    <th
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={
+                        sortField === "registeredDate"
+                          ? sortDir === "asc"
+                            ? "ascending"
+                            : "descending"
+                          : "none"
+                      }
+                      style={{
+                        width: 160,
+                        cursor: "pointer",
+                        userSelect: "none",
+                        whiteSpace: "nowrap",
+                      }}
+                      onClick={() => {
+                        // First click sorts desc (newest → oldest, the
+                        // most-common intent for a Registered Date column);
+                        // subsequent clicks toggle asc/desc. Reset to page 0
+                        // so results align with the new order.
+                        const nextDir =
+                          sortField === "registeredDate" && sortDir === "desc"
+                            ? "asc"
+                            : "desc";
+                        setSortField("registeredDate");
+                        setSortDir(nextDir);
+                        fetchAgentList(0, search, "registeredDate", nextDir);
+                      }}
+                      onKeyDown={(e) => {
+                        // Keyboard affordance for the sortable header — Enter
+                        // or Space triggers the same toggle a click would, so
+                        // keyboard users get the same discoverability path.
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          e.currentTarget.click();
+                        }
+                      }}
+                      title={
+                        sortField === "registeredDate"
+                          ? sortDir === "asc"
+                            ? "Sorted oldest first — click to sort newest first"
+                            : "Sorted newest first — click to sort oldest first"
+                          : "Click to sort by Registered Date"
+                      }
+                    >
+                      <span className="d-inline-flex align-items-center gap-1">
+                        Registered Date
+                        {/* Neutral indicator when the column isn't the
+                            active sort, active up/down when it is — makes
+                            the column visibly sortable at first glance
+                            instead of relying on the cursor-pointer hover. */}
+                        {sortField === "registeredDate" ? (
+                          <span
+                            className="text-primary fw-bold"
+                            aria-hidden="true"
+                          >
+                            {sortDir === "asc" ? "▲" : "▼"}
+                          </span>
+                        ) : (
+                          <span
+                            className="text-muted"
+                            style={{ opacity: 0.55, fontSize: "0.85em" }}
+                            aria-hidden="true"
+                          >
+                            ⇅
+                          </span>
+                        )}
+                      </span>
+                    </th>
                     <th>Business Type</th>
                     <th>Country</th>
                     <th>City</th>

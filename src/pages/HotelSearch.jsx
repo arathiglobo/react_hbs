@@ -385,7 +385,30 @@ const fullText = "Search Hotel Name...";
 // 24-hour configs). When false (the default `/new-booking/hotel` flow)
 // the 24-hour UI is hidden entirely so the page is a clean normal
 // hotel-booking flow — no toggle, no post-processing, no probe call.
-export default function HotelSearch({ force24Hour = false } = {}) {
+// `religiousMode` (default false) is the same pattern as force24Hour —
+// a hard opt-in for the dedicated Religious search route at
+// /new-booking/religious. When true:
+//   • the Destination / City picker is locked to a hardcoded list of
+//     Mecca + Medina (no /api/province cascade, no search),
+//   • the page heading picks up a "Religious" tag,
+//   • the "View Rooms" navigation targets /religious-room-list instead
+//     of /room-list, so RoomListReligious/HotelBookingPageReligious can
+//     thread the flag through to the create payload + booking list
+//     without touching the normal hotel-booking route.
+export default function HotelSearch({
+  force24Hour = false,
+  religiousMode = false,
+} = {}) {
+  // Hardcoded destination options for the Religious flow — see
+  // planning notes above. IDs pulled from master_state:
+  //   5219  = Makkah (Saudi Arabia, country_id 233)
+  //   10773 = Al Madinah Al Munawwarah (Saudi Arabia, country_id 233)
+  // Kept as a module-level constant so it's trivially removable if the
+  // religious flow is ever wound down.
+  const RELIGIOUS_DESTINATIONS = [
+    { value: 5219,  label: "Mecca (Makkah)",           countryId: 233, code: "SA" },
+    { value: 10773, label: "Medina (Al Madinah)",     countryId: 233, code: "SA" },
+  ];
   const [placeholder, setPlaceholder] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
@@ -646,6 +669,21 @@ export default function HotelSearch({ force24Hour = false } = {}) {
 
   const debouncedCitySearch = useRef(
     debounce(async (searchText = "") => {
+      // Religious flow — freeze the dropdown to Mecca + Medina; typed
+      // input never triggers a network search and can never surface any
+      // other city. Filter the fixed list by the typed prefix so the
+      // dropdown still narrows as the user types.
+      if (religiousMode) {
+        const q = (searchText || "").trim().toLowerCase();
+        setDestinationOptions(
+          q
+            ? RELIGIOUS_DESTINATIONS.filter((o) =>
+                o.label.toLowerCase().includes(q),
+              )
+            : RELIGIOUS_DESTINATIONS,
+        );
+        return;
+      }
       if (!searchText || searchText.length < 2) {
         setDestinationOptions([]);
         return;
@@ -1019,6 +1057,13 @@ export default function HotelSearch({ force24Hour = false } = {}) {
   const cityList = (searchText = "") => debouncedCitySearch(searchText);
 
   const loadPopularDestinations = async () => {
+    // Religious flow is scoped to Mecca + Medina only — skip the master
+    // cities fetch entirely so the dropdown can't ever surface any other
+    // city, even transiently while the async load is in flight.
+    if (religiousMode) {
+      setDestinationOptions(RELIGIOUS_DESTINATIONS);
+      return;
+    }
     if (destinationOptions.length > 0) return;
     try {
       setIsDestinationLoading(true);
@@ -1711,15 +1756,26 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                 }
               >
                 <div>
-                  <h2 className="fw-semibold text-primary mb-1">
+                  <h2 className="fw-semibold text-primary mb-1 d-inline-flex align-items-center gap-2">
                     {force24Hour
                       ? "24 Hours"
                       : "Find Your Perfect Stay"}
+                    {religiousMode && (
+                      <span
+                        className="badge bg-warning-subtle text-warning border border-warning-subtle"
+                        style={{ fontSize: "0.65em", padding: "4px 10px", verticalAlign: "middle" }}
+                        title="Religious flow — destination restricted to Mecca / Medina"
+                      >
+                        Religious
+                      </span>
+                    )}
                   </h2>
                   <p className={force24Hour ? "text-muted mb-0" : "text-muted"}>
                     {force24Hour
                       ? "Pick a check-in time — we'll filter to hotels with an active 24-hour config and apply the per-hotel uplift."
-                      : "Discover amazing hotels and exclusive deals"}
+                      : religiousMode
+                        ? "Search hotels in Mecca and Medina."
+                        : "Discover amazing hotels and exclusive deals"}
                   </p>
                 </div>
                 {/* Agent logins see their available credit balance at the
@@ -1860,10 +1916,10 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                           change can't break the rule. */}
                       {selectedDestination?.code === "AE" && (
                         <div
-                          className="mt-1 small fw-semibold"
-                          style={{ color: "#0f7a3a" }}
+                          className="mt-1 small"
+                          style={{ color: "#0f7a3a", lineHeight: 1.25 }}
                         >
-                          Select "United Arab Emirates" if guest resident of UAE
+                          For UAE resident holders, please mention the nationality as United Arab Emirates regardless of the actual nationality.
                         </div>
                       )}
                     </Form.Group>
@@ -2999,11 +3055,17 @@ export default function HotelSearch({ force24Hour = false } = {}) {
                                             // 24-hour-specific UI without
                                             // touching the inhouse
                                             // /room-list flow.
-                                            const route = force24Hour
-                                              ? "/room-list-24hr"
-                                              : apiId === 1
-                                                ? "/room-list"
-                                                : "/api-room-list";
+                                            // religiousMode > force24Hour > apiId — religious
+                                            // is only supported for the inhouse flow (apiId 1);
+                                            // it never touches /api-room-list.
+                                            const route =
+                                              religiousMode && apiId === 1
+                                                ? "/religious-room-list"
+                                                : force24Hour
+                                                  ? "/room-list-24hr"
+                                                  : apiId === 1
+                                                    ? "/room-list"
+                                                    : "/api-room-list";
                                             window.open(route, "_blank");
                                           }, 50);
                                         }}

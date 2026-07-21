@@ -1,0 +1,21 @@
+/*
+ * SchefferDriverBookingPage.css
+ *
+ * Page-scoped styles for the Chauffeur/Scheffer booking checkout page. The
+ * only rule for now is the sticky Booking Summary wrapper, matching the
+ * `.hbp-sticky-summary` rule from HotelBookingPage.css so the right-hand
+ * column pins to the viewport on desktop while the left form scrolls.
+ * Below 992px (Bootstrap `lg` breakpoint) the right column stacks below the
+ * form, so we drop the sticky behaviour there — otherwise a full-width
+ * sticky card would eat the mobile viewport.
+ */
+.sdbp-sticky-summary {
+  position: sticky;
+  top: 84px;
+}
+
+@media (max-width: 991px) {
+  .sdbp-sticky-summary {
+    position: static;
+  }
+}

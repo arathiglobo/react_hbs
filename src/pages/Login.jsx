@@ -135,6 +135,31 @@ const Login = () => {
       localStorage.setItem("userRole", roles);
       localStorage.setItem("UserName", loginedUserName);
 
+      // Prime localStorage.userId with the caller's own entity id (for
+      // agents: their agent id) BEFORE any downstream page mounts. Several
+      // pages (HotelSearch, LongStaySearch, etc.) read userId synchronously
+      // as the "self" agent id when building the search payload — if userId
+      // is missing they lazily fetch /api/personalProfile and fall back to
+      // agentId=1 in the meantime, which then flows into bookingData and
+      // makes the HotelBookingPage's `/api/agent/{id}` lookup read Globo's
+      // (id=1) `cardPaymentEnabled` instead of the logged-in agent's, so
+      // brand-new agents incorrectly see "online card payment is not
+      // enabled" on the booking page.
+      // Non-blocking on failure — login itself never fails on a
+      // personalProfile hiccup; the lazy fallback in downstream pages
+      // remains as a safety net.
+      try {
+        const profile = await axiosInstance.get(
+          `/api/personalProfile/${loginedUserName}`,
+        );
+        if (profile?.data?.id != null) {
+          localStorage.setItem("userId", String(profile.data.id));
+        }
+      } catch (profileErr) {
+        // Swallow — the per-page lazy fetch will still run.
+        console.warn("Failed to prime userId at login:", profileErr);
+      }
+
       // Fresh per-login id used to dedupe advertisement views (an ad is counted
       // once per page per login session). A new login → new id → countable again.
       const newAdSessionId =

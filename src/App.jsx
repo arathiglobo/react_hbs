@@ -22,9 +22,11 @@ import { Toaster } from "react-hot-toast";
 import Designations from "./pages/master/Designation";
 import HotelSearch from "./pages/HotelSearch";
 import HotelSearch24Hour from "./pages/HotelSearch24Hour";
+import HotelSearchReligious from "./pages/HotelSearchReligious";
 import RoomList from "./pages/RoomList";
 import HotelBookingList from "./pages/list/HotelBookingList";
 import HotelBookingList24Hour from "./pages/list/HotelBookingList24Hour";
+import ReligiousBookingList from "./pages/list/ReligiousBookingList";
 import AllBookingsList from "./pages/list/AllBookingsList";
 // Last Minute Booking — list page (Phase 4)
 import LastMinuteBookingList from "./pages/list/LastMinuteBookingList";
@@ -40,6 +42,7 @@ import CustomBookingDetailView from "./pages/list/CustomBookingDetailView";
 import Bank from "./pages/master/Bank";
 import ContactType from "./pages/master/ContactType";
 import MarkupType from "./pages/master/MarkupType";
+import CabType from "./pages/master/CabType";
 import Currency from "./pages/master/Currency";
 import HotelRegistrationActions from "./pages/HotelRegistrationActions";
 import MarketType from "./pages/master/MarketType";
@@ -289,7 +292,9 @@ import SeniorCitizenBookingDetailView from "./pages/list/SeniorCitizenBookingDet
 import PackageAddOnReg from "./pages/Registration/PackageAddOnReg";
 import PackageAddOnRates from "./pages/Registration/PackageAddOnRates";
 import RoomList24Hour from "./pages/RoomList24Hour";
+import RoomListReligious from "./pages/RoomListReligious";
 import HotelBookingPage24Hour from "./pages/booking/HotelBookingPage24Hour";
+import HotelBookingPageReligious from "./pages/booking/HotelBookingPageReligious";
 import AgentView from "./pages/Registration/AgentView";
 import LongStayBookingNotesPage from "./pages/list/LongStayBookingNotesPage";
 import CustomBookingNotesPage from "./pages/list/CustomBookingNotesPage";
@@ -366,6 +371,7 @@ export default function App() {
         <Route path="/masters/bank" element={<PrivateRoute><Bank /></PrivateRoute>} />
         <Route path="/masters/contact-type" element={<PrivateRoute><ContactType /></PrivateRoute>} />
         <Route path="/masters/markup-type" element={<PrivateRoute><MarkupType /></PrivateRoute>} />
+        <Route path="/masters/cab-type" element={<PrivateRoute><CabType /></PrivateRoute>} />
         <Route path="/masters/currency" element={<PrivateRoute><Currency /></PrivateRoute>} />
         <Route path="/masters/market-type" element={<PrivateRoute><MarketType /></PrivateRoute>} />
         <Route path="/masters/region" element={<PrivateRoute><Region /></PrivateRoute>} />
@@ -423,12 +429,23 @@ export default function App() {
             in 24-hour mode (toggle hidden, time pickers visible, probe
             + uplift always applied). Keeps the normal route untouched. */}
         <Route path="/new-booking/hotel-24hr" element={<PrivateRoute><HotelSearch24Hour /></PrivateRoute>} />
+        {/* Dedicated Religious hotel-search — thin wrapper on HotelSearch
+            with `religiousMode` prop so the destination picker is locked
+            to Mecca + Medina and downstream routes stay religious-only.
+            Normal /new-booking/hotel is untouched. */}
+        <Route path="/new-booking/religious" element={<PrivateRoute><HotelSearchReligious /></PrivateRoute>} />
         {/* Dedicated 24-Hour Check-In room list + booking page — same
             components as /room-list and /hotel-booking-page but with
             `force24Hour` so the post-rate-pick navigation and the
             post-booking redirect target the 24-hour-specific routes. */}
         <Route path="/room-list-24hr" element={<PrivateRoute><RoomList24Hour /></PrivateRoute>} />
         <Route path="/hotel-booking-page-24hr" element={<PrivateRoute><HotelBookingPage24Hour /></PrivateRoute>} />
+        {/* Religious room list + booking page — same components as
+            /room-list and /hotel-booking-page but with `religiousMode`
+            so create writes isReligiousBooking=true and success
+            redirects to /booking-details/religious-booking-list. */}
+        <Route path="/religious-room-list" element={<PrivateRoute><RoomListReligious /></PrivateRoute>} />
+        <Route path="/religious-booking-page" element={<PrivateRoute><HotelBookingPageReligious /></PrivateRoute>} />
         {/* Last Minute Booking (Phase 2) — separate search flow */}
         <Route path="/new-booking/last-minute-booking" element={<PrivateRoute><LastMinuteBookingPage /></PrivateRoute>} />
         {/* Last Minute Booking (Phase 3) — booking creation form */}
@@ -478,6 +495,10 @@ export default function App() {
             /booking-details/hotel-booking-list but with `force24HourOnly`
             so only bookings flagged is24HourCheckin=true are shown. */}
         <Route path="/booking-details/24hr-booking-list" element={<PrivateRoute><HotelBookingList24Hour /> </PrivateRoute>}/>
+        {/* Religious booking list — same component as /hotel-booking-list
+            with `religiousOnly` so only isReligiousBooking=true rows
+            surface here (and are excluded from the standard list). */}
+        <Route path="/booking-details/religious-booking-list" element={<PrivateRoute><ReligiousBookingList /> </PrivateRoute>}/>
         {/* Last Minute Bookings list — view + cancel from this page */}
         <Route path="/booking-details/last-minute-booking-list" element={<PrivateRoute><LastMinuteBookingList /></PrivateRoute>}/>
         {/* Last-minute bookings are the same HotelBooking entity, so their

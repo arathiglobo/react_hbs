@@ -237,6 +237,7 @@ export default function Sidebar() {
             { label: "Assign Menu", to: "/masters/assign-menu" },
             { label: "Contact Type", to: "/masters/contact-type" },
             { label: "Markup Type", to: "/masters/markup-type" },
+            { label: "Cab Type", to: "/masters/cab-type" },
             { label: "Currency", to: "/masters/currency" },
           ],
         },
@@ -333,7 +334,7 @@ export default function Sidebar() {
         { label: "Restaurants", to: "/restaurant/list" },
         { label: "Honeymoon Packages", to: "/honeymoon/list" },
         { label: "Ayurveda", to: "/registration/ayurveda" },
-        { label: "Scheffer Driver and Limousine", to: "/registration/schefferDriver" },
+        { label: "Chauffeur Driver and Limousine", to: "/registration/schefferDriver" },
         { label: "Build Your Own Package Add-Ons", to: "/registration/package-addons" },
       ],
     },
@@ -412,6 +413,11 @@ export default function Sidebar() {
           label: "Senior Citizen",
           to: "/new-booking/senior-citizen",
         },
+        // Religious flow — same HotelSearch, destination locked to Mecca/Medina.
+        {
+          label: "Religious",
+          to: "/new-booking/religious",
+        },
       ],
     },
     {
@@ -443,6 +449,12 @@ export default function Sidebar() {
         {
           label: "24 Hour",
           to: "/booking-details/24hr-booking-list",
+        },
+        // Dedicated Religious booking list — same page wrapped with
+        // religiousOnly so only isReligiousBooking=true rows are shown.
+        {
+          label: "Religious",
+          to: "/booking-details/religious-booking-list",
         },
         // Last Minute Booking list — Phase 4 entry
         {

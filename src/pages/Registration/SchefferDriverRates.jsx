@@ -68,10 +68,28 @@ const SchefferDriverRates = () => {
     marketTypeId: "",
     validityFrom: "",
     validityTo: "",
-    isActive: true,
+    // New rates are created INACTIVE by default so the operator has to
+    // explicitly turn on the Active switch to publish. Existing rates
+    // keep their loaded value (see the edit path further down).
+    isActive: false,
   };
   const [formData, setFormData] = useState(emptyHeader);
   const [packageRows, setPackageRows] = useState([newPackageRow(1)]);
+
+  // ── Terms & Conditions / Cancellation Policies state ──────────────
+  // Two independent dynamic lists, edited as textarea rows in the modal
+  // and sent back to the API as `termsAndConditions` / `cancellationPolicies`
+  // arrays of strings on the rental rate DTO. Empty rows are dropped at
+  // save-time (backend defends too). Mirrors the pattern in /cab-rates.
+  const newPolicyRow = (id) => ({ id, value: "" });
+  const [termsRows, setTermsRows] = useState([newPolicyRow(1)]);
+  const [cancellationRows, setCancellationRows] = useState([newPolicyRow(1)]);
+  const addPolicyRow = (setter) =>
+    setter((prev) => [...prev, newPolicyRow(Date.now())]);
+  const removePolicyRow = (setter, id) =>
+    setter((prev) => (prev.length > 1 ? prev.filter((r) => r.id !== id) : prev));
+  const updatePolicyRow = (setter, id, value) =>
+    setter((prev) => prev.map((r) => (r.id === id ? { ...r, value } : r)));
 
   // ---- Intercity charges ----
   const [intercityList, setIntercityList] = useState([]);
@@ -81,7 +99,11 @@ const SchefferDriverRates = () => {
     toCityId: "",
     cabType: "",
     additionalCharge: "",
-    isActive: true,
+    // New intercity charges are created INACTIVE by default so the operator
+    // has to click the Active badge on the list to publish. Mirrors the
+    // rental-rate emptyHeader default above. Existing rows loaded into the
+    // Edit modal keep their stored value (see editIntercity).
+    isActive: false,
   };
   const [intercityForm, setIntercityForm] = useState(emptyIntercity);
   const [savingIntercity, setSavingIntercity] = useState(false);
@@ -257,6 +279,8 @@ const SchefferDriverRates = () => {
     setValidationErrors({});
     setFormData(emptyHeader);
     setPackageRows([newPackageRow(1)]);
+    setTermsRows([newPolicyRow(1)]);
+    setCancellationRows([newPolicyRow(1)]);
     setShowModal(true);
   };
 
@@ -267,6 +291,8 @@ const SchefferDriverRates = () => {
     setValidationErrors({});
     setFormData(emptyHeader);
     setPackageRows([newPackageRow(1)]);
+    setTermsRows([newPolicyRow(1)]);
+    setCancellationRows([newPolicyRow(1)]);
   };
 
   const validateForm = () => {
@@ -309,6 +335,14 @@ const SchefferDriverRates = () => {
       airportDropCharge: num(r.airportDropCharge),
       isActive: Boolean(r.isActive),
     })),
+    // Drop empty rows here so the backend never sees a blank policy line;
+    // backend also guards but this keeps the payload tidy.
+    termsAndConditions: termsRows
+      .map((r) => (r.value || "").trim())
+      .filter((v) => v.length > 0),
+    cancellationPolicies: cancellationRows
+      .map((r) => (r.value || "").trim())
+      .filter((v) => v.length > 0),
   });
 
   const saveRate = async () => {
@@ -383,7 +417,68 @@ const SchefferDriverRates = () => {
           }))
         : [newPackageRow(1)];
     setPackageRows(pkgs);
+    // Seed the T&C / cancellation rows from the saved lists. Empty lists
+    // fall back to a single blank row so the Add button pattern still works.
+    const seedPolicies = (arr) =>
+      Array.isArray(arr) && arr.length > 0
+        ? arr.map((v, i) => ({ id: i + 1, value: v || "" }))
+        : [newPolicyRow(1)];
+    setTermsRows(seedPolicies(rate.termsAndConditions));
+    setCancellationRows(seedPolicies(rate.cancellationPolicies));
     setShowModal(true);
+  };
+
+  // ── Active/Inactive confirmation modal ──────────────────────────────
+  // Mirrors /hotel-actions/{id}/contract-rate: clicking the Active/Inactive
+  // badge in the list opens this modal so the operator explicitly confirms
+  // the change before we PUT the update. Kept as a small Bootstrap Modal
+  // with the same "Confirm Status Change" wording used there.
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusModalRate, setStatusModalRate] = useState(null);
+
+  const openStatusModal = (rate) => {
+    setStatusModalRate(rate);
+    setShowStatusModal(true);
+  };
+
+  const closeStatusModal = () => {
+    if (loading) return; // don't close mid-request
+    setShowStatusModal(false);
+    setStatusModalRate(null);
+  };
+
+  // Actually flip a rate's Active flag once the operator confirms in the
+  // modal. Fetches the full rate first so the PUT payload keeps every
+  // existing package / policy line — never overwrites those with stale
+  // list-row data.
+  const confirmToggleRateActive = async () => {
+    const rate = statusModalRate;
+    if (!rate) return;
+    const nextActive = !(rate.isActive !== false);
+    try {
+      setLoading(true);
+      const res = await axiosInstance.get(
+        `/api/scheffer-rental-rates/${rate.rentalRateId}`,
+      );
+      const full = res?.data;
+      if (!full) {
+        toast.error("Could not load rate details");
+        return;
+      }
+      await axiosInstance.put(
+        `/api/scheffer-rental-rates/${rate.rentalRateId}`,
+        { ...full, isActive: nextActive },
+      );
+      toast.success(nextActive ? "Rate activated" : "Rate deactivated");
+      setShowStatusModal(false);
+      setStatusModalRate(null);
+      fetchRatesList(search);
+    } catch (e) {
+      console.error("Toggle active error:", e);
+      toast.error("Failed to update status");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDelete = (rate) => {
@@ -447,8 +542,19 @@ const SchefferDriverRates = () => {
     }
   };
 
+  // ── Edit Intercity Charge modal ─────────────────────────────────────
+  // Previously the edit action populated the top "Add" form and its button
+  // label flipped to "Update". Per client request, edits now open a
+  // dedicated modal (mirrors the rental-rate edit flow) so the top form
+  // stays purely additive — the FaEdit icon is the ONLY entry point to
+  // change an existing intercity charge. Reuses the same POST endpoint
+  // (with intercityChargeId set) so no backend contract changes.
+  const [showEditIntercityModal, setShowEditIntercityModal] = useState(false);
+  const [editIntercityForm, setEditIntercityForm] = useState(emptyIntercity);
+  const [savingEditIntercity, setSavingEditIntercity] = useState(false);
+
   const editIntercity = (c) => {
-    setIntercityForm({
+    setEditIntercityForm({
       intercityChargeId: c.intercityChargeId,
       fromCityId: c.fromCityId ? String(c.fromCityId) : "",
       toCityId: c.toCityId ? String(c.toCityId) : "",
@@ -456,6 +562,99 @@ const SchefferDriverRates = () => {
       additionalCharge: c.additionalCharge ?? "",
       isActive: c.isActive !== false,
     });
+    setShowEditIntercityModal(true);
+  };
+
+  const closeEditIntercityModal = () => {
+    if (savingEditIntercity) return; // don't close mid-request
+    setShowEditIntercityModal(false);
+    setEditIntercityForm(emptyIntercity);
+  };
+
+  const saveEditIntercity = async () => {
+    if (!editIntercityForm.fromCityId || !editIntercityForm.toCityId) {
+      toast.error("From City and To City are required");
+      return;
+    }
+    if (
+      editIntercityForm.additionalCharge === "" ||
+      isNaN(parseFloat(editIntercityForm.additionalCharge))
+    ) {
+      toast.error("Additional charge is required");
+      return;
+    }
+    try {
+      setSavingEditIntercity(true);
+      await axiosInstance.post("/api/scheffer-rental-rates/intercity", {
+        intercityChargeId: editIntercityForm.intercityChargeId,
+        cabProviderId: parseInt(cabProviderId, 10),
+        fromCityId: parseInt(editIntercityForm.fromCityId, 10),
+        fromCityName: cityName(editIntercityForm.fromCityId),
+        toCityId: parseInt(editIntercityForm.toCityId, 10),
+        toCityName: cityName(editIntercityForm.toCityId),
+        cabType: editIntercityForm.cabType || null,
+        additionalCharge: parseFloat(editIntercityForm.additionalCharge),
+        isActive: Boolean(editIntercityForm.isActive),
+      });
+      toast.success("Intercity charge updated");
+      setShowEditIntercityModal(false);
+      setEditIntercityForm(emptyIntercity);
+      fetchIntercity();
+    } catch (e) {
+      console.error("Error updating intercity charge:", e);
+      toast.error("Failed to update intercity charge");
+    } finally {
+      setSavingEditIntercity(false);
+    }
+  };
+
+  // ── Intercity Active/Inactive confirmation modal ───────────────────
+  // Same UX as the rental-rate status confirmation above. Clicking the
+  // badge on any intercity row opens this modal; Confirm reuses the same
+  // POST endpoint with isActive flipped so no new backend contract is
+  // introduced.
+  const [showIntercityStatusModal, setShowIntercityStatusModal] = useState(false);
+  const [intercityStatusRow, setIntercityStatusRow] = useState(null);
+  const [togglingIntercity, setTogglingIntercity] = useState(false);
+
+  const openIntercityStatusModal = (c) => {
+    setIntercityStatusRow(c);
+    setShowIntercityStatusModal(true);
+  };
+
+  const closeIntercityStatusModal = () => {
+    if (togglingIntercity) return;
+    setShowIntercityStatusModal(false);
+    setIntercityStatusRow(null);
+  };
+
+  const confirmToggleIntercityActive = async () => {
+    const c = intercityStatusRow;
+    if (!c) return;
+    const nextActive = !(c.isActive !== false);
+    try {
+      setTogglingIntercity(true);
+      await axiosInstance.post("/api/scheffer-rental-rates/intercity", {
+        intercityChargeId: c.intercityChargeId,
+        cabProviderId: parseInt(cabProviderId, 10),
+        fromCityId: c.fromCityId,
+        fromCityName: c.fromCityName,
+        toCityId: c.toCityId,
+        toCityName: c.toCityName,
+        cabType: c.cabType || null,
+        additionalCharge: c.additionalCharge,
+        isActive: nextActive,
+      });
+      toast.success(nextActive ? "Charge activated" : "Charge deactivated");
+      setShowIntercityStatusModal(false);
+      setIntercityStatusRow(null);
+      fetchIntercity();
+    } catch (e) {
+      console.error("Error toggling intercity active:", e);
+      toast.error("Failed to update status");
+    } finally {
+      setTogglingIntercity(false);
+    }
   };
 
   const deleteIntercity = (c) => {
@@ -496,7 +695,7 @@ const SchefferDriverRates = () => {
                   size="sm"
                 >
                   <FaBackward className="me-2" />
-                  Back to Scheffer Driver & Limousine
+                  Back
                 </Button>
                 <span className="fw-semibold">
                   <FaDollarSign className="me-2 text-success" />
@@ -536,7 +735,7 @@ const SchefferDriverRates = () => {
                     <th>Packages</th>
                     <th>Validity From</th>
                     <th>Validity To</th>
-                    <th>Active</th>
+                    <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -567,7 +766,28 @@ const SchefferDriverRates = () => {
                         <td>{rate.validityFrom || "N/A"}</td>
                         <td>{rate.validityTo || "N/A"}</td>
                         <td>
-                          <span className={`badge bg-${rate.isActive !== false ? "success" : "secondary"}`}>
+                          {/* Click the badge to toggle Active ↔ Inactive
+                              (the Edit modal no longer exposes an Active
+                              switch, so this is the operator's activation
+                              control for a freshly-created rate). */}
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            title={
+                              rate.isActive !== false
+                                ? "Click to deactivate"
+                                : "Click to activate"
+                            }
+                            className={`badge bg-${rate.isActive !== false ? "success" : "secondary"}`}
+                            style={{ cursor: "pointer" }}
+                            onClick={() => openStatusModal(rate)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                openStatusModal(rate);
+                              }
+                            }}
+                          >
                             {rate.isActive !== false ? "Active" : "Inactive"}
                           </span>
                         </td>
@@ -675,7 +895,7 @@ const SchefferDriverRates = () => {
                     onClick={saveIntercity}
                     disabled={savingIntercity || !cabProviderId}
                   >
-                    {intercityForm.intercityChargeId ? "Update" : "Add"}
+                    Add
                   </Button>
                 </Col>
               </Row>
@@ -687,7 +907,7 @@ const SchefferDriverRates = () => {
                     <th>To City</th>
                     <th>Cab Type</th>
                     <th>Additional Charge</th>
-                    <th>Active</th>
+                    <th>Status</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -706,7 +926,27 @@ const SchefferDriverRates = () => {
                       <td>{c.cabType || "All"}</td>
                       <td>{c.additionalCharge} AED</td>
                       <td>
-                        <span className={`badge bg-${c.isActive !== false ? "success" : "secondary"}`}>
+                        {/* Click the badge to toggle Active ↔ Inactive
+                            (same UX as the rental-rate list badge — opens a
+                            confirmation modal before the change). */}
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          title={
+                            c.isActive !== false
+                              ? "Click to deactivate"
+                              : "Click to activate"
+                          }
+                          className={`badge bg-${c.isActive !== false ? "success" : "secondary"}`}
+                          style={{ cursor: "pointer" }}
+                          onClick={() => openIntercityStatusModal(c)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              openIntercityStatusModal(c);
+                            }
+                          }}
+                        >
                           {c.isActive !== false ? "Active" : "Inactive"}
                         </span>
                       </td>
@@ -872,16 +1112,6 @@ const SchefferDriverRates = () => {
                       </Form.Control.Feedback>
                     </Form.Group>
                   </Col>
-                  <Col md={3} className="d-flex align-items-center">
-                    <Form.Check
-                      type="switch"
-                      label="Active"
-                      checked={formData.isActive}
-                      onChange={(e) => updateFormData("isActive", e.target.checked)}
-                      disabled={isViewMode}
-                      className="mt-3"
-                    />
-                  </Col>
                 </Row>
 
                 {/* Rental Packages grid */}
@@ -903,13 +1133,9 @@ const SchefferDriverRates = () => {
                           <th style={{ minWidth: 90 }}>Hours</th>
                           <th style={{ minWidth: 90 }}>KM</th>
                           <th style={{ minWidth: 110 }}>Base Price</th>
-                          <th style={{ minWidth: 110 }}>Extra Hour</th>
-                          <th style={{ minWidth: 110 }}>Extra KM</th>
-                          <th style={{ minWidth: 110 }}>Night</th>
-                          <th style={{ minWidth: 110 }}>Waiting</th>
+                          <th style={{ minWidth: 110 }}>Waiting Time</th>
                           <th style={{ minWidth: 120 }}>Airport Pickup</th>
                           <th style={{ minWidth: 120 }}>Airport Drop</th>
-                          <th style={{ minWidth: 70 }}>Active</th>
                           {!isViewMode && <th style={{ minWidth: 90 }}>Actions</th>}
                         </tr>
                       </thead>
@@ -951,58 +1177,47 @@ const SchefferDriverRates = () => {
                             </td>
                             <td>
                               <Form.Control
-                                type="number" size="sm" placeholder="20"
-                                value={row.extraHourRate}
-                                onChange={(e) => updatePackageRow(row.id, "extraHourRate", e.target.value)}
-                                disabled={isViewMode}
-                              />
-                            </td>
-                            <td>
-                              <Form.Control
-                                type="number" size="sm" placeholder="2"
-                                value={row.extraKmRate}
-                                onChange={(e) => updatePackageRow(row.id, "extraKmRate", e.target.value)}
-                                disabled={isViewMode}
-                              />
-                            </td>
-                            <td>
-                              <Form.Control
-                                type="number" size="sm" placeholder="0"
-                                value={row.nightCharge}
-                                onChange={(e) => updatePackageRow(row.id, "nightCharge", e.target.value)}
-                                disabled={isViewMode}
-                              />
-                            </td>
-                            <td>
-                              <Form.Control
                                 type="number" size="sm" placeholder="0"
                                 value={row.waitingCharge}
                                 onChange={(e) => updatePackageRow(row.id, "waitingCharge", e.target.value)}
                                 disabled={isViewMode}
                               />
                             </td>
-                            <td>
-                              <Form.Control
-                                type="number" size="sm" placeholder="0"
-                                value={row.airportPickupCharge}
-                                onChange={(e) => updatePackageRow(row.id, "airportPickupCharge", e.target.value)}
+                            <td className="text-center">
+                              {/* Airport Pickup — tick if this package
+                                  includes/offers airport pickup. Stored on
+                                  the existing airportPickupCharge field as
+                                  1 (yes) / 0 (no) so no backend/DTO change
+                                  is needed. */}
+                              <Form.Check
+                                type="checkbox"
+                                checked={Number(row.airportPickupCharge) > 0}
+                                onChange={(e) =>
+                                  updatePackageRow(
+                                    row.id,
+                                    "airportPickupCharge",
+                                    e.target.checked ? 1 : 0,
+                                  )
+                                }
                                 disabled={isViewMode}
-                              />
-                            </td>
-                            <td>
-                              <Form.Control
-                                type="number" size="sm" placeholder="0"
-                                value={row.airportDropCharge}
-                                onChange={(e) => updatePackageRow(row.id, "airportDropCharge", e.target.value)}
-                                disabled={isViewMode}
+                                title="Airport Pickup included"
                               />
                             </td>
                             <td className="text-center">
+                              {/* Airport Drop — same tick semantics as
+                                  Airport Pickup above. */}
                               <Form.Check
                                 type="checkbox"
-                                checked={row.isActive}
-                                onChange={(e) => updatePackageRow(row.id, "isActive", e.target.checked)}
+                                checked={Number(row.airportDropCharge) > 0}
+                                onChange={(e) =>
+                                  updatePackageRow(
+                                    row.id,
+                                    "airportDropCharge",
+                                    e.target.checked ? 1 : 0,
+                                  )
+                                }
                                 disabled={isViewMode}
+                                title="Airport Drop included"
                               />
                             </td>
                             {!isViewMode && (
@@ -1029,6 +1244,109 @@ const SchefferDriverRates = () => {
                     </Table>
                   </div>
                 </div>
+
+                {/* ── Terms & Conditions ────────────────────────────────
+                    Dynamic list of free-form sentences saved per rate.
+                    Mirrors the /cab-rates pattern. Empty rows are dropped
+                    at save-time (frontend + backend defend). */}
+                <div className="border-top pt-3 mt-3">
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <h6 className="text-muted mb-0">Terms &amp; Conditions</h6>
+                    {!isViewMode && (
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        onClick={() => addPolicyRow(setTermsRows)}
+                        title="Add Terms &amp; Conditions"
+                      >
+                        <FaPlus className="me-2" />
+                        Add
+                      </Button>
+                    )}
+                  </div>
+                  {termsRows.map((row, idx) => (
+                    <Row key={row.id} className="mb-2">
+                      <Col md={10}>
+                        <Form.Control
+                          as="textarea"
+                          rows={2}
+                          value={row.value}
+                          placeholder={`Term ${idx + 1} — e.g. "Driver waiting time is 30 mins"`}
+                          onChange={(e) =>
+                            updatePolicyRow(setTermsRows, row.id, e.target.value)
+                          }
+                          disabled={isViewMode}
+                        />
+                      </Col>
+                      {!isViewMode && (
+                        <Col md={2}>
+                          <div className="d-flex gap-1">
+                            {termsRows.length > 1 && (
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                onClick={() => removePolicyRow(setTermsRows, row.id)}
+                                title="Remove"
+                              >
+                                <FaTrash size={10} />
+                              </Button>
+                            )}
+                          </div>
+                        </Col>
+                      )}
+                    </Row>
+                  ))}
+                </div>
+
+                {/* ── Cancellation Policies ───────────────────────────── */}
+                <div className="border-top pt-3 mt-3">
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <h6 className="text-muted mb-0">Cancellation Policies</h6>
+                    {!isViewMode && (
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        onClick={() => addPolicyRow(setCancellationRows)}
+                        title="Add Cancellation Policy"
+                      >
+                        <FaPlus className="me-2" />
+                        Add
+                      </Button>
+                    )}
+                  </div>
+                  {cancellationRows.map((row, idx) => (
+                    <Row key={row.id} className="mb-2">
+                      <Col md={10}>
+                        <Form.Control
+                          as="textarea"
+                          rows={2}
+                          value={row.value}
+                          placeholder={`Policy ${idx + 1} — e.g. "Free cancellation before 24 hours"`}
+                          onChange={(e) =>
+                            updatePolicyRow(setCancellationRows, row.id, e.target.value)
+                          }
+                          disabled={isViewMode}
+                        />
+                      </Col>
+                      {!isViewMode && (
+                        <Col md={2}>
+                          <div className="d-flex gap-1">
+                            {cancellationRows.length > 1 && (
+                              <Button
+                                variant="outline-danger"
+                                size="sm"
+                                onClick={() => removePolicyRow(setCancellationRows, row.id)}
+                                title="Remove"
+                              >
+                                <FaTrash size={10} />
+                              </Button>
+                            )}
+                          </div>
+                        </Col>
+                      )}
+                    </Row>
+                  ))}
+                </div>
               </Form>
             </Modal.Body>
             <Modal.Footer>
@@ -1040,6 +1358,239 @@ const SchefferDriverRates = () => {
                   {loading ? (editing ? "Updating..." : "Saving...") : editing ? "Update" : "Create"}
                 </Button>
               )}
+            </Modal.Footer>
+          </Modal>
+
+          {/* Status Toggle Confirmation Modal — mirrors the pattern used in
+              /hotel-actions/{id}/contract-rate. Opens when the operator
+              clicks the Active/Inactive badge in the rates list, so the
+              activate/deactivate change is never silent. */}
+          <Modal
+            show={showStatusModal}
+            onHide={closeStatusModal}
+            centered
+            size="sm"
+            backdrop="static"
+            keyboard={false}
+          >
+            <Modal.Header closeButton={!loading}>
+              <Modal.Title>Confirm Status Change</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <p className="mb-0">
+                Are you sure you want to{" "}
+                {statusModalRate && statusModalRate.isActive !== false
+                  ? "deactivate"
+                  : "activate"}{" "}
+                this rental rate
+                {statusModalRate?.rateCode ? (
+                  <>
+                    {" "}
+                    <strong>{statusModalRate.rateCode}</strong>
+                  </>
+                ) : null}
+                ?
+              </p>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="secondary"
+                onClick={closeStatusModal}
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={confirmToggleRateActive}
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    Processing...
+                  </>
+                ) : (
+                  "Confirm"
+                )}
+              </Button>
+            </Modal.Footer>
+          </Modal>
+
+          {/* Edit Intercity Charge Modal — dedicated dialog for editing an
+              existing intercity row. Previously the FaEdit icon populated
+              the top "Add" form and its button flipped to "Update"; now the
+              top form is add-only and this modal owns editing. */}
+          <Modal
+            show={showEditIntercityModal}
+            onHide={closeEditIntercityModal}
+            centered
+            size="lg"
+            backdrop="static"
+            keyboard={false}
+          >
+            <Modal.Header closeButton={!savingEditIntercity}>
+              <Modal.Title>Edit Intercity Charge</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <Row className="g-3">
+                <Col md={6}>
+                  <Form.Label>From City</Form.Label>
+                  <Form.Select
+                    value={editIntercityForm.fromCityId}
+                    onChange={(e) =>
+                      setEditIntercityForm((p) => ({ ...p, fromCityId: e.target.value }))
+                    }
+                    disabled={savingEditIntercity}
+                  >
+                    <option value="">Select</option>
+                    {cityList.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Col>
+                <Col md={6}>
+                  <Form.Label>To City</Form.Label>
+                  <Form.Select
+                    value={editIntercityForm.toCityId}
+                    onChange={(e) =>
+                      setEditIntercityForm((p) => ({ ...p, toCityId: e.target.value }))
+                    }
+                    disabled={savingEditIntercity}
+                  >
+                    <option value="">Select</option>
+                    {cityList.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Col>
+                <Col md={6}>
+                  <Form.Label>Cab Type</Form.Label>
+                  <Form.Select
+                    value={editIntercityForm.cabType}
+                    onChange={(e) =>
+                      setEditIntercityForm((p) => ({ ...p, cabType: e.target.value }))
+                    }
+                    disabled={savingEditIntercity}
+                  >
+                    <option value="">All</option>
+                    {cabTypeOptions.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </Form.Select>
+                </Col>
+                <Col md={6}>
+                  <Form.Label>Additional Charge</Form.Label>
+                  <Form.Control
+                    type="number"
+                    placeholder="AED"
+                    value={editIntercityForm.additionalCharge}
+                    onChange={(e) =>
+                      setEditIntercityForm((p) => ({ ...p, additionalCharge: e.target.value }))
+                    }
+                    disabled={savingEditIntercity}
+                  />
+                </Col>
+              </Row>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="secondary"
+                onClick={closeEditIntercityModal}
+                disabled={savingEditIntercity}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="success"
+                onClick={saveEditIntercity}
+                disabled={savingEditIntercity}
+              >
+                {savingEditIntercity ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    Updating...
+                  </>
+                ) : (
+                  "Update"
+                )}
+              </Button>
+            </Modal.Footer>
+          </Modal>
+
+          {/* Intercity Active/Inactive Confirmation Modal — mirrors the
+              rental-rate status modal above so both status toggles feel
+              identical. */}
+          <Modal
+            show={showIntercityStatusModal}
+            onHide={closeIntercityStatusModal}
+            centered
+            size="sm"
+            backdrop="static"
+            keyboard={false}
+          >
+            <Modal.Header closeButton={!togglingIntercity}>
+              <Modal.Title>Confirm Status Change</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <p className="mb-0">
+                Are you sure you want to{" "}
+                {intercityStatusRow && intercityStatusRow.isActive !== false
+                  ? "deactivate"
+                  : "activate"}{" "}
+                this intercity charge
+                {intercityStatusRow ? (
+                  <>
+                    {" "}
+                    (<strong>
+                      {intercityStatusRow.fromCityName} →{" "}
+                      {intercityStatusRow.toCityName}
+                    </strong>)
+                  </>
+                ) : null}
+                ?
+              </p>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="secondary"
+                onClick={closeIntercityStatusModal}
+                disabled={togglingIntercity}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={confirmToggleIntercityActive}
+                disabled={togglingIntercity}
+              >
+                {togglingIntercity ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    Processing...
+                  </>
+                ) : (
+                  "Confirm"
+                )}
+              </Button>
             </Modal.Footer>
           </Modal>
         </main>
