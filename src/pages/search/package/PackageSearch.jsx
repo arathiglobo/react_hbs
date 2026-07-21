@@ -22,16 +22,243 @@ import {
   FaMoneyBillWave,
   FaTag,
   FaFileContract,
+  FaPlaneDeparture,
+  FaExclamationTriangle,
 } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
 import "../../../styles/PackageSearch.css";
+
+// ─────────────────────────────────────────────
+// Counter Button helper
+// (mirrors the "Rooms & Guests" selector on /new-booking/hotel — HotelSearch.jsx)
+// ─────────────────────────────────────────────
+function Counter({ value, min, max, onChange }) {
+  return (
+    <div className="rgs-counter">
+      <button
+        type="button"
+        className="rgs-counter-btn"
+        onClick={() => onChange(Math.max(min, value - 1))}
+        disabled={value <= min}
+      >
+        −
+      </button>
+      <span className="rgs-counter-val">{value}</span>
+      <button
+        type="button"
+        className="rgs-counter-btn"
+        onClick={() => onChange(Math.min(max, value + 1))}
+        disabled={value >= max}
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+// Maximum number of rooms allowed per booking.
+const MAX_ROOMS = 5;
+
+// ─────────────────────────────────────────────
+// Room Guest Selector
+// ─────────────────────────────────────────────
+function RoomGuestSelector({ value, onChange }) {
+  const [rooms, setRooms] = useState(value);
+
+  // Sync internal state when the parent updates the rooms list externally
+  // (e.g. the "Add Room" button beside the Rooms & Guests trigger).
+  useEffect(() => {
+    setRooms(value);
+  }, [value]);
+
+  const update = (next) => {
+    setRooms(next);
+    onChange && onChange(next);
+  };
+
+  const addRoom = () => {
+    // Enforce the per-booking room cap.
+    if (rooms.length >= MAX_ROOMS) return;
+    update([...rooms, { adults: 1, children: 0, childAges: [] }]);
+  };
+  const removeRoom = (index) => update(rooms.filter((_, i) => i !== index));
+
+  const setAdults = (index, adults) =>
+    update(rooms.map((r, i) => (i === index ? { ...r, adults } : r)));
+
+  const setChildren = (index, children) =>
+    update(
+      rooms.map((r, i) =>
+        i === index
+          ? {
+              ...r,
+              children,
+              childAges: Array.from(
+                { length: children },
+                (_, j) => r.childAges[j] || 5,
+              ),
+            }
+          : r,
+      ),
+    );
+
+  const setChildAge = (roomIdx, childIdx, age) =>
+    update(
+      rooms.map((r, i) => {
+        if (i !== roomIdx) return r;
+        const ages = [...r.childAges];
+        ages[childIdx] = age;
+        return { ...r, childAges: ages };
+      }),
+    );
+
+  return (
+    <div className="rgs-wrap">
+      <div className="rgs-grid">
+        {rooms.map((room, i) => (
+          <div key={i} className="rgs-room-card">
+            <div className="rgs-room-header">
+              <span className="rgs-room-label">🛏 Room {i + 1}</span>
+              {rooms.length > 1 && (
+                <button
+                  type="button"
+                  className="rgs-remove-btn"
+                  onClick={() => removeRoom(i)}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="rgs-counters-col">
+              <div className="rgs-counter-row">
+                <div className="rgs-counter-info">
+                  <span className="rgs-counter-title">Adults</span>
+                  <span className="rgs-counter-sub">Age 12+</span>
+                </div>
+                <Counter
+                  value={room.adults}
+                  min={1}
+                  max={3}
+                  onChange={(v) => setAdults(i, v)}
+                />
+              </div>
+              <div className="rgs-counter-row">
+                <div className="rgs-counter-info">
+                  <span className="rgs-counter-title">Children</span>
+                  <span className="rgs-counter-sub">Age 0–12</span>
+                </div>
+                <Counter
+                  value={room.children}
+                  min={0}
+                  max={4}
+                  onChange={(v) => setChildren(i, v)}
+                />
+              </div>
+            </div>
+
+            {/* Informational guidance only — shown ONLY when this room has
+                more than 2 children, so users planning that case understand
+                they may need an additional room. Does NOT validate or
+                restrict. */}
+            {room.children > 2 && (
+              <div
+                role="note"
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "8px",
+                  border: "1px solid #b6e0fe",
+                  backgroundColor: "#eaf6ff",
+                  color: "#084c8d",
+                  borderRadius: "4px",
+                  padding: "8px 10px",
+                  marginTop: "8px",
+                  fontSize: "0.78rem",
+                  lineHeight: 1.35,
+                }}
+              >
+                <FaInfoCircle
+                  style={{ marginTop: "2px", flexShrink: 0 }}
+                  aria-hidden="true"
+                />
+                <span>
+                  Most hotels allow up to <strong>2 children per room</strong>.
+                  If you have more than 2 children, you may need to book an
+                  additional room.
+                </span>
+              </div>
+            )}
+
+            {room.children > 0 && (
+              <div className="rgs-child-ages">
+                <span className="rgs-child-ages-label">Child ages</span>
+                <div className="rgs-child-ages-row">
+                  {Array.from({ length: room.children }).map((_, idx) => (
+                    <div key={idx} className="rgs-child-age-select">
+                      <label className="rgs-child-age-label">
+                        Child {idx + 1}
+                      </label>
+                      <Form.Select
+                        size="sm"
+                        value={room.childAges[idx] || 5}
+                        onChange={(e) =>
+                          setChildAge(i, idx, parseInt(e.target.value))
+                        }
+                        className="rgs-age-dropdown"
+                      >
+                        {/* Children are age 0–12, so the age options stop at 12. */}
+                        {Array.from({ length: 13 }).map((__, age) => (
+                          <option key={age} value={age}>
+                            {age} {age === 1 ? "yr" : "yrs"}
+                          </option>
+                        ))}
+                      </Form.Select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+
+        <button
+          type="button"
+          className="rgs-add-room-btn"
+          onClick={addRoom}
+          disabled={rooms.length >= MAX_ROOMS}
+        >
+          <span className="rgs-add-icon">+</span>
+          <span>Add Room</span>
+        </button>
+        {rooms.length >= MAX_ROOMS && (
+          <div className="text-danger small mt-2">
+            A maximum of {MAX_ROOMS} rooms can be added per booking.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const PackageSearch = () => {
   const [agents, setAgents] = useState([]);
   const [agentId, setAgentId] = useState("");
   const [destinationOptions, setDestinationOptions] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState(null);
+  // Rooms & Guests filter — mirrors /new-booking/hotel (HotelSearch.jsx).
+  // Each room holds its own adult/children counts and per-child ages.
+  const [rooms, setRooms] = useState([
+    { adults: 1, children: 0, childAges: [] },
+  ]);
+  // Controls the expandable Rooms & Guests selector below the trigger button.
+  const [roomsOpen, setRoomsOpen] = useState(false);
+  // Flight Details filter (optional) — the traveller's arrival & departure
+  // date/time. When both are set they are sent with the search so the backend
+  // flags packages whose itinerary is longer than this travel window.
+  const [arrivalDateTime, setArrivalDateTime] = useState("");
+  const [departureDateTime, setDepartureDateTime] = useState("");
   const [isDestinationLoading, setIsDestinationLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -70,6 +297,19 @@ const PackageSearch = () => {
       clearTimeout(timeout);
       timeout = setTimeout(() => func(...args), wait);
     };
+  };
+
+  // Add one calendar day to a datetime-local string (yyyy-MM-ddTHH:mm),
+  // preserving the time-of-day. Used to auto-fill Departure from Arrival.
+  const addOneDayLocal = (dtLocal) => {
+    if (!dtLocal) return "";
+    const d = new Date(dtLocal);
+    if (Number.isNaN(d.getTime())) return "";
+    d.setDate(d.getDate() + 1);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+      d.getDate(),
+    )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
   // ─────────────────────────────────────────────
@@ -167,6 +407,18 @@ const PackageSearch = () => {
     const newErrors = {};
     if (!selectedDestination) newErrors.destination = "Destination is required";
     if (!agentId) newErrors.agent = "Agent is required";
+    // Flight Details are mandatory — both ends must be provided and the
+    // departure must be strictly after the arrival.
+    if (!arrivalDateTime)
+      newErrors.arrivalDateTime = "Arrival date & time is required";
+    if (!departureDateTime)
+      newErrors.departureDateTime = "Departure date & time is required";
+    if (
+      arrivalDateTime &&
+      departureDateTime &&
+      new Date(departureDateTime) <= new Date(arrivalDateTime)
+    )
+      newErrors.departureDateTime = "Departure must be after arrival";
     return newErrors;
   };
 
@@ -186,10 +438,20 @@ const PackageSearch = () => {
     setResults([]);
 
     try {
+      const totalAdults = rooms.reduce((a, r) => a + (r.adults || 0), 0);
+      const totalChildren = rooms.reduce((a, r) => a + (r.children || 0), 0);
       const payload = {
         countryId: selectedDestination.countryId || "",
         cityId: selectedDestination.value || "",
         agentId: agentId || "",
+        // Flight Details filter — sent only when both ends are provided.
+        arrivalDateTime: arrivalDateTime || "",
+        departureDateTime: departureDateTime || "",
+        // Occupancy filter — the backend returns only packages that have a
+        // category able to accommodate this group, along with the matched
+        // category (matchedCategoryId/Name) used later by the booking flow.
+        adultCount: totalAdults || 1,
+        childCount: totalChildren,
       };
 
       console.log("Package search payload:", payload);
@@ -217,6 +479,18 @@ const PackageSearch = () => {
   };
 
   const handleBookNow = (pkg) => {
+    // Flight Details filter: this package's itinerary is longer than the
+    // selected travel window. Warn and let the user accept before booking.
+    if (pkg.exceedsTravelWindow) {
+      const proceed = window.confirm(
+        `${
+          pkg.travelWindowWarning ||
+          "This package's itinerary is longer than your selected flight window."
+        }\n\nDo you want to continue booking this package?`,
+      );
+      if (!proceed) return;
+    }
+
     // Open the booking page in a new browser tab. location.state isn't
     // preserved across windows, so we pipe the context through query
     // params and let PackageBooking read it back from either source.
@@ -227,6 +501,26 @@ const PackageSearch = () => {
     if (pkg.rate != null) params.set("searchRate", String(pkg.rate));
     if (pkg.rateType) params.set("searchRateType", pkg.rateType);
     params.set("searchCurrency", pkg.currencyCode || "AED");
+
+    // Carry the Rooms & Guests selection into the booking page so its Pax
+    // counts default to what was chosen on the search screen. A package
+    // booking uses a single pax set, so forward the aggregate totals across
+    // all rooms. PackageBooking seeds its initial searchParams from these.
+    const totalAdults = rooms.reduce((a, r) => a + (r.adults || 0), 0);
+    const totalChildren = rooms.reduce((a, r) => a + (r.children || 0), 0);
+    const allChildAges = rooms.flatMap((r) => r.childAges || []);
+    params.set("adultCount", String(totalAdults || 1));
+    params.set("childCount", String(totalChildren));
+    if (allChildAges.length) params.set("childAges", allChildAges.join(","));
+    params.set("noOfRooms", String(rooms.length));
+
+    // Carry the category the search resolved for this occupancy so the booking
+    // (Hotels step + submit) uses it directly — the Basic Details step and its
+    // category picker have been removed.
+    if (pkg.matchedCategoryId != null)
+      params.set("packageCategory", String(pkg.matchedCategoryId));
+    if (pkg.matchedCategoryName)
+      params.set("packageCategoryName", pkg.matchedCategoryName);
 
     // ADD NEW ITEM flow: PackageBookingDetailView navigates here with
     // ?parentBookingCode=GPKG-... so the booking that gets created
@@ -300,6 +594,16 @@ const PackageSearch = () => {
                 {selectedAgentName && (
                   <span className="hs-summary-chip">{selectedAgentName}</span>
                 )}
+                <span className="hs-summary-chip">
+                  {rooms.reduce((a, r) => a + r.adults, 0)} adults ·{" "}
+                  {rooms.reduce((a, r) => a + r.children, 0)} Child
+                </span>
+                {arrivalDateTime && departureDateTime && (
+                  <span className="hs-summary-chip">
+                    ✈ {arrivalDateTime.replace("T", " ")} →{" "}
+                    {departureDateTime.replace("T", " ")}
+                  </span>
+                )}
               </div>
               <Button
                 type="button"
@@ -333,8 +637,37 @@ const PackageSearch = () => {
 
               <Form onSubmit={handleSearchSubmit}>
                 <Row className="g-4">
+                  {/* Agent Dropdown */}
+                  <Col lg={4} md={6}>
+                    <Form.Group>
+                      <Form.Label>Agent</Form.Label>
+                      <Form.Select
+                        className="form-control-modern"
+                        value={agentId}
+                        onChange={(e) => {
+                          setAgentId(e.target.value);
+                          if (e.target.value)
+                            setErrors((prev) => ({ ...prev, agent: null }));
+                        }}
+                      >
+                        <option value="">Select Agent</option>
+                        {agents.map((agent) => (
+                          <option key={agent.id} value={agent.id}>
+                            {agent.companyName}
+                          </option>
+                        ))}
+                      </Form.Select>
+                      {errors.agent && (
+                        <div className="text-danger small mt-1">
+                          {errors.agent}
+                        </div>
+                      )}
+                      <AgentBalanceDisplay agentId={agentId} />
+                    </Form.Group>
+                  </Col>
+
                   {/* Destination Dropdown */}
-                  <Col lg={6} md={12}>
+                  <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label>Destination</Form.Label>
                       <Select
@@ -364,33 +697,146 @@ const PackageSearch = () => {
                     </Form.Group>
                   </Col>
 
-                  {/* Agent Dropdown */}
-                  <Col lg={6} md={12}>
-                    <Form.Group>
-                      <Form.Label>Agent</Form.Label>
-                      <Form.Select
-                        className="form-control-modern"
-                        value={agentId}
-                        onChange={(e) => {
-                          setAgentId(e.target.value);
-                          if (e.target.value)
-                            setErrors((prev) => ({ ...prev, agent: null }));
+                  {/* Rooms & Guests — same selector as /new-booking/hotel.
+                      The summary button shows the aggregate adults/children/
+                      rooms and toggles the expandable RoomGuestSelector; the
+                      Add Room button appends a room (up to MAX_ROOMS). */}
+                  <Col lg={4} md={6}>
+                    <Form.Label>Number of Adults and Children</Form.Label>
+                    <div className="d-flex flex-wrap gap-2">
+                      <Button
+                        variant="outline-primary"
+                        className="flex-grow-1 text-start rooms-summary-btn-modern"
+                        type="button"
+                        onClick={() => setRoomsOpen((o) => !o)}
+                      >
+                        {rooms.reduce((a, r) => a + r.adults, 0)} adults ·{" "}
+                        {rooms.reduce((a, r) => a + r.children, 0)} Child
+                        <span className="float-end">
+                          {roomsOpen ? "▴" : "▾"}
+                        </span>
+                      </Button>
+                      <Button
+                        type="button"
+                        className="flex-shrink-0 btn-add-room-premium"
+                        disabled={roomsOpen && rooms.length >= MAX_ROOMS}
+                        onClick={() => {
+                          if (!roomsOpen) {
+                            setRoomsOpen(true); // first click: just open
+                          } else {
+                            // later clicks: add room, but never exceed the cap
+                            setRooms((prev) =>
+                              prev.length >= MAX_ROOMS
+                                ? prev
+                                : [
+                                    ...prev,
+                                    { adults: 1, children: 0, childAges: [] },
+                                  ],
+                            );
+                          }
                         }}
                       >
-                        <option value="">Select Agent</option>
-                        {agents.map((agent) => (
-                          <option key={agent.id} value={agent.id}>
-                            {agent.companyName}
-                          </option>
-                        ))}
-                      </Form.Select>
-                      {errors.agent && (
-                        <div className="text-danger small mt-1">
-                          {errors.agent}
-                        </div>
-                      )}
-                      <AgentBalanceDisplay agentId={agentId} />
-                    </Form.Group>
+                        <span className="add-room-plus">+</span>
+                        <span>Add Room</span>
+                      </Button>
+                    </div>
+                  </Col>
+                </Row>
+
+                {/* Expandable Rooms & Guests selector */}
+                {roomsOpen && (
+                  <Row className="g-3 mt-2">
+                    <Col md={12}>
+                      <RoomGuestSelector value={rooms} onChange={setRooms} />
+                    </Col>
+                  </Row>
+                )}
+
+                {/* Flight Details filter — arrival & departure date/time.
+                    Mandatory: both ends must be set. The backend flags
+                    packages whose itinerary is longer than this travel
+                    window so the user is warned before booking. */}
+                <Row className="mt-3">
+                  <Col xs={12}>
+                    <div className="flight-details-group">
+                      <div className="flight-details-title">
+                        <FaPlaneDeparture className="me-2" />
+                        Flight Details <span className="text-danger">*</span>
+                        <span className="flight-details-hint">
+                          Filter packages that fit your travel window
+                        </span>
+                      </div>
+                      <Row className="g-3">
+                        <Col md={6}>
+                          <Form.Group>
+                            <Form.Label>
+                              Arrival (Date &amp; Time){" "}
+                              <span className="text-danger">*</span>
+                            </Form.Label>
+                            <Form.Control
+                              type="datetime-local"
+                              className="form-control-modern"
+                              value={arrivalDateTime}
+                              onChange={(e) => {
+                                const newArrival = e.target.value;
+                                setArrivalDateTime(newArrival);
+                                setErrors((prev) => ({
+                                  ...prev,
+                                  arrivalDateTime: null,
+                                  departureDateTime: null,
+                                }));
+                                // Auto-fill Departure with the next day at the
+                                // same time when it's empty or no longer after
+                                // the new Arrival. Leaves a valid later value
+                                // the user picked themselves alone.
+                                if (newArrival) {
+                                  const nextDay = addOneDayLocal(newArrival);
+                                  setDepartureDateTime((prev) => {
+                                    if (!prev) return nextDay;
+                                    if (
+                                      new Date(prev) <= new Date(newArrival)
+                                    )
+                                      return nextDay;
+                                    return prev;
+                                  });
+                                }
+                              }}
+                            />
+                            {errors.arrivalDateTime && (
+                              <div className="text-danger small mt-1">
+                                {errors.arrivalDateTime}
+                              </div>
+                            )}
+                          </Form.Group>
+                        </Col>
+                        <Col md={6}>
+                          <Form.Group>
+                            <Form.Label>
+                              Departure (Date &amp; Time){" "}
+                              <span className="text-danger">*</span>
+                            </Form.Label>
+                            <Form.Control
+                              type="datetime-local"
+                              className="form-control-modern"
+                              value={departureDateTime}
+                              min={arrivalDateTime || undefined}
+                              onChange={(e) => {
+                                setDepartureDateTime(e.target.value);
+                                setErrors((prev) => ({
+                                  ...prev,
+                                  departureDateTime: null,
+                                }));
+                              }}
+                            />
+                            {errors.departureDateTime && (
+                              <div className="text-danger small mt-1">
+                                {errors.departureDateTime}
+                              </div>
+                            )}
+                          </Form.Group>
+                        </Col>
+                      </Row>
+                    </div>
                   </Col>
                 </Row>
 
@@ -492,6 +938,19 @@ const PackageSearch = () => {
                           >
                             {pkg.packageCategory}
                           </p>
+
+                          {/* Flight Details filter warning — shown when the
+                              package itinerary is longer than the selected
+                              arrival→departure window. */}
+                          {pkg.exceedsTravelWindow && (
+                            <div className="pkg-window-warning" role="note">
+                              <FaExclamationTriangle
+                                className="pkg-window-warning-icon"
+                                aria-hidden="true"
+                              />
+                              <span>{pkg.travelWindowWarning}</span>
+                            </div>
+                          )}
 
                           {/* Price + Book */}
                           <div className="price-box d-flex justify-content-between align-items-center mt-auto">

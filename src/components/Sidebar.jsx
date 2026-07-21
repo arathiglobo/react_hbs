@@ -22,6 +22,8 @@ import {
   Trophy,
   Award,
   BadgeCheck,
+  KeyRound,
+  Plug,
 } from "lucide-react";
 import { FaAd, FaBrain, FaBullhorn, FaBullseye, FaFileAlt, FaImages, FaRobot, FaTags, FaUser } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
@@ -37,6 +39,14 @@ export default function Sidebar() {
   const sidebarRef = useRef(null);
   const offcanvasRef = useRef(null);
   const [hotelId, setHotelId] = useState(null);
+
+  /**
+   * Codes that super_admin has explicitly HIDDEN for the caller's role,
+   * fetched once on mount from /api/sidebar/hidden-menus. Empty set on
+   * error → sidebar keeps its full hardcoded menu (fail-open, so a
+   * transient DB hiccup never blanks the sidebar).
+   */
+  const [hiddenCodes, setHiddenCodes] = useState(() => new Set());
   /**
    * Combined count of PENDING hotel + agent self-registration requests.
    * Shown as a red pill next to the Approvals menu label so admins see
@@ -75,6 +85,10 @@ export default function Sidebar() {
     "/agentDashboard": "agent",
     "/staffDashboard": "staff",
     "/extranetDashboard": "extranet",
+    // Super admin — same landing surface as admin (reuses AdminDashboard)
+    // but this path pins the active role to super_admin so the sidebar
+    // filter shows the SUPER_ADMIN-only groups (API Access, Credential Vault).
+    "/superAdminDashboard": "super_admin",
   };
   const pathRole = dashboardRoleByPath[pathname];
 
@@ -83,6 +97,17 @@ export default function Sidebar() {
     localStorage.getItem("currentActiveRole")?.toLowerCase() ||
     storedRoles[0] ||
     "";
+
+  // Sub-account (sub-agent / sub-user) logins use a "prefix.mainAgent"
+  // username, which always contains a dot; main-agent login usernames are
+  // validated to letters/digits/underscore only (no dot). Sub-accounts must
+  // not see the agent "Registration" menu — they can't create their own
+  // sub-users / sub-agents. Only affects agent-role logins; every other role
+  // is unchanged.
+  const loginUserName =
+    localStorage.getItem("UserName") || sessionStorage.getItem("UserName") || "";
+  const isSubAccountAgent =
+    currentRole === "agent" && loginUserName.includes(".");
 
   // Re-sync the stored active role with the dashboard context so the
   // role-guarded routes (PrivateRoute roles=[...]) agree with the menu.
@@ -138,6 +163,33 @@ export default function Sidebar() {
         setApprovalsPendingCount(h + a);
       } catch (_) {
         if (!cancelled) setApprovalsPendingCount(0);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentRole]);
+
+  // Fetch the per-role hidden-menu set from the backend once per role
+  // change. Fail-open — any error keeps the full hardcoded menu visible,
+  // so a network hiccup can never blank the sidebar. Applied via
+  // roleAllows below (returns false when the item's code is in the set).
+  useEffect(() => {
+    if (!currentRole) {
+      setHiddenCodes(new Set());
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await axiosInstance.get("/api/sidebar/hidden-menus", {
+          params: { role: currentRole },
+        });
+        if (cancelled) return;
+        const codes = Array.isArray(res?.data?.codes) ? res.data.codes : [];
+        setHiddenCodes(new Set(codes));
+      } catch (_) {
+        if (!cancelled) setHiddenCodes(new Set());
       }
     })();
     return () => {
@@ -207,6 +259,9 @@ export default function Sidebar() {
   if (currentRole === "admin") {
     dashboardPath = "/adminDashboard";
     labelForDashboard = "Admin Dashboard";
+  } else if (currentRole === "super_admin") {
+    dashboardPath = "/superAdminDashboard";
+    labelForDashboard = "Super Admin Dashboard";
   } else if (currentRole === "agent") {
     dashboardPath = "/agentDashboard";
     labelForDashboard = "Agent Dashboard";
@@ -220,11 +275,13 @@ export default function Sidebar() {
 
   const items = [
     {
+      code: "top_dashboard",
       label: labelForDashboard,
       to: dashboardPath,
-      roles: ["admin", "agent", "staff", "extranet"],
+      roles: ["admin", "agent", "staff", "extranet", "super_admin"],
     },
     {
+      code: "top_manage_masters",
       label: "Manage Masters",
       // to: "/manage-masters",
       roles: ["admin"],
@@ -234,7 +291,10 @@ export default function Sidebar() {
           children: [
             { label: "Designation", to: "/masters/designations" },
             { label: "Bank", to: "/masters/bank" },
-            { label: "Assign Menu", to: "/masters/assign-menu" },
+            // Assign Menu is a super_admin-only tool (per-role sidebar
+            // visibility). Kept inside Manage Masters → Basic settings
+            // for discoverability but role-gated so admin doesn't see it.
+            { label: "Assign Menu", to: "/masters/assign-menu", roles: ["super_admin"] },
             { label: "Contact Type", to: "/masters/contact-type" },
             { label: "Markup Type", to: "/masters/markup-type" },
             { label: "Cab Type", to: "/masters/cab-type" },
@@ -307,111 +367,125 @@ export default function Sidebar() {
       ],
     },
     {
+      code: "top_company_profile",
       label: "Company Profile",
       to: "/company-profile",
       roles: ["admin"],
       children: [],
     },
     {
+      // Admin-side API access — per-API on/off overlay + Test/Live
+      // credential management. Only APIs super_admin enabled for this
+      // admin's company show up on the page; toggles here are subtractive.
+      code: "top_admin_api_access",
+      label: "API Access",
+      to: "/admin/api-access",
+      roles: ["admin"],
+      excludeRoles: ["super_admin"],
+      children: [],
+    },
+    {
+      // SUPER_ADMIN-only group. Controls which of our APIs each external
+      // client may call, plus the encrypted Credential Vault. Restricted
+      // to super_admin so an ADMIN login never sees this group. Backend
+      // guards (SuperAdminGuard / SuperAdminOnlyGuard) still enforce the
+      // same restriction at the API layer.
+      //
+      // Group label deliberately named "Access Control" — describes the
+      // contents (API surface + client keys + secrets vault) rather than
+      // repeating the "Super Admin Dashboard" title above.
+      code: "top_access_control",
+      label: "Access Control",
+      roles: ["super_admin"],
+      children: [
+        { label: "Endpoint Catalog", to: "/super-admin/api-access/endpoints" },
+        { label: "API Clients", to: "/super-admin/api-access/clients" },
+        { label: "Admin Management", to: "/super-admin/admins" },
+        // Credential Vault deliberately hidden — companies now manage
+        // per-API credentials from the admin login (/admin/api-access),
+        // and super_admin no longer needs a separate encrypted store.
+        // Routes in App.jsx are left intact so a direct URL still works
+        // (and this line can be uncommented if the vault is needed later).
+      ],
+    },
+    {
+      code: "top_approvals",
       label: "Approvals",
       roles: ["admin"],
       children: [
-        { label: "Hotel", to: "/admin/approval/hotels" },
-        { label: "Agent", to: "/admin/approval/agents" },
+        { code: "appr_hotel", label: "Hotel", to: "/admin/approval/hotels" },
+        { code: "appr_agent", label: "Agent", to: "/admin/approval/agents" },
       ],
     },
     {
+      code: "top_registration",
       label: "Registration",
       roles: ["admin"],
       children: [
-        { label: "Hotel", to: "/registration/hotel" },
-        { label: "Agent", to: "/registration/agent" },
-        { label: "Employee", to: "/registration/employee" },
-        { label: "Transfers", to: "/registration/cabProvider" },
-        { label: "Tours and Activity", to: "/registration/activityProvider" },
-        { label: "Package", to: "/registration/package" },
-        { label: "Supplier", to: "/registration/supplier" },
-        { label: "Restaurants", to: "/restaurant/list" },
-        { label: "Honeymoon Packages", to: "/honeymoon/list" },
-        { label: "Ayurveda", to: "/registration/ayurveda" },
-        { label: "Chauffeur Driver and Limousine", to: "/registration/schefferDriver" },
-        { label: "Build Your Own Package Add-Ons", to: "/registration/package-addons" },
+        { code: "reg_hotel",         label: "Hotel",                          to: "/registration/hotel" },
+        { code: "reg_agent",         label: "Agent",                          to: "/registration/agent" },
+        { code: "reg_employee",      label: "Employee",                       to: "/registration/employee" },
+        { code: "reg_transfers",     label: "Transfers",                      to: "/registration/cabProvider" },
+        { code: "reg_activity",      label: "Tours and Activity",             to: "/registration/activityProvider" },
+        { code: "reg_package",       label: "Package",                        to: "/registration/package" },
+        { code: "reg_supplier",      label: "Supplier",                       to: "/registration/supplier" },
+        { code: "reg_restaurants",   label: "Restaurants",                    to: "/restaurant/list" },
+        { code: "reg_honeymoon",     label: "Honeymoon Packages",             to: "/honeymoon/list" },
+        { code: "reg_ayurveda",      label: "Ayurveda",                       to: "/registration/ayurveda" },
+        { code: "reg_scheffer",      label: "Scheffer Driver and Limousine",  to: "/registration/schefferDriver" },
+        { code: "reg_package_addons", label: "Build Your Own Package Add-Ons", to: "/registration/package-addons" },
       ],
     },
     {
+      code: "top_registration", // same visibility bucket — agent variant of the same top-level slot
       label: "Registration",
       roles: ["agent"],
+      // Hidden for sub-account logins (sub-agent / sub-user) — only a main
+      // agent may register sub-users / sub-agents.
+      subAccountHidden: true,
       children: [
         { label: "Sub User", to: "/agent-registration/sub-user" },
         { label: "Sub Agent", to: "/agent-registration/sub-agent" },
       ],
     },
     {
+      code: "top_new_booking",
       label: "New Booking",
       roles: ["admin", "agent"],
       children: [
-        { label: "Hotel", to: "/new-booking/hotel" },
-        // Dedicated 24-Hour Check-In entry — separate route renders the
-        // same HotelSearch component with force24Hour=true.
-        { label: "24 Hour", to: "/new-booking/hotel-24hr" },
-        // Last Minute Booking — Phase 2 entry (separate flow & APIs)
-        { label: "Last Minute", to: "/new-booking/last-minute-booking" },
-        { label: "Long Stay", to: "/new-booking/long-stay" },
-        { label: "Day Stay", to: "/new-booking/day-stay" },
-        // {
-        //   label: "Make Your Own Package",
-        //   to: "/new-booking/make-your-own-package",
-        // },
+        { code: "nb_hotel",         label: "Hotel", to: "/new-booking/hotel" },
+        { code: "nb_24hr",          label: "24 Hour", to: "/new-booking/hotel-24hr" },
+        { code: "nb_last_minute",   label: "Last Minute", to: "/new-booking/last-minute-booking" },
+        { code: "nb_long_stay",     label: "Long Stay", to: "/new-booking/long-stay" },
+        { code: "nb_day_stay",      label: "Day Stay", to: "/new-booking/day-stay" },
         {
-          // Parallel v2 flow: add-on services are picked FIRST (visa,
-          // transfer, tour, etc.). The next page's tabs / cart options
-          // are gated by what's selected here. The legacy entry above
-          // is left unchanged so anyone who prefers it can keep using it.
+          code: "nb_byop",
           label: "Build Your Own Package",
           to: "/new-booking/make-your-own-package-v2",
         },
-        
-        { label: "Package", to: "/new-booking/package-search" },
-        { label: "Transfers", to: "/new-booking/cab" },
-        { label: "Chauffeur Driver and Limousine", to: "/new-booking/scheffer-driver" },
+        { code: "nb_package",       label: "Package", to: "/new-booking/package-search" },
+        { code: "nb_transfers",     label: "Transfers", to: "/new-booking/cab" },
+        { code: "nb_chauffeur",     label: "Chauffeur Driver and Limousine", to: "/new-booking/scheffer-driver" },
+        { code: "nb_activity",      label: "Tours and Activity", to: "/new-booking/tours-and-activities" },
         {
-          label: "Tours and Activity",
-          to: "/new-booking/tours-and-activities",
-        },
-        {
+          code: "nb_offline",
           label: "Offline",
           to: "/new-booking/offline-search",
           roles: ["admin"],
         },
+        { code: "nb_restaurant",    label: "Restaurant",       to: "/new-booking/restaurant" },
+        { code: "nb_honeymoon",     label: "Honeymoon Package", to: "/new-booking/honeymoon" },
+        { code: "nb_meet_space",    label: "Meet & Space",     to: "/new-booking/meet-and-space" },
+        { code: "nb_gov",           label: "Govt / Airlines",  to: "/new-booking/gov-employee" },
+        { code: "nb_ayurveda",      label: "Ayurveda",         to: "/new-booking/ayurveda" },
         {
-          label: "Restaurant",
-          to: "/new-booking/restaurant",
-        },
-        {
-          label: "Honeymoon Package",
-          to: "/new-booking/honeymoon",
-        },
-        // Meet & Space — new booking flow added as a sibling entry under New Booking
-        {
-          label: "Meet & Space",
-          to: "/new-booking/meet-and-space",
-        },
-        {
-          label: "Govt / Airlines",
-          to: "/new-booking/gov-employee",
-        },
-        // Ayurveda — packages, doctor consultations, courses
-        {
-          label: "Ayurveda",
-          to: "/new-booking/ayurveda",
-        },
-        {
+          code: "nb_student",
           label: "Student",
           to: "/new-booking/student",
         },
         {
-          label: "Senior Citizen",
-          to: "/new-booking/senior-citizen",
+         label: "Senior Citizen",
+         to: "/new-booking/senior-citizen",
         },
         // Religious flow — same HotelSearch, destination locked to Mecca/Medina.
         {
@@ -421,6 +495,7 @@ export default function Sidebar() {
       ],
     },
     {
+      code: "top_ai_insights",
       label: "AI Insights",
       roles: ["admin"],
       children: [
@@ -431,70 +506,32 @@ export default function Sidebar() {
       ],
     },
     {
+      code: "top_booking_list",
       label: "Booking List",
       roles: ["admin", "agent", "staff"],
       children: [
         // Unified list combining all booking types below into one view
         // (new, additive page — every other entry here is unchanged).
-        {
-          label: "All Bookings",
-          to: "/booking-details/all-bookings-list",
-        },
-        {
-          label: "Hotel",
-          to: "/booking-details/hotel-booking-list",
-        },
+        { code: "bl_all",         label: "All Bookings",  to: "/booking-details/all-bookings-list" },
+        { code: "bl_hotel",       label: "Hotel",         to: "/booking-details/hotel-booking-list" },
         // Dedicated 24-Hour Check-In list — same page wrapped with
         // force24HourOnly so only is24HourCheckin=true rows are shown.
-        {
-          label: "24 Hour",
-          to: "/booking-details/24hr-booking-list",
-        },
+        { code: "bl_24hr",        label: "24 Hour",       to: "/booking-details/24hr-booking-list" },
         // Dedicated Religious booking list — same page wrapped with
         // religiousOnly so only isReligiousBooking=true rows are shown.
-        {
-          label: "Religious",
-          to: "/booking-details/religious-booking-list",
-        },
-        // Last Minute Booking list — Phase 4 entry
-        {
-          label: "Last Minute",
-          to: "/booking-details/last-minute-booking-list",
-        },
-        {
-          label: "Long Stay",
-          to: "/booking-details/long-stay-booking-list",
-        },
-        {
-          label: "Day Stay",
-          to: "/booking-details/day-stay-booking-list",
-        },
+        { code: "bl_religious",   label: "Religious",     to: "/booking-details/religious-booking-list" },
+        { code: "bl_last_minute", label: "Last Minute",   to: "/booking-details/last-minute-booking-list" },
+        { code: "bl_long_stay",   label: "Long Stay",     to: "/booking-details/long-stay-booking-list" },
+        { code: "bl_day_stay",    label: "Day Stay",      to: "/booking-details/day-stay-booking-list" },
         // {
         //   label: "Custom Bookings",
         //   to: "/booking-details/custom-booking-list",
         // },
-        {
-          // Listings for the v2 Make-Your-Own-Package flow (separate
-          // table tree, separate endpoints).
-          label: "Build Your Own Package",
-          to: "/booking-details/make-your-own-package-v2-list",
-        },
-        {
-          label: "Package Booking",
-          to: "/booking-details/package-booking-list",
-        },
-        {
-          label: "Tours and Activity",
-          to: "/booking-details/activity-booking-list",
-        },
-        {
-          label: "Transfers",
-          to: "/booking-details/cab-booking-list",
-        },
-        {
-          label: "Chauffeur Driver and Limousine",
-          to: "/booking-details/scheffer-driver-booking-list", 
-        },
+        { code: "bl_byop",        label: "Build Your Own Package", to: "/booking-details/make-your-own-package-v2-list" },
+        { code: "bl_package",     label: "Package Booking",   to: "/booking-details/package-booking-list" },
+        { code: "bl_activity",    label: "Tours and Activity", to: "/booking-details/activity-booking-list" },
+        { code: "bl_transfers",   label: "Transfers",         to: "/booking-details/cab-booking-list" },
+        { code: "bl_chauffeur",   label: "Chauffeur Driver and Limousine", to: "/booking-details/scheffer-driver-booking-list" },
         // {
         //   label: "Complete Booking",
         //   to: "/booking-details/complete-booking-list",
@@ -540,11 +577,13 @@ export default function Sidebar() {
       ],
     },
     {
+      code: "top_invoice",
       label: "Invoice",
       to: "/invoice",
       roles: ["admin", "agent"],
     },
     {
+      code: "top_inhouse_accounts",
       label: "Inhouse Accounts",
       roles: ["admin", "agent"],
       children: [
@@ -572,6 +611,7 @@ export default function Sidebar() {
     //   roles: ["admin"],
     // },
     {
+      code: "top_calendar",
       label: "Calendar",
       // Extranet (hotel) users get their own hotel-scoped calendar page.
       to: currentRole === "extranet" ? "/extranet/calendar" : "/calendar",
@@ -583,6 +623,7 @@ export default function Sidebar() {
     //   roles: ["admin"],
     // },
     {
+      code: "top_report",
       label: "Report",
       to: "/report",
       roles: ["admin", "agent"],
@@ -666,6 +707,7 @@ export default function Sidebar() {
     // Agent Incentive Module — admin manages rules + reviews claims;
     // agents see their points dashboard and claim history.
     {
+      code: "top_agent_incentive",
       label: "Agent Incentive",
       roles: ["admin"],
       children: [
@@ -675,6 +717,7 @@ export default function Sidebar() {
       ],
     },
     {
+      code: "top_agent_incentive", // agent-side variant of the same top-level slot
       label: "My Incentives",
       roles: ["agent"],
       children: [
@@ -683,8 +726,9 @@ export default function Sidebar() {
       ],
     },
 
-  
+
     {
+      code: "top_marketing",
       label: "Marketing",
       roles: ["admin"],
       children: [
@@ -722,6 +766,7 @@ export default function Sidebar() {
     //   roles: ["extranet"],
     // },
     {
+      code: "top_gallery",
       label: "Gallery",
       to: hotelId ? `/extranet/${hotelId}/gallery` : "#",
       roles: ["extranet"],
@@ -734,9 +779,34 @@ export default function Sidebar() {
   // Filter menu based on allowed roles. Child items (and items inside
   // groups) may also carry a `roles` key — those without one stay visible
   // to every role that can see the parent.
-  const roleAllows = (entry) => !entry.roles || entry.roles.includes(currentRole);
+  //
+  // super_admin inherits every menu that admin can see so a SUPER_ADMIN
+  // login keeps every admin tool (Manage Masters, Reports, Registration,
+  // …) and additionally sees SUPER_ADMIN-only groups (roles: ["super_admin"]).
+  //
+  // `excludeRoles` opts individual items OUT of that inheritance — used for
+  // screens where admin's context (their own company) makes sense but
+  // super_admin's "sees everything" model doesn't (e.g., the per-company
+  // API access page super_admin governs via a different super_admin screen).
+  const roleAllows = (entry) => {
+    // Super_admin's per-role visibility overlay — an entry whose stable
+    // {@code code} appears in the hidden-set is dropped no matter what
+    // the hardcoded roles/excludeRoles say. Only entries with a code are
+    // eligible for hiding; sub-menu leaves without a code stay visible
+    // as before (they're gated only by their parent's visibility today).
+    if (entry.code && hiddenCodes.has(entry.code)) return false;
+    if (!entry.roles) return true;
+    if (Array.isArray(entry.excludeRoles) && entry.excludeRoles.includes(currentRole)) return false;
+    if (entry.roles.includes(currentRole)) return true;
+    if (currentRole === "super_admin" && entry.roles.includes("admin")) return true;
+    return false;
+  };
 
-  const filteredItems = items.filter(roleAllows).map((item) => {
+  const filteredItems = items
+    .filter(roleAllows)
+    // Drop the agent Registration menu for sub-account logins.
+    .filter((entry) => !(entry.subAccountHidden && isSubAccountAgent))
+    .map((item) => {
     const next = { ...item };
     if (Array.isArray(item.children)) {
       next.children = item.children.filter(roleAllows);
@@ -1169,6 +1239,19 @@ function getIcon(label) {
 
     case "Company Profile":
       return <Building2 {...iconProps} />;
+
+    // SUPER_ADMIN-only group housing API surface + client keys + secrets
+    // vault. Renamed from "API Access"; label must stay in sync with the
+    // sidebar items array above (roles: ["super_admin"]).
+    case "Access Control":
+      return <KeyRound {...iconProps} />;
+
+    // Admin-side "API Access" — per-API on/off + Test/Live credentials.
+    // Uses Plug to visually distinguish from super_admin's KeyRound-marked
+    // "Access Control" group (which is about issuing API keys), while
+    // still keeping the same connection/access theme.
+    case "API Access":
+      return <Plug {...iconProps} />;
 
     case "Approvals":
       return <BadgeCheck {...iconProps} />;

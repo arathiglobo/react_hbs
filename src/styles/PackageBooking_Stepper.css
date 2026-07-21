@@ -483,9 +483,16 @@ margin: 1.25rem 0 0;
     border: none;
     border-radius: 20px;
     box-shadow: 0 2px 20px rgba(0,0,0,0.06);
-     padding: 1.25rem;
+    padding: 1.25rem;
+}
+
+/* Sticky wrapper for the sidebar. The Total Price card and the Mode-of-payment
+   card share it so they scroll and pin together as one unit, just below the
+   60px sticky .topbar (+20px gap) — neither overlaps the other nor hides
+   behind the header. */
+.sidebar-sticky {
     position: sticky;
-    top: 20px;
+    top: 80px;
 }
 
 .price-sidebar-label {
@@ -500,9 +507,13 @@ margin: 1.25rem 0 0;
 .price-sidebar-amount {
     font-size: 2.2rem;
     font-weight: 800;
-    color: #0f172a;
     letter-spacing: -1px;
     line-height: 1;
+    /* Brand red→violet gradient text, matching the Confirm booking CTA. */
+    background: linear-gradient(135deg, #EC0B43 0%, #7c3aed 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
 }
 
 .price-sidebar-sub {

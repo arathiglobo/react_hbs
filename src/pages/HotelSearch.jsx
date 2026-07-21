@@ -15,6 +15,7 @@ import AgentSelect from "../components/AgentSelect";
 import AgentCreditBalance from "../components/AgentCreditBalance";
 import axiosInstance from "../components/AxiosInstance";
 import AdvertisementCarousel from "../components/AdvertisementCarousel";
+import TimeApplyPicker from "../components/TimeApplyPicker";
 import MapModal from "../components/map/MapModal";
 import { ENABLE_MAP_PREVIEW } from "../config/featureFlags";
 import { FaSearch, FaStar, FaInfoCircle } from "react-icons/fa";
@@ -24,16 +25,24 @@ import "../styles/HotelSearch.css";
 // ─────────────────────────────────────────────
 // Search Progress Bar
 // ─────────────────────────────────────────────
-function SearchProgressBar({ pollStatus, completedChannels }) {
-  const channels = [
-    "inhouse",
-    // "iwtx",
-    // "x3",
-    // "ratehawk",
-    // "darina",
-    // "atharva",
-    // "jumeirah",
-  ];
+// Default supplier list — used when the caller has no company restriction
+// or when the parent hasn't computed a narrower list yet. Kept out of
+// component body so its identity is stable across renders.
+const DEFAULT_PROGRESS_CHANNELS = [
+  "inhouse",
+  "iwtx",
+  "x3",
+  "ratehawk",
+  "darina",
+  "atharva",
+  "jumeirah",
+];
+
+function SearchProgressBar({ pollStatus, completedChannels, channels }) {
+  const effectiveChannels =
+    Array.isArray(channels) && channels.length > 0
+      ? channels
+      : DEFAULT_PROGRESS_CHANNELS;
   const [progress, setProgress] = useState(0);
   const [visible, setVisible] = useState(false);
 
@@ -42,7 +51,9 @@ function SearchProgressBar({ pollStatus, completedChannels }) {
       setVisible(true);
       const done = completedChannels.size;
       const target =
-        done === 0 ? 12 : Math.min(90, 12 + (done / channels.length) * 78);
+        done === 0
+          ? 12
+          : Math.min(90, 12 + (done / effectiveChannels.length) * 78);
       setProgress(target);
     } else if (pollStatus === "COMPLETED") {
       setProgress(100);
@@ -513,6 +524,17 @@ export default function HotelSearch({
   const [starRating, setStarRating] = useState(null);
   const [hotelType, setHotelType] = useState([]);
   const [channelType, setChannelType] = useState([]);
+  // Per-company supplier allow-list — populated once on mount from
+  // /api/hotel-search/my-allowed-suppliers. When `channelsUnrestricted`
+  // is true (no company assigned or no picks made yet) the sidebar
+  // channel filter keeps every option visible. Otherwise it narrows to
+  // the codes in `allowedChannels` so admins/agents only see the
+  // suppliers the super_admin has actually enabled for their company.
+  //
+  // Purely presentational — the server-side HotelApiCallerContext is
+  // still the authoritative gate on which suppliers are queried.
+  const [allowedChannels, setAllowedChannels] = useState(new Set());
+  const [channelsUnrestricted, setChannelsUnrestricted] = useState(true);
   // Available Deals multi-select filter (array of option values).
   // Empty array = no filter. Matching is OR across selected options.
   const [availableDeals, setAvailableDeals] = useState([]);
@@ -570,6 +592,37 @@ export default function HotelSearch({
   useEffect(() => {
     finalHotelSearchTermRef.current = finalHotelSearchTerm;
   }, [finalHotelSearchTerm]);
+
+  // Fetch the caller's per-company supplier allow-list once on mount so
+  // the Channel sidebar filter can show only the suppliers the caller is
+  // actually allowed to hit. Fail-open: any error keeps every channel
+  // visible (matches the server-side "empty allow-list = no restriction"
+  // rule) so a transient DB hiccup never accidentally narrows the UI.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await axiosInstance.get(
+          "/api/hotel-search/my-allowed-suppliers",
+        );
+        if (cancelled) return;
+        const unrestricted = res?.data?.unrestricted !== false;
+        const codes = Array.isArray(res?.data?.codes) ? res.data.codes : [];
+        setChannelsUnrestricted(unrestricted);
+        setAllowedChannels(
+          new Set(codes.map((c) => String(c || "").toLowerCase())),
+        );
+      } catch (_) {
+        if (!cancelled) {
+          setChannelsUnrestricted(true);
+          setAllowedChannels(new Set());
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   // Sequence guard for /filter-by-name — an older response can arrive after
   // a newer one (500 ms debounce, no XHR cancel) and stomp results for the
   // wrong term. Only the response whose seq matches the latest issued call
@@ -612,13 +665,26 @@ export default function HotelSearch({
 
   const channelTypeOptions = [
     { value: "inhouse", label: "Inhouse" },
-    // { value: "iwtx", label: "Iwtx" },
-    // { value: "x3", label: "x3" },
-    // { value: "atharva", label: "Atharva" },
-    // { value: "jumeirah", label: "Jumeirah" },
-    // { value: "ratehawk", label: "Ratehawk" },
-    // { value: "darina", label: "Darina" },
+     { value: "iwtx", label: "Iwtx" },
+     { value: "x3", label: "x3" },
+     { value: "atharva", label: "Atharva" },
+     { value: "jumeirah", label: "Jumeirah" },
+     { value: "ratehawk", label: "Ratehawk" },
+     { value: "darina", label: "Darina" },
   ];
+
+  // Narrows the Channel sidebar filter (and the SearchProgressBar pills)
+  // to the suppliers this caller's company has enabled. When the caller
+  // is unrestricted — no company assignment, or the allow-list is empty —
+  // every option stays visible, so no existing flow is affected.
+  const visibleChannelTypeOptions = channelsUnrestricted
+    ? channelTypeOptions
+    : channelTypeOptions.filter((o) => allowedChannels.has(o.value));
+  const visibleProgressChannels = channelsUnrestricted
+    ? undefined // let SearchProgressBar keep its own default
+    : channelTypeOptions
+        .filter((o) => allowedChannels.has(o.value))
+        .map((o) => o.value);
 
   // Available Deals filter options. Each option maps to a per-hotel
   // predicate evaluated against the feature-flag map and the search
@@ -967,8 +1033,19 @@ export default function HotelSearch({
     [totalPages],
   );
 
-  const startEntry = totalElements === 0 ? 0 : pageIndex * pageSize + 1;
-  const endEntry = Math.min((pageIndex + 1) * pageSize, totalElements);
+  // Counter reflects rows that are actually rendered on screen, not the
+  // raw server count. On the 24-hour route (and any flow where a
+  // client-side filter — 24hr eligibility, star rating, deals, etc. —
+  // trims the fetched page), filteredResults.length can be smaller than
+  // the backend's totalElements. Using filteredResults for the range and
+  // capping the "of X" at what's visible keeps the "Showing 1 to N of N"
+  // pill honest without touching pagination controls (which still use
+  // totalPages / totalElements from the server).
+  const shownCount = filteredResults.length;
+  const startEntry = shownCount === 0 ? 0 : pageIndex * pageSize + 1;
+  const endEntry = pageIndex * pageSize + shownCount;
+  const displayTotal =
+    shownCount < allResults.length ? endEntry : Math.max(totalElements, endEntry);
 
   const pageNumbers = useMemo(() => {
     const current = pageIndex + 1;
@@ -2164,18 +2241,20 @@ export default function HotelSearch({
                           <Form.Label className="fw-semibold text-dark">
                             Check-In Time (24-hour)
                           </Form.Label>
-                          <Form.Control
-                            style={{ height: "42px" }}
-                            className="form-control-modern"
-                            type="time"
+                          {/* Same OK/Cancel + AM-PM picker used on
+                              hotel-actions/{id}/occupancy-and-minimumlength —
+                              stepper + AM/PM toggle + read-only display. Value
+                              stays as an "HH:MM" 24-hour string so downstream
+                              usage (probe call, booking payload) is unchanged. */}
+                          <TimeApplyPicker
                             value={checkInTime24}
-                            onChange={(e) => {
-                              const v = e.target.value;
+                            onApply={(v) => {
                               setCheckInTime24(v);
                               // Auto-bump check-out to the same time → 24h later.
                               // User can override afterwards.
                               if (v) setCheckOutTime24(v);
                             }}
+                            placeholder="Select check-in time"
                           />
                         </Form.Group>
                       </Col>
@@ -2184,12 +2263,10 @@ export default function HotelSearch({
                           <Form.Label className="fw-semibold text-dark">
                             Check-Out Time
                           </Form.Label>
-                          <Form.Control
-                            style={{ height: "42px" }}
-                            className="form-control-modern"
-                            type="time"
+                          <TimeApplyPicker
                             value={checkOutTime24}
-                            onChange={(e) => setCheckOutTime24(e.target.value)}
+                            onApply={(v) => setCheckOutTime24(v)}
+                            placeholder="Select check-out time"
                           />
                         </Form.Group>
                       </Col>
@@ -2252,6 +2329,7 @@ export default function HotelSearch({
           <SearchProgressBar
             pollStatus={pollStatus}
             completedChannels={completedChannels}
+            channels={visibleProgressChannels}
           />
 
           {/* ── Loading skeleton ──
@@ -2457,7 +2535,7 @@ export default function HotelSearch({
                                   Channel
                                 </Form.Label>
                                 <div className="filter-checkbox-list">
-                                  {channelTypeOptions.map((item) => (
+                                  {visibleChannelTypeOptions.map((item) => (
                                     <Form.Check
                                       key={item.value}
                                       type="checkbox"
@@ -2595,7 +2673,7 @@ export default function HotelSearch({
                     {(hasSearchResult || allResults.length > 0) && (
                       <div className="d-flex justify-content-between align-items-center mb-3">
                         <small className="text-muted fw-semibold">
-                          Showing {startEntry} to {endEntry} of {totalElements}{" "}
+                          Showing {startEntry} to {endEntry} of {displayTotal}{" "}
                           entries
                           {pollStatus === "IN_PROGRESS" && (
                             <span className="ms-1 text-primary">

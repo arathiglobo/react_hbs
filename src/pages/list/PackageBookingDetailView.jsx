@@ -32,18 +32,76 @@ import {
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import {
   FaEye,
-  FaTrash,
   FaFileAlt,
   FaEdit,
   FaEnvelope,
   FaDownload,
   FaExclamationCircle,
   FaExclamationTriangle,
+  FaHistory,
+  FaPlusCircle,
+  FaCheckCircle,
+  FaTimesCircle,
+  FaSyncAlt,
+  FaCalendarAlt,
+  FaClock,
+  FaUserAlt,
+  FaMapMarkerAlt,
+  FaNetworkWired,
 } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
+
+// Reverse-geocode browser coordinates to a readable address for the Booking
+// History audit trail — used when the user reconfirms a held booking so the
+// Reconfirmed row's Location column can show a precise street-level address.
+// Tries OpenStreetMap Nominatim first (street-level), then BigDataCloud
+// (locality-level, keyless). Returns null when neither responds so the caller
+// keeps its IP-derived fallback. Mirrors PaxInformation.jsx's helper.
+async function reverseGeocode(lat, lon) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=16&addressdetails=1`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (res.ok) {
+      const a = (await res.json())?.address || {};
+      const parts = [
+        a.road,
+        a.neighbourhood || a.suburb,
+        a.village || a.town || a.city || a.municipality,
+        a.state,
+        a.postcode,
+        a.country,
+      ].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255); // DB column is VARCHAR(255)
+    }
+  } catch {
+    // fall through to BigDataCloud
+  }
+  try {
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`,
+    );
+    if (res.ok) {
+      const d = await res.json();
+      const parts = [
+        d.locality,
+        d.city,
+        d.principalSubdivision,
+        d.countryName,
+      ].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255);
+    }
+  } catch {
+    // give up — caller keeps the IP-based fallback
+  }
+  return null;
+}
 
 const BUTTON_STYLE = {
   color: "#fff",
@@ -55,6 +113,68 @@ const BUTTON_STYLE = {
   cursor: "pointer",
   letterSpacing: "0.4px",
   whiteSpace: "nowrap",
+};
+
+// Per-action button colours — mirror the Hotel booking detail view
+// (BookingDetailedView.jsx) so both detail screens share one palette.
+const BTN_PRIMARY = { ...BUTTON_STYLE, backgroundColor: "#2563eb" }; // Add New Item
+const BTN_DANGER = { ...BUTTON_STYLE, backgroundColor: "#dc2626" }; // Cancel
+const BTN_RECONFIRM = { ...BUTTON_STYLE, backgroundColor: "#16a34a" }; // Reconfirm
+const BTN_TEAL = { ...BUTTON_STYLE, backgroundColor: "#0d9488" }; // Voucher
+const BTN_INFO = { ...BUTTON_STYLE, backgroundColor: "#0891b2" }; // Invoice
+const BTN_SKY = { ...BUTTON_STYLE, backgroundColor: "#3ba2e8" }; // Add Agent Reference
+const BTN_INDIGO = { ...BUTTON_STYLE, backgroundColor: "#6366f1" }; // Confirmation No.
+const BTN_ORANGE = { ...BUTTON_STYLE, backgroundColor: "#f0922b" }; // Resend Mail
+const BTN_ACCENT = { ...BUTTON_STYLE, backgroundColor: "#7c3aed" }; // Booking Remark
+const BTN_NEUTRAL = { ...BUTTON_STYLE, backgroundColor: "#64748b" }; // Notes
+const BTN_HISTORY = { ...BUTTON_STYLE, backgroundColor: "#334155" }; // History
+
+// Sub-booking types offered by "ADD NEW ITEM". Mirrors the Hotel detail view
+// (BookingDetailedView.jsx): each entry launches its OWN existing create flow
+// with ?parentBookingCode set so the child is stamped "{parent}/{n}" on the
+// backend. The Package option is included so an operator can also amend with
+// another package (the previous behaviour on this screen).
+const ADD_NEW_ITEM_TYPES = [
+  { key: "HOTEL", label: "Hotel Booking", route: "/new-booking/hotel" },
+  { key: "HOTEL_24HR", label: "24 Hour Check-In", route: "/new-booking/hotel-24hr" },
+  { key: "LONG_STAY", label: "Long Stay Booking", route: "/new-booking/long-stay" },
+  { key: "DAY_STAY", label: "Day Stay Check-In", route: "/new-booking/day-stay" },
+  { key: "GOV_EMPLOYEE", label: "Government Employee", route: "/new-booking/gov-employee" },
+  { key: "STUDENT", label: "Student Booking", route: "/new-booking/student" },
+  { key: "SENIOR_CITIZEN", label: "Senior Citizen Booking", route: "/new-booking/senior-citizen" },
+  { key: "PACKAGE", label: "Package Booking", route: "/new-booking/package-search" },
+];
+
+// Colour + icon per Booking History action (keyed by the exact label pushed
+// onto `bookingHistory`). Unknown actions fall back to a neutral slate badge.
+const HISTORY_ACTION_META = {
+  "Booking Created": { bg: "#e6f4ea", fg: "#1e7e34", icon: FaPlusCircle },
+  "Booking Confirmed": { bg: "#e7f1ff", fg: "#1d4ed8", icon: FaCheckCircle },
+  "Booking Reconfirmed": { bg: "#e0f2f1", fg: "#0d9488", icon: FaSyncAlt },
+  "Booking Cancelled": { bg: "#fdecea", fg: "#c0392b", icon: FaTimesCircle },
+};
+const HISTORY_ACTION_FALLBACK = { bg: "#f1f5f9", fg: "#475569", icon: FaHistory };
+
+// Date / time helpers for the History modal. Accept "yyyy-MM-ddTHH:mm:ss" or
+// "yyyy-MM-dd HH:mm:ss"; return "-" when unparseable so the table stays tidy.
+const parseHistoryDate = (v) => {
+  if (!v) return null;
+  const d = new Date(String(v).replace(" ", "T"));
+  return isNaN(d.getTime()) ? null : d;
+};
+const formatHistoryDate = (v) => {
+  const d = parseHistoryDate(v);
+  if (!d) return "-";
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+const formatHistoryTime = (v) => {
+  const d = parseHistoryDate(v);
+  if (!d) return "-";
+  return d.toLocaleTimeString("en-GB", { hour12: false });
 };
 
 // Style tokens mirror BookingDetailedView.jsx (the Hotel booking
@@ -155,65 +275,55 @@ export default function PackageBookingDetailView() {
   const [confirmationNoError, setConfirmationNoError] = useState("");
   const [savingConfirmationNo, setSavingConfirmationNo] = useState(false);
 
+  // Resend Mail to Agent — clicking the button opens a preview modal that
+  // shows the voucher PDF the mail will attach and lets the admin edit the
+  // agent's email before the /resend-mail POST fires. Mirrors the hotel
+  // detail view (BookingDetailedView.jsx) so the flow is consistent across
+  // Confirmed, ReConfirmed, and Cancelled bookings.
   const [resendingMail, setResendingMail] = useState(false);
+  const [showResendMailModal, setShowResendMailModal] = useState(false);
+  const [resendMailPdfUrl, setResendMailPdfUrl] = useState("");
+  const [resendMailEmail, setResendMailEmail] = useState("");
+  const [resendMailEmailError, setResendMailEmailError] = useState("");
+  const [resendMailPreparing, setResendMailPreparing] = useState(false);
 
   const [showRemarkModal, setShowRemarkModal] = useState(false);
   const [remarkInput, setRemarkInput] = useState("");
   const [savingRemark, setSavingRemark] = useState(false);
 
   const [showNotesModal, setShowNotesModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [noteInput, setNoteInput] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [bookingNotes, setBookingNotes] = useState([]);
   const [notesLoading, setNotesLoading] = useState(true);
 
-  // ── Client-side persistence for Agent Reference / Confirmation No.
-  //    / Remarks / Notes. The Hotel detail page hits dedicated backend
-  //    endpoints (e.g. /api/hotel-booking/{id}/remark) that don't exist
-  //    yet for package bookings. Until they do, we persist these values
-  //    in localStorage keyed by bookingId so the buttons FEEL identical
-  //    to the Hotel flow — save, success toast, value sticks across
-  //    reloads. Backend calls below remain best-effort: if the server
-  //    accepts them, great; if not, we still keep the local copy.
-  const EXTRAS_KEY = bookingId ? `pkg-booking-extras:${bookingId}` : null;
-  const [extras, setExtras] = useState({
-    agentReference: "",
-    confirmationNumber: "",
-    remarks: "",
-    notes: [],
-  });
-
-  useEffect(() => {
-    if (!EXTRAS_KEY) return;
-    try {
-      const raw = localStorage.getItem(EXTRAS_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setExtras({
-          agentReference: parsed.agentReference || "",
-          confirmationNumber: parsed.confirmationNumber || "",
-          remarks: parsed.remarks || "",
-          notes: Array.isArray(parsed.notes) ? parsed.notes : [],
-        });
-      }
-    } catch {
-      /* ignore — localStorage may be unavailable or corrupt */
-    }
-  }, [EXTRAS_KEY]);
-
-  const persistExtras = (next) => {
-    setExtras(next);
-    if (!EXTRAS_KEY) return;
-    try {
-      localStorage.setItem(EXTRAS_KEY, JSON.stringify(next));
-    } catch {
-      /* ignore */
-    }
-  };
+  // Agent Reference / Confirmation No. / Booking Remark are read directly
+  // from bookingDetails (backed by the package_booking row). Notes are
+  // fetched separately into bookingNotes below. Saves POST to dedicated
+  // backend endpoints and then re-fetch, so values persist across sessions,
+  // devices, and backend restarts.
 
   // Cancellation state
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [showReconfirmModal, setShowReconfirmModal] = useState(false);
+  const [isReconfirming, setIsReconfirming] = useState(false);
+  // Client location captured when the user opens the Reconfirm / Cancel
+  // modal, sent with the corresponding request so the History modal's
+  // "Booking Reconfirmed" / "Booking Cancelled" rows can show it. IP
+  // address is stamped server-side from the HTTP request.
+  const [reconfirmLocation, setReconfirmLocation] = useState(null);
+  const [cancelLocation, setCancelLocation] = useState(null);
+
+  // ── Add New Item (amendment) picker — same flow as hotel detail view.
+  // Opens a modal listing every sub-booking type; the chosen type's create
+  // flow is launched with ?parentBookingCode so the backend chains children
+  // under this booking's code.
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [selectedAddItemType, setSelectedAddItemType] = useState(
+    ADD_NEW_ITEM_TYPES[0].key,
+  );
 
   const [showVoucherModal, setShowVoucherModal] = useState(false);
   const [voucherEmail, setVoucherEmail] = useState("");
@@ -256,35 +366,35 @@ export default function PackageBookingDetailView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingId]);
 
-  // Try to fetch server-side notes the same way BookingDetailedView
-  // does. If the endpoint isn't implemented (404/error), we silently
-  // fall through to the locally-persisted notes carried by `extras`.
-  useEffect(() => {
-    let alive = true;
-    if (!bookingId) return undefined;
-    setNotesLoading(true);
-    axiosInstance
-      .get(`/api/v1/package-booking/booking/${bookingId}/notes`)
-      .then((res) => {
-        if (!alive) return;
-        const list = Array.isArray(res.data?.notes)
-          ? res.data.notes
-          : Array.isArray(res.data)
-            ? res.data
-            : [];
-        setBookingNotes(list);
-      })
-      .catch(() => alive && setBookingNotes([]))
-      .finally(() => alive && setNotesLoading(false));
-    return () => {
-      alive = false;
-    };
-  }, [bookingId]);
+  // Backend is now the single source of truth for notes.
+  const mergedNotes = bookingNotes;
 
-  // Merge backend-returned notes with the locally-persisted ones so the
-  // Notes section and the modal both reflect everything the user has
-  // added on this device.
-  const mergedNotes = [...extras.notes, ...bookingNotes];
+  const fetchBookingNotes = async () => {
+    if (!bookingId) return;
+    try {
+      setNotesLoading(true);
+      const res = await axiosInstance.get(
+        `/api/v1/package-booking/booking/${bookingId}/notes`,
+      );
+      const list = Array.isArray(res.data?.notes)
+        ? res.data.notes
+        : Array.isArray(res.data)
+          ? res.data
+          : [];
+      setBookingNotes(list);
+    } catch {
+      setBookingNotes([]);
+    } finally {
+      setNotesLoading(false);
+    }
+  };
+
+  // Fetch server-side notes on mount / bookingId change. Individual saves
+  // call fetchBookingNotes() directly to refresh after appending.
+  useEffect(() => {
+    fetchBookingNotes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingId]);
 
   // Once we have the booking row, lazy-fetch the underlying package's
   // programme so the page can render the itinerary, inclusions,
@@ -310,39 +420,51 @@ export default function PackageBookingDetailView() {
   }, [bookingDetails?.packageId, rowStub?.packageId]);
 
 
-  // ── ADD NEW ITEM handler ───────────────────────────────────────────
-  // Mirrors the Hotel "ADD NEW ITEM" pattern in BookingDetailedView.jsx:
-  // navigate to the PACKAGE SEARCH page (not directly to a specific
-  // package's booking flow) with a parentBookingCode query param. The
-  // user picks any package; PackageSearch forwards parentBookingCode into
-  // the booking page; on submit the backend stamps a child code
-  // "{parent}/{n}" — e.g. GPKG-4 yields GPKG-4/1, GPKG-4/2, etc.
-  //
-  // Previously this jumped straight to /new-booking/package-booking/{id}
-  // which locked the user into re-booking the same package; the hotel
-  // flow opens a search so any item can be added.
-  const handleEditClick = () => {
+  // ── ADD NEW ITEM handlers ──────────────────────────────────────────
+  // Mirrors the Hotel "ADD NEW ITEM" pattern in BookingDetailedView.jsx: the
+  // button opens a picker modal listing every sub-booking type; the chosen
+  // type's own create flow is launched with ?parentBookingCode set. Walking
+  // up to the root parent means amendments of amendments still chain to the
+  // original code (GPKG-4 → GPKG-4/1 → GPKG-4/2, not GPKG-4/1/1).
+  const openAddItemModal = () => {
     const source = bookingDetails || rowStub || {};
-    // Walk up to the original parent so amendments of amendments still
-    // chain to the root code (e.g. amending GPKG-4/1 → GPKG-4/2, not
-    // GPKG-4/1/1). Mirrors the Hotel pattern.
     const parent = source.parentBookingCode || source.confirmationCode;
     if (!parent) {
       toast.error("Cannot add new item — booking code missing");
       return;
     }
+    setSelectedAddItemType(ADD_NEW_ITEM_TYPES[0].key);
+    setShowAddItemModal(true);
+  };
+
+  const submitAddItem = () => {
+    const chosen = ADD_NEW_ITEM_TYPES.find(
+      (t) => t.key === selectedAddItemType,
+    );
+    if (!chosen) return;
+    const source = bookingDetails || rowStub || {};
+    const parent = source.parentBookingCode || source.confirmationCode;
+    if (!parent) {
+      toast.error("Cannot add new item — booking code missing");
+      return;
+    }
+    setShowAddItemModal(false);
     navigate(
-      `/new-booking/package-search?parentBookingCode=${encodeURIComponent(parent)}`,
+      `${chosen.route}?parentBookingCode=${encodeURIComponent(parent)}`,
     );
   };
 
   // ── Cancel handlers ─────────────────────────────────────────────────
+  // Sends the resolved client location alongside the cancel request so the
+  // backend can stamp cancelled_booking_location / cancelled_ip_address —
+  // the IP is resolved server-side from the HTTP request itself.
   const confirmCancelBooking = async () => {
     if (!bookingId) return;
     try {
       setIsCancelling(true);
       const response = await axiosInstance.put(
-        `/api/v1/package-booking/cancel/${bookingId}`
+        `/api/v1/package-booking/cancel/${bookingId}`,
+        { bookingLocation: cancelLocation },
       );
       if (response.data && response.data.status === "success") {
         toast.success(
@@ -364,13 +486,99 @@ export default function PackageBookingDetailView() {
     }
   };
 
+  // Kick off client-location resolution and feed the result into the given
+  // setter. IP-derived coarse fallback fires first so that even if the user
+  // denies geolocation we have SOMETHING to show; browser geolocation, when
+  // granted, overrides with a precise reverse-geocoded address. Shared
+  // between the Reconfirm and Cancel modal openers so both capture the same
+  // audit snapshot with identical fallback behaviour.
+  const resolveClientLocation = (setter) => {
+    fetch("https://ipapi.co/json/")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((info) => {
+        if (!info) return;
+        const line = [info.city, info.region, info.country_name]
+          .filter(Boolean)
+          .join(", ");
+        if (!line) return;
+        setter((prev) => prev || line);
+      })
+      .catch(() => {});
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async ({ coords }) => {
+          const precise = await reverseGeocode(coords.latitude, coords.longitude);
+          if (precise) setter(precise);
+        },
+        () => {}, // denied / unavailable — keep the IP-derived fallback
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
+      );
+    }
+  };
+
+  // Open the Reconfirm modal AND kick off client-location resolution so the
+  // reconfirm submit has an address ready to send. Deferring resolution
+  // until the user opens the modal avoids pinging geolocation on every
+  // detail-page view — the prompt only appears when the user actually
+  // intends to reconfirm.
+  const openReconfirmModal = () => {
+    setReconfirmLocation(null);
+    setShowReconfirmModal(true);
+    resolveClientLocation(setReconfirmLocation);
+  };
+
+  // Open the Cancel modal AND kick off client-location resolution so the
+  // cancel submit has an address ready to send. Same pattern as the
+  // reconfirm opener above — geolocation prompt only appears when the user
+  // actually intends to cancel, and the result feeds the History modal's
+  // "Booking Cancelled" row Location column.
+  const openCancelModal = () => {
+    setCancelLocation(null);
+    setShowCancelModal(true);
+    resolveClientLocation(setCancelLocation);
+  };
+
+  // Reconfirm a held (Confirmed) booking → ReConfirmed. Mirrors the hotel
+  // detail view's RECONFIRM: the backend flips the status AND settles the
+  // agent's deferred credit (blocking if credit is insufficient). On success
+  // we re-fetch so the buttons switch to the final Voucher / Invoice, and so
+  // the History modal picks up the freshly-captured reconfirm location + IP.
+  const confirmReconfirmBooking = async () => {
+    if (!bookingId) return;
+    try {
+      setIsReconfirming(true);
+      const response = await axiosInstance.put(
+        `/api/v1/package-booking/reconfirm/${bookingId}`,
+        { bookingLocation: reconfirmLocation },
+      );
+      if (response.data && response.data.status === "success") {
+        toast.success(
+          response.data.message || "Booking reconfirmed successfully",
+        );
+        setShowReconfirmModal(false);
+        await fetchDetails();
+      } else {
+        toast.error(response.data?.message || "Failed to reconfirm booking");
+      }
+    } catch (error) {
+      console.error("Error reconfirming booking:", error);
+      toast.error(
+        error.response?.data?.message ||
+          "Failed to reconfirm booking. Please try again.",
+      );
+    } finally {
+      setIsReconfirming(false);
+    }
+  };
+
   const loadVoucherPdf = async () => {
     if (!bookingId) return;
     setIsLoadingVoucherPdf(true);
     try {
       const response = await axiosInstance.get(
         `/api/package-bookings/${bookingId}/pdf`,
-        { params: { type: "VOUCHER" } }
+        { params: { type: "VOUCHER", proforma: !showsFinalDocs } }
       );
       if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
         setVoucherPdfUrl(response.data.pdfUrl);
@@ -414,7 +622,7 @@ export default function PackageBookingDetailView() {
       if (!url) {
         const response = await axiosInstance.get(
           `/api/package-bookings/${bookingId}/pdf`,
-          { params: { type: "VOUCHER" } }
+          { params: { type: "VOUCHER", proforma: !showsFinalDocs } }
         );
         if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
           url = response.data.pdfUrl;
@@ -442,7 +650,7 @@ export default function PackageBookingDetailView() {
     try {
       const response = await axiosInstance.get(
         `/api/package-bookings/${bookingId}/pdf`,
-        { params: { type: "INVOICE" } }
+        { params: { type: "INVOICE", proforma: !showsFinalDocs } }
       );
       if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
         setInvoicePdfUrl(response.data.pdfUrl);
@@ -478,7 +686,7 @@ export default function PackageBookingDetailView() {
       if (!url) {
         const response = await axiosInstance.get(
           `/api/package-bookings/${bookingId}/pdf`,
-          { params: { type: "INVOICE" } }
+          { params: { type: "INVOICE", proforma: !showsFinalDocs } }
         );
         if (response.data?.status === "SUCCESS" && response.data?.pdfUrl) {
           url = response.data.pdfUrl;
@@ -538,22 +746,9 @@ export default function PackageBookingDetailView() {
   //    follow the existing /api/v1/package-booking/booking/{id}/...
   //    convention used by the rest of this page.
 
-  // Best-effort backend ping. The package-booking variants of these
-  // endpoints don't exist yet, so a 404/405/network error is expected;
-  // we swallow it. The localStorage-backed `extras` state is the real
-  // source of truth — backend persistence kicks in automatically the
-  // day those endpoints ship, with no further wiring needed.
-  const bestEffortPost = async (url, body) => {
-    try {
-      await axiosInstance.post(url, body);
-    } catch {
-      /* ignore — backend may not implement this endpoint yet */
-    }
-  };
-
   // Agent Reference
   const openAgentRefModal = () => {
-    setAgentRefInput(extras.agentReference || "");
+    setAgentRefInput(bookingDetails?.agentReference || "");
     setAgentRefError("");
     setShowAgentRefModal(true);
   };
@@ -565,20 +760,31 @@ export default function PackageBookingDetailView() {
       return;
     }
     setAgentRefError("");
-    setSavingAgentRef(true);
-    persistExtras({ ...extras, agentReference: value });
-    await bestEffortPost(
-      `/api/v1/package-booking/booking/${bookingId}/agent-reference`,
-      { agentReference: value },
-    );
-    setSavingAgentRef(false);
-    setShowAgentRefModal(false);
-    toast.success("Agent Reference saved successfully");
+    try {
+      setSavingAgentRef(true);
+      const res = await axiosInstance.post(
+        `/api/v1/package-booking/booking/${bookingId}/agent-reference`,
+        { agentReference: value },
+      );
+      if (res.data?.success !== false) {
+        setShowAgentRefModal(false);
+        toast.success(res.data?.message || "Agent Reference saved successfully");
+        await fetchDetails();
+      } else {
+        toast.error(res.data?.message || "Failed to save Agent Reference");
+      }
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message || "Failed to save Agent Reference",
+      );
+    } finally {
+      setSavingAgentRef(false);
+    }
   };
 
   // Confirmation Number
   const openConfirmationNoModal = () => {
-    setConfirmationNoInput(extras.confirmationNumber || "");
+    setConfirmationNoInput(bookingDetails?.confirmationNumber || "");
     setConfirmationNoError("");
     setShowConfirmationNoModal(true);
   };
@@ -590,34 +796,114 @@ export default function PackageBookingDetailView() {
       return;
     }
     setConfirmationNoError("");
-    setSavingConfirmationNo(true);
-    persistExtras({ ...extras, confirmationNumber: value });
-    await bestEffortPost(
-      `/api/v1/package-booking/booking/${bookingId}/confirmation-number`,
-      { confirmationNumber: value },
-    );
-    setSavingConfirmationNo(false);
-    setShowConfirmationNoModal(false);
-    toast.success("Confirmation Number saved successfully");
+    try {
+      setSavingConfirmationNo(true);
+      const res = await axiosInstance.post(
+        `/api/v1/package-booking/booking/${bookingId}/confirmation-number`,
+        { confirmationNumber: value },
+      );
+      if (res.data?.success !== false) {
+        setShowConfirmationNoModal(false);
+        toast.success(
+          res.data?.message || "Confirmation Number saved successfully",
+        );
+        await fetchDetails();
+      } else {
+        toast.error(res.data?.message || "Failed to save Confirmation Number");
+      }
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message || "Failed to save Confirmation Number",
+      );
+    } finally {
+      setSavingConfirmationNo(false);
+    }
   };
 
-  // Resend mail to agent — best-effort. Surfaces a generic success
-  // toast because the user just wants confirmation that the action
-  // was triggered; the backend (when wired up) controls the actual
-  // delivery.
-  const resendMailToAgent = async () => {
-    setResendingMail(true);
-    await bestEffortPost(
-      `/api/v1/package-booking/booking/${bookingId}/resend-mail`,
-      {},
-    );
-    setResendingMail(false);
-    toast.success("Mail resent to agent successfully!");
+  // Open the RESEND MAIL preview modal. Two parallel calls hydrate the
+  // modal so the admin sees exactly what's about to go out:
+  //   1) /api/package-bookings/{id}/pdf?type=VOUCHER — the same PDF the
+  //      mail will attach, rendered inside an <iframe>. The proforma flag
+  //      mirrors the Voucher / Proforma Voucher distinction shown
+  //      elsewhere on this page (final voucher only once RECONFIRMED).
+  //   2) /api/agent/{agentId} — pulls the agent's personal email so the
+  //      recipient field starts pre-filled and editable.
+  // Errors on either lookup surface as an inline modal warning but do
+  // not block the admin from typing an address manually.
+  const openResendMailModal = async () => {
+    setResendMailPdfUrl("");
+    setResendMailEmail("");
+    setResendMailEmailError("");
+    setShowResendMailModal(true);
+    setResendMailPreparing(true);
+    try {
+      const agentId = bookingDetails?.agentId
+        ? Number(String(bookingDetails.agentId).trim())
+        : null;
+      const [docRes, agentRes] = await Promise.all([
+        axiosInstance
+          .get(`/api/package-bookings/${bookingId}/pdf`, {
+            params: { type: "VOUCHER", proforma: !showsFinalDocs },
+          })
+          .catch(() => null),
+        agentId
+          ? axiosInstance.get(`/api/agent/${agentId}`).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+      if (docRes?.data?.status === "SUCCESS" && docRes.data.pdfUrl) {
+        setResendMailPdfUrl(docRes.data.pdfUrl);
+      }
+      const a = agentRes?.data || {};
+      const email =
+        a.personalEmail || a.financeManagerEmail || a.gmEmail || "";
+      setResendMailEmail(email);
+    } finally {
+      setResendMailPreparing(false);
+    }
+  };
+
+  // Fire the actual /resend-mail POST using whatever address the admin
+  // left in the modal's email field. Backend re-validates and falls back
+  // to the agent's on-file address if the field is blank; here we keep
+  // it strict so the preview matches what actually gets sent.
+  const submitResendMail = async () => {
+    const email = (resendMailEmail || "").trim();
+    if (!email) {
+      setResendMailEmailError("Recipient email is required");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setResendMailEmailError("Enter a valid email address");
+      return;
+    }
+    setResendMailEmailError("");
+    try {
+      setResendingMail(true);
+      const res = await axiosInstance.post(
+        `/api/v1/package-booking/booking/${bookingId}/resend-mail`,
+        null,
+        { params: { email } },
+      );
+      if (res.data?.success === false) {
+        toast.error(res.data?.message || "Failed to resend mail to agent");
+      } else {
+        toast.success(
+          res.data?.message || "Mail resent to agent successfully!",
+        );
+        setShowResendMailModal(false);
+      }
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message || "Failed to resend mail to agent",
+      );
+    } finally {
+      setResendingMail(false);
+    }
   };
 
   // Booking Remark
   const openRemarkModal = () => {
-    setRemarkInput(extras.remarks || bookingDetails?.remarks || "");
+    setRemarkInput(bookingDetails?.remarks || "");
     setShowRemarkModal(true);
   };
 
@@ -627,19 +913,27 @@ export default function PackageBookingDetailView() {
       toast.error("Remark cannot be empty");
       return;
     }
-    setSavingRemark(true);
-    persistExtras({ ...extras, remarks: text });
-    await bestEffortPost(
-      `/api/v1/package-booking/booking/${bookingId}/remark`,
-      { remarks: text },
-    );
-    setSavingRemark(false);
-    setShowRemarkModal(false);
-    toast.success("Remark saved successfully");
+    try {
+      setSavingRemark(true);
+      const res = await axiosInstance.post(
+        `/api/v1/package-booking/booking/${bookingId}/remark`,
+        { remarks: text },
+      );
+      if (res.data?.success !== false) {
+        setShowRemarkModal(false);
+        toast.success(res.data?.message || "Remark saved successfully");
+        await fetchDetails();
+      } else {
+        toast.error(res.data?.message || "Failed to save remark");
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to save remark");
+    } finally {
+      setSavingRemark(false);
+    }
   };
 
-  // Notes — appended client-side. createdAt stays a stable string
-  // we can render later (no Date.now needed in this codebase).
+  // Notes — persisted server-side, listed newest-first via GET /notes.
   const openNotesModal = () => {
     setNoteInput("");
     setShowNotesModal(true);
@@ -651,27 +945,121 @@ export default function PackageBookingDetailView() {
       toast.error("Note cannot be empty");
       return;
     }
-    setSavingNote(true);
-    const newNote = {
-      noteId: `n-${extras.notes.length + 1}-${text.slice(0, 6)}`,
-      noteText: text,
-      createdBy: localStorage.getItem("username") || "You",
-      createdAt: new Date().toISOString().replace("T", " ").slice(0, 19),
-    };
-    const nextNotes = [newNote, ...extras.notes];
-    persistExtras({ ...extras, notes: nextNotes });
-    await bestEffortPost(
-      `/api/v1/package-booking/booking/${bookingId}/notes`,
-      { noteText: text },
-    );
-    setSavingNote(false);
-    setNoteInput("");
-    toast.success("Note added successfully");
+    try {
+      setSavingNote(true);
+      const createdBy =
+        localStorage.getItem("UserName") ||
+        localStorage.getItem("username") ||
+        sessionStorage.getItem("UserName") ||
+        "unknown";
+      const res = await axiosInstance.post(
+        `/api/v1/package-booking/booking/${bookingId}/notes`,
+        { noteText: text, createdBy },
+      );
+      if (res.data?.success !== false) {
+        toast.success(res.data?.message || "Note added successfully");
+        setNoteInput("");
+        await fetchBookingNotes();
+      } else {
+        toast.error(res.data?.message || "Failed to save note");
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to save note");
+    } finally {
+      setSavingNote(false);
+    }
   };
 
-  // The Edit / Voucher / Cancel actions are hidden when the booking is
-  // already cancelled. Mirrors the row icon visibility on the list.
-  const isCancellable = listStatus !== "cancelled";
+  // Live-only actions (Add New Item / Cancel / Reconfirm) are hidden once
+  // the booking is cancelled. listStatus alone isn't enough — it's read
+  // from location.state and is missing when the page is opened by direct
+  // URL, so we also consult the fetched bookingDetails.isCancelled flag.
+  // A booking is treated as live only when NEITHER source reports it
+  // cancelled.
+  const isCancellable =
+    listStatus !== "cancelled" && bookingDetails?.isCancelled !== true;
+
+  // Booking lifecycle events for the History modal — built from the detail
+  // already loaded (no extra API call). Mirrors the Hotel booking detail
+  // view: only events with a recorded timestamp are listed, sorted
+  // chronologically, with per-action "Performed By" plus (for Created /
+  // Reconfirmed) the capture location / IP.
+  const bookingHistory = (() => {
+    if (!bookingDetails) return [];
+    const events = [];
+    if (bookingDetails.bookingDate) {
+      events.push({
+        action: "Booking Created",
+        at: bookingDetails.bookingDate,
+        by: bookingDetails.createdBy || "-",
+        location: bookingDetails.bookingLocation,
+        ip: bookingDetails.ipAddress,
+      });
+    }
+    if (bookingDetails.confirmedDate) {
+      events.push({
+        action: "Booking Confirmed",
+        at: bookingDetails.confirmedDate,
+        by: bookingDetails.confirmedBy || "-",
+      });
+    }
+    // Packages don't record a separate reconfirmation timestamp (there's no
+    // deadline flow like the hotel side has), but a "Book & Voucher" choice
+    // maps to RECONFIRMED at create time. Surface it as its own history row
+    // using the same audit trail so users see the lifecycle transition. The
+    // reconfirm location / IP mirror the Created row's fields when the
+    // RECONFIRM button was clicked; older bookings without those fields fall
+    // back to whatever create-time location / IP was captured, so the row is
+    // never empty when data exists.
+    if (
+      String(bookingDetails.bookingStatus || "").trim().toUpperCase() ===
+        "RECONFIRMED" &&
+      bookingDetails.bookingDate
+    ) {
+      events.push({
+        action: "Booking Reconfirmed",
+        at: bookingDetails.reconfirmedDate || bookingDetails.bookingDate,
+        by:
+          bookingDetails.reconfirmedBy ||
+          bookingDetails.createdBy ||
+          "-",
+        location:
+          bookingDetails.reconfirmedBookingLocation ||
+          bookingDetails.bookingLocation,
+        ip:
+          bookingDetails.reconfirmedIpAddress ||
+          bookingDetails.ipAddress,
+      });
+    } else if (bookingDetails.reconfirmedDate) {
+      events.push({
+        action: "Booking Reconfirmed",
+        at: bookingDetails.reconfirmedDate,
+        by: bookingDetails.reconfirmedBy || "-",
+        location:
+          bookingDetails.reconfirmedBookingLocation ||
+          bookingDetails.bookingLocation,
+        ip:
+          bookingDetails.reconfirmedIpAddress ||
+          bookingDetails.ipAddress,
+      });
+    }
+    const cancelled =
+      bookingDetails.isCancelled === true || listStatus === "cancelled";
+    if (cancelled && bookingDetails.cancelledDate) {
+      events.push({
+        action: "Booking Cancelled",
+        at: bookingDetails.cancelledDate,
+        by: bookingDetails.cancelledBy || "-",
+        location: bookingDetails.cancelledBookingLocation,
+        ip: bookingDetails.cancelledIpAddress,
+      });
+    }
+    return events.sort((a, b) => {
+      const da = parseHistoryDate(a.at)?.getTime() ?? 0;
+      const db = parseHistoryDate(b.at)?.getTime() ?? 0;
+      return da - db;
+    });
+  })();
 
   // ── Derived enrichment from packageView ──
   const itineraries = Array.isArray(packageView?.itineraries)
@@ -745,8 +1133,43 @@ export default function PackageBookingDetailView() {
   // Plain status label — Confirmed / Cancelled — colored inline only
   // (matches the Hotel detail page's StatusBadge approach of using
   // text color to convey state, no pill or background).
-  const statusLabel = listStatus === "cancelled" ? "Cancelled" : "Confirmed";
-  const statusColor = listStatus === "cancelled" ? "#dc2626" : "#16a34a";
+  // Mirrors the hotel booking flow: Cancelled → red, ReConfirmed → blue,
+  // Confirmed → green. Cancellation takes precedence over the persisted
+  // bookingStatus so a cancelled-then-uncancelled row still reads correctly.
+  const derivedStatus = (() => {
+    if (listStatus === "cancelled" || bookingDetails?.isCancelled === true) {
+      return "Cancelled";
+    }
+    const raw = String(bookingDetails?.bookingStatus || "").trim().toUpperCase();
+    if (raw === "RECONFIRMED") return "ReConfirmed";
+    if (raw === "CONFIRMED") return "Confirmed";
+    if (raw === "CANCELLED") return "Cancelled";
+    // Legacy fallback — reconstruct from the booking-confirmation choice.
+    if (bookingDetails?.bookingConfirmation === "Book Now & Voucher later") {
+      return "Confirmed";
+    }
+    if (bookingDetails?.bookingConfirmation === "Book & Voucher") {
+      return "ReConfirmed";
+    }
+    return "Confirmed";
+  })();
+  const statusLabel = derivedStatus;
+  const statusColor =
+    derivedStatus === "Cancelled"
+      ? "#dc2626"
+      : derivedStatus === "ReConfirmed"
+        ? "#1d4ed8"
+        : "#16a34a";
+
+  // Voucher / Invoice variant. The raw bookingStatus survives cancellation
+  // (only isCancelled flips), so a cancelled-from-Confirmed booking still
+  // reports "CONFIRMED" here — same rule the hotel detail view uses via
+  // cancelledFromStatus. Only a booking that was actually ReConfirmed (live
+  // or before cancel) gets the final Voucher / Invoice; everything else
+  // stays on the Proforma equivalents.
+  const showsFinalDocs =
+    String(bookingDetails?.bookingStatus || "").trim().toUpperCase() ===
+    "RECONFIRMED";
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -876,7 +1299,6 @@ export default function PackageBookingDetailView() {
                         <InfoRow
                           label="Agent Reference"
                           value={
-                            extras.agentReference ||
                             bookingDetails.agentReference ||
                             bookingDetails.agentLpo
                           }
@@ -884,7 +1306,6 @@ export default function PackageBookingDetailView() {
                         <InfoRow
                           label="Confirmation No."
                           value={
-                            extras.confirmationNumber ||
                             bookingDetails.confirmationNumber ||
                             bookingDetails.confirmationNo
                           }
@@ -1205,9 +1626,9 @@ export default function PackageBookingDetailView() {
                       color: "#222",
                     }}
                   >
-                    {extras.remarks || bookingDetails.remarks ? (
+                    {bookingDetails.remarks ? (
                       <div style={{ whiteSpace: "pre-line" }}>
-                        {extras.remarks || bookingDetails.remarks}
+                        {bookingDetails.remarks}
                       </div>
                     ) : (
                       <span style={{ color: "#888", fontStyle: "italic" }}>
@@ -1397,108 +1818,466 @@ export default function PackageBookingDetailView() {
                     </div>
                   )}
 
-                {/* Bottom action buttons (left-aligned) — mirrors the
-                    Edit / Voucher / Cancel row icons. Same status gate
-                    (hidden when the booking is in the "cancelled"
-                    bucket) and same handlers as the original list. */}
+                {/* Bottom action buttons (left-aligned).
+                    Visibility rules mirror the Hotel detail view
+                    (BookingDetailedView.jsx):
+                      • Live booking (not cancelled) → full toolbar
+                        (Add New Item, Cancel, Reconfirm, docs, admin
+                        actions, History).
+                      • Cancelled booking → only the docs + admin follow-up
+                        buttons remain (Voucher, Invoice, Agent Reference,
+                        Confirmation No., Resend Mail, Remark, Notes,
+                        History). Add New Item / Cancel / Reconfirm are
+                        hidden because they don't apply once cancelled.
+                    Proforma vs Final labels come from showsFinalDocs so a
+                    booking cancelled while still "Confirmed" keeps the
+                    Proforma labels the operator saw pre-cancel. */}
                 <div
                   className="d-flex gap-2 justify-content-start flex-wrap"
                   style={{ marginTop: "16px", marginBottom: "20px" }}
                 >
+                  {isCancellable &&
+                    (derivedStatus === "Confirmed" ||
+                      derivedStatus === "ReConfirmed") && (
+                      <button
+                        style={BTN_PRIMARY}
+                        onClick={openAddItemModal}
+                        title="Add a new sub-booking under this booking"
+                      >
+                        ADD NEW ITEM
+                      </button>
+                    )}
                   {isCancellable && (
                     <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                      onClick={handleEditClick}
-                      title="Add a new sub-booking under this booking"
-                    >
-                      ADD NEW ITEM
-                    </button>
-                  )}
-                  <button
-                    style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                    onClick={() => window.print()}
-                  >
-                    PRINT PREVIEW
-                  </button>
-                  {isCancellable && (
-                    <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                      onClick={openVoucher}
-                      title="Voucher"
-                    >
-                      <FaFileAlt style={{ marginRight: "6px" }} />
-                      VOUCHER
-                    </button>
-                  )}
-                  {isCancellable && (
-                    <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                      onClick={openInvoice}
-                      title="Invoice"
-                    >
-                      <FaFileAlt style={{ marginRight: "6px" }} />
-                      INVOICE
-                    </button>
-                  )}
-                  {isCancellable && (
-                    <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                      onClick={() => setShowCancelModal(true)}
+                      style={BTN_DANGER}
+                      onClick={openCancelModal}
                       title="Cancel booking"
                     >
-                      <FaTrash style={{ marginRight: "6px" }} />
                       CANCEL
                     </button>
                   )}
-                  {isCancellable && (
+                  {/* RECONFIRM — shown only for a held (Confirmed) booking.
+                      Flips it to ReConfirmed and settles the agent's deferred
+                      credit. A ReConfirmed booking shows no reconfirm button. */}
+                  {isCancellable && derivedStatus === "Confirmed" && (
                     <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                      onClick={openAgentRefModal}
+                      style={BTN_RECONFIRM}
+                      onClick={openReconfirmModal}
+                      title="Reconfirm this held booking"
                     >
-                      ADD AGENT REFERENCE
+                      RECONFIRM
                     </button>
                   )}
-                  {isCancellable && (
+                  {/* Hide the final "VOUCHER" button once the booking is
+                      cancelled — no live voucher is offered post-cancellation.
+                      A cancelled-from-Confirmed booking still surfaces the
+                      "PROFORMA VOUCHER" variant. */}
+                  {!(derivedStatus === "Cancelled" && showsFinalDocs) && (
                     <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                      onClick={openConfirmationNoModal}
+                      style={BTN_TEAL}
+                      onClick={openVoucher}
+                      title="Voucher"
                     >
-                      CONFIRMATION NO.
+                      {showsFinalDocs ? "VOUCHER" : "PROFORMA VOUCHER"}
                     </button>
                   )}
-                  {isCancellable && (
-                    <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                      onClick={resendMailToAgent}
-                      disabled={resendingMail}
-                    >
-                      {resendingMail
-                        ? "SENDING..."
+                  <button style={BTN_INFO} onClick={openInvoice} title="Invoice">
+                    {showsFinalDocs ? "INVOICE" : "PROFORMA INVOICE"}
+                  </button>
+                  <button style={BTN_SKY} onClick={openAgentRefModal}>
+                    ADD AGENT REFERENCE
+                  </button>
+                  <button style={BTN_INDIGO} onClick={openConfirmationNoModal}>
+                    CONFIRMATION NO.
+                  </button>
+                  <button
+                    style={BTN_ORANGE}
+                    onClick={openResendMailModal}
+                    disabled={resendingMail || resendMailPreparing}
+                  >
+                    {resendingMail
+                      ? "SENDING..."
+                      : resendMailPreparing
+                        ? "PREPARING..."
                         : "RESEND MAIL TO AGENT"}
-                    </button>
-                  )}
-                  {isCancellable && (
-                    <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                      onClick={openRemarkModal}
-                    >
-                      BOOKING REMARK
-                    </button>
-                  )}
-                  {isCancellable && (
-                    <button
-                      style={{ ...BUTTON_STYLE, backgroundColor: "#c0392b" }}
-                      onClick={openNotesModal}
-                    >
-                      NOTES
-                    </button>
-                  )}
+                  </button>
+                  <button style={BTN_ACCENT} onClick={openRemarkModal}>
+                    BOOKING REMARK
+                  </button>
+                  <button style={BTN_NEUTRAL} onClick={openNotesModal}>
+                    NOTES
+                  </button>
+                  {/* HISTORY is always available (read-only), including for
+                      cancelled bookings. */}
+                  <button
+                    style={BTN_HISTORY}
+                    onClick={() => setShowHistoryModal(true)}
+                    title="Booking history"
+                  >
+                    HISTORY
+                  </button>
                 </div>
               </>
             )}
           </Container>
         </main>
       </div>
+
+      {/* ── Booking History Modal ───────────────────────────────────────
+          Read-only timeline built from the loaded detail (no extra API
+          call). Only events with a recorded timestamp are listed. */}
+      <Modal
+        show={showHistoryModal}
+        onHide={() => setShowHistoryModal(false)}
+        centered
+        size="xl"
+        scrollable
+      >
+        <Modal.Header closeButton>
+          <Modal.Title
+            style={{
+              fontSize: "1.05rem",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <FaHistory size={16} />
+            <span>
+              Booking History
+              {bookingDetails?.confirmationCode && (
+                <span style={{ opacity: 0.85, fontWeight: 500 }}>
+                  {` — ${bookingDetails.confirmationCode}`}
+                </span>
+              )}
+            </span>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body
+          style={{ backgroundColor: "#f8fafc", padding: "1.25rem 1.5rem" }}
+        >
+          {bookingHistory.length === 0 ? (
+            <div className="text-muted text-center py-4">
+              <FaHistory
+                size={26}
+                style={{ opacity: 0.25, marginBottom: 8 }}
+              />
+              <div>No history available for this booking.</div>
+            </div>
+          ) : (
+            <div
+              style={{
+                borderRadius: 10,
+                border: "1px solid #e2e8f0",
+                boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
+                backgroundColor: "#fff",
+                overflow: "hidden",
+              }}
+            >
+              <table
+                style={{
+                  width: "100%",
+                  tableLayout: "fixed",
+                  borderCollapse: "collapse",
+                  fontSize: "0.82rem",
+                  marginBottom: 0,
+                }}
+              >
+                <thead>
+                  <tr style={{ backgroundColor: "#f1f5f9" }}>
+                    {[
+                      { label: "S/N", width: "5%" },
+                      { label: "Action", width: "17%" },
+                      { label: "Performed By", icon: FaUserAlt, width: "13%" },
+                      { label: "Location", icon: FaMapMarkerAlt, width: "30%" },
+                      { label: "IP Address", icon: FaNetworkWired, width: "14%" },
+                      { label: "Date", icon: FaCalendarAlt, width: "11%" },
+                      { label: "Time", icon: FaClock, width: "10%" },
+                    ].map((col) => (
+                      <th
+                        key={col.label}
+                        style={{
+                          width: col.width,
+                          padding: "10px 14px",
+                          textAlign: "left",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.03em",
+                          fontSize: "0.72rem",
+                          fontWeight: 700,
+                          color: "#475569",
+                          borderBottom: "1px solid #e2e8f0",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {col.icon ? (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
+                          >
+                            <col.icon size={11} style={{ opacity: 0.7 }} />
+                            {col.label}
+                          </span>
+                        ) : (
+                          col.label
+                        )}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {bookingHistory.map((ev, idx) => {
+                    const meta =
+                      HISTORY_ACTION_META[ev.action] ||
+                      HISTORY_ACTION_FALLBACK;
+                    const ActionIcon = meta.icon;
+                    return (
+                      <tr
+                        key={`${ev.action}-${idx}`}
+                        style={{
+                          backgroundColor: idx % 2 === 1 ? "#f8fafc" : "#fff",
+                        }}
+                      >
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                            color: "#64748b",
+                          }}
+                        >
+                          {idx + 1}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "3px 10px",
+                              borderRadius: 999,
+                              backgroundColor: meta.bg,
+                              color: meta.fg,
+                              fontWeight: 600,
+                              fontSize: "0.76rem",
+                            }}
+                          >
+                            <ActionIcon size={10} style={{ flexShrink: 0 }} />
+                            {ev.action}
+                          </span>
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {ev.by || "-"}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {ev.location ? (
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "flex-start",
+                                gap: 6,
+                              }}
+                            >
+                              <FaMapMarkerAlt
+                                size={11}
+                                style={{
+                                  color: "#c0392b",
+                                  marginTop: 2,
+                                  flexShrink: 0,
+                                }}
+                              />
+                              <span>{ev.location}</span>
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          {ev.ip ? (
+                            <span
+                              style={{
+                                fontFamily:
+                                  "'Consolas', 'Courier New', monospace",
+                                backgroundColor: "#f1f5f9",
+                                color: "#334155",
+                                padding: "2px 8px",
+                                borderRadius: 4,
+                                fontSize: "0.76rem",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {ev.ip}
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          {formatHistoryDate(ev.at)}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          {formatHistoryTime(ev.at)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer style={{ backgroundColor: "#fff" }}>
+          <Button
+            variant="secondary"
+            onClick={() => setShowHistoryModal(false)}
+            style={{
+              borderRadius: 6,
+              padding: "6px 20px",
+              fontWeight: 600,
+              fontSize: "0.85rem",
+            }}
+          >
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Reconfirm Modal ─────────────────────────────────────────────
+          Confirms the CONFIRMED → RECONFIRMED transition. Warns that the
+          agent's credit will be debited (deferred from the Hold + Pay Later
+          choice). */}
+      <Modal
+        show={showReconfirmModal}
+        onHide={() => !isReconfirming && setShowReconfirmModal(false)}
+        centered
+        backdrop="static"
+        keyboard={false}
+      >
+        <Modal.Header closeButton={!isReconfirming} className="border-0">
+          <Modal.Title className="fw-bold d-flex align-items-center">
+            <FaCheckCircle className="me-2" style={{ color: "#16a34a" }} />
+            <span>Reconfirm Booking</span>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="mb-2">
+            Reconfirming moves this booking from{" "}
+            <strong>Confirmed</strong> (held) to <strong>ReConfirmed</strong>,
+            and the payable total{" "}
+            {bookingDetails?.totalPrice != null && (
+              <strong>
+                AED {Number(bookingDetails.totalPrice).toFixed(2)}
+              </strong>
+            )}{" "}
+            will be debited from the agent's credit balance now.
+          </p>
+          <p className="mb-0 text-muted small">
+            If the agent's available credit is insufficient, the
+            reconfirmation will be declined.
+          </p>
+        </Modal.Body>
+        <Modal.Footer className="border-0">
+          <Button
+            variant="outline-secondary"
+            onClick={() => setShowReconfirmModal(false)}
+            disabled={isReconfirming}
+          >
+            Cancel
+          </Button>
+          <Button
+            style={{ backgroundColor: "#16a34a", border: "none" }}
+            onClick={confirmReconfirmBooking}
+            disabled={isReconfirming}
+          >
+            {isReconfirming ? "Reconfirming..." : "Reconfirm & Pay"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Add New Item (Amendment) booking-type picker ──────────────
+          Mirrors the Hotel detail view's picker: choose any sub-booking
+          type, then jump into that flow with ?parentBookingCode set so
+          the backend chains the child code under this booking. */}
+      <Modal
+        show={showAddItemModal}
+        onHide={() => setShowAddItemModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title style={{ fontSize: "1.05rem" }}>
+            Add New Item
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div style={{ marginBottom: "10px", color: "#555" }}>
+            Select a booking type to add as a sub-booking of{" "}
+            <strong>
+              {bookingDetails?.parentBookingCode ||
+                bookingDetails?.confirmationCode}
+            </strong>
+            .
+          </div>
+          <Form>
+            {ADD_NEW_ITEM_TYPES.map((t) => (
+              <Form.Check
+                key={t.key}
+                type="radio"
+                name="addNewItemType"
+                id={`add-item-${t.key}`}
+                label={t.label}
+                value={t.key}
+                checked={selectedAddItemType === t.key}
+                onChange={() => setSelectedAddItemType(t.key)}
+                style={{ marginBottom: "6px" }}
+              />
+            ))}
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setShowAddItemModal(false)}
+          >
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={submitAddItem}>
+            Continue
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       {/* ── Cancellation Modal ──────────────────────────────────────── */}
       <Modal
@@ -2069,6 +2848,114 @@ export default function PackageBookingDetailView() {
         <Modal.Footer className="border-0">
           <Button variant="secondary" onClick={closeInvoice}>
             Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Resend Mail to Agent — preview + send ────────────────────────
+          Opens on the RESEND MAIL TO AGENT button click. Shows the Voucher
+          PDF the mail will attach inside an <iframe>, and an editable
+          email field pre-populated with the agent's on-file address, so
+          the operator sees which file goes out and who receives it before
+          confirming. The Send button POSTs
+          /api/v1/package-booking/booking/:id/resend-mail?email=…
+          and toasts success/failure. Applies to Confirmed, ReConfirmed,
+          and Cancelled bookings alike — same button, same modal. */}
+      <Modal
+        show={showResendMailModal}
+        onHide={() =>
+          resendingMail ? null : setShowResendMailModal(false)
+        }
+        size="xl"
+        centered
+        backdrop="static"
+        keyboard={!resendingMail}
+      >
+        <Modal.Header closeButton={!resendingMail}>
+          <Modal.Title style={{ fontSize: "1rem", fontWeight: 700 }}>
+            Resend {showsFinalDocs ? "Voucher" : "Proforma Voucher"} to
+            Agent
+            {bookingDetails?.confirmationCode
+              ? ` — ${bookingDetails.confirmationCode}`
+              : ""}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ padding: 0, height: "80vh" }}>
+          {resendMailPreparing ? (
+            <div className="d-flex align-items-center justify-content-center h-100">
+              <Spinner animation="border" variant="primary" />
+              <span className="ms-2 text-muted">
+                Preparing voucher attachment…
+              </span>
+            </div>
+          ) : resendMailPdfUrl ? (
+            <iframe
+              key={resendMailPdfUrl}
+              src={resendMailPdfUrl}
+              title="Voucher preview"
+              style={{
+                width: "100%",
+                height: "100%",
+                border: "none",
+                display: "block",
+              }}
+            />
+          ) : (
+            <div className="d-flex align-items-center justify-content-center h-100 text-muted small px-4 text-center">
+              Voucher preview unavailable. You can still send the mail —
+              the backend will regenerate the attachment on dispatch.
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer className="d-flex align-items-center gap-2 flex-wrap">
+          <Form.Group
+            className="flex-grow-1 me-2"
+            style={{ minWidth: 260, maxWidth: 420 }}
+          >
+            <Form.Label
+              className="fw-semibold mb-1"
+              style={{ fontSize: "0.8rem" }}
+            >
+              Agent Email <span className="text-danger">*</span>
+            </Form.Label>
+            <Form.Control
+              type="email"
+              size="sm"
+              placeholder="name@example.com"
+              value={resendMailEmail}
+              onChange={(e) => {
+                setResendMailEmail(e.target.value);
+                if (resendMailEmailError) setResendMailEmailError("");
+              }}
+              isInvalid={!!resendMailEmailError}
+              disabled={resendingMail || resendMailPreparing}
+            />
+            <Form.Control.Feedback type="invalid">
+              {resendMailEmailError}
+            </Form.Control.Feedback>
+          </Form.Group>
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            onClick={() => setShowResendMailModal(false)}
+            disabled={resendingMail}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={submitResendMail}
+            disabled={resendingMail || resendMailPreparing}
+          >
+            {resendingMail ? (
+              <>
+                <Spinner size="sm" className="me-2" />
+                Sending…
+              </>
+            ) : (
+              "Send"
+            )}
           </Button>
         </Modal.Footer>
       </Modal>

@@ -31,12 +31,18 @@ const PrivateRoute = ({ children, roles }) => {
       storedRoles[0] ||
       "";
 
-    if (!roles.includes(currentRole)) {
+    // super_admin inherits every admin-gated route so tightening a route
+    // to roles={["admin"]} never accidentally locks super_admin out. Routes
+    // that are strictly SUPER_ADMIN-only should list roles={["super_admin"]}.
+    const superAdminInheritsAdmin =
+      currentRole === "super_admin" && roles.includes("admin");
+    if (!roles.includes(currentRole) && !superAdminInheritsAdmin) {
       const dashboardByRole = {
         admin: "/adminDashboard",
         agent: "/agentDashboard",
         staff: "/staffDashboard",
         extranet: "/extranetDashboard",
+        super_admin: "/superAdminDashboard",
       };
       return <Navigate to={dashboardByRole[currentRole] || "/"} replace />;
     }

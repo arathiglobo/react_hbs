@@ -1044,6 +1044,13 @@ const PackageRates = () => {
     );
   };
 
+  // Validity is stored as a plain string. Records created before time was
+  // added are date-only ("yyyy-MM-dd"); a datetime-local input needs a time
+  // part to render them, so append midnight for display. New edits write the
+  // full "yyyy-MM-ddTHH:mm" value.
+  const toDateTimeLocalValue = (v) =>
+    v && v.length === 10 && !v.includes("T") ? `${v}T00:00` : v || "";
+
   const addOccupancy = useCallback(
     (e) => {
       if (e) {
@@ -1484,8 +1491,10 @@ const PackageRates = () => {
                                 <Form.Group className="mb-3">
                                   <Form.Label>Validity From</Form.Label>
                                   <Form.Control
-                                    type="date"
-                                    value={validity.validityFrom}
+                                    type="datetime-local"
+                                    value={toDateTimeLocalValue(
+                                      validity.validityFrom
+                                    )}
                                     onChange={(e) =>
                                       updateValidityPeriod(
                                         validity.id,
@@ -1502,8 +1511,10 @@ const PackageRates = () => {
                                 <Form.Group className="mb-3">
                                   <Form.Label>Validity To</Form.Label>
                                   <Form.Control
-                                    type="date"
-                                    value={validity.validityTo}
+                                    type="datetime-local"
+                                    value={toDateTimeLocalValue(
+                                      validity.validityTo
+                                    )}
                                     onChange={(e) =>
                                       updateValidityPeriod(
                                         validity.id,
