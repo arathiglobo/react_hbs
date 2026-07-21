@@ -15,6 +15,7 @@ import AgentSelect from "../components/AgentSelect";
 import AgentCreditBalance from "../components/AgentCreditBalance";
 import axiosInstance from "../components/AxiosInstance";
 import AdvertisementCarousel from "../components/AdvertisementCarousel";
+import TimeApplyPicker from "../components/TimeApplyPicker";
 import MapModal from "../components/map/MapModal";
 import { ENABLE_MAP_PREVIEW } from "../config/featureFlags";
 import { FaSearch, FaStar, FaInfoCircle } from "react-icons/fa";
@@ -2240,18 +2241,20 @@ export default function HotelSearch({
                           <Form.Label className="fw-semibold text-dark">
                             Check-In Time (24-hour)
                           </Form.Label>
-                          <Form.Control
-                            style={{ height: "42px" }}
-                            className="form-control-modern"
-                            type="time"
+                          {/* Same OK/Cancel + AM-PM picker used on
+                              hotel-actions/{id}/occupancy-and-minimumlength —
+                              stepper + AM/PM toggle + read-only display. Value
+                              stays as an "HH:MM" 24-hour string so downstream
+                              usage (probe call, booking payload) is unchanged. */}
+                          <TimeApplyPicker
                             value={checkInTime24}
-                            onChange={(e) => {
-                              const v = e.target.value;
+                            onApply={(v) => {
                               setCheckInTime24(v);
                               // Auto-bump check-out to the same time → 24h later.
                               // User can override afterwards.
                               if (v) setCheckOutTime24(v);
                             }}
+                            placeholder="Select check-in time"
                           />
                         </Form.Group>
                       </Col>
@@ -2260,12 +2263,10 @@ export default function HotelSearch({
                           <Form.Label className="fw-semibold text-dark">
                             Check-Out Time
                           </Form.Label>
-                          <Form.Control
-                            style={{ height: "42px" }}
-                            className="form-control-modern"
-                            type="time"
+                          <TimeApplyPicker
                             value={checkOutTime24}
-                            onChange={(e) => setCheckOutTime24(e.target.value)}
+                            onApply={(v) => setCheckOutTime24(v)}
+                            placeholder="Select check-out time"
                           />
                         </Form.Group>
                       </Col>
