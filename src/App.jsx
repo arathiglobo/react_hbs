@@ -42,6 +42,7 @@ import CustomBookingDetailView from "./pages/list/CustomBookingDetailView";
 import Bank from "./pages/master/Bank";
 import ContactType from "./pages/master/ContactType";
 import MarkupType from "./pages/master/MarkupType";
+import CabType from "./pages/master/CabType";
 import Currency from "./pages/master/Currency";
 import HotelRegistrationActions from "./pages/HotelRegistrationActions";
 import MarketType from "./pages/master/MarketType";
@@ -303,6 +304,24 @@ import SchefferDriverBookingNotesPage from "./pages/list/SchefferDriverBookingNo
 import DayStayBookingNotesPage from "./pages/list/DayStayBookingNotesPage";
 import HotelBookingHistory from "./pages/report/HotelBookingHistory";
 
+// Super Admin — API access control (external clients + per-endpoint permissions)
+import ApiEndpointCatalog from "./pages/superadmin/apiaccess/ApiEndpointCatalog";
+import ApiClientList from "./pages/superadmin/apiaccess/ApiClientList";
+import ApiClientPermissionMatrix from "./pages/superadmin/apiaccess/ApiClientPermissionMatrix";
+
+// Super Admin — encrypted credential vault (SUPER_ADMIN only on backend)
+import CredentialGroupList from "./pages/superadmin/credentialvault/CredentialGroupList";
+import CredentialGroupDetail from "./pages/superadmin/credentialvault/CredentialGroupDetail";
+
+// Super Admin — Admin Management (bind ADMIN login → company)
+import AdminList from "./pages/superadmin/adminmanagement/AdminList";
+
+// Admin — per-API on/off + Test/Live credentials (scoped to admin's own company)
+import AdminApiAccess from "./pages/admin/apiaccess/AdminApiAccess";
+
+// Super Admin — per-role sidebar visibility (Assign Menu)
+import AssignMenu from "./pages/master/AssignMenu";
+
 
 export default function App() {
   return (
@@ -325,6 +344,19 @@ export default function App() {
     </PrivateRoute>
   }
 />
+
+        {/* Super Admin dashboard — same landing surface as admin (reuses
+            AdminDashboard) so a SUPER_ADMIN login has every admin tool plus
+            the SUPER_ADMIN-only screens (Credential Vault, API Access) in
+            the sidebar. Backend guards do the actual permission enforcement. */}
+        <Route
+          path="/superAdminDashboard"
+          element={
+            <PrivateRoute roles={["super_admin"]}>
+              <AdminDashboard />
+            </PrivateRoute>
+          }
+        />
 
         <Route
           path="/agentDashboard"
@@ -370,6 +402,7 @@ export default function App() {
         <Route path="/masters/bank" element={<PrivateRoute><Bank /></PrivateRoute>} />
         <Route path="/masters/contact-type" element={<PrivateRoute><ContactType /></PrivateRoute>} />
         <Route path="/masters/markup-type" element={<PrivateRoute><MarkupType /></PrivateRoute>} />
+        <Route path="/masters/cab-type" element={<PrivateRoute><CabType /></PrivateRoute>} />
         <Route path="/masters/currency" element={<PrivateRoute><Currency /></PrivateRoute>} />
         <Route path="/masters/market-type" element={<PrivateRoute><MarketType /></PrivateRoute>} />
         <Route path="/masters/region" element={<PrivateRoute><Region /></PrivateRoute>} />
@@ -419,6 +452,36 @@ export default function App() {
         <Route path="/report/online-daily-sales" element={<OnlineDailySalesReport />} />
         <Route path="/report/time-limit-daily-sales" element={<TimeLimitOnlineDailySalesReport />} />
         <Route path="/report/hotel-booking-history" element={<PrivateRoute roles={["admin"]}><HotelBookingHistory /></PrivateRoute>} />
+
+        {/* Super Admin — API access control for external clients. Restricted
+            to super_admin so an ADMIN login can neither see the menu (Sidebar)
+            nor reach the route. Backend SuperAdminGuard still runs as a
+            second layer of enforcement. */}
+        <Route path="/super-admin/api-access/endpoints" element={<PrivateRoute roles={["super_admin"]}><ApiEndpointCatalog /></PrivateRoute>} />
+        <Route path="/super-admin/api-access/clients" element={<PrivateRoute roles={["super_admin"]}><ApiClientList /></PrivateRoute>} />
+        <Route path="/super-admin/api-access/clients/:clientId/permissions" element={<PrivateRoute roles={["super_admin"]}><ApiClientPermissionMatrix /></PrivateRoute>} />
+
+        {/* Super Admin — encrypted Credential Vault. Strictly SUPER_ADMIN on
+            both sides: backend SuperAdminOnlyGuard rejects ADMIN with 403,
+            and PrivateRoute now blocks the client route the same way so an
+            ADMIN never even sees the shell. */}
+        <Route path="/super-admin/credential-vault" element={<PrivateRoute roles={["super_admin"]}><CredentialGroupList /></PrivateRoute>} />
+        <Route path="/super-admin/credential-vault/groups/:groupId" element={<PrivateRoute roles={["super_admin"]}><CredentialGroupDetail /></PrivateRoute>} />
+
+        {/* Super Admin — bind ADMIN logins to a company. Agents the admin
+            creates inherit the company on their own UserAccount, driving
+            the per-company supplier restriction at hotel-search time. */}
+        <Route path="/super-admin/admins" element={<PrivateRoute roles={["super_admin"]}><AdminList /></PrivateRoute>} />
+
+        {/* Admin — per-API on/off overlay + Test/Live credentials. The
+            backend AdminApiAccessGuard also runs, so a direct URL from a
+            non-ADMIN account gets 403 even if this PrivateRoute passes. */}
+        <Route path="/admin/api-access" element={<PrivateRoute roles={["admin"]}><AdminApiAccess /></PrivateRoute>} />
+
+        {/* Super Admin — per-role sidebar visibility. Backend guards with
+            SuperAdminOnlyGuard so a direct URL from a non-super_admin
+            account gets 403 even if this PrivateRoute passes. */}
+        <Route path="/masters/assign-menu" element={<PrivateRoute roles={["super_admin"]}><AssignMenu /></PrivateRoute>} />
 
        {/* New Booking */}
         <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} /> 

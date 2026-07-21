@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { Badge, Card, Button, Table, Modal, Form, Pagination } from "react-bootstrap";
+import { Badge, Card, Button, Table, Modal, Form, Pagination, InputGroup } from "react-bootstrap";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
-import { FaEdit, FaTrash } from "react-icons/fa";
+import { FaEdit, FaTrash, FaSignInAlt, FaEye, FaEyeSlash } from "react-icons/fa";
 
 export default function SubUser() {
   const [items, setItems] = useState([]);
@@ -39,6 +39,32 @@ export default function SubUser() {
   // sub-agent form uses so both flows show identical options.
   const [markupTypes, setMarkupTypes] = useState([]);
   const [currencies, setCurrencies] = useState([]);
+
+  // ── Login credentials (mirrors the Sub Agent login flow) ──────────────
+  // Lets the main agent issue login credentials to a sub-user. The username
+  // is stored as "prefix.mainAgent" (same convention as sub-agents) and the
+  // account is created via /auth/register with subUser:true so the backend
+  // resolves the credentials email from the sub_user table.
+  const mainAgentName = localStorage.getItem("UserName") || "";
+  const [rolesList, setRolesList] = useState([]);
+  const [loginTarget, setLoginTarget] = useState(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showRolesDropdown, setShowRolesDropdown] = useState(false);
+  const [loginModalKey, setLoginModalKey] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showRePassword, setShowRePassword] = useState(false);
+  const [loginFormData, setLoginFormData] = useState({
+    username: "",
+    password: "",
+    repassword: "",
+    userroles: [],
+  });
+  const [loginErrors, setLoginErrors] = useState({
+    username: "",
+    password: "",
+    repassword: "",
+    userroles: "",
+  });
 
   const openCreate = () => {
     setEditing(null);
@@ -172,6 +198,115 @@ export default function SubUser() {
     setValidationErrors({});
   };
 
+  // ── Login credentials handlers (mirror SubAgent.jsx) ──────────────────
+  const handleLogin = async (item) => {
+    setLoginTarget(item);
+    setLoginFormData({ username: "", password: "", repassword: "", userroles: [] });
+    setLoginErrors({ username: "", password: "", repassword: "", userroles: "" });
+    setShowRolesDropdown(false);
+    setShowPassword(false);
+    setShowRePassword(false);
+
+    try {
+      // Scope the "already registered?" check to the AGENT user type so
+      // entities of other types sharing the same numeric id don't resolve to
+      // this sub-user's account (backend keys user_accounts by user_id +
+      // user_type_id).
+      const agentRole = rolesList.find((r) => r.roleName === "AGENT");
+      const checkUrl = agentRole
+        ? `/auth/checkRegisteredUserExist/${item.id}?userTypeId=${agentRole.id}`
+        : `/auth/checkRegisteredUserExist/${item.id}`;
+      const response = await axiosInstance.post(checkUrl);
+      if (response.data) {
+        let userNameValue = response.data.userName || response.data.username || "";
+        // Strip the ".mainAgent" suffix so only the prefix shows in the input.
+        if (mainAgentName && userNameValue.endsWith(`.${mainAgentName}`)) {
+          userNameValue = userNameValue.substring(0, userNameValue.length - mainAgentName.length - 1);
+        }
+        setLoginFormData((prev) => ({ ...prev, username: userNameValue }));
+      }
+    } catch (error) {
+      // No existing login for this sub-user — expected for first-time setup.
+    }
+    setLoginModalKey((prev) => prev + 1);
+    setShowLoginModal(true);
+  };
+
+  const handleLoginSubmit = async () => {
+    let isValid = true;
+    const errors = { username: "", password: "", repassword: "", userroles: "" };
+
+    if (!loginFormData.username.trim()) { errors.username = "Username is required"; isValid = false; }
+    if (!loginFormData.password) { errors.password = "Password is required"; isValid = false; }
+    if (loginFormData.password !== loginFormData.repassword) { errors.repassword = "Passwords do not match"; isValid = false; }
+    if (loginFormData.userroles.length === 0) { errors.userroles = "At least one user role is required"; isValid = false; }
+
+    setLoginErrors(errors);
+    if (!isValid) return;
+
+    try {
+      setIsLoading(true);
+      const activeRoleObj = rolesList.find((role) => role.roleName === "AGENT");
+      const loginPayload = {
+        userId: loginTarget?.id,
+        userTypeId: activeRoleObj?.id,
+        userName: `${loginFormData.username}.${mainAgentName}`,
+        password: loginFormData.password,
+        userRoleIds: loginFormData.userroles,
+        // Tells the backend to resolve the credentials email from the
+        // sub_user_registration table (the AGENT id space is shared with
+        // agents / sub-agents).
+        subUser: true,
+      };
+
+      const response = await axiosInstance.post("/auth/register", loginPayload);
+      if (response.data) {
+        toast.success("Login credentials saved successfully!");
+        setShowLoginModal(false);
+      }
+    } catch (error) {
+      const serverMsg =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        "Failed to save login credentials";
+      toast.error(serverMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLoginChange = (e) => {
+    const { name, value } = e.target;
+    let fieldName = name;
+    if (name === "login-username") fieldName = "username";
+    else if (name === "login-password") fieldName = "password";
+    else if (name === "login-repassword") fieldName = "repassword";
+    setLoginFormData((prev) => ({ ...prev, [fieldName]: value }));
+  };
+
+  const toggleRole = (roleId) => {
+    setLoginFormData((prev) => ({
+      ...prev,
+      userroles: prev.userroles.includes(roleId)
+        ? prev.userroles.filter((id) => id !== roleId)
+        : [...prev.userroles, roleId],
+    }));
+    setShowRolesDropdown(false);
+  };
+
+  const removeRole = (roleId) => {
+    setLoginFormData((prev) => ({
+      ...prev,
+      userroles: prev.userroles.filter((id) => id !== roleId),
+    }));
+  };
+
+  const closeLoginModal = () => {
+    setShowLoginModal(false);
+    setShowRolesDropdown(false);
+  };
+
   useEffect(() => {
     fetchSubUsers();
   }, []);
@@ -205,15 +340,18 @@ export default function SubUser() {
   // the form.
   const fetchMarkupMasterData = async () => {
     try {
-      const [markupRes, currRes] = await Promise.all([
+      const [markupRes, currRes, rolesRes] = await Promise.all([
         axiosInstance.get("/api/markupType"),
         axiosInstance.get("/api/currency"),
+        axiosInstance.get("/api/userRoles"),
       ]);
       setMarkupTypes(Array.isArray(markupRes.data) ? markupRes.data : []);
       setCurrencies(Array.isArray(currRes.data) ? currRes.data : []);
+      setRolesList(Array.isArray(rolesRes.data) ? rolesRes.data : []);
     } catch (err) {
       setMarkupTypes([]);
       setCurrencies([]);
+      setRolesList([]);
     }
   };
 
@@ -311,6 +449,14 @@ export default function SubUser() {
                           <div className="d-flex flex-wrap justify-content-center gap-2">
                             <Button
                               variant="outline-primary"
+                              size="sm"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => handleLogin(item)}
+                            >
+                              <FaSignInAlt /> Login
+                            </Button>
+                            <Button
+                              variant="outline-success"
                               size="sm"
                               className="d-flex align-items-center gap-1"
                               onClick={() => openEdit(item)}
@@ -527,6 +673,119 @@ export default function SubUser() {
               <Button className="btn-indigo px-4" onClick={handleSubmit} disabled={isLoading}>
                 {isLoading ? "Processing..." : editing ? "Update User" : "Create User"}
               </Button>
+            </Modal.Footer>
+          </Modal>
+
+          {/* Login Credentials Modal — mirrors the Sub Agent login flow */}
+          <Modal show={showLoginModal} onHide={closeLoginModal} centered key={loginModalKey} backdrop="static">
+            <Modal.Header closeButton>
+              <Modal.Title>Login Details for: {loginTarget?.agentName}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              <Form>
+                <Form.Group className="mb-3">
+                  <Form.Label>Username</Form.Label>
+                  <div className="input-group">
+                    <Form.Control
+                      name="login-username"
+                      value={loginFormData.username}
+                      onChange={handleLoginChange}
+                      isInvalid={!!loginErrors.username}
+                      placeholder="Enter username"
+                    />
+                    <span className="input-group-text">.</span>
+                    <Form.Control
+                      value={mainAgentName}
+                      readOnly
+                      disabled
+                      className="bg-light text-muted"
+                      style={{ maxWidth: '150px' }}
+                    />
+                  </div>
+                  <div className="mt-2" style={{ fontSize: '0.85rem' }}>
+                    Your username is: <span className="text-danger fw-bold">{loginFormData.username ? `${loginFormData.username}.${mainAgentName}` : `prefix.${mainAgentName}`}</span>
+                  </div>
+                  {loginErrors.username && <div className="text-danger small mt-1">{loginErrors.username}</div>}
+                </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label>Password</Form.Label>
+                  <InputGroup hasValidation>
+                    <Form.Control
+                      type={showPassword ? "text" : "password"}
+                      name="login-password"
+                      value={loginFormData.password}
+                      onChange={handleLoginChange}
+                      isInvalid={!!loginErrors.password}
+                    />
+                    <Button
+                      variant="outline-secondary"
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      title={showPassword ? "Hide password" : "Show password"}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <FaEyeSlash /> : <FaEye />}
+                    </Button>
+                    <Form.Control.Feedback type="invalid">{loginErrors.password}</Form.Control.Feedback>
+                  </InputGroup>
+                </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label>Confirm Password</Form.Label>
+                  <InputGroup hasValidation>
+                    <Form.Control
+                      type={showRePassword ? "text" : "password"}
+                      name="login-repassword"
+                      value={loginFormData.repassword}
+                      onChange={handleLoginChange}
+                      isInvalid={!!loginErrors.repassword}
+                    />
+                    <Button
+                      variant="outline-secondary"
+                      type="button"
+                      onClick={() => setShowRePassword((v) => !v)}
+                      title={showRePassword ? "Hide password" : "Show password"}
+                      aria-label={showRePassword ? "Hide password" : "Show password"}
+                    >
+                      {showRePassword ? <FaEyeSlash /> : <FaEye />}
+                    </Button>
+                    <Form.Control.Feedback type="invalid">{loginErrors.repassword}</Form.Control.Feedback>
+                  </InputGroup>
+                </Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label>User Roles</Form.Label>
+                  <div className="form-control d-flex flex-wrap align-items-center" style={{ cursor: 'pointer' }} onClick={() => setShowRolesDropdown(!showRolesDropdown)}>
+                    {loginFormData.userroles.length > 0 ? loginFormData.userroles.map(roleId => {
+                      const role = rolesList.find(r => r.id === roleId);
+                      return role ? (
+                        <span key={roleId} className="badge bg-primary me-1 mb-1">
+                          {role.roleName}
+                          <span
+                            role="button"
+                            className="ms-1"
+                            onClick={(e) => { e.stopPropagation(); removeRole(roleId); }}
+                          >
+                            ×
+                          </span>
+                        </span>
+                      ) : null;
+                    }) : <span className="text-muted">Select roles...</span>}
+                  </div>
+                  {showRolesDropdown && (
+                    <div className="border rounded mt-1 bg-white shadow-sm" style={{ maxHeight: '150px', overflowY: 'auto' }}>
+                      {rolesList.map(role => (
+                        <div key={role.id} className="p-2 cursor-pointer hover-bg-light" onClick={() => toggleRole(role.id)} onMouseEnter={e => e.target.style.backgroundColor='#f8f9fa'} onMouseLeave={e => e.target.style.backgroundColor=''}>
+                          {role.roleName}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {loginErrors.userroles && <div className="text-danger small">{loginErrors.userroles}</div>}
+                </Form.Group>
+              </Form>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onClick={closeLoginModal}>Cancel</Button>
+              <Button variant="primary" onClick={handleLoginSubmit} disabled={isLoading}>Save</Button>
             </Modal.Footer>
           </Modal>
         </main>
