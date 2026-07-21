@@ -209,10 +209,29 @@ const SchefferDriverBookingPage = () => {
     rate ||
     0;
 
+  const selectedRoute = intercityCharges.find(
+    (c) => String(c.intercityChargeId) === String(selectedIntercityId)
+  );
+  const intercitySurcharge =
+    intercityDeclared === "yes" && selectedRoute
+      ? parseFloat(selectedRoute.additionalCharge) || 0
+      : 0;
+
   const [prices, setPrices] = useState({
     sellingPrice: initialTotalRate.toString(),
     totalPrice: initialTotalRate.toString(),
   });
+
+  useEffect(() => {
+    const baseSelling = parseFloat(selectedOption?.totalRate || selectedOption?.totalRateWithoutMrk || rate || 0);
+    const baseTotal = parseFloat(selectedOption?.totalRate || selectedOption?.totalRateWithoutMrk || rate || 0);
+
+    setPrices({
+      sellingPrice: (baseSelling + intercitySurcharge).toString(),
+      totalPrice: (baseTotal + intercitySurcharge).toString(),
+    });
+  }, [intercitySurcharge, selectedOption, rate]);
+
   const [tourismDirham, setTourismDirham] = useState("");
 
   // Resolved agent id used for the payment-gate fetches. Mirrors the
@@ -469,7 +488,10 @@ const SchefferDriverBookingPage = () => {
       noOfChild: parseInt(searchCriteria.children) || 0,
       childAgeArray: (searchCriteria.childAges || []).map(age => parseInt(age)),
       totalRate: totalWithTd,
-      totalRateWithoutmrk: parseFloat(selectedOption.totalRateWithoutMrk || totalRate),
+      totalRateWithoutmrk: parseFloat(selectedOption.totalRateWithoutMrk || initialTotalRate) + intercitySurcharge,
+      intercityChargeId: intercityDeclared === "yes" && selectedIntercityId ? parseInt(selectedIntercityId, 10) : null,
+      intercitySurcharge: intercitySurcharge,
+      intercityDeclared: intercityDeclared,
       tourismDirham: tdNumber > 0 ? tdNumber : null,
       agentId: parseInt(agentId),
       userId: parseInt(agentId),
@@ -1151,11 +1173,8 @@ const SchefferDriverBookingPage = () => {
                     {searchCriteria.pickupType && (
                       <div className="sdbp-summary-row d-flex justify-content-between align-items-start py-2 border-bottom small">
                         <div className="text-muted fw-medium">
-                          <FaMapMarkerAlt className="me-2 text-success" />
-                          Pickup{" "}
-                          <span className="badge bg-success-subtle text-success ms-1">
-                            {searchCriteria.pickupType}
-                          </span>
+                          <FaMapMarkerAlt className="me-2 text-danger" />
+                          Pickup
                         </div>
                         <div className="text-dark fw-semibold text-end">
                           {searchCriteria.pickupName || "—"}
@@ -1166,11 +1185,8 @@ const SchefferDriverBookingPage = () => {
                     {searchCriteria.dropoffType && (
                       <div className="sdbp-summary-row d-flex justify-content-between align-items-start py-2 border-bottom small">
                         <div className="text-muted fw-medium">
-                          <FaMapMarkerAlt className="me-2 text-warning" />
-                          Dropoff{" "}
-                          <span className="badge bg-warning-subtle text-warning ms-1">
-                            {searchCriteria.dropoffType}
-                          </span>
+                          <FaMapMarkerAlt className="me-2 text-danger" />
+                          Dropoff
                         </div>
                         <div className="text-dark fw-semibold text-end">
                           {searchCriteria.dropoffName || "—"}
@@ -1214,14 +1230,23 @@ const SchefferDriverBookingPage = () => {
                           ? Number(tourismDirham)
                           : 0;
                       const grandTotal = Number(totalRate || 0) + tdNum;
+                      const packageFare = totalRate - intercitySurcharge;
                       return (
                         <>
                           <div className="d-flex justify-content-between align-items-center py-2 border-bottom small">
                             <div className="text-muted fw-medium">Package Fare</div>
                             <div className="text-dark fw-semibold">
-                              {formatPrice(totalRate)}
+                              {formatPrice(packageFare)}
                             </div>
                           </div>
+                          {intercitySurcharge > 0 && (
+                            <div className="d-flex justify-content-between align-items-center py-2 border-bottom small">
+                              <div className="text-muted fw-medium">Intercity Surcharge</div>
+                              <div className="text-dark fw-semibold">
+                                {formatPrice(intercitySurcharge)}
+                              </div>
+                            </div>
+                          )}
                           {tdNum > 0 && (
                             <div className="d-flex justify-content-between align-items-center py-2 border-bottom small">
                               <div className="text-muted fw-medium">Tourism Dirham</div>
@@ -1262,7 +1287,7 @@ const SchefferDriverBookingPage = () => {
                     Back
                   </Button>
                   <Button
-                    variant="success"
+                    variant="danger"
                     className="flex-grow-1 d-flex align-items-center justify-content-center gap-2"
                     onClick={handleConfirmClick}
                     disabled={isSubmitting || noPaymentPathAvailable}
@@ -1280,7 +1305,7 @@ const SchefferDriverBookingPage = () => {
                     ) : (
                       <>
                         <FaCheckCircle />
-                        Confirm Booking
+                        Confirm
                       </>
                     )}
                   </Button>
@@ -1603,14 +1628,24 @@ const SchefferDriverBookingPage = () => {
                 : 0;
             const sellingBase = Number(prices.sellingPrice) || 0;
             const totalBase = Number(prices.totalPrice) || 0;
+            const baseSelling = sellingBase - intercitySurcharge;
+            const baseTotal = totalBase - intercitySurcharge;
             return (
               <div className="p-3 bg-light rounded">
                 <div className="d-flex justify-content-between mb-2 text-muted">
-                  <span>Selling Price</span>
+                  <span>Selling Price (Base)</span>
                   <span className="fw-medium">
-                    AED {sellingBase.toFixed(2)}
+                    AED {baseSelling.toFixed(2)}
                   </span>
                 </div>
+                {intercitySurcharge > 0 && (
+                  <div className="d-flex justify-content-between mb-2 text-muted">
+                    <span>Intercity Surcharge</span>
+                    <span className="fw-medium">
+                      + AED {intercitySurcharge.toFixed(2)}
+                    </span>
+                  </div>
+                )}
                 <div className="d-flex justify-content-between mb-2 text-muted">
                   <span>Total Price</span>
                   <span className="fw-medium">

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { Card, Row, Col, Form, Button, Spinner, Badge } from "react-bootstrap";
 import { FaCar, FaSearch, FaClock, FaRoad } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -10,8 +10,33 @@ import TopBar from "../../../components/TopBar";
 import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
+import MapModal from "../../../components/map/MapModal";
+import "../../../styles/HotelSearch.css";
 
-function LazyImage({ src, alt, className }) {
+const getCityCoords = (cityName, index) => {
+  const defaults = {
+    "dubai": { lat: 25.2048, lng: 55.2708 },
+    "abu dhabi": { lat: 24.4539, lng: 54.3773 },
+    "sharjah": { lat: 25.3463, lng: 55.42095 },
+    "riyadh": { lat: 24.7136, lng: 46.6753 },
+    "jeddah": { lat: 21.5433, lng: 39.1728 },
+    "paris": { lat: 48.8566, lng: 2.3522 },
+    "london": { lat: 51.5074, lng: -0.1278 }
+  };
+  const normalized = (cityName || "").toLowerCase().trim();
+  const base = defaults[normalized] || { lat: 25.2048, lng: 55.2708 };
+  
+  // Apply a small jitter using index to spread them slightly on map so they don't overlap
+  const jitterLat = ((index % 5) - 2) * 0.008;
+  const jitterLng = (Math.floor(index / 5) % 5 - 2) * 0.008;
+  return {
+    lat: base.lat + jitterLat,
+    lng: base.lng + jitterLng
+  };
+};
+
+
+function LazyImage({ src, alt, className, style }) {
   const containerRef = useRef(null);
   const [inView, setInView] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -40,8 +65,8 @@ function LazyImage({ src, alt, className }) {
   return (
     <div
       ref={containerRef}
-      className={`ratio ratio-16x9 rounded-top overflow-hidden ${className || ""}`}
-      style={{ height: "100%", width: "100%", position: "relative" }}
+      className={`ratio ratio-16x9 overflow-hidden ${className || ""}`}
+      style={{ height: "100%", width: "100%", position: "relative", ...style }}
     >
       {!loaded && (
         <div
@@ -70,6 +95,7 @@ function LazyImage({ src, alt, className }) {
     </div>
   );
 }
+
 
 /**
  * Chauffeur-rental search. Replaces the old transfer-style
@@ -117,6 +143,20 @@ export const SchefferDriverSearch = () => {
   // When results are on screen the big search form collapses into a sticky
   // summary strip. Clicking "Modify Search" flips this true to re-expand it.
   const [isEditingSearch, setIsEditingSearch] = useState(false);
+
+  // ---- filter states ----
+  const [showMapModal, setShowMapModal] = useState(false);
+  const [nameFilter, setNameFilter] = useState("");
+  const [pendingNameFilter, setPendingNameFilter] = useState("");
+  const [selectedSuppliers, setSelectedSuppliers] = useState([]);
+  const [pendingSuppliers, setPendingSuppliers] = useState([]);
+  const [transferType, setTransferType] = useState("All");
+  const [sortBy, setSortBy] = useState("price_asc");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 5;
+  const [priceFilter, setPriceFilter] = useState(10000);
+  const [maxPriceLimit, setMaxPriceLimit] = useState(10000);
+  const [minPriceLimit, setMinPriceLimit] = useState(0);
 
   const [validationErrors, setValidationErrors] = useState({});
   const clearError = (field) =>
@@ -312,15 +352,135 @@ export const SchefferDriverSearch = () => {
       };
 
       const res = await axiosInstance.post("/api/scheffer-rental-search/search", payload);
-      setResults(Array.isArray(res.data) ? res.data : []);
+      const data = Array.isArray(res.data) ? res.data : [];
+      setResults(data);
+
+      // Reset filter states
+      setNameFilter("");
+      setPendingNameFilter("");
+      setSelectedSuppliers([]);
+      setPendingSuppliers([]);
+      setTransferType("All");
+      setSortBy("price_asc");
+      setCurrentPage(1);
+      if (data.length > 0) {
+        const prices = data.map(card => card.basePriceWithMarkup != null ? card.basePriceWithMarkup : card.basePrice);
+        const maxVal = Math.ceil(Math.max(...prices));
+        const minVal = Math.floor(Math.min(...prices));
+        setMinPriceLimit(minVal);
+        setMaxPriceLimit(maxVal);
+        setPriceFilter(maxVal);
+      } else {
+        setMinPriceLimit(0);
+        setMaxPriceLimit(10000);
+        setPriceFilter(10000);
+      }
     } catch (err) {
       console.error("Rental search failed:", err);
       toast.error("Failed to search rentals.");
       setResults([]);
+      setNameFilter("");
+      setPendingNameFilter("");
+      setSelectedSuppliers([]);
+      setPendingSuppliers([]);
+      setTransferType("All");
+      setSortBy("price_asc");
+      setCurrentPage(1);
+      setMinPriceLimit(0);
+      setMaxPriceLimit(10000);
+      setPriceFilter(10000);
     } finally {
       setLoading(false);
     }
   };
+
+  // Derive unique supplier names from raw results for the Suppliers filter
+  const supplierNames = useMemo(() => {
+    const names = results.map((c) => c.cabProviderName).filter(Boolean);
+    return [...new Set(names)].sort();
+  }, [results]);
+
+  const filteredResults = useMemo(() => {
+    let data = [...results];
+
+    // 1. Price Range filter
+    data = data.filter((card) => {
+      const price = card.basePriceWithMarkup != null ? card.basePriceWithMarkup : card.basePrice;
+      return price <= priceFilter;
+    });
+
+    // 2. Name filter
+    if (nameFilter.trim()) {
+      const q = nameFilter.trim().toLowerCase();
+      data = data.filter((card) => (card.cabName || "").toLowerCase().includes(q));
+    }
+
+    // 3. Supplier filter
+    if (selectedSuppliers.length > 0) {
+      data = data.filter((card) => selectedSuppliers.includes(card.cabProviderName));
+    }
+
+    // 4. Transfer type filter
+    if (transferType === "Shared") {
+      data = data.filter((card) => String(card.types || "").toUpperCase() === "SIC");
+    } else if (transferType === "Private") {
+      data = data.filter((card) => String(card.types || "").toUpperCase() !== "SIC");
+    }
+
+    // 5. Sort
+    if (sortBy === "price_asc") {
+      data.sort((a, b) => {
+        const pa = a.basePriceWithMarkup != null ? a.basePriceWithMarkup : a.basePrice;
+        const pb = b.basePriceWithMarkup != null ? b.basePriceWithMarkup : b.basePrice;
+        return pa - pb;
+      });
+    } else if (sortBy === "price_desc") {
+      data.sort((a, b) => {
+        const pa = a.basePriceWithMarkup != null ? a.basePriceWithMarkup : a.basePrice;
+        const pb = b.basePriceWithMarkup != null ? b.basePriceWithMarkup : b.basePrice;
+        return pb - pa;
+      });
+    } else if (sortBy === "name") {
+      data.sort((a, b) => (a.cabName || "").localeCompare(b.cabName || ""));
+    }
+
+    return data;
+  }, [results, priceFilter, nameFilter, selectedSuppliers, transferType, sortBy]);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filteredResults.length / pageSize));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageRows = filteredResults.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  const renderPagination = () => {
+    if (totalPages <= 1) return null;
+    const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
+    return (
+      <div className="d-flex gap-1 flex-wrap">
+        <Button size="sm" variant="link" className="text-decoration-none p-1" disabled={safePage === 1} onClick={() => setCurrentPage(1)}>First</Button>
+        <Button size="sm" variant="link" className="text-decoration-none p-1" disabled={safePage === 1} onClick={() => setCurrentPage(safePage - 1)}>Prev</Button>
+        {pages.map((p) => (
+          <Button key={p} size="sm" variant={p === safePage ? "primary" : "outline-secondary"} className="px-2 py-0" onClick={() => setCurrentPage(p)}>{p}</Button>
+        ))}
+        <Button size="sm" variant="link" className="text-decoration-none p-1" disabled={safePage === totalPages} onClick={() => setCurrentPage(safePage + 1)}>Next</Button>
+        <Button size="sm" variant="link" className="text-decoration-none p-1" disabled={safePage === totalPages} onClick={() => setCurrentPage(totalPages)}>Last</Button>
+      </div>
+    );
+  };
+
+  const mapMarkers = useMemo(() => {
+    return filteredResults.map((card, idx) => {
+      const coords = getCityCoords(card.cityName, idx);
+      return {
+        id: card.packageId || idx,
+        name: `${card.cabName} (${card.packageName})`,
+        lat: coords.lat,
+        lng: coords.lng,
+        address: `${card.cityName}, ${card.packageName} package`,
+        contactNumber: card.cabProviderName || "",
+      };
+    });
+  }, [filteredResults]);
 
   const handleBookNow = (card) => {
     const price = card.basePriceWithMarkup != null ? card.basePriceWithMarkup : card.basePrice;
@@ -365,9 +525,13 @@ export const SchefferDriverSearch = () => {
   };
 
   const customSelectStyles = {
-    control: (base) => ({ ...base, minHeight: "46px", height: "46px", borderRadius: "0.375rem" }),
-    valueContainer: (base) => ({ ...base, height: "46px", padding: "0 8px" }),
-    indicatorsContainer: (base) => ({ ...base, height: "46px" }),
+    control: (base) => ({
+      ...base,
+      minHeight: "42px",
+      border: "1px solid #dee2e6",
+      "&:hover": { borderColor: "#86b7fe" },
+    }),
+    menuPortal: (base) => ({ ...base, zIndex: 9999 }),
   };
 
   const money = (v) => (v == null ? "-" : `${Number(v).toLocaleString()} AED`);
@@ -435,25 +599,22 @@ export const SchefferDriverSearch = () => {
 
               {/* ── Search Card + Ads ── */}
               {!collapseSearch && (
-              <div className="d-flex gap-3 align-items-start mb-4 hs-search-ads-row">
+              <div className="d-flex gap-3 align-items-start mb-3 hs-search-ads-row">
                 <div className="flex-grow-1" style={{ minWidth: 0 }}>
-                  <Card className="border-0 shadow-sm rounded-4 bg-white mb-4">
-                <Card.Body>
+                  <Card className="border-0 shadow-sm rounded-4 bg-white mb-3">
+                <Card.Body className="p-4">
                   <Form onSubmit={handleSearch}>
-                    {/* Row 1 — Identity: Agent (admin-only) + Nationality.
-                        Grouped at the top so admins pick who's booking and
-                        the guest's nationality before anything else. For
-                        agent logins the Agent field is hidden (they can
-                        only book for themselves), so Nationality sits alone
-                        on this row. */}
+
+                    {/* Row 1 — Agent (admin-only) + City / Location + Nationality */}
                     <Row className="g-3 mb-3">
                       {!isAgentRole && (
-                        <Col md={6}>
-                          <Form.Label className="fw-semibold">
+                        <Col md={4}>
+                          <Form.Label className="fw-semibold text-dark">
                             Agent <span className="text-danger">*</span>
                           </Form.Label>
                           <Form.Select
-                            style={{ height: "46px" }}
+                            style={{ height: "42px" }}
+                            className="form-control-modern"
                             value={agent}
                             isInvalid={!!validationErrors.agent}
                             onChange={(e) => {
@@ -476,9 +637,47 @@ export const SchefferDriverSearch = () => {
                           {agent && <AgentBalanceDisplay agentId={agent} />}
                         </Col>
                       )}
-                      <Col md={6}>
-                        <Form.Label className="fw-semibold">
-                          Nationality<span className="text-danger">*</span>
+                      <Col md={!isAgentRole ? 4 : 6}>
+                        <Form.Label className="fw-semibold text-dark">
+                          City / Location <span className="text-danger">*</span>
+                        </Form.Label>
+                        <Select
+                          options={cityOptions}
+                          value={city}
+                          onChange={(opt) => {
+                            setCity(opt);
+                            if (opt) clearError("city");
+                          }}
+                          placeholder="Select city"
+                          isSearchable
+                          isClearable
+                          menuPortalTarget={document.body}
+                          styles={{
+                            ...customSelectStyles,
+                            control: (base) => ({
+                              ...customSelectStyles.control(base),
+                              borderColor: validationErrors.city ? "#dc3545" : "#dee2e6",
+                            }),
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          }}
+                        />
+                        {validationErrors.city && (
+                          <div className="text-danger small mt-1">{validationErrors.city}</div>
+                        )}
+                        {/* UAE resident notice */}
+                        {(() => {
+                          const name = (city?.label || "").toString().trim().toLowerCase().replace(/[-_]/g, " ").replace(/\s+/g, " ");
+                          const isUAE = ["dubai","abu dhabi","sharjah","ajman","fujairah","ras al khaimah","umm al quwain","al ain"].some((c) => name.includes(c));
+                          return isUAE ? (
+                            <div className="mt-1 small" style={{ color: "#0f7a3a", lineHeight: 1.25 }}>
+                              For UAE resident holders, please mention the nationality as United Arab Emirates regardless of the actual nationality.
+                            </div>
+                          ) : null;
+                        })()}
+                      </Col>
+                      <Col md={!isAgentRole ? 4 : 6}>
+                        <Form.Label className="fw-semibold text-dark">
+                          Nationality <span className="text-danger">*</span>
                         </Form.Label>
                         <Select
                           options={nationalityList}
@@ -499,7 +698,7 @@ export const SchefferDriverSearch = () => {
                             ...customSelectStyles,
                             control: (base) => ({
                               ...customSelectStyles.control(base),
-                              borderColor: validationErrors.nationality ? "#dc3545" : base.borderColor,
+                              borderColor: validationErrors.nationality ? "#dc3545" : "#dee2e6",
                             }),
                             menuPortal: (base) => ({ ...base, zIndex: 9999 }),
                           }}
@@ -510,94 +709,11 @@ export const SchefferDriverSearch = () => {
                       </Col>
                     </Row>
 
-                    {/* Row 2 — Destination: City + Hours (original widths). */}
+                    {/* Row 2 — Pickup / Dropoff + Hours */}
                     <Row className="g-3 mb-3">
-                      <Col md={6}>
-                        <Form.Label className="fw-semibold">
-                          City / Location<span className="text-danger">*</span>
-                        </Form.Label>
-                        <Select
-                          options={cityOptions}
-                          value={city}
-                          onChange={(opt) => {
-                            setCity(opt);
-                            if (opt) clearError("city");
-                          }}
-                          placeholder="Select city"
-                          isSearchable
-                          isClearable
-                          menuPortalTarget={document.body}
-                          styles={{
-                            ...customSelectStyles,
-                            control: (base) => ({
-                              ...customSelectStyles.control(base),
-                              borderColor: validationErrors.city ? "#dc3545" : base.borderColor,
-                            }),
-                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                          }}
-                        />
-                        {validationErrors.city && (
-                          <div className="text-danger small mt-1">{validationErrors.city}</div>
-                        )}
-                        {/* Surface UAE-resident status when the picked city
-                            is a UAE emirate / city. The rental lookup DTO
-                            only carries {id, name} (no country code), so we
-                            match on the well-known emirate names — the set
-                            of cities returned by the endpoint is small and
-                            master-controlled, so a name check is safe here. */}
-                        {(() => {
-                          const name = (city?.label || "")
-                            .toString()
-                            .trim()
-                            .toLowerCase()
-                            .replace(/[-_]/g, " ")
-                            .replace(/\s+/g, " ");
-                          const isUAE = [
-                            "dubai",
-                            "abu dhabi",
-                            "sharjah",
-                            "ajman",
-                            "fujairah",
-                            "ras al khaimah",
-                            "umm al quwain",
-                            "al ain",
-                          ].some((c) => name.includes(c));
-                          return isUAE ? (
-                            <div
-                              className="mt-1 small"
-                              style={{ color: "#0f7a3a", lineHeight: 1.25 }}
-                            >
-                              For UAE resident holders, please mention the nationality as United Arab Emirates regardless of the actual nationality.
-                            </div>
-                          ) : null;
-                        })()}
-                      </Col>
-
-                      <Col md={3}>
-                        <Form.Label className="fw-semibold">
-                          Hours <small className="text-muted">(optional)</small>
-                        </Form.Label>
-                        <Form.Select
-                          style={{ height: "46px" }}
-                          value={hoursFilter}
-                          onChange={(e) => setHoursFilter(e.target.value)}
-                        >
-                          <option value="">Any</option>
-                          <option value="4">4 hours</option>
-                          <option value="6">6 hours</option>
-                          <option value="8">8 hours</option>
-                          <option value="10">10 hours</option>
-                          <option value="12">12 hours</option>
-                          <option value="24">24 hours</option>
-                        </Form.Select>
-                      </Col>
-                    </Row>
-
-                    {/* Pickup / Dropoff (operational; carried into the booking) */}
-                    <Row className="g-3 mb-3">
-                      <Col md={6}>
-                        <Form.Label className="fw-semibold">
-                          Pickup <small className="text-muted">(place / hotel / airport)</small>
+                      <Col md={5}>
+                        <Form.Label className="fw-semibold text-dark">
+                          Pickup <small className="text-muted fw-normal">(place / hotel / airport)</small>
                         </Form.Label>
                         <Select
                           options={locationGroups}
@@ -606,10 +722,7 @@ export const SchefferDriverSearch = () => {
                           onInputChange={(input, { action }) => {
                             if (action !== "input-change") return;
                             clearTimeout(window.__schPickupDebounce);
-                            window.__schPickupDebounce = setTimeout(
-                              () => fetchLocationLookup(input || ""),
-                              300
-                            );
+                            window.__schPickupDebounce = setTimeout(() => fetchLocationLookup(input || ""), 300);
                           }}
                           filterOption={() => true}
                           formatOptionLabel={formatLocOption}
@@ -621,22 +734,14 @@ export const SchefferDriverSearch = () => {
                           styles={{
                             ...customSelectStyles,
                             menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                            groupHeading: (base) => ({
-                              ...base,
-                              fontWeight: 700,
-                              color: "#212529",
-                              textTransform: "uppercase",
-                              fontSize: "0.75rem",
-                            }),
+                            groupHeading: (base) => ({ ...base, fontWeight: 700, color: "#212529", textTransform: "uppercase", fontSize: "0.75rem" }),
                           }}
-                          noOptionsMessage={({ inputValue }) =>
-                            inputValue ? "No matches" : "Type to search…"
-                          }
+                          noOptionsMessage={({ inputValue }) => inputValue ? "No matches" : "Type to search…"}
                         />
                       </Col>
-                      <Col md={6}>
-                        <Form.Label className="fw-semibold">
-                          Dropoff <small className="text-muted">(place / hotel / airport)</small>
+                      <Col md={5}>
+                        <Form.Label className="fw-semibold text-dark">
+                          Dropoff <small className="text-muted fw-normal">(place / hotel / airport)</small>
                         </Form.Label>
                         <Select
                           options={locationGroups}
@@ -645,10 +750,7 @@ export const SchefferDriverSearch = () => {
                           onInputChange={(input, { action }) => {
                             if (action !== "input-change") return;
                             clearTimeout(window.__schDropoffDebounce);
-                            window.__schDropoffDebounce = setTimeout(
-                              () => fetchLocationLookup(input || ""),
-                              300
-                            );
+                            window.__schDropoffDebounce = setTimeout(() => fetchLocationLookup(input || ""), 300);
                           }}
                           filterOption={() => true}
                           formatOptionLabel={formatLocOption}
@@ -660,28 +762,41 @@ export const SchefferDriverSearch = () => {
                           styles={{
                             ...customSelectStyles,
                             menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                            groupHeading: (base) => ({
-                              ...base,
-                              fontWeight: 700,
-                              color: "#212529",
-                              textTransform: "uppercase",
-                              fontSize: "0.75rem",
-                            }),
+                            groupHeading: (base) => ({ ...base, fontWeight: 700, color: "#212529", textTransform: "uppercase", fontSize: "0.75rem" }),
                           }}
-                          noOptionsMessage={({ inputValue }) =>
-                            inputValue ? "No matches" : "Type to search…"
-                          }
+                          noOptionsMessage={({ inputValue }) => inputValue ? "No matches" : "Type to search…"}
                         />
+                      </Col>
+                      <Col md={2}>
+                        <Form.Label className="fw-semibold text-dark">
+                          Hours <small className="text-muted fw-normal">(opt.)</small>
+                        </Form.Label>
+                        <Form.Select
+                          style={{ height: "42px" }}
+                          className="form-control-modern"
+                          value={hoursFilter}
+                          onChange={(e) => setHoursFilter(e.target.value)}
+                        >
+                          <option value="">Any</option>
+                          <option value="4">4 hrs</option>
+                          <option value="6">6 hrs</option>
+                          <option value="8">8 hrs</option>
+                          <option value="10">10 hrs</option>
+                          <option value="12">12 hrs</option>
+                          <option value="24">24 hrs</option>
+                        </Form.Select>
                       </Col>
                     </Row>
 
+                    {/* Row 3 — Date / Time / Pax */}
                     <Row className="g-3 mb-3">
                       <Col md={3}>
-                        <Form.Label className="fw-semibold">
-                          Pickup Date<span className="text-danger">*</span>
+                        <Form.Label className="fw-semibold text-dark">
+                          Pickup Date <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
-                          style={{ height: "46px" }}
+                          style={{ height: "42px" }}
+                          className="form-control-modern"
                           type="date"
                           value={pickupDate}
                           isInvalid={!!validationErrors.pickupDate}
@@ -696,11 +811,12 @@ export const SchefferDriverSearch = () => {
                         </Form.Control.Feedback>
                       </Col>
                       <Col md={3}>
-                        <Form.Label className="fw-semibold">
-                          Pickup Time<span className="text-danger">*</span>
+                        <Form.Label className="fw-semibold text-dark">
+                          Pickup Time <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
-                          style={{ height: "46px" }}
+                          style={{ height: "42px" }}
+                          className="form-control-modern"
                           type="time"
                           value={pickupTime}
                           isInvalid={!!validationErrors.pickupTime}
@@ -714,43 +830,37 @@ export const SchefferDriverSearch = () => {
                         </Form.Control.Feedback>
                       </Col>
                       <Col md={3}>
-                        <Form.Label className="fw-semibold">Adults</Form.Label>
+                        <Form.Label className="fw-semibold text-dark">Adults</Form.Label>
                         <Form.Select
-                          style={{ height: "46px" }}
+                          style={{ height: "42px" }}
+                          className="form-control-modern"
                           value={adults}
                           onChange={(e) => setAdults(parseInt(e.target.value) || 1)}
                         >
                           {Array.from({ length: 9 }, (_, i) => i + 1).map((n) => (
-                            <option key={n} value={n}>
-                              {n} Adult{n > 1 ? "s" : ""}
-                            </option>
+                            <option key={n} value={n}>{n} Adult{n > 1 ? "s" : ""}</option>
                           ))}
                         </Form.Select>
                       </Col>
                       <Col md={3}>
-                        <Form.Label className="fw-semibold">Children</Form.Label>
+                        <Form.Label className="fw-semibold text-dark">Children</Form.Label>
                         <Form.Select
-                          style={{ height: "46px" }}
+                          style={{ height: "42px" }}
+                          className="form-control-modern"
                           value={children}
                           onChange={(e) => setChildren(parseInt(e.target.value) || 0)}
                         >
                           {Array.from({ length: 6 }, (_, i) => i).map((n) => (
-                            <option key={n} value={n}>
-                              {n} Child{n !== 1 ? "ren" : ""}
-                            </option>
+                            <option key={n} value={n}>{n} Child{n !== 1 ? "ren" : ""}</option>
                           ))}
                         </Form.Select>
                       </Col>
                     </Row>
 
-                    {/* Nationality moved to the top identity row (paired
-                        with Agent). Agent field was also moved out — see
-                        the first Row of this form. */}
-
                     {children > 0 && (
-                      <Row className="g-2 mb-3">
+                      <Row className="g-3 mb-3">
                         <Col md={12}>
-                          <Form.Label className="mb-2 fw-semibold">Child Ages</Form.Label>
+                          <Form.Label className="fw-semibold text-dark">Child Ages</Form.Label>
                           <div className="d-flex flex-wrap gap-2">
                             {childAges.map((age, index) => (
                               <Form.Control
@@ -760,7 +870,8 @@ export const SchefferDriverSearch = () => {
                                 max="17"
                                 placeholder="Age"
                                 value={age}
-                                style={{ width: "80px" }}
+                                className="form-control-modern"
+                                style={{ width: "80px", height: "42px" }}
                                 onChange={(e) => handleChildAgeChange(index, e.target.value)}
                               />
                             ))}
@@ -769,27 +880,21 @@ export const SchefferDriverSearch = () => {
                       </Row>
                     )}
 
-                    <Row className="justify-content-center">
-                      <Col md={4} className="d-flex justify-content-center mt-2">
-                        <Button
-                          variant="warning"
-                          className="px-5 py-2 fw-bold"
-                          type="submit"
-                          disabled={loading}
-                        >
-                          {loading ? (
-                            <>
-                              <Spinner animation="border" size="sm" className="me-2" />
-                              Searching...
-                            </>
-                          ) : (
-                            <>
-                              <FaSearch className="me-2" /> Search Rentals
-                            </>
-                          )}
-                        </Button>
-                      </Col>
-                    </Row>
+                    <div className="d-flex justify-content-center mt-3">
+                      <Button
+                        variant="danger"
+                        className="px-5 fw-bold"
+                        style={{ height: "42px", fontSize: "0.95rem" }}
+                        type="submit"
+                        disabled={loading}
+                      >
+                        {loading ? (
+                          <><Spinner animation="border" size="sm" className="me-2" />Searching...</>
+                        ) : (
+                          <><FaSearch className="me-2" />Search Rentals</>
+                        )}
+                      </Button>
+                    </div>
                   </Form>
                 </Card.Body>
               </Card>
@@ -831,127 +936,331 @@ export const SchefferDriverSearch = () => {
               )}
 
               {!loading && results.length > 0 && (
-                <>
-                  <div className="d-flex justify-content-between align-items-center mb-3 px-1">
-                    <h5 className="fw-semibold mb-0">
-                      Available Chauffeurs in {city?.label || "city"}
-                    </h5>
-                    <span className="text-muted small">{results.length} cabs found</span>
-                  </div>
-                  <Row className="g-4">
-                    {results.map((card, idx) => {
-                      const price =
-                        card.basePriceWithMarkup != null
-                          ? card.basePriceWithMarkup
-                          : card.basePrice;
-                      // Airport Pickup / Airport Drop are now stored as
-                      // boolean flags (1 = included, 0 = not) on the rate
-                      // editor. Extra Hour / Extra KM / Night were removed
-                      // from the editor entirely, so the base rate IS the
-                      // total the operator sees. Only the Waiting surcharge
-                      // remains a numeric charge; keep that block visible
-                      // only when it applies.
-                      const airportPickupIncluded = Number(card.airportPickupCharge) > 0;
-                      const airportDropIncluded = Number(card.airportDropCharge) > 0;
-                      const hasSurcharges =
-                        card.waitingCharge && card.waitingCharge > 0;
-                      return (
-                        <Col md={6} lg={4} key={`${card.rentalRateId}-${card.packageId}-${idx}`}>
-                          <Card className="h-100 shadow-sm border-0 rounded-4 overflow-hidden">
-                            <LazyImage src={card.cabPic} alt={card.cabName} />
-                            <Card.Body className="d-flex flex-column">
-                              <div className="d-flex justify-content-between align-items-start mb-2">
-                                <div>
-                                  <h5 className="fw-bold mb-0">{card.cabName}</h5>
-                                  <small className="text-muted">{card.cabProviderName}</small>
-                                </div>
-                                {card.cabType && (
-                                  <Badge bg="info" className="text-dark">
-                                    {card.cabType}
-                                  </Badge>
-                                )}
-                              </div>
+                <Row className="g-3">
+                  {/* ── LEFT: Filter panel ─────────────────────── */}
+                  <Col lg={3} md={4}>
 
-                              <div className="mb-2 d-flex flex-wrap gap-1">
-                                <Badge bg="light" text="dark" className="border">
-                                  {card.cityName}
-                                </Badge>
-                                <Badge bg="primary">{card.packageName}</Badge>
-                                {card.rateCode && (
-                                  <Badge bg="secondary" pill>
-                                    {card.rateCode}
-                                  </Badge>
-                                )}
-                              </div>
+                    {/* Explore Map Box */}
+                    <Card className="border-0 shadow-sm rounded-3 mb-3">
+                      <Card.Body className="p-0" style={{ position: "relative" }}>
+                        <img
+                          src="/images/map.jpg"
+                          alt="Map preview"
+                          className="w-100 rounded-3"
+                          style={{ height: "120px", objectFit: "cover", display: "block" }}
+                        />
+                        <Button
+                          type="button"
+                          className="btn-sm"
+                          onClick={() => setShowMapModal(true)}
+                          style={{
+                            position: "absolute",
+                            top: "50%",
+                            left: "50%",
+                            transform: "translate(-50%, -50%)",
+                            backgroundColor: "rgba(0, 0, 0, 0.75)",
+                            color: "white",
+                            border: "none",
+                            padding: "6px 12px",
+                            borderRadius: "6px",
+                            fontSize: "11px",
+                            fontWeight: "bold",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          EXPLORE ON MAP 📍
+                        </Button>
+                      </Card.Body>
+                    </Card>
 
-                              <ul className="list-unstyled small text-muted mb-2">
-                                <li className="mb-1">
-                                  <FaClock className="me-2 text-secondary" />
-                                  <strong className="text-dark">{card.hoursIncluded ?? "—"}</strong>{" "}
-                                  hours included
-                                </li>
-                                <li className="mb-1">
-                                  <FaRoad className="me-2 text-secondary" />
-                                  <strong className="text-dark">{card.kmIncluded ?? "—"}</strong>{" "}
-                                  km included
-                                </li>
-                              </ul>
+                    {/* Search by Chauffeur Name */}
+                    <Card className="border-0 shadow-sm rounded-3 mb-3">
+                      <Card.Header className="bg-white border-bottom fw-semibold d-flex justify-content-between align-items-center">
+                        <span className="text-primary">Search by Chauffeur Name</span>
+                        <span className="text-muted small">▾</span>
+                      </Card.Header>
+                      <Card.Body className="p-3">
+                        <div className="d-flex gap-2">
+                          <Form.Control
+                            type="text"
+                            size="sm"
+                            placeholder="Search"
+                            value={pendingNameFilter}
+                            onChange={(e) => setPendingNameFilter(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                setNameFilter(pendingNameFilter);
+                                setCurrentPage(1);
+                              }
+                            }}
+                          />
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            className="px-3"
+                            onClick={() => {
+                              setNameFilter(pendingNameFilter);
+                              setCurrentPage(1);
+                            }}
+                          >
+                            GO
+                          </Button>
+                        </div>
+                      </Card.Body>
+                    </Card>
 
-                              {(airportPickupIncluded || airportDropIncluded) && (
-                                <div className="d-flex flex-wrap gap-1 mb-2">
-                                  {airportPickupIncluded && (
-                                    <Badge bg="success-subtle" text="success">
-                                      ✓ Airport Pickup
-                                    </Badge>
-                                  )}
-                                  {airportDropIncluded && (
-                                    <Badge bg="success-subtle" text="success">
-                                      ✓ Airport Drop
-                                    </Badge>
-                                  )}
-                                </div>
-                              )}
 
-                              {hasSurcharges && (
-                                <div className="border-top pt-2 mb-2 small text-muted">
-                                  <div className="mb-1 fw-semibold text-dark">Surcharges</div>
-                                  <div>Waiting: {money(card.waitingCharge)}</div>
-                                </div>
-                              )}
+                    {/* Suppliers */}
+                    <Card className="border-0 shadow-sm rounded-3 mb-3">
+                      <Card.Header className="bg-white border-bottom fw-semibold d-flex justify-content-between align-items-center">
+                        <span className="text-primary">Suppliers</span>
+                        <span className="text-muted small">▾</span>
+                      </Card.Header>
+                      <Card.Body className="p-3">
+                        {supplierNames.length === 0 ? (
+                          <div className="text-muted small">No suppliers in results.</div>
+                        ) : (
+                          supplierNames.map((s) => (
+                            <Form.Check
+                              key={s}
+                              type="checkbox"
+                              id={`supplier-${s}`}
+                              label={s}
+                              className="small"
+                              checked={pendingSuppliers.includes(s)}
+                              onChange={(e) => {
+                                setPendingSuppliers((prev) =>
+                                  e.target.checked
+                                    ? [...prev, s]
+                                    : prev.filter((x) => x !== s)
+                                );
+                              }}
+                            />
+                          ))
+                        )}
+                      </Card.Body>
+                    </Card>
 
-                              {(card.validityFrom || card.validityTo) && (
-                                <div className="small text-muted mb-2">
-                                  Valid: {card.validityFrom || "—"} → {card.validityTo || "—"}
-                                </div>
-                              )}
+                    {/* Transfer Type */}
+                    <Card className="border-0 shadow-sm rounded-3 mb-3">
+                      <Card.Header className="bg-white border-bottom fw-semibold d-flex justify-content-between align-items-center">
+                        <span className="text-primary">Transfer Type</span>
+                        <span className="text-muted small">▾</span>
+                      </Card.Header>
+                      <Card.Body className="p-3">
+                        <Form.Check
+                          type="radio"
+                          id="scheffer-filter-all"
+                          name="schefferTransferType"
+                          label="All"
+                          className="small"
+                          checked={transferType === "All"}
+                          onChange={() => { setTransferType("All"); setCurrentPage(1); }}
+                        />
+                        <Form.Check
+                          type="radio"
+                          id="scheffer-filter-shared"
+                          name="schefferTransferType"
+                          label="Shared (SIC)"
+                          className="small"
+                          checked={transferType === "Shared"}
+                          onChange={() => { setTransferType("Shared"); setCurrentPage(1); }}
+                        />
+                        <Form.Check
+                          type="radio"
+                          id="scheffer-filter-private"
+                          name="schefferTransferType"
+                          label="Private"
+                          className="small"
+                          checked={transferType === "Private"}
+                          onChange={() => { setTransferType("Private"); setCurrentPage(1); }}
+                        />
+                      </Card.Body>
+                    </Card>
 
-                              <div className="mt-auto">
-                                <div className="d-flex justify-content-between align-items-end mb-2">
-                                  <span className="text-muted small">Total</span>
-                                  <span className="fw-bold fs-5 text-success">
-                                    {money(price)}
-                                  </span>
-                                </div>
-                                <Button
-                                  variant="success"
-                                  className="w-100 fw-semibold"
-                                  onClick={() => handleBookNow(card)}
-                                >
-                                  Book Now
-                                </Button>
-                              </div>
-                            </Card.Body>
-                          </Card>
-                        </Col>
-                      );
-                    })}
-                  </Row>
-                </>
+                    <Button
+                      variant="primary"
+                      className="w-100 fw-bold"
+                      onClick={() => {
+                        setNameFilter(pendingNameFilter);
+                        setSelectedSuppliers(pendingSuppliers);
+                        setCurrentPage(1);
+                      }}
+                    >
+                      APPLY FILTERS
+                    </Button>
+                  </Col>
+
+                  {/* ── RIGHT: Results column ──────────────────── */}
+                  <Col lg={9} md={8}>
+                    {/* Sort bar */}
+                    <Card className="border-0 shadow-sm rounded-3 mb-3">
+                      <Card.Body className="py-2 px-3 d-flex flex-wrap align-items-center gap-2">
+                        <span className="text-muted small me-1">Sort By:</span>
+                        <Button
+                          size="sm"
+                          variant={sortBy === "price_asc" ? "primary" : "light"}
+                          className="px-3"
+                          onClick={() => { setSortBy("price_asc"); setCurrentPage(1); }}
+                        >
+                          ↑ Price: Low to High
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={sortBy === "price_desc" ? "primary" : "light"}
+                          className="px-3"
+                          onClick={() => { setSortBy("price_desc"); setCurrentPage(1); }}
+                        >
+                          ↓ Price: High to Low
+                        </Button>
+                      </Card.Body>
+                    </Card>
+
+                    {/* Page count + pagination top */}
+                    <div className="d-flex justify-content-between align-items-center mb-2 small text-muted">
+                      <div>
+                        Page {safePage} of {totalPages} ({filteredResults.length} records)
+                      </div>
+                      {totalPages > 1 && renderPagination()}
+                    </div>
+
+                    {filteredResults.length === 0 ? (
+                      <div className="text-center text-muted py-5 bg-white rounded-3 border">
+                        No chauffeurs match your filters.
+                      </div>
+                    ) : (
+                      <Row className="g-3">
+                        {pageRows.map((card, idx) => {
+                          const price =
+                            card.basePriceWithMarkup != null
+                              ? card.basePriceWithMarkup
+                              : card.basePrice;
+                          const isSIC = String(card.types || "").toUpperCase() === "SIC";
+                          return (
+                            <Col xs={12} key={`${card.rentalRateId}-${card.packageId}-${idx}`}>
+                              <Card className="border-0 shadow-sm rounded-3 overflow-hidden">
+                                <Card.Header className="bg-light py-2 px-3 fw-semibold text-dark">
+                                  {card.cabName || "Chauffeur Vehicle"}
+                                </Card.Header>
+                                <Card.Body className="p-3">
+                                  <Row className="align-items-center g-3">
+                                    {/* Image */}
+                                    <Col xs={12} md={3}>
+                                      <div style={{ width: "100%", height: "120px", overflow: "hidden", borderRadius: "8px" }}>
+                                        <LazyImage src={card.cabPic} alt={card.cabName} />
+                                      </div>
+                                    </Col>
+
+                                    {/* Details */}
+                                    <Col xs={12} md={6}>
+                                      {/* Transfer Type */}
+                                      <div className="small mb-1">
+                                        <span className="text-muted">Transfer Type: </span>
+                                        <span className={`fw-medium ${isSIC ? "text-primary" : "text-success"}`}>
+                                          {isSIC ? "Shared (SIC)" : "Private Transfer"}
+                                        </span>
+                                      </div>
+                                      {/* Vehicle */}
+                                      <div className="small mb-1">
+                                        <span className="text-muted">Vehicle: </span>
+                                        <span className="text-dark">{card.cabName || "—"}</span>
+                                      </div>
+                                      {/* Hours & KM */}
+                                      <div className="small mb-1 d-flex flex-wrap gap-3">
+                                        <span>
+                                          <span className="text-muted">Hours Included: </span>
+                                          <span className="text-dark">{card.hoursIncluded ?? "—"}</span>
+                                        </span>
+                                        <span>
+                                          <span className="text-muted">KM Included: </span>
+                                          <span className="text-dark">{card.kmIncluded ?? "—"}</span>
+                                        </span>
+                                      </div>
+                                      {/* Package */}
+                                      {card.packageName && (
+                                        <div className="small mb-1">
+                                          <span className="text-muted">Package: </span>
+                                          <span className="text-dark">{card.packageName}</span>
+                                        </div>
+                                      )}
+                                      {/* Max Luggage Capacity with robust fallbacks */}
+                                      {(() => {
+                                        const luggageVal = card.maxLuggageCapacity ?? card.maxLuggage ?? card.vehicleMaxLuggage ?? card.luggageCapacity ?? card.luggage;
+                                        if (luggageVal != null && luggageVal !== "") {
+                                          return (
+                                            <div className="small mb-1">
+                                              <span className="text-muted">Max Luggage: </span>
+                                              <span className="text-dark fw-medium">{luggageVal} bag{Number(luggageVal) !== 1 ? "s" : ""}</span>
+                                            </div>
+                                          );
+                                        }
+                                        return null;
+                                      })()}
+                                      {/* City */}
+                                      {card.cityName && (
+                                        <div className="small mb-1 text-muted">{card.cityName}</div>
+                                      )}
+                                      {/* Supplier */}
+                                      {card.cabProviderName && (
+                                        <div className="small text-muted">
+                                          by {card.cabProviderName}
+                                        </div>
+                                      )}
+                                    </Col>
+
+                                    {/* Price + action */}
+                                    <Col xs={12} md={3} className="text-md-end">
+                                      <div className="text-success small fw-semibold mb-1">Available</div>
+                                      <div className="fw-bold fs-5 mb-1">
+                                        AED {Number(price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                      </div>
+                                      {card.hoursIncluded && (
+                                        <div className="small text-muted mb-2">
+                                          for {card.hoursIncluded} hr{card.hoursIncluded !== 1 ? "s" : ""}
+                                        </div>
+                                      )}
+                                      <div className="d-flex gap-2 justify-content-md-end">
+                                        <Button
+                                          variant="danger"
+                                          className="px-4 fw-semibold"
+                                          onClick={() => handleBookNow(card)}
+                                        >
+                                          Book Now
+                                        </Button>
+                                      </div>
+                                    </Col>
+                                  </Row>
+                                </Card.Body>
+                              </Card>
+                            </Col>
+                          );
+                        })}
+                      </Row>
+
+                    )}
+
+                    {/* Pagination bottom */}
+                    {totalPages > 1 && (
+                      <div className="d-flex justify-content-end mt-3">
+                        {renderPagination()}
+                      </div>
+                    )}
+                  </Col>
+                </Row>
               )}
             </Card.Body>
           </Card>
         </main>
       </div>
+      {showMapModal && (
+        <MapModal
+          show={showMapModal}
+          onHide={() => setShowMapModal(false)}
+          markers={mapMarkers}
+          title="Explore Chauffeurs on Map"
+        />
+      )}
     </div>
   );
 };
