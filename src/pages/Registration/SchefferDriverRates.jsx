@@ -695,7 +695,7 @@ const SchefferDriverRates = () => {
                   size="sm"
                 >
                   <FaBackward className="me-2" />
-                  Back to Scheffer Driver & Limousine
+                  Back
                 </Button>
                 <span className="fw-semibold">
                   <FaDollarSign className="me-2 text-success" />

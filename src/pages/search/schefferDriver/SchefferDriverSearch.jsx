@@ -817,7 +817,7 @@ export const SchefferDriverSearch = () => {
                 <Card className="border-0 shadow-sm">
                   <Card.Body className="text-center py-5 text-muted">
                     <FaCar className="display-4 text-secondary mb-3 opacity-50 d-block mx-auto" />
-                    No rental packages found for your search. Try a different city, package or cab type.
+                    No rental cabs found for your search. Try a different city, package or cab type.
                   </Card.Body>
                 </Card>
               )}
@@ -836,7 +836,7 @@ export const SchefferDriverSearch = () => {
                     <h5 className="fw-semibold mb-0">
                       Available Chauffeurs in {city?.label || "city"}
                     </h5>
-                    <span className="text-muted small">{results.length} packages found</span>
+                    <span className="text-muted small">{results.length} cabs found</span>
                   </div>
                   <Row className="g-4">
                     {results.map((card, idx) => {
