@@ -22,6 +22,7 @@ import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import TimeApplyPicker from "../../../components/TimeApplyPicker";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
+import "../../../styles/HotelSearch.css";
 
 function LazyImage({ src, alt, className }) {
   const containerRef = useRef(null);
@@ -1287,6 +1288,15 @@ export const CabSearch = () => {
         cab,
         selectedOption: enrichedSelectedOption,
         searchCriteria: {
+          // Selected agent — carried forward so /cab-booking-page can
+          // stamp it on the /api/cab/book payload. Falls back to the
+          // same session/local keys the search request already reads
+          // so behaviour matches whichever value the user searched with.
+          agentId:
+            (agent && String(agent)) ||
+            sessionStorage.getItem("makeYourOwnPackageAgentId") ||
+            localStorage.getItem("makeYourOwnPackageAgentId") ||
+            "",
           nationality,
           destination,
           city,
@@ -1519,6 +1529,7 @@ export const CabSearch = () => {
                             the resident rate. Matched on the city's country
                             code "AE" (from master_country) so a label change
                             can't break the rule. */}
+                        {/*
                         {city?.code === "AE" && (
                           <div
                             className="mt-1 small"
@@ -1527,6 +1538,7 @@ export const CabSearch = () => {
                             For UAE resident holders, please mention the nationality as United Arab Emirates regardless of the actual nationality.
                           </div>
                         )}
+                        */}
                         {/* Toggle that reveals the optional Drop City
                             selector (rendered in its own row below) so the
                             operator can search a route that ends in a
@@ -2784,14 +2796,14 @@ export const CabSearch = () => {
                         md={4}
                         className="d-flex justify-content-center mt-3"
                       >
-                        {/* Red to keep the CTA color uniform with the other
-                            /new-booking/* search pages (HotelSearch's search
-                            button, etc.), which use the brand red family. */}
+                        {/* Match the HotelSearch CTA look (btn-search-modern)
+                            so the /new-booking/* search pages share the same
+                            button shape, size and gradient. */}
                         <Button
-                          variant="danger"
-                          className="px-5 py-2 fw-bold"
                           type="submit"
+                          className="btn-search-modern"
                           disabled={transferLoading}
+                          size="lg"
                         >
                           {transferLoading ? (
                             <>

@@ -10,6 +10,7 @@ import {
   Col,
   Form,
   InputGroup,
+  Button,
 } from "react-bootstrap";
 import {
   FaEye,
@@ -40,42 +41,33 @@ const COLUMN_WIDTHS = {
   action: "70px",
 };
 
+// Colours picked to match HotelBookingList's Notification column palette:
+//   Confirmed / ReConfirmed → #06a301 (bright green)
+//   Cancelled              → #dc3545 (red)
+//   Upcoming / Pending /
+//     On Request           → #e67e22 (orange)
+// Completed / Invoiced kept in their own neutral hues since Hotel has no
+// direct equivalent — they still read distinctly next to the primary trio.
 const STATUS_META = {
-  CONFIRMED:  { label: "Confirmed",  bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  COMPLETED:  { label: "Completed",  bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
-  PENDING:    { label: "Pending",    bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  CANCELLED:  { label: "Cancelled",  bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
-  UPCOMING:   { label: "Upcoming",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  RECONFIRMED:{ label: "Reconfirmed",bg: "#ecfeff", color: "#0e7490", dot: "#06b6d4" },
-  INVOICED:   { label: "Invoiced",   bg: "#f5f3ff", color: "#5b21b6", dot: "#8b5cf6" },
-  ONREQUEST:  { label: "On Request", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  CONFIRMED:  { label: "Confirmed",  color: "#06a301" },
+  COMPLETED:  { label: "Completed",  color: "#175cd3" },
+  PENDING:    { label: "Pending",    color: "#e67e22" },
+  CANCELLED:  { label: "Cancelled",  color: "#dc3545" },
+  UPCOMING:   { label: "Upcoming",   color: "#e67e22" },
+  RECONFIRMED:{ label: "Reconfirmed",color: "#06a301" },
+  INVOICED:   { label: "Invoiced",   color: "#5b21b6" },
+  ONREQUEST:  { label: "On Request", color: "#e67e22" },
 };
 
+// Notification cell — bare colored+bold text span, matching the exact
+// shape HotelBookingList's `renderColoredStatus` uses for its Cancelled /
+// Confirmed labels. Deliberately minimal: no padding, no border-radius,
+// no inline-flex — those on a span (with no background) produced a
+// baseline-snap artefact that read as an underline in the previous style.
 const StatusPill = ({ meta, raw }) => {
   if (!meta) return <span className="text-muted">{raw || "-"}</span>;
   return (
-    <span
-      className="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill"
-      style={{
-        backgroundColor: meta.bg,
-        color: meta.color,
-        fontSize: "0.7rem",
-        fontWeight: 600,
-        lineHeight: 1,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {meta.dot && (
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            backgroundColor: meta.dot,
-            display: "inline-block",
-          }}
-        />
-      )}
+    <span style={{ color: meta.color, fontWeight: 600 }}>
       {meta.label}
     </span>
   );
@@ -126,6 +118,10 @@ const CabBookingList = () => {
   const [status, setStatus] = useState("all");
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
+  // Transfer Date filter (YYYY-MM-DD from <input type="date">). Matches
+  // HotelBookingList's Check-in Date filter — narrows the list to rows
+  // whose pickupDate equals the picked day. Blank = no restriction.
+  const [transferDateFilter, setTransferDateFilter] = useState("");
 
   // Client-side pagination across the merged + filtered list.
   const [page, setPage] = useState(1);
@@ -287,6 +283,18 @@ const CabBookingList = () => {
         }
       }
 
+      // Transfer Date filter — exact-day match on bookingDate (the value
+      // shown in the "Book Date" column) against the YYYY-MM-DD value
+      // from <input type="date">. Rows without a bookingDate are
+      // excluded when the filter is active.
+      const transferPick = (transferDateFilter || "").trim();
+      if (transferPick) {
+        const bookIso = b.bookingDate
+          ? String(b.bookingDate).split("T")[0].trim()
+          : "";
+        if (bookIso !== transferPick) return false;
+      }
+
       if (needle) {
         const hay = [
           b.packageBookCode,
@@ -304,18 +312,33 @@ const CabBookingList = () => {
       }
       return true;
     });
-  }, [allBookings, status, search, selectedMonth, selectedYear]);
+  }, [allBookings, status, search, selectedMonth, selectedYear, transferDateFilter]);
+
+  // Default row order — mirror HotelBookingList: newest Book Date first
+  // (descending) across every status, so the list opens on the most
+  // recent bookings regardless of Confirmed/Cancelled state. Rows with
+  // no bookingDate are pushed to the end.
+  const sortedBookings = useMemo(() => {
+    return [...filteredBookings].sort((a, b) => {
+      const aIso = a.bookingDate ? String(a.bookingDate).split("T")[0].trim() : "";
+      const bIso = b.bookingDate ? String(b.bookingDate).split("T")[0].trim() : "";
+      if (!aIso && !bIso) return 0;
+      if (!aIso) return 1;
+      if (!bIso) return -1;
+      return bIso.localeCompare(aIso);
+    });
+  }, [filteredBookings]);
 
   // Reset to page 1 whenever a filter changes.
   useEffect(() => {
     setPage(1);
-  }, [search, status, selectedMonth, selectedYear, perPage]);
+  }, [search, status, selectedMonth, selectedYear, transferDateFilter, perPage]);
 
-  const totalEntries = filteredBookings.length;
+  const totalEntries = sortedBookings.length;
   const safeTotalPages = Math.max(1, Math.ceil(totalEntries / perPage));
   const currentPage = Math.min(page, safeTotalPages);
   const serialNumberBase = (currentPage - 1) * perPage;
-  const pageBookings = filteredBookings.slice(
+  const pageBookings = sortedBookings.slice(
     serialNumberBase,
     serialNumberBase + perPage,
   );
@@ -333,7 +356,7 @@ const CabBookingList = () => {
     whiteSpace: "normal",
     overflow: "visible",
     wordBreak: "break-word",
-    lineHeight: 1.4,
+    lineHeight: 1.25,
   };
 
   const baseHeaderStyle = {
@@ -346,18 +369,21 @@ const CabBookingList = () => {
     lineHeight: 1.2,
   };
 
-  // Pick the StatusPill meta from the row's bucket (since the cab API
-  // doesn't always populate a plain `bookingStatus` string).
+  // Mirror the cab detail view's `displayStatus` (Cancelled → red, else
+  // `confirmationStatus` falling back to Confirmed) so the list's
+  // Notification column and the detail page's Status field stay in sync.
   const bucketMeta = (b) => {
-    if (b.__bucket === "cancelled" || normStatus(b.bookingStatus) === "cancelled")
-      return STATUS_META.CANCELLED;
-    if (b.__bucket === "completed") return STATUS_META.COMPLETED;
-    if (b.__bucket === "upcoming") return STATUS_META.UPCOMING;
-    return STATUS_META[normStatus(b.bookingStatus).toUpperCase()] || null;
+    const isCancelled =
+      b.__bucket === "cancelled" ||
+      normStatus(b.bookingStatus) === "cancelled" ||
+      b.cancelStatus === true;
+    if (isCancelled) return STATUS_META.CANCELLED;
+    const cs = normStatus(b.confirmationStatus).toUpperCase();
+    return STATUS_META[cs] || STATUS_META.CONFIRMED;
   };
 
   return (
-    <div className="min-vh-100 bg-light d-flex flex-column hbl-modern">
+    <div className="min-vh-100 bg-light d-flex flex-column hbl-modern cab-booking-list">
       <Topbar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
@@ -367,10 +393,10 @@ const CabBookingList = () => {
         >
           <Container fluid className="px-0">
             {/* Header: Title + Search (left) | Time Period (right) */}
-            <div className="d-flex justify-content-between align-items-end mb-3">
-              <div>
+            <div className="d-flex justify-content-between align-items-end mb-3 hbl-header">
+              <div className="hbl-header-left">
                 <h3 className="fw-bold text-dark mb-2">Cab Bookings</h3>
-                <InputGroup style={{ height: "40px", width: "300px" }}>
+                <InputGroup className="hbl-search" style={{ height: "40px", width: "300px" }}>
                   <InputGroup.Text
                     style={{
                       backgroundColor: "#f8f9fa",
@@ -395,7 +421,7 @@ const CabBookingList = () => {
                 </InputGroup>
               </div>
               <Card
-                className="shadow-sm border-0"
+                className="shadow-sm border-0 hbl-timecard"
                 style={{ borderRadius: "8px", minWidth: "260px" }}
               >
                 <Card.Body className="p-3">
@@ -451,14 +477,14 @@ const CabBookingList = () => {
                   style={{ borderRadius: "8px" }}
                 >
                   <Card.Body className="p-3">
-                    <h6
-                      className="mb-2 fw-bold text-dark"
-                      style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
-                    >
-                      Booking Type
-                    </h6>
-                    <Row className="g-2">
+                    <Row className="g-2 align-items-end">
                       <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Booking Type
+                        </h6>
                         <Form.Select
                           value={status}
                           onChange={(e) => setStatus(e.target.value)}
@@ -472,6 +498,40 @@ const CabBookingList = () => {
                             </option>
                           ))}
                         </Form.Select>
+                      </Col>
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Transfer Date
+                        </h6>
+                        <div className="d-flex gap-2">
+                          <Form.Control
+                            type="date"
+                            value={transferDateFilter}
+                            onChange={(e) =>
+                              setTransferDateFilter(e.target.value)
+                            }
+                            size="sm"
+                            aria-label="Transfer date filter"
+                            style={{ fontSize: "0.85rem", height: "46px" }}
+                          />
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            onClick={() => setTransferDateFilter("")}
+                            disabled={!transferDateFilter}
+                            aria-label="Clear transfer date filter"
+                            style={{
+                              fontSize: "0.85rem",
+                              height: "46px",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            Clear
+                          </Button>
+                        </div>
                       </Col>
                     </Row>
                   </Card.Body>
@@ -498,7 +558,7 @@ const CabBookingList = () => {
                     <Table
                       hover
                       size="sm"
-                      className="mb-0 align-middle table-bordered"
+                      className="mb-0 align-middle table-bordered hbl-table"
                       style={{
                         tableLayout: "auto",
                         width: "100%",
@@ -518,12 +578,12 @@ const CabBookingList = () => {
                         }}
                       >
                         <tr>
-                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.sn }}>
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", whiteSpace: "nowrap", width: COLUMN_WIDTHS.sn }}>
                             S.N
                           </th>
                           {role === "admin" && (
                             <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.customerName }}>
-                              Agent
+                              Agent Name
                             </th>
                           )}
                           <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.customerName }}>
@@ -532,7 +592,7 @@ const CabBookingList = () => {
                           <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingCode }}>
                             Booking Code
                           </th>
-                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.bookDate }}>
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", whiteSpace: "nowrap", width: COLUMN_WIDTHS.bookDate }}>
                             Book Date
                           </th>
                           <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingDetails }}>
@@ -547,10 +607,10 @@ const CabBookingList = () => {
                           <th style={{ ...baseHeaderStyle, textAlign: "right", width: COLUMN_WIDTHS.total }}>
                             Total
                           </th>
-                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
-                            Status
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", whiteSpace: "nowrap", width: COLUMN_WIDTHS.status }}>
+                            Notification
                           </th>
-                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.action }}>
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", whiteSpace: "nowrap", width: COLUMN_WIDTHS.action }}>
                             Action
                           </th>
                         </tr>
@@ -742,7 +802,7 @@ const CabBookingList = () => {
                                     width: COLUMN_WIDTHS.status,
                                   }}
                                 >
-                                  <StatusPill meta={sMeta} raw={b.bookingStatus || b.__bucket} />
+                                  <StatusPill meta={sMeta} raw={b.confirmationStatus || b.bookingStatus || b.__bucket} />
                                 </td>
                                 <td
                                   style={{
@@ -797,7 +857,7 @@ const CabBookingList = () => {
                 style={{ borderRadius: "8px" }}
               >
                 <Card.Body className="py-3">
-                  <div className="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                  <div className="d-flex justify-content-between align-items-center flex-wrap gap-3 hbl-pagination-bar">
                     <div className="text-muted" style={{ fontSize: "0.875rem" }}>
                       Showing{" "}
                       <span className="fw-semibold text-dark">{displayStart}</span>{" "}
