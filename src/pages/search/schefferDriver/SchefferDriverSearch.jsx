@@ -891,7 +891,7 @@ export const SchefferDriverSearch = () => {
                         {loading ? (
                           <><Spinner animation="border" size="sm" className="me-2" />Searching...</>
                         ) : (
-                          <><FaSearch className="me-2" />Search Rentals</>
+                          <><FaSearch className="me-2" />Search</>
                         )}
                       </Button>
                     </div>

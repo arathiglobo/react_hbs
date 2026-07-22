@@ -51,7 +51,6 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   FaCar,
   FaTrash,
-  FaRoad,
   FaMapMarkerAlt,
   FaPhoneAlt,
   FaEnvelope,
@@ -84,7 +83,6 @@ const BUTTON_STYLE = {
 // handler, or guard is affected.
 const BTN_TEAL = { ...BUTTON_STYLE, backgroundColor: "#0d9488" }; // Reconfirm
 const BTN_DANGER = { ...BUTTON_STYLE, backgroundColor: "#dc2626" }; // Cancel
-const BTN_PRIMARY = { ...BUTTON_STYLE, backgroundColor: "#2563eb" }; // Record Usage
 const BTN_SKY = { ...BUTTON_STYLE, backgroundColor: "#3ba2e8" }; // Add Agent Reference
 const BTN_INDIGO = { ...BUTTON_STYLE, backgroundColor: "#6366f1" }; // Confirmation No.
 const BTN_INFO = { ...BUTTON_STYLE, backgroundColor: "#0891b2" }; // Voucher / Invoice docs
@@ -163,13 +161,30 @@ const StatusBadge = ({ status }) => {
     if (p === "ON REQUEST") return "#e67e22";
     return "#888";
   };
+
+  const formatTitleCase = (part) => {
+    if (!part) return "";
+    const p = part.trim();
+    if (!p) return "";
+    const upper = p.toUpperCase();
+    if (upper === "CONFIRMED") return "Confirmed";
+    if (upper === "RECONFIRMED") return "Reconfirmed";
+    if (upper === "CANCELLED") return "Cancelled";
+    if (upper === "ON REQUEST") return "On Request";
+    return p
+      .toLowerCase()
+      .split(" ")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  };
+
   const parts = String(status || "-").split("/");
   return (
     <span style={{ fontWeight: "700", fontSize: "0.85rem" }}>
       {parts.map((part, i) => (
         <React.Fragment key={i}>
           {i > 0 && <span style={{ color: "#888" }}>/</span>}
-          <span style={{ color: colorFor(part) }}>{part}</span>
+          <span style={{ color: colorFor(part) }}>{formatTitleCase(part)}</span>
         </React.Fragment>
       ))}
     </span>
@@ -198,16 +213,7 @@ export default function SchefferDriverBookingDetailView() {
   const [pdfPreview, setPdfPreview] = useState(null);
   const [generatingPdfType, setGeneratingPdfType] = useState(null);
 
-  // Actual-usage modal
-  const [showUsage, setShowUsage] = useState(false);
-  const [savingUsage, setSavingUsage] = useState(false);
-  const [usageForm, setUsageForm] = useState({
-    actualHoursUsed: "",
-    actualKmUsed: "",
-    intercityFromCityId: "",
-    intercityToCityId: "",
-  });
-  const [cityList, setCityList] = useState([]);
+
 
   // Reconfirm (Confirm / Reject popup)
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -241,11 +247,46 @@ export default function SchefferDriverBookingDetailView() {
   // Resend Mail to Agent
   const [resendingMail, setResendingMail] = useState(false);
 
+  // Fallback luggage capacity fetched from cab registration when the booking
+  // record doesn't carry maxLuggageCapacity (old bookings created before the
+  // field was added to the payload). Only populated when needed; never
+  // overwrites the booking-level value if it's already present.
+  const [cabMaxLuggageCapacity, setCabMaxLuggageCapacity] = useState(null);
+
+const getPickupLandmarkAddress = (b) => {
+  if (!b) return "";
+  return (
+    b.pickupLandmarkAddress ||
+    b.pickupLandmark ||
+    b.landmark ||
+    b.landMark ||
+    b.pickupAddress ||
+    b.pickUpLandmark ||
+    b.pickUpLandmarkAddress ||
+    b.pickUpAddress ||
+    b.pickupLocation ||
+    b.pickupDetails ||
+    b.pickupRemark ||
+    b.pickupLandmarkDetails ||
+    b.custPickupLandmark ||
+    b.custPickupAddress ||
+    b.customerDTO?.pickupLandmark ||
+    b.customerDTO?.pickupLandmarkAddress ||
+    b.customerDTO?.landmark ||
+    b.customerDTO?.pickupAddress ||
+    b.customer?.pickupLandmark ||
+    b.customer?.pickupLandmarkAddress ||
+    b.customer?.landmark ||
+    b.customer?.pickupAddress ||
+    ""
+  );
+};
+
   const fetchBooking = async () => {
     setLoading(true);
     try {
       const res = await axiosInstance.get(`${API_BASE}/booking/${id}`);
-      setDetails(res.data);
+      setDetails((prev) => ({ ...(prev || {}), ...(res.data || {}) }));
     } catch (e) {
       console.error("Failed to load booking", e);
       toast.error("Failed to load booking");
@@ -261,30 +302,54 @@ export default function SchefferDriverBookingDetailView() {
     // eslint-disable-next-line
   }, [id]);
 
-  // Cities used by the Record-Actual-Usage modal's intercity selects.
+  // When booking details load and maxLuggageCapacity is not stored in the
+  // booking record (pre-fix old bookings), try to fetch it from the cab
+  // registration using the cabId / cabProviderId that the booking carries.
+  // This is a read-only, best-effort fetch — any failure is silently ignored.
   useEffect(() => {
-    (async () => {
-      try {
-        const r = await axiosInstance.get("/api/province", {
-          params: { limit: 500 },
-        });
-        const items = Array.isArray(r.data) ? r.data : r.data?.content || [];
-        setCityList(
-          items.map((it) => ({
-            id: it.id ?? it.stateId ?? it.placeid ?? it.provinceId,
-            name: it.name ?? it.stateName ?? it.placeName ?? it.provinceName,
-          })),
-        );
-      } catch (e) {
-        console.error("Error loading cities:", e);
-      }
-    })();
-  }, []);
+    if (!details) return;
+    // If the booking already has the value, nothing to do.
+    const bookingLuggage =
+      details.maxLuggageCapacity ??
+      details.cabMaxLuggageCapacity ??
+      details.maxLuggage;
+    if (bookingLuggage != null) {
+      setCabMaxLuggageCapacity(null); // clear any stale fallback
+      return;
+    }
 
-  const cityName = (cid) => {
-    const c = cityList.find((x) => String(x.id) === String(cid));
-    return c ? c.name : "";
-  };
+    // Try to look up the cab's maxLuggageCapacity from the registration using
+    // the cabProviderId (returned by the booking API) + cabId.
+    const providerId =
+      details.cabProviderId ??
+      details.cabProvider ??
+      details.providerId;
+    const cabId = details.cabId;
+
+    if (!providerId || !cabId) return;
+
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/SchefferDriver/cabs/${providerId}`)
+      .then((res) => {
+        if (cancelled) return;
+        const cabs = Array.isArray(res.data) ? res.data : [];
+        const cab = cabs.find((c) => String(c.cabId) === String(cabId));
+        if (cab && cab.maxLuggageCapacity != null) {
+          setCabMaxLuggageCapacity(cab.maxLuggageCapacity);
+        }
+      })
+      .catch(() => {
+        // Silently ignore — the Luggage field will just show the legacy
+        // boolean fallback for very old bookings.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [details?.id, details?.cabId, details?.cabProviderId]);
+
+
 
   const bookingId = details?.id || details?.custombookingId || id;
 
@@ -304,12 +369,17 @@ export default function SchefferDriverBookingDetailView() {
     normalizedStatus === "COMPLETED" ||
     details?.reconfirmation === true;
 
-  // Combined status label for the header / Trip Info StatusBadge. Surfaces
-  // the cancelled-from state when available (e.g. "ReConfirmed/Cancelled").
+  // Combined status label for the header / Trip Info StatusBadge.
+  // Shows status progression: Confirmed → Reconfirmed → Cancelled
+  // Mirrors the hotel booking detail page pattern.
   const displayStatus = isCancelled
-    ? details?.confirmationStatus
-      ? `${details.confirmationStatus}/Cancelled`
+    ? normalizedStatus === "RECONFIRMED"
+      ? "Confirmed/Reconfirmed/Cancelled"
+      : normalizedStatus === "CONFIRMED"
+      ? "Confirmed/Cancelled"
       : "Cancelled"
+    : normalizedStatus === "RECONFIRMED"
+    ? "Confirmed/Reconfirmed"
     : details?.confirmationStatus || details?.status || "Confirmed";
 
   // ── Cancel ──────────────────────────────────────────────────────
@@ -379,56 +449,7 @@ export default function SchefferDriverBookingDetailView() {
     }
   };
 
-  // ── Record Actual Usage ─────────────────────────────────────────
-  const openUsage = () => {
-    if (!details) return;
-    setUsageForm({
-      actualHoursUsed:
-        details.actualHoursUsed != null ? details.actualHoursUsed : "",
-      actualKmUsed: details.actualKmUsed != null ? details.actualKmUsed : "",
-      intercityFromCityId: "",
-      intercityToCityId: "",
-    });
-    setShowUsage(true);
-  };
 
-  const saveUsage = async () => {
-    if (!bookingId) return;
-    setSavingUsage(true);
-    try {
-      const payload = {
-        actualHoursUsed:
-          usageForm.actualHoursUsed === ""
-            ? null
-            : Number(usageForm.actualHoursUsed),
-        actualKmUsed:
-          usageForm.actualKmUsed === ""
-            ? null
-            : Number(usageForm.actualKmUsed),
-        intercityFromCityId: usageForm.intercityFromCityId
-          ? Number(usageForm.intercityFromCityId)
-          : null,
-        intercityFromCity: usageForm.intercityFromCityId
-          ? cityName(usageForm.intercityFromCityId)
-          : null,
-        intercityToCityId: usageForm.intercityToCityId
-          ? Number(usageForm.intercityToCityId)
-          : null,
-        intercityToCity: usageForm.intercityToCityId
-          ? cityName(usageForm.intercityToCityId)
-          : null,
-      };
-      await axiosInstance.put(`${API_BASE}/${bookingId}/usage`, payload);
-      toast.success("Usage updated — final amount recalculated");
-      setShowUsage(false);
-      fetchBooking();
-    } catch (e) {
-      console.error("Usage update error:", e);
-      toast.error("Failed to update usage");
-    } finally {
-      setSavingUsage(false);
-    }
-  };
 
   // ── Reconfirm ──────────────────────────────────────────────────────
   const openConfirmModal = () => setShowConfirmModal(true);
@@ -719,6 +740,18 @@ export default function SchefferDriverBookingDetailView() {
                             <>
                               <FaMapMarkerAlt
                                 className="me-1"
+                                style={{ color: "#16a34a" }}
+                              />
+                              Pickup Landmark Address
+                            </>
+                          }
+                          value={getPickupLandmarkAddress(details) || "-"}
+                        />
+                        <InfoRow
+                          label={
+                            <>
+                              <FaMapMarkerAlt
+                                className="me-1"
                                 style={{ color: "#dc2626" }}
                               />
                               Dropoff
@@ -731,6 +764,18 @@ export default function SchefferDriverBookingDetailView() {
                               ? ` @ ${details.dropoffTime}`
                               : ""
                           }`}
+                        />
+                        <InfoRow
+                          label="Deadline Date"
+                          value={
+                            details.deadlineDate ? (
+                              <span style={{ color: "#dc2626", fontWeight: 600 }}>
+                                {`${String(details.deadlineDate).slice(0, 10)} 02:00 PM (UAE)`}
+                              </span>
+                            ) : (
+                              "-"
+                            )
+                          }
                         />
                       </Col>
                       <Col md={6}>
@@ -746,7 +791,20 @@ export default function SchefferDriverBookingDetailView() {
                         />
                         <InfoRow
                           label="Luggage"
-                          value={details.luggage ? "Yes" : "No"}
+                          value={(() => {
+                            // Check multiple possible field names in order of
+                            // preference: booking-level snapshot → fallback
+                            // fetched from cab registration → legacy boolean.
+                            const capacity =
+                              details.maxLuggageCapacity ??
+                              details.cabMaxLuggageCapacity ??
+                              details.maxLuggage ??
+                              cabMaxLuggageCapacity;
+                            if (capacity != null) {
+                              return `${capacity} pieces`;
+                            }
+                            return details.luggage ? "Yes" : "No";
+                          })()}
                         />
                         {(details.transporter || details.driverName) && (
                           <InfoRow
@@ -938,22 +996,15 @@ export default function SchefferDriverBookingDetailView() {
                         </Col>
                         <Col md={6}>
                           <InfoRow
-                            label="Extra Rates"
-                            value={`Hour: AED ${
-                              details.extraHourRate ?? "-"
-                            } · KM: AED ${details.extraKmRate ?? "-"}`}
-                          />
-                          <InfoRow
-                            label="Actual Used"
-                            value={`${
-                              details.actualHoursUsed != null
-                                ? `${details.actualHoursUsed} hrs`
-                                : "—"
-                            }${
-                              details.actualKmUsed != null
-                                ? ` · ${details.actualKmUsed} km`
-                                : ""
-                            }`}
+                            label="No. of Kilometers Used"
+                            value={(() => {
+                              const km =
+                                details.includedKm ?? details.kmIncluded;
+                              if (km == null || km === "") return "-";
+                              return String(km).toLowerCase().includes("km")
+                                ? km
+                                : `${km} km`;
+                            })()}
                           />
                           {(details.extraHoursCharge > 0 ||
                             details.extraKmCharge > 0 ||
@@ -1131,16 +1182,7 @@ export default function SchefferDriverBookingDetailView() {
                     </>
                   )}
 
-                  {details.packageName && !isCancelled && (
-                    <button
-                      style={BTN_PRIMARY}
-                      onClick={openUsage}
-                      title="Record actual usage"
-                    >
-                      <FaRoad style={{ marginRight: "6px" }} />
-                      RECORD USAGE
-                    </button>
-                  )}
+
 
                   {!isCancelled && (
                     <button
@@ -1397,125 +1439,7 @@ export default function SchefferDriverBookingDetailView() {
         </Modal.Footer>
       </Modal>
 
-      {/* Actual usage modal */}
-      <Modal show={showUsage} onHide={() => setShowUsage(false)} centered>
-        <Modal.Header
-          closeButton
-          style={{
-            backgroundColor: "#fff",
-            borderBottom: "2px solid #e9ecef",
-          }}
-        >
-          <Modal.Title className="fw-bold d-flex align-items-center">
-            <FaRoad className="me-2 text-warning" />
-            <span>Record Actual Usage</span>
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body style={{ padding: "1.5rem" }}>
-          {details && (
-            <>
-              <p className="text-muted small mb-3">
-                Package <strong>{details.packageName}</strong> —{" "}
-                {details.includedHours ?? "-"} hrs /{" "}
-                {details.includedKm ?? "-"} km included. Extra hour: AED{" "}
-                {details.extraHourRate ?? "-"}, Extra km: AED{" "}
-                {details.extraKmRate ?? "-"}.
-              </p>
-              <Row className="g-3">
-                <Col md={6}>
-                  <Form.Label>Actual Hours Used</Form.Label>
-                  <Form.Control
-                    type="number"
-                    min="0"
-                    value={usageForm.actualHoursUsed}
-                    onChange={(e) =>
-                      setUsageForm((p) => ({
-                        ...p,
-                        actualHoursUsed: e.target.value,
-                      }))
-                    }
-                  />
-                </Col>
-                <Col md={6}>
-                  <Form.Label>Actual KM Used</Form.Label>
-                  <Form.Control
-                    type="number"
-                    min="0"
-                    value={usageForm.actualKmUsed}
-                    onChange={(e) =>
-                      setUsageForm((p) => ({
-                        ...p,
-                        actualKmUsed: e.target.value,
-                      }))
-                    }
-                  />
-                </Col>
-                <Col md={12}>
-                  <hr className="my-2" />
-                  <small className="text-muted">
-                    Intercity leg (optional — adds surcharge)
-                  </small>
-                </Col>
-                <Col md={6}>
-                  <Form.Label>From City</Form.Label>
-                  <Form.Select
-                    value={usageForm.intercityFromCityId}
-                    onChange={(e) =>
-                      setUsageForm((p) => ({
-                        ...p,
-                        intercityFromCityId: e.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">None</option>
-                    {cityList.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </Form.Select>
-                </Col>
-                <Col md={6}>
-                  <Form.Label>To City</Form.Label>
-                  <Form.Select
-                    value={usageForm.intercityToCityId}
-                    onChange={(e) =>
-                      setUsageForm((p) => ({
-                        ...p,
-                        intercityToCityId: e.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">None</option>
-                    {cityList.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </Form.Select>
-                </Col>
-              </Row>
-            </>
-          )}
-        </Modal.Body>
-        <Modal.Footer
-          style={{
-            backgroundColor: "#f8f9fa",
-            borderTop: "1px solid #dee2e6",
-          }}
-        >
-          <Button
-            variant="secondary"
-            onClick={() => setShowUsage(false)}
-            disabled={savingUsage}
-          >
-            Cancel
-          </Button>
-          <Button variant="success" onClick={saveUsage} disabled={savingUsage}>
-            {savingUsage ? "Saving..." : "Save & Recalculate"}
-          </Button>
-        </Modal.Footer>
-      </Modal>
+
 
       {/* ── Reconfirm Booking Modal ───────────────────────── */}
       <Modal

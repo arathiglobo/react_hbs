@@ -562,6 +562,10 @@ const SchefferDriverBookingPage = () => {
         searchCriteria.cityName ||
         null,
       pickupTime: searchCriteria.pickupTime || null,
+      pickupLandmark: contactDetails.pickupLandmark || null,
+      pickupLandmarkAddress: contactDetails.pickupLandmark || null,
+      pickupAddress: contactDetails.pickupLandmark || null,
+      landmark: contactDetails.pickupLandmark || null,
       dropoffType: searchCriteria.dropoffType || "CITY",
       dropoffName:
         searchCriteria.dropoffName ||
@@ -569,6 +573,15 @@ const SchefferDriverBookingPage = () => {
         searchCriteria.cityName ||
         null,
       dropoffTime: searchCriteria.dropoffTime || null,
+      // Max luggage capacity from the cab registration — snapshot at booking
+      // time so the detail view can display it without a separate lookup.
+      // Robust fallback chain mirrors what the search result card uses.
+      maxLuggageCapacity:
+        selectedOption.maxLuggageCapacity ??
+        selectedOption.maxLuggage ??
+        selectedOption.vehicleMaxLuggage ??
+        selectedOption.luggageCapacity ??
+        null,
     };
 
     setPendingPayload(payload);
@@ -1182,6 +1195,18 @@ const SchefferDriverBookingPage = () => {
                       </div>
                     )}
 
+                    {contactDetails.pickupLandmark && (
+                      <div className="sdbp-summary-row d-flex justify-content-between align-items-start py-2 border-bottom small">
+                        <div className="text-muted fw-medium">
+                          <FaMapMarkerAlt className="me-2 text-success" />
+                          Pickup Landmark Address
+                        </div>
+                        <div className="text-dark fw-semibold text-end">
+                          {contactDetails.pickupLandmark}
+                        </div>
+                      </div>
+                    )}
+
                     {searchCriteria.dropoffType && (
                       <div className="sdbp-summary-row d-flex justify-content-between align-items-start py-2 border-bottom small">
                         <div className="text-muted fw-medium">
@@ -1512,6 +1537,12 @@ const SchefferDriverBookingPage = () => {
                           ? searchCriteria.pickupTime
                           : "—"}
                       </td>
+                    </tr>
+                  )}
+                  {contactDetails.pickupLandmark && (
+                    <tr>
+                      <td className="fw-semibold">Pickup Landmark Address</td>
+                      <td colSpan={3}>{contactDetails.pickupLandmark}</td>
                     </tr>
                   )}
                   {searchCriteria.dropoffType && (

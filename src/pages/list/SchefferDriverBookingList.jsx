@@ -9,7 +9,7 @@
  * The Action column contains only the View (eye) icon — clicking it
  * navigates to a dedicated detail page
  * (/booking-details/scheffer-driver-booking/:id) where Voucher / Cancel /
- * Record-Actual-Usage live as buttons at the bottom-left.
+ * Action buttons live.
  *
  * Visually mirrors the Hotel Booking List (`hbl-modern` skin): title +
  * 300px search left, Time Period card right, Booking Type filter card,
@@ -125,8 +125,36 @@ const rowStatusMeta = (b) => {
   if (cs === "reconfirmed" || b.reconfirmation === true)
     return STATUS_META.RECONFIRMED;
   if (cs === "rejected") return STATUS_META.REJECTED;
-  if (b.__bucket === "completed") return STATUS_META.COMPLETED;
   return STATUS_META.CONFIRMED;
+};
+
+const getPickupLandmarkAddress = (b) => {
+  if (!b) return "";
+  return (
+    b.pickupLandmarkAddress ||
+    b.pickupLandmark ||
+    b.landmark ||
+    b.landMark ||
+    b.pickupAddress ||
+    b.pickUpLandmark ||
+    b.pickUpLandmarkAddress ||
+    b.pickUpAddress ||
+    b.pickupLocation ||
+    b.pickupDetails ||
+    b.pickupRemark ||
+    b.pickupLandmarkDetails ||
+    b.custPickupLandmark ||
+    b.custPickupAddress ||
+    b.customerDTO?.pickupLandmark ||
+    b.customerDTO?.pickupLandmarkAddress ||
+    b.customerDTO?.landmark ||
+    b.customerDTO?.pickupAddress ||
+    b.customer?.pickupLandmark ||
+    b.customer?.pickupLandmarkAddress ||
+    b.customer?.landmark ||
+    b.customer?.pickupAddress ||
+    ""
+  );
 };
 
 const SchefferDriverBookingList = ({
@@ -696,6 +724,17 @@ const SchefferDriverBookingList = ({
                                       </span>
                                     )}
                                   </div>
+                                  {getPickupLandmarkAddress(b) ? (
+                                    <div
+                                      className="text-muted"
+                                      style={{
+                                        fontSize: "0.7rem",
+                                        paddingLeft: "12px",
+                                      }}
+                                    >
+                                      📍 {getPickupLandmarkAddress(b)}
+                                    </div>
+                                  ) : null}
                                   <div className="d-flex align-items-center gap-1">
                                     <FaMapMarkerAlt
                                       style={{
