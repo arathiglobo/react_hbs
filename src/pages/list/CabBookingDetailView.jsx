@@ -206,26 +206,23 @@ const formatDate = (value) => {
   return `${day} ${d.toLocaleString("default", { month: "short" })} ${d.getFullYear()}`;
 };
 
-// Per-part coloured status label, copied from the Hotel Booking detail view.
-// Confirmed / ReConfirmed → green, Cancelled → red, On Request → orange.
+// Coloured status label, copied from the Hotel Booking detail view. Coloured by
+// the label's dominant meaning (so the combined labels match the Package detail
+// view): Cancelled → red (cancellation wins, e.g. "ReConfirmed/Cancelled"),
+// Confirmed / ReConfirmed (incl. "Confirm/ReConfirmed") → green, On Request →
+// orange, anything else → grey.
 const StatusBadge = ({ status }) => {
-  const colorFor = (part) => {
-    const p = (part || "").trim().toUpperCase();
-    if (p.startsWith("CONFIRMED") || p.startsWith("RECONFIRMED"))
-      return "#16a34a";
-    if (p.startsWith("CANCELLED")) return "#dc2626";
-    if (p === "ON REQUEST") return "#e67e22";
-    return "#888";
-  };
-  const parts = String(status || "-").split("/");
+  const p = String(status || "-").trim().toUpperCase();
+  const color = p.includes("CANCELLED")
+    ? "#dc2626"
+    : p.includes("CONFIRM")
+      ? "#16a34a"
+      : p === "ON REQUEST"
+        ? "#e67e22"
+        : "#888";
   return (
-    <span style={{ fontWeight: "700", fontSize: "0.85rem" }}>
-      {parts.map((part, i) => (
-        <React.Fragment key={i}>
-          {i > 0 && <span style={{ color: "#888" }}>/</span>}
-          <span style={{ color: colorFor(part) }}>{part}</span>
-        </React.Fragment>
-      ))}
+    <span style={{ fontWeight: "700", fontSize: "0.85rem", color }}>
+      {status ?? "-"}
     </span>
   );
 };
@@ -947,11 +944,23 @@ export default function CabBookingDetailView() {
   // only "OK" is remapped — every other status (ReConfirmed, Rejected, …) is
   // shown as-is. Display-only: the stored confirmationStatus is unchanged.
   const rawStatus = actionState.confirmationStatus || "Confirmed";
-  const displayStatus = isCancelled
+  const baseStatus = isCancelled
     ? "Cancelled"
     : String(rawStatus).trim().toUpperCase() === "OK"
       ? "Confirmed"
       : rawStatus;
+  // Display-only relabels (mirror PackageBookingDetailView): a ReConfirmed
+  // booking reads "Confirm/ReConfirmed" and a Cancelled one reads
+  // "ReConfirmed/Cancelled". The underlying state (isCancelled / the stored
+  // confirmationStatus) is unchanged, so the action-button gates still work off
+  // the real status.
+  const normalizedBase = String(baseStatus).trim().toUpperCase();
+  const displayStatus =
+    normalizedBase === "CANCELLED"
+      ? "ReConfirmed/Cancelled"
+      : normalizedBase === "RECONFIRMED"
+        ? "Confirm/ReConfirmed"
+        : baseStatus;
 
   // Booking lifecycle events for the History modal — built from the row stub
   // already loaded (no extra API call), mirroring the Package / Hotel booking

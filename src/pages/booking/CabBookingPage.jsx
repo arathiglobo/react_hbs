@@ -116,10 +116,54 @@ async function reverseGeocode(lat, lon) {
   return null;
 }
 
+// ── New-tab booking hand-off ─────────────────────────────────────────────
+// The cab search "Select" button opens this page in a new browser tab. Router
+// state can't cross tabs, so the payload is stashed in localStorage under a
+// one-time `cabBookingDraft:<id>` key and the id is passed as ?draft=<id>.
+// Parsed drafts are cached in-module so a React StrictMode double-mount (dev)
+// still resolves the payload after the localStorage key has been cleared.
+const cabBookingDraftCache = new Map();
+
+function readCabBookingDraft(draftId) {
+  if (!draftId) return null;
+  if (cabBookingDraftCache.has(draftId)) return cabBookingDraftCache.get(draftId);
+  try {
+    const raw = localStorage.getItem(`cabBookingDraft:${draftId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      cabBookingDraftCache.set(draftId, parsed);
+      return parsed;
+    }
+  } catch {
+    // corrupt or unavailable draft — fall through to null
+  }
+  return null;
+}
+
 const CabBookingPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { cab, selectedOption, searchCriteria } = location.state || {};
+  // Resolve the incoming booking payload. In-app navigation delivers it via
+  // router state; when the "Select" button opens this page in a NEW TAB the
+  // payload is instead handed off through localStorage under a one-time
+  // ?draft=<id> key (router state can't cross a browser tab).
+  const draftId = useMemo(
+    () => new URLSearchParams(location.search).get("draft"),
+    [location.search],
+  );
+  const { cab, selectedOption, searchCriteria } = useMemo(
+    () => location.state || readCabBookingDraft(draftId) || {},
+    [location.state, draftId],
+  );
+
+  // Clear the one-time draft hand-off once consumed so it can't leak into a
+  // later booking or accumulate in localStorage. The in-module cache still
+  // holds the parsed payload, so this is safe to run after the first render.
+  useEffect(() => {
+    if (draftId) {
+      localStorage.removeItem(`cabBookingDraft:${draftId}`);
+    }
+  }, [draftId]);
   const selectedAgentId =
     searchCriteria?.agentId != null && searchCriteria.agentId !== ""
       ? String(searchCriteria.agentId)
@@ -608,8 +652,11 @@ const CabBookingPage = () => {
     return { errors, hasErrors };
   };
 
-  // ── Step 1: validate + build payload + open Order Summary modal.
-  // No backend call yet — the user must explicitly confirm in the modal.
+  // ── Step 1: validate the form, then gate on Terms acceptance. If the user
+  // hasn't accepted the policies yet, open the Terms pop-up (the first modal
+  // in the confirm flow) and stop; once accepted we hand off to
+  // proceedToOrderSummary(). No backend call happens until the user confirms
+  // in the Order Summary modal.
   const handleConfirmClick = () => {
     const { errors, hasErrors } = validateForm();
 
@@ -629,13 +676,23 @@ const CabBookingPage = () => {
       return;
     }
 
+    // Terms & Conditions + Cancellation Policy acceptance is captured in a
+    // dedicated pop-up shown as the FIRST step of the confirm flow (it
+    // replaced the old inline checkbox). If the user hasn't accepted yet,
+    // open that pop-up and stop here — its "Agree & Continue" button resumes
+    // the flow by calling proceedToOrderSummary().
     if (!acceptedPolicies) {
-      toast.error(
-        "Please accept the Terms & Conditions and Cancellation Policy to continue.",
-      );
+      setShowPolicyModal(true);
       return;
     }
 
+    proceedToOrderSummary();
+  };
+
+  // Builds the booking payload from the current form state and opens the
+  // Order Summary review modal. Split out of handleConfirmClick so the Terms
+  // pop-up's "Agree & Continue" action can resume the flow after acceptance.
+  const proceedToOrderSummary = () => {
     const tdNumber =
       tourismDirham !== "" && !isNaN(Number(tourismDirham))
         ? Number(tourismDirham)
@@ -855,6 +912,7 @@ const CabBookingPage = () => {
                     style={cardHeaderStyle}
                   >
                     <span className="fw-bold text-dark">Booking Summary</span>
+                    {/* Edit Search button hidden per request
                     <Button
                       variant="outline-secondary"
                       size="sm"
@@ -863,6 +921,7 @@ const CabBookingPage = () => {
                     >
                       <FaEdit /> Edit Search
                     </Button>
+                    */}
                   </Card.Header>
                   <Card.Body className="p-4">
                     <Row className="g-3">
@@ -1627,6 +1686,7 @@ const CabBookingPage = () => {
                       style={cardHeaderStyle}
                     >
                       <span className="fw-bold">Vehicle Details</span>
+                      {/* Change button hidden per request
                       <Button
                         variant="outline-secondary"
                         size="sm"
@@ -1635,6 +1695,7 @@ const CabBookingPage = () => {
                       >
                         <FaEdit /> Change
                       </Button>
+                      */}
                     </Card.Header>
                     <Card.Body className="p-3">
                       <div className="d-flex gap-3">
@@ -1732,54 +1793,10 @@ const CabBookingPage = () => {
                     </Card.Body>
                   </Card>
 
-                  {/* Terms acceptance — links open the policy detail modal. */}
-                  <div className="mt-3 px-1">
-                    <Form.Check
-                      type="checkbox"
-                      id="cab-accept-terms"
-                      checked={acceptedPolicies}
-                      onChange={(e) => setAcceptedPolicies(e.target.checked)}
-                      label={
-                        <span className="small">
-                          I have read and agree to the{" "}
-                          <span
-                            role="button"
-                            tabIndex={0}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setShowPolicyModal(true);
-                            }}
-                            style={{
-                              color: "#EC0B43",
-                              cursor: "pointer",
-                              textDecoration: "underline",
-                            }}
-                          >
-                            Terms &amp; Conditions
-                          </span>{" "}
-                          and{" "}
-                          <span
-                            role="button"
-                            tabIndex={0}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setShowPolicyModal(true);
-                            }}
-                            style={{
-                              color: "#EC0B43",
-                              cursor: "pointer",
-                              textDecoration: "underline",
-                            }}
-                          >
-                            Cancellation Policy
-                          </span>
-                          .
-                        </span>
-                      }
-                    />
-                  </div>
+                  {/* Terms & Conditions + Cancellation Policy acceptance moved
+                       into a dedicated pop-up that appears as the first step
+                       when the user clicks "Confirm Booking" — see the Terms
+                       modal near the end of this file + handleConfirmClick. */}
 
                   <div className="hbp-action-bar mt-3 d-flex gap-2">
                     <Button
@@ -1809,7 +1826,7 @@ const CabBookingPage = () => {
                       ) : (
                         <>
                           <FaCheckCircle className="me-1" />
-                          Confirm Booking
+                          Booking
                         </>
                       )}
                     </Button>
@@ -1821,13 +1838,20 @@ const CabBookingPage = () => {
         </main>
       </div>
 
-      {/* ── Transfer Policies & Terms modal — opened from the inline
-           Terms & Conditions / Cancellation Policy links. Informational:
-           accepting here also ticks the page-level acceptance checkbox. */}
+      {/* ── Transfer Policies & Terms modal — shown as the FIRST pop-up when
+           the user clicks "Confirm Booking" (see handleConfirmClick). It lists
+           the Terms & Conditions + Cancellation Policy and requires the
+           mandatory acceptance checkbox in the footer to be ticked before the
+           flow continues to the Order Summary modal. Dismissing it without
+           agreeing clears the acceptance so the gate re-shows next time. */}
       <Modal
         show={showPolicyModal}
-        onHide={() => setShowPolicyModal(false)}
+        onHide={() => {
+          setShowPolicyModal(false);
+          setAcceptedPolicies(false);
+        }}
         dialogClassName="policy-modal"
+        size="lg"
         centered
       >
         <Modal.Header closeButton className="policy-modal-header">
@@ -1835,7 +1859,7 @@ const CabBookingPage = () => {
             Transfer Policies &amp; Terms
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body className="policy-modal-body" style={{ maxHeight: "65vh", overflowY: "auto" }}>
+        <Modal.Body className="policy-modal-body">
           {policyLoading ? (
             <div className="text-center py-5">
               <Spinner animation="border" variant="primary" />
@@ -1871,25 +1895,45 @@ const CabBookingPage = () => {
             </>
           )}
         </Modal.Body>
-        <Modal.Footer className="policy-modal-footer">
-          <Button
-            variant="outline-secondary"
-            size="sm"
-            onClick={() => setShowPolicyModal(false)}
-          >
-            Close
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={policyLoading}
-            onClick={() => {
-              setAcceptedPolicies(true);
-              setShowPolicyModal(false);
-            }}
-          >
-            I Agree
-          </Button>
+        <Modal.Footer className="policy-modal-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+          {/* Mandatory acceptance — "Agree & Continue" stays disabled until
+               this box is ticked, so the booking cannot proceed without the
+               user accepting the Terms & Conditions and Cancellation Policy. */}
+          <Form.Check
+            type="checkbox"
+            id="cab-modal-accept-terms"
+            checked={acceptedPolicies}
+            onChange={(e) => setAcceptedPolicies(e.target.checked)}
+            label={
+              <span className="small">
+                I have read and agree to the Terms &amp; Conditions and
+                Cancellation Policy.
+              </span>
+            }
+          />
+          <div className="d-flex gap-2">
+            <Button
+              variant="outline-secondary"
+              size="sm"
+              onClick={() => {
+                setShowPolicyModal(false);
+                setAcceptedPolicies(false);
+              }}
+            >
+              Close
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={policyLoading || !acceptedPolicies}
+              onClick={() => {
+                setShowPolicyModal(false);
+                proceedToOrderSummary();
+              }}
+            >
+              Agree &amp; Continue
+            </Button>
+          </div>
         </Modal.Footer>
       </Modal>
 
@@ -1919,8 +1963,21 @@ const CabBookingPage = () => {
             <Col md={10}>
               <h6 className="fw-bold mb-1">{cab.cabname}</h6>
               <Badge bg={selectedOption?.types === "Private" ? "success" : "info"}>
-                {selectedOption?.types}
+                {selectedOption?.types === "Private"
+                  ? "Private Transfer"
+                  : "Shared (SIC)"}
               </Badge>
+              {cab.cabProviderName && (
+                <span className="text-muted small ms-2">
+                  by {cab.cabProviderName}
+                </span>
+              )}
+              <div className="text-muted small mt-1">
+                Max Pax: {cab.vehicleMaxCapacity ?? cab.capacityMax ?? "—"}
+                {"  ·  "}
+                Max Luggage: {cab.vehicleMaxLuggage ?? cab.capacityMax ?? "—"}
+                {cab.noOfCabs > 1 ? `  ·  ${cab.noOfCabs} Cabs` : ""}
+              </div>
               {cab.cabdetails && (
                 <div className="text-muted small mt-1">{cab.cabdetails}</div>
               )}
@@ -1945,6 +2002,44 @@ const CabBookingPage = () => {
               <span>
                 {selectedOption?.location || "N/A"} → {selectedOption?.dropOff || "N/A"}
               </span>
+            </Col>
+          </Row>
+
+          {/* Transfer details — city, nationality and the rate's service info
+              (duration / distance / driver waiting time / currency) so the
+              operator can verify the whole transfer before confirming. */}
+          <Row className="mb-3">
+            <Col md={4}>
+              <small className="text-muted d-block">City</small>
+              <span>
+                {searchCriteria.city?.label ||
+                  searchCriteria.destination?.label ||
+                  "—"}
+              </span>
+            </Col>
+            <Col md={4}>
+              <small className="text-muted d-block">Nationality</small>
+              <span>{searchCriteria.nationality?.label || "—"}</span>
+            </Col>
+            <Col md={4}>
+              <small className="text-muted d-block">Duration</small>
+              <span>{selectedOption?.hourDetails || "NA"}</span>
+            </Col>
+            <Col md={4} className="mt-2">
+              <small className="text-muted d-block">Distance</small>
+              <span>
+                {selectedOption?.distance != null
+                  ? `${Number(selectedOption.distance).toFixed(1)} Km`
+                  : "—"}
+              </span>
+            </Col>
+            <Col md={4} className="mt-2">
+              <small className="text-muted d-block">Driver Waiting Time</small>
+              <span>{selectedOption?.driverWaitingTime || "—"}</span>
+            </Col>
+            <Col md={4} className="mt-2">
+              <small className="text-muted d-block">Currency</small>
+              <span>{searchCriteria.currencyCode || "AED"}</span>
             </Col>
           </Row>
 
@@ -2161,7 +2256,7 @@ const CabBookingPage = () => {
             ) : (
               <>
                 <FaCheckCircle className="me-2" />
-                Confirm &amp; Book
+                Confirm
               </>
             )}
           </Button>

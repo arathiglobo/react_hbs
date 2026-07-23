@@ -777,7 +777,20 @@ const CabBookingList = () => {
                                   {(b.pickupName || b.dropoffName) && (
                                     <div
                                       className="text-muted"
-                                      style={{ fontSize: "0.7rem" }}
+                                      style={{
+                                        fontSize: "0.7rem",
+                                        // Cap the Travel cell at 3 lines total:
+                                        // 1 line for the date above + up to 2
+                                        // lines for the route (clamped with an
+                                        // ellipsis; full route shows on hover).
+                                        display: "-webkit-box",
+                                        WebkitLineClamp: 2,
+                                        WebkitBoxOrient: "vertical",
+                                        overflow: "hidden",
+                                      }}
+                                      title={`${b.pickupName || ""}${
+                                        b.dropoffName ? ` → ${b.dropoffName}` : ""
+                                      }`}
                                     >
                                       {b.pickupName || ""}
                                       {b.dropoffName ? ` → ${b.dropoffName}` : ""}
