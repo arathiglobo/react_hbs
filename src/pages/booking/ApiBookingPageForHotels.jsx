@@ -288,11 +288,25 @@ const ApiBookingPageForHotels = () => {
         rooms[0]?.guests?.[0] ||
         {};
 
+      // ATHARVA (apiId 3): the create-booking endpoint requires the
+      // session TokenId + vendor HKey stamped at the top level. Every
+      // room in a single hotel search shares the same pair, so it's safe
+      // to lift them from the first rate. Left null for other suppliers.
+      const firstRate = bookingData.selectedRate[0] || {};
+
       const payload = {
         agentId: bookingData.payload.agentId || null,
         apiId: bookingData.payload.apiId || null,
         hotelId: bookingData.selectedRate[0]?.hotelId || "",
-        hotelCode: bookingData.selectedRate[0]?.hotelCode || "",
+        hotelCode:
+          bookingData.selectedRate[0]?.hotelCode ||
+          bookingData.payload?.hotelCode ||
+          "",
+        // ATHARVA carriers (harmless nulls for other suppliers).
+        tokenId: firstRate.atharvaTokenId || null,
+        hKey: firstRate.atharvaHKey || null,
+        cityId: bookingData.payload?.cityId || null,
+        nationalityId: bookingData.payload?.nationalityId || null,
         hotelName: bookingData.hotelStaticData.hotelName,
         address: bookingData.hotelStaticData.address,
         starRating: bookingData.hotelStaticData.starRating,
@@ -385,6 +399,11 @@ const ApiBookingPageForHotels = () => {
             roomTypeCode: rate.roomTypeCode,
             mealPlanCode: rate.mealPlanCode,
             contractTokenId: rate.contractTokenId,
+            // ATHARVA per-room rate key. Prefers the prebook-refreshed
+            // value; falls back to the search-time key so a room whose
+            // prebook was skipped still round-trips. Ignored by other
+            // suppliers (RoomBookingRequest.rateKey is @Nullable).
+            rateKey: rate.atharvaRateKey || null,
             guests: room.guests.map((guest) => ({
               salutation: guest.salutation,
               firstName: guest.firstName,
@@ -544,9 +563,23 @@ const ApiBookingPageForHotels = () => {
         <Sidebar />
         <main className="content-wrapper py-4">
           <Container fluid="xl">
-            {/* Results-page heading — same "Accommodation" tag Inhouse uses. */}
-            <div className="hs-page-heading">
-              <h3 className="hs-page-heading-title">Accommodation</h3>
+            {/* Results-page heading — same "Accommodation" tag Inhouse uses.
+                Right-side agent balance is shown in red per the operator's
+                request; only rendered when the credit-limit endpoint has
+                returned a number for the current agent. */}
+            <div
+              className="hs-page-heading d-flex justify-content-between align-items-center flex-wrap gap-2"
+            >
+              <h3 className="hs-page-heading-title mb-0">Accommodation</h3>
+              {agentAvailableBalance != null && (
+                <div
+                  className="fw-bold"
+                  style={{ color: "#dc2626" }}
+                  title="Available agent balance"
+                >
+                  Available Balance: {formatPrice(agentAvailableBalance)}
+                </div>
+              )}
             </div>
 
             <Form onSubmit={openPolicyConsent}>
@@ -602,6 +635,23 @@ const ApiBookingPageForHotels = () => {
                                       {slot.mealPlan}
                                     </Badge>
                                   )}
+                                  {/* ATHARVA (apiId 3): show the backend-computed
+                                      display deadline (raw supplier deadline
+                                      minus 2 days) so operators see the buffered
+                                      cut-off at a glance. Rendered as a light
+                                      pill so it doesn't compete with the price. */}
+                                  {bookingData?.payload?.apiId === 3 &&
+                                    slot.atharvaDisplayDeadlineDate && (
+                                      <Badge
+                                        bg="warning"
+                                        text="dark"
+                                        className="ms-2"
+                                        title="Cancel by this date to avoid charges"
+                                      >
+                                        Cancel by{" "}
+                                        {slot.atharvaDisplayDeadlineDate}
+                                      </Badge>
+                                    )}
                                   {slot.rate != null && (
                                     <span
                                       className="ms-auto small fw-normal"
