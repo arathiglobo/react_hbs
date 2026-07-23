@@ -1183,14 +1183,14 @@ const SchefferDriverBookingPage = () => {
                       </div>
                     </div>
 
-                    {searchCriteria.pickupType && (
+                    {(searchCriteria.pickupName || searchCriteria.pickupType || selectedOption?.cityName) && (
                       <div className="sdbp-summary-row d-flex justify-content-between align-items-start py-2 border-bottom small">
                         <div className="text-muted fw-medium">
                           <FaMapMarkerAlt className="me-2 text-danger" />
                           Pickup
                         </div>
                         <div className="text-dark fw-semibold text-end">
-                          {searchCriteria.pickupName || "—"}
+                          {searchCriteria.pickupName || selectedOption?.cityName || searchCriteria.cityName || "—"}
                         </div>
                       </div>
                     )}
@@ -1207,14 +1207,14 @@ const SchefferDriverBookingPage = () => {
                       </div>
                     )}
 
-                    {searchCriteria.dropoffType && (
+                    {(searchCriteria.dropoffName || searchCriteria.dropoffType || selectedOption?.cityName) && (
                       <div className="sdbp-summary-row d-flex justify-content-between align-items-start py-2 border-bottom small">
                         <div className="text-muted fw-medium">
                           <FaMapMarkerAlt className="me-2 text-danger" />
                           Dropoff
                         </div>
                         <div className="text-dark fw-semibold text-end">
-                          {searchCriteria.dropoffName || "—"}
+                          {searchCriteria.dropoffName || searchCriteria.pickupName || selectedOption?.cityName || searchCriteria.cityName || "—"}
                           {searchCriteria.dropoffTime && (
                             <div className="text-muted small fw-normal">
                               @ {searchCriteria.dropoffTime}
@@ -1504,56 +1504,54 @@ const SchefferDriverBookingPage = () => {
             <Col md={4}>
               <small className="text-muted d-block">Route</small>
               <span>
-                {selectedOption?.location || "N/A"} → {selectedOption?.dropOff || "N/A"}
+                {searchCriteria.pickupName || selectedOption?.cityName || searchCriteria.cityName || "N/A"}
+                {" → "}
+                {searchCriteria.dropoffName || searchCriteria.pickupName || selectedOption?.cityName || searchCriteria.cityName || "N/A"}
               </span>
             </Col>
           </Row>
 
-          {/* Pickup / Dropoff details — only shown when chosen upstream */}
-          {(searchCriteria.pickupType || searchCriteria.dropoffType) && (
+          {/* Pickup / Dropoff details — shown when location details are available */}
+          {(searchCriteria.pickupType || searchCriteria.pickupName || searchCriteria.dropoffType || searchCriteria.dropoffName || selectedOption?.cityName) && (
             <>
               <h6 className="fw-bold mb-2">Pickup &amp; Dropoff</h6>
               <Table size="sm" bordered className="mb-3">
                 <thead className="table-light">
                   <tr>
-                    <th style={{ width: "20%" }}></th>
-                    <th>Type</th>
+                    <th style={{ width: "25%" }}>Location</th>
                     <th>Name</th>
                     <th>Time</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {searchCriteria.pickupType && (
+                  {(searchCriteria.pickupType || searchCriteria.pickupName || selectedOption?.cityName) && (
                     <tr>
                       <td className="fw-semibold">Pickup</td>
                       <td>
-                        <Badge bg="success-subtle" text="success">
-                          {searchCriteria.pickupType}
-                        </Badge>
+                        {searchCriteria.pickupName ||
+                          selectedOption?.cityName ||
+                          searchCriteria.cityName ||
+                          "—"}
                       </td>
-                      <td>{searchCriteria.pickupName || "—"}</td>
-                      <td>
-                        {searchCriteria.pickupType === "AIRPORT" && searchCriteria.pickupTime
-                          ? searchCriteria.pickupTime
-                          : "—"}
-                      </td>
+                      <td>{searchCriteria.pickupTime || "—"}</td>
                     </tr>
                   )}
                   {contactDetails.pickupLandmark && (
                     <tr>
                       <td className="fw-semibold">Pickup Landmark Address</td>
-                      <td colSpan={3}>{contactDetails.pickupLandmark}</td>
+                      <td colSpan={2}>{contactDetails.pickupLandmark}</td>
                     </tr>
                   )}
-                  {searchCriteria.dropoffType && (
+                  {(searchCriteria.dropoffType || searchCriteria.dropoffName || selectedOption?.cityName) && (
                     <tr>
                       <td className="fw-semibold">Dropoff</td>
                       <td>
-                        <Badge bg="warning-subtle" text="warning">
-                          {searchCriteria.dropoffType}
-                        </Badge>
+                        {searchCriteria.dropoffName ||
+                          searchCriteria.pickupName ||
+                          selectedOption?.cityName ||
+                          searchCriteria.cityName ||
+                          "—"}
                       </td>
-                      <td>{searchCriteria.dropoffName || "—"}</td>
                       <td>{searchCriteria.dropoffTime || "—"}</td>
                     </tr>
                   )}

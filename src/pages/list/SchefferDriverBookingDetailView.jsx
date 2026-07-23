@@ -55,6 +55,15 @@ import {
   FaPhoneAlt,
   FaEnvelope,
   FaExclamationCircle,
+  FaHistory,
+  FaPlusCircle,
+  FaCheckCircle,
+  FaSyncAlt,
+  FaTimesCircle,
+  FaUserAlt,
+  FaNetworkWired,
+  FaCalendarAlt,
+  FaClock,
 } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
@@ -78,17 +87,37 @@ const BUTTON_STYLE = {
 
 // Purpose-based colour variants for the action buttons — identical palette to
 // the Hotel Booking detail view (BookingDetailedView.jsx) so the two flows
-// look uniform. Each reuses the exact BUTTON_STYLE shape (size / padding /
-// radius / white text); only the background colour changes. No behaviour,
-// handler, or guard is affected.
+// look uniform.
 const BTN_TEAL = { ...BUTTON_STYLE, backgroundColor: "#0d9488" }; // Reconfirm
 const BTN_DANGER = { ...BUTTON_STYLE, backgroundColor: "#dc2626" }; // Cancel
+const BTN_PRIMARY = { ...BUTTON_STYLE, backgroundColor: "#2563eb" }; // Add New Item
 const BTN_SKY = { ...BUTTON_STYLE, backgroundColor: "#3ba2e8" }; // Add Agent Reference
 const BTN_INDIGO = { ...BUTTON_STYLE, backgroundColor: "#6366f1" }; // Confirmation No.
 const BTN_INFO = { ...BUTTON_STYLE, backgroundColor: "#0891b2" }; // Voucher / Invoice docs
 const BTN_ORANGE = { ...BUTTON_STYLE, backgroundColor: "#f0922b" }; // Resend Mail
 const BTN_ACCENT = { ...BUTTON_STYLE, backgroundColor: "#7c3aed" }; // Booking Remark
 const BTN_NEUTRAL = { ...BUTTON_STYLE, backgroundColor: "#64748b" }; // Back / Notes
+const BTN_HISTORY = { ...BUTTON_STYLE, backgroundColor: "#334155" }; // Booking History
+
+// Per-action badge styling for the Booking History modal — colour + icon
+// keyed by the exact label pushed onto `bookingHistory`.
+const HISTORY_ACTION_META = {
+  "Booking Created": { bg: "#e6f4ea", fg: "#1e7e34", icon: FaPlusCircle },
+  "Booking Confirmed": { bg: "#e7f1ff", fg: "#1d4ed8", icon: FaCheckCircle },
+  "Booking Reconfirmed": { bg: "#e0f2f1", fg: "#0d9488", icon: FaSyncAlt },
+  "Booking Cancelled": { bg: "#fdecea", fg: "#c0392b", icon: FaTimesCircle },
+};
+const HISTORY_ACTION_FALLBACK = { bg: "#f1f5f9", fg: "#475569", icon: FaHistory };
+
+const ADD_NEW_ITEM_TYPES = [
+  { key: "HOTEL", label: "Hotel Booking", route: "/new-booking/hotel" },
+  { key: "HOTEL_24HR", label: "24 Hour Check-In", route: "/new-booking/hotel-24hr" },
+  { key: "LONG_STAY", label: "Long Stay Booking", route: "/new-booking/long-stay" },
+  { key: "DAY_STAY", label: "Day Stay Check-In", route: "/new-booking/day-stay" },
+  { key: "GOV_EMPLOYEE", label: "Government Employee", route: "/new-booking/gov-employee" },
+  { key: "STUDENT", label: "Student Booking", route: "/new-booking/student" },
+  { key: "SENIOR_CITIZEN", label: "Senior Citizen Booking", route: "/new-booking/senior-citizen" },
+];
 
 const SECTION_HEADER = {
   backgroundColor: "#f0f0f0",
@@ -144,6 +173,15 @@ const formatDateTime = (dateStr) => {
   const min = String(d.getMinutes()).padStart(2, "0");
   const sec = String(d.getSeconds()).padStart(2, "0");
   return `${formatDate(dateStr)} ${hrs}:${min}:${sec}`;
+};
+
+const formatTimeOnly = (dateStr) => {
+  const d = parseLocal(dateStr);
+  if (!d) return "-";
+  const hrs = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const sec = String(d.getSeconds()).padStart(2, "0");
+  return `${hrs}:${min}:${sec}`;
 };
 
 // Kept the original short date helper for the Scheffer-specific Pickup /
@@ -244,13 +282,18 @@ export default function SchefferDriverBookingDetailView() {
   const [remarkInput, setRemarkInput] = useState("");
   const [savingRemark, setSavingRemark] = useState(false);
 
-  // Resend Mail to Agent
-  const [resendingMail, setResendingMail] = useState(false);
+  // Booking History modal
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+  // Add New Item modal
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [selectedAddItemType, setSelectedAddItemType] = useState(
+    ADD_NEW_ITEM_TYPES[0].key,
+  );
+  const [amendmentLinks, setAmendmentLinks] = useState([]);
 
   // Fallback luggage capacity fetched from cab registration when the booking
-  // record doesn't carry maxLuggageCapacity (old bookings created before the
-  // field was added to the payload). Only populated when needed; never
-  // overwrites the booking-level value if it's already present.
+  // record doesn't carry maxLuggageCapacity
   const [cabMaxLuggageCapacity, setCabMaxLuggageCapacity] = useState(null);
 
 const getPickupLandmarkAddress = (b) => {
@@ -348,6 +391,83 @@ const getPickupLandmarkAddress = (b) => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [details?.id, details?.cabId, details?.cabProviderId]);
+
+  const amendmentParentCode = details?.parentBookingCode || details?.bookingCode;
+  useEffect(() => {
+    let alive = true;
+    if (!amendmentParentCode) {
+      setAmendmentLinks([]);
+      return undefined;
+    }
+    axiosInstance
+      .get(
+        `/api/booking-amendment-link/parent/${encodeURIComponent(
+          amendmentParentCode,
+        )}`,
+      )
+      .then((res) => {
+        if (!alive) return;
+        setAmendmentLinks(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch(() => alive && setAmendmentLinks([]));
+    return () => {
+      alive = false;
+    };
+  }, [amendmentParentCode]);
+
+  const creatorLabel =
+    details?.createdBy ||
+    details?.employeeName ||
+    details?.agentName ||
+    details?.createdByRole ||
+    details?.source ||
+    "-";
+  const bookingHistory = (() => {
+    if (!details) return [];
+    const events = [];
+    const createdTs =
+      details.bookingDate || details.bookingDateTime || details.createdAt;
+    if (createdTs) {
+      events.push({
+        action: "Booking Created",
+        at: createdTs,
+        by: creatorLabel,
+        location:
+          details.bookingLocation ||
+          details.pickupLandmark ||
+          details.pickupName ||
+          "-",
+        ip: details.ipAddress,
+      });
+    }
+    if (details.confirmedDate) {
+      events.push({
+        action: "Booking Confirmed",
+        at: details.confirmedDate,
+        by: details.confirmedBy || "-",
+      });
+    }
+    if (details.reconfirmedDate) {
+      events.push({
+        action: "Booking Reconfirmed",
+        at: details.reconfirmedDate,
+        by: details.reconfirmedBy || "-",
+      });
+    }
+    const cancelTs = details.cancelledAt || details.cancelledDate;
+    if (cancelTs) {
+      events.push({
+        action: "Booking Cancelled",
+        at: cancelTs,
+        by: details.cancelledBy || "-",
+      });
+    }
+    return events.sort((a, b) => {
+      const ta = parseLocal(a.at)?.getTime() ?? 0;
+      const tb = parseLocal(b.at)?.getTime() ?? 0;
+      return ta - tb;
+    });
+  })();
 
 
 
@@ -1186,6 +1306,18 @@ const getPickupLandmarkAddress = (b) => {
 
                   {!isCancelled && (
                     <button
+                      style={BTN_PRIMARY}
+                      onClick={() => {
+                        setSelectedAddItemType(ADD_NEW_ITEM_TYPES[0].key);
+                        setShowAddItemModal(true);
+                      }}
+                    >
+                      ADD NEW ITEM
+                    </button>
+                  )}
+
+                  {!isCancelled && (
+                    <button
                       style={BTN_DANGER}
                       onClick={openCancelModal}
                       title="Cancel"
@@ -1252,6 +1384,13 @@ const getPickupLandmarkAddress = (b) => {
                     }
                   >
                     NOTES
+                  </button>
+
+                  <button
+                    style={BTN_HISTORY}
+                    onClick={() => setShowHistoryModal(true)}
+                  >
+                    HISTORY
                   </button>
                 </div>
 
