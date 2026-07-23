@@ -937,6 +937,11 @@ export const CabSearch = () => {
             ? "Please select a drop accommodation."
             : "Please select a drop place.";
 
+    // Departure time is required whenever the Departure Time field is shown
+    // (non-HOTEL drops). Hotel drops hide the field, so it's skipped there.
+    if (dropoffKind !== "HOTEL" && !dropDepartureTime)
+      errs.dropDepartureTime = "Departure time is required.";
+
     return errs;
   };
 
@@ -1938,13 +1943,23 @@ export const CabSearch = () => {
                       {dropoffKind !== "HOTEL" && (
                         <Col md={3}>
                           <Form.Label className="fw-semibold">
-                            Departure Time
+                            Departure Time{" "}
+                            <span className="text-danger">*</span>
                           </Form.Label>
                           <TimeApplyPicker
                             value={dropDepartureTime}
-                            onApply={(v) => setDropDepartureTime(v)}
+                            isInvalid={!!validationErrors.dropDepartureTime}
+                            onApply={(v) => {
+                              setDropDepartureTime(v);
+                              if (v) clearError("dropDepartureTime");
+                            }}
                             placeholder="Select departure time"
                           />
+                          {validationErrors.dropDepartureTime && (
+                            <div className="invalid-feedback d-block">
+                              {validationErrors.dropDepartureTime}
+                            </div>
+                          )}
                         </Col>
                       )}
 

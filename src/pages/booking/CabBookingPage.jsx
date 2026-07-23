@@ -973,13 +973,12 @@ const CabBookingPage = () => {
                       <Row className="small text-muted px-2 mb-2 d-none d-md-flex fw-semibold text-uppercase">
                         <Col md={2}>Passenger Type</Col>
                         <Col md={2}>Title</Col>
-                        <Col md={2}>
+                        <Col md={3}>
                           First Name <span className="text-danger">*</span>
                         </Col>
-                        <Col md={2}>
+                        <Col md={3}>
                           Last Name <span className="text-danger">*</span>
                         </Col>
-                        <Col md={2}>Contact No.</Col>
                         <Col md={2} className="text-center">
                           Lead
                         </Col>
@@ -1033,7 +1032,7 @@ const CabBookingPage = () => {
                                 )}
                               </Form.Select>
                             </Col>
-                            <Col xs={6} md={2}>
+                            <Col xs={6} md={3}>
                               <Form.Control
                                 size="sm"
                                 type="text"
@@ -1051,7 +1050,7 @@ const CabBookingPage = () => {
                                 }
                               />
                             </Col>
-                            <Col xs={6} md={2}>
+                            <Col xs={6} md={3}>
                               <Form.Control
                                 size="sm"
                                 type="text"
@@ -1069,29 +1068,11 @@ const CabBookingPage = () => {
                                 }
                               />
                             </Col>
-                            {/* Contact No. — captured per-passenger so the
-                                operator can dispatch updates to whoever is
-                                actually in the cab. The Lead row's value
-                                is what flows into customerDTO.contactNumber
-                                on save (existing behaviour). */}
-                            <Col xs={6} md={2}>
-                              <Form.Control
-                                size="sm"
-                                type="text"
-                                placeholder="Contact No."
-                                value={g.contactNumber || ""}
-                                onChange={(e) =>
-                                  handleGuestChange(
-                                    idx,
-                                    "contactNumber",
-                                    e.target.value,
-                                  )
-                                }
-                                isInvalid={
-                                  !!validationErrors[`guest_${idx}_contactNumber`]
-                                }
-                              />
-                            </Col>
+                            {/* Contact No. column hidden from the passenger
+                                grid per request. The lead passenger's phone
+                                is still captured (and required) in the
+                                Contact Details card below, which is what
+                                flows into customerDTO.contactNumber on save. */}
                             <Col xs={6} md={2} className="text-center">
                               <Form.Check
                                 type="radio"
