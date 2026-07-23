@@ -664,16 +664,6 @@ export const SchefferDriverSearch = () => {
                         {validationErrors.city && (
                           <div className="text-danger small mt-1">{validationErrors.city}</div>
                         )}
-                        {/* UAE resident notice */}
-                        {(() => {
-                          const name = (city?.label || "").toString().trim().toLowerCase().replace(/[-_]/g, " ").replace(/\s+/g, " ");
-                          const isUAE = ["dubai","abu dhabi","sharjah","ajman","fujairah","ras al khaimah","umm al quwain","al ain"].some((c) => name.includes(c));
-                          return isUAE ? (
-                            <div className="mt-1 small" style={{ color: "#0f7a3a", lineHeight: 1.25 }}>
-                              For UAE resident holders, please mention the nationality as United Arab Emirates regardless of the actual nationality.
-                            </div>
-                          ) : null;
-                        })()}
                       </Col>
                       <Col md={!isAgentRole ? 4 : 6}>
                         <Form.Label className="fw-semibold text-dark">

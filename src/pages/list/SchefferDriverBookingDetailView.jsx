@@ -282,6 +282,9 @@ export default function SchefferDriverBookingDetailView() {
   const [remarkInput, setRemarkInput] = useState("");
   const [savingRemark, setSavingRemark] = useState(false);
 
+  // Resend Mail to Agent
+  const [resendingMail, setResendingMail] = useState(false);
+
   // Booking History modal
   const [showHistoryModal, setShowHistoryModal] = useState(false);
 
@@ -1233,6 +1236,99 @@ const getPickupLandmarkAddress = (b) => {
                   </div>
                 )}
 
+                {/* Related Sub-Bookings created through Add New Item.
+                    The hotel detail page shows these links after the child
+                    flow persists them via /api/booking-amendment-link. */}
+                {amendmentLinks && amendmentLinks.length > 0 && (
+                  <div style={card}>
+                    <div style={SECTION_HEADER}>
+                      Related Sub-Bookings - Other Types ({amendmentLinks.length})
+                    </div>
+                    <div style={{ padding: "10px 16px" }}>
+                      {amendmentLinks.map((lnk) => (
+                        <div
+                          key={lnk.id}
+                          style={{
+                            borderTop: "1px solid #eee",
+                            padding: "10px 0",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "6px",
+                              gap: "10px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                color: "#c0392b",
+                                fontWeight: "700",
+                                fontSize: "0.9rem",
+                              }}
+                            >
+                              {lnk.childBookingCode || "-"}
+                              <span
+                                style={{
+                                  marginLeft: "8px",
+                                  color: "#888",
+                                  fontWeight: "500",
+                                  fontSize: "0.8rem",
+                                }}
+                              >
+                                ({lnk.childTypeLabel || lnk.childType})
+                              </span>
+                            </span>
+                            {lnk.childDetailRoutePrefix && lnk.childBookingId != null && (
+                              <button
+                                style={BTN_NEUTRAL}
+                                onClick={() =>
+                                  navigate(
+                                    `${lnk.childDetailRoutePrefix}${lnk.childBookingId}`,
+                                  )
+                                }
+                              >
+                                View
+                              </button>
+                            )}
+                          </div>
+                          <Row>
+                            <Col md={6}>
+                              <InfoRow
+                                label="Booking Type"
+                                value={lnk.childTypeLabel || lnk.childType}
+                              />
+                              <InfoRow
+                                label="Reference No."
+                                value={lnk.childReferenceNumber}
+                              />
+                              <InfoRow label="Hotel" value={lnk.childHotelName} />
+                            </Col>
+                            <Col md={6}>
+                              <InfoRow label="Check-In" value={lnk.childCheckInDate} />
+                              <InfoRow label="Check-Out" value={lnk.childCheckOutDate} />
+                              <InfoRow
+                                label="Total Rate"
+                                value={
+                                  lnk.childTotalRate != null
+                                    ? Number(lnk.childTotalRate).toFixed(2)
+                                    : "-"
+                                }
+                              />
+                              <InfoRow
+                                label="Status"
+                                value={<StatusBadge status={lnk.childStatus} />}
+                              />
+                            </Col>
+                          </Row>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* ── Action Buttons ───────────────────────────────── */}
                 <div
                   style={{
@@ -1960,6 +2056,305 @@ const getPickupLandmarkAddress = (b) => {
             ) : (
               "Save"
             )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Add New Item booking-type picker. Mirrors the hotel detail flow:
+          choose a child booking type, then launch that existing create page
+          with parentBookingCode so the backend links it as an amendment. */}
+      <Modal
+        show={showAddItemModal}
+        onHide={() => setShowAddItemModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title style={{ fontSize: "1.05rem" }}>
+            Add New Item
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div style={{ marginBottom: "10px", color: "#555" }}>
+            Select a booking type to add as a sub-booking of{" "}
+            <strong>{details?.parentBookingCode || details?.bookingCode}</strong>.
+          </div>
+          <Form>
+            {ADD_NEW_ITEM_TYPES.map((t) => (
+              <Form.Check
+                key={t.key}
+                type="radio"
+                name="addNewItemType"
+                id={`scheffer-add-item-${t.key}`}
+                label={t.label}
+                value={t.key}
+                checked={selectedAddItemType === t.key}
+                onChange={() => setSelectedAddItemType(t.key)}
+                style={{ marginBottom: "6px" }}
+              />
+            ))}
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowAddItemModal(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              const chosen = ADD_NEW_ITEM_TYPES.find(
+                (t) => t.key === selectedAddItemType,
+              );
+              const parent = details?.parentBookingCode || details?.bookingCode;
+              if (!chosen || !parent) return;
+              setShowAddItemModal(false);
+              navigate(
+                `${chosen.route}?parentBookingCode=${encodeURIComponent(parent)}`,
+              );
+            }}
+          >
+            Continue
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Booking History modal. Read-only lifecycle table derived from the
+          loaded booking data, matching the hotel detail page UI. */}
+      <Modal
+        show={showHistoryModal}
+        onHide={() => setShowHistoryModal(false)}
+        centered
+        size="xl"
+        scrollable
+        contentClassName="hbs-history-modal-content"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title
+            style={{
+              fontSize: "1.05rem",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <FaHistory size={16} />
+            <span>
+              Booking History
+              {details?.bookingCode && (
+                <span style={{ opacity: 0.85, fontWeight: 500 }}>
+                  {` - ${details.bookingCode}`}
+                </span>
+              )}
+            </span>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ backgroundColor: "#f8fafc", padding: "1.25rem 1.5rem" }}>
+          {bookingHistory.length === 0 ? (
+            <div className="text-muted text-center py-4">
+              <FaHistory size={26} style={{ opacity: 0.25, marginBottom: 8 }} />
+              <div>No history available for this booking.</div>
+            </div>
+          ) : (
+            <div
+              style={{
+                borderRadius: 10,
+                border: "1px solid #e2e8f0",
+                boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
+                backgroundColor: "#fff",
+              }}
+            >
+              <table
+                style={{
+                  width: "100%",
+                  tableLayout: "fixed",
+                  borderCollapse: "collapse",
+                  fontSize: "0.82rem",
+                  marginBottom: 0,
+                }}
+              >
+                <thead>
+                  <tr style={{ backgroundColor: "#f1f5f9" }}>
+                    {[
+                      { label: "S/N", width: "5%" },
+                      { label: "Action", width: "17%" },
+                      { label: "Performed By", icon: FaUserAlt, width: "13%" },
+                      { label: "Location", icon: FaMapMarkerAlt, width: "30%" },
+                      { label: "IP Address", icon: FaNetworkWired, width: "14%" },
+                      { label: "Date", icon: FaCalendarAlt, width: "11%" },
+                      { label: "Time", icon: FaClock, width: "10%" },
+                    ].map((col) => (
+                      <th
+                        key={col.label}
+                        style={{
+                          width: col.width,
+                          padding: "10px 14px",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.03em",
+                          fontSize: "0.72rem",
+                          fontWeight: 700,
+                          color: "#475569",
+                          borderBottom: "1px solid #e2e8f0",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {col.icon ? (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
+                          >
+                            <col.icon size={11} style={{ opacity: 0.7 }} />
+                            {col.label}
+                          </span>
+                        ) : (
+                          col.label
+                        )}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {bookingHistory.map((ev, idx) => {
+                    const meta =
+                      HISTORY_ACTION_META[ev.action] || HISTORY_ACTION_FALLBACK;
+                    const ActionIcon = meta.icon;
+                    return (
+                      <tr
+                        key={`${ev.action}-${idx}`}
+                        style={{
+                          backgroundColor: idx % 2 === 1 ? "#f8fafc" : "#fff",
+                        }}
+                      >
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                            color: "#64748b",
+                          }}
+                        >
+                          {idx + 1}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "3px 10px",
+                              borderRadius: 999,
+                              backgroundColor: meta.bg,
+                              color: meta.fg,
+                              fontWeight: 600,
+                              fontSize: "0.76rem",
+                            }}
+                          >
+                            <ActionIcon size={10} style={{ flexShrink: 0 }} />
+                            {ev.action}
+                          </span>
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          {ev.by || "-"}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {ev.location ? (
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "flex-start",
+                                gap: 6,
+                              }}
+                            >
+                              <FaMapMarkerAlt
+                                size={11}
+                                style={{
+                                  color: "#c0392b",
+                                  marginTop: 2,
+                                  flexShrink: 0,
+                                }}
+                              />
+                              <span>{ev.location}</span>
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          {ev.ip ? (
+                            <span
+                              style={{
+                                fontFamily: "'Consolas', 'Courier New', monospace",
+                                backgroundColor: "#f1f5f9",
+                                color: "#334155",
+                                padding: "2px 8px",
+                                borderRadius: 4,
+                                fontSize: "0.76rem",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {ev.ip}
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          {formatDate(ev.at)}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          {formatTimeOnly(ev.at)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer style={{ backgroundColor: "#fff" }}>
+          <Button
+            variant="secondary"
+            onClick={() => setShowHistoryModal(false)}
+            style={{
+              borderRadius: 6,
+              padding: "6px 20px",
+              fontWeight: 600,
+              fontSize: "0.85rem",
+            }}
+          >
+            Close
           </Button>
         </Modal.Footer>
       </Modal>
