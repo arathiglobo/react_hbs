@@ -11,13 +11,14 @@ import {
   Nav,
   Tab,
   Spinner,
+  InputGroup,
 } from "react-bootstrap";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import BackButton from "../../../components/BackButton";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
-import { FaKey } from "react-icons/fa";
+import { FaKey, FaEye, FaEyeSlash } from "react-icons/fa";
 
 /**
  * Admin-side API access screen. Shows the APIs super_admin has enabled
@@ -362,6 +363,61 @@ function CredentialsModal({ row, initialEnv, onClose, onSaved }) {
   const [values, setValues] = useState({ TEST: {}, LIVE: {} });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Per-field password visibility toggle. Keyed by `${env}:${fieldKey}` so
+  // the TEST and LIVE tabs track independently and toggling one does not
+  // reveal the other.
+  const [shownFields, setShownFields] = useState(() => new Set());
+  // Environments (TEST/LIVE) for which we have already fetched the
+  // unmasked credentials via ?reveal=true. The default GET returns
+  // MASK ("••••••••") for password/token/secStr keys so the browser
+  // never receives plaintext until the operator explicitly asks — that
+  // ask happens the first time they click the eye icon on that tab.
+  const [revealedEnvs, setRevealedEnvs] = useState(() => new Set());
+
+  const flipShownState = (fieldId) =>
+    setShownFields((prev) => {
+      const next = new Set(prev);
+      if (next.has(fieldId)) next.delete(fieldId);
+      else next.add(fieldId);
+      return next;
+    });
+
+  const toggleShown = async (fieldId, thisEnv) => {
+    const willShow = !shownFields.has(fieldId);
+    if (willShow && !revealedEnvs.has(thisEnv)) {
+      try {
+        const res = await axiosInstance.get(
+          `${BASE}/${row.externalApiId}/credentials/${thisEnv}`,
+          { params: { reveal: true } },
+        );
+        const unmasked = res?.data?.credentials || {};
+        // Only overwrite entries the operator has NOT already retyped in
+        // this session (i.e. still hold the MASK sentinel from the initial
+        // load) — otherwise clicking the eye would clobber in-progress
+        // edits.
+        setValues((prev) => {
+          const currentEnv = prev[thisEnv] || {};
+          const merged = { ...currentEnv };
+          Object.entries(unmasked).forEach(([k, v]) => {
+            if (merged[k] === MASK || merged[k] == null || merged[k] === "") {
+              merged[k] = v;
+            }
+          });
+          return { ...prev, [thisEnv]: merged };
+        });
+        setRevealedEnvs((prev) => {
+          const next = new Set(prev);
+          next.add(thisEnv);
+          return next;
+        });
+      } catch (e) {
+        // Fall through — the eye still flips, the user just keeps seeing
+        // the MASK. A toast keeps the failure visible.
+        toast.error("Could not reveal saved credentials");
+      }
+    }
+    flipShownState(fieldId);
+  };
 
   const schema = CREDENTIAL_SCHEMAS[row.apiCode?.toUpperCase()] || [];
 
@@ -454,28 +510,55 @@ function CredentialsModal({ row, initialEnv, onClose, onSaved }) {
               {["TEST", "LIVE"].map((thisEnv) => (
                 <Tab.Pane key={thisEnv} eventKey={thisEnv}>
                   <Row className="g-3">
-                    {schema.map((field) => (
-                      <Col md={6} key={field.key}>
-                        <Form.Group>
-                          <Form.Label className="fw-semibold small">
-                            {field.label}
-                          </Form.Label>
-                          <Form.Control
-                            type={field.type === "password" ? "password" : "text"}
-                            value={values[thisEnv]?.[field.key] ?? ""}
-                            placeholder={
-                              values[thisEnv]?.[field.key] === MASK
-                                ? "Leave to keep existing"
-                                : ""
-                            }
-                            onChange={(e) =>
-                              patchField(thisEnv, field.key, e.target.value)
-                            }
-                            disabled={saving}
-                          />
-                        </Form.Group>
-                      </Col>
-                    ))}
+                    {schema.map((field) => {
+                      const isPassword = field.type === "password";
+                      const fieldId = `${thisEnv}:${field.key}`;
+                      const isShown = shownFields.has(fieldId);
+                      const control = (
+                        <Form.Control
+                          type={isPassword && !isShown ? "password" : "text"}
+                          value={values[thisEnv]?.[field.key] ?? ""}
+                          placeholder={
+                            values[thisEnv]?.[field.key] === MASK
+                              ? "Leave to keep existing"
+                              : ""
+                          }
+                          onChange={(e) =>
+                            patchField(thisEnv, field.key, e.target.value)
+                          }
+                          disabled={saving}
+                        />
+                      );
+                      return (
+                        <Col md={6} key={field.key}>
+                          <Form.Group>
+                            <Form.Label className="fw-semibold small">
+                              {field.label}
+                            </Form.Label>
+                            {isPassword ? (
+                              <InputGroup>
+                                {control}
+                                <Button
+                                  variant="outline-secondary"
+                                  type="button"
+                                  onClick={() => toggleShown(fieldId, thisEnv)}
+                                  disabled={saving}
+                                  aria-label={
+                                    isShown ? "Hide value" : "Show value"
+                                  }
+                                  title={isShown ? "Hide" : "Show"}
+                                  tabIndex={-1}
+                                >
+                                  {isShown ? <FaEyeSlash /> : <FaEye />}
+                                </Button>
+                              </InputGroup>
+                            ) : (
+                              control
+                            )}
+                          </Form.Group>
+                        </Col>
+                      );
+                    })}
                   </Row>
                 </Tab.Pane>
               ))}
