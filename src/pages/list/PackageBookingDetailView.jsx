@@ -241,21 +241,24 @@ const formatDate = (dateString) => {
   }
 };
 
-// Deadline Date carries a datetime — the package's Policy Details validityTo is
-// captured with a datetime-local picker (PackageRates.jsx) — so show the date
-// AND its time. Values stored date-only (legacy, no "T") fall back to date-only
-// so we never render a misleading 00:00 for them.
+// Deadline Date carries the package's Policy Details validityTo (the latest
+// validity window). Every package-booking detail view shows BOTH the date AND
+// the time. Values may be a full datetime ("yyyy-MM-ddTHH:mm:ss") or a legacy
+// date-only ("yyyy-MM-dd"); a date-only value is normalised to local midnight
+// so it renders as "12:00 AM" rather than a timezone-shifted time — new Date()
+// parses a bare "yyyy-MM-dd" as UTC, which would otherwise show e.g. 05:30 AM
+// (IST) / 04:00 AM (GST) here.
 const formatDateTime = (dateString) => {
   if (!dateString) return "-";
-  const str = String(dateString);
-  const date = new Date(str);
+  const str = String(dateString).trim();
+  const normalised = /^\d{4}-\d{2}-\d{2}$/.test(str) ? `${str}T00:00:00` : str;
+  const date = new Date(normalised);
   if (isNaN(date.getTime())) return str;
   const datePart = date.toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   });
-  if (!str.includes("T")) return datePart;
   const timePart = date.toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
