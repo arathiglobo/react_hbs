@@ -81,6 +81,8 @@ export default function SeniorCitizenList() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState({});
+  const [search, setSearch] = useState("");
+
 
   // View-mode flag — when true the shared create/edit modal is rendered
   // read-only. Mirrors the /occupancy-and-minimumlength pattern.
@@ -134,17 +136,23 @@ export default function SeniorCitizenList() {
     setShowModal(true);
   };
 
-  const fetchAll = async () => {
+  const fetchAll = async (searchQuery = search) => {
     setLoading(true);
     try {
       const { data } = await axiosInstance.get(
-        `/api/hotel-senior-citizen-promotion/hotel/${hotelId}`
+        `/api/hotel-senior-citizen-promotion/hotel/${hotelId}`,
+        {
+          params: {
+            search: searchQuery || undefined
+          }
+        }
       );
       setRows(Array.isArray(data) ? data : []);
     } catch (e) {
       toast.error("Failed to load promotions");
     } finally { setLoading(false); }
   };
+
 
   useEffect(() => {
     if (hotelId) fetchAll();
@@ -328,6 +336,41 @@ export default function SeniorCitizenList() {
               >
                 Senior Citizen Discount
               </span>
+              <div className="d-flex align-items-center gap-2">
+                <div className="position-relative" style={{ width: "260px" }}>
+                  <Form.Control
+                    type="text"
+                    placeholder="Search by date or status..."
+                    value={search}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSearch(value);
+                      fetchAll(value);
+                    }}
+                    className="border-1 bg-light"
+                  />
+                  {search && (
+                    <button
+                      type="button"
+                      className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
+                      style={{
+                        border: "none",
+                        background: "none",
+                        color: "#6c757d",
+                        padding: "0 12px",
+                        zIndex: 10,
+                      }}
+                      onClick={() => {
+                        setSearch("");
+                        fetchAll("");
+                      }}
+                      title="Clear search"
+                    >
+                      <i className="fas fa-times"></i>
+                    </button>
+                  )}
+                </div>
+              </div>
               <Button className="btn-green create-btn" onClick={openCreate}>
                 + Create
               </Button>

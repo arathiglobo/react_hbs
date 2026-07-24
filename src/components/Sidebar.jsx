@@ -432,7 +432,7 @@ export default function Sidebar() {
         { code: "reg_restaurants",   label: "Restaurants",                    to: "/restaurant/list" },
         { code: "reg_honeymoon",     label: "Honeymoon Packages",             to: "/honeymoon/list" },
         { code: "reg_ayurveda",      label: "Ayurveda",                       to: "/registration/ayurveda" },
-        { code: "reg_scheffer",      label: "Scheffer Driver and Limousine",  to: "/registration/schefferDriver" },
+        { code: "reg_scheffer",      label: "Chauffer Driver and Limousine",  to: "/registration/schefferDriver" },
         { code: "reg_package_addons", label: "Build Your Own Package Add-Ons", to: "/registration/package-addons" },
       ],
     },

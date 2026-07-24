@@ -7,8 +7,8 @@ import {
   Spinner,
   Pagination,
   Form,
-  InputGroup,
-  Modal,
+  InputGroup,  
+  Modal, 
   Row,
   Col,
 } from "react-bootstrap";

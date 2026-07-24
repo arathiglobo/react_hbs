@@ -77,13 +77,47 @@ const SchefferDriverRates = () => {
   const [packageRows, setPackageRows] = useState([newPackageRow(1)]);
 
   // ── Terms & Conditions / Cancellation Policies state ──────────────
-  // Two independent dynamic lists, edited as textarea rows in the modal
-  // and sent back to the API as `termsAndConditions` / `cancellationPolicies`
-  // arrays of strings on the rental rate DTO. Empty rows are dropped at
-  // save-time (backend defends too). Mirrors the pattern in /cab-rates.
   const newPolicyRow = (id) => ({ id, value: "" });
+  const newCancellationRow = (id) => ({
+    id: id || Date.now() + Math.random(),
+    cancellationFee: "",
+    cancellationFeeType: "PERCENT",
+    noOfNights: "",
+  });
+
+  const formatCancellationPolicyString = (c) => {
+    if (!c) return "";
+    const fee = c.cancellationFee !== undefined && c.cancellationFee !== null ? String(c.cancellationFee).trim() : "";
+    const feeType = c.cancellationFeeType || "PERCENT";
+    const days = c.noOfNights !== undefined && c.noOfNights !== null ? String(c.noOfNights).trim() : "";
+    if (!fee && !days) return "";
+    const feeTypeLabel = feeType === "PERCENT" ? "%" : "Amt";
+    return `Cancellation fee of ${fee} ${feeTypeLabel} of total booking if cancelled less than ${days} days prior to arrival`;
+  };
+
+  const parseCancellationPolicyString = (str) => {
+    if (!str || typeof str !== "string") {
+      return { cancellationFee: "", cancellationFeeType: "PERCENT", noOfNights: "" };
+    }
+    const match = str.match(/Cancellation fee of\s+([\d.]+)\s+(%|Amt|PERCENT|AMOUNT)\s+of total booking if cancelled less than\s+(\d+)\s+days/i);
+    if (match) {
+      const fee = match[1];
+      const rawType = match[2].toUpperCase();
+      const feeType = (rawType === "%" || rawType === "PERCENT") ? "PERCENT" : "AMOUNT";
+      const days = match[3];
+      return { cancellationFee: fee, cancellationFeeType: feeType, noOfNights: days };
+    }
+    const daysMatch = str.match(/(\d+)\s*days/i);
+    const feeMatch = str.match(/(\d+)\s*(%|percent|amt|amount)/i);
+    return {
+      cancellationFee: feeMatch ? feeMatch[1] : "",
+      cancellationFeeType: feeMatch && (feeMatch[2].toLowerCase().includes("amt") || feeMatch[2].toLowerCase().includes("amount")) ? "AMOUNT" : "PERCENT",
+      noOfNights: daysMatch ? daysMatch[1] : "",
+    };
+  };
+
   const [termsRows, setTermsRows] = useState([newPolicyRow(1)]);
-  const [cancellationRows, setCancellationRows] = useState([newPolicyRow(1)]);
+  const [cancellationRows, setCancellationRows] = useState([newCancellationRow(1)]);
   const addPolicyRow = (setter) =>
     setter((prev) => [...prev, newPolicyRow(Date.now())]);
   const removePolicyRow = (setter, id) =>
@@ -280,7 +314,7 @@ const SchefferDriverRates = () => {
     setFormData(emptyHeader);
     setPackageRows([newPackageRow(1)]);
     setTermsRows([newPolicyRow(1)]);
-    setCancellationRows([newPolicyRow(1)]);
+    setCancellationRows([newCancellationRow(1)]);
     setShowModal(true);
   };
 
@@ -292,7 +326,7 @@ const SchefferDriverRates = () => {
     setFormData(emptyHeader);
     setPackageRows([newPackageRow(1)]);
     setTermsRows([newPolicyRow(1)]);
-    setCancellationRows([newPolicyRow(1)]);
+    setCancellationRows([newCancellationRow(1)]);
   };
 
   const validateForm = () => {
@@ -341,7 +375,7 @@ const SchefferDriverRates = () => {
       .map((r) => (r.value || "").trim())
       .filter((v) => v.length > 0),
     cancellationPolicies: cancellationRows
-      .map((r) => (r.value || "").trim())
+      .map((r) => formatCancellationPolicyString(r))
       .filter((v) => v.length > 0),
   });
 
@@ -417,14 +451,17 @@ const SchefferDriverRates = () => {
           }))
         : [newPackageRow(1)];
     setPackageRows(pkgs);
-    // Seed the T&C / cancellation rows from the saved lists. Empty lists
-    // fall back to a single blank row so the Add button pattern still works.
-    const seedPolicies = (arr) =>
+    // Seed the T&C rows from the saved list. Empty lists fall back to a single blank row.
+    const seedTerms = (arr) =>
       Array.isArray(arr) && arr.length > 0
         ? arr.map((v, i) => ({ id: i + 1, value: v || "" }))
         : [newPolicyRow(1)];
-    setTermsRows(seedPolicies(rate.termsAndConditions));
-    setCancellationRows(seedPolicies(rate.cancellationPolicies));
+    const seedCancellationPolicies = (arr) =>
+      Array.isArray(arr) && arr.length > 0
+        ? arr.map((v, i) => ({ id: i + 1, ...parseCancellationPolicyString(v) }))
+        : [newCancellationRow(1)];
+    setTermsRows(seedTerms(rate.termsAndConditions));
+    setCancellationRows(seedCancellationPolicies(rate.cancellationPolicies));
     setShowModal(true);
   };
 
@@ -1298,52 +1335,124 @@ const SchefferDriverRates = () => {
                   ))}
                 </div>
 
-                {/* ── Cancellation Policies ───────────────────────────── */}
+                {/* ── Cancellation Policies ── */}
                 <div className="border-top pt-3 mt-3">
                   <div className="d-flex justify-content-between align-items-center mb-3">
-                    <h6 className="text-muted mb-0">Cancellation Policies</h6>
+                    <h6 className="text-muted mb-0">Cancellation Policy</h6>
                     {!isViewMode && (
                       <Button
                         variant="outline-primary"
                         size="sm"
-                        onClick={() => addPolicyRow(setCancellationRows)}
+                        onClick={() =>
+                          setCancellationRows((prev) => [...prev, newCancellationRow()])
+                        }
                         title="Add Cancellation Policy"
                       >
                         <FaPlus className="me-2" />
-                        Add
+                        Add Policy
                       </Button>
                     )}
                   </div>
-                  {cancellationRows.map((row, idx) => (
-                    <Row key={row.id} className="mb-2">
-                      <Col md={10}>
-                        <Form.Control
-                          as="textarea"
-                          rows={2}
-                          value={row.value}
-                          placeholder={`Policy ${idx + 1} — e.g. "Free cancellation before 24 hours"`}
-                          onChange={(e) =>
-                            updatePolicyRow(setCancellationRows, row.id, e.target.value)
-                          }
-                          disabled={isViewMode}
-                        />
-                      </Col>
-                      {!isViewMode && (
-                        <Col md={2}>
-                          <div className="d-flex gap-1">
-                            {cancellationRows.length > 1 && (
-                              <Button
-                                variant="outline-danger"
-                                size="sm"
-                                onClick={() => removePolicyRow(setCancellationRows, row.id)}
-                                title="Remove"
+                  {cancellationRows.map((c, index) => (
+                    <Row
+                      key={c.id || index}
+                      className="align-items-center mb-3 bg-light p-3 rounded-3 mx-0"
+                    >
+                      <Col md={12}>
+                        {!isViewMode ? (
+                          <>
+                            <Form.Label className="fw-semibold small">
+                              Cancellation fee of
+                            </Form.Label>
+                            <div className="d-flex align-items-center flex-wrap gap-2 mt-1">
+                              <Form.Control
+                                type="number"
+                                min="0"
+                                onKeyDown={(e) => {
+                                  if (e.key === "-" || e.key === "e" || e.key === "E")
+                                    e.preventDefault();
+                                }}
+                                placeholder="Fee"
+                                value={c.cancellationFee}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setCancellationRows((prev) =>
+                                    prev.map((row) =>
+                                      row.id === c.id
+                                        ? { ...row, cancellationFee: val }
+                                        : row
+                                    )
+                                  );
+                                }}
+                                style={{ width: "120px" }}
+                              />
+                              <Form.Select
+                                value={c.cancellationFeeType}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setCancellationRows((prev) =>
+                                    prev.map((row) =>
+                                      row.id === c.id
+                                        ? { ...row, cancellationFeeType: val }
+                                        : row
+                                    )
+                                  );
+                                }}
+                                style={{ width: "90px" }}
                               >
-                                <FaTrash size={10} />
-                              </Button>
-                            )}
+                                <option value="PERCENT">%</option>
+                                <option value="AMOUNT">Amt</option>
+                              </Form.Select>
+                              <span className="text-muted small">
+                                of total booking if cancelled less than
+                              </span>
+                              <Form.Control
+                                type="number"
+                                min="0"
+                                onKeyDown={(e) => {
+                                  if (e.key === "-" || e.key === "e" || e.key === "E")
+                                    e.preventDefault();
+                                }}
+                                placeholder="Days"
+                                value={c.noOfNights}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setCancellationRows((prev) =>
+                                    prev.map((row) =>
+                                      row.id === c.id
+                                        ? { ...row, noOfNights: val }
+                                        : row
+                                    )
+                                  );
+                                }}
+                                style={{ width: "90px" }}
+                              />
+                              <span className="text-muted small">
+                                days prior to arrival
+                              </span>
+                              {cancellationRows.length > 1 && (
+                                <Button
+                                  size="sm"
+                                  variant="outline-danger"
+                                  className="rounded-circle ms-auto"
+                                  onClick={() =>
+                                    setCancellationRows((prev) =>
+                                      prev.filter((row) => row.id !== c.id)
+                                    )
+                                  }
+                                  title="Remove"
+                                >
+                                  <FaTrash size={12} />
+                                </Button>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <div className="p-2 bg-light rounded small">
+                            {formatCancellationPolicyString(c) || "—"}
                           </div>
-                        </Col>
-                      )}
+                        )}
+                      </Col>
                     </Row>
                   ))}
                 </div>

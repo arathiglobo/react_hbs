@@ -153,11 +153,13 @@ export default function MeetingSpaceManage() {
         `/api/meet-and-space/by-hotel/${hotelId}`
       );
       const all = Array.isArray(res.data) ? res.data : [];
+      const term = searchTerm.trim().toLowerCase();
       const filtered = searchTerm
         ? all.filter(
             (r) =>
-              (r.spaceName || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-              (r.spaceType || "").toLowerCase().includes(searchTerm.toLowerCase())
+              (r.spaceName || "").toLowerCase().includes(term) ||
+              (r.spaceType || "").toLowerCase().includes(term) ||
+              (r.status || "").toLowerCase() === term
           )
         : all;
       const start = pageNum * PAGE_SIZE;
@@ -606,7 +608,7 @@ export default function MeetingSpaceManage() {
               <Form.Group className="hotel-search-bar position-relative">
                 <Form.Control
                   type="text"
-                  placeholder="Search meeting spaces..."
+                  placeholder="Search by name, type, or status..."
                   className="form-control-modern-sm"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}

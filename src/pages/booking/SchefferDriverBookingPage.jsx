@@ -209,10 +209,29 @@ const SchefferDriverBookingPage = () => {
     rate ||
     0;
 
+  const selectedRoute = intercityCharges.find(
+    (c) => String(c.intercityChargeId) === String(selectedIntercityId)
+  );
+  const intercitySurcharge =
+    intercityDeclared === "yes" && selectedRoute
+      ? parseFloat(selectedRoute.additionalCharge) || 0
+      : 0;
+
   const [prices, setPrices] = useState({
     sellingPrice: initialTotalRate.toString(),
     totalPrice: initialTotalRate.toString(),
   });
+
+  useEffect(() => {
+    const baseSelling = parseFloat(selectedOption?.totalRate || selectedOption?.totalRateWithoutMrk || rate || 0);
+    const baseTotal = parseFloat(selectedOption?.totalRate || selectedOption?.totalRateWithoutMrk || rate || 0);
+
+    setPrices({
+      sellingPrice: (baseSelling + intercitySurcharge).toString(),
+      totalPrice: (baseTotal + intercitySurcharge).toString(),
+    });
+  }, [intercitySurcharge, selectedOption, rate]);
+
   const [tourismDirham, setTourismDirham] = useState("");
 
   // Resolved agent id used for the payment-gate fetches. Mirrors the
@@ -469,7 +488,10 @@ const SchefferDriverBookingPage = () => {
       noOfChild: parseInt(searchCriteria.children) || 0,
       childAgeArray: (searchCriteria.childAges || []).map(age => parseInt(age)),
       totalRate: totalWithTd,
-      totalRateWithoutmrk: parseFloat(selectedOption.totalRateWithoutMrk || totalRate),
+      totalRateWithoutmrk: parseFloat(selectedOption.totalRateWithoutMrk || initialTotalRate) + intercitySurcharge,
+      intercityChargeId: intercityDeclared === "yes" && selectedIntercityId ? parseInt(selectedIntercityId, 10) : null,
+      intercitySurcharge: intercitySurcharge,
+      intercityDeclared: intercityDeclared,
       tourismDirham: tdNumber > 0 ? tdNumber : null,
       agentId: parseInt(agentId),
       userId: parseInt(agentId),
@@ -540,6 +562,10 @@ const SchefferDriverBookingPage = () => {
         searchCriteria.cityName ||
         null,
       pickupTime: searchCriteria.pickupTime || null,
+      pickupLandmark: contactDetails.pickupLandmark || null,
+      pickupLandmarkAddress: contactDetails.pickupLandmark || null,
+      pickupAddress: contactDetails.pickupLandmark || null,
+      landmark: contactDetails.pickupLandmark || null,
       dropoffType: searchCriteria.dropoffType || "CITY",
       dropoffName:
         searchCriteria.dropoffName ||
@@ -547,6 +573,15 @@ const SchefferDriverBookingPage = () => {
         searchCriteria.cityName ||
         null,
       dropoffTime: searchCriteria.dropoffTime || null,
+      // Max luggage capacity from the cab registration — snapshot at booking
+      // time so the detail view can display it without a separate lookup.
+      // Robust fallback chain mirrors what the search result card uses.
+      maxLuggageCapacity:
+        selectedOption.maxLuggageCapacity ??
+        selectedOption.maxLuggage ??
+        selectedOption.vehicleMaxLuggage ??
+        selectedOption.luggageCapacity ??
+        null,
     };
 
     setPendingPayload(payload);
@@ -1148,32 +1183,38 @@ const SchefferDriverBookingPage = () => {
                       </div>
                     </div>
 
-                    {searchCriteria.pickupType && (
+                    {(searchCriteria.pickupName || searchCriteria.pickupType || selectedOption?.cityName) && (
                       <div className="sdbp-summary-row d-flex justify-content-between align-items-start py-2 border-bottom small">
                         <div className="text-muted fw-medium">
-                          <FaMapMarkerAlt className="me-2 text-success" />
-                          Pickup{" "}
-                          <span className="badge bg-success-subtle text-success ms-1">
-                            {searchCriteria.pickupType}
-                          </span>
+                          <FaMapMarkerAlt className="me-2 text-danger" />
+                          Pickup
                         </div>
                         <div className="text-dark fw-semibold text-end">
-                          {searchCriteria.pickupName || "—"}
+                          {searchCriteria.pickupName || selectedOption?.cityName || searchCriteria.cityName || "—"}
                         </div>
                       </div>
                     )}
 
-                    {searchCriteria.dropoffType && (
+                    {contactDetails.pickupLandmark && (
                       <div className="sdbp-summary-row d-flex justify-content-between align-items-start py-2 border-bottom small">
                         <div className="text-muted fw-medium">
-                          <FaMapMarkerAlt className="me-2 text-warning" />
-                          Dropoff{" "}
-                          <span className="badge bg-warning-subtle text-warning ms-1">
-                            {searchCriteria.dropoffType}
-                          </span>
+                          <FaMapMarkerAlt className="me-2 text-success" />
+                          Pickup Landmark Address
                         </div>
                         <div className="text-dark fw-semibold text-end">
-                          {searchCriteria.dropoffName || "—"}
+                          {contactDetails.pickupLandmark}
+                        </div>
+                      </div>
+                    )}
+
+                    {(searchCriteria.dropoffName || searchCriteria.dropoffType || selectedOption?.cityName) && (
+                      <div className="sdbp-summary-row d-flex justify-content-between align-items-start py-2 border-bottom small">
+                        <div className="text-muted fw-medium">
+                          <FaMapMarkerAlt className="me-2 text-danger" />
+                          Dropoff
+                        </div>
+                        <div className="text-dark fw-semibold text-end">
+                          {searchCriteria.dropoffName || searchCriteria.pickupName || selectedOption?.cityName || searchCriteria.cityName || "—"}
                           {searchCriteria.dropoffTime && (
                             <div className="text-muted small fw-normal">
                               @ {searchCriteria.dropoffTime}
@@ -1214,14 +1255,23 @@ const SchefferDriverBookingPage = () => {
                           ? Number(tourismDirham)
                           : 0;
                       const grandTotal = Number(totalRate || 0) + tdNum;
+                      const packageFare = totalRate - intercitySurcharge;
                       return (
                         <>
                           <div className="d-flex justify-content-between align-items-center py-2 border-bottom small">
                             <div className="text-muted fw-medium">Package Fare</div>
                             <div className="text-dark fw-semibold">
-                              {formatPrice(totalRate)}
+                              {formatPrice(packageFare)}
                             </div>
                           </div>
+                          {intercitySurcharge > 0 && (
+                            <div className="d-flex justify-content-between align-items-center py-2 border-bottom small">
+                              <div className="text-muted fw-medium">Intercity Surcharge</div>
+                              <div className="text-dark fw-semibold">
+                                {formatPrice(intercitySurcharge)}
+                              </div>
+                            </div>
+                          )}
                           {tdNum > 0 && (
                             <div className="d-flex justify-content-between align-items-center py-2 border-bottom small">
                               <div className="text-muted fw-medium">Tourism Dirham</div>
@@ -1262,7 +1312,7 @@ const SchefferDriverBookingPage = () => {
                     Back
                   </Button>
                   <Button
-                    variant="success"
+                    variant="danger"
                     className="flex-grow-1 d-flex align-items-center justify-content-center gap-2"
                     onClick={handleConfirmClick}
                     disabled={isSubmitting || noPaymentPathAvailable}
@@ -1280,7 +1330,7 @@ const SchefferDriverBookingPage = () => {
                     ) : (
                       <>
                         <FaCheckCircle />
-                        Confirm Booking
+                        Confirm
                       </>
                     )}
                   </Button>
@@ -1454,50 +1504,54 @@ const SchefferDriverBookingPage = () => {
             <Col md={4}>
               <small className="text-muted d-block">Route</small>
               <span>
-                {selectedOption?.location || "N/A"} → {selectedOption?.dropOff || "N/A"}
+                {searchCriteria.pickupName || selectedOption?.cityName || searchCriteria.cityName || "N/A"}
+                {" → "}
+                {searchCriteria.dropoffName || searchCriteria.pickupName || selectedOption?.cityName || searchCriteria.cityName || "N/A"}
               </span>
             </Col>
           </Row>
 
-          {/* Pickup / Dropoff details — only shown when chosen upstream */}
-          {(searchCriteria.pickupType || searchCriteria.dropoffType) && (
+          {/* Pickup / Dropoff details — shown when location details are available */}
+          {(searchCriteria.pickupType || searchCriteria.pickupName || searchCriteria.dropoffType || searchCriteria.dropoffName || selectedOption?.cityName) && (
             <>
               <h6 className="fw-bold mb-2">Pickup &amp; Dropoff</h6>
               <Table size="sm" bordered className="mb-3">
                 <thead className="table-light">
                   <tr>
-                    <th style={{ width: "20%" }}></th>
-                    <th>Type</th>
+                    <th style={{ width: "25%" }}>Location</th>
                     <th>Name</th>
                     <th>Time</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {searchCriteria.pickupType && (
+                  {(searchCriteria.pickupType || searchCriteria.pickupName || selectedOption?.cityName) && (
                     <tr>
                       <td className="fw-semibold">Pickup</td>
                       <td>
-                        <Badge bg="success-subtle" text="success">
-                          {searchCriteria.pickupType}
-                        </Badge>
+                        {searchCriteria.pickupName ||
+                          selectedOption?.cityName ||
+                          searchCriteria.cityName ||
+                          "—"}
                       </td>
-                      <td>{searchCriteria.pickupName || "—"}</td>
-                      <td>
-                        {searchCriteria.pickupType === "AIRPORT" && searchCriteria.pickupTime
-                          ? searchCriteria.pickupTime
-                          : "—"}
-                      </td>
+                      <td>{searchCriteria.pickupTime || "—"}</td>
                     </tr>
                   )}
-                  {searchCriteria.dropoffType && (
+                  {contactDetails.pickupLandmark && (
+                    <tr>
+                      <td className="fw-semibold">Pickup Landmark Address</td>
+                      <td colSpan={2}>{contactDetails.pickupLandmark}</td>
+                    </tr>
+                  )}
+                  {(searchCriteria.dropoffType || searchCriteria.dropoffName || selectedOption?.cityName) && (
                     <tr>
                       <td className="fw-semibold">Dropoff</td>
                       <td>
-                        <Badge bg="warning-subtle" text="warning">
-                          {searchCriteria.dropoffType}
-                        </Badge>
+                        {searchCriteria.dropoffName ||
+                          searchCriteria.pickupName ||
+                          selectedOption?.cityName ||
+                          searchCriteria.cityName ||
+                          "—"}
                       </td>
-                      <td>{searchCriteria.dropoffName || "—"}</td>
                       <td>{searchCriteria.dropoffTime || "—"}</td>
                     </tr>
                   )}
@@ -1603,14 +1657,24 @@ const SchefferDriverBookingPage = () => {
                 : 0;
             const sellingBase = Number(prices.sellingPrice) || 0;
             const totalBase = Number(prices.totalPrice) || 0;
+            const baseSelling = sellingBase - intercitySurcharge;
+            const baseTotal = totalBase - intercitySurcharge;
             return (
               <div className="p-3 bg-light rounded">
                 <div className="d-flex justify-content-between mb-2 text-muted">
-                  <span>Selling Price</span>
+                  <span>Selling Price (Base)</span>
                   <span className="fw-medium">
-                    AED {sellingBase.toFixed(2)}
+                    AED {baseSelling.toFixed(2)}
                   </span>
                 </div>
+                {intercitySurcharge > 0 && (
+                  <div className="d-flex justify-content-between mb-2 text-muted">
+                    <span>Intercity Surcharge</span>
+                    <span className="fw-medium">
+                      + AED {intercitySurcharge.toFixed(2)}
+                    </span>
+                  </div>
+                )}
                 <div className="d-flex justify-content-between mb-2 text-muted">
                   <span>Total Price</span>
                   <span className="fw-medium">

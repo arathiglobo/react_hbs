@@ -51,11 +51,19 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   FaCar,
   FaTrash,
-  FaRoad,
   FaMapMarkerAlt,
   FaPhoneAlt,
   FaEnvelope,
   FaExclamationCircle,
+  FaHistory,
+  FaPlusCircle,
+  FaCheckCircle,
+  FaSyncAlt,
+  FaTimesCircle,
+  FaUserAlt,
+  FaNetworkWired,
+  FaCalendarAlt,
+  FaClock,
 } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
@@ -79,18 +87,37 @@ const BUTTON_STYLE = {
 
 // Purpose-based colour variants for the action buttons — identical palette to
 // the Hotel Booking detail view (BookingDetailedView.jsx) so the two flows
-// look uniform. Each reuses the exact BUTTON_STYLE shape (size / padding /
-// radius / white text); only the background colour changes. No behaviour,
-// handler, or guard is affected.
+// look uniform.
 const BTN_TEAL = { ...BUTTON_STYLE, backgroundColor: "#0d9488" }; // Reconfirm
 const BTN_DANGER = { ...BUTTON_STYLE, backgroundColor: "#dc2626" }; // Cancel
-const BTN_PRIMARY = { ...BUTTON_STYLE, backgroundColor: "#2563eb" }; // Record Usage
+const BTN_PRIMARY = { ...BUTTON_STYLE, backgroundColor: "#2563eb" }; // Add New Item
 const BTN_SKY = { ...BUTTON_STYLE, backgroundColor: "#3ba2e8" }; // Add Agent Reference
 const BTN_INDIGO = { ...BUTTON_STYLE, backgroundColor: "#6366f1" }; // Confirmation No.
 const BTN_INFO = { ...BUTTON_STYLE, backgroundColor: "#0891b2" }; // Voucher / Invoice docs
 const BTN_ORANGE = { ...BUTTON_STYLE, backgroundColor: "#f0922b" }; // Resend Mail
 const BTN_ACCENT = { ...BUTTON_STYLE, backgroundColor: "#7c3aed" }; // Booking Remark
 const BTN_NEUTRAL = { ...BUTTON_STYLE, backgroundColor: "#64748b" }; // Back / Notes
+const BTN_HISTORY = { ...BUTTON_STYLE, backgroundColor: "#334155" }; // Booking History
+
+// Per-action badge styling for the Booking History modal — colour + icon
+// keyed by the exact label pushed onto `bookingHistory`.
+const HISTORY_ACTION_META = {
+  "Booking Created": { bg: "#e6f4ea", fg: "#1e7e34", icon: FaPlusCircle },
+  "Booking Confirmed": { bg: "#e7f1ff", fg: "#1d4ed8", icon: FaCheckCircle },
+  "Booking Reconfirmed": { bg: "#e0f2f1", fg: "#0d9488", icon: FaSyncAlt },
+  "Booking Cancelled": { bg: "#fdecea", fg: "#c0392b", icon: FaTimesCircle },
+};
+const HISTORY_ACTION_FALLBACK = { bg: "#f1f5f9", fg: "#475569", icon: FaHistory };
+
+const ADD_NEW_ITEM_TYPES = [
+  { key: "HOTEL", label: "Hotel Booking", route: "/new-booking/hotel" },
+  { key: "HOTEL_24HR", label: "24 Hour Check-In", route: "/new-booking/hotel-24hr" },
+  { key: "LONG_STAY", label: "Long Stay Booking", route: "/new-booking/long-stay" },
+  { key: "DAY_STAY", label: "Day Stay Check-In", route: "/new-booking/day-stay" },
+  { key: "GOV_EMPLOYEE", label: "Government Employee", route: "/new-booking/gov-employee" },
+  { key: "STUDENT", label: "Student Booking", route: "/new-booking/student" },
+  { key: "SENIOR_CITIZEN", label: "Senior Citizen Booking", route: "/new-booking/senior-citizen" },
+];
 
 const SECTION_HEADER = {
   backgroundColor: "#f0f0f0",
@@ -148,6 +175,15 @@ const formatDateTime = (dateStr) => {
   return `${formatDate(dateStr)} ${hrs}:${min}:${sec}`;
 };
 
+const formatTimeOnly = (dateStr) => {
+  const d = parseLocal(dateStr);
+  if (!d) return "-";
+  const hrs = String(d.getHours()).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const sec = String(d.getSeconds()).padStart(2, "0");
+  return `${hrs}:${min}:${sec}`;
+};
+
 // Kept the original short date helper for the Scheffer-specific Pickup /
 // Dropoff rows (date-only display, no time component).
 const fmtDate = (d) => (d ? String(d).split("T")[0] : "-");
@@ -163,13 +199,30 @@ const StatusBadge = ({ status }) => {
     if (p === "ON REQUEST") return "#e67e22";
     return "#888";
   };
+
+  const formatTitleCase = (part) => {
+    if (!part) return "";
+    const p = part.trim();
+    if (!p) return "";
+    const upper = p.toUpperCase();
+    if (upper === "CONFIRMED") return "Confirmed";
+    if (upper === "RECONFIRMED") return "Reconfirmed";
+    if (upper === "CANCELLED") return "Cancelled";
+    if (upper === "ON REQUEST") return "On Request";
+    return p
+      .toLowerCase()
+      .split(" ")
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(" ");
+  };
+
   const parts = String(status || "-").split("/");
   return (
     <span style={{ fontWeight: "700", fontSize: "0.85rem" }}>
       {parts.map((part, i) => (
         <React.Fragment key={i}>
           {i > 0 && <span style={{ color: "#888" }}>/</span>}
-          <span style={{ color: colorFor(part) }}>{part}</span>
+          <span style={{ color: colorFor(part) }}>{formatTitleCase(part)}</span>
         </React.Fragment>
       ))}
     </span>
@@ -198,16 +251,7 @@ export default function SchefferDriverBookingDetailView() {
   const [pdfPreview, setPdfPreview] = useState(null);
   const [generatingPdfType, setGeneratingPdfType] = useState(null);
 
-  // Actual-usage modal
-  const [showUsage, setShowUsage] = useState(false);
-  const [savingUsage, setSavingUsage] = useState(false);
-  const [usageForm, setUsageForm] = useState({
-    actualHoursUsed: "",
-    actualKmUsed: "",
-    intercityFromCityId: "",
-    intercityToCityId: "",
-  });
-  const [cityList, setCityList] = useState([]);
+
 
   // Reconfirm (Confirm / Reject popup)
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -241,11 +285,54 @@ export default function SchefferDriverBookingDetailView() {
   // Resend Mail to Agent
   const [resendingMail, setResendingMail] = useState(false);
 
+  // Booking History modal
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+  // Add New Item modal
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [selectedAddItemType, setSelectedAddItemType] = useState(
+    ADD_NEW_ITEM_TYPES[0].key,
+  );
+  const [amendmentLinks, setAmendmentLinks] = useState([]);
+
+  // Fallback luggage capacity fetched from cab registration when the booking
+  // record doesn't carry maxLuggageCapacity
+  const [cabMaxLuggageCapacity, setCabMaxLuggageCapacity] = useState(null);
+
+const getPickupLandmarkAddress = (b) => {
+  if (!b) return "";
+  return (
+    b.pickupLandmarkAddress ||
+    b.pickupLandmark ||
+    b.landmark ||
+    b.landMark ||
+    b.pickupAddress ||
+    b.pickUpLandmark ||
+    b.pickUpLandmarkAddress ||
+    b.pickUpAddress ||
+    b.pickupLocation ||
+    b.pickupDetails ||
+    b.pickupRemark ||
+    b.pickupLandmarkDetails ||
+    b.custPickupLandmark ||
+    b.custPickupAddress ||
+    b.customerDTO?.pickupLandmark ||
+    b.customerDTO?.pickupLandmarkAddress ||
+    b.customerDTO?.landmark ||
+    b.customerDTO?.pickupAddress ||
+    b.customer?.pickupLandmark ||
+    b.customer?.pickupLandmarkAddress ||
+    b.customer?.landmark ||
+    b.customer?.pickupAddress ||
+    ""
+  );
+};
+
   const fetchBooking = async () => {
     setLoading(true);
     try {
       const res = await axiosInstance.get(`${API_BASE}/booking/${id}`);
-      setDetails(res.data);
+      setDetails((prev) => ({ ...(prev || {}), ...(res.data || {}) }));
     } catch (e) {
       console.error("Failed to load booking", e);
       toast.error("Failed to load booking");
@@ -261,30 +348,131 @@ export default function SchefferDriverBookingDetailView() {
     // eslint-disable-next-line
   }, [id]);
 
-  // Cities used by the Record-Actual-Usage modal's intercity selects.
+  // When booking details load and maxLuggageCapacity is not stored in the
+  // booking record (pre-fix old bookings), try to fetch it from the cab
+  // registration using the cabId / cabProviderId that the booking carries.
+  // This is a read-only, best-effort fetch — any failure is silently ignored.
   useEffect(() => {
-    (async () => {
-      try {
-        const r = await axiosInstance.get("/api/province", {
-          params: { limit: 500 },
-        });
-        const items = Array.isArray(r.data) ? r.data : r.data?.content || [];
-        setCityList(
-          items.map((it) => ({
-            id: it.id ?? it.stateId ?? it.placeid ?? it.provinceId,
-            name: it.name ?? it.stateName ?? it.placeName ?? it.provinceName,
-          })),
-        );
-      } catch (e) {
-        console.error("Error loading cities:", e);
-      }
-    })();
-  }, []);
+    if (!details) return;
+    // If the booking already has the value, nothing to do.
+    const bookingLuggage =
+      details.maxLuggageCapacity ??
+      details.cabMaxLuggageCapacity ??
+      details.maxLuggage;
+    if (bookingLuggage != null) {
+      setCabMaxLuggageCapacity(null); // clear any stale fallback
+      return;
+    }
 
-  const cityName = (cid) => {
-    const c = cityList.find((x) => String(x.id) === String(cid));
-    return c ? c.name : "";
-  };
+    // Try to look up the cab's maxLuggageCapacity from the registration using
+    // the cabProviderId (returned by the booking API) + cabId.
+    const providerId =
+      details.cabProviderId ??
+      details.cabProvider ??
+      details.providerId;
+    const cabId = details.cabId;
+
+    if (!providerId || !cabId) return;
+
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/SchefferDriver/cabs/${providerId}`)
+      .then((res) => {
+        if (cancelled) return;
+        const cabs = Array.isArray(res.data) ? res.data : [];
+        const cab = cabs.find((c) => String(c.cabId) === String(cabId));
+        if (cab && cab.maxLuggageCapacity != null) {
+          setCabMaxLuggageCapacity(cab.maxLuggageCapacity);
+        }
+      })
+      .catch(() => {
+        // Silently ignore — the Luggage field will just show the legacy
+        // boolean fallback for very old bookings.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [details?.id, details?.cabId, details?.cabProviderId]);
+
+  const amendmentParentCode = details?.parentBookingCode || details?.bookingCode;
+  useEffect(() => {
+    let alive = true;
+    if (!amendmentParentCode) {
+      setAmendmentLinks([]);
+      return undefined;
+    }
+    axiosInstance
+      .get(
+        `/api/booking-amendment-link/parent/${encodeURIComponent(
+          amendmentParentCode,
+        )}`,
+      )
+      .then((res) => {
+        if (!alive) return;
+        setAmendmentLinks(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch(() => alive && setAmendmentLinks([]));
+    return () => {
+      alive = false;
+    };
+  }, [amendmentParentCode]);
+
+  const creatorLabel =
+    details?.createdBy ||
+    details?.employeeName ||
+    details?.agentName ||
+    details?.createdByRole ||
+    details?.source ||
+    "-";
+  const bookingHistory = (() => {
+    if (!details) return [];
+    const events = [];
+    const createdTs =
+      details.bookingDate || details.bookingDateTime || details.createdAt;
+    if (createdTs) {
+      events.push({
+        action: "Booking Created",
+        at: createdTs,
+        by: creatorLabel,
+        location:
+          details.bookingLocation ||
+          details.pickupLandmark ||
+          details.pickupName ||
+          "-",
+        ip: details.ipAddress,
+      });
+    }
+    if (details.confirmedDate) {
+      events.push({
+        action: "Booking Confirmed",
+        at: details.confirmedDate,
+        by: details.confirmedBy || "-",
+      });
+    }
+    if (details.reconfirmedDate) {
+      events.push({
+        action: "Booking Reconfirmed",
+        at: details.reconfirmedDate,
+        by: details.reconfirmedBy || "-",
+      });
+    }
+    const cancelTs = details.cancelledAt || details.cancelledDate;
+    if (cancelTs) {
+      events.push({
+        action: "Booking Cancelled",
+        at: cancelTs,
+        by: details.cancelledBy || "-",
+      });
+    }
+    return events.sort((a, b) => {
+      const ta = parseLocal(a.at)?.getTime() ?? 0;
+      const tb = parseLocal(b.at)?.getTime() ?? 0;
+      return ta - tb;
+    });
+  })();
+
+
 
   const bookingId = details?.id || details?.custombookingId || id;
 
@@ -304,12 +492,17 @@ export default function SchefferDriverBookingDetailView() {
     normalizedStatus === "COMPLETED" ||
     details?.reconfirmation === true;
 
-  // Combined status label for the header / Trip Info StatusBadge. Surfaces
-  // the cancelled-from state when available (e.g. "ReConfirmed/Cancelled").
+  // Combined status label for the header / Trip Info StatusBadge.
+  // Shows status progression: Confirmed → Reconfirmed → Cancelled
+  // Mirrors the hotel booking detail page pattern.
   const displayStatus = isCancelled
-    ? details?.confirmationStatus
-      ? `${details.confirmationStatus}/Cancelled`
+    ? normalizedStatus === "RECONFIRMED"
+      ? "Confirmed/Reconfirmed/Cancelled"
+      : normalizedStatus === "CONFIRMED"
+      ? "Confirmed/Cancelled"
       : "Cancelled"
+    : normalizedStatus === "RECONFIRMED"
+    ? "Confirmed/Reconfirmed"
     : details?.confirmationStatus || details?.status || "Confirmed";
 
   // ── Cancel ──────────────────────────────────────────────────────
@@ -379,56 +572,7 @@ export default function SchefferDriverBookingDetailView() {
     }
   };
 
-  // ── Record Actual Usage ─────────────────────────────────────────
-  const openUsage = () => {
-    if (!details) return;
-    setUsageForm({
-      actualHoursUsed:
-        details.actualHoursUsed != null ? details.actualHoursUsed : "",
-      actualKmUsed: details.actualKmUsed != null ? details.actualKmUsed : "",
-      intercityFromCityId: "",
-      intercityToCityId: "",
-    });
-    setShowUsage(true);
-  };
 
-  const saveUsage = async () => {
-    if (!bookingId) return;
-    setSavingUsage(true);
-    try {
-      const payload = {
-        actualHoursUsed:
-          usageForm.actualHoursUsed === ""
-            ? null
-            : Number(usageForm.actualHoursUsed),
-        actualKmUsed:
-          usageForm.actualKmUsed === ""
-            ? null
-            : Number(usageForm.actualKmUsed),
-        intercityFromCityId: usageForm.intercityFromCityId
-          ? Number(usageForm.intercityFromCityId)
-          : null,
-        intercityFromCity: usageForm.intercityFromCityId
-          ? cityName(usageForm.intercityFromCityId)
-          : null,
-        intercityToCityId: usageForm.intercityToCityId
-          ? Number(usageForm.intercityToCityId)
-          : null,
-        intercityToCity: usageForm.intercityToCityId
-          ? cityName(usageForm.intercityToCityId)
-          : null,
-      };
-      await axiosInstance.put(`${API_BASE}/${bookingId}/usage`, payload);
-      toast.success("Usage updated — final amount recalculated");
-      setShowUsage(false);
-      fetchBooking();
-    } catch (e) {
-      console.error("Usage update error:", e);
-      toast.error("Failed to update usage");
-    } finally {
-      setSavingUsage(false);
-    }
-  };
 
   // ── Reconfirm ──────────────────────────────────────────────────────
   const openConfirmModal = () => setShowConfirmModal(true);
@@ -719,6 +863,18 @@ export default function SchefferDriverBookingDetailView() {
                             <>
                               <FaMapMarkerAlt
                                 className="me-1"
+                                style={{ color: "#16a34a" }}
+                              />
+                              Pickup Landmark Address
+                            </>
+                          }
+                          value={getPickupLandmarkAddress(details) || "-"}
+                        />
+                        <InfoRow
+                          label={
+                            <>
+                              <FaMapMarkerAlt
+                                className="me-1"
                                 style={{ color: "#dc2626" }}
                               />
                               Dropoff
@@ -731,6 +887,18 @@ export default function SchefferDriverBookingDetailView() {
                               ? ` @ ${details.dropoffTime}`
                               : ""
                           }`}
+                        />
+                        <InfoRow
+                          label="Deadline Date"
+                          value={
+                            details.deadlineDate ? (
+                              <span style={{ color: "#dc2626", fontWeight: 600 }}>
+                                {`${String(details.deadlineDate).slice(0, 10)} 02:00 PM (UAE)`}
+                              </span>
+                            ) : (
+                              "-"
+                            )
+                          }
                         />
                       </Col>
                       <Col md={6}>
@@ -746,7 +914,20 @@ export default function SchefferDriverBookingDetailView() {
                         />
                         <InfoRow
                           label="Luggage"
-                          value={details.luggage ? "Yes" : "No"}
+                          value={(() => {
+                            // Check multiple possible field names in order of
+                            // preference: booking-level snapshot → fallback
+                            // fetched from cab registration → legacy boolean.
+                            const capacity =
+                              details.maxLuggageCapacity ??
+                              details.cabMaxLuggageCapacity ??
+                              details.maxLuggage ??
+                              cabMaxLuggageCapacity;
+                            if (capacity != null) {
+                              return `${capacity} pieces`;
+                            }
+                            return details.luggage ? "Yes" : "No";
+                          })()}
                         />
                         {(details.transporter || details.driverName) && (
                           <InfoRow
@@ -938,22 +1119,15 @@ export default function SchefferDriverBookingDetailView() {
                         </Col>
                         <Col md={6}>
                           <InfoRow
-                            label="Extra Rates"
-                            value={`Hour: AED ${
-                              details.extraHourRate ?? "-"
-                            } · KM: AED ${details.extraKmRate ?? "-"}`}
-                          />
-                          <InfoRow
-                            label="Actual Used"
-                            value={`${
-                              details.actualHoursUsed != null
-                                ? `${details.actualHoursUsed} hrs`
-                                : "—"
-                            }${
-                              details.actualKmUsed != null
-                                ? ` · ${details.actualKmUsed} km`
-                                : ""
-                            }`}
+                            label="No. of Kilometers Used"
+                            value={(() => {
+                              const km =
+                                details.includedKm ?? details.kmIncluded;
+                              if (km == null || km === "") return "-";
+                              return String(km).toLowerCase().includes("km")
+                                ? km
+                                : `${km} km`;
+                            })()}
                           />
                           {(details.extraHoursCharge > 0 ||
                             details.extraKmCharge > 0 ||
@@ -1062,6 +1236,99 @@ export default function SchefferDriverBookingDetailView() {
                   </div>
                 )}
 
+                {/* Related Sub-Bookings created through Add New Item.
+                    The hotel detail page shows these links after the child
+                    flow persists them via /api/booking-amendment-link. */}
+                {amendmentLinks && amendmentLinks.length > 0 && (
+                  <div style={card}>
+                    <div style={SECTION_HEADER}>
+                      Related Sub-Bookings - Other Types ({amendmentLinks.length})
+                    </div>
+                    <div style={{ padding: "10px 16px" }}>
+                      {amendmentLinks.map((lnk) => (
+                        <div
+                          key={lnk.id}
+                          style={{
+                            borderTop: "1px solid #eee",
+                            padding: "10px 0",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: "6px",
+                              gap: "10px",
+                            }}
+                          >
+                            <span
+                              style={{
+                                color: "#c0392b",
+                                fontWeight: "700",
+                                fontSize: "0.9rem",
+                              }}
+                            >
+                              {lnk.childBookingCode || "-"}
+                              <span
+                                style={{
+                                  marginLeft: "8px",
+                                  color: "#888",
+                                  fontWeight: "500",
+                                  fontSize: "0.8rem",
+                                }}
+                              >
+                                ({lnk.childTypeLabel || lnk.childType})
+                              </span>
+                            </span>
+                            {lnk.childDetailRoutePrefix && lnk.childBookingId != null && (
+                              <button
+                                style={BTN_NEUTRAL}
+                                onClick={() =>
+                                  navigate(
+                                    `${lnk.childDetailRoutePrefix}${lnk.childBookingId}`,
+                                  )
+                                }
+                              >
+                                View
+                              </button>
+                            )}
+                          </div>
+                          <Row>
+                            <Col md={6}>
+                              <InfoRow
+                                label="Booking Type"
+                                value={lnk.childTypeLabel || lnk.childType}
+                              />
+                              <InfoRow
+                                label="Reference No."
+                                value={lnk.childReferenceNumber}
+                              />
+                              <InfoRow label="Hotel" value={lnk.childHotelName} />
+                            </Col>
+                            <Col md={6}>
+                              <InfoRow label="Check-In" value={lnk.childCheckInDate} />
+                              <InfoRow label="Check-Out" value={lnk.childCheckOutDate} />
+                              <InfoRow
+                                label="Total Rate"
+                                value={
+                                  lnk.childTotalRate != null
+                                    ? Number(lnk.childTotalRate).toFixed(2)
+                                    : "-"
+                                }
+                              />
+                              <InfoRow
+                                label="Status"
+                                value={<StatusBadge status={lnk.childStatus} />}
+                              />
+                            </Col>
+                          </Row>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* ── Action Buttons ───────────────────────────────── */}
                 <div
                   style={{
@@ -1131,14 +1398,17 @@ export default function SchefferDriverBookingDetailView() {
                     </>
                   )}
 
-                  {details.packageName && !isCancelled && (
+
+
+                  {!isCancelled && (
                     <button
                       style={BTN_PRIMARY}
-                      onClick={openUsage}
-                      title="Record actual usage"
+                      onClick={() => {
+                        setSelectedAddItemType(ADD_NEW_ITEM_TYPES[0].key);
+                        setShowAddItemModal(true);
+                      }}
                     >
-                      <FaRoad style={{ marginRight: "6px" }} />
-                      RECORD USAGE
+                      ADD NEW ITEM
                     </button>
                   )}
 
@@ -1210,6 +1480,13 @@ export default function SchefferDriverBookingDetailView() {
                     }
                   >
                     NOTES
+                  </button>
+
+                  <button
+                    style={BTN_HISTORY}
+                    onClick={() => setShowHistoryModal(true)}
+                  >
+                    HISTORY
                   </button>
                 </div>
 
@@ -1397,125 +1674,7 @@ export default function SchefferDriverBookingDetailView() {
         </Modal.Footer>
       </Modal>
 
-      {/* Actual usage modal */}
-      <Modal show={showUsage} onHide={() => setShowUsage(false)} centered>
-        <Modal.Header
-          closeButton
-          style={{
-            backgroundColor: "#fff",
-            borderBottom: "2px solid #e9ecef",
-          }}
-        >
-          <Modal.Title className="fw-bold d-flex align-items-center">
-            <FaRoad className="me-2 text-warning" />
-            <span>Record Actual Usage</span>
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body style={{ padding: "1.5rem" }}>
-          {details && (
-            <>
-              <p className="text-muted small mb-3">
-                Package <strong>{details.packageName}</strong> —{" "}
-                {details.includedHours ?? "-"} hrs /{" "}
-                {details.includedKm ?? "-"} km included. Extra hour: AED{" "}
-                {details.extraHourRate ?? "-"}, Extra km: AED{" "}
-                {details.extraKmRate ?? "-"}.
-              </p>
-              <Row className="g-3">
-                <Col md={6}>
-                  <Form.Label>Actual Hours Used</Form.Label>
-                  <Form.Control
-                    type="number"
-                    min="0"
-                    value={usageForm.actualHoursUsed}
-                    onChange={(e) =>
-                      setUsageForm((p) => ({
-                        ...p,
-                        actualHoursUsed: e.target.value,
-                      }))
-                    }
-                  />
-                </Col>
-                <Col md={6}>
-                  <Form.Label>Actual KM Used</Form.Label>
-                  <Form.Control
-                    type="number"
-                    min="0"
-                    value={usageForm.actualKmUsed}
-                    onChange={(e) =>
-                      setUsageForm((p) => ({
-                        ...p,
-                        actualKmUsed: e.target.value,
-                      }))
-                    }
-                  />
-                </Col>
-                <Col md={12}>
-                  <hr className="my-2" />
-                  <small className="text-muted">
-                    Intercity leg (optional — adds surcharge)
-                  </small>
-                </Col>
-                <Col md={6}>
-                  <Form.Label>From City</Form.Label>
-                  <Form.Select
-                    value={usageForm.intercityFromCityId}
-                    onChange={(e) =>
-                      setUsageForm((p) => ({
-                        ...p,
-                        intercityFromCityId: e.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">None</option>
-                    {cityList.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </Form.Select>
-                </Col>
-                <Col md={6}>
-                  <Form.Label>To City</Form.Label>
-                  <Form.Select
-                    value={usageForm.intercityToCityId}
-                    onChange={(e) =>
-                      setUsageForm((p) => ({
-                        ...p,
-                        intercityToCityId: e.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">None</option>
-                    {cityList.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </Form.Select>
-                </Col>
-              </Row>
-            </>
-          )}
-        </Modal.Body>
-        <Modal.Footer
-          style={{
-            backgroundColor: "#f8f9fa",
-            borderTop: "1px solid #dee2e6",
-          }}
-        >
-          <Button
-            variant="secondary"
-            onClick={() => setShowUsage(false)}
-            disabled={savingUsage}
-          >
-            Cancel
-          </Button>
-          <Button variant="success" onClick={saveUsage} disabled={savingUsage}>
-            {savingUsage ? "Saving..." : "Save & Recalculate"}
-          </Button>
-        </Modal.Footer>
-      </Modal>
+
 
       {/* ── Reconfirm Booking Modal ───────────────────────── */}
       <Modal
@@ -1897,6 +2056,305 @@ export default function SchefferDriverBookingDetailView() {
             ) : (
               "Save"
             )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Add New Item booking-type picker. Mirrors the hotel detail flow:
+          choose a child booking type, then launch that existing create page
+          with parentBookingCode so the backend links it as an amendment. */}
+      <Modal
+        show={showAddItemModal}
+        onHide={() => setShowAddItemModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title style={{ fontSize: "1.05rem" }}>
+            Add New Item
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div style={{ marginBottom: "10px", color: "#555" }}>
+            Select a booking type to add as a sub-booking of{" "}
+            <strong>{details?.parentBookingCode || details?.bookingCode}</strong>.
+          </div>
+          <Form>
+            {ADD_NEW_ITEM_TYPES.map((t) => (
+              <Form.Check
+                key={t.key}
+                type="radio"
+                name="addNewItemType"
+                id={`scheffer-add-item-${t.key}`}
+                label={t.label}
+                value={t.key}
+                checked={selectedAddItemType === t.key}
+                onChange={() => setSelectedAddItemType(t.key)}
+                style={{ marginBottom: "6px" }}
+              />
+            ))}
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowAddItemModal(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              const chosen = ADD_NEW_ITEM_TYPES.find(
+                (t) => t.key === selectedAddItemType,
+              );
+              const parent = details?.parentBookingCode || details?.bookingCode;
+              if (!chosen || !parent) return;
+              setShowAddItemModal(false);
+              navigate(
+                `${chosen.route}?parentBookingCode=${encodeURIComponent(parent)}`,
+              );
+            }}
+          >
+            Continue
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Booking History modal. Read-only lifecycle table derived from the
+          loaded booking data, matching the hotel detail page UI. */}
+      <Modal
+        show={showHistoryModal}
+        onHide={() => setShowHistoryModal(false)}
+        centered
+        size="xl"
+        scrollable
+        contentClassName="hbs-history-modal-content"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title
+            style={{
+              fontSize: "1.05rem",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <FaHistory size={16} />
+            <span>
+              Booking History
+              {details?.bookingCode && (
+                <span style={{ opacity: 0.85, fontWeight: 500 }}>
+                  {` - ${details.bookingCode}`}
+                </span>
+              )}
+            </span>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ backgroundColor: "#f8fafc", padding: "1.25rem 1.5rem" }}>
+          {bookingHistory.length === 0 ? (
+            <div className="text-muted text-center py-4">
+              <FaHistory size={26} style={{ opacity: 0.25, marginBottom: 8 }} />
+              <div>No history available for this booking.</div>
+            </div>
+          ) : (
+            <div
+              style={{
+                borderRadius: 10,
+                border: "1px solid #e2e8f0",
+                boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
+                backgroundColor: "#fff",
+              }}
+            >
+              <table
+                style={{
+                  width: "100%",
+                  tableLayout: "fixed",
+                  borderCollapse: "collapse",
+                  fontSize: "0.82rem",
+                  marginBottom: 0,
+                }}
+              >
+                <thead>
+                  <tr style={{ backgroundColor: "#f1f5f9" }}>
+                    {[
+                      { label: "S/N", width: "5%" },
+                      { label: "Action", width: "17%" },
+                      { label: "Performed By", icon: FaUserAlt, width: "13%" },
+                      { label: "Location", icon: FaMapMarkerAlt, width: "30%" },
+                      { label: "IP Address", icon: FaNetworkWired, width: "14%" },
+                      { label: "Date", icon: FaCalendarAlt, width: "11%" },
+                      { label: "Time", icon: FaClock, width: "10%" },
+                    ].map((col) => (
+                      <th
+                        key={col.label}
+                        style={{
+                          width: col.width,
+                          padding: "10px 14px",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.03em",
+                          fontSize: "0.72rem",
+                          fontWeight: 700,
+                          color: "#475569",
+                          borderBottom: "1px solid #e2e8f0",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {col.icon ? (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
+                          >
+                            <col.icon size={11} style={{ opacity: 0.7 }} />
+                            {col.label}
+                          </span>
+                        ) : (
+                          col.label
+                        )}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {bookingHistory.map((ev, idx) => {
+                    const meta =
+                      HISTORY_ACTION_META[ev.action] || HISTORY_ACTION_FALLBACK;
+                    const ActionIcon = meta.icon;
+                    return (
+                      <tr
+                        key={`${ev.action}-${idx}`}
+                        style={{
+                          backgroundColor: idx % 2 === 1 ? "#f8fafc" : "#fff",
+                        }}
+                      >
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                            color: "#64748b",
+                          }}
+                        >
+                          {idx + 1}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "3px 10px",
+                              borderRadius: 999,
+                              backgroundColor: meta.bg,
+                              color: meta.fg,
+                              fontWeight: 600,
+                              fontSize: "0.76rem",
+                            }}
+                          >
+                            <ActionIcon size={10} style={{ flexShrink: 0 }} />
+                            {ev.action}
+                          </span>
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          {ev.by || "-"}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {ev.location ? (
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "flex-start",
+                                gap: 6,
+                              }}
+                            >
+                              <FaMapMarkerAlt
+                                size={11}
+                                style={{
+                                  color: "#c0392b",
+                                  marginTop: 2,
+                                  flexShrink: 0,
+                                }}
+                              />
+                              <span>{ev.location}</span>
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          {ev.ip ? (
+                            <span
+                              style={{
+                                fontFamily: "'Consolas', 'Courier New', monospace",
+                                backgroundColor: "#f1f5f9",
+                                color: "#334155",
+                                padding: "2px 8px",
+                                borderRadius: 4,
+                                fontSize: "0.76rem",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {ev.ip}
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          {formatDate(ev.at)}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          {formatTimeOnly(ev.at)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer style={{ backgroundColor: "#fff" }}>
+          <Button
+            variant="secondary"
+            onClick={() => setShowHistoryModal(false)}
+            style={{
+              borderRadius: 6,
+              padding: "6px 20px",
+              fontWeight: 600,
+              fontSize: "0.85rem",
+            }}
+          >
+            Close
           </Button>
         </Modal.Footer>
       </Modal>

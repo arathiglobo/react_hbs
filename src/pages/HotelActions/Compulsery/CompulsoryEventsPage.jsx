@@ -119,10 +119,15 @@ const CompulsoryEventsPage = () => {
   });
 
   // Fetch compulsory events
-  const fetchEvents = async () => {
+  const fetchEvents = async (searchQuery = searchTerm) => {
     try {
       setLoading(true);
-      const res = await axiosInstance.get(`/api/compulsoryEvent`);
+      const res = await axiosInstance.get(`/api/compulsoryEvent`, {
+        params: {
+          limit: 1000,
+          search: searchQuery || undefined,
+        },
+      });
       setEvents(res.data || []);
     } catch (error) {
       console.error("Error fetching events:", error);
@@ -577,9 +582,7 @@ const CompulsoryEventsPage = () => {
   };
 
   // ---- Search & Pagination derived data ----
-  const filteredEvents = events.filter((ev) =>
-    ev.supplyments?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredEvents = events;
 
   const totalPages = Math.ceil(filteredEvents.length / itemsPerPage) || 1;
   const currentData = filteredEvents.slice(
@@ -632,18 +635,43 @@ const CompulsoryEventsPage = () => {
                 >
                   Compulsory Events
                 </span>
-                <Form.Group className="hotel-search-bar position-relative">
-                  <Form.Control
-                    type="text"
-                    placeholder="Search supplements..."
-                    className="form-control-modern-sm"
-                    value={searchTerm}
-                    onChange={(e) => {
-                      setSearchTerm(e.target.value);
-                      setCurrentPage(1);
-                    }}
-                  />
-                </Form.Group>
+                <div className="d-flex align-items-center gap-2">
+                  <div className="position-relative" style={{ width: "260px" }}>
+                    <Form.Control
+                      type="text"
+                      placeholder="Search by code, tagline, status..."
+                      value={searchTerm}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setSearchTerm(value);
+                        setCurrentPage(1);
+                        fetchEvents(value);
+                      }}
+                      className="border-1 bg-light"
+                    />
+                    {searchTerm && (
+                      <button
+                        type="button"
+                        className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
+                        style={{
+                          border: "none",
+                          background: "none",
+                          color: "#6c757d",
+                          padding: "0 12px",
+                          zIndex: 10,
+                        }}
+                        onClick={() => {
+                          setSearchTerm("");
+                          setCurrentPage(1);
+                          fetchEvents("");
+                        }}
+                        title="Clear search"
+                      >
+                        <i className="fas fa-times"></i>
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <Button className="btn-green create-btn" onClick={handleCreate}>
                   + Create
                 </Button>
