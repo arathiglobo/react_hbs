@@ -52,6 +52,47 @@ const renderPolicyValidity = (fromDate, toDate) => {
 };
 
 /**
+ * ATHARVA-only per-rate deadline pill for the room list card. Source is the
+ * raw supplier DeadLineDate carried on rate.deadlineDate as "DD-MMM-YYYY"
+ * (e.g. "18-Jun-2023") — see AtharvaSingleHotelOrchestrator.java. We format
+ * to "DD MMM YYYY" and stamp a static "11:59 PM (UAE)" time per the operator
+ * spec. Returns null when the field is missing or the string doesn't parse,
+ * so the pill silently disappears for non-Atharva rates and malformed rows.
+ */
+const renderAtharvaDeadlinePill = (deadlineDate) => {
+  if (!deadlineDate || typeof deadlineDate !== "string") return null;
+  const parts = deadlineDate.trim().split("-");
+  if (parts.length !== 3) return null;
+  const [d, monShort, y] = parts;
+  const monthMap = {
+    jan: "Jan",
+    feb: "Feb",
+    mar: "Mar",
+    apr: "Apr",
+    may: "May",
+    jun: "Jun",
+    jul: "Jul",
+    aug: "Aug",
+    sep: "Sep",
+    oct: "Oct",
+    nov: "Nov",
+    dec: "Dec",
+  };
+  const mon = monthMap[String(monShort || "").toLowerCase().slice(0, 3)];
+  if (!d || !mon || !y) return null;
+  return (
+    <span
+      bg="warning"
+      text="dark"
+      className="fw-normal"
+      title="Cancel by this date/time to avoid charges"
+    >
+      Deadline: {d} {mon} {y}, 23:59
+    </span>
+  );
+};
+
+/**
  * Strip HTML markup out of a policy string so the modal shows plain text.
  * Some suppliers (RateHawk, ATHARVA remarks, etc.) return the cancellation
  * policy with embedded <div>, <p>, <br>, <ul>/<li>, <b> etc. We convert
@@ -1468,6 +1509,20 @@ const ExternalApiRoomList = () => {
                                                     {rate.contractLabel}
                                                   </div>
 
+                                                  {/* ATHARVA (apiId 3) per-rate DeadLineDate pill,
+                                                      sourced from HSearchByHotelCode_V2. Sits directly
+                                                      above the Cancellation link so the operator
+                                                      sees the cut-off before opening the policy
+                                                      modal. Helper returns null when the rate has
+                                                      no deadlineDate (non-Atharva or malformed). */}
+                                                  {rate.deadlineDate && (
+                                                    <div className="feature-item">
+                                                      {renderAtharvaDeadlinePill(
+                                                        rate.deadlineDate,
+                                                      )}
+                                                    </div>
+                                                  )}
+
                                                   <div className="feature-item">
                                                     <Button
                                                       variant="link"
@@ -1580,6 +1635,17 @@ const ExternalApiRoomList = () => {
                                                         {rate.contractLabel}
                                                       </span>
                                                     </div>
+                                                    {/* ATHARVA (apiId 3) per-rate DeadLineDate pill,
+                                                        sourced from HSearchByHotelCode_V2. Helper
+                                                        returns null when the rate has no
+                                                        deadlineDate (non-Atharva or malformed). */}
+                                                    {rate.deadlineDate && (
+                                                      <div className="feature-item d-flex align-items-center">
+                                                        {renderAtharvaDeadlinePill(
+                                                          rate.deadlineDate,
+                                                        )}
+                                                      </div>
+                                                    )}
                                                     <div className="feature-item d-flex align-items-center">
                                                       <Button
                                                         variant="link"
