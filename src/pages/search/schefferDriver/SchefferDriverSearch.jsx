@@ -725,23 +725,39 @@ export const SchefferDriverSearch = () => {
                           <Form.Label className="fw-semibold text-dark">
                             Agent <span className="text-danger">*</span>
                           </Form.Label>
-                          <Form.Select
-                            style={{ height: "42px" }}
-                            className="form-control-modern"
-                            value={agent}
-                            isInvalid={!!validationErrors.agent}
-                            onChange={(e) => {
-                              setAgent(e.target.value);
-                              if (e.target.value) clearError("agent");
-                            }}
-                          >
-                            <option value="">Select Agent</option>
-                            {agents.map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {a.companyName}
-                              </option>
-                            ))}
-                          </Form.Select>
+                          <Select
+  options={agents.map((a) => ({
+    value: a.id,
+    label: a.companyName,
+  }))}
+  value={
+    agents
+      .map((a) => ({
+        value: a.id,
+        label: a.companyName,
+      }))
+      .find((a) => String(a.value) === String(agent)) || null
+  }
+  onChange={(selected) => {
+    setAgent(selected ? selected.value : "");
+    if (selected) clearError("agent");
+  }}
+  placeholder="Select Agent"
+  isSearchable
+  isClearable
+  menuPortalTarget={document.body}
+  styles={{
+    ...customSelectStyles,
+    control: (base) => ({
+      ...customSelectStyles.control(base),
+      borderColor: validationErrors.agent ? "#dc3545" : "#dee2e6",
+    }),
+    menuPortal: (base) => ({
+      ...base,
+      zIndex: 9999,
+    }),
+  }}
+/>
                           {validationErrors.agent && (
                             <div className="text-danger small mt-1">
                               {validationErrors.agent}
