@@ -446,11 +446,17 @@ const ApiBookingPageForHotels = () => {
       );
       const bookingResponse = response.data;
 
-      if (
-        bookingResponse &&
-        bookingResponse.status === "CONFIRMED" &&
-        bookingResponse.bookingId != 0
-      ) {
+      // Backend returns "CONFIRMED" for Inhouse and "Reconfirmed" for API
+      // suppliers (IWTX/X3/etc. — see HotelBookingResponse.success
+      // factories). Both mean the booking was created; failures come back
+      // as "FAILED" or "NOT_IMPLEMENTED". Match case-insensitively so a
+      // successful IWTX/X3 booking doesn't fall through to the error toast.
+      const statusUpper = String(bookingResponse?.status || "").toUpperCase();
+      const isSuccess =
+        (statusUpper === "CONFIRMED" || statusUpper === "RECONFIRMED") &&
+        bookingResponse?.bookingId != 0;
+
+      if (bookingResponse && isSuccess) {
         toast.success(bookingResponse.message);
         navigate("/booking-details/hotel-booking-list");
       } else {

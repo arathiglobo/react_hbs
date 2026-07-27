@@ -150,10 +150,18 @@ const ExternalApiRoomList = () => {
       : Array.isArray(hotelDetail?.termsAndConditions)
         ? hotelDetail.termsAndConditions
         : [];
+    // IWTX (and other API suppliers) don't send policy rows for
+    // non-refundable rates — the list arrives empty. Without carrying the
+    // flag through, the modal used to fall back to "No cancellation
+    // policies available", which reads as "we don't know" instead of
+    // "you can't cancel". Match the wording the booking page already uses.
+    const isNonRefundable =
+      String(rate?.nonRefundable).toLowerCase() === "true";
     setPoliciesModalData({
       cancellationPolicies: cancellation,
       termsAndConditions: inlineTerms,
       selectedRoomLabel: label,
+      nonRefundable: isNonRefundable,
     });
     setShowPoliciesModal(true);
   };
@@ -469,6 +477,16 @@ const ExternalApiRoomList = () => {
       setLoadingRate(true);
       setTimeout(async () => {
         try {
+          // Child ages from the original search — the reprice endpoint (X3
+          // in particular) validates that Adult+Child count matches the
+          // contractTokenId that was issued for the searched pax mix.
+          // Missing `child` on the payload gets rejected with "The child
+          // count doesn't correspond selected contract token id".
+          const searchChildAges = payload.rooms?.[0]?.childAges || [];
+          const childArr = searchChildAges
+            .filter((n) => Number(n) > 0)
+            .map((age) => ({ age: String(age) }));
+
           const roomsArray = [
             {
               adult: {
@@ -476,6 +494,7 @@ const ExternalApiRoomList = () => {
                   payload.rooms?.[0]?.adultAges?.[0] ?? 30
                 ).toString(),
               },
+              ...(childArr.length ? { child: childArr } : {}),
               roomTypeCode: rate.roomTypeCode,
               mealPlanCode: rate.mealPlanCode,
               contractTokenId: rate.contractTokenId || "0",
@@ -494,6 +513,12 @@ const ExternalApiRoomList = () => {
               cancellationPolicy: "Y",
               groupByRooms: "Y",
             },
+            // Send the caller-agent's id so the IWTX reprice endpoint can
+            // apply the same markup IwtxResponseMapper already applied on
+            // the list. Without this the modal/booking page would show
+            // the raw net rate, mismatching the room-list card.
+            agentId:
+              payload?.agentId != null ? String(payload.agentId) : undefined,
           };
 
           const endpoint =
@@ -516,7 +541,12 @@ const ExternalApiRoomList = () => {
               mealPlan: room.mealPlan,
               contractLabel: room.contractLabel,
               nonRefundable: room.nonRefundable,
-              rate: room.rateDetails.rate,
+              // IWTX Rate = total for stay (matches the room-list card).
+              // rateDetails.rate is per-night, which was previously used
+              // here and silently under-priced the booking. Both fields
+              // are marked-up server-side.
+              rate: room.rate,
+              rateWithoutMarkup: room.rateWithoutMarkup,
               currency: room.currCode,
               // IWTX BookHotel requires RoomTypeCode / MealPlanCode /
               // ContractTokenId per room. Prefer the accurate response's
@@ -605,73 +635,185 @@ const ExternalApiRoomList = () => {
       setLoadingRate(true);
       setTimeout(async () => {
         try {
-          const roomsArray = selectedRooms.map((r, i) => ({
-            adult: {
-              age: (
-                payload.rooms?.[i]?.adultAges?.[0] ??
-                payload.rooms?.[0]?.adultAges?.[0] ??
-                30
-              ).toString(),
-            },
-            roomTypeCode: r.selectedRate?.roomTypeCode,
-            mealPlanCode: r.selectedRate?.mealPlanCode,
-            contractTokenId: r.selectedRate?.contractTokenId || "0",
-            roomConfigurationId: i + 1,
-          }));
-
-          const priceCheckReq = {
-            searchCriteria: {
-              roomConfiguration: { room: roomsArray },
-              startDate: payload.checkInDate,
-              endDate: payload.checkOutDate,
-              hotelCode: payload.hotelCode,
-              nationality: payload.nationality,
-              includeRateDetails: "Y",
-              cancellationPolicy: "Y",
-              groupByRooms: "Y",
-            },
+          // Same reason as the single-room branch above: without `child`
+          // the X3 reprice rejects with "The child count doesn't
+          // correspond selected contract token id" whenever the searched
+          // pax mix included children.
+          const buildRoomBlock = (r, i) => {
+            const searchChildAges =
+              payload.rooms?.[i]?.childAges ||
+              payload.rooms?.[0]?.childAges ||
+              [];
+            const childArr = searchChildAges
+              .filter((n) => Number(n) > 0)
+              .map((age) => ({ age: String(age) }));
+            return {
+              adult: {
+                age: (
+                  payload.rooms?.[i]?.adultAges?.[0] ??
+                  payload.rooms?.[0]?.adultAges?.[0] ??
+                  30
+                ).toString(),
+              },
+              ...(childArr.length ? { child: childArr } : {}),
+              roomTypeCode: r.selectedRate?.roomTypeCode,
+              mealPlanCode: r.selectedRate?.mealPlanCode,
+              contractTokenId: r.selectedRate?.contractTokenId || "0",
+            };
           };
 
-          const endpoint =
-            currentApiId === 12
-              ? "/api/iwtx/hotel/availability"
-              : "/api/x3/hotel/availability";
+          const baseSearchCriteria = {
+            startDate: payload.checkInDate,
+            endDate: payload.checkOutDate,
+            hotelCode: payload.hotelCode,
+            nationality: payload.nationality,
+            includeRateDetails: "Y",
+            cancellationPolicy: "Y",
+            groupByRooms: "Y",
+          };
+          const agentIdArg =
+            payload?.agentId != null ? String(payload.agentId) : undefined;
 
-          const response = await axiosInstance.post(endpoint, priceCheckReq);
-          const respHotel = response.data.hotels.hotel[0];
-          const rooms = respHotel.roomTypeDetails.rooms.room;
-          const accurateRates = rooms
-            .filter((room) => room != null)
-            .map((room, i) => ({
-              roomNo: i + 1,
-              roomConfigurationId: room.roomConfigurationId,
-              hotelId: respHotel.hotelId,
-              hotelName: respHotel.hotelName,
-              hotelCode: respHotel.hotelCode,
-              roomCategory: room.roomType,
-              mealPlan: room.mealPlan,
-              contractLabel: room.contractLabel,
-              nonRefundable: room.nonRefundable,
-              rate: room.rateDetails.rate,
-              currency: room.currCode,
-              // IWTX BookHotel requires these three per room. Prefer the
-              // accurate response; fall back to the operator's originally
-              // selected rate in each slot so we never post nulls.
-              roomTypeCode:
-                room.roomTypeCode ??
-                selectedRooms[i]?.selectedRate?.roomTypeCode,
-              mealPlanCode:
-                room.mealPlanCode ??
-                selectedRooms[i]?.selectedRate?.mealPlanCode,
-              contractTokenId:
-                room.contractTokenId ??
-                selectedRooms[i]?.selectedRate?.contractTokenId,
-              // Cancellation policies from search — needed so the
-              // booking page can compute deadlineDate. Same reason as
-              // single-room path.
-              cancellationPolicy:
-                selectedRooms[i]?.selectedRate?.cancellationPolicies || [],
+          // X3 (apiId 15) on runtime inventory — per IOL-X docs, Hotel
+          // Availability "validates the rate and availability for a
+          // specific rate" (singular). The vendor rejects any request
+          // with more than one <Room> in <RoomConfiguration> with
+          // "Not supported RoomConfigurationId". So for X3 multi-room
+          // we fire ONE reprice per selected room in parallel and stitch
+          // the responses back in the original order. IWTX (apiId 12)
+          // and every single-room path keep the original one-shot call
+          // (the IWTX vendor accepts multi-room reprice).
+          let accurateRates;
+          if (currentApiId === 15 && selectedRooms.length > 1) {
+            const perRoomRequests = selectedRooms.map((r, i) => ({
+              searchCriteria: {
+                roomConfiguration: {
+                  room: [{ ...buildRoomBlock(r, i), roomConfigurationId: 1 }],
+                },
+                ...baseSearchCriteria,
+              },
+              agentId: agentIdArg,
             }));
+
+            const responses = await Promise.all(
+              perRoomRequests.map((req) =>
+                axiosInstance.post("/api/x3/hotel/availability", req),
+              ),
+            );
+
+            // Surface the vendor's own error text on the first failing
+            // room — the shared catch below only reads err.message /
+            // response.data.message, but IOL-X puts the reason at
+            // errorMessage.msg, so throw a synthetic error so the catch
+            // shows something actionable.
+            responses.forEach((resp, i) => {
+              const vendorErr = resp.data?.errorMessage?.msg;
+              if (vendorErr) {
+                const e = new Error(`Room ${i + 1}: ${vendorErr}`);
+                e.response = { data: { message: `Room ${i + 1}: ${vendorErr}` } };
+                throw e;
+              }
+            });
+
+            accurateRates = responses.map((resp, i) => {
+              const respHotel = resp.data.hotels.hotel[0];
+              const room = respHotel.roomTypeDetails.rooms.room.find(
+                (rr) => rr != null,
+              );
+              return {
+                roomNo: i + 1,
+                // Each per-room reprice is a self-contained call, so the
+                // vendor always echoes roomConfigurationId=1. Stamp the
+                // FE-side room slot number (i + 1) instead so downstream
+                // booking-payload construction still keys rooms correctly.
+                roomConfigurationId: i + 1,
+                hotelId: respHotel.hotelId,
+                hotelName: respHotel.hotelName,
+                hotelCode: respHotel.hotelCode,
+                roomCategory: room.roomType,
+                mealPlan: room.mealPlan,
+                contractLabel: room.contractLabel,
+                nonRefundable: room.nonRefundable,
+                rate: room.rate,
+                rateWithoutMarkup: room.rateWithoutMarkup,
+                currency: room.currCode,
+                roomTypeCode:
+                  room.roomTypeCode ??
+                  selectedRooms[i]?.selectedRate?.roomTypeCode,
+                mealPlanCode:
+                  room.mealPlanCode ??
+                  selectedRooms[i]?.selectedRate?.mealPlanCode,
+                contractTokenId:
+                  room.contractTokenId ??
+                  selectedRooms[i]?.selectedRate?.contractTokenId,
+                cancellationPolicy:
+                  selectedRooms[i]?.selectedRate?.cancellationPolicies || [],
+              };
+            });
+          } else {
+            const roomsArray = selectedRooms.map((r, i) => ({
+              ...buildRoomBlock(r, i),
+              roomConfigurationId: i + 1,
+            }));
+
+            const priceCheckReq = {
+              searchCriteria: {
+                roomConfiguration: { room: roomsArray },
+                ...baseSearchCriteria,
+              },
+              // Send the caller-agent's id so the IWTX reprice endpoint can
+              // apply the same markup IwtxResponseMapper already applied on
+              // the list. Without this the modal/booking page would show
+              // the raw net rate, mismatching the room-list card.
+              agentId: agentIdArg,
+            };
+
+            const endpoint =
+              currentApiId === 12
+                ? "/api/iwtx/hotel/availability"
+                : "/api/x3/hotel/availability";
+
+            const response = await axiosInstance.post(endpoint, priceCheckReq);
+            const respHotel = response.data.hotels.hotel[0];
+            const rooms = respHotel.roomTypeDetails.rooms.room;
+            accurateRates = rooms
+              .filter((room) => room != null)
+              .map((room, i) => ({
+                roomNo: i + 1,
+                roomConfigurationId: room.roomConfigurationId,
+                hotelId: respHotel.hotelId,
+                hotelName: respHotel.hotelName,
+                hotelCode: respHotel.hotelCode,
+                roomCategory: room.roomType,
+                mealPlan: room.mealPlan,
+                contractLabel: room.contractLabel,
+                nonRefundable: room.nonRefundable,
+                // IWTX Rate = total for stay (matches the room-list card).
+                // rateDetails.rate is per-night, which was previously used
+                // here and silently under-priced the booking. Both fields
+                // are marked-up server-side.
+                rate: room.rate,
+                rateWithoutMarkup: room.rateWithoutMarkup,
+                currency: room.currCode,
+                // IWTX BookHotel requires these three per room. Prefer the
+                // accurate response; fall back to the operator's originally
+                // selected rate in each slot so we never post nulls.
+                roomTypeCode:
+                  room.roomTypeCode ??
+                  selectedRooms[i]?.selectedRate?.roomTypeCode,
+                mealPlanCode:
+                  room.mealPlanCode ??
+                  selectedRooms[i]?.selectedRate?.mealPlanCode,
+                contractTokenId:
+                  room.contractTokenId ??
+                  selectedRooms[i]?.selectedRate?.contractTokenId,
+                // Cancellation policies from search — needed so the
+                // booking page can compute deadlineDate. Same reason as
+                // single-room path.
+                cancellationPolicy:
+                  selectedRooms[i]?.selectedRate?.cancellationPolicies || [],
+              }));
+          }
 
           setSelectedRate(accurateRates);
           setLoadingRate(false);
@@ -1839,6 +1981,12 @@ const ExternalApiRoomList = () => {
                 );
               })}
             </ul>
+          ) : policiesModalData.nonRefundable ? (
+            <div className="alert alert-danger py-2 px-3 mb-4 small">
+              <strong>Non-refundable rate.</strong> No refund will be
+              provided if this booking is cancelled. 100% cancellation
+              charges apply.
+            </div>
           ) : (
             <p className="text-muted mb-4">
               No cancellation policies available.
