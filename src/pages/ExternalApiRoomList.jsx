@@ -35,6 +35,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/RoomList.css";
 import axiosInstance from "../components/AxiosInstance";
+import toast from "react-hot-toast";
 import { formatFlexibleDate } from "../utils/dateUtils";
 import RoomFilters from "../components/roomlist/RoomFilters";
 import useRoomFilters from "../hooks/useRoomFilters";
@@ -638,6 +639,21 @@ const ExternalApiRoomList = () => {
       atharvaRateKey: prebookRoom?.rateKey || rate?.rateKey || null,
       atharvaHKey: prebook?.hKey || rate?.hKey || null,
       atharvaTokenId: prebook?.tokenId || rate?.tokenId || null,
+      // Search-time keys preserved untouched. The booking page's late
+      // prebook (multi-room path) always needs to send the ORIGINAL
+      // search-response values — the "atharva*" fields above may have
+      // been overwritten with fresh keys from a per-rate prebook when
+      // the operator opened the Cancellation Policies modal, and mixing
+      // fresh + search values across rooms is what triggers Atharva's
+      // "1005: Invalid RateKey" error on multi-room prebook.
+      atharvaSearchRateKey: rate?.rateKey || null,
+      atharvaSearchHKey: rate?.hKey || null,
+      atharvaSearchTokenId: rate?.tokenId || null,
+      // Flag: true when the tokens above came from a prior /atharva/prebook
+      // call (operator opened the Cancellation Policies modal here). Booking
+      // page uses this to decide whether it must run prebook itself before
+      // submitting HCreateBooking — the search tokens alone won't work.
+      atharvaPrebooked: !!prebook,
       // Operator-facing deadline (already earliest cancellation date minus
       // 2 days, computed on the backend). Booking page renders this in the
       // cancellation accordion header. Null when prebook wasn't run yet.
@@ -646,6 +662,28 @@ const ExternalApiRoomList = () => {
   };
 
   const handleRateSelect = (roomIndex, rate, hotelId, hotelName) => {
+    // ATHARVA (apiId=3) multi-room constraint: every rateKey sent to
+    // HPreBooking must belong to the same VendorList (same HKey). The
+    // search response splits identical-looking rates across multiple
+    // VendorList entries under distinct HKeys, so a flat rate list can
+    // easily let the operator pick incompatible rates → Atharva returns
+    // "1005: Invalid RateKey" on prebook. Reject cross-vendor picks up
+    // front with a clear message so the operator reselects instead of
+    // discovering the mismatch on the booking page.
+    const currentApiId = String(roomData?.payload?.apiId || "");
+    if (currentApiId === "3" && rate?.hKey) {
+      const otherSelected = selectedRooms.find(
+        (r, i) => i !== roomIndex && r?.selectedRate,
+      );
+      const otherHKey = otherSelected?.selectedRate?.hKey;
+      if (otherHKey && otherHKey !== rate.hKey) {
+        toast.error(
+          "Atharva multi-room bookings require every room to be selected from the SAME rate group. Please clear the other room's selection first, or pick a rate from the same vendor group.",
+        );
+        return;
+      }
+    }
+
     setSelectedRooms((prev) =>
       prev.map((r, i) => {
         if (i !== roomIndex) return r;
@@ -1491,7 +1529,67 @@ const ExternalApiRoomList = () => {
                             const isActive = slotActiveKey === eventKey;
                             const filteredRates = (
                               category.availableRates || []
-                            ).filter(rateMatches);
+                            )
+                              .filter(rateMatches)
+                              // ATHARVA (apiId=3) multi-room disambiguation:
+                              // the search response mixes rates for every
+                              // RoomSrNo into one vendor list, so each slot
+                              // must show only its own RoomSrNo rates,
+                              // otherwise the operator picks incompatible
+                              // rates and Atharva returns 1005: Invalid
+                              // RateKey on prebook.
+                              .filter((rate) => {
+                                if (
+                                  String(roomData?.payload?.apiId || "") !== "3" ||
+                                  !isMultiRoom ||
+                                  rate?.roomSrNo == null
+                                ) {
+                                  return true;
+                                }
+                                return rate.roomSrNo === roomSlotIndex + 1;
+                              })
+                              // For Atharva multi-room with FixedOption=true,
+                              // once an EARLIER slot has picked a rate, this
+                              // slot must be restricted to rates whose
+                              // atharvaIndex forms a valid pair with the
+                              // earlier picks per the vendor's Options[]
+                              // combinations. Options entries look like
+                              // "1,28" — one index per room slot in order.
+                              .filter((rate) => {
+                                if (
+                                  String(roomData?.payload?.apiId || "") !== "3" ||
+                                  !isMultiRoom ||
+                                  hotel?.atharvaFixedOption !== true ||
+                                  !Array.isArray(hotel?.atharvaOptions) ||
+                                  hotel.atharvaOptions.length === 0 ||
+                                  rate?.atharvaIndex == null
+                                ) {
+                                  return true;
+                                }
+                                // Collect indices from any earlier slot with
+                                // a selection; positions without a selection
+                                // become wildcards (any Option row matches).
+                                const requiredIndices = selectedRooms.map(
+                                  (r) => r?.selectedRate?.atharvaIndex ?? null,
+                                );
+                                const hasEarlierPick = requiredIndices
+                                  .slice(0, roomSlotIndex)
+                                  .some((v) => v != null);
+                                if (!hasEarlierPick) return true;
+                                return hotel.atharvaOptions.some((opt) => {
+                                  const parts = String(opt)
+                                    .split(",")
+                                    .map((p) => Number(p.trim()));
+                                  if (parts.length <= roomSlotIndex) return false;
+                                  if (parts[roomSlotIndex] !== rate.atharvaIndex)
+                                    return false;
+                                  return requiredIndices.every((idx, i) => {
+                                    if (i === roomSlotIndex) return true;
+                                    if (idx == null) return true;
+                                    return parts[i] === idx;
+                                  });
+                                });
+                              });
                             if (filteredRates.length === 0) return null;
 
                             return (
