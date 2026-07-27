@@ -297,6 +297,7 @@ export default function Sidebar() {
             { label: "Assign Menu", to: "/masters/assign-menu", roles: ["super_admin"] },
             { label: "Contact Type", to: "/masters/contact-type" },
             { label: "Markup Type", to: "/masters/markup-type" },
+            { label: "Cab Type", to: "/masters/cab-type" },
             { label: "Currency", to: "/masters/currency" },
           ],
         },
@@ -431,7 +432,7 @@ export default function Sidebar() {
         { code: "reg_restaurants",   label: "Restaurants",                    to: "/restaurant/list" },
         { code: "reg_honeymoon",     label: "Honeymoon Packages",             to: "/honeymoon/list" },
         { code: "reg_ayurveda",      label: "Ayurveda",                       to: "/registration/ayurveda" },
-        { code: "reg_scheffer",      label: "Scheffer Driver and Limousine",  to: "/registration/schefferDriver" },
+        { code: "reg_scheffer",      label: "Chauffer Driver and Limousine",  to: "/registration/schefferDriver" },
         { code: "reg_package_addons", label: "Build Your Own Package Add-Ons", to: "/registration/package-addons" },
       ],
     },
@@ -483,8 +484,8 @@ export default function Sidebar() {
           to: "/new-booking/student",
         },
         {
-          label: "Senior Citizen",
-          to: "/new-booking/senior-citizen",
+         label: "Senior Citizen",
+         to: "/new-booking/senior-citizen",
         },
         // Religious flow — same HotelSearch, destination locked to Mecca/Medina.
         {

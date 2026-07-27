@@ -74,6 +74,8 @@ export default function StudentDiscountPromotion() {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [search, setSearch] = useState("");
+
 
   // Status-toggle modal state — mirrors the ContractRate pattern.
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -117,10 +119,17 @@ export default function StudentDiscountPromotion() {
     setShowModal(true);
   };
 
-  const fetchAll = async () => {
+  const fetchAll = async (searchQuery = search) => {
     setLoading(true);
     try {
-      const { data } = await axiosInstance.get(`/api/hotel-student-discount-promotion/hotel/${hotelId}`);
+      const { data } = await axiosInstance.get(
+        `/api/hotel-student-discount-promotion/hotel/${hotelId}`,
+        {
+          params: {
+            search: searchQuery || undefined
+          }
+        }
+      );
       setRows(Array.isArray(data) ? data : []);
     } catch (e) {
       toast.error("Failed to load promotions");
@@ -128,6 +137,7 @@ export default function StudentDiscountPromotion() {
       setLoading(false);
     }
   };
+
   useEffect(() => {
     if (hotelId) fetchAll();
     // eslint-disable-next-line
@@ -280,10 +290,46 @@ export default function StudentDiscountPromotion() {
               >
                 Student Discount
               </span>
+              <div className="d-flex align-items-center gap-2">
+                <div className="position-relative" style={{ width: "260px" }}>
+                  <Form.Control
+                    type="text"
+                    placeholder="Search by date or status..."
+                    value={search}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSearch(value);
+                      fetchAll(value);
+                    }}
+                    className="border-1 bg-light"
+                  />
+                  {search && (
+                    <button
+                      type="button"
+                      className="btn btn-link position-absolute top-50 end-0 translate-middle-y"
+                      style={{
+                        border: "none",
+                        background: "none",
+                        color: "#6c757d",
+                        padding: "0 12px",
+                        zIndex: 10,
+                      }}
+                      onClick={() => {
+                        setSearch("");
+                        fetchAll("");
+                      }}
+                      title="Clear search"
+                    >
+                      <i className="fas fa-times"></i>
+                    </button>
+                  )}
+                </div>
+              </div>
               <Button className="btn-green create-btn" onClick={openCreate}>
                 + Create
               </Button>
             </Card.Header>
+
 
             <Card.Body className="p-0">
               <Table

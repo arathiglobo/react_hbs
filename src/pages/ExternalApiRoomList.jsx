@@ -51,6 +51,82 @@ const renderPolicyValidity = (fromDate, toDate) => {
   return `Valid: ${from || "N/A"} - ${to || "N/A"}`;
 };
 
+/**
+ * ATHARVA-only per-rate deadline pill for the room list card. Source is the
+ * raw supplier DeadLineDate carried on rate.deadlineDate as "DD-MMM-YYYY"
+ * (e.g. "18-Jun-2023") — see AtharvaSingleHotelOrchestrator.java. We format
+ * to "DD MMM YYYY" and stamp a static "11:59 PM (UAE)" time per the operator
+ * spec. Returns null when the field is missing or the string doesn't parse,
+ * so the pill silently disappears for non-Atharva rates and malformed rows.
+ */
+const renderAtharvaDeadlinePill = (deadlineDate) => {
+  if (!deadlineDate || typeof deadlineDate !== "string") return null;
+  const parts = deadlineDate.trim().split("-");
+  if (parts.length !== 3) return null;
+  const [d, monShort, y] = parts;
+  const monthMap = {
+    jan: "Jan",
+    feb: "Feb",
+    mar: "Mar",
+    apr: "Apr",
+    may: "May",
+    jun: "Jun",
+    jul: "Jul",
+    aug: "Aug",
+    sep: "Sep",
+    oct: "Oct",
+    nov: "Nov",
+    dec: "Dec",
+  };
+  const mon = monthMap[String(monShort || "").toLowerCase().slice(0, 3)];
+  if (!d || !mon || !y) return null;
+  return (
+    <span
+      bg="warning"
+      text="dark"
+      className="fw-normal"
+      title="Cancel by this date/time to avoid charges"
+    >
+      Deadline: {d} {mon} {y}, 23:59
+    </span>
+  );
+};
+
+/**
+ * Strip HTML markup out of a policy string so the modal shows plain text.
+ * Some suppliers (RateHawk, ATHARVA remarks, etc.) return the cancellation
+ * policy with embedded <div>, <p>, <br>, <ul>/<li>, <b> etc. We convert
+ * block-level closes and <br> to newlines (the modal uses white-space:
+ * pre-line, so newlines render as line breaks), then drop every tag, then
+ * decode the handful of HTML entities suppliers actually send. Returns "" for
+ * a null / undefined input so React never renders "undefined".
+ */
+const stripHtmlTags = (raw) => {
+  if (raw == null) return "";
+  const s = String(raw)
+    // Block-level breaks first, so text on either side of a </div>/<br>
+    // ends up on separate lines in the modal.
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|h[1-6])>/gi, "\n")
+    // Bulletise <li> entries so lists remain readable after tags are gone.
+    .replace(/<li[^>]*>/gi, "\n• ")
+    .replace(/<\/li>/gi, "")
+    // Drop every other tag (including opening <p>, <b>, <ul>, attributes …).
+    .replace(/<[^>]+>/g, "")
+    // Common HTML entities we actually see in supplier payloads.
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    // Collapse runs of blank lines and trim trailing whitespace on each line.
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return s;
+};
+
 function AccordionToggleButton({ eventKey, isActive }) {
   const decoratedOnClick = useAccordionButton(eventKey);
   return (
@@ -114,12 +190,23 @@ const ExternalApiRoomList = () => {
 
   // Cancellation Policies & Terms modal — sourced from the search
   // response; no extra API call for external suppliers.
+  //
+  // Exception: ATHARVA (apiId 3). Their search response has no cancellation
+  // policy — it is only produced by the HPreBooking call. When the user opens
+  // the modal for an ATHARVA rate we call /api/hotel-booking/atharva/prebook,
+  // display the returned policies, and cache the response keyed by rate so
+  // subsequent opens are instant and the booking payload can pick up the
+  // fresh TokenId / HKey / RateKey the vendor requires.
   const [showPoliciesModal, setShowPoliciesModal] = useState(false);
   const [policiesModalData, setPoliciesModalData] = useState({
     cancellationPolicies: [],
     termsAndConditions: [],
     selectedRoomLabel: "",
   });
+  const [prebookLoading, setPrebookLoading] = useState(false);
+  const [prebookError, setPrebookError] = useState(null);
+  // rateKey -> AtharvaPreBookResponseDTO (fresh tokenId/hKey/rateKey/policies)
+  const [atharvaPrebookCache, setAtharvaPrebookCache] = useState({});
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -136,12 +223,69 @@ const ExternalApiRoomList = () => {
   const activeUserRole = localStorage.getItem("currentActiveRole");
 
   // ─────────────────────────── helpers ────────────────────────────────
-  const openPoliciesModal = (rate, hotelDetail) => {
-    const cancellation = Array.isArray(rate?.cancellationPolicies)
-      ? rate.cancellationPolicies
-      : Array.isArray(hotelDetail?.cancellationPolicies)
-        ? hotelDetail.cancellationPolicies
-        : [];
+
+  /**
+   * Fetch ATHARVA HPreBooking for a single selected rate and turn its
+   * `Policies[] × CancellationPolicy[]` into the same {policyText, fromDate,
+   * toDate} shape the modal already renders. On success the response is
+   * cached against the rate's `rateKey` so opening the modal again is free
+   * and the booking payload can pull the fresh keys back out.
+   *
+   * Returns the response object (success or failure) so the caller can
+   * decide whether to still open the modal, which we always do — showing the
+   * error inside the same modal is more discoverable than a toast.
+   */
+  const fetchAtharvaPrebook = async (rate) => {
+    if (!rate?.rateKey || !rate?.hKey || !rate?.tokenId) {
+      return {
+        success: false,
+        message:
+          "ATHARVA prebook: search response is missing tokenId / hKey / rateKey — cannot fetch policy.",
+      };
+    }
+    if (atharvaPrebookCache[rate.rateKey]) {
+      return atharvaPrebookCache[rate.rateKey];
+    }
+    const { payload } = roomData || {};
+    const req = {
+      agentId: payload?.agentId ? String(payload.agentId) : null,
+      cityId: payload?.cityId || null,
+      nationalityId: payload?.nationalityId || null,
+      nationality: payload?.nationality || null,
+      checkInDate: payload?.checkInDate,
+      checkOutDate: payload?.checkOutDate,
+      hotelCode: payload?.hotelCode,
+      tokenId: rate.tokenId,
+      hKey: rate.hKey,
+      rooms: (payload?.rooms || []).map((r, i) => ({
+        roomSrNo: i + 1,
+        noOfAdult: r.adults,
+        noOfChild: r.children || 0,
+        childAges: r.childAges || [],
+        rateKey: rate.rateKey,
+      })),
+    };
+    try {
+      const resp = await axiosInstance.post(
+        "/api/hotel-booking/atharva/prebook",
+        req,
+      );
+      const data = resp?.data || {};
+      if (data.success) {
+        setAtharvaPrebookCache((prev) => ({ ...prev, [rate.rateKey]: data }));
+      }
+      return data;
+    } catch (err) {
+      const backendMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Prebook request failed";
+      return { success: false, message: backendMsg };
+    }
+  };
+
+  const openPoliciesModal = async (rate, hotelDetail) => {
     const label = [rate?.roomCategory, rate?.mealPlan]
       .filter(Boolean)
       .join(" • ");
@@ -157,13 +301,52 @@ const ExternalApiRoomList = () => {
     // "you can't cancel". Match the wording the booking page already uses.
     const isNonRefundable =
       String(rate?.nonRefundable).toLowerCase() === "true";
+
+    const supplierApiId = resolveApiId(hotelDetail);
+    const isAtharva = supplierApiId === apiIdMapping.ATHARVA;
+
+    // Non-ATHARVA: policies come from the search response, same as before.
+    if (!isAtharva) {
+      const cancellation = Array.isArray(rate?.cancellationPolicies)
+        ? rate.cancellationPolicies
+        : Array.isArray(hotelDetail?.cancellationPolicies)
+          ? hotelDetail.cancellationPolicies
+          : [];
+      setPrebookError(null);
+      setPoliciesModalData({
+        cancellationPolicies: cancellation,
+        termsAndConditions: inlineTerms,
+        selectedRoomLabel: label,
+        nonRefundable: isNonRefundable,
+      });
+      setShowPoliciesModal(true);
+      return;
+    }
+
+    // ATHARVA: open the modal in a loading state, hit prebook, then fill it.
+    setPrebookError(null);
     setPoliciesModalData({
-      cancellationPolicies: cancellation,
+      cancellationPolicies: [],
       termsAndConditions: inlineTerms,
       selectedRoomLabel: label,
       nonRefundable: isNonRefundable,
     });
     setShowPoliciesModal(true);
+    setPrebookLoading(true);
+    try {
+      const prebook = await fetchAtharvaPrebook(rate);
+      if (prebook?.success) {
+        setPoliciesModalData({
+          cancellationPolicies: prebook.cancellationPolicies || [],
+          termsAndConditions: inlineTerms,
+          selectedRoomLabel: label,
+        });
+      } else {
+        setPrebookError(prebook?.message || "Failed to fetch cancellation policy");
+      }
+    } finally {
+      setPrebookLoading(false);
+    }
   };
 
   const getMealPlanIcon = (mealPlan) => {
@@ -414,28 +597,53 @@ const ExternalApiRoomList = () => {
   //
   // Additive: roomTypeCode / mealPlanCode / contractTokenId — IWTX/IOL-X
   // BookHotel needs these three per room. Other suppliers ignore them.
-  const mapRateForPayload = (rate, hotelObj, roomNo) => ({
-    roomNo,
-    roomCategory: rate?.roomCategory,
-    mealPlan: rate?.mealPlan,
-    contractLabel: rate?.contractLabel,
-    nonRefundable: rate?.nonRefundable,
-    rate: rate?.totalRate,
-    rateWithoutMarkup: rate?.totalRateWithoutMarkup,
-    roomRateBasedOnRoomCount: rate?.roomRateBasedOnRoomCount,
-    roomRateBasedOnRoomCount_WithoutMarkup:
-      rate?.roomRateBasedOnRoomCount_WithoutMarkup,
-    roomStatus: rate?.roomStatus,
-    currency: "AED",
-    hotelId: hotelObj?.hotelId,
-    hotelName: hotelObj?.hotelName,
-    cancellationPolicy: rate?.cancellationPolicies,
-    // IWTX booking payload fields — forwarded from the search response
-    // so IwtxHotelBookingService can build its JSON BookHotel body.
-    roomTypeCode: rate?.roomTypeCode,
-    mealPlanCode: rate?.mealPlanCode,
-    contractTokenId: rate?.contractTokenId,
-  });
+  const mapRateForPayload = (rate, hotelObj, roomNo) => {
+    // ATHARVA prebook keys: prefer the FRESH values from the cached prebook
+    // response (HCreateBooking requires them) and fall back to the search
+    // response values so a rate that wasn't prebooked yet still round-trips.
+    // Also carry the cancellation policy the modal fetched, so the booking
+    // page can compute the deadline the same way it does for other suppliers.
+    const prebook = rate?.rateKey ? atharvaPrebookCache[rate.rateKey] : null;
+    const prebookRoom = prebook?.rooms?.find(
+      (r) => (r.roomSrNo ?? null) === roomNo,
+    );
+
+    return {
+      roomNo,
+      roomCategory: rate?.roomCategory,
+      mealPlan: rate?.mealPlan,
+      contractLabel: rate?.contractLabel,
+      nonRefundable: rate?.nonRefundable,
+      rate: rate?.totalRate,
+      rateWithoutMarkup: rate?.totalRateWithoutMarkup,
+      roomRateBasedOnRoomCount: rate?.roomRateBasedOnRoomCount,
+      roomRateBasedOnRoomCount_WithoutMarkup:
+        rate?.roomRateBasedOnRoomCount_WithoutMarkup,
+      roomStatus: rate?.roomStatus,
+      currency: "AED",
+      hotelId: hotelObj?.hotelId,
+      hotelName: hotelObj?.hotelName,
+      // Prefer prebook cancellation policies over search-time ones for ATHARVA
+      // (search response has none). For other suppliers the search value wins.
+      cancellationPolicy:
+        (prebook?.cancellationPolicies?.length && prebook.cancellationPolicies) ||
+        rate?.cancellationPolicies,
+      // IWTX booking payload fields — forwarded from the search response
+      // so IwtxHotelBookingService can build its JSON BookHotel body.
+      roomTypeCode: rate?.roomTypeCode,
+      mealPlanCode: rate?.mealPlanCode,
+      contractTokenId: rate?.contractTokenId,
+      // ATHARVA-only carriers. Ignored by every other supplier's booking
+      // service. `rateKey` prefers the prebook-refreshed value.
+      atharvaRateKey: prebookRoom?.rateKey || rate?.rateKey || null,
+      atharvaHKey: prebook?.hKey || rate?.hKey || null,
+      atharvaTokenId: prebook?.tokenId || rate?.tokenId || null,
+      // Operator-facing deadline (already earliest cancellation date minus
+      // 2 days, computed on the backend). Booking page renders this in the
+      // cancellation accordion header. Null when prebook wasn't run yet.
+      atharvaDisplayDeadlineDate: prebook?.displayDeadlineDate || null,
+    };
+  };
 
   const handleRateSelect = (roomIndex, rate, hotelId, hotelName) => {
     setSelectedRooms((prev) =>
@@ -1444,6 +1652,20 @@ const ExternalApiRoomList = () => {
                                                     {rate.contractLabel}
                                                   </div>
 
+                                                  {/* ATHARVA (apiId 3) per-rate DeadLineDate pill,
+                                                      sourced from HSearchByHotelCode_V2. Sits directly
+                                                      above the Cancellation link so the operator
+                                                      sees the cut-off before opening the policy
+                                                      modal. Helper returns null when the rate has
+                                                      no deadlineDate (non-Atharva or malformed). */}
+                                                  {rate.deadlineDate && (
+                                                    <div className="feature-item">
+                                                      {renderAtharvaDeadlinePill(
+                                                        rate.deadlineDate,
+                                                      )}
+                                                    </div>
+                                                  )}
+
                                                   <div className="feature-item">
                                                     <Button
                                                       variant="link"
@@ -1556,6 +1778,17 @@ const ExternalApiRoomList = () => {
                                                         {rate.contractLabel}
                                                       </span>
                                                     </div>
+                                                    {/* ATHARVA (apiId 3) per-rate DeadLineDate pill,
+                                                        sourced from HSearchByHotelCode_V2. Helper
+                                                        returns null when the rate has no
+                                                        deadlineDate (non-Atharva or malformed). */}
+                                                    {rate.deadlineDate && (
+                                                      <div className="feature-item d-flex align-items-center">
+                                                        {renderAtharvaDeadlinePill(
+                                                          rate.deadlineDate,
+                                                        )}
+                                                      </div>
+                                                    )}
                                                     <div className="feature-item d-flex align-items-center">
                                                       <Button
                                                         variant="link"
@@ -1958,6 +2191,19 @@ const ExternalApiRoomList = () => {
             </div>
           )}
 
+          {/* ATHARVA prebook feedback. Loading + error banners live above the
+              policies list so they're visible without covering the T&C section. */}
+          {prebookLoading && (
+            <div className="alert alert-info py-2 mb-3" role="status">
+              Fetching cancellation policy from supplier…
+            </div>
+          )}
+          {prebookError && (
+            <div className="alert alert-warning py-2 mb-3" role="alert">
+              {prebookError}
+            </div>
+          )}
+
           <h6 className="text-danger mb-2">
             <FaTimesCircle className="me-2" />
             Cancellation Policies
@@ -1972,7 +2218,7 @@ const ExternalApiRoomList = () => {
                 return (
                   <li key={idx} className="mb-2">
                     <div style={{ whiteSpace: "pre-line" }}>
-                      {policy?.policyText || ""}
+                      {stripHtmlTags(policy?.policyText)}
                     </div>
                     {validity && (
                       <small className="text-muted">{validity}</small>
@@ -2000,13 +2246,14 @@ const ExternalApiRoomList = () => {
           {policiesModalData.termsAndConditions?.length > 0 ? (
             <ul className="mb-0 ps-3">
               {policiesModalData.termsAndConditions.map((term, idx) => {
-                const text =
+                const raw =
                   typeof term === "string"
                     ? term
                     : term?.description ||
                       term?.policyText ||
                       term?.text ||
                       "";
+                const text = stripHtmlTags(raw);
                 if (!text) return null;
                 return (
                   <li

@@ -85,8 +85,12 @@ const ApiBookingPageForHotels = () => {
   const [paymentMode, setPaymentMode] = useState("CREDITLIMIT");
   const [agentAvailableBalance, setAgentAvailableBalance] = useState(null);
   const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
-  const [bookingConfirmation, setBookingConfirmation] =
-    useState("Book & Voucher");
+  // ATHARVA-only booking-mode picker. Starts unset so neither radio
+  // is pre-selected on page load — the operator must explicitly
+  // choose "Book and Pay Now" or "Hold Room and Pay Later" before
+  // Confirm Booking is allowed to proceed. openPolicyConsent below
+  // enforces the pick with a toast + inline error for apiId===3.
+  const [bookingConfirmation, setBookingConfirmation] = useState(null);
 
   // ─────────────────────────── effects ────────────────────────────────
   useEffect(() => {
@@ -245,9 +249,25 @@ const ApiBookingPageForHotels = () => {
     }
 
     const { errors, hasErrors } = validateForm();
-    if (hasErrors) {
+
+    // ATHARVA (apiId 3): the operator MUST pick a booking mode
+    // (Book and Pay Now / Hold Room and Pay Later) before we open the
+    // policy modal. Merges into the same validationErrors bag as the
+    // guest-detail errors so a single toast covers both cases.
+    if (
+      bookingData?.payload?.apiId === 3 &&
+      bookingConfirmation !== "Book & Voucher" &&
+      bookingConfirmation !== "Hold & Book Later"
+    ) {
+      errors.bookingMode =
+        "Please select a booking mode: Book and Pay Now or Hold Room and Pay Later.";
+    }
+
+    if (hasErrors || errors.bookingMode) {
       setValidationErrors(errors);
-      toast.error("Please fill in all required fields correctly.");
+      toast.error(
+        errors.bookingMode || "Please fill in all required fields correctly.",
+      );
       return;
     }
     setValidationErrors({});
@@ -288,11 +308,25 @@ const ApiBookingPageForHotels = () => {
         rooms[0]?.guests?.[0] ||
         {};
 
+      // ATHARVA (apiId 3): the create-booking endpoint requires the
+      // session TokenId + vendor HKey stamped at the top level. Every
+      // room in a single hotel search shares the same pair, so it's safe
+      // to lift them from the first rate. Left null for other suppliers.
+      const firstRate = bookingData.selectedRate[0] || {};
+
       const payload = {
         agentId: bookingData.payload.agentId || null,
         apiId: bookingData.payload.apiId || null,
         hotelId: bookingData.selectedRate[0]?.hotelId || "",
-        hotelCode: bookingData.selectedRate[0]?.hotelCode || "",
+        hotelCode:
+          bookingData.selectedRate[0]?.hotelCode ||
+          bookingData.payload?.hotelCode ||
+          "",
+        // ATHARVA carriers (harmless nulls for other suppliers).
+        tokenId: firstRate.atharvaTokenId || null,
+        hKey: firstRate.atharvaHKey || null,
+        cityId: bookingData.payload?.cityId || null,
+        nationalityId: bookingData.payload?.nationalityId || null,
         hotelName: bookingData.hotelStaticData.hotelName,
         address: bookingData.hotelStaticData.address,
         starRating: bookingData.hotelStaticData.starRating,
@@ -385,6 +419,11 @@ const ApiBookingPageForHotels = () => {
             roomTypeCode: rate.roomTypeCode,
             mealPlanCode: rate.mealPlanCode,
             contractTokenId: rate.contractTokenId,
+            // ATHARVA per-room rate key. Prefers the prebook-refreshed
+            // value; falls back to the search-time key so a room whose
+            // prebook was skipped still round-trips. Ignored by other
+            // suppliers (RoomBookingRequest.rateKey is @Nullable).
+            rateKey: rate.atharvaRateKey || null,
             guests: room.guests.map((guest) => ({
               salutation: guest.salutation,
               firstName: guest.firstName,
@@ -423,26 +462,49 @@ const ApiBookingPageForHotels = () => {
     setIsSubmitting(true);
 
     try {
-      const agentId = pendingPayload.agentId;
-      const requiredAmount = pendingPayload.rooms.reduce(
+      // Re-apply the modal's current Vouchered / Confirmed choice on
+      // submit. handleSubmit snapshotted bookingConfirmation into
+      // pendingPayload before the modal opened, so a mid-modal radio
+      // change would otherwise be dropped. Rebuild only the two fields
+      // the backend actually reads.
+      const effectivePayload = {
+        ...pendingPayload,
+        isBookandVoucher: bookingConfirmation === "Book & Voucher",
+        bookingConfirmation: bookingConfirmation || "Book & Voucher",
+      };
+
+      const agentId = effectivePayload.agentId;
+      const requiredAmount = effectivePayload.rooms.reduce(
         (sum, r) => sum + (r.rate || 0),
         0,
       );
 
-      const creditResponse = await axiosInstance.get(
-        `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentId}&requiredAmount=${requiredAmount}`,
-      );
+      // ATHARVA Hold Room and Pay Later: docs say no balance is
+      // required — the booking is held until the time limit. Skip the
+      // client-side credit gate so the operator isn't blocked with
+      // "insufficient credit" for a valid hold. Backend still enforces
+      // its own rules. Guarded to apiId===3 so other suppliers are
+      // unaffected.
+      const isAtharvaHold =
+        effectivePayload.apiId === 3 &&
+        effectivePayload.isBookandVoucher === false;
 
-      if (creditResponse.data === false) {
-        toast.error(
-          "Insufficient credit. Please proceed with online payment.",
+      if (!isAtharvaHold) {
+        const creditResponse = await axiosInstance.get(
+          `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentId}&requiredAmount=${requiredAmount}`,
         );
-        return;
+
+        if (creditResponse.data === false) {
+          toast.error(
+            "Insufficient credit. Please proceed with online payment.",
+          );
+          return;
+        }
       }
 
       const response = await axiosInstance.post(
         "/api/hotel-booking/create",
-        pendingPayload,
+        effectivePayload,
       );
       const bookingResponse = response.data;
 
@@ -550,9 +612,23 @@ const ApiBookingPageForHotels = () => {
         <Sidebar />
         <main className="content-wrapper py-4">
           <Container fluid="xl">
-            {/* Results-page heading — same "Accommodation" tag Inhouse uses. */}
-            <div className="hs-page-heading">
-              <h3 className="hs-page-heading-title">Accommodation</h3>
+            {/* Results-page heading — same "Accommodation" tag Inhouse uses.
+                Right-side agent balance is shown in red per the operator's
+                request; only rendered when the credit-limit endpoint has
+                returned a number for the current agent. */}
+            <div
+              className="hs-page-heading d-flex justify-content-between align-items-center flex-wrap gap-2"
+            >
+              <h3 className="hs-page-heading-title mb-0">Accommodation</h3>
+              {agentAvailableBalance != null && (
+                <div
+                  className="fw-bold"
+                  style={{ color: "#dc2626" }}
+                  title="Available agent balance"
+                >
+                  Available Balance: {formatPrice(agentAvailableBalance)}
+                </div>
+              )}
             </div>
 
             <Form onSubmit={openPolicyConsent}>
@@ -608,14 +684,63 @@ const ApiBookingPageForHotels = () => {
                                       {slot.mealPlan}
                                     </Badge>
                                   )}
-                                  {slot.rate != null && (
+                                  {/* ATHARVA (apiId 3): show the backend-computed
+                                      display deadline (raw supplier deadline
+                                      minus 2 days). Rendered as an inline
+                                      "| Deadline: DD MMM YYYY, 11:59 PM (UAE)"
+                                      string per the operator's requested look;
+                                      time is intentionally static at 11:59 PM. */}
+                                  {bookingData?.payload?.apiId === 3 &&
+                                    slot.atharvaDisplayDeadlineDate &&
+                                    (() => {
+                                      const parts =
+                                        slot.atharvaDisplayDeadlineDate.split(
+                                          "-",
+                                        );
+                                      if (parts.length !== 3) return null;
+                                      const [y, m, d] = parts;
+                                      const monthNames = [
+                                        "Jan",
+                                        "Feb",
+                                        "Mar",
+                                        "Apr",
+                                        "May",
+                                        "Jun",
+                                        "Jul",
+                                        "Aug",
+                                        "Sep",
+                                        "Oct",
+                                        "Nov",
+                                        "Dec",
+                                      ];
+                                      const idx = parseInt(m, 10) - 1;
+                                      if (
+                                        !y ||
+                                        !d ||
+                                        Number.isNaN(idx) ||
+                                        idx < 0 ||
+                                        idx > 11
+                                      )
+                                        return null;
+                                      return (
+                                        <span
+                                          className="ms-2 small fw-normal"
+                                          style={{ opacity: 0.95 }}
+                                          title="Cancel by this date/time to avoid charges"
+                                        >
+                                          | Deadline: {d} {monthNames[idx]}{" "}
+                                          {y}, 11:59 PM (UAE)
+                                        </span>
+                                      );
+                                    })()}
+                                  {/* {slot.rate != null && (
                                     <span
                                       className="ms-auto small fw-normal"
                                       style={{ opacity: 0.9 }}
                                     >
                                       {formatPrice(slot.rate)}
                                     </span>
-                                  )}
+                                  )} */}
                                 </h6>
                               </Accordion.Header>
                               <Accordion.Body className="p-3">
@@ -1079,6 +1204,76 @@ const ApiBookingPageForHotels = () => {
                         )}
                       </Card.Body>
                     </Card>
+
+                    {/* ATHARVA (apiId 3) ONLY: Vouchered vs Confirmed booking
+                        choice per the HCreateBooking docs. Sits right above
+                        the action bar so the operator picks the mode
+                        immediately before hitting Confirm Booking.
+                          "Book and Pay Now"        → VoucherBooking = true
+                              (auto-vouchers; needs sufficient credit)
+                          "Hold Room and Pay Later" → VoucherBooking = false
+                              (confirmed hold; no balance needed; auto-cancels
+                               if not vouchered before the time limit)
+                        Guarded by apiId===3 so other suppliers on this page
+                        are untouched. */}
+                    {bookingData?.payload?.apiId === 3 && (
+                      <Card className="shadow-sm rounded-3 border-0 mt-3">
+                        {/* <Card.Header className="bg-light py-2">
+                          <h6 className="mb-0 fw-bold">Booking Mode</h6>
+                        </Card.Header> */}
+                        <Card.Body className="p-3">
+                          {/* <div className="text-muted small mb-2 fw-bold">
+                            Are you sure you want to continue with the
+                            booking?
+                          </div> */}
+                          <Form.Label className="mb-2 fw-semibold">
+                               Are you sure you want to continue with the booking?
+                          </Form.Label>
+                          <Form.Check
+                            type="radio"
+                            name="atharvaBookingMode"
+                            id="atharva-mode-voucher"
+                            label="Book and Pay Now"
+                            checked={bookingConfirmation === "Book & Voucher"}
+                            onChange={() => {
+                              setBookingConfirmation("Book & Voucher");
+                              if (validationErrors.bookingMode) {
+                                setValidationErrors((prev) => {
+                                  const next = { ...prev };
+                                  delete next.bookingMode;
+                                  return next;
+                                });
+                              }
+                            }}
+                            className="mb-1"
+                          />
+                          <Form.Check
+                            type="radio"
+                            name="atharvaBookingMode"
+                            id="atharva-mode-hold"
+                            label="Hold Room and Pay Later"
+                            checked={
+                              bookingConfirmation === "Hold & Book Later"
+                            }
+                            onChange={() => {
+                              setBookingConfirmation("Hold & Book Later");
+                              if (validationErrors.bookingMode) {
+                                setValidationErrors((prev) => {
+                                  const next = { ...prev };
+                                  delete next.bookingMode;
+                                  return next;
+                                });
+                              }
+                            }}
+                          />
+                          {validationErrors.bookingMode && (
+                            <div className="text-danger small mt-2">
+                              {validationErrors.bookingMode}
+                            </div>
+                          )}
+                        </Card.Body>
+                      </Card>
+                    )}
 
                     <div className="hbp-action-bar mt-3 d-flex gap-2">
                       <Button

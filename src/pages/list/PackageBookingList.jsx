@@ -10,24 +10,142 @@ import {
   InputGroup,
   Spinner,
   Pagination,
+  Button,
 } from "react-bootstrap";
 import {
   FaSearch,
   FaEye,
-  FaCalendarAlt,
+  FaInbox,
+  FaUser,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
+// Shared "hotel booking list" look (Lexend, red/white theme, table/card/
+// pagination styling). Same skin the /booking-details/hotel-booking-list,
+// long-stay, and last-minute lists use — the four pages line up visually.
+import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
-const fmtDateLong = (iso) => {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  if (isNaN(d)) return typeof iso === "string" ? iso.slice(0, 10) : "-";
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+// Column-width hints kept in sync with LastMinuteBookingList / HotelBookingList
+// so all list tables render at the same widths under the shared hbl-modern skin.
+const COLUMN_WIDTHS = {
+  sn: "40px",
+  agentName: "90px",
+  customerName: "150px",
+  bookingCode: "100px",
+  bookDate: "95px",
+  bookingDetails: "240px",
+  deadlineDate: "110px",
+  paymentMode: "140px",
+  status: "110px",
+  action: "70px",
+};
+
+// Human-readable label for the persisted `modeOfPayment` value. Codes come
+// from the booking wizard's PAYMENT_MODES; unknown values (legacy rows,
+// admin edits) fall back to a title-cased, underscore-stripped version so
+// the cell is never blank when a value exists.
+const PAYMENT_MODE_LABELS = {
+  CREDIT: "Credit Limit Payment",
+  CARD: "Card payment",
+  BANK_TRANSFER: "Bank transfer",
+  CASH: "Cash",
+};
+const formatPaymentMode = (mode) => {
+  if (mode === null || mode === undefined) return "-";
+  const key = String(mode).trim().toUpperCase();
+  if (!key) return "-";
+  if (PAYMENT_MODE_LABELS[key]) return PAYMENT_MODE_LABELS[key];
+  return key
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+};
+
+// "dd/mm/yyyy" — matches the last-minute list's date shape so the two tables
+// render dates identically.
+const formatShortDate = (dateString) => {
+  if (!dateString) return "";
+  const normalized = String(dateString).includes("T")
+    ? dateString
+    : `${dateString}T00:00:00`;
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return `${day}/${month}/${d.getFullYear()}`;
+};
+
+// Deadline Date column uses ISO-style yyyy-MM-dd. Kept separate from
+// formatShortDate so the other columns (Book Date / Travel Date) still
+// render as dd/mm/yyyy.
+const formatIsoDate = (dateString) => {
+  if (!dateString) return "";
+  const normalized = String(dateString).includes("T")
+    ? dateString
+    : `${dateString}T00:00:00`;
+  const d = new Date(normalized);
+  if (isNaN(d.getTime())) return "";
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  return `${d.getFullYear()}-${month}-${day}`;
+};
+
+// Package-booking lifecycle — now mirrors the hotel flow with three states:
+//   RECONFIRMED (Book & Voucher / paid up front) — blue pill
+//   CONFIRMED   (Book Now & Voucher later / held) — green pill
+//   CANCELLED   — red pill
+const STATUS_META = {
+  ReConfirmed: { label: "ReConfirmed", bg: "#e6f0ff", color: "#1d4ed8", dot: "#3b82f6" },
+  Confirmed:   { label: "Confirmed",   bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  Cancelled:   { label: "Cancelled",   bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+};
+
+// Derive the display label from the persisted lifecycle status. Cancellation
+// takes precedence; falls back to the bookingConfirmation choice for legacy
+// rows that pre-date the bookingStatus column.
+const deriveDisplayStatus = (b) => {
+  if (b?.isCancelled === true) return "Cancelled";
+  const raw = String(b?.bookingStatus || "").trim().toUpperCase();
+  if (raw === "RECONFIRMED") return "ReConfirmed";
+  if (raw === "CANCELLED") return "Cancelled";
+  if (raw === "CONFIRMED") return "Confirmed";
+  // Legacy fallback — reconstruct from the booking-confirmation choice.
+  if (b?.bookingConfirmation === "Book Now & Voucher later") return "Confirmed";
+  if (b?.bookingConfirmation === "Book & Voucher") return "ReConfirmed";
+  return "Confirmed";
+};
+
+// Plain colored bold text — matches the hotel-booking-list notification cell
+// (green for Confirmed / ReConfirmed, red for Cancelled) instead of a filled
+// pill with a dot. Preserves the `meta` prop shape so callers stay unchanged.
+const StatusPill = ({ meta, raw }) => {
+  const label = meta?.label || raw || "-";
+  const normalized = String(label).replace(/\s+/g, "").toLowerCase();
+  let color = "#6c757d";
+  if (normalized === "confirmed" || normalized === "reconfirmed") color = "#06a301";
+  else if (normalized === "cancelled") color = "#dc3545";
+  else if (normalized === "onrequest") color = "#e67e22";
+  return (
+    <span
+      style={{
+        color,
+        padding: "0.32rem 0.6rem",
+        fontSize: "0.82rem",
+        fontWeight: 600,
+        borderRadius: "0.375rem",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "0.35rem",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {label}
+    </span>
+  );
 };
 
 const PackageBookingList = () => {
@@ -41,12 +159,15 @@ const PackageBookingList = () => {
     return (stored && stored !== "null") ? stored : null;
   });
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("upcoming");
+  const [status, setStatus] = useState("all");
   const [search, setSearch] = useState("");
   const [perPage, setPerPage] = useState(10);
   const [page, setPage] = useState(1);
   const [selectedMonth, setSelectedMonth] = useState("");
   const [selectedYear, setSelectedYear] = useState("");
+  // Exact-day travel-date filter — mirrors the Check-in Date control on the
+  // last-minute list. Applied client-side.
+  const [travelDateFilter, setTravelDateFilter] = useState("");
   const [allBookings, setAllBookings] = useState([]); // Store all bookings for client-side pagination
   // Server-side pagination metadata. `serverPaginated` is true when the
   // current endpoint returns a Spring Page (i.e. /bookings, /all) so we can
@@ -98,8 +219,9 @@ const PackageBookingList = () => {
       if (selectedYear) params.year = selectedYear;
 
       // Switch endpoint based on status: "all" hits the dedicated all-statuses
-      // endpoint, "cancelled" the cancelled-only list, anything else (upcoming /
-      // completed) falls back to the active-bookings endpoint.
+      // endpoint, "cancelled" the cancelled-only list, anything else (upcoming
+      // / completed / reconfirmed / confirmed) falls back to the active-
+      // bookings endpoint — ReConfirmed / Confirmed then narrow client-side.
       let endpoint;
       if (status === "all") {
         endpoint = "/api/v1/package-booking/all";
@@ -199,11 +321,28 @@ const PackageBookingList = () => {
   // Reset to page 1 when filters or perPage change
   useEffect(() => {
     setPage(1);
-  }, [status, perPage, selectedMonth, selectedYear]);
+  }, [status, perPage, selectedMonth, selectedYear, travelDateFilter, search]);
 
   // Filter and paginate bookings client-side
   const filteredBookings = useMemo(() => {
     let filtered = allBookings;
+
+    // ReConfirmed / Confirmed refine the fetched list on the derived label —
+    // the backend endpoint groups all live rows together, so pick the exact
+    // lifecycle state here.
+    if (status === "reconfirmed" || status === "confirmed") {
+      const target = status === "reconfirmed" ? "ReConfirmed" : "Confirmed";
+      filtered = filtered.filter((b) => deriveDisplayStatus(b) === target);
+    }
+
+    // Exact travel-date match (mirrors the last-minute list's Check-in Date).
+    const dayPick = (travelDateFilter || "").trim();
+    if (dayPick) {
+      const toIsoDay = (d) => (d ? String(d).split("T")[0].trim() : "");
+      filtered = filtered.filter(
+        (b) => toIsoDay(b.travelDate) === dayPick,
+      );
+    }
 
     // Apply search filter
     if (search.trim()) {
@@ -217,7 +356,7 @@ const PackageBookingList = () => {
     }
 
     return filtered;
-  }, [allBookings, search]);
+  }, [allBookings, search, travelDateFilter, role]);
 
   // Paginate filtered bookings. When the backend already paginated (Page
   // response) skip the local slice — `filteredBookings` is already the
@@ -277,8 +416,30 @@ const PackageBookingList = () => {
   const displayStart = paginatedBookings.length > 0 ? (page - 1) * perPage + 1 : 0;
   const displayEnd = Math.min(page * perPage, totalElements);
 
+  // Shared table cell/header styling — identical to LastMinuteBookingList so
+  // the two tables render uniformly.
+  const baseCellStyle = {
+    padding: "0.5rem 0.6rem",
+    fontSize: "0.8rem",
+    border: "1px solid #dee2e6",
+    verticalAlign: "middle",
+    whiteSpace: "normal",
+    overflow: "visible",
+    wordBreak: "break-word",
+    lineHeight: 1.4,
+  };
+  const baseHeaderStyle = {
+    padding: "0.45rem 0.6rem",
+    fontWeight: 600,
+    textTransform: "uppercase",
+    color: "#495057",
+    border: "1px solid #dee2e6",
+    whiteSpace: "normal",
+    lineHeight: 1.2,
+  };
+
   return (
-    <div className="min-vh-100 bg-light d-flex flex-column">
+    <div className="min-vh-100 bg-light d-flex flex-column hbl-modern">
       <TopBar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
@@ -294,48 +455,35 @@ const PackageBookingList = () => {
               paddingRight: "0.5rem",
             }}
           >
-            <div className="d-flex justify-content-between align-items-end mb-4">
-              <div>
-                <h5 className="mb-2 text-dark fw-semibold">Package Booking</h5>
-                <InputGroup
-                  style={{
-                    height: "44px",
-                    width: "320px",
-                    borderRadius: "12px",
-                    overflow: "hidden",
-                    boxShadow: "0 1px 3px rgba(17, 19, 24, 0.04)",
-                  }}
-                >
+            <div className="d-flex justify-content-between align-items-end mb-3 hbl-header">
+              <div className="hbl-header-left">
+                <h3 className="fw-bold text-dark mb-2">Package Booking</h3>
+                <InputGroup className="hbl-search" style={{ height: "40px", width: "320px" }}>
                   <InputGroup.Text
                     style={{
-                      backgroundColor: "#ffffff",
-                      borderRight: 0,
-                      border: "1.5px solid #E5E5E1",
-                      padding: "0 14px",
+                      backgroundColor: "#f8f9fa",
+                      borderRight: "none",
+                      borderColor: "#dee2e6",
                     }}
                   >
-                    <FaSearch style={{ color: "#9A9A95", width: 14, height: 14 }} />
+                    <FaSearch style={{ color: "#6c757d" }} />
                   </InputGroup.Text>
                   <Form.Control
                     type="text"
-                    placeholder="Search here..."
+                    placeholder="Search by code / customer / package"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     style={{
-                      borderLeft: 0,
-                      border: "1.5px solid #E5E5E1",
-                      backgroundColor: "#ffffff",
-                      fontSize: "0.92rem",
-                      letterSpacing: "-0.006em",
-                      height: "44px",
-                      padding: "0.55rem 0.85rem",
-                      color: "#15171C",
+                      borderLeft: "none",
+                      fontSize: "0.85rem",
+                      borderColor: "#dee2e6",
+                      height: "40px",
                     }}
                   />
                 </InputGroup>
               </div>
               <Card
-                className="shadow-sm border-0"
+                className="shadow-sm border-0 hbl-timecard"
                 style={{ borderRadius: "8px", minWidth: "260px" }}
               >
                 <Card.Body className="p-3">
@@ -383,27 +531,23 @@ const PackageBookingList = () => {
               </Card>
             </div>
 
-            {/* Booking Type filter card — full-width row above the table. */}
-            <Row className="mb-3 g-1">
+            {/* Booking Type + Travel Date filters — full-width row above the
+                table. Mirrors the last-minute list's two-column filter card. */}
+            <Row className="mb-2 g-1">
               <Col xs={12}>
                 <Card
                   className="shadow-sm border-0 w-100"
                   style={{ borderRadius: "8px" }}
                 >
                   <Card.Body className="p-3">
-                    <h6
-                      className="mb-2 fw-bold"
-                      style={{
-                        fontSize: "0.7rem",
-                        letterSpacing: "0.08em",
-                        textTransform: "uppercase",
-                        color: "#8A8A85",
-                      }}
-                    >
-                      Booking Type
-                    </h6>
                     <Row className="g-2">
                       <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Booking Type
+                        </h6>
                         <Form.Select
                           id="package-booking-type"
                           value={status}
@@ -415,8 +559,42 @@ const PackageBookingList = () => {
                           <option value="all">All</option>
                           <option value="upcoming">Upcoming</option>
                           <option value="completed">Completed</option>
+                          <option value="reconfirmed">ReConfirmed</option>
+                          <option value="confirmed">Confirmed</option>
                           <option value="cancelled">Cancelled</option>
                         </Form.Select>
+                      </Col>
+                      <Col xs={12} md={6} lg={4} xl={3}>
+                        <h6
+                          className="mb-2 fw-bold text-dark"
+                          style={{ fontSize: "0.85rem", letterSpacing: "0.4px" }}
+                        >
+                          Travel Date
+                        </h6>
+                        <div className="d-flex gap-2">
+                          <Form.Control
+                            type="date"
+                            value={travelDateFilter}
+                            onChange={(e) => setTravelDateFilter(e.target.value)}
+                            size="sm"
+                            aria-label="Travel date filter"
+                            style={{ fontSize: "0.85rem", height: "46px" }}
+                          />
+                          <Button
+                            variant="outline-secondary"
+                            size="sm"
+                            onClick={() => setTravelDateFilter("")}
+                            disabled={!travelDateFilter}
+                            aria-label="Clear travel date filter"
+                            style={{
+                              fontSize: "0.85rem",
+                              height: "46px",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            Clear
+                          </Button>
+                        </div>
                       </Col>
                     </Row>
                   </Card.Body>
@@ -441,126 +619,203 @@ const PackageBookingList = () => {
                 <span>List of Bookings</span>
               </Card.Header>
               <Card.Body style={{ padding: "1.5rem 1rem 1rem" }}>
-                {/* Table */}
                 {loading ? (
                   <div className="text-center py-5">
                     <Spinner animation="border" variant="primary" />
                     <p className="mt-3 text-muted">Loading bookings...</p>
                   </div>
+                ) : paginatedBookings.length === 0 ? (
+                  <div className="text-center py-5 text-muted">
+                    <FaInbox className="display-4 mb-3" style={{ opacity: 0.4 }} />
+                    <h6 className="fw-semibold">No package bookings yet</h6>
+                    <p className="mb-0 small">
+                      They'll appear here once you create one via{" "}
+                      <em>New Booking → Package</em>.
+                    </p>
+                  </div>
                 ) : (
                   <>
-                    <div className="table-responsive saas-table-wrap">
-                      <Table hover className="mb-0 align-middle saas-table">
-                        <thead>
+                    <div
+                      className="thin-scrollbar"
+                      style={{ overflowX: "auto", width: "100%" }}
+                    >
+                      <Table
+                        hover
+                        size="sm"
+                        className="mb-0 align-middle table-bordered hbl-table"
+                        style={{
+                          tableLayout: "auto",
+                          width: "100%",
+                          fontSize: "0.78rem",
+                          borderCollapse: "separate",
+                          borderSpacing: 0,
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        <thead
+                          style={{
+                            backgroundColor: "#f8f9fa",
+                            borderBottom: "2px solid #dee2e6",
+                            boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+                            fontSize: "0.7rem",
+                            letterSpacing: "0.03em",
+                          }}
+                        >
                           <tr>
-                            <th style={{ width: "48px" }}>#</th>
-                            <th>Conf Code</th>
-                            <th>Package</th>
-                            {role === "admin" && <th>Agent</th>}
-                            <th>Contact</th>
-                            <th>Travel Date</th>
-                            <th className="text-end">Total Price</th>
-                            <th className="text-center" style={{ width: "70px" }}>Action</th>
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.sn, whiteSpace: "nowrap" }}>
+                              S.N
+                            </th>
+                            <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.agentName, whiteSpace: "nowrap" }}>
+                              Agent Name
+                            </th>
+                            <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.customerName }}>
+                              Customer Name
+                            </th>
+                            <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingCode }}>
+                              Booking Code
+                            </th>
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.bookDate }}>
+                              Book Date
+                            </th>
+                            <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingDetails }}>
+                              Booking Details
+                            </th>
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.deadlineDate }}>
+                              Deadline Date
+                            </th>
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentMode }}>
+                              Payment Mode
+                            </th>
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
+                              Notification
+                            </th>
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.action }}>
+                              Action
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
-                          {paginatedBookings.length > 0 ? (
-                            paginatedBookings.map((booking, index) => (
-                              <tr key={booking.bookingId || index}>
-                                <td className="text-muted">{(page - 1) * perPage + index + 1}</td>
-                                <td>
-                                  <span
-                                    className="fw-semibold"
-                                    style={{ color: "#1d4ed8" }}
-                                  >
-                                    {booking.confirmationCode || "-"}
-                                  </span>
+                          {paginatedBookings.map((b, idx) => {
+                            const statusText = deriveDisplayStatus(b);
+                            const sMeta = STATUS_META[statusText];
+                            return (
+                              <tr key={b.bookingId || idx}>
+                                <td
+                                  className="text-muted fw-semibold"
+                                  style={{ ...baseCellStyle, textAlign: "center", color: "#6c757d", width: COLUMN_WIDTHS.sn }}
+                                >
+                                  {(page - 1) * perPage + idx + 1}
                                 </td>
-                                <td>
+                                {/* Agent Name — pulled from the DTO, populated
+                                    by the service via AgentRepository lookup. */}
+                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.agentName }}>
                                   <span className="fw-medium text-dark">
-                                    {booking.packageName || "-"}
+                                    {b.agentName || "-"}
                                   </span>
                                 </td>
-                                {role === "admin" && (
-                                  <td>{booking.agentName || "-"}</td>
-                                )}
-                                <td>{booking.contactName || "-"}</td>
-                                <td style={{ whiteSpace: "nowrap" }}>
-                                  <div className="d-flex align-items-center gap-1">
-                                    <FaCalendarAlt
-                                      style={{ fontSize: "0.7rem", color: "#98a2b3" }}
-                                    />
-                                    <span>{fmtDateLong(booking.travelDate)}</span>
+                                {/* Customer Name — matches the FaUser layout on
+                                    the last-minute list. */}
+                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.customerName }}>
+                                  <span className="d-inline-flex align-items-center" style={{ gap: "0.3rem" }}>
+                                    <FaUser style={{ color: "#6c757d", fontSize: "0.78rem", flexShrink: 0 }} />
+                                    <span className="fw-medium text-dark">
+                                      {b.contactName || "-"}
+                                    </span>
+                                  </span>
+                                </td>
+                                {/* Booking Code — red, matching the last-minute
+                                    list (which uses text-danger for the code). */}
+                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.bookingCode }}>
+                                  <span className="fw-bold" style={{ color: "#dc2626" }}>
+                                    {b.confirmationCode || "-"}
+                                  </span>
+                                </td>
+                                <td
+                                  className="text-muted"
+                                  style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.bookDate }}
+                                >
+                                  {formatShortDate(b.bookingDate) || "-"}
+                                </td>
+                                {/* Booking Details — package name + travel date
+                                    in the same "Name (date)" shape the last-
+                                    minute list uses for hotel + stay window. */}
+                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.bookingDetails }}>
+                                  <div
+                                    className="d-flex align-items-center"
+                                    style={{ gap: "0.35rem", flexWrap: "wrap" }}
+                                  >
+                                    <span
+                                      className="fw-semibold text-dark"
+                                      style={{ fontSize: "0.875rem" }}
+                                    >
+                                      {b.packageName || "-"}
+                                    </span>
+                                    {formatShortDate(b.travelDate) && (
+                                      <span
+                                        className="text-muted"
+                                        style={{ fontSize: "0.75rem" }}
+                                      >
+                                        ({formatShortDate(b.travelDate)})
+                                      </span>
+                                    )}
                                   </div>
                                 </td>
-                                <td className="text-end" style={{ whiteSpace: "nowrap" }}>
+                                <td
+                                  className="text-muted"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.deadlineDate,
+                                  }}
+                                >
+                                  {formatIsoDate(b.deadlineDate) || "-"}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.paymentMode,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
                                   <span className="fw-semibold text-dark">
-                                    AED{" "}
-                                    {parseFloat(booking.totalPrice || 0).toLocaleString(undefined, {
-                                      minimumFractionDigits: 2,
-                                    })}
+                                    {formatPaymentMode(b.modeOfPayment)}
                                   </span>
                                 </td>
-                                <td className="text-center">
-                                  <button
-                                    type="button"
-                                    className="btn btn-sm border-0 p-1"
-                                    style={{
-                                      backgroundColor: "#eff6ff",
-                                      color: "#1d4ed8",
-                                      borderRadius: "6px",
-                                    }}
-                                    onClick={() =>
-                                      navigate(
-                                        `/booking-details/package-booking/${booking.bookingId || booking.id}`,
-                                        { state: { booking, status } },
-                                      )
-                                    }
-                                    title="View details"
-                                  >
-                                    <FaEye style={{ fontSize: "12px" }} />
-                                  </button>
+                                <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
+                                  <StatusPill meta={sMeta} raw={statusText} />
+                                </td>
+                                <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.action }}>
+                                  <div className="d-flex justify-content-center align-items-center">
+                                    <FaEye
+                                      role="button"
+                                      tabIndex={0}
+                                      title="View full booking details"
+                                      style={{ fontSize: "18px", color: "#007bff", cursor: "pointer" }}
+                                      onClick={() =>
+                                        navigate(
+                                          `/booking-details/package-booking/${b.bookingId || b.id}`,
+                                          { state: { booking: b, status } },
+                                        )
+                                      }
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                          e.preventDefault();
+                                          navigate(
+                                            `/booking-details/package-booking/${b.bookingId || b.id}`,
+                                            { state: { booking: b, status } },
+                                          );
+                                        }
+                                      }}
+                                    />
+                                  </div>
                                 </td>
                               </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td
-                                colSpan={role === "admin" ? 8 : 7}
-                                className="text-center py-5 text-muted"
-                              >
-                                No bookings found
-                              </td>
-                            </tr>
-                          )}
+                            );
+                          })}
                         </tbody>
                       </Table>
                     </div>
-
-                    <style>{`
-                      .saas-table-wrap { border: 1px solid #eaecf0; border-radius: 8px; overflow-x: auto; }
-                      .saas-table { font-size: 0.8rem; margin-bottom: 0; }
-                      .saas-table thead th {
-                        background-color: #f9fafb;
-                        color: #667085;
-                        font-size: 0.68rem;
-                        font-weight: 600;
-                        text-transform: uppercase;
-                        letter-spacing: 0.04em;
-                        border-bottom: 1px solid #eaecf0;
-                        border-top: none;
-                        padding: 0.65rem 0.75rem;
-                        white-space: nowrap;
-                      }
-                      .saas-table tbody td {
-                        padding: 0.65rem 0.75rem;
-                        border-top: 1px solid #f2f4f7;
-                        vertical-align: middle;
-                        color: #344054;
-                      }
-                      .saas-table tbody tr:first-child td { border-top: none; }
-                      .saas-table tbody tr:hover { background-color: #fafbfc; }
-                    `}</style>
                   </>
                 )}
               </Card.Body>

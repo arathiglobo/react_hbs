@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Row, Col, Spinner } from "react-bootstrap";
+import { Row, Col, Spinner, Modal, Form, Button } from "react-bootstrap";
 import axiosInstance from "../../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import {
@@ -22,6 +22,12 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
   const [packageView, setPackageView] = useState(null);
   const [isPackageLoading, setIsPackageLoading] = useState(false);
   const [openDays, setOpenDays] = useState({ 0: true });
+  // Hotel selection. The user is encouraged to pick a hotel — it is NOT
+  // auto-selected. If they press Next without one, a warning popup asks them
+  // to acknowledge (via a checkbox) before proceeding.
+  const [selectedHotelId, setSelectedHotelId] = useState(null);
+  const [showNoHotelModal, setShowNoHotelModal] = useState(false);
+  const [ackNoHotel, setAckNoHotel] = useState(false);
 
   const formatDateForApi = (dateStr) => {
     if (!dateStr) return "";
@@ -88,17 +94,56 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
     }
   };
 
+  // Pre-select a hotel when returning to this step with one already chosen
+  // (e.g. the user went forward then came back). Runs once hotels load.
   useEffect(() => {
-    if (hotels.length > 0) {
-      const totalPrice = Number(hotels[0]?.totalRateWithMarkup || 0);
-      updateData({
-        selectedHotels: hotels,
-        hotelPrice: totalPrice,
-      });
+    if (!hotels.length) return;
+    const existing =
+      Array.isArray(bookingData?.selectedHotels) &&
+      bookingData.selectedHotels.length === 1
+        ? bookingData.selectedHotels[0]?.hotelId
+        : null;
+    if (existing != null && hotels.some((h) => h.hotelId === existing)) {
+      setSelectedHotelId(existing);
     }
   }, [hotels]);
 
   const setField = (field, value) => updateProgramme({ [field]: value });
+
+  // Select a single hotel and push it (with its rate) into the shared booking
+  // state so the Total Price sidebar and submit payload reflect the choice.
+  const selectHotel = (hotel) => {
+    setSelectedHotelId(hotel.hotelId);
+    updateData({
+      selectedHotels: [hotel],
+      hotelPrice: Number(hotel.totalRateWithMarkup || 0),
+    });
+  };
+
+  // On Next: if no hotel is chosen — whether because none was selected or none
+  // is available for this package — open the warning popup instead of
+  // advancing. The user must tick the acknowledgement box to proceed. A
+  // selected hotel skips the popup entirely.
+  const handleNext = () => {
+    if (!selectedHotelId) {
+      setAckNoHotel(false);
+      setShowNoHotelModal(true);
+      return;
+    }
+    onNext();
+  };
+
+  const closeNoHotelModal = () => {
+    setShowNoHotelModal(false);
+    setAckNoHotel(false);
+  };
+
+  // Proceed to the next step after the user acknowledges via the checkbox.
+  const proceedWithoutHotel = () => {
+    setShowNoHotelModal(false);
+    setAckNoHotel(false);
+    onNext();
+  };
 
   const toggleDay = (idx) =>
     setOpenDays((prev) => ({ ...prev, [idx]: !prev[idx] }));
@@ -181,10 +226,11 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         </Row>
       </div>
 
-      {/* ────── Programme grid: itinerary | inc/exc | confirmation ────── */}
+      {/* ────── Day-wise itinerary — now full width so its two-column day
+          grid spreads across the page. Includes / Excludes / After booking
+          sit in their own row below. ────── */}
       <Row className="g-3 mb-3">
-        {/* Left: Day-wise itinerary */}
-        <Col lg={6}>
+        <Col lg={12}>
           <div className="prg-section">
             <div className="prg-section-head">
               <FaMapMarkerAlt className="me-2" />
@@ -240,10 +286,14 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
             </div>
           </div>
         </Col>
+      </Row>
 
-        {/* Middle: Includes / Excludes */}
-        <Col lg={3}>
-          <div className="prg-section prg-section-ok mb-3">
+      {/* ────── Includes / Excludes / After booking — moved below the
+          itinerary (one row of three) so the day-wise plan gets full width.
+          h-100 keeps the three cards equal height. ────── */}
+      <Row className="g-3 mb-3">
+        <Col lg={4} md={6}>
+          <div className="prg-section prg-section-ok h-100">
             <div className="prg-section-head">
               <FaCheckCircle className="me-2" />
               <span>Includes</span>
@@ -260,7 +310,10 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
               )}
             </div>
           </div>
-          <div className="prg-section prg-section-warn">
+        </Col>
+
+        <Col lg={4} md={6}>
+          <div className="prg-section prg-section-warn h-100">
             <div className="prg-section-head">
               <FaTimesCircle className="me-2" />
               <span>Excludes</span>
@@ -279,9 +332,8 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           </div>
         </Col>
 
-        {/* Right: Confirmation + cancellation */}
-        <Col lg={3}>
-          <div className="prg-info-card mb-3">
+        <Col lg={4} md={12}>
+          <div className="prg-info-card h-100">
             <div className="prg-info-title">
               <FaEnvelope className="me-2" />After booking
             </div>
@@ -297,19 +349,6 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
             <a href="tel:+971561752667" className="prg-info-link">+971 56 175 2667</a>
             <a href="mailto:support@ibyta.com" className="prg-info-link">support@ibyta.com</a>
           </div>
-
-          <div className="prg-cxl-card">
-            <div className="prg-cxl-title">
-              <FaRegClock className="me-2" />Cancellation policy
-            </div>
-            {cancellationParts.map((p, i) => (
-              <div key={i} className={`prg-cxl-line prg-cxl-${p.tone}`}>{p.text}</div>
-            ))}
-            <div className="prg-cxl-note">
-              <FaShieldAlt className="me-2" />
-              This is a <strong>NON-REFUNDABLE</strong> package within the charge window.
-            </div>
-          </div>
         </Col>
       </Row>
 
@@ -323,15 +362,36 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           )}
         </div>
         <div className="prg-section-body">
+          {/* Neutral guidance only. The "no hotel selected" warning is shown
+              as a popup when the user presses Next (see the Modal below). */}
+          {hotels.length > 0 && (
+            <div className="prg-hotel-select-hint">
+              Select a hotel to continue.
+            </div>
+          )}
           {isLoading ? (
             <div className="prg-loading">
               <Spinner animation="border" size="sm" /> <span>Searching for hotels…</span>
             </div>
           ) : hasSearched && hotels.length > 0 ? (
             <Row className="g-3">
-              {hotels.map((hotel) => (
+              {hotels.map((hotel) => {
+                const isSelected = selectedHotelId === hotel.hotelId;
+                return (
                 <Col key={hotel.hotelId} md={6}>
-                  <div className="prg-hotel-card">
+                  <div
+                    className={`prg-hotel-card ${isSelected ? "selected" : ""}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={isSelected}
+                    onClick={() => selectHotel(hotel)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        selectHotel(hotel);
+                      }
+                    }}
+                  >
                     <div className="prg-hotel-thumb">
                       <img
                         src={hotel.image || "https://via.placeholder.com/150?text=Hotel"}
@@ -341,7 +401,20 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
                     <div className="prg-hotel-body">
                       <div className="d-flex justify-content-between align-items-start">
                         <h6 className="prg-hotel-name mb-1">{hotel.hotelName}</h6>
-                        <span className="prg-pill prg-pill-ok">Included</span>
+                        <span
+                          className={`prg-pill ${
+                            isSelected ? "prg-pill-selected" : "prg-pill-ok"
+                          }`}
+                        >
+                          {isSelected ? (
+                            <>
+                              <FaCheckCircle size={10} className="me-1" />
+                              Selected
+                            </>
+                          ) : (
+                            "Included"
+                          )}
+                        </span>
                       </div>
                       <div className="prg-hotel-loc">
                         <FaMapMarkerAlt size={10} /> {hotel.stateName}
@@ -349,11 +422,20 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
                       <div className="d-flex gap-2 align-items-center mt-2">
                         <span className="prg-pill prg-pill-soft">{hotel.noOfnight} Night{hotel.noOfnight === 1 ? "" : "s"}</span>
                         <span className="prg-pill prg-pill-pref">Preferred</span>
+                        <span
+                          className={`prg-hotel-radio ms-auto ${
+                            isSelected ? "on" : ""
+                          }`}
+                          aria-hidden="true"
+                        >
+                          {isSelected && <FaCheckCircle />}
+                        </span>
                       </div>
                     </div>
                   </div>
                 </Col>
-              ))}
+                );
+              })}
             </Row>
           ) : hasSearched ? (
             <div className="prg-empty-state">
@@ -370,30 +452,94 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         </div>
       </div>
 
+      {/* ────── Cancellation policy — moved here (below the hotels list) so it
+          reads as a full-width closing note instead of a cramped sidebar
+          card. ────── */}
+      <div className="prg-cxl-card mb-3">
+        <div className="prg-cxl-title">
+          <FaRegClock className="me-2" />Cancellation policy
+        </div>
+        {cancellationParts.map((p, i) => (
+          <div key={i} className={`prg-cxl-line prg-cxl-${p.tone}`}>{p.text}</div>
+        ))}
+        <div className="prg-cxl-note">
+          <FaShieldAlt className="me-2" />
+          This is a <strong>NON-REFUNDABLE</strong> package within the charge window.
+        </div>
+      </div>
+
       {/* Mode of payment moved to the Pax Info step's right sidebar (below
           the Total Price card). T&C acceptance lives in the Confirm-booking
           popup on the same step. */}
 
       <div className="sticky-nav-row d-flex justify-content-between">
         <button className="btn-nav-prev" onClick={onPrev}>← Previous</button>
-        <button className="btn-nav-next" onClick={onNext}>Next →</button>
+        <button className="btn-nav-next" onClick={handleNext}>Next →</button>
       </div>
+
+      {/* ────── No-hotel-selected warning popup ──────
+          Shown when Next is pressed without a hotel. The user must tick the
+          acknowledgement checkbox to enable "Proceed anyway". */}
+      <Modal show={showNoHotelModal} onHide={closeNoHotelModal} centered>
+        <Modal.Header closeButton>
+          <Modal.Title className="d-flex align-items-center" style={{ fontSize: "1.05rem" }}>
+            <FaTimesCircle className="me-2" style={{ color: "#dc2626" }} />
+            {hotels.length === 0 ? "No hotels available" : "No hotel selected"}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="mb-3" style={{ fontSize: "0.9rem", color: "#475569" }}>
+            {hotels.length === 0
+              ? "There are no hotels available for this package at the moment. You can still proceed with the booking without a hotel."
+              : "You haven't selected a hotel for this package. We recommend picking a hotel before continuing. If you'd like to proceed without selecting one, please confirm below."}
+          </p>
+          <Form.Check
+            type="checkbox"
+            id="ack-proceed-without-hotel"
+            checked={ackNoHotel}
+            onChange={(e) => setAckNoHotel(e.target.checked)}
+            label={
+              hotels.length === 0
+                ? "I understand and want to proceed without a hotel."
+                : "I understand and want to proceed without selecting a hotel."
+            }
+          />
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="outline-secondary" onClick={closeNoHotelModal}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            disabled={!ackNoHotel}
+            onClick={proceedWithoutHotel}
+          >
+            Proceed to next step
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       <style>{`
         /* === HERO === */
         .prg-hero {
-          background: #ffffff;
+          background: linear-gradient(135deg, #FFF1F5 0%, #FFFFFF 52%, #FBF7FF 100%);
           color: #15171C;
-          padding: 22px 26px;
+          padding: 24px 28px;
           border-radius: 18px;
-          border: 1px solid #ECECE8;
-          box-shadow: 0 1px 3px rgba(17, 19, 24, 0.04), 0 10px 24px rgba(17, 19, 24, 0.04);
+          border: 1px solid #F6DCE4;
+          box-shadow: 0 1px 3px rgba(17, 19, 24, 0.04), 0 12px 30px rgba(236, 11, 67, 0.07);
+          transition: box-shadow 0.28s ease, transform 0.28s ease;
+          animation: prgFadeInUp 0.45s ease both;
+        }
+        .prg-hero:hover {
+          box-shadow: 0 2px 6px rgba(17, 19, 24, 0.06), 0 18px 42px rgba(17, 19, 24, 0.09);
+          transform: translateY(-2px);
         }
         .prg-hero-eyebrow {
           font-size: 0.7rem;
           letter-spacing: 0.18em;
-          color: #8A8A85;
-          font-weight: 600;
+          color: #EC0B43;
+          font-weight: 700;
           text-transform: uppercase;
         }
         .prg-hero-title {
@@ -407,6 +553,15 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           flex-wrap: wrap;
         }
         .prg-hero-divider { color: #C5C5BE; font-weight: 400; }
+        /* "01 Nights / 02 Days" — brand gradient text, matching the page's
+           red→violet CTA buttons. */
+        .prg-hero-title strong {
+          background: linear-gradient(135deg, #EC0B43 0%, #8b5cf6 100%);
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+          font-weight: 800;
+        }
         .prg-hero-sub {
           font-size: 0.86rem;
           color: #6B7280;
@@ -430,7 +585,8 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         }
         .prg-hero-input-row:focus-within {
           background: #ffffff;
-          border-color: #C5C5BE;
+          border-color: #EC0B43;
+          box-shadow: 0 0 0 3px rgba(236, 11, 67, 0.10);
         }
         .prg-hero-input-icon {
           width: 32px;
@@ -439,8 +595,8 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          background: #F0F0EC;
-          color: #6B7280;
+          background: #FDE7ED;
+          color: #EC0B43;
           flex-shrink: 0;
         }
         .prg-hero-input-body {
@@ -469,19 +625,25 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         .prg-section {
           background: #ffffff;
           border: 1px solid #e5e7eb;
-          border-radius: 14px;
+          border-radius: 16px;
           overflow: hidden;
-          box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+          box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 8px 20px rgba(15,23,42,0.04);
+          transition: box-shadow 0.28s ease;
+          animation: prgFadeInUp 0.5s ease both;
+        }
+        .prg-section:hover {
+          box-shadow: 0 2px 6px rgba(15,23,42,0.06), 0 14px 34px rgba(15,23,42,0.08);
         }
         .prg-section-head {
           display: flex;
           align-items: center;
-          gap: 4px;
-          padding: 12px 16px;
+          gap: 6px;
+          padding: 14px 18px;
           background: #f8fafc;
           border-bottom: 1px solid #e5e7eb;
           font-weight: 600;
           font-size: 0.92rem;
+          letter-spacing: 0.01em;
           color: #1e293b;
         }
         .prg-section-pill {
@@ -506,17 +668,30 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         }
 
         /* === TIMELINE / DAYS === */
-        .prg-timeline { display: flex; flex-direction: column; gap: 8px; }
+        /* Two-column day grid: Day 02 sits next to Day 01. align-items:start
+           so a collapsed day never stretches to a taller expanded neighbour. */
+        .prg-timeline {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+          align-items: start;
+        }
+        @media (max-width: 767.98px) {
+          .prg-timeline { grid-template-columns: 1fr; }
+        }
         .prg-day {
           border: 1px solid #e5e7eb;
-          border-radius: 10px;
+          border-radius: 12px;
           overflow: hidden;
           background: #fff;
-          transition: border-color 0.15s, box-shadow 0.15s;
+          transition: border-color 0.18s ease, box-shadow 0.18s ease;
+        }
+        .prg-day:hover {
+          box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
         }
         .prg-day.open {
-          border-color: #93c5fd;
-          box-shadow: 0 0 0 3px rgba(147, 197, 253, 0.18);
+          border-color: #F8C9D5;
+          box-shadow: 0 0 0 3px rgba(236, 11, 67, 0.12);
         }
         .prg-day-head {
           display: flex;
@@ -530,12 +705,12 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           cursor: pointer;
           transition: background 0.12s;
         }
-        .prg-day-head:hover { background: #f8fafc; }
+        .prg-day-head:hover { background: #FFF5F8; }
         .prg-day-num {
           width: 34px;
           height: 34px;
-          border-radius: 8px;
-          background: linear-gradient(135deg, #2563eb, #3b82f6);
+          border-radius: 10px;
+          background: linear-gradient(135deg, #EC0B43, #8b5cf6);
           color: #fff;
           font-weight: 700;
           font-size: 0.85rem;
@@ -543,6 +718,7 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
+          box-shadow: 0 4px 10px rgba(236, 11, 67, 0.28);
         }
         .prg-day-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
         .prg-day-title-main {
@@ -561,7 +737,7 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           color: #94a3b8;
           transition: transform 0.18s;
         }
-        .prg-day.open .prg-day-chev { transform: rotate(180deg); color: #2563eb; }
+        .prg-day.open .prg-day-chev { transform: rotate(180deg); color: #EC0B43; }
         .prg-day-body {
           padding: 0 14px 12px 58px;
           font-size: 0.83rem;
@@ -610,8 +786,14 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         .prg-info-card {
           background: #f8fafc;
           border: 1px solid #e5e7eb;
-          border-radius: 14px;
-          padding: 14px;
+          border-radius: 16px;
+          padding: 16px;
+          box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 8px 20px rgba(15,23,42,0.04);
+          transition: box-shadow 0.28s ease;
+          animation: prgFadeInUp 0.5s ease both;
+        }
+        .prg-info-card:hover {
+          box-shadow: 0 2px 6px rgba(15,23,42,0.06), 0 14px 34px rgba(15,23,42,0.08);
         }
         .prg-info-title {
           font-weight: 600;
@@ -641,8 +823,14 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         .prg-cxl-card {
           background: linear-gradient(135deg, #fef3c7, #fff7ed);
           border: 1px solid #fcd34d;
-          border-radius: 14px;
-          padding: 14px;
+          border-radius: 16px;
+          padding: 16px;
+          box-shadow: 0 1px 2px rgba(202,138,4,0.06), 0 8px 20px rgba(202,138,4,0.08);
+          transition: box-shadow 0.28s ease;
+          animation: prgFadeInUp 0.5s ease both;
+        }
+        .prg-cxl-card:hover {
+          box-shadow: 0 2px 6px rgba(202,138,4,0.08), 0 14px 34px rgba(202,138,4,0.12);
         }
         .prg-cxl-title {
           font-weight: 600;
@@ -681,19 +869,68 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           border: 1px solid #e5e7eb;
           border-radius: 12px;
           background: #fff;
-          transition: border-color 0.15s, box-shadow 0.15s;
+          cursor: pointer;
+          transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
         }
         .prg-hotel-card:hover {
-          border-color: #93c5fd;
-          box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+          border-color: #F8C9D5;
+          box-shadow: 0 8px 20px rgba(236, 11, 67, 0.10);
+          transform: translateY(-2px);
+        }
+        .prg-hotel-card:focus-visible {
+          outline: none;
+          border-color: #10b981;
+          box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+        }
+        .prg-hotel-card.selected {
+          border-color: #10b981;
+          background: #f0fdf4;
+          box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+        }
+        /* Selected-state pill + radio indicator */
+        .prg-pill-selected {
+          background: #10b981;
+          color: #fff;
+          display: inline-flex;
+          align-items: center;
+        }
+        .prg-hotel-radio {
+          width: 20px;
+          height: 20px;
+          border-radius: 50%;
+          border: 2px solid #cbd5e1;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          color: #10b981;
+          font-size: 0.95rem;
+          flex-shrink: 0;
+        }
+        .prg-hotel-radio.on {
+          border-color: #10b981;
+        }
+        /* Neutral select-a-hotel guidance (the warning itself is a popup) —
+           rendered as a soft rose chip so it reads as friendly guidance. */
+        .prg-hotel-select-hint {
+          display: inline-flex;
+          align-items: center;
+          font-size: 0.78rem;
+          font-weight: 600;
+          color: #C11049;
+          background: #FFF5F8;
+          border: 1px dashed #F8C9D5;
+          border-radius: 999px;
+          padding: 6px 14px;
+          margin-bottom: 12px;
         }
         .prg-hotel-thumb {
           width: 90px;
           height: 90px;
-          border-radius: 10px;
+          border-radius: 12px;
           overflow: hidden;
           flex-shrink: 0;
           background: #f1f5f9;
+          box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.06);
         }
         .prg-hotel-thumb img {
           width: 100%;
@@ -784,6 +1021,45 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         .prg-tnc-details ul {
           margin-top: 6px;
           padding-left: 18px;
+        }
+
+        /* Branded count pills ("2 days", "2 hotels") — the same red→violet
+           gradient as the page's CTAs. */
+        .prg-section-pill {
+          padding: 3px 12px;
+          background: linear-gradient(135deg, #EC0B43, #8b5cf6);
+          color: #ffffff;
+          box-shadow: 0 2px 6px rgba(236, 11, 67, 0.25);
+        }
+        /* Brand-red icons on the neutral section headers (Itinerary, Hotels)
+           and the sidebar info card — Includes/Excludes keep their own
+           green/orange headers. */
+        .prg-section:not(.prg-section-ok):not(.prg-section-warn) > .prg-section-head > svg {
+          color: #EC0B43;
+        }
+        .prg-info-title > svg {
+          color: #EC0B43;
+        }
+        .prg-info-link {
+          transition: color 0.15s ease, transform 0.15s ease;
+        }
+        .prg-info-link:hover {
+          transform: translateX(2px);
+        }
+
+        /* Gentle entrance for the step's cards */
+        @keyframes prgFadeInUp {
+          from { opacity: 0; transform: translateY(10px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .prg-hero,
+          .prg-section,
+          .prg-info-card,
+          .prg-cxl-card {
+            animation: none;
+          }
+          .prg-hero:hover { transform: none; }
         }
 
         /* Responsive tweaks */

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Row, Col, Form, Modal, Button, Table } from "react-bootstrap";
+import AsyncSelect from "react-select/async";
 import axiosInstance from "../../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -14,6 +15,54 @@ import {
   FaTimesCircle,
   FaInfoCircle,
 } from "react-icons/fa";
+
+// Reverse-geocode browser coordinates to a readable address for the Booking
+// History audit trail. Tries OpenStreetMap Nominatim first (street-level),
+// then BigDataCloud (locality-level, keyless) — both free, CORS-enabled.
+// Returns null when neither responds so the caller keeps its IP-derived
+// fallback. Mirrors the other booking pages (DayStay / Student / etc.).
+async function reverseGeocode(lat, lon) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=16&addressdetails=1`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (res.ok) {
+      const a = (await res.json())?.address || {};
+      const parts = [
+        a.road,
+        a.neighbourhood || a.suburb,
+        a.village || a.town || a.city || a.municipality,
+        a.state,
+        a.postcode,
+        a.country,
+      ].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255); // DB column is VARCHAR(255)
+    }
+  } catch {
+    // fall through to BigDataCloud
+  }
+  try {
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`,
+    );
+    if (res.ok) {
+      const d = await res.json();
+      const parts = [
+        d.locality,
+        d.city,
+        d.principalSubdivision,
+        d.countryName,
+      ].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255);
+    }
+  } catch {
+    // give up — caller keeps the IP-based fallback
+  }
+  return null;
+}
 
 const PaxInformation = ({
   searchParams,
@@ -35,6 +84,61 @@ const PaxInformation = ({
   const [showSummary, setShowSummary] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tourismDirham, setTourismDirham] = useState("");
+
+  // Edit mode: the parent loads the saved booking asynchronously, so
+  // bookingData.tourismDirham may arrive after this component mounts. Sync it
+  // in once, without clobbering user input made in the meantime. Prevents
+  // the amend flow from silently dropping the previously-entered TD.
+  const hasHydratedTD = useRef(false);
+  useEffect(() => {
+    if (!hasHydratedTD.current && bookingData?.tourismDirham != null) {
+      setTourismDirham(String(bookingData.tourismDirham));
+      hasHydratedTD.current = true;
+    }
+  }, [bookingData?.tourismDirham]);
+
+  // Client location snapshot for the Booking History audit trail, resolved
+  // once on this step and sent on the /book payload. Location comes from
+  // browser geolocation (reverse-geocoded), with a coarse IP-derived city as
+  // the fallback. The IP Address column is NOT resolved here — the backend
+  // stamps each system's unique IPv4 from the request itself.
+  const [clientNetwork, setClientNetwork] = useState({ bookingLocation: null });
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("https://ipapi.co/json/")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((info) => {
+        if (cancelled || !info) return;
+        setClientNetwork((prev) => ({
+          // Never clobber a precise geolocation result that already landed.
+          bookingLocation:
+            prev.bookingLocation ||
+            [info.city, info.region, info.country_name]
+              .filter(Boolean)
+              .join(", ") ||
+            null,
+        }));
+      })
+      .catch(() => {});
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async ({ coords }) => {
+          const precise = await reverseGeocode(coords.latitude, coords.longitude);
+          if (!cancelled && precise) {
+            setClientNetwork({ bookingLocation: precise });
+          }
+        },
+        () => {}, // denied / unavailable — keep the IP-derived fallback
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
+      );
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Terms acceptance — moved off the Hotels step. After Confirm booking
   // is clicked we open a popup with the package's full T&C text and a
@@ -171,7 +275,10 @@ const PaxInformation = ({
     if (!localData.travellers || localData.travellers.length === 0) {
       const seeded = { ...localData, travellers: [makeTraveller("Adult")] };
       setLocalData(seeded);
-      updateData({ ...bookingData, paxInfo: seeded });
+      // Functional setter — spreading the `bookingData` prop directly would
+      // capture a stale snapshot and wipe any concurrent parent updates
+      // (e.g. the async agent-credit-limit hook seeding modeOfPayment).
+      updateData((prev) => ({ ...prev, paxInfo: seeded }));
       return;
     }
     const adults = localData.travellers.filter((t) => t.type === "Adult");
@@ -182,7 +289,7 @@ const PaxInformation = ({
       const merged = [...trimmedAdults, ...trimmedChildren];
       const updated = { ...localData, travellers: merged };
       setLocalData(updated);
-      updateData({ ...bookingData, paxInfo: updated });
+      updateData((prev) => ({ ...prev, paxInfo: updated }));
     }
   }, [maxAdults, maxChildren]);
 
@@ -191,7 +298,11 @@ const PaxInformation = ({
     updatedTravellers[index] = { ...updatedTravellers[index], [field]: value };
     const updated = { ...localData, travellers: updatedTravellers };
     setLocalData(updated);
-    updateData({ ...bookingData, paxInfo: updated });
+    // Functional setter avoids stale-closure bugs — see comment in the seed
+    // effect above. A raw `{ ...bookingData, paxInfo }` spread here caused
+    // every keystroke to revert whatever the parent had just set (payment
+    // mode, hotel selection, etc.).
+    updateData((prev) => ({ ...prev, paxInfo: updated }));
   };
 
   const addExtraTraveller = (type) => {
@@ -207,7 +318,7 @@ const PaxInformation = ({
       : [...adults, ...children, newRow];
     const updated = { ...localData, travellers: merged };
     setLocalData(updated);
-    updateData({ ...bookingData, paxInfo: updated });
+    updateData((prev) => ({ ...prev, paxInfo: updated }));
   };
 
   const removeTraveller = (index) => {
@@ -216,10 +327,37 @@ const PaxInformation = ({
     const newList = localData.travellers.filter((_, i) => i !== index);
     const updated = { ...localData, travellers: newList };
     setLocalData(updated);
-    updateData({ ...bookingData, paxInfo: updated });
+    updateData((prev) => ({ ...prev, paxInfo: updated }));
   };
 
   const primary = localData.travellers && localData.travellers[0];
+
+  // Pax passport — moved here from the removed Basic Details step. Updates the
+  // shared searchParams so the submit payload's nativeCountry is populated.
+  const loadPassportOptions = async (inputValue) => {
+    try {
+      const response = await axiosInstance.get(
+        `/api/country?page=0&limit=20&search=${encodeURIComponent(inputValue)}`,
+      );
+      return (response.data || []).map((country) => ({
+        value: country.id,
+        label: country.name,
+      }));
+    } catch {
+      return [];
+    }
+  };
+
+  const setPaxPassport = (option) => {
+    updateData((prev) => ({
+      ...prev,
+      searchParams: {
+        ...prev.searchParams,
+        paxPassport: option,
+        nativeCountry: option ? option.value : "",
+      },
+    }));
+  };
 
   const validatePaxData = () => {
     if (!primary) {
@@ -257,9 +395,17 @@ const PaxInformation = ({
         travelDate: searchParams.travelDate,
         packageCategory: searchParams.packageCategory,
         nativeCountry: searchParams.nativeCountry,
+        // Booking History audit — client location (backend stamps the IP).
+        bookingLocation: clientNetwork.bookingLocation,
         // Amend → child-booking lineage. Backend uses this to compute
         // "{parent}/{n}" for the new booking's code.
         parentBookingCode: parentBookingCode || null,
+        // NOTE: totalPrice is the package BASE (before Tourism Dirham). The
+        // backend stores base+TD as the row's total_price, so the Grand Total
+        // shown in Order Summary (Number(totalPrice)+Number(tourismDirham))
+        // matches what ends up persisted. Do NOT change this to
+        // "totalPrice: totalPrice + tourismDirham" — the backend would then
+        // add TD a second time, silently inflating every booking's total.
         totalPrice: totalPrice,
         tourismDirham:
           tourismDirham !== "" && !isNaN(Number(tourismDirham))
@@ -301,6 +447,7 @@ const PaxInformation = ({
         checkInDate: bookingData.programme?.checkInDate || null,
         flightDetails: bookingData.programme?.flightDetails || null,
         modeOfPayment: bookingData.programme?.modeOfPayment || null,
+        bookingConfirmation: bookingData.programme?.bookingConfirmation || null,
         termsAccepted: !!bookingData.programme?.termsAccepted,
       };
 
@@ -318,9 +465,18 @@ const PaxInformation = ({
             payload,
           );
 
-      if (response.data?.status === "success") {
+      // Trust the HTTP layer: axios throws for non-2xx, so reaching this
+      // line already means the request succeeded. Requiring
+      // `data.status === "success"` used to silently swallow any 2xx that
+      // omitted or renamed the status field — the button re-enabled with no
+      // toast, and users re-clicked, creating duplicate bookings. We now
+      // treat 2xx as success unless the body explicitly says otherwise.
+      const httpOk =
+        response && response.status >= 200 && response.status < 300;
+      const bodyErrored = response?.data?.status === "error";
+      if (httpOk && !bodyErrored) {
         toast.success(
-          response.data.message ||
+          response.data?.message ||
             (editingBookingId
               ? "Booking amended successfully!"
               : "Booking confirmed successfully!"),
@@ -341,6 +497,13 @@ const PaxInformation = ({
         } else {
           navigate("/booking-details/package-booking-list");
         }
+      } else {
+        // 2xx with an explicit error body — surface it so the user knows
+        // the submission was rejected and doesn't try again.
+        toast.error(
+          response?.data?.message ||
+            "Booking was not confirmed. Please try again.",
+        );
       }
     } catch (error) {
       console.error("Booking submission error:", error);
@@ -418,7 +581,7 @@ const PaxInformation = ({
             <Col md={3}>
               <Form.Group>
                 <Form.Label className="booking-field-label">
-                  First name
+                  First name <span className="text-danger">*</span>
                 </Form.Label>
                 <Form.Control
                   value={pax.firstName}
@@ -444,7 +607,7 @@ const PaxInformation = ({
             <Col md={4}>
               <Form.Group>
                 <Form.Label className="booking-field-label">
-                  Last name
+                  Last name <span className="text-danger">*</span>
                 </Form.Label>
                 <Form.Control
                   value={pax.lastName}
@@ -492,6 +655,37 @@ const PaxInformation = ({
         </div>
         );
       })}
+
+      {/* Travel details — Pax passport sits after the travellers, just before
+          the add-extra controls. Feeds searchParams.nativeCountry for submit. */}
+      <p className="tab-section-title mt-3">Travel details</p>
+      <Row className="g-3 mb-2">
+        <Col md={4}>
+          <Form.Group>
+            <Form.Label className="booking-field-label">
+              Pax passport <span className="required-dot">*</span>
+            </Form.Label>
+            <AsyncSelect
+              cacheOptions
+              defaultOptions
+              loadOptions={loadPassportOptions}
+              value={searchParams.paxPassport || null}
+              onChange={setPaxPassport}
+              placeholder="Select country"
+              className="modern-select"
+              classNamePrefix="react-select"
+              isDisabled={isViewMode}
+              // Render the menu in a body-level portal so it isn't clipped or
+              // covered by the sticky Previous/Confirm nav row directly below.
+              menuPortalTarget={
+                typeof document !== "undefined" ? document.body : null
+              }
+              menuPosition="fixed"
+              styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
+            />
+          </Form.Group>
+        </Col>
+      </Row>
 
       {/* Add-extra controls — the Adult button is always rendered (cap is
           guaranteed >= 2 above); the Child button only renders when the
@@ -548,6 +742,12 @@ const PaxInformation = ({
               toast.error("Please select a mode of payment.");
               return;
             }
+            // Mandatory "continue with the booking?" choice (Book and Pay Now /
+            // Hold Room and Pay Later) — mirrors the hotel booking page.
+            if (!bookingData?.programme?.bookingConfirmation) {
+              toast.error("Please select a booking option to continue.");
+              return;
+            }
             // Prime the popup with whatever was previously accepted so a
             // user who reopens it doesn't have to re-tick the box.
             setTermsCheck(!!bookingData?.programme?.termsAccepted);
@@ -580,6 +780,29 @@ const PaxInformation = ({
             to the order summary.
           </p>
 
+          {/* Time-period reminder — the package dates/duration must be
+              verified against the traveller's schedule before proceeding,
+              since they are locked once the booking is confirmed. */}
+          <div
+            className="d-flex align-items-start gap-2 p-3 mb-3 rounded"
+            style={{
+              border: "1px solid #fcd34d",
+              background: "#fffbeb",
+              color: "#92400e",
+            }}
+          >
+            <FaCalendarAlt style={{ marginTop: 2, flexShrink: 0 }} />
+            <div className="small">
+              <strong>Confirm the package time period.</strong> Before
+              proceeding, please make sure the package's time period — the
+              travel dates and duration (number of nights / days) — has been
+              reviewed and confirmed against the traveller's arrival and
+              departure schedule. Once the booking is confirmed these dates
+              are locked, and the cancellation charges below will apply to any
+              changes.
+            </div>
+          </div>
+
           <div
             className="terms-scroll p-3 mb-3 rounded border bg-light"
             style={{ maxHeight: 260, overflowY: "auto" }}
@@ -606,7 +829,7 @@ const PaxInformation = ({
             id="pax-terms-accept"
             checked={termsCheck}
             onChange={(e) => setTermsCheck(e.target.checked)}
-            label="I have read and accept the Terms & Conditions and cancellation policy."
+            label="I have read and accept the Terms & Conditions and cancellation policy, and I confirm the package time period (travel dates and duration) has been checked."
           />
         </Modal.Body>
         <Modal.Footer
@@ -915,17 +1138,32 @@ const PaxInformation = ({
                 </tr>
               </thead>
               <tbody>
-                <tr>
-                  <td className="text-muted">Package Base</td>
-                  <td>Included Services</td>
-                  <td className="text-end">AED {packageData?.rate || 0}</td>
-                </tr>
+                {/*
+                  Hotel selection uses REPLACEMENT semantics — the hotel's
+                  totalRateWithMarkup (already sized to the searched category +
+                  pax count on the backend) becomes the package total, it is
+                  NOT added on top of packageData.rate. So the "Package Base"
+                  row is shown only when no hotel has been picked. Without this
+                  guard the summary showed "Base + Hotel = 2500" but the Grand
+                  Total (which comes from the sidebar total = hotel only) said
+                  1500 — rows didn't sum to the total.
+                */}
+                {(!bookingData.selections.selectedHotels ||
+                  bookingData.selections.selectedHotels.length === 0) && (
+                  <tr>
+                    <td className="text-muted">Package Base</td>
+                    <td>Included Services</td>
+                    <td className="text-end">
+                      AED {Number(packageData?.rate || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                )}
                 {bookingData.selections.selectedHotels && bookingData.selections.selectedHotels.map((hotel, idx) => (
                   <tr key={hotel.hotelId || idx}>
                     <td className="text-muted">Hotel {bookingData.selections.selectedHotels.length > 1 ? idx + 1 : ""}</td>
                     <td>{hotel.hotelName}</td>
                     <td className="text-end">
-                      + AED {hotel.totalRateWithMarkup || 0}
+                      AED {Number(hotel.totalRateWithMarkup || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                   </tr>
                 ))}

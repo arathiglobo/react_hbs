@@ -42,6 +42,7 @@ import CustomBookingDetailView from "./pages/list/CustomBookingDetailView";
 import Bank from "./pages/master/Bank";
 import ContactType from "./pages/master/ContactType";
 import MarkupType from "./pages/master/MarkupType";
+import CabType from "./pages/master/CabType";
 import Currency from "./pages/master/Currency";
 import HotelRegistrationActions from "./pages/HotelRegistrationActions";
 import MarketType from "./pages/master/MarketType";
@@ -401,6 +402,7 @@ export default function App() {
         <Route path="/masters/bank" element={<PrivateRoute><Bank /></PrivateRoute>} />
         <Route path="/masters/contact-type" element={<PrivateRoute><ContactType /></PrivateRoute>} />
         <Route path="/masters/markup-type" element={<PrivateRoute><MarkupType /></PrivateRoute>} />
+        <Route path="/masters/cab-type" element={<PrivateRoute><CabType /></PrivateRoute>} />
         <Route path="/masters/currency" element={<PrivateRoute><Currency /></PrivateRoute>} />
         <Route path="/masters/market-type" element={<PrivateRoute><MarketType /></PrivateRoute>} />
         <Route path="/masters/region" element={<PrivateRoute><Region /></PrivateRoute>} />

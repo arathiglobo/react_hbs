@@ -14,7 +14,7 @@
  * found — go back" hint because the list endpoint doesn't expose a
  * per-id GET.
  */
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Container,
   Row,
@@ -34,6 +34,16 @@ import {
   FaFileInvoice,
   FaEnvelope,
   FaExclamationCircle,
+  FaHistory,
+  FaUserAlt,
+  FaMapMarkerAlt,
+  FaNetworkWired,
+  FaCalendarAlt,
+  FaClock,
+  FaPlusCircle,
+  FaCheckCircle,
+  FaSyncAlt,
+  FaTimesCircle,
 } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
@@ -55,9 +65,71 @@ const BUTTON_STYLE = {
   whiteSpace: "nowrap",
 };
 
-// Alias kept so the existing action-row JSX (which references ACTION_BTN)
-// continues to work — same red button as the Hotel view.
-const ACTION_BTN = BUTTON_STYLE;
+// Purpose-based colour variants for the action buttons — ported verbatim from
+// the Hotel Booking detail view so the cab action row uses the same palette
+// instead of an all-red set. They reuse the exact BUTTON_STYLE shape (size /
+// padding / radius / white text); only the background colour changes. No
+// handler, guard, or disabled state is affected.
+const BTN_SUCCESS = { ...BUTTON_STYLE, backgroundColor: "#16a34a" }; // Email Voucher
+const BTN_TEAL = { ...BUTTON_STYLE, backgroundColor: "#0d9488" }; // Reconfirm
+const BTN_DANGER = { ...BUTTON_STYLE, backgroundColor: "#dc2626" }; // Cancel
+const BTN_SKY = { ...BUTTON_STYLE, backgroundColor: "#3ba2e8" }; // Add Agent Reference
+const BTN_INDIGO = { ...BUTTON_STYLE, backgroundColor: "#6366f1" }; // Confirmation No.
+const BTN_INFO = { ...BUTTON_STYLE, backgroundColor: "#0891b2" }; // Voucher / Invoice
+const BTN_ORANGE = { ...BUTTON_STYLE, backgroundColor: "#f0922b" }; // Resend Mail
+const BTN_ACCENT = { ...BUTTON_STYLE, backgroundColor: "#7c3aed" }; // Booking Remark
+const BTN_NEUTRAL = { ...BUTTON_STYLE, backgroundColor: "#64748b" }; // Notes
+const BTN_HISTORY = { ...BUTTON_STYLE, backgroundColor: "#334155" }; // History
+const BTN_PRIMARY = { ...BUTTON_STYLE, backgroundColor: "#2563eb" }; // Add New Item
+
+// Sub-booking types offered by "ADD NEW ITEM". Mirrors the Package / Hotel
+// detail views: each entry launches its OWN existing create flow with
+// ?parentBookingCode set so the backend stamps the child "{parent}/{n}"
+// under this booking's code.
+const ADD_NEW_ITEM_TYPES = [
+  { key: "HOTEL", label: "Hotel Booking", route: "/new-booking/hotel" },
+  { key: "HOTEL_24HR", label: "24 Hour Check-In", route: "/new-booking/hotel-24hr" },
+  { key: "LONG_STAY", label: "Long Stay Booking", route: "/new-booking/long-stay" },
+  { key: "DAY_STAY", label: "Day Stay Check-In", route: "/new-booking/day-stay" },
+  { key: "GOV_EMPLOYEE", label: "Government Employee", route: "/new-booking/gov-employee" },
+  { key: "STUDENT", label: "Student Booking", route: "/new-booking/student" },
+  { key: "SENIOR_CITIZEN", label: "Senior Citizen Booking", route: "/new-booking/senior-citizen" },
+  { key: "PACKAGE", label: "Package Booking", route: "/new-booking/package-search" },
+];
+
+// Colour + icon per Booking History action (keyed by the exact label pushed
+// onto `bookingHistory`). Unknown actions fall back to a neutral slate badge.
+// Ported from the Package / Hotel booking detail views so the cab History
+// modal reads with the same palette.
+const HISTORY_ACTION_META = {
+  "Booking Created": { bg: "#e6f4ea", fg: "#1e7e34", icon: FaPlusCircle },
+  "Booking Confirmed": { bg: "#e7f1ff", fg: "#1d4ed8", icon: FaCheckCircle },
+  "Booking Reconfirmed": { bg: "#e0f2f1", fg: "#0d9488", icon: FaSyncAlt },
+  "Booking Cancelled": { bg: "#fdecea", fg: "#c0392b", icon: FaTimesCircle },
+};
+const HISTORY_ACTION_FALLBACK = { bg: "#f1f5f9", fg: "#475569", icon: FaHistory };
+
+// Date / time helpers for the History modal. Accept "yyyy-MM-ddTHH:mm:ss" or
+// "yyyy-MM-dd HH:mm:ss"; return "-" when unparseable so the table stays tidy.
+const parseHistoryDate = (v) => {
+  if (!v) return null;
+  const d = new Date(String(v).replace(" ", "T"));
+  return isNaN(d.getTime()) ? null : d;
+};
+const formatHistoryDate = (v) => {
+  const d = parseHistoryDate(v);
+  if (!d) return "-";
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+const formatHistoryTime = (v) => {
+  const d = parseHistoryDate(v);
+  if (!d) return "-";
+  return d.toLocaleTimeString("en-GB", { hour12: false });
+};
 
 // Card / section styling copied from the Hotel Booking detail view.
 const SECTION_HEADER = {
@@ -99,35 +171,58 @@ const formatPrice = (price) =>
     currency: "AED",
   }).format(price || 0);
 
-const formatDate = (date) => {
-  if (!date) return "-";
-  try {
-    return new Date(date).toLocaleDateString();
-  } catch {
-    return date;
+// Parse the mixed date formats the cab API returns: `bookingDate` arrives as
+// ISO (yyyy-MM-dd / yyyy-MM-ddTHH:mm:ss) while `pickupDate` / `dropoffDate`
+// arrive as dd-MM-yyyy (or dd/MM/yyyy). Handling both here keeps every date
+// on the page rendering, instead of silently collapsing dd-MM-yyyy to "-".
+const parseFlexibleDate = (value) => {
+  if (!value) return null;
+  const str = String(value).trim();
+  // ISO — yyyy-MM-dd, optionally with a time component.
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    const normalized = str.includes("T") ? str : `${str}T00:00:00`;
+    const d = new Date(normalized);
+    return isNaN(d.getTime()) ? null : d;
   }
+  // dd-MM-yyyy or dd/MM/yyyy.
+  const m = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (m) {
+    const [, dd, mm, yyyy] = m;
+    const d = new Date(Number(yyyy), Number(mm) - 1, Number(dd));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  // Fallback — let the engine try whatever else it can parse.
+  const d = new Date(str);
+  return isNaN(d.getTime()) ? null : d;
 };
 
-// Per-part coloured status label, copied from the Hotel Booking detail view.
-// Confirmed / ReConfirmed → green, Cancelled → red, On Request → orange.
+// "dd MMM yyyy" — mirrors the Hotel Booking detail view's date style so the
+// cab detail page reads consistently (e.g. "21 Jul 2026") instead of the
+// raw / locale-dependent values it showed before.
+const formatDate = (value) => {
+  const d = parseFlexibleDate(value);
+  if (!d) return "-";
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${day} ${d.toLocaleString("default", { month: "short" })} ${d.getFullYear()}`;
+};
+
+// Coloured status label, copied from the Hotel Booking detail view. Coloured by
+// the label's dominant meaning (so the combined labels match the Package detail
+// view): Cancelled → red (cancellation wins, e.g. "ReConfirmed/Cancelled"),
+// Confirmed / ReConfirmed (incl. "Confirm/ReConfirmed") → green, On Request →
+// orange, anything else → grey.
 const StatusBadge = ({ status }) => {
-  const colorFor = (part) => {
-    const p = (part || "").trim().toUpperCase();
-    if (p.startsWith("CONFIRMED") || p.startsWith("RECONFIRMED"))
-      return "#16a34a";
-    if (p.startsWith("CANCELLED")) return "#dc2626";
-    if (p === "ON REQUEST") return "#e67e22";
-    return "#888";
-  };
-  const parts = String(status || "-").split("/");
+  const p = String(status || "-").trim().toUpperCase();
+  const color = p.includes("CANCELLED")
+    ? "#dc2626"
+    : p.includes("CONFIRM")
+      ? "#16a34a"
+      : p === "ON REQUEST"
+        ? "#e67e22"
+        : "#888";
   return (
-    <span style={{ fontWeight: "700", fontSize: "0.85rem" }}>
-      {parts.map((part, i) => (
-        <React.Fragment key={i}>
-          {i > 0 && <span style={{ color: "#888" }}>/</span>}
-          <span style={{ color: colorFor(part) }}>{part}</span>
-        </React.Fragment>
-      ))}
+    <span style={{ fontWeight: "700", fontSize: "0.85rem", color }}>
+      {status ?? "-"}
     </span>
   );
 };
@@ -151,6 +246,49 @@ const SectionHeader = ({ children }) => (
 const SectionBody = ({ children }) => (
   <div style={{ padding: "12px 16px" }}>{children}</div>
 );
+
+// Reverse-geocode browser coordinates to a readable address for the Booking
+// History audit trail on the RECONFIRM / CANCEL actions. Tries OpenStreetMap
+// Nominatim first (street-level), then BigDataCloud (locality-level, keyless)
+// — both free, CORS-enabled. Returns null when neither responds so the caller
+// keeps its IP-derived fallback. Mirrors the booking pages + PackageBookingDetailView.
+async function reverseGeocode(lat, lon) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=16&addressdetails=1`,
+      { headers: { Accept: "application/json" } }
+    );
+    if (res.ok) {
+      const a = (await res.json())?.address || {};
+      const parts = [
+        a.road,
+        a.neighbourhood || a.suburb,
+        a.village || a.town || a.city || a.municipality,
+        a.state,
+        a.postcode,
+        a.country,
+      ].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255); // DB column is VARCHAR(255)
+    }
+  } catch {
+    // fall through to BigDataCloud
+  }
+  try {
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`
+    );
+    if (res.ok) {
+      const d = await res.json();
+      const parts = [d.locality, d.city, d.principalSubdivision, d.countryName].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255);
+    }
+  } catch {
+    // give up — caller keeps the IP-based fallback
+  }
+  return null;
+}
 
 export default function CabBookingDetailView() {
   const { id } = useParams();
@@ -188,6 +326,12 @@ export default function CabBookingDetailView() {
   // Cancel (with reason)
   const [cancellationReason, setCancellationReason] = useState("");
 
+  // Client location captured when the Cancel / Reconfirm modals open, so the
+  // History modal's "Booking Cancelled" / "Booking Reconfirmed" rows show
+  // where the action was performed. IP is stamped server-side.
+  const [cancelLocation, setCancelLocation] = useState(null);
+  const [reconfirmLocation, setReconfirmLocation] = useState(null);
+
   // Reconfirm (Confirm / Reject popup)
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [confirmingBooking, setConfirmingBooking] = useState(false);
@@ -217,8 +361,34 @@ export default function CabBookingDetailView() {
   const [remarkInput, setRemarkInput] = useState("");
   const [savingRemark, setSavingRemark] = useState(false);
 
-  // Resend Mail
+  // Notes — inline list + add-modal (mirrors the Package detail view; the
+  // legacy NOTES button navigated to a separate page).
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [noteInput, setNoteInput] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+  const [bookingNotes, setBookingNotes] = useState([]);
+  const [notesLoading, setNotesLoading] = useState(true);
+
+  // Resend Mail — preview modal (voucher PDF + editable agent email), then
+  // POST /resend-mail?email=… . Mirrors the Package booking detail view.
   const [resendingMail, setResendingMail] = useState(false);
+  const [showResendMailModal, setShowResendMailModal] = useState(false);
+  const [resendMailPdfUrl, setResendMailPdfUrl] = useState("");
+  const [resendMailEmail, setResendMailEmail] = useState("");
+  const [resendMailEmailError, setResendMailEmailError] = useState("");
+  const [resendMailPreparing, setResendMailPreparing] = useState(false);
+
+  // Booking History (read-only timeline modal)
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+  // Add New Item (amendment) picker — mirrors the Package / Hotel detail
+  // views. Opens a modal listing every sub-booking type; the chosen type's
+  // create flow is launched with ?parentBookingCode so the backend chains
+  // the child under this cab booking's code.
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
+  const [selectedAddItemType, setSelectedAddItemType] = useState(
+    ADD_NEW_ITEM_TYPES[0].key
+  );
 
   // PDF generation feedback + in-page preview. Shape: { url, label, type }.
   const [generatingPdfType, setGeneratingPdfType] = useState(null);
@@ -239,6 +409,18 @@ export default function CabBookingDetailView() {
       confirmationNumber: dto.confirmationNumber ?? prev.confirmationNumber,
       remarks: dto.remarks ?? prev.remarks,
       cancelStatus: dto.cancelStatus ?? prev.cancelStatus,
+      // Reconfirm / Cancel audit — lets the History modal show the freshly
+      // captured Location + IP immediately after the action (no reload).
+      reconfirmedDate: dto.reconfirmedDate ?? prev.reconfirmedDate,
+      reconfirmedBy: dto.reconfirmedBy ?? prev.reconfirmedBy,
+      reconfirmedBookingLocation:
+        dto.reconfirmedBookingLocation ?? prev.reconfirmedBookingLocation,
+      reconfirmedIpAddress: dto.reconfirmedIpAddress ?? prev.reconfirmedIpAddress,
+      cancelledDate: dto.cancelledDate ?? prev.cancelledDate,
+      cancelledBy: dto.cancelledBy ?? prev.cancelledBy,
+      cancelledBookingLocation:
+        dto.cancelledBookingLocation ?? prev.cancelledBookingLocation,
+      cancelledIpAddress: dto.cancelledIpAddress ?? prev.cancelledIpAddress,
     }));
   };
 
@@ -254,12 +436,35 @@ export default function CabBookingDetailView() {
     actionState.reconfirmation === true ||
     normalizedStatus === "RECONFIRMED" ||
     normalizedStatus === "COMPLETED";
-  const isConfirmedOrLater =
-    normalizedStatus === "CONFIRMED" ||
-    normalizedStatus === "OK" ||
-    normalizedStatus === "RECONFIRMED" ||
-    normalizedStatus === "COMPLETED" ||
-    actionState.reconfirmation === true;
+
+  // Kick off client-location resolution and feed the result into the given
+  // setter. IP-derived coarse fallback fires first so that even if the user
+  // denies geolocation we have SOMETHING to show; browser geolocation, when
+  // granted, overrides with a precise reverse-geocoded address. Shared by the
+  // Cancel and Reconfirm modal openers. Mirrors PackageBookingDetailView.
+  const resolveClientLocation = (setter) => {
+    fetch("https://ipapi.co/json/")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((info) => {
+        if (!info) return;
+        const line = [info.city, info.region, info.country_name]
+          .filter(Boolean)
+          .join(", ");
+        if (line) setter((prev) => prev || line);
+      })
+      .catch(() => {});
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async ({ coords }) => {
+          const precise = await reverseGeocode(coords.latitude, coords.longitude);
+          if (precise) setter(precise);
+        },
+        () => {}, // denied / unavailable — keep the IP-derived fallback
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+      );
+    }
+  };
 
   const handleCancelBooking = async () => {
     if (!booking) return;
@@ -268,9 +473,11 @@ export default function CabBookingDetailView() {
       const params = cancellationReason.trim()
         ? { reason: cancellationReason.trim() }
         : undefined;
+      // bookingLocation travels in the request body; the backend stamps the
+      // IP server-side. Feeds the History modal's "Booking Cancelled" row.
       const response = await axiosInstance.delete(
         `/api/cab/delete/${booking.custombookingId}`,
-        { params }
+        { params, data: { bookingLocation: cancelLocation } }
       );
       if (response.data?.status === "success") {
         toast.success("Booking cancelled");
@@ -289,19 +496,27 @@ export default function CabBookingDetailView() {
 
   const openCancelModal = () => {
     setCancellationReason("");
+    setCancelLocation(null);
     setShowCancelModal(true);
+    resolveClientLocation(setCancelLocation);
   };
 
   // ── Reconfirm ──
-  const openConfirmModal = () => setShowConfirmModal(true);
+  const openConfirmModal = () => {
+    setReconfirmLocation(null);
+    setShowConfirmModal(true);
+    resolveClientLocation(setReconfirmLocation);
+  };
 
   const confirmBooking = async () => {
     if (!bookingId) return;
     try {
       setConfirmingBooking(true);
+      // bookingLocation travels in the body; the backend stamps the IP
+      // server-side. Feeds the History modal's "Booking Reconfirmed" row.
       const res = await axiosInstance.patch(
         `/api/cab/${bookingId}/confirmation-status`,
-        { confirmStatus: true }
+        { confirmStatus: true, bookingLocation: reconfirmLocation }
       );
       mergeActionState(res.data);
       setShowConfirmModal(false);
@@ -469,12 +684,121 @@ export default function CabBookingDetailView() {
     }
   };
 
+  // ── Notes (server-side list + add) ──
+  const fetchCabNotes = useCallback(async () => {
+    if (!bookingId) return;
+    try {
+      setNotesLoading(true);
+      const res = await axiosInstance.get(`/api/cab/${bookingId}/notes`);
+      const list = Array.isArray(res.data) ? res.data : res.data?.notes || [];
+      setBookingNotes(list);
+    } catch {
+      setBookingNotes([]);
+    } finally {
+      setNotesLoading(false);
+    }
+  }, [bookingId]);
+
+  useEffect(() => {
+    fetchCabNotes();
+  }, [fetchCabNotes]);
+
+  const openNotesModal = () => {
+    setNoteInput("");
+    setShowNotesModal(true);
+  };
+
+  const saveNote = async () => {
+    const text = (noteInput || "").trim();
+    if (!text) {
+      toast.error("Note cannot be empty");
+      return;
+    }
+    try {
+      setSavingNote(true);
+      const createdBy =
+        localStorage.getItem("UserName") ||
+        sessionStorage.getItem("UserName") ||
+        "unknown";
+      await axiosInstance.post(`/api/cab/${bookingId}/notes`, {
+        note: text,
+        createdBy,
+      });
+      toast.success("Note added successfully");
+      setNoteInput("");
+      setShowNotesModal(false);
+      await fetchCabNotes();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to save note");
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
   // ── Resend Mail ──
-  const resendMailToAgent = async () => {
+  // Open the preview modal: (1) generate the cab voucher PDF for preview
+  // (proforma while held, final once ReConfirmed), and (2) prefill the
+  // agent's on-file email into an editable recipient field. Lookup errors
+  // surface inline but never block the admin from typing an address.
+  const openResendMailModal = async () => {
+    setResendMailPdfUrl("");
+    setResendMailEmail("");
+    setResendMailEmailError("");
+    setShowResendMailModal(true);
+    setResendMailPreparing(true);
+    try {
+      const agentId = booking?.agentId
+        ? Number(String(booking.agentId).trim())
+        : null;
+      const [docRes, agentRes] = await Promise.all([
+        axiosInstance
+          .get(`/api/cab/${bookingId}/pdf`, {
+            params: { type: showsFinalDocs ? "VOUCHER" : "PROFORMA_VOUCHER" },
+          })
+          .catch(() => null),
+        agentId
+          ? axiosInstance.get(`/api/agent/${agentId}`).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+      if (docRes?.data?.status === "SUCCESS" && docRes.data.pdfUrl) {
+        setResendMailPdfUrl(docRes.data.pdfUrl);
+      }
+      const a = agentRes?.data || {};
+      const email =
+        a.personalEmail || a.financeManagerEmail || a.gmEmail || "";
+      setResendMailEmail(email);
+    } finally {
+      setResendMailPreparing(false);
+    }
+  };
+
+  // Fire the actual /resend-mail POST with whatever address the admin left
+  // in the modal's email field. The backend re-validates and falls back to
+  // the agent's on-file address when blank.
+  const submitResendMail = async () => {
+    const email = (resendMailEmail || "").trim();
+    if (!email) {
+      setResendMailEmailError("Recipient email is required");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setResendMailEmailError("Enter a valid email address");
+      return;
+    }
+    setResendMailEmailError("");
     try {
       setResendingMail(true);
-      await axiosInstance.post(`/api/cab/${bookingId}/resend-mail`);
-      toast.success("Mail resent to agent successfully!");
+      const res = await axiosInstance.post(
+        `/api/cab/${bookingId}/resend-mail`,
+        null,
+        { params: { email } }
+      );
+      if (res.data?.success === false) {
+        toast.error(res.data?.message || "Failed to resend mail to agent");
+      } else {
+        toast.success(res.data?.message || "Mail resent to agent successfully!");
+        setShowResendMailModal(false);
+      }
     } catch (error) {
       toast.error(
         error.response?.data?.message ||
@@ -616,9 +940,123 @@ export default function CabBookingDetailView() {
 
   // Display status for the StatusBadge — cancelled shows red, otherwise the
   // live confirmation status (falling back to Confirmed) coloured green.
-  const displayStatus = isCancelled
+  // The default "OK" confirmation status reads as "Confirmed" on this page;
+  // only "OK" is remapped — every other status (ReConfirmed, Rejected, …) is
+  // shown as-is. Display-only: the stored confirmationStatus is unchanged.
+  const rawStatus = actionState.confirmationStatus || "Confirmed";
+  const baseStatus = isCancelled
     ? "Cancelled"
-    : actionState.confirmationStatus || "Confirmed";
+    : String(rawStatus).trim().toUpperCase() === "OK"
+      ? "Confirmed"
+      : rawStatus;
+  // Display-only relabels (mirror PackageBookingDetailView): a ReConfirmed
+  // booking reads "Confirm/ReConfirmed" and a Cancelled one reads
+  // "ReConfirmed/Cancelled". The underlying state (isCancelled / the stored
+  // confirmationStatus) is unchanged, so the action-button gates still work off
+  // the real status.
+  const normalizedBase = String(baseStatus).trim().toUpperCase();
+  const displayStatus =
+    normalizedBase === "CANCELLED"
+      ? "ReConfirmed/Cancelled"
+      : normalizedBase === "RECONFIRMED"
+        ? "Confirm/ReConfirmed"
+        : baseStatus;
+
+  // Booking lifecycle events for the History modal — built from the row stub
+  // already loaded (no extra API call), mirroring the Package / Hotel booking
+  // detail views. The cab booking DTO only carries a real `bookingDate`
+  // (creation time); the confirm / reconfirm / cancel transitions are not
+  // timestamped server-side today, so those rows are added defensively — only
+  // when a genuine timestamp is present, never fabricated. If the backend
+  // later exposes those fields they light up automatically. Events are sorted
+  // chronologically so the timeline reads top-to-bottom.
+  const bookingHistory = (() => {
+    if (!booking) return [];
+    const events = [];
+    if (booking.bookingDate) {
+      events.push({
+        action: "Booking Created",
+        at: booking.bookingDate,
+        by: booking.createdBy || "-",
+        location: booking.bookingLocation,
+        ip: booking.ipAddress,
+      });
+    }
+    if (booking.confirmedDate) {
+      events.push({
+        action: "Booking Confirmed",
+        at: booking.confirmedDate,
+        by: booking.confirmedBy || "-",
+      });
+    }
+    // Reconfirm audit — prefer the fresh action-response snapshot (so the row
+    // appears right after the user reconfirms) and fall back to the row stub.
+    const reconfirmedAt = actionState.reconfirmedDate || booking.reconfirmedDate;
+    if (reconfirmedAt) {
+      events.push({
+        action: "Booking Reconfirmed",
+        at: reconfirmedAt,
+        by: actionState.reconfirmedBy || booking.reconfirmedBy || "-",
+        location:
+          actionState.reconfirmedBookingLocation ||
+          booking.reconfirmedBookingLocation,
+        ip: actionState.reconfirmedIpAddress || booking.reconfirmedIpAddress,
+      });
+    }
+    const cancelled =
+      actionState.cancelStatus === true ||
+      booking.cancelStatus === true ||
+      isCancelled;
+    const cancelledAt =
+      actionState.cancelledDate ||
+      booking.cancelledDate ||
+      booking.cancelledAt;
+    if (cancelled && cancelledAt) {
+      events.push({
+        action: "Booking Cancelled",
+        at: cancelledAt,
+        by: actionState.cancelledBy || booking.cancelledBy || "-",
+        location:
+          actionState.cancelledBookingLocation ||
+          booking.cancelledBookingLocation,
+        ip: actionState.cancelledIpAddress || booking.cancelledIpAddress,
+      });
+    }
+    return events.sort((a, b) => {
+      const da = parseHistoryDate(a.at)?.getTime() ?? 0;
+      const db = parseHistoryDate(b.at)?.getTime() ?? 0;
+      return da - db;
+    });
+  })();
+
+  // ── ADD NEW ITEM handlers ──────────────────────────────────────────
+  // Mirrors the Package / Hotel "ADD NEW ITEM" pattern: the button opens a
+  // picker modal listing every sub-booking type; the chosen type's own
+  // create flow is launched with ?parentBookingCode set so the backend
+  // chains the child under this cab booking's code (PAC… → PAC…/1). Cab
+  // bookings are always top-level, so packageBookCode is the root parent.
+  const addItemParentCode = () =>
+    booking?.parentBookingCode || booking?.packageBookCode || "";
+
+  const openAddItemModal = () => {
+    if (!addItemParentCode()) {
+      toast.error("Cannot add new item — booking code missing");
+      return;
+    }
+    setSelectedAddItemType(ADD_NEW_ITEM_TYPES[0].key);
+    setShowAddItemModal(true);
+  };
+
+  const submitAddItem = () => {
+    const chosen = ADD_NEW_ITEM_TYPES.find((t) => t.key === selectedAddItemType);
+    const parent = addItemParentCode();
+    if (!chosen || !parent) {
+      toast.error("Cannot add new item — booking code missing");
+      return;
+    }
+    setShowAddItemModal(false);
+    navigate(`${chosen.route}?parentBookingCode=${encodeURIComponent(parent)}`);
+  };
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -681,14 +1119,17 @@ export default function CabBookingDetailView() {
                     />
                     <InfoRow label="Cab" value={booking.cabName} />
                     <InfoRow label="Transporter" value={booking.transporter} />
-                    <InfoRow label="Pickup Date" value={booking.pickupDate} />
+                    <InfoRow
+                      label="Pickup Date"
+                      value={formatDate(booking.pickupDate)}
+                    />
                     <InfoRow
                       label="Dropoff Date"
-                      value={
+                      value={formatDate(
                         booking.dropOffDate ||
-                        booking.dropoffDate ||
-                        booking.pickupDate
-                      }
+                          booking.dropoffDate ||
+                          booking.pickupDate
+                      )}
                     />
                   </Col>
                   <Col md={6}>
@@ -756,7 +1197,24 @@ export default function CabBookingDetailView() {
                         booking.customer?.nationality || booking.nationality
                       }
                     />
-                    <InfoRow label="Agent LPO" value={booking.lpo} />
+                    {/* Reflects the value saved via "ADD AGENT REFERENCE" —
+                        actionState.agentLpo is refreshed on save (mergeActionState),
+                        falling back to whatever the row stub carried. */}
+                    <InfoRow
+                      label="Agent LPO"
+                      value={
+                        actionState.agentLpo || booking.agentLpo || booking.lpo
+                      }
+                    />
+                    {/* Reflects the value saved via "CONFIRMATION NO." —
+                        actionState.confirmationNumber is refreshed on save. */}
+                    <InfoRow
+                      label="Confirmation No."
+                      value={
+                        actionState.confirmationNumber ||
+                        booking.confirmationNumber
+                      }
+                    />
                   </Col>
                 </Row>
               </SectionBody>
@@ -877,6 +1335,90 @@ export default function CabBookingDetailView() {
               </SectionBody>
             </div>
 
+            {/* ── Remarks ── Saved via the "BOOKING REMARK" modal;
+                actionState.remarks refreshes on save (mergeActionState). */}
+            <div style={card}>
+              <SectionHeader>Remarks</SectionHeader>
+              <SectionBody>
+                {actionState.remarks ? (
+                  <div
+                    style={{
+                      whiteSpace: "pre-line",
+                      fontSize: "0.82rem",
+                      color: "#222",
+                    }}
+                  >
+                    {actionState.remarks}
+                  </div>
+                ) : (
+                  <span
+                    style={{
+                      color: "#888",
+                      fontStyle: "italic",
+                      fontSize: "0.82rem",
+                    }}
+                  >
+                    No remarks.
+                  </span>
+                )}
+              </SectionBody>
+            </div>
+
+            {/* ── Notes ── Ad-hoc notes fetched from /api/cab/{id}/notes.
+                The "NOTES" button below opens a modal that posts to the same
+                endpoint and refreshes this list. */}
+            <div style={card}>
+              <SectionHeader>Notes</SectionHeader>
+              <SectionBody>
+                {notesLoading && bookingNotes.length === 0 ? (
+                  <span style={{ color: "#888", fontSize: "0.82rem" }}>
+                    Loading notes…
+                  </span>
+                ) : bookingNotes.length === 0 ? (
+                  <span
+                    style={{
+                      color: "#888",
+                      fontStyle: "italic",
+                      fontSize: "0.82rem",
+                    }}
+                  >
+                    No notes yet.
+                  </span>
+                ) : (
+                  <ul style={{ marginBottom: 0, paddingLeft: "18px" }}>
+                    {bookingNotes.map((n, idx) => (
+                      <li key={n.id || idx} style={{ marginBottom: 6 }}>
+                        <div
+                          style={{
+                            whiteSpace: "pre-line",
+                            fontSize: "0.82rem",
+                            color: "#222",
+                          }}
+                        >
+                          {n.note || "-"}
+                        </div>
+                        {(n.createdBy || n.createdDate) && (
+                          <div
+                            style={{
+                              fontSize: "0.72rem",
+                              color: "#888",
+                              marginTop: 2,
+                            }}
+                          >
+                            {n.createdBy ? `By ${n.createdBy}` : ""}
+                            {n.createdBy && n.createdDate ? " · " : ""}
+                            {n.createdDate
+                              ? String(n.createdDate).replace("T", " ")
+                              : ""}
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </SectionBody>
+            </div>
+
             {/* Bottom action buttons — mirrors LongStayBookingDetailView's
                 action row. The legacy email-voucher modal is preserved on the
                 first button; the rest are the Long-Stay action set. The
@@ -885,14 +1427,27 @@ export default function CabBookingDetailView() {
               className="d-flex gap-2 justify-content-start flex-wrap"
               style={{ marginTop: "16px", marginBottom: "20px" }}
             >
+              {/* ADD NEW ITEM — first action. Opens the sub-booking picker so
+                  the operator can chain a new item under this booking's code.
+                  Hidden once cancelled (no amendments on a dead booking). */}
               {!isCancelled && (
-                <button style={ACTION_BTN} onClick={openCancelModal}>
+                <button
+                  style={BTN_PRIMARY}
+                  onClick={openAddItemModal}
+                  title="Add a new sub-booking under this booking"
+                >
+                  ADD NEW ITEM
+                </button>
+              )}
+
+              {!isCancelled && (
+                <button style={BTN_DANGER} onClick={openCancelModal}>
                   CANCEL
                 </button>
               )}
 
               {!showsFinalDocs && !isCancelled && (
-                <button style={ACTION_BTN} onClick={openConfirmModal}>
+                <button style={BTN_TEAL} onClick={openConfirmModal}>
                   RECONFIRM
                 </button>
               )}
@@ -900,7 +1455,7 @@ export default function CabBookingDetailView() {
               {!showsFinalDocs ? (
                 <>
                   <button
-                    style={ACTION_BTN}
+                    style={BTN_INFO}
                     disabled={generatingPdfType === "PROFORMA_VOUCHER"}
                     onClick={() =>
                       handleDownloadPdf("PROFORMA_VOUCHER", "Proforma Voucher")
@@ -911,7 +1466,7 @@ export default function CabBookingDetailView() {
                       : "PROFORMA VOUCHER"}
                   </button>
                   <button
-                    style={ACTION_BTN}
+                    style={BTN_INFO}
                     disabled={generatingPdfType === "PROFORMA_INVOICE"}
                     onClick={() =>
                       handleDownloadPdf("PROFORMA_INVOICE", "Proforma Invoice")
@@ -924,17 +1479,22 @@ export default function CabBookingDetailView() {
                 </>
               ) : (
                 <>
+                  {/* Final VOUCHER is hidden once cancelled — no live voucher
+                      is offered post-cancellation (mirrors the Package view).
+                      The INVOICE remains available. */}
+                  {!isCancelled && (
+                    <button
+                      style={BTN_INFO}
+                      disabled={generatingPdfType === "VOUCHER"}
+                      onClick={() => handleDownloadPdf("VOUCHER", "Voucher")}
+                    >
+                      {generatingPdfType === "VOUCHER"
+                        ? "GENERATING..."
+                        : "VOUCHER"}
+                    </button>
+                  )}
                   <button
-                    style={ACTION_BTN}
-                    disabled={generatingPdfType === "VOUCHER"}
-                    onClick={() => handleDownloadPdf("VOUCHER", "Voucher")}
-                  >
-                    {generatingPdfType === "VOUCHER"
-                      ? "GENERATING..."
-                      : "VOUCHER"}
-                  </button>
-                  <button
-                    style={ACTION_BTN}
+                    style={BTN_INFO}
                     disabled={generatingPdfType === "INVOICE"}
                     onClick={() => handleDownloadPdf("INVOICE", "Invoice")}
                   >
@@ -945,61 +1505,59 @@ export default function CabBookingDetailView() {
                 </>
               )}
 
-              <button
-                style={ACTION_BTN}
-                onClick={() => {
-                  if (!isConfirmedOrLater) {
-                    toast.error(
-                      "Agent Reference can only be added once the booking is Confirmed or ReConfirmed."
-                    );
-                    return;
-                  }
-                  openConfirmStatusModal();
-                }}
-              >
+              {/* ADD AGENT REFERENCE — opens the modal directly, mirroring the
+                  Package booking detail view (no status gate). The cab list DTO
+                  doesn't carry confirmationStatus, so an isConfirmedOrLater gate
+                  here wrongly blocked the action on otherwise-valid bookings. */}
+              <button style={BTN_SKY} onClick={openConfirmStatusModal}>
                 ADD AGENT REFERENCE
               </button>
 
-              <button
-                style={ACTION_BTN}
-                onClick={() => {
-                  if (!isConfirmedOrLater) {
-                    toast.error(
-                      "Confirmation Number can only be added once the booking is Confirmed or ReConfirmed."
-                    );
-                    return;
-                  }
-                  openConfirmationNoModal();
-                }}
-              >
+              {/* CONFIRMATION NO. — opens the modal directly, mirroring the
+                  Package booking detail view (no status gate). The cab list DTO
+                  doesn't carry confirmationStatus, so an isConfirmedOrLater gate
+                  here wrongly blocked the action on otherwise-valid bookings. */}
+              <button style={BTN_INDIGO} onClick={openConfirmationNoModal}>
                 CONFIRMATION NO.
               </button>
 
               <button
-                style={ACTION_BTN}
-                onClick={resendMailToAgent}
-                disabled={resendingMail}
+                style={BTN_ORANGE}
+                onClick={openResendMailModal}
+                disabled={resendingMail || resendMailPreparing}
               >
-                {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
+                {resendingMail
+                  ? "SENDING..."
+                  : resendMailPreparing
+                    ? "PREPARING..."
+                    : "RESEND MAIL TO AGENT"}
               </button>
 
-              <button style={ACTION_BTN} onClick={openRemarkModal}>
+              <button style={BTN_ACCENT} onClick={openRemarkModal}>
                 BOOKING REMARK
               </button>
 
-              <button
-                style={ACTION_BTN}
-                onClick={() =>
-                  navigate(`/booking-details/cab-booking/${bookingId}/notes`)
-                }
-              >
+              <button style={BTN_NEUTRAL} onClick={openNotesModal}>
                 NOTES
               </button>
 
-              {/* Legacy email-voucher modal action — kept so operators can
-                  still email the voucher PDF to an arbitrary recipient. */}
+              {/* HISTORY is always available (read-only), including for
+                  cancelled bookings — mirrors the Package booking detail. */}
               <button
-                style={{ ...BUTTON_STYLE, backgroundColor: "#198754" }}
+                style={BTN_HISTORY}
+                onClick={() => setShowHistoryModal(true)}
+                title="Booking history"
+              >
+                HISTORY
+              </button>
+
+              {/* "Email Voucher" action button commented out per request —
+                  hidden from the action row. Uncomment the block below to
+                  restore it (handler handleVoucher + BTN_SUCCESS style are
+                  still defined above). */}
+              {/*
+              <button
+                style={BTN_SUCCESS}
                 onClick={handleVoucher}
                 disabled={voucherLoadingId === booking.custombookingId}
                 title="Email Voucher"
@@ -1014,6 +1572,7 @@ export default function CabBookingDetailView() {
                 )}
                 Email Voucher
               </button>
+              */}
             </div>
 
             {/* ── Booking Date footer (matches the Hotel Booking detail view) ── */}
@@ -1030,6 +1589,306 @@ export default function CabBookingDetailView() {
           </Container>
         </main>
       </div>
+
+      {/* ── Booking History Modal ───────────────────────────────────────
+          Read-only timeline built from the loaded row stub (no extra API
+          call). Only events with a recorded timestamp are listed. */}
+      <Modal
+        show={showHistoryModal}
+        onHide={() => setShowHistoryModal(false)}
+        centered
+        size="xl"
+        scrollable
+      >
+        <Modal.Header closeButton>
+          <Modal.Title
+            style={{
+              fontSize: "1.05rem",
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+            }}
+          >
+            <FaHistory size={16} />
+            <span>
+              Booking History
+              {booking.packageBookCode && (
+                <span style={{ opacity: 0.85, fontWeight: 500 }}>
+                  {` — ${booking.packageBookCode}`}
+                </span>
+              )}
+            </span>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body
+          style={{ backgroundColor: "#f8fafc", padding: "1.25rem 1.5rem" }}
+        >
+          {bookingHistory.length === 0 ? (
+            <div className="text-muted text-center py-4">
+              <FaHistory
+                size={26}
+                style={{ opacity: 0.25, marginBottom: 8 }}
+              />
+              <div>No history available for this booking.</div>
+            </div>
+          ) : (
+            <div
+              style={{
+                borderRadius: 10,
+                border: "1px solid #e2e8f0",
+                boxShadow: "0 1px 3px rgba(15, 23, 42, 0.06)",
+                backgroundColor: "#fff",
+                overflow: "hidden",
+              }}
+            >
+              <table
+                style={{
+                  width: "100%",
+                  tableLayout: "fixed",
+                  borderCollapse: "collapse",
+                  fontSize: "0.82rem",
+                  marginBottom: 0,
+                }}
+              >
+                <thead>
+                  <tr style={{ backgroundColor: "#f1f5f9" }}>
+                    {[
+                      { label: "S/N", width: "5%" },
+                      { label: "Action", width: "17%" },
+                      { label: "Performed By", icon: FaUserAlt, width: "13%" },
+                      { label: "Location", icon: FaMapMarkerAlt, width: "30%" },
+                      { label: "IP Address", icon: FaNetworkWired, width: "14%" },
+                      { label: "Date", icon: FaCalendarAlt, width: "11%" },
+                      { label: "Time", icon: FaClock, width: "10%" },
+                    ].map((col) => (
+                      <th
+                        key={col.label}
+                        style={{
+                          width: col.width,
+                          padding: "10px 14px",
+                          textAlign: "left",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.03em",
+                          fontSize: "0.72rem",
+                          fontWeight: 700,
+                          color: "#475569",
+                          borderBottom: "1px solid #e2e8f0",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {col.icon ? (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                            }}
+                          >
+                            <col.icon size={11} style={{ opacity: 0.7 }} />
+                            {col.label}
+                          </span>
+                        ) : (
+                          col.label
+                        )}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {bookingHistory.map((ev, idx) => {
+                    const meta =
+                      HISTORY_ACTION_META[ev.action] ||
+                      HISTORY_ACTION_FALLBACK;
+                    const ActionIcon = meta.icon;
+                    return (
+                      <tr
+                        key={`${ev.action}-${idx}`}
+                        style={{
+                          backgroundColor: idx % 2 === 1 ? "#f8fafc" : "#fff",
+                        }}
+                      >
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                            color: "#64748b",
+                          }}
+                        >
+                          {idx + 1}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "3px 10px",
+                              borderRadius: 999,
+                              backgroundColor: meta.bg,
+                              color: meta.fg,
+                              fontWeight: 600,
+                              fontSize: "0.76rem",
+                            }}
+                          >
+                            <ActionIcon size={10} style={{ flexShrink: 0 }} />
+                            {ev.action}
+                          </span>
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {ev.by || "-"}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                            wordBreak: "break-word",
+                          }}
+                        >
+                          {ev.location ? (
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "flex-start",
+                                gap: 6,
+                              }}
+                            >
+                              <FaMapMarkerAlt
+                                size={11}
+                                style={{
+                                  color: "#c0392b",
+                                  marginTop: 2,
+                                  flexShrink: 0,
+                                }}
+                              />
+                              <span>{ev.location}</span>
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          {ev.ip ? (
+                            <span
+                              style={{
+                                fontFamily:
+                                  "'Consolas', 'Courier New', monospace",
+                                backgroundColor: "#f1f5f9",
+                                color: "#334155",
+                                padding: "2px 8px",
+                                borderRadius: 4,
+                                fontSize: "0.76rem",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {ev.ip}
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          {formatHistoryDate(ev.at)}
+                        </td>
+                        <td
+                          style={{
+                            padding: "10px 14px",
+                            borderBottom: "1px solid #eef2f6",
+                          }}
+                        >
+                          {formatHistoryTime(ev.at)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer style={{ backgroundColor: "#fff" }}>
+          <Button
+            variant="secondary"
+            onClick={() => setShowHistoryModal(false)}
+            style={{
+              borderRadius: 6,
+              padding: "6px 20px",
+              fontWeight: 600,
+              fontSize: "0.85rem",
+            }}
+          >
+            Close
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Add New Item picker ──────────────────────────────────────────
+          Lists every sub-booking type; the chosen type's create flow is
+          launched with ?parentBookingCode set so the backend chains the
+          child code under this booking. */}
+      <Modal
+        show={showAddItemModal}
+        onHide={() => setShowAddItemModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title style={{ fontSize: "1.05rem" }}>
+            Add New Item
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <div style={{ marginBottom: "10px", color: "#555" }}>
+            Select a booking type to add as a sub-booking of{" "}
+            <strong>{addItemParentCode()}</strong>.
+          </div>
+          <Form>
+            {ADD_NEW_ITEM_TYPES.map((t) => (
+              <Form.Check
+                key={t.key}
+                type="radio"
+                name="addNewItemType"
+                id={`add-item-${t.key}`}
+                label={t.label}
+                value={t.key}
+                checked={selectedAddItemType === t.key}
+                onChange={() => setSelectedAddItemType(t.key)}
+                style={{ marginBottom: "6px" }}
+              />
+            ))}
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setShowAddItemModal(false)}
+          >
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={submitAddItem}>
+            Continue
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       {/* Cancel confirmation (with optional reason) */}
       <Modal
@@ -1472,6 +2331,187 @@ export default function CabBookingDetailView() {
               </>
             ) : (
               "Save"
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Notes Modal ── */}
+      <Modal
+        show={showNotesModal}
+        onHide={() => {
+          if (!savingNote) setShowNotesModal(false);
+        }}
+        centered
+        backdrop="static"
+        keyboard={false}
+        size="md"
+      >
+        <Modal.Header
+          closeButton={!savingNote}
+          style={{ backgroundColor: "#fff", borderBottom: "2px solid #e9ecef" }}
+        >
+          <Modal.Title className="fw-bold">Add Note</Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ padding: "1.5rem" }}>
+          {bookingNotes.length > 0 && (
+            <div
+              className="mb-3"
+              style={{
+                background: "#f8f9fa",
+                border: "1px solid #e9ecef",
+                borderRadius: 4,
+                padding: "10px 12px",
+                maxHeight: 180,
+                overflowY: "auto",
+                fontSize: "0.82rem",
+              }}
+            >
+              <div
+                className="fw-semibold mb-2"
+                style={{ fontSize: "0.78rem", color: "#555" }}
+              >
+                Existing notes ({bookingNotes.length})
+              </div>
+              <ul className="mb-0 ps-3">
+                {bookingNotes.map((n, idx) => (
+                  <li key={n.id || idx} style={{ marginBottom: 4 }}>
+                    {n.note || "-"}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <Form.Group controlId="cabNoteInput">
+            <Form.Label className="fw-semibold mb-1">New Note</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={4}
+              placeholder="Enter a note for this booking"
+              value={noteInput}
+              onChange={(e) => setNoteInput(e.target.value)}
+              disabled={savingNote}
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer
+          style={{
+            backgroundColor: "#f8f9fa",
+            borderTop: "1px solid #dee2e6",
+          }}
+        >
+          <Button
+            variant="secondary"
+            onClick={() => setShowNotesModal(false)}
+            disabled={savingNote}
+          >
+            Close
+          </Button>
+          <Button variant="primary" onClick={saveNote} disabled={savingNote}>
+            {savingNote ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-2" />
+                Saving...
+              </>
+            ) : (
+              "Add Note"
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Resend Mail to Agent Modal ──
+          Previews the cab voucher that will be attached and lets the admin
+          confirm/edit the recipient before the /resend-mail POST fires. */}
+      <Modal
+        show={showResendMailModal}
+        onHide={() => (resendingMail ? null : setShowResendMailModal(false))}
+        size="xl"
+        centered
+        backdrop="static"
+        keyboard={!resendingMail}
+      >
+        <Modal.Header closeButton={!resendingMail}>
+          <Modal.Title style={{ fontSize: "1rem", fontWeight: 700 }}>
+            Resend {showsFinalDocs ? "Voucher" : "Proforma Voucher"} to Agent
+            {booking?.packageBookCode ? ` — ${booking.packageBookCode}` : ""}
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ padding: 0, height: "80vh" }}>
+          {resendMailPreparing ? (
+            <div className="d-flex align-items-center justify-content-center h-100">
+              <Spinner animation="border" variant="primary" />
+              <span className="ms-2 text-muted">
+                Preparing voucher attachment…
+              </span>
+            </div>
+          ) : resendMailPdfUrl ? (
+            <iframe
+              key={resendMailPdfUrl}
+              src={resendMailPdfUrl}
+              title="Voucher preview"
+              style={{
+                width: "100%",
+                height: "100%",
+                border: "none",
+                display: "block",
+              }}
+            />
+          ) : (
+            <div className="d-flex align-items-center justify-content-center h-100 text-muted small px-4 text-center">
+              Voucher preview unavailable. You can still send the mail — the
+              backend will regenerate the attachment on dispatch.
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer className="d-flex align-items-center gap-2 flex-wrap">
+          <Form.Group
+            className="flex-grow-1 me-2"
+            style={{ minWidth: 260, maxWidth: 420 }}
+          >
+            <Form.Label
+              className="fw-semibold mb-1"
+              style={{ fontSize: "0.8rem" }}
+            >
+              Agent Email <span className="text-danger">*</span>
+            </Form.Label>
+            <Form.Control
+              type="email"
+              size="sm"
+              placeholder="name@example.com"
+              value={resendMailEmail}
+              onChange={(e) => {
+                setResendMailEmail(e.target.value);
+                if (resendMailEmailError) setResendMailEmailError("");
+              }}
+              isInvalid={!!resendMailEmailError}
+              disabled={resendingMail || resendMailPreparing}
+            />
+            <Form.Control.Feedback type="invalid">
+              {resendMailEmailError}
+            </Form.Control.Feedback>
+          </Form.Group>
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            onClick={() => setShowResendMailModal(false)}
+            disabled={resendingMail}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={submitResendMail}
+            disabled={resendingMail || resendMailPreparing}
+          >
+            {resendingMail ? (
+              <>
+                <Spinner size="sm" className="me-2" />
+                Sending…
+              </>
+            ) : (
+              "Send"
             )}
           </Button>
         </Modal.Footer>

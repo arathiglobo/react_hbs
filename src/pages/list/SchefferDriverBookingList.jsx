@@ -9,7 +9,7 @@
  * The Action column contains only the View (eye) icon — clicking it
  * navigates to a dedicated detail page
  * (/booking-details/scheffer-driver-booking/:id) where Voucher / Cancel /
- * Record-Actual-Usage live as buttons at the bottom-left.
+ * Action buttons live.
  *
  * Visually mirrors the Hotel Booking List (`hbl-modern` skin): title +
  * 300px search left, Time Period card right, Booking Type filter card,
@@ -53,11 +53,13 @@ const COLUMN_WIDTHS = {
 // Status meta — Scheffer buckets map to Confirmed (upcoming),
 // Completed and Cancelled. Extra entries kept for parity with HBL.
 const STATUS_META = {
-  CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
-  PENDING:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
-  CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
-  UPCOMING:  { label: "Upcoming",  bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  CONFIRMED:   { label: "Confirmed",   bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
+  RECONFIRMED: { label: "Reconfirmed", bg: "#e6faf7", color: "#0f766e", dot: "#14b8a6" },
+  COMPLETED:   { label: "Completed",   bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
+  PENDING:     { label: "Pending",     bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  REJECTED:    { label: "Rejected",    bg: "#fff4e5", color: "#c2410c", dot: "#f97316" },
+  CANCELLED:   { label: "Cancelled",   bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+  UPCOMING:    { label: "Upcoming",    bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
 };
 
 const MONTHS = [
@@ -108,6 +110,52 @@ const fmtDateLong = (iso) => {
 
 const normStatus = (v) =>
   String(v ?? "").replace(/[\s_-]+/g, "").toLowerCase();
+
+// Status pill resolver. The date-based bucket alone can't tell Confirmed
+// from Reconfirmed (a reconfirmed booking still lives in the "upcoming"
+// bucket), so the workflow status (confirmationStatus / reconfirmation)
+// takes precedence — matching the detail page. Cancelled always wins since
+// a cancelled row may still carry a prior "ReConfirmed" confirmationStatus.
+// Kept at module scope so both the Status column and the search haystack
+// (below) can derive the same visible label.
+const rowStatusMeta = (b) => {
+  if (b.__bucket === "cancelled") return STATUS_META.CANCELLED;
+  const cs = normStatus(b.confirmationStatus);
+  if (cs === "cancelled") return STATUS_META.CANCELLED;
+  if (cs === "reconfirmed" || b.reconfirmation === true)
+    return STATUS_META.RECONFIRMED;
+  if (cs === "rejected") return STATUS_META.REJECTED;
+  return STATUS_META.CONFIRMED;
+};
+
+const getPickupLandmarkAddress = (b) => {
+  if (!b) return "";
+  return (
+    b.pickupLandmarkAddress ||
+    b.pickupLandmark ||
+    b.landmark ||
+    b.landMark ||
+    b.pickupAddress ||
+    b.pickUpLandmark ||
+    b.pickUpLandmarkAddress ||
+    b.pickUpAddress ||
+    b.pickupLocation ||
+    b.pickupDetails ||
+    b.pickupRemark ||
+    b.pickupLandmarkDetails ||
+    b.custPickupLandmark ||
+    b.custPickupAddress ||
+    b.customerDTO?.pickupLandmark ||
+    b.customerDTO?.pickupLandmarkAddress ||
+    b.customerDTO?.landmark ||
+    b.customerDTO?.pickupAddress ||
+    b.customer?.pickupLandmark ||
+    b.customer?.pickupLandmarkAddress ||
+    b.customer?.landmark ||
+    b.customer?.pickupAddress ||
+    ""
+  );
+};
 
 const SchefferDriverBookingList = ({
   apiBase = "/api/scheffer",
@@ -226,6 +274,11 @@ const SchefferDriverBookingList = ({
       }
 
       if (needle) {
+        // Include the visible Status label (Confirmed / Reconfirmed /
+        // Completed / Cancelled …) so a search like "reconfirmed" matches
+        // the Status column, plus the raw confirmationStatus for good
+        // measure — alongside the existing Booking / Cab / customer /
+        // location fields.
         const hay = [
           b.bookingCode,
           b.packageBookCode,
@@ -236,6 +289,8 @@ const SchefferDriverBookingList = ({
           b.custLastName,
           b.pickupName,
           b.dropoffName,
+          rowStatusMeta(b)?.label,
+          b.confirmationStatus,
         ]
           .filter(Boolean)
           .join(" ")
@@ -283,13 +338,6 @@ const SchefferDriverBookingList = ({
     border: "1px solid #dee2e6",
     whiteSpace: "normal",
     lineHeight: 1.2,
-  };
-
-  const bucketToStatusMeta = (bucket) => {
-    if (bucket === "upcoming") return STATUS_META.CONFIRMED;
-    if (bucket === "completed") return STATUS_META.COMPLETED;
-    if (bucket === "cancelled") return STATUS_META.CANCELLED;
-    return null;
   };
 
   return (
@@ -562,7 +610,7 @@ const SchefferDriverBookingList = ({
                           </tr>
                         ) : (
                           pageBookings.map((b, i) => {
-                            const sMeta = bucketToStatusMeta(b.__bucket);
+                            const sMeta = rowStatusMeta(b);
                             return (
                               <tr
                                 key={b.id || b.custombookingId || `${b.__bucket}-${i}`}
@@ -676,6 +724,17 @@ const SchefferDriverBookingList = ({
                                       </span>
                                     )}
                                   </div>
+                                  {getPickupLandmarkAddress(b) ? (
+                                    <div
+                                      className="text-muted"
+                                      style={{
+                                        fontSize: "0.7rem",
+                                        paddingLeft: "12px",
+                                      }}
+                                    >
+                                      📍 {getPickupLandmarkAddress(b)}
+                                    </div>
+                                  ) : null}
                                   <div className="d-flex align-items-center gap-1">
                                     <FaMapMarkerAlt
                                       style={{
@@ -757,7 +816,7 @@ const SchefferDriverBookingList = ({
                                 >
                                   <StatusPill
                                     meta={sMeta}
-                                    raw={b.__bucket}
+                                    raw={b.confirmationStatus || b.__bucket}
                                   />
                                 </td>
                                 <td

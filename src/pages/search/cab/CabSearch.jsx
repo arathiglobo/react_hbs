@@ -10,7 +10,20 @@ import {
   ProgressBar,
   Modal,
 } from "react-bootstrap";
-import { FaCar, FaSearch } from "react-icons/fa";
+import {
+  FaCar,
+  FaSearch,
+  FaRoute,
+  FaClock,
+  FaUserTie,
+  FaMoneyBillWave,
+  FaCheckCircle,
+  FaUsers,
+  FaSuitcase,
+  FaInfoCircle,
+  FaHourglassHalf,
+  FaRoad,
+} from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
 import Select from "react-select";
 import AgentSelect from "../../../components/AgentSelect";
@@ -22,6 +35,8 @@ import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import TimeApplyPicker from "../../../components/TimeApplyPicker";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
+import "../../../styles/HotelSearch.css";
+import "../../../styles/CabTransferModal.css";
 
 function LazyImage({ src, alt, className }) {
   const containerRef = useRef(null);
@@ -936,6 +951,11 @@ export const CabSearch = () => {
             ? "Please select a drop accommodation."
             : "Please select a drop place.";
 
+    // Departure time is required whenever the Departure Time field is shown
+    // (non-HOTEL drops). Hotel drops hide the field, so it's skipped there.
+    if (dropoffKind !== "HOTEL" && !dropDepartureTime)
+      errs.dropDepartureTime = "Departure time is required.";
+
     return errs;
   };
 
@@ -1281,43 +1301,85 @@ export const CabSearch = () => {
       // and the supplier-side base reconcile correctly downstream.
       totalRateWithoutMrk: baseTotal,
     };
-    // Navigate to CabBookingPage and carry over search data and selected cab data
-    navigate("/cab-booking-page", {
-      state: {
-        cab,
-        selectedOption: enrichedSelectedOption,
-        searchCriteria: {
-          nationality,
-          destination,
-          city,
-          pickupDate: transferPickupDate,
-          dropoffDate: transferDropoffDate,
-          adults: transferAdults,
-          children: transferChildren,
-          childAges: transferChildAges,
-          // Carry the simplified Transfer criteria forward so the booking
-          // summary can display facility names and (where present) times.
-          pickupType: pickupKind === "HOTEL" ? "HOTEL" : pickupKind,
-          pickupName: pickupItem?.locationName || "",
-          pickupTime: arrivalTime,
-          // Master-configured estimated arrival buffer for the picked
-          // airport — carried through so the booking page renders it
-          // read-only instead of asking the operator to retype it.
-          pickupEstimatedArrivalTime:
-            pickupKind === "AIRPORT"
-              ? pickupItem?.estimatedArrivalTime || ""
-              : "",
-          dropoffType: dropoffKind === "HOTEL" ? "HOTEL" : dropoffKind,
-          dropoffName: dropoffItem?.locationName || "",
-          dropoffTime: dropDepartureTime || "",
-          arrivalTime,
-          // Currency code (e.g. "AED") chosen on the search page — carried
-          // through so the booking page / downstream invoice can apply
-          // conversion. Null when the user didn't pick one.
-          currencyCode: currency?.value || null,
-        },
+    // Assemble the payload the checkout page needs.
+    const bookingState = {
+      cab,
+      selectedOption: enrichedSelectedOption,
+      searchCriteria: {
+        // Selected agent — carried forward so /cab-booking-page can
+        // stamp it on the /api/cab/book payload. Falls back to the
+        // same session/local keys the search request already reads
+        // so behaviour matches whichever value the user searched with.
+        agentId:
+          (agent && String(agent)) ||
+          sessionStorage.getItem("makeYourOwnPackageAgentId") ||
+          localStorage.getItem("makeYourOwnPackageAgentId") ||
+          "",
+        nationality,
+        destination,
+        city,
+        pickupDate: transferPickupDate,
+        dropoffDate: transferDropoffDate,
+        adults: transferAdults,
+        children: transferChildren,
+        childAges: transferChildAges,
+        // Carry the simplified Transfer criteria forward so the booking
+        // summary can display facility names and (where present) times.
+        pickupType: pickupKind === "HOTEL" ? "HOTEL" : pickupKind,
+        pickupName: pickupItem?.locationName || "",
+        pickupTime: arrivalTime,
+        // Master-configured estimated arrival buffer for the picked
+        // airport — carried through so the booking page renders it
+        // read-only instead of asking the operator to retype it.
+        pickupEstimatedArrivalTime:
+          pickupKind === "AIRPORT"
+            ? pickupItem?.estimatedArrivalTime || ""
+            : "",
+        dropoffType: dropoffKind === "HOTEL" ? "HOTEL" : dropoffKind,
+        dropoffName: dropoffItem?.locationName || "",
+        dropoffTime: dropDepartureTime || "",
+        arrivalTime,
+        // Currency code (e.g. "AED") chosen on the search page — carried
+        // through so the booking page / downstream invoice can apply
+        // conversion. Null when the user didn't pick one.
+        currencyCode: currency?.value || null,
       },
-    });
+    };
+
+    // Open the checkout in a NEW TAB. Router state can't cross a browser
+    // tab, so hand the payload off through localStorage under a one-time
+    // ?draft=<id> key that CabBookingPage reads (and clears) on load. If the
+    // hand-off or the popup is blocked, fall back to same-tab navigation.
+    const draftId = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    let handedOff = false;
+    try {
+      localStorage.setItem(
+        `cabBookingDraft:${draftId}`,
+        JSON.stringify(bookingState),
+      );
+      handedOff = true;
+    } catch {
+      // localStorage full/unavailable — we'll navigate in the same tab.
+    }
+
+    const newTab = handedOff
+      ? window.open(
+          `${window.location.origin}/cab-booking-page?draft=${draftId}`,
+          "_blank",
+        )
+      : null;
+
+    if (newTab) {
+      // Same-origin, but sever the opener reference as a tidy default.
+      newTab.opener = null;
+    } else {
+      // Popup blocked or hand-off failed — keep the original behaviour and
+      // navigate in the current tab, carrying the payload via router state.
+      if (handedOff) {
+        localStorage.removeItem(`cabBookingDraft:${draftId}`);
+      }
+      navigate("/cab-booking-page", { state: bookingState });
+    }
   };
 
   const customSelectStyles = {
@@ -1519,6 +1581,7 @@ export const CabSearch = () => {
                             the resident rate. Matched on the city's country
                             code "AE" (from master_country) so a label change
                             can't break the rule. */}
+                        {/*
                         {city?.code === "AE" && (
                           <div
                             className="mt-1 small"
@@ -1527,6 +1590,7 @@ export const CabSearch = () => {
                             For UAE resident holders, please mention the nationality as United Arab Emirates regardless of the actual nationality.
                           </div>
                         )}
+                        */}
                         {/* Toggle that reveals the optional Drop City
                             selector (rendered in its own row below) so the
                             operator can search a route that ends in a
@@ -1926,13 +1990,23 @@ export const CabSearch = () => {
                       {dropoffKind !== "HOTEL" && (
                         <Col md={3}>
                           <Form.Label className="fw-semibold">
-                            Departure Time
+                            Departure Time{" "}
+                            <span className="text-danger">*</span>
                           </Form.Label>
                           <TimeApplyPicker
                             value={dropDepartureTime}
-                            onApply={(v) => setDropDepartureTime(v)}
+                            isInvalid={!!validationErrors.dropDepartureTime}
+                            onApply={(v) => {
+                              setDropDepartureTime(v);
+                              if (v) clearError("dropDepartureTime");
+                            }}
                             placeholder="Select departure time"
                           />
+                          {validationErrors.dropDepartureTime && (
+                            <div className="invalid-feedback d-block">
+                              {validationErrors.dropDepartureTime}
+                            </div>
+                          )}
                         </Col>
                       )}
 
@@ -2784,14 +2858,14 @@ export const CabSearch = () => {
                         md={4}
                         className="d-flex justify-content-center mt-3"
                       >
-                        {/* Red to keep the CTA color uniform with the other
-                            /new-booking/* search pages (HotelSearch's search
-                            button, etc.), which use the brand red family. */}
+                        {/* Match the HotelSearch CTA look (btn-search-modern)
+                            so the /new-booking/* search pages share the same
+                            button shape, size and gradient. */}
                         <Button
-                          variant="danger"
-                          className="px-5 py-2 fw-bold"
                           type="submit"
+                          className="btn-search-modern"
                           disabled={transferLoading}
+                          size="lg"
                         >
                           {transferLoading ? (
                             <>
@@ -3362,25 +3436,18 @@ export const CabSearch = () => {
       </div>
 
       {/* ── Transfer details view modal ────────────────────────────────
-          Triggered by the "View" button on each result-card row. Shows the
-          fields prescribed by spec:
-          - title:        "<Transfer Type> - <Vehicle Name>"
-          - From / To:    location names + the source label (Airport /
-                          Accommodation / Place) the user picked on the
-                          form (pickupKind / dropoffKind).
-          - table row:    Transfer Date / Transfer Type / Nationality /
-                          Duration / Passenger / Vehicle Name
-          - Transfer Info: driverWaitingTime + distance (from the backend
-                          rate row — null falls back to "—").
-          - Vehicle Capacity: vehicleMaxCapacity / vehicleMaxLuggage on the
-                          cab row (falls back to capacityMax when not set).
-          - Disclaimer:   static legal text (intentional — same on every
-                          row, supplied by the business). */}
+          Triggered by the "View" button on each result-card row. Redesigned
+          into a rich, package-modal-style card (hero + highlight strip +
+          feature chips + journey route + transfer summary + stat tiles +
+          price + disclaimer). All fields come from the (cab, detail) row and
+          the search-form state; styling lives in CabTransferModal.css. */}
       <Modal
         show={!!viewModal}
         onHide={() => setViewModal(null)}
         size="lg"
         centered
+        scrollable
+        className="ctm-modal"
       >
         {viewModal && (() => {
           const { cab, detail } = viewModal;
@@ -3392,10 +3459,12 @@ export const CabSearch = () => {
                 : k === "PLACE"
                   ? "Place"
                   : "";
-          const transferTypeLabel =
-            String(detail.types || "").toUpperCase() === "SIC"
-              ? "Shared Transfer"
-              : "Private Transfer";
+          const isPrivate =
+            String(detail.types || "").toUpperCase() === "PRIVATE";
+          const transferTypeLabel = isPrivate
+            ? "Private Transfer"
+            : "Shared Transfer";
+          const transferTypeShort = isPrivate ? "Private" : "Shared (SIC)";
           const totalChildren = Number(transferChildren) || 0;
           const totalAdults = Number(transferAdults) || 0;
           const passengerLabel = `${totalAdults} Adult${
@@ -3412,93 +3481,335 @@ export const CabSearch = () => {
                 year: "numeric",
               })
             : "—";
-          const fromLabel = `${
-            cab.originLocationName || detail.pickup || "—"
-          }${pickupKind ? ` (${labelForKind(pickupKind)})` : ""}`;
-          const toLabel = `${
-            cab.destinationLocationName || detail.dropOff || "—"
-          }${dropoffKind ? ` (${labelForKind(dropoffKind)})` : ""}`;
+          const fromLoc =
+            cab.originLocationName || detail.pickup || detail.location || "—";
+          const toLoc = cab.destinationLocationName || detail.dropOff || "—";
+          const fromKind = pickupKind ? labelForKind(pickupKind) : "";
+          const toKind = dropoffKind ? labelForKind(dropoffKind) : "";
+          const durationLabel = detail.hourDetails || "NA";
           const waitingTime = detail.driverWaitingTime || "—";
           const distanceLabel =
             detail.distance != null
               ? `${Number(detail.distance).toFixed(3)} Km`
               : "—";
-          const maxPax =
-            cab.vehicleMaxCapacity ?? cab.capacityMax ?? "—";
+          const maxPax = cab.vehicleMaxCapacity ?? cab.capacityMax ?? "—";
           const maxLuggage =
-            cab.vehicleMaxLuggage ?? "—";
+            cab.vehicleMaxLuggage ?? cab.capacityMax ?? "—";
+          const supplier = cab.cabProviderName || "";
+          const { total: priceTotal, perUnit, label: priceLabel } =
+            priceDetail(detail);
+          const fmtAed = (n) =>
+            Number(n || 0).toLocaleString(undefined, {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            });
           return (
             <>
-              <Modal.Header closeButton>
-                <Modal.Title className="fs-5">
-                  {transferTypeLabel} — {cab.cabname || "Vehicle"} or similar
+              <Modal.Header closeButton className="ctm-header">
+                <Modal.Title className="ctm-title">
+                  <FaCar className="me-2" /> Transfer Details
                 </Modal.Title>
               </Modal.Header>
-              <Modal.Body>
-                <div className="mb-3">
-                  <div>
-                    <strong>From:</strong> {fromLabel}
+              <Modal.Body className="ctm-body">
+                {/* ─── Hero ──────────────────────────────────────── */}
+                <div className="ctm-hero">
+                  <div className="ctm-hero-fallback">
+                    <FaCar />
                   </div>
-                  <div>
-                    <strong>To:</strong> {toLabel}
+                  {cab.cabpic && (
+                    <img
+                      src={cab.cabpic}
+                      alt={cab.cabname || "Vehicle"}
+                      className="ctm-hero-img"
+                      onError={(e) => {
+                        e.target.style.display = "none";
+                      }}
+                    />
+                  )}
+                  <div className="ctm-hero-overlay">
+                    <div className="ctm-hero-text">
+                      <span className="ctm-hero-type">
+                        {transferTypeShort}
+                      </span>
+                      <h4 className="ctm-hero-name">
+                        {cab.cabname || "Vehicle"} <small>or similar</small>
+                      </h4>
+                      <div className="ctm-hero-meta">
+                        <span>
+                          <FaRoute className="me-1" size={12} />
+                          {fromLoc} → {toLoc}
+                        </span>
+                        <span>
+                          <FaClock className="me-1" size={12} />
+                          {durationLabel}
+                        </span>
+                        {supplier && (
+                          <span>
+                            <FaUserTie className="me-1" size={12} />
+                            by {supplier}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <Table responsive bordered size="sm" className="mb-3">
-                  <thead className="table-light">
-                    <tr>
-                      <th>Transfer Date</th>
-                      <th>Transfer Type</th>
-                      <th>Nationality</th>
-                      <th>Duration</th>
-                      <th>Passenger</th>
-                      <th>Vehicle Name</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>{transferDateLabel}</td>
-                      <td>{transferTypeLabel}</td>
-                      <td>{nationality?.label || "—"}</td>
-                      <td>{detail.hourDetails || "NA"}</td>
-                      <td>{passengerLabel}</td>
-                      <td>
-                        {transferTypeLabel.split(" ")[0]} — {cab.cabname}{" "}
-                        or similar
-                      </td>
-                    </tr>
-                  </tbody>
-                </Table>
+                <div className="ctm-content">
+                  {/* ─── Highlight strip ─────────────────────────── */}
+                  <div className="ctm-highlight-strip">
+                    <div className="ctm-highlight-item">
+                      <FaMoneyBillWave className="ctm-highlight-icon" />
+                      <div>
+                        <div className="ctm-highlight-label">Total Price</div>
+                        <div className="ctm-highlight-value ctm-price">
+                          AED {fmtAed(priceTotal)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="ctm-highlight-item">
+                      <FaCar className="ctm-highlight-icon" />
+                      <div>
+                        <div className="ctm-highlight-label">Transfer</div>
+                        <div className="ctm-highlight-value">
+                          {transferTypeShort}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="ctm-highlight-item">
+                      <FaClock className="ctm-highlight-icon" />
+                      <div>
+                        <div className="ctm-highlight-label">Duration</div>
+                        <div className="ctm-highlight-value">
+                          {durationLabel}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="ctm-highlight-item">
+                      <FaCheckCircle className="ctm-highlight-icon" />
+                      <div>
+                        <div className="ctm-highlight-label">Availability</div>
+                        <div className="ctm-highlight-value text-success">
+                          Available
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
-                <h6 className="fw-bold mt-4 mb-2">Transfer Info</h6>
-                <div className="mb-1">
-                  <strong>Driver Waiting Time:</strong> {waitingTime}
-                </div>
-                <div className="mb-3">
-                  <strong>Distance:</strong> {distanceLabel}
-                </div>
+                  {/* ─── Feature chips ───────────────────────────── */}
+                  <div className="ctm-chips">
+                    <span className="ctm-chip ctm-chip-type">
+                      <FaCar /> {transferTypeShort}
+                    </span>
+                    <span className="ctm-chip">
+                      <FaUsers /> Max {maxPax} Pax
+                    </span>
+                    <span className="ctm-chip">
+                      <FaSuitcase /> Max {maxLuggage} Luggage
+                    </span>
+                    <span className="ctm-chip">
+                      <FaUserTie /> Driver Included
+                    </span>
+                  </div>
 
-                <h6 className="fw-bold mt-4 mb-2">Vehicle Capacity</h6>
-                <div className="mb-3">
-                  Max Pax Per Vehicle : {maxPax}
-                  {"    |    "}
-                  Max Luggage Per Vehicle : {maxLuggage}
-                </div>
+                  {/* ─── Journey route ───────────────────────────── */}
+                  <section className="ctm-section">
+                    <h6 className="ctm-section-title">
+                      <FaRoute className="me-2 text-danger" />
+                      Journey Route
+                    </h6>
+                    <div className="ctm-route">
+                      <div className="ctm-route-rail">
+                        <span className="ctm-route-pin" />
+                        <span className="ctm-route-line" />
+                        <span className="ctm-route-pin ctm-route-pin-end" />
+                      </div>
+                      <div className="ctm-route-points">
+                        <div>
+                          <div className="ctm-route-loc">{fromLoc}</div>
+                          <div className="ctm-route-kind">
+                            {fromKind ? `Pickup · ${fromKind}` : "Pickup"}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="ctm-route-loc">{toLoc}</div>
+                          <div className="ctm-route-kind">
+                            {toKind ? `Drop-off · ${toKind}` : "Drop-off"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
 
-                <h6 className="fw-bold mt-4 mb-2">Disclaimer</h6>
-                <p className="small text-muted mb-0">
-                  Whilst we believe all our transfer information and reports
-                  to be accurate we shall not be liable in any way to you or
-                  to any third parties should any such information or reports
-                  prove to be incorrect or incomplete in any way.
-                </p>
+                  {/* ─── Transfer summary ────────────────────────── */}
+                  <section className="ctm-section">
+                    <h6 className="ctm-section-title">
+                      <FaInfoCircle className="me-2 text-danger" />
+                      Transfer Summary
+                    </h6>
+                    <Row className="g-md-4">
+                      <Col md={6}>
+                        <div className="ctm-info-row">
+                          <span className="ctm-info-label">Transfer Date</span>
+                          <span className="ctm-info-value">
+                            {transferDateLabel}
+                          </span>
+                        </div>
+                        <div className="ctm-info-row">
+                          <span className="ctm-info-label">Transfer Type</span>
+                          <span className="ctm-info-value">
+                            {transferTypeLabel}
+                          </span>
+                        </div>
+                        <div className="ctm-info-row">
+                          <span className="ctm-info-label">Nationality</span>
+                          <span className="ctm-info-value">
+                            {nationality?.label || "—"}
+                          </span>
+                        </div>
+                        <div className="ctm-info-row">
+                          <span className="ctm-info-label">Duration</span>
+                          <span className="ctm-info-value">
+                            {durationLabel}
+                          </span>
+                        </div>
+                      </Col>
+                      <Col md={6}>
+                        <div className="ctm-info-row">
+                          <span className="ctm-info-label">Passengers</span>
+                          <span className="ctm-info-value">
+                            {passengerLabel}
+                          </span>
+                        </div>
+                        <div className="ctm-info-row">
+                          <span className="ctm-info-label">Vehicle</span>
+                          <span className="ctm-info-value">
+                            {cab.cabname || "—"} or similar
+                          </span>
+                        </div>
+                        <div className="ctm-info-row">
+                          <span className="ctm-info-label">Supplier</span>
+                          <span className="ctm-info-value">
+                            {supplier || "—"}
+                          </span>
+                        </div>
+                        <div className="ctm-info-row">
+                          <span className="ctm-info-label">Availability</span>
+                          <span className="ctm-info-value text-success">
+                            Available
+                          </span>
+                        </div>
+                      </Col>
+                    </Row>
+                  </section>
+
+                  {/* ─── Transfer & vehicle info tiles ───────────── */}
+                  <section className="ctm-section">
+                    <h6 className="ctm-section-title">
+                      <FaCar className="me-2 text-danger" />
+                      Transfer &amp; Vehicle Info
+                    </h6>
+                    <div className="ctm-stat-grid">
+                      <div className="ctm-stat-tile">
+                        <div className="ctm-stat-icon">
+                          <FaHourglassHalf />
+                        </div>
+                        <div>
+                          <div className="ctm-stat-label">
+                            Driver Waiting Time
+                          </div>
+                          <div className="ctm-stat-value">{waitingTime}</div>
+                        </div>
+                      </div>
+                      <div className="ctm-stat-tile">
+                        <div className="ctm-stat-icon">
+                          <FaRoad />
+                        </div>
+                        <div>
+                          <div className="ctm-stat-label">Distance</div>
+                          <div className="ctm-stat-value">{distanceLabel}</div>
+                        </div>
+                      </div>
+                      <div className="ctm-stat-tile">
+                        <div className="ctm-stat-icon">
+                          <FaUsers />
+                        </div>
+                        <div>
+                          <div className="ctm-stat-label">
+                            Max Pax / Vehicle
+                          </div>
+                          <div className="ctm-stat-value">{maxPax}</div>
+                        </div>
+                      </div>
+                      <div className="ctm-stat-tile">
+                        <div className="ctm-stat-icon">
+                          <FaSuitcase />
+                        </div>
+                        <div>
+                          <div className="ctm-stat-label">
+                            Max Luggage / Vehicle
+                          </div>
+                          <div className="ctm-stat-value">{maxLuggage}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* ─── Price details ───────────────────────────── */}
+                  <section className="ctm-section">
+                    <h6 className="ctm-section-title">
+                      <FaMoneyBillWave className="me-2 text-danger" />
+                      Price Details
+                    </h6>
+                    {priceLabel && (
+                      <div className="ctm-price-row">
+                        <span>Rate</span>
+                        <span>
+                          {perUnit > 0
+                            ? `AED ${Number(perUnit).toLocaleString()} ${priceLabel}`
+                            : priceLabel}
+                        </span>
+                      </div>
+                    )}
+                    <div className="ctm-price-row ctm-price-total">
+                      <span>Total Price</span>
+                      <span>AED {fmtAed(priceTotal)}</span>
+                    </div>
+                  </section>
+
+                  {/* ─── Disclaimer ──────────────────────────────── */}
+                  <section className="ctm-section">
+                    <h6 className="ctm-section-title">
+                      <FaInfoCircle className="me-2 text-danger" />
+                      Disclaimer
+                    </h6>
+                    <p className="ctm-disclaimer">
+                      Whilst we believe all our transfer information and reports
+                      to be accurate we shall not be liable in any way to you or
+                      to any third parties should any such information or reports
+                      prove to be incorrect or incomplete in any way.
+                    </p>
+                  </section>
+                </div>
               </Modal.Body>
-              <Modal.Footer>
+              <Modal.Footer className="ctm-footer">
                 <Button
-                  variant="secondary"
+                  variant="outline-secondary"
+                  size="sm"
+                  className="px-3 rounded-pill"
                   onClick={() => setViewModal(null)}
                 >
                   Close
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="px-4 rounded-pill fw-bold"
+                  onClick={() => {
+                    setViewModal(null);
+                    handleBookNow(cab, detail);
+                  }}
+                >
+                  Select This Transfer
                 </Button>
               </Modal.Footer>
             </>

@@ -11,13 +11,15 @@ import {
   Spinner,
   Modal,
   Table,
+  Alert,
 } from "react-bootstrap";
-import { FaCar, FaUserAlt, FaCheckCircle, FaCalendarAlt, FaMapMarkerAlt } from "react-icons/fa";
+import { FaCar, FaUserAlt, FaCheckCircle, FaCalendarAlt, FaMapMarkerAlt, FaArrowLeft } from "react-icons/fa";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
+import "../../styles/SchefferDriverBookingPage.css";
 
 const formatDateToDDMMYYYY = (dateString) => {
   if (!dateString) return "";
@@ -33,15 +35,77 @@ const SchefferDriverBookingPage = () => {
   // If accessed directly without state, we should probably redirect or show an error
   const hasValidState = !!cab && !!selectedOption && !!searchCriteria;
 
-  const [primaryGuest, setPrimaryGuest] = useState({
-    salutation: "Mr",
-    firstName: "",
-    lastName: "",
+  // Lead-passenger marker — index into the guests array of the single pax
+  // flagged as Lead. Mirrors /hotel-booking-page: the Lead-marked adult
+  // drives the primary guest name / salutation at submit time. Defaults
+  // to the first adult so the radio always has one selection on first
+  // render. Children cannot be flagged as Lead.
+  const [leadIndex, setLeadIndex] = useState(0);
+
+  // Contact Details — booking-level contact info collected in its own
+  // card below the Passenger Details grid. Kept separate from the pax
+  // manifest because these fields aren't per-traveller; they're the
+  // single point of contact for the booking.
+  const [contactDetails, setContactDetails] = useState({
     contactNumber: "",
     emailId: "",
-    passportNumber: "",
-    lpo: "",
+    // Free-text landmark for the pickup location (e.g. "Near Al Wasl Mall,
+    // behind the ADNOC station"). Optional. Kept alongside the other
+    // contact-level fields so the same handleContactChange/validation
+    // shape covers it — no separate state slice needed.
+    pickupLandmark: "",
   });
+
+  // Intercity surcharge disclosure — heads-up shown after Contact Details.
+  // The card is only rendered when this cab provider actually has intercity
+  // charges configured (managed in /scheffer-driver-rates → Supplementary
+  // Charges); providers with no rows never see the section. Fetched eagerly
+  // when the booking page mounts so the presence/absence is known before
+  // first paint of the left column.
+  //   intercityCharges  – the provider's active rows (used to decide whether
+  //                       to render the card at all).
+  //   intercityDeclared – "yes" / "no" radio state (default "no").
+  //   selectedIntercityId – radio-selected route id (display-only, no payload).
+  const [intercityDeclared, setIntercityDeclared] = useState("no");
+  const [intercityCharges, setIntercityCharges] = useState([]);
+  const [selectedIntercityId, setSelectedIntercityId] = useState("");
+
+  useEffect(() => {
+    const providerId = cab?.cabProviderId;
+    if (!providerId) return;
+    let cancelled = false;
+    axiosInstance
+      .get("/api/scheffer-rental-rates/intercity", { params: { providerId } })
+      .then((res) => {
+        if (cancelled) return;
+        const list = Array.isArray(res?.data) ? res.data : [];
+        // Only keep active rows — inactive rows exist for internal admin
+        // use and shouldn't be quoted to guests.
+        setIntercityCharges(list.filter((c) => c.isActive !== false));
+      })
+      .catch(() => {
+        if (!cancelled) setIntercityCharges([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cab]);
+
+  // Payment mode selector — mirrors the /hotel-booking-page pattern.
+  // Default keeps the legacy behaviour (CREDITLIMIT) so existing callers
+  // that don't touch the selector keep working. Value is sent as the
+  // `paymentMode` field on the /api/scheffer/book payload; backend
+  // ignores unknown fields, so this stays backward-compatible.
+  const [paymentMode, setPaymentMode] = useState("CREDITLIMIT");
+
+  // Effective available credit for the currently-selected agent (regular
+  // available + any active Temporary Credit Limit). Null while loading so
+  // the UI doesn't flash the wrong scenario on first render. Fetched from
+  // /api/agent-credit-limit/agent/{id} — same endpoint the hotel flow uses.
+  const [agentAvailableBalance, setAgentAvailableBalance] = useState(null);
+  // Per-agent Card-payment gate (AgentView toggle). Falls back to false on
+  // any fetch failure so a network hiccup never silently exposes Card.
+  const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
 
   // ── Full pax manifest (one row per adult + child) ────────────────────
   // Seeded from the searchCriteria counts so the operator can capture
@@ -83,33 +147,6 @@ const SchefferDriverBookingPage = () => {
   }, []);
   const [guests, setGuests] = useState(initialGuests);
 
-  // Keep Adult 1 in sync with primary guest contact whenever either side
-  // changes, so the operator never has to retype names. Only the three
-  // name-related fields are mirrored.
-  useEffect(() => {
-    if (guests.length === 0) return;
-    setGuests((prev) => {
-      const next = [...prev];
-      if (!next[0]) return prev;
-      const a1 = next[0];
-      if (
-        a1.salutation === primaryGuest.salutation &&
-        a1.firstName === primaryGuest.firstName &&
-        a1.lastName === primaryGuest.lastName
-      ) {
-        return prev;
-      }
-      next[0] = {
-        ...a1,
-        salutation: primaryGuest.salutation || a1.salutation,
-        firstName: primaryGuest.firstName,
-        lastName: primaryGuest.lastName,
-      };
-      return next;
-    });
-    // eslint-disable-next-line
-  }, [primaryGuest.salutation, primaryGuest.firstName, primaryGuest.lastName]);
-
   const handleGuestChange = (index, field, value) => {
     setGuests((prev) => {
       const next = [...prev];
@@ -117,15 +154,6 @@ const SchefferDriverBookingPage = () => {
       next[index] = { ...next[index], [field]: value };
       return next;
     });
-    // Mirror Adult 1 name fields back to primary guest contact card.
-    if (
-      index === 0 &&
-      ["salutation", "firstName", "lastName"].includes(field)
-    ) {
-      setPrimaryGuest((prev) =>
-        prev[field] === value ? prev : { ...prev, [field]: value }
-      );
-    }
     // Clear inline error if any.
     const key = `guest_${index}_${field}`;
     if (validationErrors[key]) {
@@ -137,12 +165,14 @@ const SchefferDriverBookingPage = () => {
     }
   };
 
-  const [transporterDetails, setTransporterDetails] = useState({
-    transporter: "",
-    contactNumber: "",
-    driverName: "",
-    driverContact: "",
-  });
+  // Flip which pax is the Lead. Children can't be Lead — the caller is
+  // expected to gate the radio's `disabled` on `g.isChild`, but we
+  // double-check here so an accidental programmatic call is a no-op.
+  const handleLeadSelect = (idx) => {
+    const g = guests[idx];
+    if (!g || g.isChild) return;
+    setLeadIndex(idx);
+  };
 
   const [validationErrors, setValidationErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -153,6 +183,18 @@ const SchefferDriverBookingPage = () => {
   // to /api/scheffer/book, giving the user a final review step before save.
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
+
+  // ── Policies + T&C consent modal ─────────────────────────────────────
+  // Mirrors the /hotel-booking-page pattern: Confirm Booking opens this
+  // modal first, the operator ticks the accept box, then Proceed continues
+  // to the Order Summary modal that already exists on this page. The two
+  // arrays are fetched inline from /api/scheffer-rental-rates/{id} because
+  // the search-result card doesn't carry them.
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
+  const [policyAccepted, setPolicyAccepted] = useState(false);
+  const [policiesLoading, setPoliciesLoading] = useState(false);
+  const [rateTerms, setRateTerms] = useState([]);
+  const [rateCancellationPolicies, setRateCancellationPolicies] = useState([]);
 
   const rate = selectedOption?.types === "SIC" ? selectedOption.sicRate : selectedOption?.privateRate;
   // Prefer the new markup-applied total (`totalRate`) from the search
@@ -167,11 +209,142 @@ const SchefferDriverBookingPage = () => {
     rate ||
     0;
 
+  const selectedRoute = intercityCharges.find(
+    (c) => String(c.intercityChargeId) === String(selectedIntercityId)
+  );
+  const intercitySurcharge =
+    intercityDeclared === "yes" && selectedRoute
+      ? parseFloat(selectedRoute.additionalCharge) || 0
+      : 0;
+
   const [prices, setPrices] = useState({
     sellingPrice: initialTotalRate.toString(),
     totalPrice: initialTotalRate.toString(),
   });
+
+  useEffect(() => {
+    const baseSelling = parseFloat(selectedOption?.totalRate || selectedOption?.totalRateWithoutMrk || rate || 0);
+    const baseTotal = parseFloat(selectedOption?.totalRate || selectedOption?.totalRateWithoutMrk || rate || 0);
+
+    setPrices({
+      sellingPrice: (baseSelling + intercitySurcharge).toString(),
+      totalPrice: (baseTotal + intercitySurcharge).toString(),
+    });
+  }, [intercitySurcharge, selectedOption, rate]);
+
   const [tourismDirham, setTourismDirham] = useState("");
+
+  // Resolved agent id used for the payment-gate fetches. Mirrors the
+  // same-priority resolution used in the payload builder below (session →
+  // localStorage → fallback "1"). Kept as a plain expression, not a hook,
+  // so the effects below can read the current value on every render.
+  const resolvedAgentId =
+    sessionStorage.getItem("makeYourOwnPackageAgentId") ||
+    localStorage.getItem("makeYourOwnPackageAgentId") ||
+    "1";
+
+  // ── Fetch the agent's effective available credit ──
+  // Same endpoint + fallback shape as /hotel-booking-page. On any
+  // network / 404 failure we treat balance as null (unknown) so the
+  // credit-sufficiency check returns null and the UI keeps the default
+  // Credit Limit option instead of flashing an empty state.
+  useEffect(() => {
+    if (!resolvedAgentId) {
+      setAgentAvailableBalance(null);
+      return;
+    }
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/agent-credit-limit/agent/${resolvedAgentId}`)
+      .then((res) => {
+        if (cancelled) return;
+        const combined =
+          res?.data?.effectiveAvailableCreditLimit ??
+          res?.data?.availableCreditLimit ??
+          null;
+        setAgentAvailableBalance(combined);
+      })
+      .catch(() => {
+        if (!cancelled) setAgentAvailableBalance(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedAgentId]);
+
+  // ── Fetch the per-agent Card-payment gate ──
+  useEffect(() => {
+    if (!resolvedAgentId) {
+      setAgentCardPaymentEnabled(false);
+      return;
+    }
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/agent/${resolvedAgentId}`)
+      .then((res) => {
+        if (!cancelled) {
+          setAgentCardPaymentEnabled(!!res?.data?.cardPaymentEnabled);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAgentCardPaymentEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [resolvedAgentId]);
+
+  // Total the agent owes for this booking (AED) — matches what the
+  // Booking Summary displays as the Grand Total. Feeds the sufficiency
+  // check that drives the payment-mode options.
+  const bookingSellingPrice = useMemo(() => {
+    const base = Number(prices.totalPrice) || 0;
+    const td =
+      tourismDirham !== "" && !isNaN(Number(tourismDirham))
+        ? Number(tourismDirham)
+        : 0;
+    return base + td;
+  }, [prices.totalPrice, tourismDirham]);
+
+  // Client-side sufficiency flag. Null while balance is still loading so
+  // the UI defaults to Credit Limit and doesn't flash the wrong scenario.
+  const hasSufficientCredit = useMemo(() => {
+    if (agentAvailableBalance == null) return null;
+    return Number(agentAvailableBalance) >= bookingSellingPrice;
+  }, [agentAvailableBalance, bookingSellingPrice]);
+
+  // Hard-block scenario: no credit AND per-agent Card gate is off — the
+  // agent has no viable path to complete the booking.
+  const noPaymentPathAvailable =
+    hasSufficientCredit === false && !agentCardPaymentEnabled;
+
+  // Three-scenario option list, identical rules to /hotel-booking-page:
+  //   1. Sufficient credit                    → Credit Limit only
+  //   2. Insufficient credit + Card enabled   → Card only
+  //   3. Insufficient credit + Card disabled  → no options, banner shown
+  // While the balance is loading (null), fall back to Credit Limit so
+  // the dropdown never renders empty on first paint.
+  const paymentModeOptions = useMemo(() => {
+    if (hasSufficientCredit === true) {
+      return [{ value: "CREDITLIMIT", label: "Credit Limit" }];
+    }
+    if (hasSufficientCredit === false && agentCardPaymentEnabled) {
+      return [{ value: "CARD", label: "Card" }];
+    }
+    if (hasSufficientCredit === false && !agentCardPaymentEnabled) {
+      return [];
+    }
+    return [{ value: "CREDITLIMIT", label: "Credit Limit" }];
+  }, [hasSufficientCredit, agentCardPaymentEnabled]);
+
+  // Snap paymentMode to the first available option whenever the option
+  // set changes so we never send a value the current scenario forbids.
+  useEffect(() => {
+    if (paymentModeOptions.length === 0) return;
+    if (!paymentModeOptions.some((o) => o.value === paymentMode)) {
+      setPaymentMode(paymentModeOptions[0].value);
+    }
+  }, [paymentModeOptions, paymentMode]);
 
   // If no state, show prompt
   if (!hasValidState) {
@@ -199,68 +372,32 @@ const SchefferDriverBookingPage = () => {
 
   const totalRate = parseFloat(prices.totalPrice) || initialTotalRate;
 
-  const handlePrimaryGuestChange = (field, value) => {
-    setPrimaryGuest((prev) => ({ ...prev, [field]: value }));
-
-    // Real-time validation for email format
-    if (field === "emailId" && value.trim() !== "") {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-        setValidationErrors((prev) => ({
-          ...prev,
-          emailId: "Please enter a valid email address",
-        }));
-        return;
-      }
-    }
-
-    // Clear validation error when user starts typing
-    const errorKey = field;
-    if (validationErrors[errorKey]) {
+  const handleContactChange = (field, value) => {
+    setContactDetails((prev) => ({ ...prev, [field]: value }));
+    // Clear inline error as soon as the operator starts fixing it.
+    if (validationErrors[field]) {
       setValidationErrors((prev) => {
         const updated = { ...prev };
-        delete updated[errorKey];
+        delete updated[field];
         return updated;
       });
     }
-  };
-
-  const handleTransporterChange = (field, value) => {
-    setTransporterDetails((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handlePriceChange = (field, value) => {
-    setPrices((prev) => ({ ...prev, [field]: value }));
   };
 
   const validateForm = () => {
     const errors = {};
     let hasErrors = false;
 
-    if (!primaryGuest.salutation || primaryGuest.salutation.trim() === "") {
-      errors.salutation = "Salutation is required";
-      hasErrors = true;
-    }
-    if (!primaryGuest.firstName || primaryGuest.firstName.trim() === "") {
-      errors.firstName = "First Name is required";
-      hasErrors = true;
-    }
-    if (!primaryGuest.lastName || primaryGuest.lastName.trim() === "") {
-      errors.lastName = "Last Name is required";
-      hasErrors = true;
-    }
-    if (!primaryGuest.contactNumber || primaryGuest.contactNumber.trim() === "") {
+    // Contact Details — required booking-level fields.
+    if (!contactDetails.contactNumber || contactDetails.contactNumber.trim() === "") {
       errors.contactNumber = "Contact Number is required";
       hasErrors = true;
     }
-    if (!primaryGuest.emailId || primaryGuest.emailId.trim() === "") {
-      errors.emailId = "Email Id is required";
+    if (!contactDetails.emailId || contactDetails.emailId.trim() === "") {
+      errors.emailId = "Email ID is required";
       hasErrors = true;
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(primaryGuest.emailId)) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactDetails.emailId)) {
       errors.emailId = "Please enter a valid email address";
-      hasErrors = true;
-    }
-    if (!primaryGuest.lpo || primaryGuest.lpo.trim() === "") {
-      errors.lpo = "LPO is required";
       hasErrors = true;
     }
 
@@ -287,6 +424,16 @@ const SchefferDriverBookingPage = () => {
   // ── Step 1: validate + build payload + open Order Summary modal.
   // No backend call yet — the user must explicitly confirm in the modal.
   const handleConfirmClick = () => {
+    // Belt-and-braces guard — the button is already disabled when this
+    // is true, but a hard refusal here means a bypassed disable can't
+    // still POST a booking the agent has no way to pay for.
+    if (noPaymentPathAvailable) {
+      toast.error(
+        "No payment method available. Enable card payment or contact your admin."
+      );
+      return;
+    }
+
     const { errors, hasErrors } = validateForm();
 
     if (hasErrors) {
@@ -341,20 +488,34 @@ const SchefferDriverBookingPage = () => {
       noOfChild: parseInt(searchCriteria.children) || 0,
       childAgeArray: (searchCriteria.childAges || []).map(age => parseInt(age)),
       totalRate: totalWithTd,
-      totalRateWithoutmrk: parseFloat(selectedOption.totalRateWithoutMrk || totalRate),
+      totalRateWithoutmrk: parseFloat(selectedOption.totalRateWithoutMrk || initialTotalRate) + intercitySurcharge,
+      intercityChargeId: intercityDeclared === "yes" && selectedIntercityId ? parseInt(selectedIntercityId, 10) : null,
+      intercitySurcharge: intercitySurcharge,
+      intercityDeclared: intercityDeclared,
       tourismDirham: tdNumber > 0 ? tdNumber : null,
       agentId: parseInt(agentId),
       userId: parseInt(agentId),
-      customerDTO: {
-        salutation: primaryGuest.salutation,
-        firstName: primaryGuest.firstName,
-        lastName: primaryGuest.lastName,
-        contactNumber: primaryGuest.contactNumber,
-        emailId: primaryGuest.emailId,
-        passportNumber: primaryGuest.passportNumber,
-        lpo: primaryGuest.lpo
-      },
+      // Primary guest (customer) — name / salutation come from the pax
+      // marked as Lead in the Passenger Details grid, matching the
+      // /hotel-booking-page pattern. Contact Number + Email ID come
+      // from the dedicated Contact Details card below the pax grid.
+      // LPO is no longer collected here (Agent Reference is added later
+      // via ADD AGENT REFERENCE on the booking detail view).
+      customerDTO: (() => {
+        const lead = guests[leadIndex] || {};
+        return {
+          salutation: lead.salutation || "",
+          firstName: lead.firstName || "",
+          lastName: lead.lastName || "",
+          contactNumber: contactDetails.contactNumber,
+          emailId: contactDetails.emailId,
+        };
+      })(),
       // Full pax manifest — backend persists each row into cab_guest.
+      // `isLead` marks the single pax the operator flagged as Lead so the
+      // booking-detail view can surface it, same shape as the Hotel
+      // module. Backend ignores unknown fields, so this stays backward-
+      // compatible with existing /api/scheffer/book callers.
       guests: guests.map((g, idx) => {
         const adultsBefore = totalAdults;
         const seatNumber = g.isChild
@@ -370,14 +531,20 @@ const SchefferDriverBookingPage = () => {
           age: g.age != null ? Number(g.age) : null,
           passportNo: g.passportNo || null,
           guestIndex: seatNumber,
+          isLead: idx === leadIndex,
         };
       }),
-      transporter: transporterDetails.transporter,
-      contactNumber: transporterDetails.contactNumber,
-      driverName: transporterDetails.driverName,
-      driverContact: transporterDetails.driverContact,
+      // Transporter / driver fields removed from the UI — send empty
+      // strings so the backend contract stays unchanged for legacy
+      // consumers that still read these columns.
+      transporter: "",
+      contactNumber: "",
+      driverName: "",
+      driverContact: "",
       sellingPrice: String(sellingWithTd.toFixed(2)),
       totalPrice: String(totalWithTd.toFixed(2)),
+      // Payment mode picked from the new selector (mirrors /hotel-booking-page).
+      paymentMode,
       // Pickup / Drop-off details — prefer the zone-based search result row
       // (selectedOption.pickup / dropOff / pickupTime / dropoffTime), then
       // fall back to the search criteria's origin/destination location, then
@@ -395,6 +562,10 @@ const SchefferDriverBookingPage = () => {
         searchCriteria.cityName ||
         null,
       pickupTime: searchCriteria.pickupTime || null,
+      pickupLandmark: contactDetails.pickupLandmark || null,
+      pickupLandmarkAddress: contactDetails.pickupLandmark || null,
+      pickupAddress: contactDetails.pickupLandmark || null,
+      landmark: contactDetails.pickupLandmark || null,
       dropoffType: searchCriteria.dropoffType || "CITY",
       dropoffName:
         searchCriteria.dropoffName ||
@@ -402,10 +573,67 @@ const SchefferDriverBookingPage = () => {
         searchCriteria.cityName ||
         null,
       dropoffTime: searchCriteria.dropoffTime || null,
+      // Max luggage capacity from the cab registration — snapshot at booking
+      // time so the detail view can display it without a separate lookup.
+      // Robust fallback chain mirrors what the search result card uses.
+      maxLuggageCapacity:
+        selectedOption.maxLuggageCapacity ??
+        selectedOption.maxLuggage ??
+        selectedOption.vehicleMaxLuggage ??
+        selectedOption.luggageCapacity ??
+        null,
     };
 
     setPendingPayload(payload);
+
+    // Step 1a — open the Policies / T&C modal FIRST (mirrors Hotel).
+    // Fetch the rate's saved policy lists inline so the modal renders the
+    // real data. Any failure falls back to empty arrays; the modal still
+    // opens with "No terms configured" placeholders so the flow isn't
+    // blocked by a network hiccup — same behaviour Hotel shows.
+    setPolicyAccepted(false);
+    setShowPolicyModal(true);
+    const rateId = selectedOption?.rentalRateId;
+    if (rateId) {
+      setPoliciesLoading(true);
+      axiosInstance
+        .get(`/api/scheffer-rental-rates/${rateId}`)
+        .then((res) => {
+          const d = res?.data || {};
+          setRateTerms(Array.isArray(d.termsAndConditions) ? d.termsAndConditions : []);
+          setRateCancellationPolicies(
+            Array.isArray(d.cancellationPolicies) ? d.cancellationPolicies : []
+          );
+        })
+        .catch(() => {
+          setRateTerms([]);
+          setRateCancellationPolicies([]);
+        })
+        .finally(() => setPoliciesLoading(false));
+    } else {
+      setRateTerms([]);
+      setRateCancellationPolicies([]);
+    }
+  };
+
+  // ── Step 1b: Policies modal → Proceed. Closes the policy modal and
+  // hands off to the existing Order Summary modal (which owns the final
+  // Confirm & Book step). Separated so we don't skip the T&C acceptance.
+  const proceedFromPolicy = () => {
+    if (!policyAccepted) return;
+    setShowPolicyModal(false);
     setShowSummaryModal(true);
+  };
+
+  // ── Back button on the Booking Summary column → return to the search
+  // page so the operator can revise cab / package selection.
+  const handleBackToSearch = () => {
+    // Preserve the current search context by passing state so the search
+    // form doesn't reset (mirrors what the "Modify Search" collapse
+    // already does on the search page).
+    navigate("/new-booking/scheffer-driver", {
+      state: searchCriteria || null,
+    });
   };
 
   // ── Step 2: actually POST to /api/scheffer/book once the user confirms in
@@ -425,7 +653,17 @@ const SchefferDriverBookingPage = () => {
       }
     } catch (error) {
       console.error("Booking error:", error);
-      toast.error("An error occurred during booking. Please try again.");
+      // Surface the actual backend message so the operator can see WHY
+      // the booking failed (e.g. insufficient credit, missing field).
+      // The Spring ResponseStatusException reason lives on `error` or
+      // in `error.response.data.message`; probe the common shapes.
+      const backendMsg =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        (typeof error?.response?.data === "string" ? error.response.data : null) ||
+        error?.message ||
+        "An error occurred during booking. Please try again.";
+      toast.error(backendMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -446,7 +684,22 @@ const SchefferDriverBookingPage = () => {
         <main className="flex-grow-1 p-4">
           <Container fluid className="px-0">
             <div className="d-flex justify-content-between align-items-center mb-2">
-              <h4 className="fw-bold mb-0 text-primary">Cab Booking Checkout</h4>
+              {/* Top Back button — same handler as the Back button in the
+                  Booking Summary column, so both do the exact same thing
+                  (mirrors /hotel-booking-page's inline "← Back" next to
+                  the section heading). */}
+              <div className="d-flex align-items-center">
+                <Button
+                  variant="outline-secondary"
+                  size="sm"
+                  onClick={handleBackToSearch}
+                  disabled={isSubmitting}
+                  className="me-3"
+                >
+                  ← Back
+                </Button>
+                <h4 className="fw-bold mb-0 text-primary">Cab Booking Checkout</h4>
+              </div>
               <AgentBalanceDisplay
                 agentId={
                   sessionStorage.getItem("makeYourOwnPackageAgentId") ||
@@ -458,195 +711,19 @@ const SchefferDriverBookingPage = () => {
             <Row className="g-4">
               {/* Left Column: Guest Details */}
               <Col lg={8}>
-               <Card className="shadow border-0 rounded-4 mb-4">
-  
-  {/* Header */}
-  <Card.Header className="bg-white border-0 pt-4 px-4">
-    <h5 className="fw-semibold text-dark d-flex align-items-center mb-0">
-      <FaUserAlt className="me-2 text-primary" />
-      Primary Guest Details
-    </h5>
-  </Card.Header>
-
-  <Card.Body className="px-4 pb-4">
-
-    <Row className="g-3">
-
-      {/* Salutation */}
-      <Col xs={12} md={3} lg={2}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Salutation <span className="text-danger">*</span>
-          </Form.Label>
-
-          <Form.Select
-            className="rounded-3 shadow-sm"
-            value={primaryGuest.salutation}
-            onChange={(e) =>
-              handlePrimaryGuestChange("salutation", e.target.value)
-            }
-            isInvalid={!!validationErrors.salutation}
-          >
-            <option value="Mr">Mr</option>
-            <option value="Mrs">Mrs</option>
-            <option value="Ms">Ms</option>
-            <option value="Miss">Miss</option>
-            <option value="Dr">Dr</option>
-          </Form.Select>
-
-          <Form.Control.Feedback type="invalid">
-            {validationErrors.salutation}
-          </Form.Control.Feedback>
-        </Form.Group>
-      </Col>
-
-      {/* First Name */}
-      <Col xs={12} md={5}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            First Name <span className="text-danger">*</span>
-          </Form.Label>
-
-          <Form.Control
-            type="text"
-            placeholder="First Name"
-            className="rounded-3 shadow-sm"
-            value={primaryGuest.firstName}
-            onChange={(e) =>
-              handlePrimaryGuestChange("firstName", e.target.value)
-            }
-            isInvalid={!!validationErrors.firstName}
-          />
-
-          <Form.Control.Feedback type="invalid">
-            {validationErrors.firstName}
-          </Form.Control.Feedback>
-        </Form.Group>
-      </Col>
-
-      {/* Last Name */}
-      <Col xs={12} md={4} lg={5}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Last Name <span className="text-danger">*</span>
-          </Form.Label>
-
-          <Form.Control
-            type="text"
-            placeholder="Last Name"
-            className="rounded-3 shadow-sm"
-            value={primaryGuest.lastName}
-            onChange={(e) =>
-              handlePrimaryGuestChange("lastName", e.target.value)
-            }
-            isInvalid={!!validationErrors.lastName}
-          />
-
-          <Form.Control.Feedback type="invalid">
-            {validationErrors.lastName}
-          </Form.Control.Feedback>
-        </Form.Group>
-      </Col>
-
-      {/* Phone */}
-      <Col xs={12} md={6}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Contact Number <span className="text-danger">*</span>
-          </Form.Label>
-
-          <Form.Control
-            type="text"
-            placeholder="Contact Number"
-            className="rounded-3 shadow-sm"
-            value={primaryGuest.contactNumber}
-            onChange={(e) =>
-              handlePrimaryGuestChange("contactNumber", e.target.value)
-            }
-            isInvalid={!!validationErrors.contactNumber}
-          />
-
-          <Form.Control.Feedback type="invalid">
-            {validationErrors.contactNumber}
-          </Form.Control.Feedback>
-        </Form.Group>
-      </Col>
-
-      {/* Email */}
-      <Col xs={12} md={6}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Email ID <span className="text-danger">*</span>
-          </Form.Label>
-
-          <Form.Control
-            type="email"
-            placeholder="Email ID"
-            className="rounded-3 shadow-sm"
-            value={primaryGuest.emailId}
-            onChange={(e) =>
-              handlePrimaryGuestChange("emailId", e.target.value)
-            }
-            isInvalid={!!validationErrors.emailId}
-          />
-
-          <Form.Control.Feedback type="invalid">
-            {validationErrors.emailId}
-          </Form.Control.Feedback>
-        </Form.Group>
-      </Col>
-
-      {/* Passport */}
-      <Col xs={12} md={6}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Passport Number{" "}
-          </Form.Label>
-
-          <Form.Control
-            type="text"
-            placeholder="Passport Number"
-            className="rounded-3 shadow-sm"
-            value={primaryGuest.passportNumber}
-            onChange={(e) =>
-              handlePrimaryGuestChange("passportNumber", e.target.value)
-            }
-          />
-        </Form.Group>
-      </Col>
-
-      {/* LPO */}
-      <Col xs={12} md={6}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            LPO Number <span className="text-danger">*</span>
-          </Form.Label>
-
-          <Form.Control
-            type="text"
-            placeholder="Agent LPO"
-            className="rounded-3 shadow-sm"
-            value={primaryGuest.lpo}
-            onChange={(e) =>
-              handlePrimaryGuestChange("lpo", e.target.value)
-            }
-            isInvalid={!!validationErrors.lpo}
-          />
-
-          <Form.Control.Feedback type="invalid">
-            {validationErrors.lpo}
-          </Form.Control.Feedback>
-        </Form.Group>
-      </Col>
-
-    </Row>
-
-  </Card.Body>
-</Card>
+                {/* Primary Guest Details card removed — the Passenger
+                    Details grid below IS the guest details section for
+                    chauffeur bookings, matching /hotel-booking-page where
+                    the Guest Details grid is the single source of pax
+                    data and the Lead-marked pax drives the customerDTO
+                    at submit time. */}
 
                 {/* ── Pax Manifest ─────────────────────────────────────
                      One compact row per traveller (Adult 1..N, Child
-                     1..M). Adult 1 mirrors the Primary Guest card. */}
+                     1..M). The pax marked as Lead via the last-column
+                     radio drives the primary guest card / customerDTO
+                     name fields at submit time — same pattern as
+                     /hotel-booking-page. Children can't be Lead. */}
                 {guests.length > 0 && (
                   <Card className="shadow border-0 rounded-4 mb-4">
                     <Card.Header className="bg-white border-0 pt-3 px-4 pb-2">
@@ -660,17 +737,26 @@ const SchefferDriverBookingPage = () => {
                       </h6>
                     </Card.Header>
                     <Card.Body className="px-4 pt-2 pb-3">
+                      {/* Column headers — mirrors the Hotel Booking grid. */}
+                      <Row className="g-2 fw-semibold small text-muted d-none d-md-flex mb-1">
+                        <Col md={2}>Passenger</Col>
+                        <Col md={2}>Title</Col>
+                        <Col md={3}>First Name</Col>
+                        <Col md={4}>Last Name</Col>
+                        <Col md={1} className="text-center">Lead</Col>
+                      </Row>
                       {guests.map((g, idx) => {
                         const adultSeat = idx + 1;
                         const childSeat = idx - totalAdults + 1;
                         const label = g.isChild
                           ? `Child ${childSeat}${g.age != null ? ` (Age ${g.age})` : ""}`
                           : `Adult ${adultSeat}`;
+                        const isLead = idx === leadIndex;
                         return (
                           <Row key={idx} className="g-2 align-items-center mb-2">
                             <Col xs={12} md={2}>
                               <span className="fw-semibold text-muted small">
-                                {label} {idx === 0 ? <span className="text-danger">*</span> : ""}
+                                {label}
                               </span>
                             </Col>
                             <Col xs={6} md={2}>
@@ -709,7 +795,7 @@ const SchefferDriverBookingPage = () => {
                                 isInvalid={!!validationErrors[`guest_${idx}_firstName`]}
                               />
                             </Col>
-                            <Col xs={6} md={3}>
+                            <Col xs={6} md={4}>
                               <Form.Control
                                 size="sm"
                                 type="text"
@@ -721,14 +807,18 @@ const SchefferDriverBookingPage = () => {
                                 isInvalid={!!validationErrors[`guest_${idx}_lastName`]}
                               />
                             </Col>
-                            <Col xs={6} md={2}>
-                              <Form.Control
-                                size="sm"
-                                type="text"
-                                placeholder="Passport (opt)"
-                                value={g.passportNo}
-                                onChange={(e) =>
-                                  handleGuestChange(idx, "passportNo", e.target.value)
+                            <Col xs={6} md={1} className="text-center">
+                              <Form.Check
+                                type="radio"
+                                name="sdbp-lead-pax"
+                                id={`sdbp-lead-${idx}`}
+                                checked={isLead}
+                                disabled={g.isChild}
+                                onChange={() => handleLeadSelect(idx)}
+                                title={
+                                  g.isChild
+                                    ? "Children cannot be Lead"
+                                    : "Mark as Lead passenger"
                                 }
                               />
                             </Col>
@@ -739,430 +829,622 @@ const SchefferDriverBookingPage = () => {
                   </Card>
                 )}
 
-                {/* Transporter & Driver Details Card */}
-               <Card className="shadow border-0 rounded-4 mb-4">
+                {/* ── Contact Details ─────────────────────────────────
+                     Booking-level contact info — sits directly below
+                     Passenger Details. Two required fields: Contact
+                     Number and Email ID. Persisted as the booking's
+                     customer contact fields (customerDTO). */}
+                <Card className="shadow border-0 rounded-4 mb-4">
+                  <Card.Header className="bg-white border-0 pt-4 px-4">
+                    <h5 className="fw-semibold text-dark d-flex align-items-center mb-0">
+                      <FaUserAlt className="me-2 text-primary" />
+                      Contact Details
+                    </h5>
+                  </Card.Header>
+                  <Card.Body className="px-4 pb-4">
+                    <Row className="g-3">
+                      <Col xs={12} md={6}>
+                        <Form.Group>
+                          <Form.Label className="small text-muted fw-semibold">
+                            Contact Number <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Control
+                            type="text"
+                            placeholder="Contact Number"
+                            className="rounded-3 shadow-sm"
+                            value={contactDetails.contactNumber}
+                            onChange={(e) =>
+                              handleContactChange("contactNumber", e.target.value)
+                            }
+                            isInvalid={!!validationErrors.contactNumber}
+                          />
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.contactNumber}
+                          </Form.Control.Feedback>
+                        </Form.Group>
+                      </Col>
+                      <Col xs={12} md={6}>
+                        <Form.Group>
+                          <Form.Label className="small text-muted fw-semibold">
+                            Email ID <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Control
+                            type="email"
+                            placeholder="Email ID"
+                            className="rounded-3 shadow-sm"
+                            value={contactDetails.emailId}
+                            onChange={(e) =>
+                              handleContactChange("emailId", e.target.value)
+                            }
+                            isInvalid={!!validationErrors.emailId}
+                          />
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.emailId}
+                          </Form.Control.Feedback>
+                        </Form.Group>
+                      </Col>
+                      {/* Pickup Landmark — optional free-text address /
+                          landmark for the pickup location (e.g. "Near Al Wasl
+                          Mall, behind the ADNOC station"). Full-width row of
+                          its own so long text stays readable. */}
+                      <Col xs={12}>
+                        <Form.Group>
+                          <Form.Label className="small text-muted fw-semibold">
+                            Pickup Landmark / Address
+                          </Form.Label>
+                          <Form.Control
+                            as="textarea"
+                            rows={2}
+                            placeholder="e.g. Near Al Wasl Mall, behind the ADNOC station"
+                            className="rounded-3 shadow-sm"
+                            value={contactDetails.pickupLandmark}
+                            onChange={(e) =>
+                              handleContactChange("pickupLandmark", e.target.value)
+                            }
+                          />
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                  </Card.Body>
+                </Card>
 
-  {/* Header */}
-  <Card.Header className="bg-white border-0 pt-4 px-4">
-    <h5 className="fw-semibold text-dark d-flex align-items-center mb-0">
-      <FaCar className="me-2 text-primary" />
-      Transporter & Driver Details
-    </h5>
-  </Card.Header>
+                {/* Transporter & Driver Details card removed — replaced
+                    with the Payment Mode selector below. Price details
+                    are now shown only in the Booking Summary. */}
 
-  <Card.Body className="px-4 pb-4">
+                {/* ── Supplementary Charges Disclosure ─────────────────
+                     Optional Yes / No prompt reminding the operator that
+                     supplementary charges apply when the trip crosses into
+                     another city. Choosing "Yes" surfaces the current cab
+                     provider's intercity routes (managed in
+                     /scheffer-driver-rates → Supplementary Charges) as a
+                     radio list. The whole card is hidden when this cab
+                     provider has no intercity charges configured, so the
+                     section never appears empty. Display-only — no booking
+                     payload change. */}
+                {intercityCharges.length > 0 && (
+                  <Card className="shadow border-0 rounded-4 mb-4">
+                    <Card.Header className="bg-white border-0 pt-4 px-4">
+                      <h5 className="fw-semibold text-dark d-flex align-items-center mb-0">
+                        <FaMapMarkerAlt className="me-2 text-primary" />
+                        Supplementary Charges
+                      </h5>
+                    </Card.Header>
+                    <Card.Body className="px-4 pb-4">
+                      <div className="small text-muted fw-semibold mb-2">
+                        In case of travel to another city, supplementary
+                        charges will apply.
+                      </div>
+                      <Form.Group>
+                        <div className="d-flex gap-4 mt-1">
+                          <Form.Check
+                            type="radio"
+                            id="sdbp-intercity-yes"
+                            name="sdbp-intercity"
+                            label="Yes"
+                            value="yes"
+                            checked={intercityDeclared === "yes"}
+                            onChange={(e) =>
+                              setIntercityDeclared(e.target.value)
+                            }
+                          />
+                          <Form.Check
+                            type="radio"
+                            id="sdbp-intercity-no"
+                            name="sdbp-intercity"
+                            label="No"
+                            value="no"
+                            checked={intercityDeclared === "no"}
+                            onChange={(e) => {
+                              setIntercityDeclared(e.target.value);
+                              // Reset selection when flipping back to No.
+                              setSelectedIntercityId("");
+                            }}
+                          />
+                        </div>
+                      </Form.Group>
 
-    {/* ===== Transport Fields ===== */}
-    <Row className="g-3">
+                      {intercityDeclared === "yes" && (
+                        <div className="mt-3">
+                          <Form.Group>
+                            <Form.Label className="small text-muted fw-semibold d-block mb-2">
+                              Select intercity route
+                            </Form.Label>
+                            {/* Grid of clickable radio "cards" — one per
+                                intercity row, 3-up on desktop, 2-up on
+                                tablets, stacked on mobile. Each card is a
+                                labelled radio wrapping the whole tile so
+                                clicking anywhere selects the route. */}
+                            <Row className="g-2">
+                              {intercityCharges.map((c) => {
+                                const val = String(c.intercityChargeId);
+                                const selected = selectedIntercityId === val;
+                                return (
+                                  <Col xs={12} key={val}>
+                                    <label
+                                      htmlFor={`sdbp-intercity-route-${val}`}
+                                      className="w-100 h-100 d-flex align-items-center gap-2 p-2 rounded-3"
+                                      style={{
+                                        cursor: "pointer",
+                                        border: `1px solid ${
+                                          selected ? "#0d6efd" : "#dee2e6"
+                                        }`,
+                                        backgroundColor: selected
+                                          ? "#eaf3ff"
+                                          : "#fff",
+                                        transition:
+                                          "border-color 0.15s, background-color 0.15s",
+                                      }}
+                                    >
+                                      <input
+                                        type="radio"
+                                        id={`sdbp-intercity-route-${val}`}
+                                        name="sdbp-intercity-route"
+                                        value={val}
+                                        checked={selected}
+                                        onChange={(e) =>
+                                          setSelectedIntercityId(
+                                            e.target.value,
+                                          )
+                                        }
+                                        // Native radios can't be un-checked
+                                        // by clicking the same option again;
+                                        // this click-handler adds that
+                                        // toggle behaviour so the operator
+                                        // can clear their selection without
+                                        // having to switch to another route
+                                        // or flip the Yes/No radios above.
+                                        onClick={(e) => {
+                                          if (selected) {
+                                            e.preventDefault();
+                                            setSelectedIntercityId("");
+                                          }
+                                        }}
+                                        className="form-check-input mt-1"
+                                      />
+                                      <div className="d-flex flex-grow-1 align-items-center justify-content-between gap-2">
+                                        <span className="fw-semibold text-dark">
+                                          {c.fromCityName || "-"} →{" "}
+                                          {c.toCityName || "-"}
+                                        </span>
+                                        <span className="fw-semibold text-primary">
+                                          AED {c.additionalCharge}
+                                        </span>
+                                      </div>
+                                    </label>
+                                  </Col>
+                                );
+                              })}
+                            </Row>
+                          </Form.Group>
+                        </div>
+                      )}
+                    </Card.Body>
+                  </Card>
+                )}
 
-      <Col xs={12} md={6}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Transporter Name
-          </Form.Label>
-          <Form.Control
-            className="rounded-3 shadow-sm"
-            placeholder="Enter transporter name"
-            value={transporterDetails.transporter}
-            onChange={(e) =>
-              handleTransporterChange("transporter", e.target.value)
-            }
-          />
-        </Form.Group>
-      </Col>
-
-      <Col xs={12} md={6}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Contact Number
-          </Form.Label>
-          <Form.Control
-            className="rounded-3 shadow-sm"
-            placeholder="Enter contact number"
-            value={transporterDetails.contactNumber}
-            onChange={(e) =>
-              handleTransporterChange("contactNumber", e.target.value)
-            }
-          />
-        </Form.Group>
-      </Col>
-
-      <Col xs={12} md={6}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Driver Name
-          </Form.Label>
-          <Form.Control
-            className="rounded-3 shadow-sm"
-            placeholder="Enter driver name"
-            value={transporterDetails.driverName}
-            onChange={(e) =>
-              handleTransporterChange("driverName", e.target.value)
-            }
-          />
-        </Form.Group>
-      </Col>
-
-      <Col xs={12} md={6}>
-        <Form.Group>
-          <Form.Label className="small text-muted fw-semibold">
-            Driver Contact
-          </Form.Label>
-          <Form.Control
-            className="rounded-3 shadow-sm"
-            placeholder="Enter driver contact"
-            value={transporterDetails.driverContact}
-            onChange={(e) =>
-              handleTransporterChange("driverContact", e.target.value)
-            }
-          />
-        </Form.Group>
-      </Col>
-
-    </Row>
-
-    {/* ===== Price Section ===== */}
-    <div className="mt-4 pt-4 border-top">
-
-      <Row className="g-3">
-
-        {/* Selling Price */}
-        <Col xs={12} md={6}>
-          <div className="bg-light border rounded-3 p-3 h-100">
-            <small className="text-muted fw-semibold d-block mb-1">
-              Selling Price
-            </small>
-
-            <div className="d-flex align-items-center">
-              <span className="text-muted me-2">AED</span>
-
-              <Form.Control
-                type="text"
-                className="border-0 bg-transparent p-0 fw-bold text-success"
-                value={prices.sellingPrice}
-                onChange={(e) =>
-                  handlePriceChange("sellingPrice", e.target.value)
-                }
-              />
-            </div>
-          </div>
-        </Col>
-
-        {/* Total Price */}
-        <Col xs={12} md={6}>
-          <div className="bg-light border rounded-3 p-3 h-100">
-            <small className="text-muted fw-semibold d-block mb-1">
-              Total Price
-            </small>
-
-            <div className="d-flex align-items-center">
-              <span className="text-muted me-2">AED</span>
-
-              <Form.Control
-                type="text"
-                className="border-0 bg-transparent p-0 fw-bold text-success"
-                value={prices.totalPrice}
-                onChange={(e) =>
-                  handlePriceChange("totalPrice", e.target.value)
-                }
-              />
-            </div>
-          </div>
-        </Col>
-
-        {/* Tourism Dirham */}
-        <Col xs={12} md={6}>
-          <div className="bg-light border rounded-3 p-3 h-100">
-            <small className="text-muted fw-semibold d-block mb-1">
-              Tourism Dirham
-            </small>
-
-            <div className="d-flex align-items-center">
-              <span className="text-muted me-2">AED</span>
-
-              <Form.Control
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-                className="border-0 bg-transparent p-0 fw-bold text-primary"
-                value={tourismDirham}
-                onChange={(e) => setTourismDirham(e.target.value)}
-              />
-            </div>
-            <small className="text-muted">
-              Optional — added to Selling &amp; Total Price.
-            </small>
-          </div>
-        </Col>
-
-      </Row>
-
-    </div>
-
-  </Card.Body>
-</Card>
+                {/* ── Payment Mode ────────────────────────────────────
+                     Mirrors /hotel-booking-page. Three-scenario UI:
+                       1. Sufficient credit          → Credit Limit only
+                       2. No credit + Card enabled   → Card only + note
+                       3. No credit + Card disabled  → hard-block Alert
+                     The selection rides on the create payload as
+                     `paymentMode`. */}
+                <Card className="shadow border-0 rounded-4 mb-4">
+                  <Card.Header className="bg-white border-0 pt-4 px-4">
+                    <h5 className="fw-semibold text-dark d-flex align-items-center mb-0">
+                      <FaCar className="me-2 text-primary" />
+                      Payment Mode
+                    </h5>
+                  </Card.Header>
+                  <Card.Body className="px-4 pb-4">
+                    {paymentModeOptions.length > 0 ? (
+                      <>
+                        <Row className="g-3">
+                          <Col xs={12} md={6}>
+                            <Form.Group>
+                              <Form.Label className="small text-muted fw-semibold">
+                                Mode
+                              </Form.Label>
+                              <Form.Select
+                                className="rounded-3 shadow-sm"
+                                value={paymentMode}
+                                onChange={(e) => setPaymentMode(e.target.value)}
+                              >
+                                {paymentModeOptions.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </Form.Select>
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                        {hasSufficientCredit === false && agentCardPaymentEnabled && (
+                          <div className="text-danger small mt-2 fw-semibold">
+                            Insufficient credit. Pay with credit card before
+                            time limit and reconfirm.
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <Alert variant="danger" className="mb-0">
+                        You do not have sufficient credit limit, and online
+                        card payment is not enabled for your account.
+                        Therefore, this booking cannot be completed. Please
+                        contact your account manager or administrator to
+                        enable a payment method.
+                      </Alert>
+                    )}
+                  </Card.Body>
+                </Card>
               </Col>
 
-              {/* Right Column: Order Summary */}
+              {/* Right Column: Booking Summary — mirrors the two-card
+                  layout used on /hotel-booking-page (Booking Summary +
+                  Price Details) so the two flows look uniform. The
+                  .sdbp-sticky-summary wrapper (see SchefferDriverBookingPage.css)
+                  pins this column while the left form scrolls, matching the
+                  hotel page's .hbp-sticky-summary behaviour. */}
               <Col lg={4}>
-                <Card
-  className="shadow border-0 rounded-4 "
- 
->
-  {/* ===== Header ===== */}
-  <Card.Header
-    className="border-0 rounded-top-4"
-    style={{
-      background: "#7193d5",
-      padding: "18px 20px",
-    }}
-  >
-    <div className="d-flex align-items-center justify-content-between">
-      <div>
-        <h5 className="mb-1 fw-bold text-white">Booking Summary</h5>
-        <small className="text-white opacity-75">
-          Review your trip details
-        </small>
-      </div>
+                <div className="sdbp-sticky-summary">
+                {/* ── Booking Summary card ─────────────────────────── */}
+                <Card className="shadow-sm rounded-3 mb-3 border-0 overflow-hidden">
+                  <Card.Header className="bg-primary text-white py-2 rounded-top">
+                    <h6 className="mb-0 d-flex align-items-center">
+                      <FaCar className="me-2" /> Booking Summary
+                    </h6>
+                  </Card.Header>
+                  <Card.Body className="p-3">
+                    {/* Cab identity block — mirrors Hotel's hotelName /
+                        address / badges block at the top of its summary. */}
+                    <div className="mb-3">
+                      <div className="fw-bold text-primary mb-1">
+                        {cab.cabname}
+                      </div>
+                      {selectedOption.cityName && (
+                        <div className="text-muted small mb-2">
+                          {selectedOption.cityName}
+                        </div>
+                      )}
+                      <div className="d-flex flex-wrap align-items-center gap-2">
+                        {selectedOption.cabType && (
+                          <span className="badge bg-info text-dark">
+                            {selectedOption.cabType}
+                          </span>
+                        )}
+                        {selectedOption.packageName && (
+                          <span className="badge bg-primary">
+                            {selectedOption.packageName}
+                          </span>
+                        )}
+                      </div>
+                    </div>
 
-      <div
-        className="bg-white bg-opacity-25 rounded-circle d-flex align-items-center justify-content-center"
-        style={{ width: "40px", height: "40px" }}
-      >
-        <FaCar className="text-white" />
-      </div>
-    </div>
-  </Card.Header>
+                    {/* Detail rows — uses the same label/value split
+                        Hotel uses in its .hbp-summary-row blocks. */}
+                    <div className="sdbp-summary-row d-flex justify-content-between align-items-center py-2 border-bottom small">
+                      <div className="text-muted fw-medium">
+                        <FaCalendarAlt className="me-2 text-primary" />
+                        Pickup Date
+                      </div>
+                      <div className="text-dark fw-semibold">
+                        {searchCriteria.pickupDate || "—"}
+                      </div>
+                    </div>
 
-  <Card.Body className="p-0">
+                    {searchCriteria.pickupTime && (
+                      <div className="sdbp-summary-row d-flex justify-content-between align-items-center py-2 border-bottom small">
+                        <div className="text-muted fw-medium">
+                          <FaCalendarAlt className="me-2 text-primary" />
+                          Pickup Time
+                        </div>
+                        <div className="text-dark fw-semibold">
+                          {searchCriteria.pickupTime}
+                        </div>
+                      </div>
+                    )}
 
-    {/* ===== Transfer Info ===== */}
-    <div className="p-4 border-bottom">
+                    <div className="sdbp-summary-row d-flex justify-content-between align-items-start py-2 border-bottom small">
+                      <div className="text-muted fw-medium">
+                        <FaMapMarkerAlt className="me-2 text-danger" />
+                        Rental Package
+                      </div>
+                      <div className="text-dark fw-semibold text-end">
+                        {selectedOption.packageName || "—"}
+                        <div className="text-muted small fw-normal">
+                          {selectedOption.hoursIncluded != null
+                            ? `${selectedOption.hoursIncluded} hrs`
+                            : ""}
+                          {selectedOption.kmIncluded != null
+                            ? ` · ${selectedOption.kmIncluded} km included`
+                            : ""}
+                        </div>
+                      </div>
+                    </div>
 
-      {/* Cab Info */}
-      <div className="d-flex align-items-start gap-3 mb-3">
-        <div
-          style={{
-            width: "100px",
-            height: "80px",
-            borderRadius: "12px",
-            overflow: "hidden",
-            flexShrink: 0,
-          }}
-        >
-          <img
-            src={cab.cabpic || "https://via.placeholder.com/80?text=Cab"}
-            alt={cab.cabname}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
-        </div>
+                    {(searchCriteria.pickupName || searchCriteria.pickupType || selectedOption?.cityName) && (
+                      <div className="sdbp-summary-row d-flex justify-content-between align-items-start py-2 border-bottom small">
+                        <div className="text-muted fw-medium">
+                          <FaMapMarkerAlt className="me-2 text-danger" />
+                          Pickup
+                        </div>
+                        <div className="text-dark fw-semibold text-end">
+                          {searchCriteria.pickupName || selectedOption?.cityName || searchCriteria.cityName || "—"}
+                        </div>
+                      </div>
+                    )}
 
-        <div className="flex-grow-1">
-          <h6 className="fw-bold mb-1 text-dark">{cab.cabname}</h6>
+                    {contactDetails.pickupLandmark && (
+                      <div className="sdbp-summary-row d-flex justify-content-between align-items-start py-2 border-bottom small">
+                        <div className="text-muted fw-medium">
+                          <FaMapMarkerAlt className="me-2 text-success" />
+                          Pickup Landmark Address
+                        </div>
+                        <div className="text-dark fw-semibold text-end">
+                          {contactDetails.pickupLandmark}
+                        </div>
+                      </div>
+                    )}
 
-          <div className="mb-2 d-flex flex-wrap gap-1">
-            {selectedOption.cabType && (
-              <Badge bg="info" className="text-dark">{selectedOption.cabType}</Badge>
-            )}
-            {selectedOption.packageName && (
-              <Badge bg="primary">{selectedOption.packageName}</Badge>
-            )}
-          </div>
+                    {(searchCriteria.dropoffName || searchCriteria.dropoffType || selectedOption?.cityName) && (
+                      <div className="sdbp-summary-row d-flex justify-content-between align-items-start py-2 border-bottom small">
+                        <div className="text-muted fw-medium">
+                          <FaMapMarkerAlt className="me-2 text-danger" />
+                          Dropoff
+                        </div>
+                        <div className="text-dark fw-semibold text-end">
+                          {searchCriteria.dropoffName || searchCriteria.pickupName || selectedOption?.cityName || searchCriteria.cityName || "—"}
+                          {searchCriteria.dropoffTime && (
+                            <div className="text-muted small fw-normal">
+                              @ {searchCriteria.dropoffTime}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
-          {cab.cabdetails && (
-            <small className="text-muted d-block" style={{ lineHeight: "1.3" }}>
-              {cab.cabdetails}
-            </small>
-          )}
-        </div>
-      </div>
+                    <div className="sdbp-summary-row d-flex justify-content-between align-items-center py-2 small">
+                      <div className="text-muted fw-medium">
+                        <FaUserAlt className="me-2 text-primary" />
+                        Passengers
+                      </div>
+                      <div className="text-dark fw-semibold">
+                        {searchCriteria.adults || 0} Adult
+                        {(searchCriteria.adults || 0) !== 1 ? "s" : ""}
+                        {searchCriteria.children
+                          ? `, ${searchCriteria.children} Child${
+                              searchCriteria.children > 1 ? "ren" : ""
+                            }`
+                          : ""}
+                      </div>
+                    </div>
+                  </Card.Body>
+                </Card>
 
-      {/* Info Box */}
-      <div className="bg-light rounded-3 p-3 mb-3">
+                {/* ── Price Details card — mirrors Hotel's Price Details
+                    (light header, small rows, red New Total). */}
+                <Card className="shadow-sm rounded-3 border-0 mb-3">
+                  <Card.Header className="bg-light py-2">
+                    <h6 className="mb-0 fw-bold">Price Details</h6>
+                  </Card.Header>
+                  <Card.Body className="p-3">
+                    {(() => {
+                      const tdNum =
+                        tourismDirham !== "" && !isNaN(Number(tourismDirham))
+                          ? Number(tourismDirham)
+                          : 0;
+                      const grandTotal = Number(totalRate || 0) + tdNum;
+                      const packageFare = totalRate - intercitySurcharge;
+                      return (
+                        <>
+                          <div className="d-flex justify-content-between align-items-center py-2 border-bottom small">
+                            <div className="text-muted fw-medium">Package Fare</div>
+                            <div className="text-dark fw-semibold">
+                              {formatPrice(packageFare)}
+                            </div>
+                          </div>
+                          {intercitySurcharge > 0 && (
+                            <div className="d-flex justify-content-between align-items-center py-2 border-bottom small">
+                              <div className="text-muted fw-medium">Intercity Surcharge</div>
+                              <div className="text-dark fw-semibold">
+                                {formatPrice(intercitySurcharge)}
+                              </div>
+                            </div>
+                          )}
+                          {tdNum > 0 && (
+                            <div className="d-flex justify-content-between align-items-center py-2 border-bottom small">
+                              <div className="text-muted fw-medium">Tourism Dirham</div>
+                              <div className="text-primary fw-semibold">
+                                {formatPrice(tdNum)}
+                              </div>
+                            </div>
+                          )}
+                          <div className="d-flex justify-content-between align-items-center py-2 border-bottom small">
+                            <div className="text-muted fw-medium">Taxes &amp; Fees</div>
+                            <div className="text-dark fw-semibold">{formatPrice(0)}</div>
+                          </div>
+                          <hr className="my-2" />
+                          <div className="d-flex justify-content-between align-items-center py-1">
+                            <div className="text-danger fw-bold">New Total</div>
+                            <div className="text-danger fw-bold fs-5">
+                              {formatPrice(grandTotal)}
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </Card.Body>
+                </Card>
 
-        {/* Date */}
-        <div className="d-flex align-items-start gap-2 mb-3">
-          <FaCalendarAlt className="text-primary mt-1" />
-          <div>
-            <small className="text-muted fw-semibold d-block">
-              Pickup Date
-            </small>
-            <span className="fw-medium text-dark">
-              {searchCriteria.pickupDate}
-            </span>
-          </div>
-        </div>
-
-        {/* Rental package details */}
-        <div className="d-flex align-items-start gap-2">
-          <FaMapMarkerAlt className="text-danger mt-1" />
-          <div>
-            <small className="text-muted fw-semibold d-block">
-              Rental Package
-            </small>
-            <span className="fw-medium text-dark">
-              {selectedOption.cityName || "—"}
-              {selectedOption.packageName ? ` · ${selectedOption.packageName}` : ""}
-            </span>
-            <div className="text-muted small">
-              {selectedOption.hoursIncluded != null ? `${selectedOption.hoursIncluded} hrs` : ""}
-              {selectedOption.kmIncluded != null ? ` · ${selectedOption.kmIncluded} km included` : ""}
-            </div>
-            {selectedOption.pickupTime && (
-              <div className="text-muted small">Pickup @ {searchCriteria.pickupTime}</div>
-            )}
-          </div>
-        </div>
-
-        {/* ── Pickup details ─────────────────────────────────────────
-             Shows the chosen pickup category (HOTEL / AIRPORT) plus
-             the actual facility name; airport pickups also show the
-             time. The block is hidden entirely when no pickup type
-             was selected upstream so existing flows aren't affected. */}
-        {searchCriteria.pickupType && (
-          <div className="d-flex align-items-start gap-2 mt-3">
-            <FaMapMarkerAlt className="text-success mt-1" />
-            <div>
-              <small className="text-muted fw-semibold d-block">
-                Pickup{" "}
-                <span className="badge bg-success-subtle text-success ms-1">
-                  {searchCriteria.pickupType}
-                </span>
-              </small>
-              <span className="fw-medium text-dark">
-                {searchCriteria.pickupName || "—"}
-                {searchCriteria.pickupType === "AIRPORT" &&
-                  searchCriteria.pickupTime && (
-                    <span className="text-muted ms-2 small">
-                      @ {searchCriteria.pickupTime}
-                    </span>
-                  )}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* ── Dropoff details (same pattern; time is always optional) ── */}
-        {searchCriteria.dropoffType && (
-          <div className="d-flex align-items-start gap-2 mt-3">
-            <FaMapMarkerAlt className="text-warning mt-1" />
-            <div>
-              <small className="text-muted fw-semibold d-block">
-                Dropoff{" "}
-                <span className="badge bg-warning-subtle text-warning ms-1">
-                  {searchCriteria.dropoffType}
-                </span>
-              </small>
-              <span className="fw-medium text-dark">
-                {searchCriteria.dropoffName || "—"}
-                {searchCriteria.dropoffTime && (
-                  <span className="text-muted ms-2 small">
-                    @ {searchCriteria.dropoffTime}
-                  </span>
-                )}
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Passengers */}
-      <div className="d-flex justify-content-between small">
-        <span className="text-muted">
-          Adults:{" "}
-          <span className="fw-bold text-dark">
-            {searchCriteria.adults}
-          </span>
-        </span>
-        <span className="text-muted">
-          Children:{" "}
-          <span className="fw-bold text-dark">
-            {searchCriteria.children}
-          </span>
-        </span>
-      </div>
-    </div>
-
-    {/* ===== Price Section ===== */}
-    <div className="p-4 bg-light">
-
-      {(() => {
-        const tdNum =
-          tourismDirham !== "" && !isNaN(Number(tourismDirham))
-            ? Number(tourismDirham)
-            : 0;
-        const grandTotal = Number(totalRate || 0) + tdNum;
-        return (
-          <>
-            <div className="d-flex justify-content-between mb-2 text-muted">
-              <span>Package Fare</span>
-              <span className="fw-medium">{formatPrice(totalRate)}</span>
-            </div>
-
-            {tdNum > 0 && (
-              <div className="d-flex justify-content-between mb-2 text-muted">
-                <span>Tourism Dirham</span>
-                <span className="fw-medium text-primary">
-                  {formatPrice(tdNum)}
-                </span>
-              </div>
-            )}
-
-            <div className="d-flex justify-content-between mb-3 text-muted">
-              <span>Taxes &amp; Fees</span>
-              <span className="fw-medium">{formatPrice(0)}</span>
-            </div>
-
-            <hr className="my-3" />
-
-            <div className="d-flex justify-content-between align-items-center">
-              <span className="fw-bold text-dark fs-5">Total Amount</span>
-              <span className="fw-bold text-primary fs-4">
-                {formatPrice(grandTotal)}
-              </span>
-            </div>
-          </>
-        );
-      })()}
-    </div>
-
-    {/* ===== Button ===== */}
-    <div className="p-4">
-
-      <Button
-        variant="success"
-        className="w-100 py-3 rounded-3 fw-bold fs-5 shadow d-flex align-items-center justify-content-center gap-2"
-        // Validate + build payload, then open the Order Summary modal.
-        // The actual /api/scheffer/book POST happens only on modal-confirm.
-        onClick={handleConfirmClick}
-        disabled={isSubmitting}
-      >
-        {isSubmitting ? (
-          <>
-            <Spinner animation="border" size="sm" />
-            Processing...
-          </>
-        ) : (
-          <>
-            <FaCheckCircle />
-            Confirm Booking
-          </>
-        )}
-      </Button>
-
-      <p className="text-center text-muted small mt-3 mb-0">
-        By confirming, you agree to the Terms and Conditions.
-      </p>
-    </div>
-
-  </Card.Body>
-</Card>
+                {/* ── Back + Confirm Booking buttons ────────────────────
+                     Back returns to the chauffeur search page; Confirm
+                     opens the Policies / T&C modal (Step 1a) which then
+                     hands off to the Order Summary modal (Step 2). */}
+                <div className="mb-3 d-flex gap-2">
+                  <Button
+                    variant="outline-secondary"
+                    className="flex-grow-1 d-flex align-items-center justify-content-center gap-2"
+                    onClick={handleBackToSearch}
+                    disabled={isSubmitting}
+                  >
+                    <FaArrowLeft />
+                    Back
+                  </Button>
+                  <Button
+                    variant="danger"
+                    className="flex-grow-1 d-flex align-items-center justify-content-center gap-2"
+                    onClick={handleConfirmClick}
+                    disabled={isSubmitting || noPaymentPathAvailable}
+                    title={
+                      noPaymentPathAvailable
+                        ? "No payment method available — enable card payment or contact your admin."
+                        : undefined
+                    }
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Spinner animation="border" size="sm" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <FaCheckCircle />
+                        Confirm
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <p className="text-center text-muted small mt-1 mb-3">
+                  By confirming, you agree to the Terms and Conditions.
+                </p>
+                </div>
               </Col>
             </Row>
           </Container>
         </main>
       </div>
+
+      {/* ── Policies + T&C modal ────────────────────────────────────
+           Opens on Confirm Booking (Step 1a). Renders the rate's saved
+           T&C and Cancellation Policies (fetched inline from
+           /api/scheffer-rental-rates/{id}) plus an accept checkbox that
+           gates the Proceed button. Proceed hands off to the existing
+           Order Summary modal. Mirrors HotelBookingPage.jsx's policy
+           modal so the two flows behave the same way. */}
+      <Modal
+        show={showPolicyModal}
+        onHide={() => setShowPolicyModal(false)}
+        centered
+        backdrop="static"
+        size="lg"
+        scrollable
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>
+            <FaCar className="me-2 text-primary" />
+            Chauffeur Policies &amp; Terms
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {policiesLoading ? (
+            <div className="text-center py-4">
+              <Spinner animation="border" size="sm" />
+              <div className="mt-2 text-muted small">
+                Loading policies &amp; terms…
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Cancellation Policies */}
+              <section className="mb-4">
+                <h6 className="fw-bold text-dark border-bottom pb-2 mb-2">
+                  Cancellation Policies
+                </h6>
+                {rateCancellationPolicies.length > 0 ? (
+                  <ul className="mb-0 ps-3">
+                    {rateCancellationPolicies.map((p, idx) => (
+                      <li key={idx} className="small mb-1">
+                        {p}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-muted small">
+                    No cancellation policy configured for this rate.
+                  </div>
+                )}
+              </section>
+
+              {/* Terms & Conditions */}
+              <section className="mb-2">
+                <h6 className="fw-bold text-dark border-bottom pb-2 mb-2">
+                  Terms &amp; Conditions
+                </h6>
+                {rateTerms.length > 0 ? (
+                  <ul className="mb-0 ps-3">
+                    {rateTerms.map((t, idx) => (
+                      <li key={idx} className="small mb-1">
+                        {t}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="text-muted small">
+                    No terms &amp; conditions configured for this rate.
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer className="d-flex align-items-center">
+          <Form.Check
+            type="checkbox"
+            id="sdbp-policy-accept"
+            className="me-auto"
+            label="I have read and accept the policies and terms & conditions"
+            checked={policyAccepted}
+            onChange={(e) => setPolicyAccepted(e.target.checked)}
+            disabled={policiesLoading}
+          />
+          <Button
+            variant="outline-secondary"
+            size="sm"
+            onClick={() => setShowPolicyModal(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={proceedFromPolicy}
+            disabled={!policyAccepted || policiesLoading}
+          >
+            Proceed
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       {/* ── Order Summary modal (mirrors HotelBookingPage.jsx) ─────────
            Triggered by the page-level "Confirm Booking" button after
@@ -1179,7 +1461,7 @@ const SchefferDriverBookingPage = () => {
         <Modal.Header closeButton={!isSubmitting}>
           <Modal.Title>
             <FaCar className="me-2 text-primary" />
-            Order Summary — please review
+            Order Summary 
           </Modal.Title>
         </Modal.Header>
         <Modal.Body>
@@ -1222,50 +1504,54 @@ const SchefferDriverBookingPage = () => {
             <Col md={4}>
               <small className="text-muted d-block">Route</small>
               <span>
-                {selectedOption?.location || "N/A"} → {selectedOption?.dropOff || "N/A"}
+                {searchCriteria.pickupName || selectedOption?.cityName || searchCriteria.cityName || "N/A"}
+                {" → "}
+                {searchCriteria.dropoffName || searchCriteria.pickupName || selectedOption?.cityName || searchCriteria.cityName || "N/A"}
               </span>
             </Col>
           </Row>
 
-          {/* Pickup / Dropoff details — only shown when chosen upstream */}
-          {(searchCriteria.pickupType || searchCriteria.dropoffType) && (
+          {/* Pickup / Dropoff details — shown when location details are available */}
+          {(searchCriteria.pickupType || searchCriteria.pickupName || searchCriteria.dropoffType || searchCriteria.dropoffName || selectedOption?.cityName) && (
             <>
               <h6 className="fw-bold mb-2">Pickup &amp; Dropoff</h6>
               <Table size="sm" bordered className="mb-3">
                 <thead className="table-light">
                   <tr>
-                    <th style={{ width: "20%" }}></th>
-                    <th>Type</th>
+                    <th style={{ width: "25%" }}>Location</th>
                     <th>Name</th>
                     <th>Time</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {searchCriteria.pickupType && (
+                  {(searchCriteria.pickupType || searchCriteria.pickupName || selectedOption?.cityName) && (
                     <tr>
                       <td className="fw-semibold">Pickup</td>
                       <td>
-                        <Badge bg="success-subtle" text="success">
-                          {searchCriteria.pickupType}
-                        </Badge>
+                        {searchCriteria.pickupName ||
+                          selectedOption?.cityName ||
+                          searchCriteria.cityName ||
+                          "—"}
                       </td>
-                      <td>{searchCriteria.pickupName || "—"}</td>
-                      <td>
-                        {searchCriteria.pickupType === "AIRPORT" && searchCriteria.pickupTime
-                          ? searchCriteria.pickupTime
-                          : "—"}
-                      </td>
+                      <td>{searchCriteria.pickupTime || "—"}</td>
                     </tr>
                   )}
-                  {searchCriteria.dropoffType && (
+                  {contactDetails.pickupLandmark && (
+                    <tr>
+                      <td className="fw-semibold">Pickup Landmark Address</td>
+                      <td colSpan={2}>{contactDetails.pickupLandmark}</td>
+                    </tr>
+                  )}
+                  {(searchCriteria.dropoffType || searchCriteria.dropoffName || selectedOption?.cityName) && (
                     <tr>
                       <td className="fw-semibold">Dropoff</td>
                       <td>
-                        <Badge bg="warning-subtle" text="warning">
-                          {searchCriteria.dropoffType}
-                        </Badge>
+                        {searchCriteria.dropoffName ||
+                          searchCriteria.pickupName ||
+                          selectedOption?.cityName ||
+                          searchCriteria.cityName ||
+                          "—"}
                       </td>
-                      <td>{searchCriteria.dropoffName || "—"}</td>
                       <td>{searchCriteria.dropoffTime || "—"}</td>
                     </tr>
                   )}
@@ -1300,7 +1586,6 @@ const SchefferDriverBookingPage = () => {
                     <th>#</th>
                     <th>Type</th>
                     <th>Name</th>
-                    <th>Passport</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1311,12 +1596,14 @@ const SchefferDriverBookingPage = () => {
                         {g.isChild
                           ? `Child${g.age != null ? ` (${g.age})` : ""}`
                           : "Adult"}
+                        {idx === leadIndex && !g.isChild && (
+                          <Badge bg="primary" className="ms-2">Lead</Badge>
+                        )}
                       </td>
                       <td>
                         {[g.salutation, g.firstName, g.lastName]
                           .filter(Boolean).join(" ") || "—"}
                       </td>
-                      <td>{g.passportNo || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1324,60 +1611,43 @@ const SchefferDriverBookingPage = () => {
             </>
           )}
 
-          {/* Primary guest */}
-          <h6 className="fw-bold mb-2">Primary Guest</h6>
+          {/* Primary Guest section removed — the Passenger Details table
+              above (with the Lead badge) is the single source of guest data. */}
+
+          {/* Contact Details */}
+          <h6 className="fw-bold mb-2">Contact Details</h6>
           <Row className="mb-3">
             <Col md={6}>
-              <small className="text-muted d-block">Name</small>
-              <span>
-                {[primaryGuest.salutation, primaryGuest.firstName, primaryGuest.lastName]
-                  .filter(Boolean).join(" ") || "—"}
-              </span>
+              <small className="text-muted d-block">Contact Number</small>
+              <span>{contactDetails.contactNumber || "—"}</span>
             </Col>
-            <Col md={3}>
-              <small className="text-muted d-block">Phone</small>
-              <span>{primaryGuest.contactNumber || "—"}</span>
-            </Col>
-            <Col md={3}>
-              <small className="text-muted d-block">LPO</small>
-              <span>{primaryGuest.lpo || "—"}</span>
-            </Col>
-            <Col md={6} className="mt-2">
-              <small className="text-muted d-block">Email</small>
-              <span>{primaryGuest.emailId || "—"}</span>
-            </Col>
-            <Col md={6} className="mt-2">
-              <small className="text-muted d-block">Passport</small>
-              <span>{primaryGuest.passportNumber || "—"}</span>
+            <Col md={6}>
+              <small className="text-muted d-block">Email ID</small>
+              <span>{contactDetails.emailId || "—"}</span>
             </Col>
           </Row>
 
-          {/* Transporter (only if anything filled) */}
-          {(transporterDetails.transporter || transporterDetails.driverName) && (
-            <>
-              <h6 className="fw-bold mb-2">Transporter &amp; Driver</h6>
-              <Row className="mb-3">
-                <Col md={6}>
-                  <small className="text-muted d-block">Transporter</small>
-                  <span>{transporterDetails.transporter || "—"}</span>
-                </Col>
-                <Col md={6}>
-                  <small className="text-muted d-block">Transporter Contact</small>
-                  <span>{transporterDetails.contactNumber || "—"}</span>
-                </Col>
-                <Col md={6} className="mt-2">
-                  <small className="text-muted d-block">Driver</small>
-                  <span>{transporterDetails.driverName || "—"}</span>
-                </Col>
-                <Col md={6} className="mt-2">
-                  <small className="text-muted d-block">Driver Contact</small>
-                  <span>{transporterDetails.driverContact || "—"}</span>
-                </Col>
-              </Row>
-            </>
-          )}
+          {/* Payment Mode */}
+          <h6 className="fw-bold mb-2">Payment Mode</h6>
+          <Row className="mb-3">
+            <Col md={12}>
+              <span>
+                {paymentMode === "CREDITLIMIT"
+                  ? "Credit Limit"
+                  : paymentMode === "CARD"
+                    ? "Card"
+                    : paymentMode === "CASH"
+                      ? "Cash"
+                      : paymentMode || "—"}
+              </span>
+            </Col>
+          </Row>
 
           <hr />
+
+          {/* Transporter & Driver block removed — the card that carried
+              those fields is gone. Pricing breakdown below stays as the
+              price detail shown in the booking summary. */}
 
           {/* Pricing breakdown — selling, total, optional TD, grand total */}
           {(() => {
@@ -1387,14 +1657,24 @@ const SchefferDriverBookingPage = () => {
                 : 0;
             const sellingBase = Number(prices.sellingPrice) || 0;
             const totalBase = Number(prices.totalPrice) || 0;
+            const baseSelling = sellingBase - intercitySurcharge;
+            const baseTotal = totalBase - intercitySurcharge;
             return (
               <div className="p-3 bg-light rounded">
                 <div className="d-flex justify-content-between mb-2 text-muted">
-                  <span>Selling Price</span>
+                  <span>Selling Price (Base)</span>
                   <span className="fw-medium">
-                    AED {sellingBase.toFixed(2)}
+                    AED {baseSelling.toFixed(2)}
                   </span>
                 </div>
+                {intercitySurcharge > 0 && (
+                  <div className="d-flex justify-content-between mb-2 text-muted">
+                    <span>Intercity Surcharge</span>
+                    <span className="fw-medium">
+                      + AED {intercitySurcharge.toFixed(2)}
+                    </span>
+                  </div>
+                )}
                 <div className="d-flex justify-content-between mb-2 text-muted">
                   <span>Total Price</span>
                   <span className="fw-medium">
@@ -1409,7 +1689,7 @@ const SchefferDriverBookingPage = () => {
                 )}
                 <hr className="my-2" />
                 <div className="d-flex justify-content-between align-items-center">
-                  <span className="fw-semibold">Grand Total</span>
+                  <span className="fw-semibold">Total Payable Amount</span>
                   <span className="fs-4 fw-bold text-success">
                     AED {(totalBase + tdNum).toFixed(2)}
                   </span>
@@ -1442,7 +1722,7 @@ const SchefferDriverBookingPage = () => {
             ) : (
               <>
                 <FaCheckCircle className="me-2" />
-                Confirm &amp; Book
+                Confirm
               </>
             )}
           </Button>

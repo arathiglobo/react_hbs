@@ -438,6 +438,25 @@ const SchefferDriverReg = () => {
   const [hotelOptionList, setHotelOptionList] = useState([]);
   const [airportOptionList, setAirportOptionList] = useState([]);
 
+  // Cab-type master, feeds the Cab Type dropdown. Fetched once on mount and on
+  // modal open so a freshly-added type at /masters/cab-type is picked up.
+  // Each row: { id, name, adultCount, childCount }.
+  const [cabTypeOptions, setCabTypeOptions] = useState([]);
+  const fetchCabTypeOptions = async () => {
+    try {
+      const res = await axiosInstance.get("/api/masterCabType?page=0&limit=200");
+      const arr = Array.isArray(res.data)
+        ? res.data
+        : res.data?.content || [];
+      setCabTypeOptions(arr);
+    } catch {
+      setCabTypeOptions([]);
+    }
+  };
+  useEffect(() => {
+    fetchCabTypeOptions();
+  }, []);
+
   const fetchHotelOptionList = async () => {
     try {
       const res = await axiosInstance.get("/api/hotels?page=0&limit=20");
@@ -533,8 +552,11 @@ const SchefferDriverReg = () => {
     pickup: "",
     dropOff: "",
     cabImage: null,
+    maxCapacity: "",
+    maxLuggageCapacity: "",
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [error, setError] = useState("");
   const [validationErrors, setValidationErrors] = useState({});
   const [page, setPage] = useState(0);
@@ -573,6 +595,8 @@ const SchefferDriverReg = () => {
       placeId: "",
       pickup: "",
       dropOff: "",
+      maxCapacity: "",
+      maxLuggageCapacity: "",
     });
     setCabList([]);
     setPlaces([]);
@@ -584,180 +608,139 @@ const SchefferDriverReg = () => {
     setShowModal(true);
   };
 
-  const openEdit = async (item) => {
-    console.log("Editing item:", item); // Debug log to see the structure
-    console.log("Item keys:", Object.keys(item)); // Debug log to see available keys
-    setEditing(item);
-    setIsViewMode(false);
+  // Fetch full provider details fresh from the backend and populate all modal
+  // state from the response. Used by both Edit and View so the modal always
+  // reflects DB state, never the (potentially stale) row data from the list.
+  const loadProviderDetails = async (providerId, viewMode) => {
+    setIsDetailLoading(true);
+    try {
+      const res = await axiosInstance.get(`/api/SchefferDriver/${providerId}`);
+      const data = res?.data || {};
 
-    setFormData({
-      cabProviderName: item.providername || "",
-      contactPerson: item.contactperson || "",
-      contactNumber: item.phonenumber || "",
-      email: item.emailid || "",
-      cabCode: "",
-      cabName: "",
-      countryId: "",
-      placeId: "",
-      pickup: "",
-      dropOff: "",
-    });
+      setFormData({
+        cabProviderName: data.providername || "",
+        contactPerson: data.contactperson || "",
+        contactNumber: data.phonenumber || "",
+        email: data.emailid || "",
+        cabCode: "",
+        cabName: "",
+        cabType: "",
+        countryId: "",
+        placeId: "",
+        pickup: "",
+        dropOff: "",
+        cabImage: null,
+        maxCapacity: "",
+        maxLuggageCapacity: "",
+      });
 
-    // First, try to use existing cab data from the item
-    if (item.cabList && Array.isArray(item.cabList) && item.cabList.length > 0) {
-      console.log("Loading existing cab list from item:", item.cabList);
-      const normalized = item.cabList.map((cab) => normalizeCab(cab));
+      const rawCabs = Array.isArray(data.cabList) ? data.cabList : [];
+      const normalized = rawCabs.map((cab) => normalizeCab(cab));
       setCabList(normalized);
-    } else {
-      console.log("No cab list found in item, attempting to fetch detailed data");
-      // Try to fetch detailed cab data for this provider
-      try {
-        console.log("Attempting to fetch detailed cab data for ID:", item.cabprovider || item.id);
-        const detailedResponse = await axiosInstance.get(`/api/SchefferDriver/${item.cabprovider || item.id}`);
-        console.log("Detailed cab provider data:", detailedResponse.data);
-        
-        if (detailedResponse.data && detailedResponse.data.cabList && Array.isArray(detailedResponse.data.cabList)) {
-          console.log("Loading detailed cab list:", detailedResponse.data.cabList);
-          const normalized = detailedResponse.data.cabList.map((cab) => normalizeCab(cab));
-          setCabList(normalized);
-        } else if (detailedResponse.data && Array.isArray(detailedResponse.data)) {
-          console.log("Loading cab list from array response:", detailedResponse.data);
-          const normalized = detailedResponse.data.map((cab) => normalizeCab(cab));
-          setCabList(normalized);
-        } else {
-          console.log("No cab list found in detailed response, setting empty array");
-          setCabList([]);
-        }
-      } catch (error) {
-        console.log("Error fetching detailed data:", error);
-        setCabList([]);
-      }
-    }
-    
-    setPlaces([]);
-    setPickupDropoffList([]);
-    setEditingCab(null); // Clear any previous editing cab
-    setSelectedCountryOption(null);
-    fetchCountries("");
 
-    setValidationErrors({});
-    setShowModal(true);
-    
-    // Debug log to show final cabList state
-    setTimeout(() => {
-      console.log("Final cabList state after opening edit:", cabList);
-    }, 100);
+      // View mode: preselect the first cab so the form fields show its data,
+      // and hydrate the pickup/dropoff list from its locations.
+      if (viewMode) {
+        const firstCab = rawCabs[0] || null;
+        if (firstCab) {
+          setFormData((prev) => ({
+            ...prev,
+            cabCode: firstCab.cabCode || "",
+            cabName: firstCab.name || "",
+            cabType: firstCab.cabType || "",
+            countryId: String(firstCab.countryid || ""),
+            placeId: String(firstCab.placeid || ""),
+            maxCapacity:
+              firstCab.maxCapacity != null ? String(firstCab.maxCapacity) : "",
+            maxLuggageCapacity:
+              firstCab.maxLuggageCapacity != null
+                ? String(firstCab.maxLuggageCapacity)
+                : "",
+          }));
+          if (firstCab.countryid) {
+            cityList(firstCab.countryid);
+            fetchCountries("").then((options) => {
+              const matched = (options || []).find(
+                (c) => String(c.value) === String(firstCab.countryid)
+              );
+              if (matched) setSelectedCountryOption(matched);
+            });
+          }
+          const locs = Array.isArray(firstCab.cabLocationDTOList)
+            ? firstCab.cabLocationDTOList
+            : [];
+          if (locs.length > 0) {
+            if (hotelOptionList.length === 0) fetchHotelOptionList();
+            if (airportOptionList.length === 0) fetchAirportOptionList();
+            setPickupDropoffList(
+              locs.map((location, idx) => ({
+                id: location.cablocationId || Date.now() + idx,
+                pickupType: location.pickupType || "Other",
+                pickupRefId:
+                  location.pickupRefId != null
+                    ? String(location.pickupRefId)
+                    : null,
+                pickup: location.pickup || "",
+                pickupLocation: location.pickupLocation || "",
+                pickupAddress: location.pickupAddress || "",
+                dropoffType: location.dropoffType || "Other",
+                dropoffRefId:
+                  location.dropoffRefId != null
+                    ? String(location.dropoffRefId)
+                    : null,
+                dropOff: location.dropoff || "",
+                dropoffLocation: location.dropoffLocation || "",
+                dropoffAddress: location.dropoffAddress || "",
+              }))
+            );
+          } else {
+            setPickupDropoffList([]);
+          }
+        } else {
+          setPickupDropoffList([]);
+          setSelectedCountryOption(null);
+          fetchCountries("");
+        }
+      } else {
+        // Edit mode: cab form is empty; user edits cabs individually from the list.
+        setPickupDropoffList([]);
+        setSelectedCountryOption(null);
+        fetchCountries("");
+      }
+    } catch (err) {
+      console.error("Failed to load cab provider details:", err);
+      toast.error(
+        `Failed to load cab provider details: ${
+          err.response?.data?.message || err.message
+        }`
+      );
+      setCabList([]);
+      setPickupDropoffList([]);
+    } finally {
+      setIsDetailLoading(false);
+    }
   };
 
-  const handleView = async (item) => {
-    console.log("Viewing item:", item); // Debug log to see the structure
-    console.log("Item keys:", Object.keys(item)); // Debug log to see available keys
+  const openEdit = (item) => {
+    setEditing(item);
+    setIsViewMode(false);
+    setPlaces([]);
+    setEditingCab(null);
+    setValidationErrors({});
+    setError("");
+    setShowModal(true);
+    loadProviderDetails(item.cabprovider || item.id, false);
+  };
+
+  const handleView = (item) => {
     setEditing(item);
     setIsViewMode(true);
-
-    // Get the first cab's data to populate form fields
-    const firstCab = item.cabList && item.cabList.length > 0 ? item.cabList[0] : null;
-    const firstLocation = firstCab && firstCab.cabLocationDTOList && firstCab.cabLocationDTOList.length > 0 ? firstCab.cabLocationDTOList[0] : null;
-    
-    setFormData({
-      cabProviderName: item.providername || "",
-      contactPerson: item.contactperson || "",
-      contactNumber: item.phonenumber || "",
-      email: item.emailid || "",
-      cabCode: firstCab ? firstCab.cabCode || "" : "",
-      cabName: firstCab ? firstCab.name || "" : "",
-      countryId: firstCab ? String(firstCab.countryid || "") : "",
-      placeId: firstCab ? String(firstCab.placeid || "") : "",
-      pickup: firstLocation ? firstLocation.pickup || "" : "",
-      dropOff: firstLocation ? firstLocation.dropoff || "" : "",
-    });
-
-    // Populate pickup/dropoff locations from the first cab
-    if (firstCab && firstCab.cabLocationDTOList && firstCab.cabLocationDTOList.length > 0) {
-      if (hotelOptionList.length === 0) fetchHotelOptionList();
-      if (airportOptionList.length === 0) fetchAirportOptionList();
-      const locations = firstCab.cabLocationDTOList.map((location, index) => ({
-        id: location.cablocationId || Date.now() + index,
-        pickupType: location.pickupType || "Other",
-        pickupRefId: location.pickupRefId != null ? String(location.pickupRefId) : null,
-        pickup: location.pickup || "",
-        pickupLocation: location.pickupLocation || "",
-        pickupAddress: location.pickupAddress || "",
-        dropoffType: location.dropoffType || "Other",
-        dropoffRefId: location.dropoffRefId != null ? String(location.dropoffRefId) : null,
-        dropOff: location.dropoff || "",
-        dropoffLocation: location.dropoffLocation || "",
-        dropoffAddress: location.dropoffAddress || "",
-      }));
-      console.log("Setting pickup/dropoff locations for view:", locations);
-      setPickupDropoffList(locations);
-    } else {
-      console.log("No pickup/dropoff locations found for view");
-      setPickupDropoffList([]);
-    }
-
-    // Load places for the selected country if available
-    if (firstCab && firstCab.countryid) {
-      cityList(firstCab.countryid);
-    }
-
-    // First, try to use existing cab data from the item
-    if (item.cabList && Array.isArray(item.cabList) && item.cabList.length > 0) {
-      console.log("Loading existing cab list from item for view:", item.cabList);
-      const normalized = item.cabList.map((cab) => normalizeCab(cab));
-      setCabList(normalized);
-    } else {
-      console.log("No cab list found in item for view, attempting to fetch detailed data");
-      // Try to fetch detailed cab data for this provider
-      try {
-        console.log("Attempting to fetch detailed cab data for view, ID:", item.cabprovider || item.id);
-        const detailedResponse = await axiosInstance.get(`/api/SchefferDriver/${item.cabprovider || item.id}`);
-        console.log("Detailed cab provider data for view:", detailedResponse.data);
-        
-        if (detailedResponse.data && detailedResponse.data.cabList && Array.isArray(detailedResponse.data.cabList)) {
-          console.log("Loading detailed cab list for view:", detailedResponse.data.cabList);
-          const normalized = detailedResponse.data.cabList.map((cab) => normalizeCab(cab));
-          setCabList(normalized);
-        } else if (detailedResponse.data && Array.isArray(detailedResponse.data)) {
-          console.log("Loading cab list from array response for view:", detailedResponse.data);
-          const normalized = detailedResponse.data.map((cab) => normalizeCab(cab));
-          setCabList(normalized);
-        } else {
-          console.log("No cab list found in detailed response for view, setting empty array");
-          setCabList([]);
-        }
-      } catch (error) {
-        console.log("Error fetching detailed data for view:", error);
-        setCabList([]);
-      }
-    }
-    
     setPlaces([]);
-    // Don't clear pickupDropoffList here - it's set above
-    
-    // Resolve country for view
-    if (firstCab && firstCab.countryid) {
-      fetchCountries("").then((options) => {
-        const matched = (options || []).find(
-          (c) => String(c.value) === String(firstCab.countryid)
-        );
-        if (matched) {
-          setSelectedCountryOption(matched);
-        }
-      });
-    } else {
-      setSelectedCountryOption(null);
-      fetchCountries("");
-    }
-
+    setEditingCab(null);
     setValidationErrors({});
+    setError("");
     setShowModal(true);
-    
-    // Debug log to show final cabList state for view
-    setTimeout(() => {
-      console.log("Final cabList state after opening view:", cabList);
-      console.log("Final pickupDropoffList state after opening view:", pickupDropoffList);
-    }, 100);
+    loadProviderDetails(item.cabprovider || item.id, true);
   };
 
   const fetchCountries = async (searchTerm = "") => {
@@ -1019,6 +1002,15 @@ const SchefferDriverReg = () => {
       placeOptions.find((place) => String(place.id) === placeIdString)?.name ||
       "";
 
+    const parsedMaxCapacity =
+      formData.maxCapacity === "" || formData.maxCapacity == null
+        ? null
+        : parseInt(formData.maxCapacity, 10);
+    const parsedMaxLuggageCapacity =
+      formData.maxLuggageCapacity === "" || formData.maxLuggageCapacity == null
+        ? null
+        : parseInt(formData.maxLuggageCapacity, 10);
+
     const newCab = {
       cabId: editingCab ? editingCab.cabId : Date.now(), // Keep existing ID if editing
       cabCode: formData.cabCode,
@@ -1028,6 +1020,10 @@ const SchefferDriverReg = () => {
       placeid: formData.placeId, // Use 'placeid' to match your data structure
       placeName: selectedPlaceName,
       cabImage: formData.cabImage, // Include the uploaded image
+      maxCapacity: Number.isFinite(parsedMaxCapacity) ? parsedMaxCapacity : null,
+      maxLuggageCapacity: Number.isFinite(parsedMaxLuggageCapacity)
+        ? parsedMaxLuggageCapacity
+        : null,
       cabLocationDTOList: pickupDropoffList.map((location, index) => ({
         cablocationId: location.id || Date.now() + index,
         cabid: null,
@@ -1062,6 +1058,8 @@ const SchefferDriverReg = () => {
       pickup: "",
       dropOff: "",
       cabImage: null,
+      maxCapacity: "",
+      maxLuggageCapacity: "",
     }));
     setPlaces([]);
     setPickupDropoffList([]); // Clear pickup/dropoff list
@@ -1089,6 +1087,9 @@ const SchefferDriverReg = () => {
       countryId: String(cab.countryid || ""),
       placeId: String(cab.placeid || ""),
       cabImage: cab.cabImage || null,
+      maxCapacity: cab.maxCapacity != null ? String(cab.maxCapacity) : "",
+      maxLuggageCapacity:
+        cab.maxLuggageCapacity != null ? String(cab.maxLuggageCapacity) : "",
     }));
 
     // Set pickup/dropoff locations for editing
@@ -1282,6 +1283,12 @@ const SchefferDriverReg = () => {
         formDataPayload.append(`${prefix}.countryid`, cab.countryid || cab.countryId || '');
         formDataPayload.append(`${prefix}.placeid`, String(cab.placeid || cab.placeId || ''));
         formDataPayload.append(`${prefix}.providername`, '');
+        if (cab.maxCapacity != null && cab.maxCapacity !== '') {
+          formDataPayload.append(`${prefix}.maxCapacity`, String(cab.maxCapacity));
+        }
+        if (cab.maxLuggageCapacity != null && cab.maxLuggageCapacity !== '') {
+          formDataPayload.append(`${prefix}.maxLuggageCapacity`, String(cab.maxLuggageCapacity));
+        }
 
         const cabPicName =
           cab.cabpic ||
@@ -1383,6 +1390,12 @@ const SchefferDriverReg = () => {
         formDataPayload.append(`${prefix}.countryid`, cab.countryid || cab.countryId || '');
         formDataPayload.append(`${prefix}.placeid`, String(cab.placeid || cab.placeId || ''));
         formDataPayload.append(`${prefix}.providername`, '');
+        if (cab.maxCapacity != null && cab.maxCapacity !== '') {
+          formDataPayload.append(`${prefix}.maxCapacity`, String(cab.maxCapacity));
+        }
+        if (cab.maxLuggageCapacity != null && cab.maxLuggageCapacity !== '') {
+          formDataPayload.append(`${prefix}.maxLuggageCapacity`, String(cab.maxLuggageCapacity));
+        }
 
         const cabPicName =
           cab.cabpic ||
@@ -1455,6 +1468,8 @@ const SchefferDriverReg = () => {
       pickup: "",
       dropOff: "",
       cabImage: null,
+      maxCapacity: "",
+      maxLuggageCapacity: "",
     });
     setCabList([]);
     setPlaces([]);
@@ -1463,6 +1478,7 @@ const SchefferDriverReg = () => {
     setValidationErrors({});
     setError("");
     setEditingCab(null);
+    setIsDetailLoading(false);
   };
 
   const fetchCabList = async (pageNum = 0, searchTerm = search) => {
@@ -1575,7 +1591,7 @@ const SchefferDriverReg = () => {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex justify-content-between align-items-center">
-              <span className="fw-semibold">Scheffer Driver and Limousine</span>
+              <span className="fw-semibold">Chauffeur Driver and Limousine</span>
               <Form.Group className="hotel-search-bar position-relative">
                 <Form.Control
                   type="text"
@@ -1747,7 +1763,18 @@ const SchefferDriverReg = () => {
               </Modal.Title>
             </Modal.Header>
             <Modal.Body>
-              <Form>
+              {isDetailLoading && (
+                <div className="text-center py-4">
+                  <div
+                    className="spinner-border spinner-border-sm me-2"
+                    role="status"
+                  >
+                    <span className="visually-hidden">Loading...</span>
+                  </div>
+                  Loading cab provider details...
+                </div>
+              )}
+              <Form style={{ display: isDetailLoading ? "none" : "block" }}>
                 <Card className="mb-3">
                   <Card.Header>Cab Provider Details</Card.Header>
                   <Card.Body>
@@ -1932,7 +1959,7 @@ const SchefferDriverReg = () => {
                               />
                             </Form.Group>
                           </Col>
-                      <Col md={3}>
+                      <Col md={6}>
                             <Form.Group className="mb-3">
                           <Form.Label>Cab Type</Form.Label>
                               <Form.Select
@@ -1943,10 +1970,11 @@ const SchefferDriverReg = () => {
                             }
                           >
                             <option value="">Select type</option>
-                            <option value="Sedan">Sedan</option>
-                            <option value="SUV">SUV</option>
-                            <option value="Luxury">Luxury</option>
-                            <option value="Van">Van</option>
+                            {cabTypeOptions.map((ct) => (
+                              <option key={ct.id} value={ct.name}>
+                                {ct.name} (Adults: {ct.adultCount ?? 0}, Children: {ct.childCount ?? 0})
+                              </option>
+                            ))}
                           </Form.Select>
                             </Form.Group>
                           </Col>
@@ -2068,6 +2096,49 @@ const SchefferDriverReg = () => {
                       </Col>
                     </Row>
                     
+                    <Row>
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Max Capacity</Form.Label>
+                          <Form.Control
+                            type="number"
+                            min="0"
+                            value={formData.maxCapacity}
+                            placeholder=""
+                            {...getFormControlProps(
+                              "maxCapacity",
+                              (e) =>
+                                setFormData({
+                                  ...formData,
+                                  maxCapacity: e.target.value,
+                                }),
+                              {}
+                            )}
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Max Luggage Capacity</Form.Label>
+                          <Form.Control
+                            type="number"
+                            min="0"
+                            value={formData.maxLuggageCapacity}
+                            placeholder=""
+                            {...getFormControlProps(
+                              "maxLuggageCapacity",
+                              (e) =>
+                                setFormData({
+                                  ...formData,
+                                  maxLuggageCapacity: e.target.value,
+                                }),
+                              {}
+                            )}
+                          />
+                        </Form.Group>
+                      </Col>
+                    </Row>
+
                     {/* Pickup & Dropoff Locations were moved out of this modal.
                         After saving the cab provider, use the Zone icon (map marker)
                         on the cab provider list row to manage zones per cab. */}
@@ -2381,6 +2452,8 @@ const SchefferDriverReg = () => {
                                 <th>Cab Name</th>
                                 <th>Country</th>
                                 <th>Place</th>
+                                <th>Max Capacity</th>
+                                <th>Max Luggage</th>
                                 <th>Image</th>
                                 <th>Actions</th>
                               </tr>
@@ -2391,7 +2464,11 @@ const SchefferDriverReg = () => {
                                   <td>{cab.cabCode}</td>
                                   <td>{cab.name}</td>
                                   <td>
-                                    {countries.find(c => String(c.id) === String(cab.countryid))?.name || cab.countryid}
+                                    {cab.countryName ||
+                                      countries.find(
+                                        (c) => String(c.value) === String(cab.countryid)
+                                      )?.label ||
+                                      cab.countryid}
                                   </td>
                                   <td>
                                     {cab.placeName ||
@@ -2407,6 +2484,8 @@ const SchefferDriverReg = () => {
                                       cab.place ||
                                       cab.placeid}
                                   </td>
+                                  <td>{cab.maxCapacity != null ? cab.maxCapacity : "—"}</td>
+                                  <td>{cab.maxLuggageCapacity != null ? cab.maxLuggageCapacity : "—"}</td>
                                   <td>
                                     {cab.cabImage ? (
                                       <img 

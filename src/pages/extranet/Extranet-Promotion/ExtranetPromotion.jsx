@@ -261,7 +261,7 @@ const ExtranetPromotion = () => {
                   <div className="position-relative" style={{ width: "260px" }}>
                     <Form.Control
                       type="text"
-                      placeholder="Search promotion..."
+                      placeholder="Search by type, status, or code..."
                       value={searchTerm}
                       onChange={(e) => {
                         const value = e.target.value;
