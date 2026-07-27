@@ -8,6 +8,28 @@ import { toast } from "react-hot-toast";
 import { Card, Form, Row, Col, Button, Container, Alert } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 
+const formatMarkupOption = (m) => {
+  if (!m) return "";
+  const value = m.markup;
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return m.name || "";
+  }
+  const isPercent = String(m.markupType || "").toLowerCase() === "percent";
+  return `${m.name || ""} - ${value}${isPercent ? "%" : ""}`;
+};
+
+const sortMarkupTypesByPercentage = (items = []) => {
+  return [...items].sort((a, b) => {
+    const aMarkup = Number(a?.markup);
+    const bMarkup = Number(b?.markup);
+    const aValue = Number.isFinite(aMarkup) ? aMarkup : Number.POSITIVE_INFINITY;
+    const bValue = Number.isFinite(bMarkup) ? bMarkup : Number.POSITIVE_INFINITY;
+
+    if (aValue !== bValue) return aValue - bValue;
+    return String(a?.name || "").localeCompare(String(b?.name || ""));
+  });
+};
+
 const Register = () => {
   const [formData, setFormData] = useState({
     companyName: "",
@@ -215,7 +237,7 @@ const Register = () => {
   const markupTypeList = async () => {
     try {
       const response = await axiosInstance.get("/api/markupType");
-      setMarkupList(Array.isArray(response.data) ? response.data : []);
+      setMarkupList(sortMarkupTypesByPercentage(Array.isArray(response.data) ? response.data : []));
     } catch (error) {
       console.log("axios call error for markup list : ", error);
     }
@@ -950,7 +972,7 @@ const Register = () => {
                                 <option value="">Select markup</option>
                                 {Array.isArray(markupList) && markupList.map((m) => (
                                   <option key={m.id} value={m.id}>
-                                    {m.name}
+                                    {formatMarkupOption(m)}
                                   </option>
                                 ))}
                               </Form.Select>

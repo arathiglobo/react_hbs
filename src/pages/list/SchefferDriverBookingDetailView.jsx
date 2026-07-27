@@ -281,6 +281,24 @@ const StatusBadge = ({ status }) => {
   );
 };
 
+const RatePolicyRows = ({ rows, emptyText }) => {
+  const cleanRows = Array.isArray(rows)
+    ? rows.filter((row) => row != null && String(row).trim() !== "")
+    : [];
+
+  if (cleanRows.length === 0) {
+    return <span style={{ color: "#888", fontStyle: "italic" }}>{emptyText}</span>;
+  }
+
+  return (
+    <ul style={{ marginBottom: 0, paddingLeft: "18px" }}>
+      {cleanRows.map((row, index) => (
+        <li key={`rate-policy-${index}`}>{row}</li>
+      ))}
+    </ul>
+  );
+};
+
 export default function SchefferDriverBookingDetailView() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -358,6 +376,7 @@ export default function SchefferDriverBookingDetailView() {
   // record doesn't carry maxLuggageCapacity
   const [cabMaxLuggageCapacity, setCabMaxLuggageCapacity] = useState(null);
   const [rateCancellationPolicies, setRateCancellationPolicies] = useState([]);
+  const [rateTermsAndConditions, setRateTermsAndConditions] = useState([]);
 
 const getPickupLandmarkAddress = (b) => {
   if (!b) return "";
@@ -432,6 +451,7 @@ const getPickupLandmarkAddress = (b) => {
       details?.rateId;
     if (!rateId) {
       setRateCancellationPolicies([]);
+      setRateTermsAndConditions([]);
       return undefined;
     }
 
@@ -443,10 +463,17 @@ const getPickupLandmarkAddress = (b) => {
         const list = Array.isArray(res?.data?.cancellationPolicies)
           ? res.data.cancellationPolicies
           : [];
+        const terms = Array.isArray(res?.data?.termsAndConditions)
+          ? res.data.termsAndConditions
+          : [];
         setRateCancellationPolicies(list);
+        setRateTermsAndConditions(terms);
       })
       .catch(() => {
-        if (alive) setRateCancellationPolicies([]);
+        if (alive) {
+          setRateCancellationPolicies([]);
+          setRateTermsAndConditions([]);
+        }
       });
     return () => {
       alive = false;
@@ -1349,6 +1376,38 @@ const getPickupLandmarkAddress = (b) => {
                 </div>
 
                 {/* ── Remarks ──────────────────────────────────────── */}
+                <div style={card}>
+                  <div style={SECTION_HEADER}>Cancellation Policy</div>
+                  <div
+                    style={{
+                      padding: "12px 16px",
+                      fontSize: "0.82rem",
+                      color: "#222",
+                    }}
+                  >
+                    <RatePolicyRows
+                      rows={rateCancellationPolicies}
+                      emptyText="No cancellation policy configured for this chauffeur rate."
+                    />
+                  </div>
+                </div>
+
+                <div style={card}>
+                  <div style={SECTION_HEADER}>Terms & Conditions</div>
+                  <div
+                    style={{
+                      padding: "12px 16px",
+                      fontSize: "0.82rem",
+                      color: "#222",
+                    }}
+                  >
+                    <RatePolicyRows
+                      rows={rateTermsAndConditions}
+                      emptyText="No terms and conditions configured for this chauffeur rate."
+                    />
+                  </div>
+                </div>
+
                 {details.remarks && (
                   <div style={card}>
                     <div style={SECTION_HEADER}>Remarks</div>

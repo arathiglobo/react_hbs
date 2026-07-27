@@ -115,6 +115,18 @@ const formatMarkupOption = (m) => {
   return `${m.name || ""} - ${value}${isPercent ? "%" : ""}`;
 };
 
+const sortMarkupTypesByPercentage = (items = []) => {
+  return [...items].sort((a, b) => {
+    const aMarkup = Number(a?.markup);
+    const bMarkup = Number(b?.markup);
+    const aValue = Number.isFinite(aMarkup) ? aMarkup : Number.POSITIVE_INFINITY;
+    const bValue = Number.isFinite(bMarkup) ? bMarkup : Number.POSITIVE_INFINITY;
+
+    if (aValue !== bValue) return aValue - bValue;
+    return String(a?.name || "").localeCompare(String(b?.name || ""));
+  });
+};
+
 export default function SubAgent() {
   const [items, setItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -273,7 +285,7 @@ export default function SubAgent() {
       ]);
       setCategories(catRes.data || []);
       setCurrencies(currRes.data || []);
-      setMarkupTypes(Array.isArray(markupRes.data) ? markupRes.data : []);
+      setMarkupTypes(sortMarkupTypesByPercentage(Array.isArray(markupRes.data) ? markupRes.data : []));
       setRolesList(rolesRes.data || []);
       fetchCountries(""); 
     } catch (err) {

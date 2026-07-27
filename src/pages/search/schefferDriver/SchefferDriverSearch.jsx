@@ -143,6 +143,8 @@ export const SchefferDriverSearch = () => {
   const [showCabDetailModal, setShowCabDetailModal] = useState(false);
   const [selectedCabResult, setSelectedCabResult] = useState(null);
   const [selectedCabConfig, setSelectedCabConfig] = useState(null);
+  const [selectedCabRateDetails, setSelectedCabRateDetails] = useState(null);
+  const [selectedCabZoneDetails, setSelectedCabZoneDetails] = useState(null);
   const [cabDetailLoading, setCabDetailLoading] = useState(false);
   // When results are on screen the big search form collapses into a sticky
   // summary strip. Clicking "Modify Search" flips this true to re-expand it.
@@ -547,30 +549,68 @@ export const SchefferDriverSearch = () => {
   const handleViewCab = async (card) => {
     setSelectedCabResult(card);
     setSelectedCabConfig(null);
+    setSelectedCabRateDetails(null);
+    setSelectedCabZoneDetails(null);
     setShowCabDetailModal(true);
 
-    if (!card?.cabProviderId || !card?.cabId) return;
+    const cabId = card?.cabId || card?.cabid;
+    const providerId = card?.cabProviderId;
+    const rateId = card?.rentalRateId || card?.cabRateId || card?.cabratesId;
+    const requests = [];
 
-    try {
-      setCabDetailLoading(true);
-      const res = await axiosInstance.get(`/api/SchefferDriver/cabs/${card.cabProviderId}`);
-      const cabList = Array.isArray(res.data)
-        ? res.data
-        : Array.isArray(res.data?.data)
-        ? res.data.data
-        : Array.isArray(res.data?.cabs)
-        ? res.data.cabs
-        : [];
-      const matchingCab = cabList.find(
-        (cab) => String(cab.cabId || cab.id) === String(card.cabId),
+    setCabDetailLoading(true);
+
+    if (providerId && cabId) {
+      requests.push(
+        axiosInstance
+          .get(`/api/SchefferDriver/cabs/${providerId}`)
+          .then((res) => {
+            const cabList = Array.isArray(res.data)
+              ? res.data
+              : Array.isArray(res.data?.data)
+              ? res.data.data
+              : Array.isArray(res.data?.cabs)
+              ? res.data.cabs
+              : [];
+            const matchingCab = cabList.find(
+              (cab) => String(cab.cabId || cab.id) === String(cabId),
+            );
+            setSelectedCabConfig(matchingCab || null);
+          }),
       );
-      setSelectedCabConfig(matchingCab || null);
-    } catch (error) {
-      console.error("Failed to load cab details:", error);
-      toast.error("Unable to load full cab details. Showing search result details.");
-    } finally {
-      setCabDetailLoading(false);
     }
+
+    if (rateId) {
+      requests.push(
+        axiosInstance
+          .get(`/api/scheffer-rental-rates/${rateId}`)
+          .then((res) => setSelectedCabRateDetails(res.data || null)),
+      );
+    }
+
+    if (providerId && cabId) {
+      requests.push(
+        axiosInstance
+          .get(`/api/scheffer-zones/by-provider/${providerId}`)
+          .then((res) => {
+            const zones = Array.isArray(res.data) ? res.data : [];
+            const matchingZone = zones.find((zone) => String(zone.cabId) === String(cabId));
+            setSelectedCabZoneDetails(matchingZone || null);
+          }),
+      );
+    }
+
+    if (requests.length === 0) {
+      setCabDetailLoading(false);
+      return;
+    }
+
+    const results = await Promise.allSettled(requests);
+    if (results.some((result) => result.status === "rejected")) {
+      console.error("Failed to load one or more cab detail sections:", results);
+      toast.error("Some cab details could not be loaded. Showing available details.");
+    }
+    setCabDetailLoading(false);
   };
 
   const customSelectStyles = {
@@ -603,6 +643,31 @@ export const SchefferDriverSearch = () => {
       </div>
     </Col>
   );
+
+  const PolicyList = ({ rows, emptyText }) => {
+    const cleanRows = Array.isArray(rows)
+      ? rows.filter((row) => row != null && String(row).trim() !== "")
+      : [];
+    if (cleanRows.length === 0) {
+      return <div className="text-muted small">{emptyText}</div>;
+    }
+    return (
+      <ol className="mb-0 ps-3">
+        {cleanRows.map((row, index) => (
+          <li key={`${row}-${index}`} className="small mb-1">
+            {row}
+          </li>
+        ))}
+      </ol>
+    );
+  };
+
+  const formatZoneLocation = (loc) => {
+    if (!loc) return "-";
+    const name = loc.locationName || loc.name || loc.label || "-";
+    const source = loc.source ? ` (${loc.source})` : "";
+    return `${name}${source}`;
+  };
 
   // Results are on screen once a search has run. Collapse the full form into
   // the sticky summary strip then, unless the user chose to modify the search.
@@ -652,6 +717,24 @@ export const SchefferDriverSearch = () => {
       value !== "" &&
       typeof value !== "object",
   );
+  const selectedRateId =
+    selectedCabResult?.rentalRateId ||
+    selectedCabResult?.cabRateId ||
+    selectedCabResult?.cabratesId;
+  const selectedRateTerms = Array.isArray(selectedCabRateDetails?.termsAndConditions)
+    ? selectedCabRateDetails.termsAndConditions
+    : [];
+  const selectedRateCancellationPolicies = Array.isArray(
+    selectedCabRateDetails?.cancellationPolicies,
+  )
+    ? selectedCabRateDetails.cancellationPolicies
+    : [];
+  const selectedZonePickupLocations = Array.isArray(selectedCabZoneDetails?.pickupLocations)
+    ? selectedCabZoneDetails.pickupLocations
+    : [];
+  const selectedZoneDropoffLocations = Array.isArray(selectedCabZoneDetails?.dropoffLocations)
+    ? selectedCabZoneDetails.dropoffLocations
+    : [];
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -1511,8 +1594,79 @@ export const SchefferDriverSearch = () => {
                         selectedCabResult?.basePrice,
                     )}
                   />
-                  <DetailItem label="Rental Rate ID" value={selectedCabResult?.rentalRateId} />
+                  <DetailItem label="Rental Rate ID" value={selectedRateId} />
                 </Row>
+              </div>
+
+              <Row className="g-3 mb-3">
+                <Col md={6}>
+                  <div className="bg-white border rounded-3 p-3 h-100">
+                    <div className="fw-bold mb-2">Cancellation Policies</div>
+                    <PolicyList
+                      rows={selectedRateCancellationPolicies}
+                      emptyText={
+                        selectedRateId
+                          ? "No cancellation policy configured for this rate."
+                          : "Rate details are not available for this cab."
+                      }
+                    />
+                  </div>
+                </Col>
+                <Col md={6}>
+                  <div className="bg-white border rounded-3 p-3 h-100">
+                    <div className="fw-bold mb-2">Terms &amp; Conditions</div>
+                    <PolicyList
+                      rows={selectedRateTerms}
+                      emptyText={
+                        selectedRateId
+                          ? "No terms and conditions configured for this rate."
+                          : "Rate details are not available for this cab."
+                      }
+                    />
+                  </div>
+                </Col>
+              </Row>
+
+              <div className="bg-white border rounded-3 p-3 mb-3">
+                <div className="fw-bold mb-2">Zone Details</div>
+                {!selectedCabZoneDetails ? (
+                  <div className="text-muted small">No zone details configured for this cab.</div>
+                ) : (
+                  <Row className="g-3">
+                    <Col md={6}>
+                      <div className="border rounded-3 p-2 h-100">
+                        <div className="text-muted small fw-semibold mb-1">Pickup Locations</div>
+                        {selectedZonePickupLocations.length > 0 ? (
+                          <ol className="mb-0 ps-3">
+                            {selectedZonePickupLocations.map((loc, index) => (
+                              <li key={loc.id || `${loc.locationId}-${index}`} className="small mb-1">
+                                {formatZoneLocation(loc)}
+                              </li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <div className="text-muted small">No pickup locations configured.</div>
+                        )}
+                      </div>
+                    </Col>
+                    <Col md={6}>
+                      <div className="border rounded-3 p-2 h-100">
+                        <div className="text-muted small fw-semibold mb-1">Dropoff Locations</div>
+                        {selectedZoneDropoffLocations.length > 0 ? (
+                          <ol className="mb-0 ps-3">
+                            {selectedZoneDropoffLocations.map((loc, index) => (
+                              <li key={loc.id || `${loc.locationId}-${index}`} className="small mb-1">
+                                {formatZoneLocation(loc)}
+                              </li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <div className="text-muted small">No dropoff locations configured.</div>
+                        )}
+                      </div>
+                    </Col>
+                  </Row>
+                )}
               </div>
 
               {selectedCabLocations.length > 0 && (
