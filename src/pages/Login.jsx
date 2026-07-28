@@ -19,6 +19,18 @@ const Login = () => {
   const [forgetUsername, setForgetUsername] = useState("");
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [selectedRole, setSelectedRole] = useState("Agent");
+  // ── Agent login OTP (second factor) ──
+  // When /auth/login returns { otpRequired: true } for an agent, we open a
+  // popup to collect the emailed 6-digit code and finish login via
+  // /auth/verify-login-otp. No token is stored until the code is verified.
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpUsername, setOtpUsername] = useState("");
+  const [otpMaskedEmail, setOtpMaskedEmail] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpError, setOtpError] = useState(null);
+  const [otpSubmitting, setOtpSubmitting] = useState(false);
+  const [otpResending, setOtpResending] = useState(false);
+  const [otpResendIn, setOtpResendIn] = useState(0); // resend cooldown, seconds
   // Promo carousel on the login brand panel. Two public sources feed it:
   //   1. OfferZone banners (/api/offerDetails) — shown FIRST, each carrying a
   //      description + validity dates overlaid on the banner image.
@@ -100,6 +112,15 @@ const Login = () => {
     return () => clearInterval(t);
   }, [slides]);
 
+  // Count down the "Resend OTP" cooldown once per second while active.
+  useEffect(() => {
+    if (otpResendIn <= 0) return undefined;
+    const t = setInterval(() => {
+      setOtpResendIn((s) => (s > 0 ? s - 1 : 0));
+    }, 1000);
+    return () => clearInterval(t);
+  }, [otpResendIn]);
+
   // Format a LocalDateTime string ("2026-06-22T00:00:00") to a readable date.
   const formatOfferDate = (value) => {
     if (!value) return "";
@@ -113,6 +134,64 @@ const Login = () => {
     });
   };
 
+  // Store the issued token, prime per-login state, and route to the right
+  // dashboard. Shared by the direct (non-agent) login and the post-OTP path so
+  // both finish a login identically once a token is in hand.
+  const completeLogin = async (data) => {
+    const token = data?.token;
+    const roles = data?.roles;
+    const loginedUserName = data?.username;
+
+    if (!token || !roles || !loginedUserName) {
+      throw new Error(
+        "Invalid response from server: Missing token or roles or username",
+      );
+    }
+
+    localStorage.setItem("authToken", token);
+    localStorage.setItem("userRole", roles);
+    localStorage.setItem("UserName", loginedUserName);
+
+    // Prime localStorage.userId with the caller's own entity id (for
+    // agents: their agent id) BEFORE any downstream page mounts. Several
+    // pages (HotelSearch, LongStaySearch, etc.) read userId synchronously
+    // as the "self" agent id when building the search payload — if userId
+    // is missing they lazily fetch /api/personalProfile and fall back to
+    // agentId=1 in the meantime, which then flows into bookingData and
+    // makes the HotelBookingPage's `/api/agent/{id}` lookup read Globo's
+    // (id=1) `cardPaymentEnabled` instead of the logged-in agent's, so
+    // brand-new agents incorrectly see "online card payment is not
+    // enabled" on the booking page.
+    // Non-blocking on failure — login itself never fails on a
+    // personalProfile hiccup; the lazy fallback in downstream pages
+    // remains as a safety net.
+    try {
+      const profile = await axiosInstance.get(
+        `/api/personalProfile/${loginedUserName}`,
+      );
+      if (profile?.data?.id != null) {
+        localStorage.setItem("userId", String(profile.data.id));
+      }
+    } catch (profileErr) {
+      // Swallow — the per-page lazy fetch will still run.
+      console.warn("Failed to prime userId at login:", profileErr);
+    }
+
+    // Fresh per-login id used to dedupe advertisement views (an ad is counted
+    // once per page per login session). A new login → new id → countable again.
+    const newAdSessionId =
+      typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `s-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+    localStorage.setItem("adSessionId", newAdSessionId);
+
+    if (roles.length > 1) {
+      navigate("/select-userRole", { state: { roles } });
+    } else {
+      DashboardRedirections(roles[0] || "User", navigate);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
@@ -123,59 +202,88 @@ const Login = () => {
         withCredentials: true,
       });
 
-      const token = response.data.token;
-      const roles = response.data.roles;
-      const loginedUserName = response.data.username;
-
-      if (!token || !roles || !loginedUserName) {
-        throw new Error("Invalid response from server: Missing token or roles or username");
+      // Agent accounts get a second factor: the backend has validated the
+      // password, emailed a one-time code, and withheld the token. Open the
+      // OTP popup instead of completing the login here.
+      if (response.data?.otpRequired) {
+        setOtpUsername(response.data.username || username);
+        setOtpMaskedEmail(response.data.maskedEmail || "");
+        setOtpCode("");
+        setOtpError(null);
+        setOtpResendIn(30);
+        setShowOtpModal(true);
+        return;
       }
 
-      localStorage.setItem("authToken", token);
-      localStorage.setItem("userRole", roles);
-      localStorage.setItem("UserName", loginedUserName);
-
-      // Prime localStorage.userId with the caller's own entity id (for
-      // agents: their agent id) BEFORE any downstream page mounts. Several
-      // pages (HotelSearch, LongStaySearch, etc.) read userId synchronously
-      // as the "self" agent id when building the search payload — if userId
-      // is missing they lazily fetch /api/personalProfile and fall back to
-      // agentId=1 in the meantime, which then flows into bookingData and
-      // makes the HotelBookingPage's `/api/agent/{id}` lookup read Globo's
-      // (id=1) `cardPaymentEnabled` instead of the logged-in agent's, so
-      // brand-new agents incorrectly see "online card payment is not
-      // enabled" on the booking page.
-      // Non-blocking on failure — login itself never fails on a
-      // personalProfile hiccup; the lazy fallback in downstream pages
-      // remains as a safety net.
-      try {
-        const profile = await axiosInstance.get(
-          `/api/personalProfile/${loginedUserName}`,
-        );
-        if (profile?.data?.id != null) {
-          localStorage.setItem("userId", String(profile.data.id));
-        }
-      } catch (profileErr) {
-        // Swallow — the per-page lazy fetch will still run.
-        console.warn("Failed to prime userId at login:", profileErr);
-      }
-
-      // Fresh per-login id used to dedupe advertisement views (an ad is counted
-      // once per page per login session). A new login → new id → countable again.
-      const newAdSessionId =
-        typeof crypto !== "undefined" && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `s-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
-      localStorage.setItem("adSessionId", newAdSessionId);
-
-      if (roles.length > 1) {
-        navigate("/select-userRole", { state: { roles } });
-      } else {
-        DashboardRedirections(roles[0] || "User", navigate);
-      }
+      await completeLogin(response.data);
     } catch (err) {
       setError("Invalid username or password");
     }
+  };
+
+  // Submit the 6-digit code; on success the backend returns the same
+  // { token, roles, username } shape as a normal login.
+  const handleVerifyOtp = async (e) => {
+    if (e) e.preventDefault();
+    const code = otpCode.trim();
+    if (code.length !== 6) {
+      setOtpError("Please enter the 6-digit code sent to your email.");
+      return;
+    }
+    setOtpSubmitting(true);
+    setOtpError(null);
+    try {
+      const res = await axiosInstance.post(
+        "/auth/verify-login-otp",
+        { username: otpUsername, otp: code },
+        { withCredentials: true },
+      );
+      // On success completeLogin navigates away, unmounting this page (and the
+      // modal). If it throws, the modal stays open and shows the error below.
+      await completeLogin(res.data);
+    } catch (err) {
+      // The backend returns 400 (not 401/403) for a bad/expired code, so it
+      // lands here rather than triggering the axios refresh/session flow.
+      setOtpError(
+        err?.response?.data?.message ||
+          "Invalid or expired code. Please try again.",
+      );
+    } finally {
+      setOtpSubmitting(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (otpResendIn > 0 || otpResending) return;
+    setOtpResending(true);
+    setOtpError(null);
+    try {
+      const res = await axiosInstance.post(
+        "/auth/resend-login-otp",
+        { username: otpUsername },
+        { withCredentials: true },
+      );
+      if (res.data?.maskedEmail) setOtpMaskedEmail(res.data.maskedEmail);
+      setOtpCode("");
+      setOtpResendIn(30);
+      toast.success("A new verification code has been sent to your email.");
+    } catch (err) {
+      setOtpError(
+        err?.response?.data?.message ||
+          "Could not resend the code. Please try again.",
+      );
+    } finally {
+      setOtpResending(false);
+    }
+  };
+
+  const closeOtpModal = () => {
+    setShowOtpModal(false);
+    setOtpCode("");
+    setOtpError(null);
+    setOtpUsername("");
+    setOtpMaskedEmail("");
+    setOtpResendIn(0);
   };
 
   const [forgetSubmitting, setForgetSubmitting] = useState(false);
@@ -527,6 +635,132 @@ const Login = () => {
                 }}
               >
                 OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Agent Login OTP Modal ── */}
+      {showOtpModal && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 1070,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff", borderRadius: 12, padding: "30px 34px",
+              width: 400, maxWidth: "100%", boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ textAlign: "center", marginBottom: 6 }}>
+              <div
+                style={{
+                  width: 56, height: 56, borderRadius: "50%", background: "#fff5f5",
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  color: "#c0392b", fontSize: 22, marginBottom: 12,
+                }}
+              >
+                <i className="fas fa-shield-alt"></i>
+              </div>
+              <h5 style={{ margin: 0, fontWeight: 700, color: "#1a1a2e" }}>
+                Verify it's you
+              </h5>
+              <p style={{ margin: "8px 0 0", color: "#6c757d", fontSize: 14 }}>
+                We&apos;ve emailed a 6-digit verification code
+                {otpMaskedEmail ? (
+                  <>
+                    {" "}to <strong>{otpMaskedEmail}</strong>
+                  </>
+                ) : null}
+                . Enter it below to finish signing in.
+              </p>
+            </div>
+
+            <form onSubmit={handleVerifyOtp}>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                autoFocus
+                value={otpCode}
+                onChange={(e) => {
+                  setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                  if (otpError) setOtpError(null);
+                }}
+                placeholder="••••••"
+                aria-label="6-digit verification code"
+                style={{
+                  width: "100%", textAlign: "center", letterSpacing: "0.5em",
+                  fontSize: 24, fontWeight: 600, padding: "12px 14px",
+                  border: `2px solid ${otpError ? "#c0392b" : "#e0e0e0"}`,
+                  borderRadius: 8, outline: "none", marginTop: 16, boxSizing: "border-box",
+                }}
+              />
+
+              {otpError && (
+                <div
+                  style={{
+                    color: "#c0392b", fontSize: 13, marginTop: 10, textAlign: "center",
+                  }}
+                >
+                  {otpError}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={otpSubmitting || otpCode.length !== 6}
+                style={{
+                  width: "100%", marginTop: 18, padding: "11px 0", borderRadius: 8,
+                  border: "none",
+                  background: otpSubmitting || otpCode.length !== 6 ? "#e39b93" : "#c0392b",
+                  color: "#fff", fontWeight: 600, fontSize: 15,
+                  cursor: otpSubmitting || otpCode.length !== 6 ? "not-allowed" : "pointer",
+                }}
+              >
+                {otpSubmitting ? "Verifying…" : "Verify & Sign In"}
+              </button>
+            </form>
+
+            <div
+              style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                marginTop: 16,
+              }}
+            >
+              <button
+                type="button"
+                onClick={closeOtpModal}
+                style={{
+                  border: "none", background: "none", color: "#6c757d",
+                  cursor: "pointer", fontSize: 13, padding: 0,
+                }}
+              >
+                <i className="fas fa-arrow-left me-1"></i> Back to login
+              </button>
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                disabled={otpResendIn > 0 || otpResending}
+                style={{
+                  border: "none", background: "none",
+                  color: otpResendIn > 0 || otpResending ? "#adb5bd" : "#c0392b",
+                  cursor: otpResendIn > 0 || otpResending ? "default" : "pointer",
+                  fontWeight: 600, fontSize: 13, padding: 0,
+                }}
+              >
+                {otpResending
+                  ? "Sending…"
+                  : otpResendIn > 0
+                  ? `Resend in ${otpResendIn}s`
+                  : "Resend code"}
               </button>
             </div>
           </div>
