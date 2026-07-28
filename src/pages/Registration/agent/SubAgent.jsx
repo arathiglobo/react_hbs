@@ -748,7 +748,12 @@ export default function SubAgent() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-3 border-0">
             <Card.Header className="bg-white border-0 py-3 d-flex justify-content-between align-items-center border-bottom">
-              <h5 className="mb-0 fw-bold text-dark">Subagent</h5>
+              {/* Title markup matches SubUser.jsx ("Sub User Registration") so
+                  both registration screens share a size and weight. The brand
+                  red comes from the site-wide card-header rule in custom.scss —
+                  no colour is set here. Bootstrap's `text-dark` was previously
+                  overriding that rule (colour utilities carry !important). */}
+              <span className="fw-semibold">Sub Agent Registration</span>
               <div className="d-flex gap-2">
                 <Button className="btn-indigo d-flex align-items-center gap-2" size="sm" onClick={() => handleOpen()}>
                   Create +
@@ -782,7 +787,7 @@ export default function SubAgent() {
                   <tr>
                     <th className="ps-4 py-2 small">S.N</th>
                     <th className="py-2 small">Company</th>
-                    <th className="py-2 small">Name</th>
+                    <th className="py-2 small">Sub Agent Name</th>
                     <th className="py-2 small">Contact</th>
                     <th className="py-2 small">Country</th>
                     <th className="py-2 small">City</th>

@@ -116,7 +116,11 @@ export default function SubUser() {
   const fetchSubUsers = async () => {
     setIsLoading(true);
     try {
-      const res = await axiosInstance.get("/api/sub-user");
+      // Scoped to the logged-in main agent — this screen must only list the
+      // sub-users that agent created. Mirrors SubAgent.jsx, which fetches
+      // "/api/sub-agent/my-sub-agents". The owner is stamped server-side from
+      // the JWT on create, so no agent id is sent from here.
+      const res = await axiosInstance.get("/api/sub-user/my-sub-users");
       if (res.data && Array.isArray(res.data)) {
         setItems(res.data);
       } else {
@@ -397,7 +401,7 @@ export default function SubUser() {
                 <thead className="bg-light">
                   <tr>
                     <th className="ps-4">S/N</th>
-                    <th>Agent Name</th>
+                    <th>Sub User Name</th>
                     <th>Email</th>
                     <th>Mobile</th>
                     <th>Country</th>
