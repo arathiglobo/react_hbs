@@ -421,9 +421,22 @@ export default function Sidebar() {
       code: "top_registration",
       label: "Registration",
       roles: ["admin"],
+      // "Agent Management" is an inline nested accordion (has its own
+      // children[]) — the render code detects this and renders it as an
+      // in-line accordion at this exact position, so it sits right after
+      // "Hotel" as required. Sub Agent / Sub User reuse the same
+      // /agent-registration routes that agents themselves use.
       children: [
         { code: "reg_hotel",         label: "Hotel",                          to: "/registration/hotel" },
-        { code: "reg_agent",         label: "Agent",                          to: "/registration/agent" },
+        {
+          code: "reg_agent_management",
+          label: "Agent Management",
+          children: [
+            { label: "Agent",     to: "/registration/agent" },
+            { label: "Sub Agent", to: "/agent-registration/sub-agent" },
+            { label: "Sub User",  to: "/agent-registration/sub-user" },
+          ],
+        },
         { code: "reg_employee",      label: "Employee",                       to: "/registration/employee" },
         { code: "reg_transfers",     label: "Transfers",                      to: "/registration/cabProvider" },
         { code: "reg_activity",      label: "Tours and Activity",             to: "/registration/activityProvider" },
@@ -955,7 +968,7 @@ export default function Sidebar() {
             return (
               <Nav.Item
                 key={item.label}
-                className={`nav-item-custom ${hasChildren || hasGroups ? "nav-item-has-children" : ""} ${item.label === "Report" || item.label === "Inhouse Accounts" || item.label === "Agent Incentive" || item.label === "Marketing" ? "submenu-up" : ""} ${item.label === "Booking List" || item.label === "New Booking" ? "submenu-center" : ""}`}
+                className={`nav-item-custom ${hasChildren || hasGroups ? "nav-item-has-children" : ""} ${item.label === "Report" || item.label === "Inhouse Accounts" || item.label === "Agent Incentive" || item.label === "Marketing" ? "submenu-up" : ""} ${item.label === "Booking List" || item.label === "New Booking" || item.label === "Registration" ? "submenu-center" : ""}`}
               >
                 <Nav.Link
                   as={hasChildren || hasGroups ? "div" : Link}
@@ -1021,24 +1034,69 @@ export default function Sidebar() {
                     }}
                   >
                     {hasChildren &&
-                      item.children.map((child) => (
-                        <Nav.Link
-                          as={Link}
-                          to={child.to}
-                          key={`${item.label}-${child.label}`}
-                          className="submenu-link"
-                          style={{
-                            display: "block",
-                            padding: "8px 12px",
-                            color: "var(--color-secondary, #111827)",
-                            textDecoration: "none",
-                            cursor: "pointer",
-                            fontWeight: 450,
-                          }}
-                        >
-                          {child.label}
-                        </Nav.Link>
-                      ))}
+                      item.children.map((child) => {
+                        // Inline nested group: a child with its own children[]
+                        // renders as an in-line accordion so it can sit at any
+                        // position in the flat list (e.g. "Agent Management"
+                        // right after "Hotel"). The item-level `groups: [...]`
+                        // field below is still supported for pages like Manage
+                        // Masters that only need grouped sub-sections.
+                        if (Array.isArray(child.children) && child.children.length > 0) {
+                          const groupKey = `${item.label}-${child.label}`;
+                          const isOpen = !!openGroups[groupKey];
+                          return (
+                            <div key={child.label} className="submenu-group">
+                              <button
+                                type="button"
+                                className={`submenu-accordion-header d-flex justify-content-between align-items-center ${
+                                  isOpen ? "open" : ""
+                                }`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  toggleGroup(groupKey);
+                                }}
+                              >
+                                <span>{child.label}</span>
+                                <span className="caret-small">
+                                  {isOpen ? "▴" : "▾"}
+                                </span>
+                              </button>
+                              {isOpen && (
+                                <div className="submenu-children">
+                                  {child.children.map((sub) => (
+                                    <Nav.Link
+                                      as={Link}
+                                      to={sub.to}
+                                      key={`${groupKey}-${sub.label}`}
+                                      className="submenu-link"
+                                    >
+                                      {sub.label}
+                                    </Nav.Link>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+                        return (
+                          <Nav.Link
+                            as={Link}
+                            to={child.to}
+                            key={`${item.label}-${child.label}`}
+                            className="submenu-link"
+                            style={{
+                              display: "block",
+                              padding: "8px 12px",
+                              color: "var(--color-secondary, #111827)",
+                              textDecoration: "none",
+                              cursor: "pointer",
+                              fontWeight: 450,
+                            }}
+                          >
+                            {child.label}
+                          </Nav.Link>
+                        );
+                      })}
                     {hasGroups &&
                       item.groups.map((group) => {
                         const groupKey = `${item.label}-${group.label}`;
@@ -1151,24 +1209,67 @@ export default function Sidebar() {
                       }}
                     >
                       {hasChildren &&
-                        item.children.map((child) => (
-                          <Nav.Link
-                            as={Link}
-                            to={child.to}
-                            key={`${item.label}-mobile-${child.label}`}
-                            onClick={handleClose}
-                            className="submenu-link"
-                            style={{
-                              display: "block",
-                              padding: "8px 12px",
-                              color: "#111827",
-                              textDecoration: "none",
-                              cursor: "pointer",
-                            }}
-                          >
-                            {child.label}
-                          </Nav.Link>
-                        ))}
+                        item.children.map((child) => {
+                          // Mirror the desktop render — inline nested group
+                          // support so a child with children[] renders as an
+                          // accordion at its natural position in the list.
+                          if (Array.isArray(child.children) && child.children.length > 0) {
+                            const groupKey = `${item.label}-${child.label}`;
+                            const isOpen = !!openGroups[groupKey];
+                            return (
+                              <div key={`${child.label}-mobile`} className="submenu-group">
+                                <button
+                                  type="button"
+                                  className={`submenu-accordion-header d-flex justify-content-between align-items-center ${
+                                    isOpen ? "open" : ""
+                                  }`}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    toggleGroup(groupKey);
+                                  }}
+                                >
+                                  <span>{child.label}</span>
+                                  <span className="caret-small">
+                                    {isOpen ? "▴" : "▾"}
+                                  </span>
+                                </button>
+                                {isOpen && (
+                                  <div className="submenu-children">
+                                    {child.children.map((sub) => (
+                                      <Nav.Link
+                                        as={Link}
+                                        to={sub.to}
+                                        key={`${groupKey}-mobile-${sub.label}`}
+                                        onClick={handleClose}
+                                        className="submenu-link"
+                                      >
+                                        {sub.label}
+                                      </Nav.Link>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+                          return (
+                            <Nav.Link
+                              as={Link}
+                              to={child.to}
+                              key={`${item.label}-mobile-${child.label}`}
+                              onClick={handleClose}
+                              className="submenu-link"
+                              style={{
+                                display: "block",
+                                padding: "8px 12px",
+                                color: "#111827",
+                                textDecoration: "none",
+                                cursor: "pointer",
+                              }}
+                            >
+                              {child.label}
+                            </Nav.Link>
+                          );
+                        })}
                       {hasGroups &&
                         item.groups.map((group) => {
                           const groupKey = `${item.label}-${group.label}`;

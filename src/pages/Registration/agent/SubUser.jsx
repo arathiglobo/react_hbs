@@ -7,6 +7,28 @@ import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import { FaEdit, FaTrash, FaSignInAlt, FaEye, FaEyeSlash } from "react-icons/fa";
 
+const formatMarkupOption = (m) => {
+  if (!m) return "";
+  const value = m.markup;
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return m.name || "";
+  }
+  const isPercent = String(m.markupType || "").toLowerCase() === "percent";
+  return `${m.name || ""} - ${value}${isPercent ? "%" : ""}`;
+};
+
+const sortMarkupTypesByPercentage = (items = []) => {
+  return [...items].sort((a, b) => {
+    const aMarkup = Number(a?.markup);
+    const bMarkup = Number(b?.markup);
+    const aValue = Number.isFinite(aMarkup) ? aMarkup : Number.POSITIVE_INFINITY;
+    const bValue = Number.isFinite(bMarkup) ? bMarkup : Number.POSITIVE_INFINITY;
+
+    if (aValue !== bValue) return aValue - bValue;
+    return String(a?.name || "").localeCompare(String(b?.name || ""));
+  });
+};
+
 export default function SubUser() {
   const [items, setItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -35,10 +57,11 @@ export default function SubUser() {
   // province/state master — the place level isn't captured for sub-users.)
   const [countries, setCountries] = useState([]);
   const [provinces, setProvinces] = useState([]);
-  // Markup Type + Currency master lists — loaded from the same endpoints the
-  // sub-agent form uses so both flows show identical options.
+  // Markup Type + Currency master lists. Currency is displayed read-only after
+  // resolving the logged-in sub-agent/main-agent currency.
   const [markupTypes, setMarkupTypes] = useState([]);
   const [currencies, setCurrencies] = useState([]);
+  const [subAgentCurrency, setSubAgentCurrency] = useState(null);
 
   // ── Login credentials (mirrors the Sub Agent login flow) ──────────────
   // Lets the main agent issue login credentials to a sub-user. The username
@@ -68,7 +91,10 @@ export default function SubUser() {
 
   const openCreate = () => {
     setEditing(null);
-    setFormData(initialFormState);
+    setFormData({
+      ...initialFormState,
+      currency: subAgentCurrency?.id != null ? String(subAgentCurrency.id) : "",
+    });
     setValidationErrors({});
     setShowModal(true);
   };
@@ -89,7 +115,9 @@ export default function SubUser() {
       // Legacy rows without markup data leave the selects empty; the Status
       // select falls back to "Active" via initialFormState.
       markup: item.markup ? String(item.markup) : "",
-      currency: item.currency ? String(item.currency) : "",
+      currency: subAgentCurrency?.id != null
+        ? String(subAgentCurrency.id)
+        : (item.currency ? String(item.currency) : ""),
       status: item.status || "Active",
     });
     setValidationErrors({});
@@ -198,7 +226,10 @@ export default function SubUser() {
   const closeModal = () => {
     setShowModal(false);
     setEditing(null);
-    setFormData(initialFormState);
+    setFormData({
+      ...initialFormState,
+      currency: subAgentCurrency?.id != null ? String(subAgentCurrency.id) : "",
+    });
     setValidationErrors({});
   };
 
@@ -349,7 +380,7 @@ export default function SubUser() {
         axiosInstance.get("/api/currency"),
         axiosInstance.get("/api/userRoles"),
       ]);
-      setMarkupTypes(Array.isArray(markupRes.data) ? markupRes.data : []);
+      setMarkupTypes(sortMarkupTypesByPercentage(Array.isArray(markupRes.data) ? markupRes.data : []));
       setCurrencies(Array.isArray(currRes.data) ? currRes.data : []);
       setRolesList(Array.isArray(rolesRes.data) ? rolesRes.data : []);
     } catch (err) {
@@ -359,10 +390,37 @@ export default function SubUser() {
     }
   };
 
+  const resolveSubAgentCurrency = async () => {
+    try {
+      const uname =
+        localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+      if (!uname) return;
+      const prof = await axiosInstance.get(`/api/personalProfile/${uname}`);
+      const agentId = prof?.data?.id;
+      if (agentId == null) return;
+      const agentRes = await axiosInstance.get(`/api/agent/${agentId}`);
+      const currencyId = agentRes?.data?.currency;
+      if (currencyId == null) return;
+      setSubAgentCurrency({
+        id: currencyId,
+        code: agentRes?.data?.currencyCode || "",
+      });
+    } catch (err) {
+      console.error("Could not resolve sub-agent currency", err);
+    }
+  };
+
   useEffect(() => {
     fetchCountries();
     fetchMarkupMasterData();
+    resolveSubAgentCurrency();
   }, []);
+
+  useEffect(() => {
+    if (subAgentCurrency?.id != null) {
+      setFormData((prev) => ({ ...prev, currency: String(subAgentCurrency.id) }));
+    }
+  }, [subAgentCurrency]);
 
   useEffect(() => {
     fetchProvinces(formData.countryId);
@@ -373,6 +431,16 @@ export default function SubUser() {
     item.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.mobileNumber?.includes(searchTerm)
   );
+
+  const subAgentCurrencyLabel = () => {
+    if (!subAgentCurrency) return "Not configured";
+    const match = currencies.find(
+      (c) => String(c.currencyId || c.id) === String(subAgentCurrency.id)
+    );
+    const code = subAgentCurrency.code || match?.currencyCode || match?.code || "";
+    const name = (match?.name || match?.currencyName || "").trim();
+    return name ? `${code} - ${name}` : code || `#${subAgentCurrency.id}`;
+  };
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -599,9 +667,8 @@ export default function SubUser() {
                   </div>
                   {/* ── Markup configuration ─────────────────────────────
                       Mirrors the Settings block on the sub-agent form
-                      (Markup Type required, Currency optional, Status
-                      required). Options come from the same master
-                      endpoints (/api/markupType, /api/currency). */}
+                      (Markup Type required, Currency inherited, Status
+                      required). Markup options come from /api/markupType. */}
                   <div className="col-md-4 mb-3">
                     <Form.Group>
                       <Form.Label className="small fw-bold">
@@ -617,7 +684,7 @@ export default function SubUser() {
                         <option value="">SELECT</option>
                         {markupTypes.map((m) => (
                           <option key={m.id} value={m.id}>
-                            {m.name}
+                            {formatMarkupOption(m)}
                           </option>
                         ))}
                       </Form.Select>
@@ -629,22 +696,11 @@ export default function SubUser() {
                   <div className="col-md-4 mb-3">
                     <Form.Group>
                       <Form.Label className="small fw-bold">Currency</Form.Label>
-                      <Form.Select
-                        value={formData.currency}
-                        onChange={(e) =>
-                          setFormData({ ...formData, currency: e.target.value })
-                        }
-                      >
-                        <option value="">SELECT</option>
-                        {currencies.map((c) => (
-                          <option
-                            key={c.currencyId || c.id}
-                            value={c.currencyId || c.id}
-                          >
-                            {(c.code || c.currencyCode)} - {(c.name || c.currencyName)}
-                          </option>
-                        ))}
-                      </Form.Select>
+                      <Form.Control
+                        value={subAgentCurrencyLabel()}
+                        readOnly
+                        disabled
+                      />
                     </Form.Group>
                   </div>
                   <div className="col-md-4 mb-3">

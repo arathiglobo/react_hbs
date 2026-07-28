@@ -42,6 +42,28 @@ import {
   FaArrowLeft,
 } from "react-icons/fa";
 
+const formatMarkupOption = (markup) => {
+  if (!markup) return "";
+  const value = markup.markup;
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return markup.name || "";
+  }
+  const isPercent = String(markup.markupType || "").toLowerCase() === "percent";
+  return `${markup.name || ""} - ${value}${isPercent ? "%" : ""}`;
+};
+
+const sortMarkupTypesByPercentage = (items = []) => {
+  return [...items].sort((a, b) => {
+    const aMarkup = Number(a?.markup);
+    const bMarkup = Number(b?.markup);
+    const aValue = Number.isFinite(aMarkup) ? aMarkup : Number.POSITIVE_INFINITY;
+    const bValue = Number.isFinite(bMarkup) ? bMarkup : Number.POSITIVE_INFINITY;
+
+    if (aValue !== bValue) return aValue - bValue;
+    return String(a?.name || "").localeCompare(String(b?.name || ""));
+  });
+};
+
 const tabOrder = [
   "hotel-info",
   "location-info",
@@ -566,7 +588,7 @@ const loadHotelData = async () => {
     try {
       const response = await axiosInstance.get("/api/markupType");
       // console.log("Markup Types response:", response.data);
-      setMarkupTypes(response.data || []);
+      setMarkupTypes(sortMarkupTypesByPercentage(Array.isArray(response.data) ? response.data : []));
     } catch (error) {
       console.error("Error loading markup types:", error);
       toast.error("Failed to load markup types");
@@ -2009,7 +2031,7 @@ const handleAmenityChange = (e) => {
                                 <option value="">Select Markup Type</option>
                                 {markupTypes.map((markup) => (
                                   <option key={markup.id} value={markup.id}>
-                                    {markup.name}
+                                    {formatMarkupOption(markup)}
                                   </option>
                                 ))}
                               </Form.Select>

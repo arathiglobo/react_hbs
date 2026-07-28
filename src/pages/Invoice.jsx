@@ -43,6 +43,7 @@ export default function Invoice() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [hasAppliedFilters, setHasAppliedFilters] = useState(false);
   const itemsPerPage = 10;
 
   const activeRole = (localStorage.getItem("currentActiveRole") || "")
@@ -63,14 +64,102 @@ export default function Invoice() {
     }
   };
 
-  const fetchInvoiceData = async (pageNumber = 0) => {
+  const firstNonEmpty = (...values) =>
+    values.find((value) => String(value ?? "").trim() !== "");
+
+  const joinName = (...parts) =>
+    parts
+      .map((part) => String(part ?? "").trim())
+      .filter(Boolean)
+      .join(" ");
+
+  const getInvoiceCustomerName = (invoice) => {
+    const customer = invoice?.customer || invoice?.customerDTO || {};
+    const primaryGuest =
+      invoice?.primaryGuest ||
+      invoice?.leadGuest ||
+      invoice?.leadPassenger ||
+      invoice?.guest ||
+      {};
+    const firstGuest = Array.isArray(invoice?.guests)
+      ? invoice.guests[0]
+      : Array.isArray(invoice?.passengers)
+        ? invoice.passengers[0]
+        : Array.isArray(invoice?.paxDetails)
+          ? invoice.paxDetails[0]
+          : {};
+
+    return firstNonEmpty(
+      invoice?.customerName,
+      invoice?.guestName,
+      invoice?.leadGuestName,
+      invoice?.leadPassengerName,
+      invoice?.passengerName,
+      invoice?.primaryGuestName,
+      invoice?.customerFullName,
+      customer?.name,
+      customer?.customerName,
+      joinName(customer?.firstName, customer?.lastName),
+      joinName(primaryGuest?.firstName, primaryGuest?.lastName),
+      joinName(firstGuest?.firstName, firstGuest?.lastName),
+      joinName(invoice?.customerFirstName, invoice?.customerLastName),
+      joinName(invoice?.firstName, invoice?.lastName),
+    );
+  };
+
+  const normalizeInvoiceRow = (invoice) => ({
+    ...invoice,
+    customerName: getInvoiceCustomerName(invoice) || invoice?.customerName || "",
+  });
+
+  const applyInvoiceResponse = (data) => {
+    const pageData = data?.bookings || data?.data || data;
+    const content = Array.isArray(pageData)
+      ? pageData
+      : (pageData?.content || pageData?.bookings || []);
+
+    setInvoiceList(Array.isArray(content) ? content.map(normalizeInvoiceRow) : []);
+    setTotalElements(
+      pageData?.totalElements ?? data?.totalElements ?? content?.length ?? 0,
+    );
+    setTotalPages(
+      pageData?.totalPages ??
+        data?.totalPages ??
+        Math.ceil((content?.length || 0) / itemsPerPage),
+    );
+  };
+
+  const fetchInitialInvoiceData = async (pageNumber = 0) => {
+    setIsLoading(true);
+    setError("");
+    try {
+      const response = await axiosInstance.get(
+        `/api/unified-bookings/list?page=${pageNumber}&size=${itemsPerPage}`,
+      );
+
+      applyInvoiceResponse(response.data);
+    } catch (err) {
+      console.error("Error fetching bookings:", err);
+      setError(
+        err.response?.data?.message ||
+          "An error occurred while fetching bookings",
+      );
+      setInvoiceList([]);
+      setTotalElements(0);
+      setTotalPages(0);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchFilteredInvoiceData = async (pageNumber = 0) => {
     setIsLoading(true);
     setError("");
     try {
       const params = new URLSearchParams();
+      if (agent) params.append("agent", agent);
       if (fromDate) params.append("fromDate", fromDate);
       if (toDate) params.append("toDate", toDate);
-      if (agent) params.append("agent", agent);
       params.append("page", String(pageNumber));
       params.append("limit", String(itemsPerPage));
 
@@ -78,18 +167,21 @@ export default function Invoice() {
         `/api/bookings/full-list?${params.toString()}`,
       );
 
-      if (response.data && response.data.success) {
-        setInvoiceList(response.data.bookings?.content || []);
-        setTotalElements(response.data.bookings?.totalElements || 0);
-        setTotalPages(response.data.bookings?.totalPages || 0);
-        if (response.data.bookings?.content?.length === 0) {
-          toast.success("No bookings found for the selected criteria");
-        }
-      } else {
+      if (response.data && response.data.success === false) {
         setError(response.data?.message || "Failed to fetch bookings");
         setInvoiceList([]);
         setTotalElements(0);
         setTotalPages(0);
+        return;
+      }
+
+      applyInvoiceResponse(response.data);
+      const pageData = response.data?.bookings || response.data?.data || response.data;
+      const content = Array.isArray(pageData)
+        ? pageData
+        : (pageData?.content || pageData?.bookings || []);
+      if (Array.isArray(content) && content.length === 0) {
+        toast.success("No bookings found for the selected criteria");
       }
     } catch (err) {
       console.error("Error fetching bookings:", err);
@@ -105,21 +197,30 @@ export default function Invoice() {
     }
   };
 
-  // Agent logins are auto-scoped by the backend, so load the list on mount
-  // (and on page change) without requiring an agent selection. Admins keep
-  // the existing behavior of only fetching once a filter is chosen.
+  // Load all invoice records by default, then keep pagination on the current
+  // data source: initial list until filters are applied, filtered list after.
   useEffect(() => {
-    if (isAgentRole || fromDate || toDate || agent) {
-      fetchInvoiceData(currentPage - 1);
+    if (hasAppliedFilters) {
+      fetchFilteredInvoiceData(currentPage - 1);
+    } else {
+      fetchInitialInvoiceData(currentPage - 1);
     }
-  }, [currentPage]);
+  }, [currentPage, hasAppliedFilters]);
 
   const handleSearch = (e) => {
     e.preventDefault();
-    if (currentPage === 1) {
-      fetchInvoiceData(0);
-    } else {
+    const hasSearchCriteria = Boolean(agent || fromDate || toDate);
+    if (currentPage !== 1) {
+      setHasAppliedFilters(hasSearchCriteria);
       setCurrentPage(1);
+    } else if (hasSearchCriteria === hasAppliedFilters) {
+      if (hasSearchCriteria) {
+        fetchFilteredInvoiceData(0);
+      } else {
+        fetchInitialInvoiceData(0);
+      }
+    } else {
+      setHasAppliedFilters(hasSearchCriteria);
     }
   };
 
@@ -363,7 +464,6 @@ export default function Invoice() {
                               value={agent}
                               onChange={(e) => setAgent(e.target.value)}
                               onFocus={agentList}
-                              required
                             >
                               <option value="">Select Agent</option>
                               {agents.map((agentItem) => (
