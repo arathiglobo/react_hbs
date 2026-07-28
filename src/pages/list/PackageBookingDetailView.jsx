@@ -241,6 +241,32 @@ const formatDate = (dateString) => {
   }
 };
 
+// Deadline Date carries the package's Policy Details validityTo (the latest
+// validity window). Every package-booking detail view shows BOTH the date AND
+// the time. Values may be a full datetime ("yyyy-MM-ddTHH:mm:ss") or a legacy
+// date-only ("yyyy-MM-dd"); a date-only value is normalised to local midnight
+// so it renders as "12:00 AM" rather than a timezone-shifted time — new Date()
+// parses a bare "yyyy-MM-dd" as UTC, which would otherwise show e.g. 05:30 AM
+// (IST) / 04:00 AM (GST) here.
+const formatDateTime = (dateString) => {
+  if (!dateString) return "-";
+  const str = String(dateString).trim();
+  const normalised = /^\d{4}-\d{2}-\d{2}$/.test(str) ? `${str}T00:00:00` : str;
+  const date = new Date(normalised);
+  if (isNaN(date.getTime())) return str;
+  const datePart = date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  const timePart = date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+  return `${datePart}, ${timePart}`;
+};
+
 export default function PackageBookingDetailView() {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
@@ -1133,9 +1159,12 @@ export default function PackageBookingDetailView() {
   // Plain status label — Confirmed / Cancelled — colored inline only
   // (matches the Hotel detail page's StatusBadge approach of using
   // text color to convey state, no pill or background).
-  // Mirrors the hotel booking flow: Cancelled → red, ReConfirmed → blue,
-  // Confirmed → green. Cancellation takes precedence over the persisted
-  // bookingStatus so a cancelled-then-uncancelled row still reads correctly.
+  // Mirrors the hotel booking flow: Cancelled → red, Confirmed → green.
+  // ReConfirmed is displayed as "Confirm/ReConfirmed" in green too — only the
+  // Status row's label/colour differ; derivedStatus itself keeps the plain
+  // "ReConfirmed" value the action-button logic further down relies on.
+  // Cancellation takes precedence over the persisted bookingStatus so a
+  // cancelled-then-uncancelled row still reads correctly.
   const derivedStatus = (() => {
     if (listStatus === "cancelled" || bookingDetails?.isCancelled === true) {
       return "Cancelled";
@@ -1153,13 +1182,16 @@ export default function PackageBookingDetailView() {
     }
     return "Confirmed";
   })();
-  const statusLabel = derivedStatus;
-  const statusColor =
-    derivedStatus === "Cancelled"
-      ? "#dc2626"
-      : derivedStatus === "ReConfirmed"
-        ? "#1d4ed8"
-        : "#16a34a";
+  // Status row display only: ReConfirmed reads "Confirm/ReConfirmed" (green)
+  // and Cancelled reads "ReConfirmed/Cancelled" (red). derivedStatus itself is
+  // unchanged so the action-button logic still keys off the plain values.
+  const statusLabel =
+    derivedStatus === "ReConfirmed"
+      ? "Confirm/ReConfirmed"
+      : derivedStatus === "Cancelled"
+        ? "ReConfirmed/Cancelled"
+        : derivedStatus;
+  const statusColor = derivedStatus === "Cancelled" ? "#dc2626" : "#16a34a";
 
   // Voucher / Invoice variant. The raw bookingStatus survives cancellation
   // (only isCancelled flips), so a cancelled-from-Confirmed booking still
@@ -1252,15 +1284,21 @@ export default function PackageBookingDetailView() {
                           label="Travel Date"
                           value={formatDate(bookingDetails.travelDate)}
                         />
+                        {/* Check-in Date row hidden per request
                         <InfoRow
                           label="Check-in Date"
                           value={formatDate(bookingDetails.checkInDate)}
                         />
+                        */}
                         <InfoRow
                           label="No. of Nights"
                           value={
                             nights ? `${nights} Nights / ${daysInt} Days` : "-"
                           }
+                        />
+                        <InfoRow
+                          label="Deadline Date"
+                          value={formatDateTime(bookingDetails.deadlineDate)}
                         />
                       </Col>
                       <Col md={6}>

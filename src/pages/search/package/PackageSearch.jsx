@@ -57,9 +57,6 @@ function Counter({ value, min, max, onChange }) {
   );
 }
 
-// Maximum number of rooms allowed per booking.
-const MAX_ROOMS = 5;
-
 // ─────────────────────────────────────────────
 // Room Guest Selector
 // ─────────────────────────────────────────────
@@ -76,13 +73,6 @@ function RoomGuestSelector({ value, onChange }) {
     setRooms(next);
     onChange && onChange(next);
   };
-
-  const addRoom = () => {
-    // Enforce the per-booking room cap.
-    if (rooms.length >= MAX_ROOMS) return;
-    update([...rooms, { adults: 1, children: 0, childAges: [] }]);
-  };
-  const removeRoom = (index) => update(rooms.filter((_, i) => i !== index));
 
   const setAdults = (index, adults) =>
     update(rooms.map((r, i) => (i === index ? { ...r, adults } : r)));
@@ -118,19 +108,6 @@ function RoomGuestSelector({ value, onChange }) {
       <div className="rgs-grid">
         {rooms.map((room, i) => (
           <div key={i} className="rgs-room-card">
-            <div className="rgs-room-header">
-              <span className="rgs-room-label">🛏 Room {i + 1}</span>
-              {rooms.length > 1 && (
-                <button
-                  type="button"
-                  className="rgs-remove-btn"
-                  onClick={() => removeRoom(i)}
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-
             <div className="rgs-counters-col">
               <div className="rgs-counter-row">
                 <div className="rgs-counter-info">
@@ -222,21 +199,6 @@ function RoomGuestSelector({ value, onChange }) {
             )}
           </div>
         ))}
-
-        <button
-          type="button"
-          className="rgs-add-room-btn"
-          onClick={addRoom}
-          disabled={rooms.length >= MAX_ROOMS}
-        >
-          <span className="rgs-add-icon">+</span>
-          <span>Add Room</span>
-        </button>
-        {rooms.length >= MAX_ROOMS && (
-          <div className="text-danger small mt-2">
-            A maximum of {MAX_ROOMS} rooms can be added per booking.
-          </div>
-        )}
       </div>
     </div>
   );
@@ -697,10 +659,10 @@ const PackageSearch = () => {
                     </Form.Group>
                   </Col>
 
-                  {/* Rooms & Guests — same selector as /new-booking/hotel.
-                      The summary button shows the aggregate adults/children/
-                      rooms and toggles the expandable RoomGuestSelector; the
-                      Add Room button appends a room (up to MAX_ROOMS). */}
+                  {/* Rooms & Guests — mirrors /new-booking/hotel's selector.
+                      The summary button shows the aggregate adults/children and
+                      toggles the expandable RoomGuestSelector for adjusting the
+                      adults/children counts. */}
                   <Col lg={4} md={6}>
                     <Form.Label>Number of Adults and Children</Form.Label>
                     <div className="d-flex flex-wrap gap-2">
@@ -715,29 +677,6 @@ const PackageSearch = () => {
                         <span className="float-end">
                           {roomsOpen ? "▴" : "▾"}
                         </span>
-                      </Button>
-                      <Button
-                        type="button"
-                        className="flex-shrink-0 btn-add-room-premium"
-                        disabled={roomsOpen && rooms.length >= MAX_ROOMS}
-                        onClick={() => {
-                          if (!roomsOpen) {
-                            setRoomsOpen(true); // first click: just open
-                          } else {
-                            // later clicks: add room, but never exceed the cap
-                            setRooms((prev) =>
-                              prev.length >= MAX_ROOMS
-                                ? prev
-                                : [
-                                    ...prev,
-                                    { adults: 1, children: 0, childAges: [] },
-                                  ],
-                            );
-                          }
-                        }}
-                      >
-                        <span className="add-room-plus">+</span>
-                        <span>Add Room</span>
                       </Button>
                     </div>
                   </Col>

@@ -1,0 +1,431 @@
+/* ============================================================
+   Cab Transfer "View" detail modal
+   ------------------------------------------------------------
+   Attractive, user-friendly transfer-details modal shown from the
+   "View" button on each result row of /new-booking/cab. Visually
+   mirrors the package detail modal (PackageSearch.css) but every
+   class is scoped with a `ctm-` prefix so this stylesheet is fully
+   self-contained and cannot collide with other pages' global CSS.
+   Brand red: #EC0B43
+   ============================================================ */
+
+.ctm-modal .modal-content {
+    border: none;
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.ctm-modal .modal-dialog {
+    max-width: 860px;
+}
+
+/* --- Header --- */
+.ctm-header {
+    border-bottom: none;
+    padding: 0.85rem 1.25rem;
+    background: linear-gradient(135deg, #EC0B43 0%, #C90939 100%);
+    color: #fff;
+}
+
+.ctm-header .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+    opacity: 0.9;
+}
+
+.ctm-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
+    margin: 0;
+    display: flex;
+    align-items: center;
+}
+
+/* --- Body / Footer --- */
+.ctm-body {
+    padding: 0;
+    background: #f8fafc;
+}
+
+.ctm-footer {
+    border-top: 1px solid #edf2f7;
+    padding: 0.6rem 1rem;
+    background: #fff;
+}
+
+/* --- Hero --- */
+.ctm-hero {
+    position: relative;
+    width: 100%;
+    height: 220px;
+    overflow: hidden;
+    background: linear-gradient(135deg, #EC0B43 0%, #7a0521 100%);
+}
+
+.ctm-hero-fallback {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.22);
+    font-size: 5.5rem;
+}
+
+.ctm-hero-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.ctm-hero-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        180deg,
+        rgba(0, 0, 0, 0) 30%,
+        rgba(0, 0, 0, 0.78) 100%
+    );
+    display: flex;
+    align-items: flex-end;
+    padding: 1.25rem;
+}
+
+.ctm-hero-text {
+    color: #fff;
+    width: 100%;
+}
+
+.ctm-hero-type {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: rgba(236, 11, 67, 0.95);
+    color: #fff;
+    padding: 3px 10px;
+    border-radius: 50px;
+    margin-bottom: 0.5rem;
+}
+
+.ctm-hero-name {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #fff;
+    margin: 0 0 0.35rem 0;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.ctm-hero-name small {
+    font-weight: 600;
+    font-size: 0.8rem;
+    opacity: 0.85;
+}
+
+.ctm-hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.92);
+}
+
+.ctm-hero-meta span {
+    display: inline-flex;
+    align-items: center;
+}
+
+/* --- Content wrapper --- */
+.ctm-content {
+    padding: 1rem;
+}
+
+/* --- Highlight strip --- */
+.ctm-highlight-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.75rem;
+    background: #fff;
+    border: 1px solid #edf2f7;
+    border-radius: 12px;
+    padding: 0.85rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.ctm-highlight-item {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+}
+
+.ctm-highlight-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #fde2e9 0%, #fbd0db 100%);
+    color: #EC0B43;
+    padding: 10px;
+    flex-shrink: 0;
+}
+
+.ctm-highlight-label {
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #718096;
+    font-weight: 700;
+    margin-bottom: 1px;
+}
+
+.ctm-highlight-value {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #2d3748;
+    line-height: 1.2;
+}
+
+.ctm-highlight-value.ctm-price {
+    color: #EC0B43;
+}
+
+/* --- Feature chips --- */
+.ctm-chips {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+.ctm-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 13px;
+    border-radius: 50px;
+    font-size: 0.76rem;
+    font-weight: 600;
+    background: #eef2f7;
+    color: #334155;
+    border: 1px solid #e2e8f0;
+}
+
+.ctm-chip svg {
+    color: #EC0B43;
+}
+
+.ctm-chip.ctm-chip-type {
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    color: #155724;
+    border-color: #b1dfbb;
+}
+
+.ctm-chip.ctm-chip-type svg {
+    color: #155724;
+}
+
+/* --- Section card --- */
+.ctm-section {
+    background: #fff;
+    border: 1px solid #edf2f7;
+    border-radius: 12px;
+    padding: 1rem 1.1rem;
+    margin-bottom: 1rem;
+}
+
+.ctm-section:last-child {
+    margin-bottom: 0;
+}
+
+.ctm-section-title {
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #2d3748;
+    margin-bottom: 0.85rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    align-items: center;
+}
+
+/* --- Journey route visual --- */
+.ctm-route {
+    display: flex;
+    align-items: stretch;
+    gap: 0.85rem;
+}
+
+.ctm-route-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 4px;
+}
+
+.ctm-route-pin {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 3px solid #EC0B43;
+    background: #fff;
+    flex-shrink: 0;
+}
+
+.ctm-route-pin.ctm-route-pin-end {
+    background: #EC0B43;
+}
+
+.ctm-route-line {
+    flex: 1;
+    width: 2px;
+    background: repeating-linear-gradient(
+        #EC0B43 0 4px,
+        transparent 4px 8px
+    );
+    margin: 2px 0;
+    min-height: 22px;
+}
+
+.ctm-route-points {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+}
+
+.ctm-route-loc {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #2d3748;
+    line-height: 1.25;
+}
+
+.ctm-route-kind {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #718096;
+}
+
+/* --- Info rows --- */
+.ctm-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 6px 0;
+    border-bottom: 1px dashed #f1f5f9;
+    font-size: 0.82rem;
+}
+
+.ctm-info-row:last-child {
+    border-bottom: none;
+}
+
+.ctm-info-label {
+    color: #718096;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.ctm-info-value {
+    color: #2d3748;
+    font-weight: 600;
+    text-align: right;
+    word-break: break-word;
+}
+
+/* --- Stat tiles (transfer + vehicle info) --- */
+.ctm-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.75rem;
+}
+
+.ctm-stat-tile {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    background: #f8fafc;
+    border: 1px solid #edf2f7;
+    border-radius: 10px;
+    padding: 0.7rem 0.85rem;
+}
+
+.ctm-stat-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    background: #fff;
+    border: 1px solid #f1d4dc;
+    color: #EC0B43;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.ctm-stat-label {
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #718096;
+    font-weight: 700;
+}
+
+.ctm-stat-value {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #2d3748;
+    line-height: 1.2;
+}
+
+/* --- Price breakdown --- */
+.ctm-price-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    color: #4a5568;
+    padding: 3px 0;
+}
+
+.ctm-price-total {
+    border-top: 1px dashed #e2e8f0;
+    margin-top: 6px;
+    padding-top: 8px;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #EC0B43;
+}
+
+/* --- Disclaimer --- */
+.ctm-disclaimer {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    line-height: 1.5;
+    margin: 0;
+}
+
+@media (max-width: 768px) {
+    .ctm-hero {
+        height: 170px;
+    }
+
+    .ctm-hero-name {
+        font-size: 1.1rem;
+    }
+
+    .ctm-info-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .ctm-info-value {
+        text-align: left;
+    }
+}
