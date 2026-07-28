@@ -321,6 +321,7 @@ import AdminApiAccess from "./pages/admin/apiaccess/AdminApiAccess";
 
 // Super Admin — per-role sidebar visibility (Assign Menu)
 import AssignMenu from "./pages/master/AssignMenu";
+import UserRoles from "./pages/master/UserRoles";
 
 
 export default function App() {
@@ -400,6 +401,7 @@ export default function App() {
         {/* Masters */}
         <Route path="/masters/designations" element={<PrivateRoute><Designations /></PrivateRoute>} />
         <Route path="/masters/bank" element={<PrivateRoute><Bank /></PrivateRoute>} />
+        <Route path="/masters/user-roles" element={<PrivateRoute><UserRoles /></PrivateRoute>} />
         <Route path="/masters/contact-type" element={<PrivateRoute><ContactType /></PrivateRoute>} />
         <Route path="/masters/markup-type" element={<PrivateRoute><MarkupType /></PrivateRoute>} />
         <Route path="/masters/cab-type" element={<PrivateRoute><CabType /></PrivateRoute>} />
@@ -478,6 +480,12 @@ export default function App() {
             non-ADMIN account gets 403 even if this PrivateRoute passes. */}
         <Route path="/admin/api-access" element={<PrivateRoute roles={["admin"]}><AdminApiAccess /></PrivateRoute>} />
 
+       {/* Super Admin — per-role sidebar visibility. Backend guards with
+            SuperAdminOnlyGuard so a direct URL from a non-super_admin
+            account gets 403 even if this PrivateRoute passes. */}
+        <Route path="/masters/user-roles" element={<PrivateRoute roles={["super_admin"]}><UserRoles /></PrivateRoute>} />
+
+      
         {/* Super Admin — per-role sidebar visibility. Backend guards with
             SuperAdminOnlyGuard so a direct URL from a non-super_admin
             account gets 403 even if this PrivateRoute passes. */}

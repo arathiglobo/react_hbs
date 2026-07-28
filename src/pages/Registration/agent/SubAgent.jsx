@@ -1701,7 +1701,10 @@ export default function SubAgent() {
                   </div>
                   {showRolesDropdown && (
                     <div className="border rounded mt-1 bg-white shadow-sm" style={{ maxHeight: '150px', overflowY: 'auto' }}>
-                      {rolesList.map(role => (
+                      {/* Sub-agent creation page — the only meaningful role
+                          here is SUB_AGENT, so hide every other option to
+                          prevent operators from picking the wrong bucket. */}
+                      {rolesList.filter(r => r.roleName === "SUB_AGENT").map(role => (
                         <div key={role.id} className="p-2 cursor-pointer hover-bg-light" onClick={() => toggleRole(role.id)} onMouseEnter={e => e.target.style.backgroundColor='#f8f9fa'} onMouseLeave={e => e.target.style.backgroundColor=''}>
                           {role.roleName}
                         </div>

@@ -1,1 +1,40 @@
+/* Tighter vertical rhythm on the desktop sidebar so all top-level menu
+   items fit in the viewport without the tail (Marketing, footer) getting
+   clipped. Scoped to `aside.sidebar` so the mobile Offcanvas menu — which
+   already scrolls on its own — is not affected.
+   !important is required because `custom.scss` sets a similar rule that
+   ships with `margin-bottom: 0.25rem` (~4px between every row, wasted
+   across 15+ items) and the dashboard pages wrap the sidebar in
+   `.rw-dashboard` which further boosts specificity of neighbouring
+   rules. Without !important those wrappers won out on the dashboards
+   and this trim had no effect there. */
+/* Force the sidebar to use the app's default system font (bs-font-sans-serif)
+   regardless of the wrapper it's nested inside. Dashboards inject a
+   `.dash-shell { font-family: 'Lexend' }` (and `.agent-compact *` further
+   forces 'Inter') on top of their inner <style> tag — those fonts have
+   taller ascender/descender metrics than the system stack, so the SAME
+   line-height renders visibly taller rows on dashboards than on inner
+   pages. Locking the sidebar's font here normalises row height everywhere. */
+aside.sidebar,
+aside.sidebar * {
+  font-family: var(--bs-font-sans-serif) !important;
+}
 
+/* Parent row itself — zero out any wrapper margin. Bootstrap / custom.scss
+   do not touch this today, but the dashboard skin's inline `<style>` on
+   /adminDashboard, /agentDashboard, /staffDashboard, /extranetDashboard
+   ships a `*` reset that zeros margins; enforcing 0 here explicitly means
+   the same spacing renders on non-dashboard pages (which don't get that
+   reset), so the sidebar looks identical everywhere. */
+aside.sidebar .nav-item-custom {
+  margin: 0 !important;
+}
+
+aside.sidebar .nav-item-custom > .nav-link {
+  padding-top: 0.3rem !important;
+  padding-bottom: 0.3rem !important;
+  padding-left: 0.75rem !important;
+  padding-right: 0.75rem !important;
+  margin: 0 !important;
+  line-height: 1.8 !important;
+}

@@ -281,18 +281,16 @@ const ApiBookingPageForHotels = () => {
 
     // ATHARVA (apiId=3) + Indian primary guest: PAN is mandatory. The vendor
     // rejects HCreateBooking with error 3006 otherwise, and the operator sees
-    // a swallowed "no status returned" failure. Validate shape too — an Indian
-    // PAN is 10 alphanumerics (AAAAA9999A). Both fields tie into the same
-    // validationErrors bag so the shared toast covers this case.
+    // a swallowed "no status returned" failure. Length-only check (10 chars);
+    // the strict ABCDE1234F format is not enforced here per product decision.
     if (requiresAtharvaPan()) {
       const trimmed = (panCardNo || "").trim().toUpperCase();
       if (!trimmed) {
         errors.panCardNo =
           "PAN Card No is required (Indian primary guest booking with Atharva).";
         hasErrors = true;
-      } else if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(trimmed)) {
-        errors.panCardNo =
-          "PAN must be 10 characters in the format ABCDE1234F.";
+      } else if (trimmed.length !== 10) {
+        errors.panCardNo = "PAN must be 10 characters.";
         hasErrors = true;
       }
       if (!panCardType) {
@@ -832,6 +830,33 @@ const ApiBookingPageForHotels = () => {
   const tourismDirhamsAmount = 0;
   const newTotal = totalPrice;
 
+  // Cancellation / refundability signals for the confirm modal — mirror
+  // the Inhouse derivations in HotelBookingPage.jsx so this modal renders
+  // the same non-refundable warning / deadline pill / payment-mode badge
+  // combination. Reads `nonRefundable` and `deadlineDate` from
+  // bookingData.selectedRate (both populated by the prebook pass).
+  const isNonRefundableRate = selectedRate.some(
+    (r) =>
+      r?.nonRefundable === true ||
+      r?.nonRefundable === "true" ||
+      r?.nonRefundable === "Y",
+  );
+  const cancellationDeadline = (() => {
+    const dates = selectedRate
+      .map((r) => r?.deadlineDate)
+      .filter(Boolean)
+      .map((d) => new Date(d))
+      .filter((d) => !Number.isNaN(d.getTime()));
+    if (dates.length === 0) return null;
+    return new Date(Math.min(...dates.map((d) => d.getTime())));
+  })();
+  const isOutsideDeadline = (() => {
+    if (!cancellationDeadline) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today > cancellationDeadline;
+  })();
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column hotel-booking-container">
       <TopBar />
@@ -1212,7 +1237,7 @@ const ApiBookingPageForHotels = () => {
                               type="text"
                               value={panCardNo}
                               maxLength={10}
-                              placeholder="e.g. ABCDE1234F"
+                              placeholder="Enter 10-character PAN"
                               isInvalid={!!validationErrors.panCardNo}
                               onChange={(e) => {
                                 // Uppercase-only on typing so the pattern
@@ -1823,7 +1848,11 @@ const ApiBookingPageForHotels = () => {
                           </p>
                         </Col>
 
-                        {/* Per-room category + meal plan */}
+                        {/* Room category + meal plan — same WHAT-am-I-booking
+                            info that the per-room Accordion.Header shows in
+                            the Guest Details section. pendingPayload.rooms
+                            already carries per-room roomCategory / mealPlan
+                            copied from the selected rate at submit time. */}
                         {pendingPayload.rooms.map((s, i) => (
                           <React.Fragment key={i}>
                             <Col xs={6}>
@@ -1850,7 +1879,9 @@ const ApiBookingPageForHotels = () => {
                           </React.Fragment>
                         ))}
 
-                        {/* Lead Passenger */}
+                        {/* Lead Passenger — uses the lead guest captured into
+                            primaryGuest at submit time. Only shown when there
+                            is a usable name; gracefully hides on empty. */}
                         {(() => {
                           const lp = pendingPayload?.primaryGuest;
                           if (!lp) return null;
@@ -1874,19 +1905,109 @@ const ApiBookingPageForHotels = () => {
                           );
                         })()}
 
-                        <Col xs={12}>
-                          <p
-                            className="mb-1 d-flex align-items-center"
-                            style={{ color: "#16a34a", fontWeight: 500 }}
+                        {/* Cancellation block — for Non-Refundable rates the
+                            deadline doesn't apply at all, so we render a clear
+                            "no refund" notice instead. The rate's refundability
+                            takes precedence over the Hotel Cancellation Policy
+                            (also overridden in the Policies modal below).
+                            Payment Mode badge sits in a paired md=6 column so
+                            the two read as one row (deadline left, mode right)
+                            on tablet+, and stack cleanly on mobile. */}
+                        {isNonRefundableRate ? (
+                          <Col xs={12} md={6}>
+                            <div
+                              className="p-2 rounded border"
+                              style={{
+                                borderColor: "#dc2626",
+                                background: "#fef2f2",
+                              }}
+                            >
+                              <p
+                                className="mb-1 fw-bold"
+                                style={{ color: "#dc2626" }}
+                              >
+                                Non-refundable
+                              </p>
+                              <p className="mb-1 text-dark small">
+                                No refund will be provided if this booking is
+                                cancelled.
+                              </p>
+                              <p className="mb-0 text-dark small">
+                                100% cancellation charges apply from the time of
+                                booking.
+                              </p>
+                            </div>
+                          </Col>
+                        ) : (
+                          cancellationDeadline && (
+                            <Col xs={12} md={6}>
+                              <p className="mb-1">
+                                <strong>Cancellation Deadline:</strong>
+                                <br />
+                                <span className="text-dark">
+                                  {cancellationDeadline.toLocaleDateString(
+                                    "en-GB",
+                                    {
+                                      day: "2-digit",
+                                      month: "short",
+                                      year: "numeric",
+                                    },
+                                  )}
+                                  , 02:00 PM (UAE)
+                                </span>
+                                {isOutsideDeadline ? (
+                                  <span
+                                    className="badge bg-danger ms-2"
+                                    style={{ fontSize: "0.7rem" }}
+                                  >
+                                    Passed
+                                  </span>
+                                ) : (
+                                  <span
+                                    className="badge bg-success ms-2"
+                                    style={{ fontSize: "0.7rem" }}
+                                  >
+                                    Refundable until this date
+                                  </span>
+                                )}
+                              </p>
+                            </Col>
+                          )
+                        )}
+
+                        {/* Payment Mode — small badge beside the cancellation
+                            deadline / non-refundable notice. Shown for either
+                            refundable branch so the user re-confirms which
+                            method will be used before submitting. */}
+                        {(isNonRefundableRate || cancellationDeadline) && (
+                          <Col
+                            xs={12}
+                            md={6}
+                            className="d-flex align-items-start justify-content-md-end"
                           >
-                            <FaCheckCircle className="me-2" />
-                            Hotel policies and terms &amp; conditions accepted
-                          </p>
-                        </Col>
+                            <p className="mb-1">
+                              <strong>Payment Mode:</strong>
+                              <br />
+                              <span
+                                className="badge bg-success"
+                                style={{ fontSize: "0.75rem" }}
+                              >
+                                {paymentMode === "CREDITLIMIT"
+                                  ? "Credit Limit"
+                                  : paymentMode === "CARD"
+                                    ? "Online Payment"
+                                    : paymentMode === "CASH"
+                                      ? "Cash"
+                                      : paymentMode || "—"}
+                              </span>
+                            </p>
+                          </Col>
+                        )}
 
                         <Col xs={12}>
+                          {/* ✅ Show Selling Price only if ADMIN */}
                           {activeUserRole === "ADMIN" && (
-                            <div className="p-3 rounded bg-white shadow-sm mt-2 border">
+                            <div className="p-2 rounded bg-white border mt-2">
                               <div className="d-flex justify-content-between align-items-center">
                                 <h6 className="mb-0 text-muted">
                                   Selling Price
@@ -1898,20 +2019,59 @@ const ApiBookingPageForHotels = () => {
                             </div>
                           )}
 
-                          <div className="p-3 rounded bg-gradient-success text-white text-center mt-2">
-                            <h6 className="mb-0 fw-bold">Total Price</h6>
-                            <h4 className="mb-0">
-                              {formatPrice(newTotal)} for{" "}
-                              {pendingPayload.rooms.length}{" "}
-                              {pendingPayload.rooms.length > 1
-                                ? "rooms"
-                                : "room"}
-                            </h4>
+                          {/* Payable row — plain border, no green
+                              highlight. Single-line layout. */}
+                          <div className="p-2 rounded bg-white border mt-2 d-flex justify-content-between align-items-center">
+                            <h6 className="mb-0 fw-bold">Payable</h6>
+                            <h5 className="mb-0 fw-bold">
+                              {formatPrice(newTotal)}{" "}
+                              <span className="text-muted small fw-normal">
+                                for {pendingPayload.rooms.length}{" "}
+                                {pendingPayload.rooms.length > 1
+                                  ? "rooms"
+                                  : "room"}
+                              </span>
+                            </h5>
                           </div>
                         </Col>
                       </Row>
 
-                      <div className="mt-3 text-center">
+                      <div className="mt-1 p-2 bg-white border rounded">
+                        <h6 className="fw-bold mb-1">Rate Split</h6>
+                        <div className="d-flex justify-content-between">
+                          <span>Selling Price</span>
+                          <span>{formatPrice(totalPrice)}</span>
+                        </div>
+                        <hr className="my-1" />
+                        <div className="d-flex justify-content-between fw-bold">
+                          <span>Total (Selling)</span>
+                          <span>{formatPrice(totalPrice)}</span>
+                        </div>
+                      </div>
+
+                      <div className="mt-1 p-2 bg-white border rounded d-flex align-items-center">
+                        <span
+                          className="me-2 d-inline-flex align-items-center justify-content-center"
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: "50%",
+                            background: "#16a34a",
+                            color: "#fff",
+                            fontSize: "0.7rem",
+                            fontWeight: 700,
+                            lineHeight: 1,
+                          }}
+                          aria-hidden="true"
+                        >
+                          ✓
+                        </span>
+                        <span className="small text-dark">
+                          Hotel policies and terms &amp; conditions accepted
+                        </span>
+                      </div>
+
+                      <div className="mt-1 text-center">
                         <p className="text-muted small mb-0">
                           Please review the booking details carefully before
                           confirming.
@@ -1920,13 +2080,14 @@ const ApiBookingPageForHotels = () => {
                     </div>
                   )}
                 </Modal.Body>
+
                 <Modal.Footer className="bg-light border-0 d-flex justify-content-between">
                   <Button
                     variant="outline-secondary"
                     onClick={() => setShowConfirmModal(false)}
                     disabled={isSubmitting}
                   >
-                    Cancel
+                    <i className="bi bi-x-circle me-1"></i> Cancel
                   </Button>
                   <Button
                     variant="primary"
@@ -1943,7 +2104,9 @@ const ApiBookingPageForHotels = () => {
                         Processing...
                       </>
                     ) : (
-                      "Confirm"
+                      <>
+                        <i className="bi bi-check-circle me-1"></i> Confirm
+                      </>
                     )}
                   </Button>
                 </Modal.Footer>
