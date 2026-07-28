@@ -567,11 +567,18 @@ export default function BookingDetailedView() {
   };
 
   const cancelBooking = async () => {
+    // Cancellation reason is now mandatory — the modal marks the field
+    // with an asterisk + invalid state, and the "Yes, Cancel" button is
+    // disabled when empty. Belt-and-braces guard here so a stray submit
+    // (Enter key, programmatic call) can't sneak past.
+    const reason = cancellationReason.trim();
+    if (!reason) {
+      toast.error("Please enter a cancellation reason.");
+      return;
+    }
     try {
       setCancellingBooking(true);
-      const params = cancellationReason.trim()
-        ? { reason: cancellationReason.trim() }
-        : undefined;
+      const params = { reason };
       const response = await axiosInstance.delete(
         `/api/hotel-booking/${id}/cancel`,
         { params },
@@ -2865,21 +2872,26 @@ export default function BookingDetailedView() {
                             </div>
                           );
                         })()}
-                      <Form.Group controlId="cancellationReason">
+                      <Form.Group controlId="cancellationReason" className="text-start">
                         <Form.Label className="fw-semibold">
                           Cancellation Reason{" "}
-                          <span className="text-muted">(optional)</span>
+                          <span className="text-danger">*</span>
                         </Form.Label>
                         <Form.Control
                           as="textarea"
                           rows={3}
-                          placeholder="Add a reason for cancellation (optional)"
+                          placeholder="Add a reason for cancellation"
                           value={cancellationReason}
                           onChange={(e) =>
                             setCancellationReason(e.target.value)
                           }
                           disabled={cancellingBooking}
+                          isInvalid={!cancellationReason.trim()}
+                          required
                         />
+                        <Form.Control.Feedback type="invalid">
+                          Cancellation reason is required.
+                        </Form.Control.Feedback>
                       </Form.Group>
                     </div>
                   </Modal.Body>
@@ -2902,7 +2914,7 @@ export default function BookingDetailedView() {
                     <Button
                       variant="danger"
                       onClick={cancelBooking}
-                      disabled={cancellingBooking}
+                      disabled={cancellingBooking || !cancellationReason.trim()}
                     >
                       {cancellingBooking ? (
                         <>

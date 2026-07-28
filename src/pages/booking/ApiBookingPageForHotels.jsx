@@ -5,6 +5,7 @@ import {
   FaCalendarAlt,
   FaUsers,
   FaUtensils,
+  FaCheckCircle,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -41,6 +42,30 @@ const SPECIAL_REQUEST_OPTIONS = [
   "Honeymooners / Anniversary",
   "Smoking Room",
 ];
+
+// ATHARVA policy text comes back with raw <div>/<br/>/<p>/<ul>/<li> tags
+// mixed with plain text. Modal renders it as free text — turn block-level
+// tags into line breaks, list items into bullets, drop the rest, and decode
+// the handful of HTML entities the supplier actually emits.
+const stripPolicyHtml = (raw) => {
+  if (raw == null) return "";
+  let s = String(raw);
+  s = s.replace(/<\s*br\s*\/?\s*>/gi, "\n");
+  s = s.replace(/<\s*\/(p|div|ul|h[1-6])\s*>/gi, "\n");
+  s = s.replace(/<\s*(p|div|ul|h[1-6])[^>]*>/gi, "\n");
+  s = s.replace(/<\s*li[^>]*>/gi, "\n• ");
+  s = s.replace(/<\s*\/li\s*>/gi, "");
+  s = s.replace(/<[^>]+>/g, "");
+  s = s
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+  s = s.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
+  return s.trim();
+};
 
 /**
  * API booking page — visual shell restyled to match the Inhouse
@@ -91,6 +116,19 @@ const ApiBookingPageForHotels = () => {
   // Confirm Booking is allowed to proceed. openPolicyConsent below
   // enforces the pick with a toast + inline error for apiId===3.
   const [bookingConfirmation, setBookingConfirmation] = useState(null);
+
+  // ATHARVA-only PAN inputs (apiId===3 + Indian-national primary guest).
+  // Atharva §6.1 flags PAN as MANDATORY for Indian nationals booking a hotel
+  // outside India — omitting it makes HCreateBooking reject with error 3006
+  // ("Invalid PAN details") and returns no APIRefNo, which the operator sees
+  // as an opaque failure. The two inputs render below in an Atharva-gated
+  // card; other suppliers (IWTX/X3/Inhouse/Jumeirah/Ratehawk/Darina) never
+  // see this card and ignore the fields on the payload.
+  const [panCardNo, setPanCardNo] = useState("");
+  // Default to "2" (Personal) — the correct choice for an individual traveller
+  // per the vendor's PANCardType enum. Corporate/Trust/etc. can be picked in
+  // the dropdown if the booking is on behalf of an entity.
+  const [panCardType, setPanCardType] = useState("2");
 
   // ─────────────────────────── effects ────────────────────────────────
   useEffect(() => {
@@ -198,6 +236,18 @@ const ApiBookingPageForHotels = () => {
     }
   };
 
+  // ATHARVA-only helper: is this an Indian-national booking that needs a PAN?
+  // Matches the same ISO alias set the backend uses (isIndianNational in
+  // AtharvaHotelBookingService) so FE + BE agree on who the PAN gate applies
+  // to. The nationality is stamped by the search page into
+  // bookingData.payload.nationality — we don't peek at per-guest values.
+  const requiresAtharvaPan = () => {
+    if (!bookingData) return false;
+    if (Number(bookingData?.payload?.apiId) !== 3) return false;
+    const n = String(bookingData?.payload?.nationality || "").trim().toUpperCase();
+    return n === "IN" || n === "IND" || n === "INDIA";
+  };
+
   const validateForm = () => {
     const errors = {};
     let hasErrors = false;
@@ -229,7 +279,149 @@ const ApiBookingPageForHotels = () => {
       });
     });
 
+    // ATHARVA (apiId=3) + Indian primary guest: PAN is mandatory. The vendor
+    // rejects HCreateBooking with error 3006 otherwise, and the operator sees
+    // a swallowed "no status returned" failure. Validate shape too — an Indian
+    // PAN is 10 alphanumerics (AAAAA9999A). Both fields tie into the same
+    // validationErrors bag so the shared toast covers this case.
+    if (requiresAtharvaPan()) {
+      const trimmed = (panCardNo || "").trim().toUpperCase();
+      if (!trimmed) {
+        errors.panCardNo =
+          "PAN Card No is required (Indian primary guest booking with Atharva).";
+        hasErrors = true;
+      } else if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(trimmed)) {
+        errors.panCardNo =
+          "PAN must be 10 characters in the format ABCDE1234F.";
+        hasErrors = true;
+      }
+      if (!panCardType) {
+        errors.panCardType = "PAN Card Type is required.";
+        hasErrors = true;
+      }
+    }
+
     return { errors, hasErrors };
+  };
+
+  /**
+   * ATHARVA-only: ensure fresh HPreBooking keys + cancellation policies
+   * are on bookingData.selectedRate before we render the policy modal.
+   * Runs when the operator skipped the Cancellation Policies modal in
+   * /api-room-list (atharvaPrebooked=false). Mutates the in-memory
+   * bookingData so both the policy modal and the eventual /create
+   * payload pick up the fresh tokens transparently. Returns true when
+   * safe to proceed, false when the vendor rejected the prebook.
+   */
+  const ensureAtharvaPrebook = async () => {
+    if (!bookingData) return false;
+    const isAtharva = String(bookingData?.payload?.apiId || "") === "3";
+    if (!isAtharva) return true;
+    const selectedRates = bookingData.selectedRate || [];
+    const firstRate = selectedRates[0] || {};
+    const isMultiRoom = selectedRates.length > 1;
+
+    // Multi-room: enforce all selected rates share the same search-time
+    // HKey/vendor. Atharva's HPreBooking accepts ONE HKey for the whole
+    // call; every per-room RateKey must belong to that HKey's VendorList.
+    // Mixing rates across vendors is what returns "1005: Invalid RateKey".
+    // Surface the mismatch here so the operator gets an actionable
+    // message instead of a supplier error code they can't decode.
+    if (isMultiRoom) {
+      const hKeys = selectedRates
+        .map((r) => r?.atharvaSearchHKey || r?.atharvaHKey)
+        .filter(Boolean);
+      const uniqueHKeys = [...new Set(hKeys)];
+      if (uniqueHKeys.length > 1) {
+        toast.error(
+          "Atharva multi-room bookings require all rooms to be selected from the same rate group. Please go back and reselect rates that appear under the same vendor.",
+        );
+        return false;
+      }
+    }
+
+    // Single-room fast path — the operator already prebooked via the
+    // Cancellation Policies modal, so `bookingData.selectedRate[0]`
+    // carries fresh tokenId/hKey/rateKey and running prebook again would
+    // just invalidate them. Multi-room ALWAYS re-prebooks (below) with
+    // search-time keys so every room's rateKey lives under the same fresh
+    // HKey.
+    if (!isMultiRoom && firstRate.atharvaPrebooked) return true;
+
+    // Always use SEARCH-time tokens for the prebook payload — per-room
+    // `atharva*` fields might have been overwritten with fresh keys from
+    // a partial modal-prebook (Room 1 opened, Room 2 not) and mixing
+    // fresh + search values across rooms trips 1005. `atharvaSearch*`
+    // fields hold the untouched HSearchByHotelCode_V2 values.
+    try {
+      const preReq = {
+        agentId: bookingData.payload.agentId
+          ? String(bookingData.payload.agentId)
+          : null,
+        cityId: bookingData.payload?.cityId || null,
+        nationalityId: bookingData.payload?.nationalityId || null,
+        nationality: bookingData.payload?.nationality || null,
+        checkInDate: bookingData.payload?.checkInDate,
+        checkOutDate: bookingData.payload?.checkOutDate,
+        hotelCode:
+          selectedRates[0]?.hotelCode ||
+          bookingData.payload?.hotelCode ||
+          "",
+        tokenId: firstRate.atharvaSearchTokenId || firstRate.atharvaTokenId,
+        hKey: firstRate.atharvaSearchHKey || firstRate.atharvaHKey,
+        rooms: (rooms.length ? rooms : bookingData.payload?.rooms || []).map(
+          (room, i) => {
+            const rate = selectedRates[i] || firstRate;
+            return {
+              roomSrNo: i + 1,
+              noOfAdult: room.adults,
+              noOfChild: room.children || 0,
+              childAges: room.childAges || [],
+              rateKey:
+                rate.atharvaSearchRateKey || rate.atharvaRateKey || null,
+            };
+          },
+        ),
+      };
+      const resp = await axiosInstance.post(
+        "/api/hotel-booking/atharva/prebook",
+        preReq,
+      );
+      const data = resp?.data;
+      if (!data || data.success === false) {
+        toast.error(
+          data?.message ||
+            "Atharva prebook failed — rate may no longer be available. Please repeat the search.",
+        );
+        return false;
+      }
+      const freshRooms = Array.isArray(data.rooms) ? data.rooms : [];
+      const patched = bookingData.selectedRate.map((r, i) => {
+        const match =
+          freshRooms.find((pr) => (pr.roomSrNo ?? null) === i + 1) ||
+          freshRooms[i];
+        return {
+          ...r,
+          atharvaTokenId: data.tokenId || r.atharvaTokenId,
+          atharvaHKey: data.hKey || r.atharvaHKey,
+          atharvaRateKey: match?.rateKey || r.atharvaRateKey,
+          atharvaPrebooked: true,
+          cancellationPolicy:
+            (data.cancellationPolicies?.length && data.cancellationPolicies) ||
+            r.cancellationPolicy,
+        };
+      });
+      setBookingData({ ...bookingData, selectedRate: patched });
+      return true;
+    } catch (err) {
+      const backendMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Atharva prebook request failed";
+      toast.error(backendMsg);
+      return false;
+    }
   };
 
   /**
@@ -238,7 +430,7 @@ const ApiBookingPageForHotels = () => {
    * which builds the payload and opens the booking-summary modal. Mirrors
    * Inhouse HotelBookingPage's openPolicyConsent.
    */
-  const openPolicyConsent = (e) => {
+  const openPolicyConsent = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
 
     if (noPaymentPathAvailable) {
@@ -265,12 +457,31 @@ const ApiBookingPageForHotels = () => {
 
     if (hasErrors || errors.bookingMode) {
       setValidationErrors(errors);
+      // Priority order for the shared toast: PAN gate first (Atharva-only,
+      // most likely to bite operators mid-booking with a cryptic upstream
+      // failure otherwise), then booking-mode gate, then the generic message.
       toast.error(
-        errors.bookingMode || "Please fill in all required fields correctly.",
+        errors.panCardNo ||
+          errors.panCardType ||
+          errors.bookingMode ||
+          "Please fill in all required fields correctly.",
       );
       return;
     }
     setValidationErrors({});
+
+    // Late Atharva prebook — the modal has to render the vendor's
+    // policies, so we fetch them here (only when /api-room-list skipped
+    // it). Gate the modal on prebook success so the operator never sees
+    // an empty policies list after a silent failure.
+    setIsSubmitting(true);
+    try {
+      const ok = await ensureAtharvaPrebook();
+      if (!ok) return;
+    } finally {
+      setIsSubmitting(false);
+    }
+
     setPolicyAccepted(false);
     setShowPolicyModal(true);
   };
@@ -312,6 +523,10 @@ const ApiBookingPageForHotels = () => {
       // session TokenId + vendor HKey stamped at the top level. Every
       // room in a single hotel search shares the same pair, so it's safe
       // to lift them from the first rate. Left null for other suppliers.
+      // Fresh HPreBooking keys are already stamped on selectedRate by
+      // ensureAtharvaPrebook() (either from /api-room-list's policies-modal
+      // fetch or from openPolicyConsent's late-prebook step) — nothing to
+      // do here.
       const firstRate = bookingData.selectedRate[0] || {};
 
       const payload = {
@@ -396,6 +611,13 @@ const ApiBookingPageForHotels = () => {
           passportNo: "",
           agentLpo: "",
           nativeCountry: bookingData.payload.nationality,
+          // ATHARVA-only carriers (apiId=3, Indian primary guest). Emit them
+          // only when the PAN gate applies so non-Atharva payloads stay byte-
+          // for-byte identical to before this change.
+          panCardNo: requiresAtharvaPan()
+            ? (panCardNo || "").trim().toUpperCase()
+            : null,
+          panCardType: requiresAtharvaPan() ? panCardType || "2" : null,
         },
         rooms: rooms.map((room, roomIndex) => {
           const rate = bookingData.selectedRate[roomIndex] || {};
@@ -458,7 +680,11 @@ const ApiBookingPageForHotels = () => {
 
   const confirmBooking = async () => {
     if (!pendingPayload) return;
-    setShowConfirmModal(false);
+    // Keep the summary modal open while /api/hotel-booking/create is in
+    // flight — the Confirm button already renders a spinner + "Processing…"
+    // label off `isSubmitting`, but the modal used to close synchronously
+    // here so the operator never saw it. Modal is dismissed in `finally`
+    // below once the outcome (success or failure) is known.
     setIsSubmitting(true);
 
     try {
@@ -508,11 +734,17 @@ const ApiBookingPageForHotels = () => {
       );
       const bookingResponse = response.data;
 
-      if (
-        bookingResponse &&
-        bookingResponse.status === "CONFIRMED" &&
-        bookingResponse.bookingId != 0
-      ) {
+      // Backend returns "CONFIRMED" for Inhouse and "Reconfirmed" for API
+      // suppliers (IWTX/X3/etc. — see HotelBookingResponse.success
+      // factories). Both mean the booking was created; failures come back
+      // as "FAILED" or "NOT_IMPLEMENTED". Match case-insensitively so a
+      // successful IWTX/X3 booking doesn't fall through to the error toast.
+      const statusUpper = String(bookingResponse?.status || "").toUpperCase();
+      const isSuccess =
+        (statusUpper === "CONFIRMED" || statusUpper === "RECONFIRMED") &&
+        bookingResponse?.bookingId != 0;
+
+      if (bookingResponse && isSuccess) {
         toast.success(bookingResponse.message);
         navigate("/booking-details/hotel-booking-list");
       } else {
@@ -535,6 +767,7 @@ const ApiBookingPageForHotels = () => {
       toast.error(detail);
     } finally {
       setIsSubmitting(false);
+      setShowConfirmModal(false);
     }
   };
 
@@ -951,6 +1184,99 @@ const ApiBookingPageForHotels = () => {
                     </Card.Body>
                   </Card>
 
+                  {/* ATHARVA (apiId=3) + Indian primary guest ONLY:
+                      PAN Card capture. Atharva §6.1 documents PAN as
+                      MANDATORY for Indian nationals booking a hotel
+                      outside India; omitting it makes HCreateBooking
+                      reject with error 3006 ("Invalid PAN details") and
+                      the operator sees an opaque "no status returned"
+                      failure. Card is gated so every other supplier on
+                      this page (and Indian-domestic Atharva bookings)
+                      keeps its existing 4-card layout unchanged. */}
+                  {requiresAtharvaPan() && (
+                    <Card className="p-4 mb-2 shadow-sm border-0">
+                      <h5 className="mb-1 fw-bold">
+                        Primary Guest PAN Details
+                      </h5>
+                      <div className="text-muted small mb-3">
+                        PAN is required for Indian nationals booking with
+                        Atharva. Enter the primary guest's PAN card details.
+                      </div>
+                      <Row className="g-3">
+                        <Col md={6}>
+                          <Form.Group>
+                            <Form.Label className="fw-semibold">
+                              PAN Card No <span className="text-danger">*</span>
+                            </Form.Label>
+                            <Form.Control
+                              type="text"
+                              value={panCardNo}
+                              maxLength={10}
+                              placeholder="e.g. ABCDE1234F"
+                              isInvalid={!!validationErrors.panCardNo}
+                              onChange={(e) => {
+                                // Uppercase-only on typing so the pattern
+                                // match in validateForm is stable regardless
+                                // of caps lock state.
+                                setPanCardNo(e.target.value.toUpperCase());
+                                if (validationErrors.panCardNo) {
+                                  setValidationErrors((prev) => {
+                                    const next = { ...prev };
+                                    delete next.panCardNo;
+                                    return next;
+                                  });
+                                }
+                              }}
+                            />
+                            {validationErrors.panCardNo && (
+                              <Form.Control.Feedback type="invalid">
+                                {validationErrors.panCardNo}
+                              </Form.Control.Feedback>
+                            )}
+                          </Form.Group>
+                        </Col>
+                        <Col md={6}>
+                          <Form.Group>
+                            <Form.Label className="fw-semibold">
+                              PAN Card Type{" "}
+                              <span className="text-danger">*</span>
+                            </Form.Label>
+                            <Form.Select
+                              value={panCardType}
+                              isInvalid={!!validationErrors.panCardType}
+                              onChange={(e) => {
+                                setPanCardType(e.target.value);
+                                if (validationErrors.panCardType) {
+                                  setValidationErrors((prev) => {
+                                    const next = { ...prev };
+                                    delete next.panCardType;
+                                    return next;
+                                  });
+                                }
+                              }}
+                            >
+                              {/* Values are the Atharva PANCardType enum
+                                  per §6.1 — sent verbatim on the wire. */}
+                              <option value="2">Personal</option>
+                              <option value="1">Corporate</option>
+                              <option value="3">Government</option>
+                              <option value="4">Proprietor</option>
+                              <option value="5">Firm</option>
+                              <option value="6">HUF</option>
+                              <option value="7">Trust</option>
+                              <option value="8">Education Society</option>
+                            </Form.Select>
+                            {validationErrors.panCardType && (
+                              <Form.Control.Feedback type="invalid">
+                                {validationErrors.panCardType}
+                              </Form.Control.Feedback>
+                            )}
+                          </Form.Group>
+                        </Col>
+                      </Row>
+                    </Card>
+                  )}
+
                   {/* Special Requests card — matches Inhouse
                       HotelBookingPage: optional Booking Done For text
                       (admin only) at the top, then the 11-chip preset
@@ -1363,8 +1689,11 @@ const ApiBookingPageForHotels = () => {
                       }
                       return allPolicies.map((p, idx) => (
                         <div key={idx} className="policy-item">
-                          <div className="policy-text">
-                            {p?.policyText || "—"}
+                          <div
+                            className="policy-text"
+                            style={{ whiteSpace: "pre-line" }}
+                          >
+                            {stripPolicyHtml(p?.policyText) || "—"}
                           </div>
                           {(p?.fromDate || p?.toDate) && (
                             <div className="policy-meta">
@@ -1546,25 +1875,13 @@ const ApiBookingPageForHotels = () => {
                         })()}
 
                         <Col xs={12}>
-                          <p className="mb-1">
-                            <strong>Cancellation Policy:</strong>
+                          <p
+                            className="mb-1 d-flex align-items-center"
+                            style={{ color: "#16a34a", fontWeight: 500 }}
+                          >
+                            <FaCheckCircle className="me-2" />
+                            Hotel policies and terms &amp; conditions accepted
                           </p>
-                          <ul className="mb-0 ps-3">
-                            {pendingPayload.cancellationPolicy &&
-                            pendingPayload.cancellationPolicy.length > 0 ? (
-                              pendingPayload.cancellationPolicy.map(
-                                (policy, index) => (
-                                  <li key={index} className="text-dark">
-                                    {policy}
-                                  </li>
-                                ),
-                              )
-                            ) : (
-                              <li className="text-muted">
-                                No cancellation policy available.
-                              </li>
-                            )}
-                          </ul>
                         </Col>
 
                         <Col xs={12}>
