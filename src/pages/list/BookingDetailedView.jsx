@@ -1751,6 +1751,18 @@ export default function BookingDetailedView() {
                       const baseTotal = Number(booking.totalRate) || 0;
                       const td = Number(booking.tourismDirham) || 0;
                       const grand = baseTotal + td;
+                      // Supplier-native line — shown only when the supplier
+                      // confirmed the booking in a currency other than what
+                      // we're rendering (e.g. X3 confirms in USD, we show
+                      // AED). Kept as a small aside so the primary AED total
+                      // stays the visual anchor.
+                      const nativeCurr = booking.supplierNativeCurrency;
+                      const nativeAmt = Number(booking.supplierNativeAmount);
+                      const showNative =
+                        !!nativeCurr &&
+                        nativeCurr !== currencyCode &&
+                        Number.isFinite(nativeAmt) &&
+                        nativeAmt > 0;
                       return (
                         <span>
                           <span style={{ fontWeight: "600" }}>
@@ -1770,6 +1782,19 @@ export default function BookingDetailedView() {
                               ({currencyCode}{" "}
                               {toDisplayAmount(baseTotal).toFixed(2)} + TD{" "}
                               {toDisplayAmount(td).toFixed(2)})
+                            </span>
+                          )}
+                          {showNative && (
+                            <span
+                              style={{
+                                marginLeft: 8,
+                                fontSize: "0.72rem",
+                                color: "#888",
+                              }}
+                              title="Supplier's native confirmation currency"
+                            >
+                              (supplier: {nativeCurr}{" "}
+                              {nativeAmt.toFixed(2)})
                             </span>
                           )}
                         </span>
