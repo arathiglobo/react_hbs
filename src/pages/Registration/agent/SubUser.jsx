@@ -828,7 +828,10 @@ export default function SubUser() {
                   </div>
                   {showRolesDropdown && (
                     <div className="border rounded mt-1 bg-white shadow-sm" style={{ maxHeight: '150px', overflowY: 'auto' }}>
-                      {rolesList.map(role => (
+                      {/* Sub-user creation page — the only meaningful role
+                          here is SUB_USER, so hide every other option to
+                          prevent operators from picking the wrong bucket. */}
+                      {rolesList.filter(r => r.roleName === "SUB_USER").map(role => (
                         <div key={role.id} className="p-2 cursor-pointer hover-bg-light" onClick={() => toggleRole(role.id)} onMouseEnter={e => e.target.style.backgroundColor='#f8f9fa'} onMouseLeave={e => e.target.style.backgroundColor=''}>
                           {role.roleName}
                         </div>

@@ -341,9 +341,17 @@ const ExternalApiRoomList = () => {
           cancellationPolicies: prebook.cancellationPolicies || [],
           termsAndConditions: inlineTerms,
           selectedRoomLabel: label,
+          // Aggregated Atharva Policies[].Remark from the prebook — shown as
+          // a top-of-modal notice (includes "IMPORTANT NOTE …" content).
+          remark: prebook.remark || null,
         });
       } else {
-        setPrebookError(prebook?.message || "Failed to fetch cancellation policy");
+        // Supplier prebook returned no policy (e.g. Atharva "HPreBooking error
+        // 2001: No Result Found."). Swallow the raw vendor text so the modal
+        // shows only the "No cancellation policies available." / "No terms &
+        // conditions available." placeholders instead of an alarming banner.
+        // The vendor detail is still logged for operator triage.
+        console.warn("Atharva prebook: no policy returned:", prebook?.message);
       }
     } finally {
       setPrebookLoading(false);
@@ -1408,7 +1416,18 @@ const ExternalApiRoomList = () => {
                               {Array.isArray(payload.rooms) &&
                                 payload.rooms.length <= 1 && (
                                   <span className="fw-semibold">
-                                    {hotel.guestBreakdown}
+                                    {(() => {
+                                      // Build from payload.rooms[0] — `hotel.guestBreakdown`
+                                      // is only populated by the DayStay flow and is
+                                      // undefined here, so previously the span was blank.
+                                      const r = payload.rooms?.[0];
+                                      const a = r?.adults || 0;
+                                      const c = r?.children || 0;
+                                      const parts = [];
+                                      if (a) parts.push(`${a} adult${a > 1 ? "s" : ""}`);
+                                      if (c) parts.push(`${c} child${c > 1 ? "ren" : ""}`);
+                                      return parts.join(", ") || hotel.guestBreakdown || "—";
+                                    })()}
                                   </span>
                                 )}
                             </div>
@@ -1714,7 +1733,19 @@ const ExternalApiRoomList = () => {
                                                     </div>
                                                   </div>
                                                   {getRefundStatusBadgeInRoomList(
-                                                    rate.nonRefundable,
+                                                    // Prefer the prebook-time
+                                                    // signal (derived from the
+                                                    // supplier's Remark text)
+                                                    // when a prebook has been
+                                                    // fetched for this rate;
+                                                    // fall back to the search-
+                                                    // time flag before that so
+                                                    // the badge still shows on
+                                                    // first render.
+                                                    atharvaPrebookCache?.[
+                                                      rate.rateKey
+                                                    ]?.nonRefundable ??
+                                                      rate.nonRefundable,
                                                   )}
                                                 </div>
 
@@ -2299,6 +2330,33 @@ const ExternalApiRoomList = () => {
           {prebookError && (
             <div className="alert alert-warning py-2 mb-3" role="alert">
               {prebookError}
+            </div>
+          )}
+
+          {/* Atharva Policies[].Remark aggregated by the backend. Includes
+              the "IMPORTANT NOTE …" line and any non-refundable notice as
+              supplied by the vendor. whiteSpace: pre-line preserves the
+              newlines the backend used when joining multiple Remarks. */}
+          {policiesModalData.remark && (
+            <div
+              className="p-2 mb-3 border rounded"
+              style={{ background: "#fff8e1", borderColor: "#f59e0b" }}
+            >
+              <div
+                className="fw-semibold small mb-1"
+                style={{ color: "#92400e" }}
+              >
+                Supplier Notes
+              </div>
+              <div
+                className="small text-dark"
+                style={{ whiteSpace: "pre-line" }}
+              >
+                {/* Strip supplier HTML (<p>, <b>, <div>, <ul>, <li> …) so
+                    the notice reads as plain text. Same helper the
+                    cancellation-policy rows below already use. */}
+                {stripHtmlTags(policiesModalData.remark)}
+              </div>
             </div>
           )}
 

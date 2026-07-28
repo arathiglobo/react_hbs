@@ -17,9 +17,13 @@
 @media (max-width: 640px) { .adm-main { padding: 20px 16px 32px; gap: 20px; } }
 
 /* ── MENU SECTION · sidebar rework (scoped) ──────────────────────────────── */
-.adm-shell .sidebar { background: #ffffff !important; border-right: 1px solid #ECECE8; box-shadow: none !important; padding: 14px 10px !important; }
+/* Padding trimmed (was 14px 10px → 6px 10px on the aside, and .58rem .8rem
+   → .3rem .75rem on each nav-link) so the row height matches the shared
+   Sidebar.css rules used on non-dashboard pages — all top-level items now
+   fit on a 720px viewport instead of clipping at "Report". */
+.adm-shell .sidebar { background: #ffffff !important; border-right: 1px solid #ECECE8; box-shadow: none !important; padding: 6px 10px !important; }
 .adm-shell .sidebar .nav-item-custom .nav-link {
-  border-radius: 10px; padding: .58rem .8rem !important;
+  border-radius: 10px; padding: .3rem .75rem !important;
   font-size: .875rem !important; font-weight: 500; letter-spacing: -.006em;
   color: #3E3E3B !important; transition: background .15s ease, color .15s ease;
 }

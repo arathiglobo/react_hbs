@@ -291,9 +291,10 @@ export default function Sidebar() {
           children: [
             { label: "Designation", to: "/masters/designations" },
             { label: "Bank", to: "/masters/bank" },
-            // Assign Menu is a super_admin-only tool (per-role sidebar
+            //Roles and  Assign Menu are super_admin-only tool (per-role sidebar
             // visibility). Kept inside Manage Masters → Basic settings
             // for discoverability but role-gated so admin doesn't see it.
+            { label: "Roles", to: "/masters/user-roles", roles: ["super_admin"] },
             { label: "Assign Menu", to: "/masters/assign-menu", roles: ["super_admin"] },
             { label: "Contact Type", to: "/masters/contact-type" },
             { label: "Markup Type", to: "/masters/markup-type" },
@@ -968,7 +969,7 @@ export default function Sidebar() {
             return (
               <Nav.Item
                 key={item.label}
-                className={`nav-item-custom ${hasChildren || hasGroups ? "nav-item-has-children" : ""} ${item.label === "Report" || item.label === "Inhouse Accounts" || item.label === "Agent Incentive" || item.label === "Marketing" ? "submenu-up" : ""} ${item.label === "Booking List" || item.label === "New Booking" || item.label === "Registration" ? "submenu-center" : ""}`}
+                className={`nav-item-custom ${hasChildren || hasGroups ? "nav-item-has-children" : ""} ${(item.label === "Inhouse Accounts" || item.label === "Agent Incentive" || item.label === "Marketing") ? "submenu-up" : ""} ${item.label === "Booking List" || item.label === "New Booking" || item.label === "Report" || (item.label === "Registration" && (item.children?.length ?? 0) > 4) ? "submenu-center" : ""}`}
               >
                 <Nav.Link
                   as={hasChildren || hasGroups ? "div" : Link}
