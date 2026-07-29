@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Card,
   Button,
@@ -8,6 +8,8 @@ import {
   Col,
   Modal,
   Pagination,
+  OverlayTrigger,
+  Popover,
 } from "react-bootstrap";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/TopBar";
@@ -24,19 +26,72 @@ import {
   FaSearch,
   FaPlus,
   FaFileInvoice,
-  FaFileInvoiceDollar,
+  FaReceipt,
   FaInbox,
 } from "react-icons/fa";
+import "../styles/Invoice.css";
+
+// Shared invoice-table cell styling. Identical to the per-cell inline
+// styles used previously — only the repetition has been removed.
+const headerCellStyle = {
+  padding: "0.3rem 0.6rem",
+  fontWeight: "600",
+  textTransform: "uppercase",
+  color: "#495057",
+  border: "1px solid #dee2e6",
+  whiteSpace: "normal",
+  lineHeight: 1.2,
+};
+
+// Single-line cells. The table is `table-layout: fixed`, so a value that is
+// too wide is trimmed with an ellipsis (full text stays in the cell tooltip)
+// instead of forcing a horizontal scrollbar. Keeping every cell to one line
+// also makes the row height constant, which the fit calculation relies on.
+const baseCellStyle = {
+  padding: "0.3rem 0.6rem",
+  fontSize: "0.82rem",
+  border: "1px solid #dee2e6",
+  verticalAlign: "middle",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  lineHeight: 1.35,
+};
+
+// Row geometry used to work out how many rows fit in the viewport. Both
+// values are deliberate over-estimates: erring high costs one row, erring
+// low would let the last row be clipped.
+const ROW_HEIGHT_PX = 30; // 0.3rem padding x2 + 0.82rem/1.35 line + borders
+const TABLE_CHROME_PX = 88; // column header row + pagination bar
+const MIN_ROWS_PER_PAGE = 3;
+const MAX_ROWS_PER_PAGE = 10; // the list shows at most 10 invoices per page
+
+// Proportional column widths — they add up to 100% so the grid always spans
+// exactly the available width, whatever the window size.
+const COLUMN_WIDTHS = {
+  serial: "3.5%",
+  customer: "12%",
+  details: "3.5%",
+  agent: "7%",
+  bookingCode: "10%",
+  bookingDate: "13.5%", // full "29 Jul 2026 11:17 AM" without trimming
+  hotel: "10.5%",
+  checkIn: "8.5%",
+  checkOut: "8.5%",
+  amount: "9%",
+  action: "14%", // holds the two labelled action buttons
+};
 
 export default function Invoice() {
   const [invoiceList, setInvoiceList] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  // Starts true: the first fetch waits on the viewport measurement, and the
+  // spinner avoids a frame of "no data" before it runs.
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [agent, setAgent] = useState("");
   const [agents, setAgents] = useState([]);
-  const [expandedRows, setExpandedRows] = useState(new Set());
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [pdfUrl, setPdfUrl] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -44,7 +99,13 @@ export default function Invoice() {
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [hasAppliedFilters, setHasAppliedFilters] = useState(false);
-  const itemsPerPage = 10;
+
+  // The page size is derived from the viewport rather than fixed, so the grid
+  // always shows as many rows as fit and never needs a scrollbar. 0 means
+  // "not measured yet" — the first fetch waits for the measurement.
+  const [itemsPerPage, setItemsPerPage] = useState(0);
+  const tableAreaRef = useRef(null);
+  const measuredRowsRef = useRef(0);
 
   const activeRole = (localStorage.getItem("currentActiveRole") || "")
     .trim()
@@ -197,15 +258,61 @@ export default function Invoice() {
     }
   };
 
+  // Measure the space left for rows and ask the API for exactly that many.
+  // Re-measured (debounced) on resize so the grid stays scrollbar-free.
+  useEffect(() => {
+    let resizeTimer;
+
+    const measure = () => {
+      const element = tableAreaRef.current;
+      // Falls back to a viewport estimate so a missing node can never leave
+      // the page size at 0, which would stop the list from loading at all.
+      const usableHeight = element
+        ? element.clientHeight - TABLE_CHROME_PX
+        : window.innerHeight - 420;
+
+      const nextRows = Math.min(
+        MAX_ROWS_PER_PAGE,
+        Math.max(
+          MIN_ROWS_PER_PAGE,
+          Math.floor(usableHeight / ROW_HEIGHT_PX),
+        ),
+      );
+
+      if (nextRows === measuredRowsRef.current) return;
+
+      const isFirstMeasurement = measuredRowsRef.current === 0;
+      measuredRowsRef.current = nextRows;
+      setItemsPerPage(nextRows);
+      // A different page size invalidates the current offset.
+      if (!isFirstMeasurement) setCurrentPage(1);
+    };
+
+    measure();
+
+    const handleResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(measure, 150);
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => {
+      clearTimeout(resizeTimer);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
   // Load all invoice records by default, then keep pagination on the current
   // data source: initial list until filters are applied, filtered list after.
   useEffect(() => {
+    if (!itemsPerPage) return; // wait for the viewport measurement
+
     if (hasAppliedFilters) {
       fetchFilteredInvoiceData(currentPage - 1);
     } else {
       fetchInitialInvoiceData(currentPage - 1);
     }
-  }, [currentPage, hasAppliedFilters]);
+  }, [currentPage, hasAppliedFilters, itemsPerPage]);
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -221,6 +328,23 @@ export default function Invoice() {
       }
     } else {
       setHasAppliedFilters(hasSearchCriteria);
+    }
+  };
+
+  // Clears the criteria and returns to the unfiltered first page. Mirrors the
+  // branching in handleSearch so the effect below never fires twice.
+  const handleReset = () => {
+    setFromDate("");
+    setToDate("");
+    setAgent("");
+
+    if (currentPage !== 1) {
+      setHasAppliedFilters(false);
+      setCurrentPage(1);
+    } else if (hasAppliedFilters) {
+      setHasAppliedFilters(false);
+    } else {
+      fetchInitialInvoiceData(0);
     }
   };
 
@@ -305,17 +429,34 @@ export default function Invoice() {
     });
   };
 
-  const handlePlusClick = (index) => {
-    setExpandedRows((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(index)) {
-        newSet.delete(index);
-      } else {
-        newSet.add(index);
-      }
-      return newSet;
-    });
-  };
+  // Booking extras live in a popover rather than an expanding row: an inline
+  // detail row would add height the fixed viewport has no room for.
+  const renderDetailPopover = (invoice) => (
+    <Popover>
+      <Popover.Header as="h6">Booking details</Popover.Header>
+      <Popover.Body style={{ fontSize: "0.82rem" }}>
+        <div className="mb-2">
+          <strong>Hotel name:</strong> <span>{invoice.hotelName || "-"}</span>
+        </div>
+        <div className="mb-2">
+          <strong>Date:</strong>{" "}
+          <span>
+            {formatDateShort(invoice.checkInDate)} to{" "}
+            {formatDateShort(invoice.checkOutDate)}
+          </span>
+        </div>
+        <div>
+          <strong>Confirmation code:</strong>{" "}
+          <code
+            className="bg-white px-2 py-1 rounded"
+            style={{ fontSize: "0.75rem", color: "#495057" }}
+          >
+            {invoice.confirmationCode || "-"}
+          </code>
+        </div>
+      </Popover.Body>
+    </Popover>
+  );
 
   const handleInvoiceVoucherClick = async (invoice) => {
     try {
@@ -395,17 +536,17 @@ export default function Invoice() {
   };
 
   return (
-    <div className="min-vh-100 bg-light d-flex flex-column">
+    <div className="invoice-page min-vh-100 bg-light d-flex flex-column">
       <Topbar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4">
-          <Card className="shadow-sm rounded-xl">
-            <Card.Header className="d-flex flex-wrap gap-2 justify-content-between align-items-center">
+        <main className="invoice-main flex-grow-1 p-2 d-flex flex-column">
+          <Card className="shadow-sm rounded-xl invoice-flex-fill d-flex flex-column flex-grow-1 overflow-hidden">
+            <Card.Header className="d-flex flex-wrap gap-2 justify-content-between align-items-center flex-shrink-0">
               <div className="d-flex align-items-center">
                 <Button
                   variant="link"
-                  className="p-0 me-3"
+                  className="p-0 me-3 invoice-no-print"
                   onClick={() => window.history.back()}
                 >
                   &lt;&lt; Back
@@ -418,7 +559,7 @@ export default function Invoice() {
                   </span>
                 )}
               </div>
-              <div className="d-flex gap-2">
+              <div className="d-flex gap-2 invoice-no-print">
                 <Button variant="secondary" onClick={handlePrint}>
                   <FaPrint className="me-2" />
                   Print
@@ -429,25 +570,26 @@ export default function Invoice() {
                 </Button>
               </div>
             </Card.Header>
-            <Card.Body className="p-3">
-              <Card className="mb-3 border-0 bg-light">
-                <Card.Body className="p-3">
-                  <h6 className="fw-semibold mb-3">Search Criteria</h6>
+            <Card.Body className="p-2 d-flex flex-column flex-grow-1 invoice-flex-fill">
+              <Card className="mb-2 border-0 bg-light flex-shrink-0 invoice-no-print">
+                <Card.Body className="p-2">
+                  <h6 className="fw-semibold mb-2">Search Criteria</h6>
                   <Form onSubmit={handleSearch}>
-                    <Row className="g-3 align-items-end">
+                    <Row className="g-2 align-items-end">
                       <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>From Date</Form.Label>
+                        <Form.Group controlId="invoiceFromDate">
+                          <Form.Label className="mb-1">From Date</Form.Label>
                           <Form.Control
                             type="date"
                             value={fromDate}
                             onChange={(e) => setFromDate(e.target.value)}
+                            max={toDate || undefined}
                           />
                         </Form.Group>
                       </Col>
                       <Col md={3}>
-                        <Form.Group>
-                          <Form.Label>To Date</Form.Label>
+                        <Form.Group controlId="invoiceToDate">
+                          <Form.Label className="mb-1">To Date</Form.Label>
                           <Form.Control
                             type="date"
                             value={toDate}
@@ -458,8 +600,8 @@ export default function Invoice() {
                       </Col>
                       {!isAgentRole && (
                         <Col md={3}>
-                          <Form.Group>
-                            <Form.Label>Agent</Form.Label>
+                          <Form.Group controlId="invoiceAgent">
+                            <Form.Label className="mb-1">Agent</Form.Label>
                             <Form.Select
                               value={agent}
                               onChange={(e) => setAgent(e.target.value)}
@@ -476,23 +618,41 @@ export default function Invoice() {
                         </Col>
                       )}
                       <Col md={3}>
-                        <Button
-                          type="submit"
-                          variant="primary"
-                          className="w-100"
-                          disabled={isLoading}
-                        >
-                          <FaSearch className="me-2" />
-                          {isLoading ? "Searching..." : "Search"}
-                        </Button>
+                        <div className="d-flex gap-2">
+                          <Button
+                            type="submit"
+                            variant="primary"
+                            className="flex-grow-1"
+                            disabled={isLoading}
+                          >
+                            <FaSearch className="me-2" />
+                            {isLoading ? "Searching..." : "Search"}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline-secondary"
+                            className="text-nowrap"
+                            onClick={handleReset}
+                            disabled={isLoading}
+                            title="Clear the criteria and show all invoices"
+                          >
+                            Reset
+                          </Button>
+                        </div>
                       </Col>
                     </Row>
                   </Form>
                 </Card.Body>
               </Card>
 
-              {isLoading ? (
-                <div className="text-center py-5">
+              {/* Always rendered so its height can be measured even while the
+                  first page is still loading — that height decides the page size. */}
+              <div
+                ref={tableAreaRef}
+                className="invoice-table-area d-flex flex-column flex-grow-1 invoice-flex-fill"
+              >
+                {isLoading ? (
+                <div className="text-center d-flex flex-column align-items-center justify-content-center flex-grow-1">
                   <div
                     className="spinner-border text-primary"
                     role="status"
@@ -503,22 +663,22 @@ export default function Invoice() {
                   <p className="mt-3 text-muted">Loading invoice data...</p>
                 </div>
               ) : error ? (
-                <div className="alert alert-danger" role="alert">
+                <div className="alert alert-danger flex-shrink-0" role="alert">
                   {error}
                 </div>
               ) : invoiceList.length > 0 ? (
                 <Card
-                  className="shadow-sm border-0"
+                  className="shadow-sm border-0 d-flex flex-column flex-grow-1 invoice-flex-fill"
                   style={{ borderRadius: "8px", overflow: "hidden" }}
                 >
-                  <Card.Body className="p-0">
-                    <div style={{ overflowX: "auto" }}>
+                  <Card.Body className="p-0 d-flex flex-column flex-grow-1 invoice-flex-fill">
+                    <div className="invoice-table-viewport">
                       <Table
                         hover
                         size="sm"
-                        className="mb-0 align-middle table-bordered"
+                        className="mb-0 align-middle table-bordered invoice-table"
                         style={{
-                          tableLayout: "auto",
+                          tableLayout: "fixed",
                           width: "100%",
                           fontSize: "0.82rem",
                           borderCollapse: "separate",
@@ -537,157 +697,92 @@ export default function Invoice() {
                           <tr>
                             <th
                               style={{
-                                padding: "0.45rem 0.6rem",
-                                fontWeight: "600",
-                                textTransform: "uppercase",
-                                color: "#495057",
+                                ...headerCellStyle,
                                 textAlign: "center",
-                                border: "1px solid #dee2e6",
-                                whiteSpace: "normal",
-                                lineHeight: 1.2,
-                                minWidth: "64px",
+                                width: COLUMN_WIDTHS.serial,
                               }}
                             >
                               S.N
                             </th>
                             <th
                               style={{
-                                padding: "0.45rem 0.6rem",
-                                fontWeight: "600",
-                                textTransform: "uppercase",
-                                color: "#495057",
-                                border: "1px solid #dee2e6",
-                                whiteSpace: "normal",
-                                lineHeight: 1.2,
-                                minWidth: "130px",
+                                ...headerCellStyle,
+                                width: COLUMN_WIDTHS.customer,
                               }}
                             >
                               Customer
                             </th>
                             <th
                               style={{
-                                padding: "0.45rem 0.6rem",
-                                fontWeight: "600",
-                                textTransform: "uppercase",
-                                color: "#495057",
+                                ...headerCellStyle,
                                 textAlign: "center",
-                                border: "1px solid #dee2e6",
-                                whiteSpace: "normal",
-                                lineHeight: 1.2,
-                                minWidth: "50px",
-                                width: "50px",
+                                width: COLUMN_WIDTHS.details,
                               }}
-                            ></th>
+                            >
+                              <span className="visually-hidden">Details</span>
+                            </th>
                             <th
                               style={{
-                                padding: "0.45rem 0.6rem",
-                                fontWeight: "600",
-                                textTransform: "uppercase",
-                                color: "#495057",
-                                border: "1px solid #dee2e6",
-                                whiteSpace: "normal",
-                                lineHeight: 1.2,
-                                minWidth: "100px",
+                                ...headerCellStyle,
+                                width: COLUMN_WIDTHS.agent,
                               }}
                             >
                               Agent
                             </th>
                             <th
                               style={{
-                                padding: "0.45rem 0.6rem",
-                                fontWeight: "600",
-                                textTransform: "uppercase",
-                                color: "#495057",
-                                border: "1px solid #dee2e6",
-                                whiteSpace: "normal",
-                                lineHeight: 1.2,
-                                minWidth: "100px",
+                                ...headerCellStyle,
+                                width: COLUMN_WIDTHS.bookingCode,
                               }}
                             >
                               Booking Code
                             </th>
                             <th
                               style={{
-                                padding: "0.45rem 0.6rem",
-                                fontWeight: "600",
-                                textTransform: "uppercase",
-                                color: "#495057",
-                                border: "1px solid #dee2e6",
-                                whiteSpace: "normal",
-                                lineHeight: 1.2,
-                                minWidth: "140px",
+                                ...headerCellStyle,
+                                width: COLUMN_WIDTHS.bookingDate,
                               }}
                             >
                               Booking Date
                             </th>
                             <th
                               style={{
-                                padding: "0.45rem 0.6rem",
-                                fontWeight: "600",
-                                textTransform: "uppercase",
-                                color: "#495057",
-                                border: "1px solid #dee2e6",
-                                whiteSpace: "normal",
-                                lineHeight: 1.2,
-                                minWidth: "120px",
+                                ...headerCellStyle,
+                                width: COLUMN_WIDTHS.hotel,
                               }}
                             >
                               Hotel Name
                             </th>
                             <th
                               style={{
-                                padding: "0.45rem 0.6rem",
-                                fontWeight: "600",
-                                textTransform: "uppercase",
-                                color: "#495057",
-                                border: "1px solid #dee2e6",
-                                whiteSpace: "normal",
-                                lineHeight: 1.2,
-                                minWidth: "110px",
+                                ...headerCellStyle,
+                                width: COLUMN_WIDTHS.checkIn,
                               }}
                             >
                               Check-In
                             </th>
                             <th
                               style={{
-                                padding: "0.45rem 0.6rem",
-                                fontWeight: "600",
-                                textTransform: "uppercase",
-                                color: "#495057",
-                                border: "1px solid #dee2e6",
-                                whiteSpace: "normal",
-                                lineHeight: 1.2,
-                                minWidth: "110px",
+                                ...headerCellStyle,
+                                width: COLUMN_WIDTHS.checkOut,
                               }}
                             >
                               Check-Out
                             </th>
                             <th
                               style={{
-                                padding: "0.45rem 0.6rem",
-                                fontWeight: "600",
-                                textTransform: "uppercase",
-                                color: "#495057",
+                                ...headerCellStyle,
                                 textAlign: "right",
-                                border: "1px solid #dee2e6",
-                                whiteSpace: "normal",
-                                lineHeight: 1.2,
-                                minWidth: "120px",
+                                width: COLUMN_WIDTHS.amount,
                               }}
                             >
                               Total Amount
                             </th>
                             <th
                               style={{
-                                padding: "0.45rem 0.6rem",
-                                fontWeight: "600",
-                                textTransform: "uppercase",
-                                color: "#495057",
+                                ...headerCellStyle,
                                 textAlign: "center",
-                                border: "1px solid #dee2e6",
-                                whiteSpace: "normal",
-                                lineHeight: 1.2,
-                                minWidth: "120px",
+                                width: COLUMN_WIDTHS.action,
                               }}
                             >
                               Action
@@ -696,17 +791,11 @@ export default function Invoice() {
                         </thead>
                         <tbody>
                           {invoiceList.map((invoice, index) => {
-                            const baseCellStyle = {
-                              padding: "0.45rem 0.6rem",
-                              fontSize: "0.82rem",
-                              border: "1px solid #dee2e6",
-                              verticalAlign: "middle",
-                              whiteSpace: "normal",
-                              wordBreak: "break-word",
-                              lineHeight: 1.35,
-                            };
                             const serialNumber =
                               (currentPage - 1) * itemsPerPage + index + 1;
+                            const bookingDate = formatDateTime(
+                              invoice.bookingDate,
+                            );
 
                             return (
                               <React.Fragment key={index}>
@@ -735,7 +824,10 @@ export default function Invoice() {
                                   >
                                     {serialNumber}
                                   </td>
-                                  <td style={baseCellStyle}>
+                                  <td
+                                    style={baseCellStyle}
+                                    title={invoice.customerName || "-"}
+                                  >
                                     <span className="fw-medium text-dark">
                                       {invoice.customerName || "-"}
                                     </span>
@@ -746,31 +838,53 @@ export default function Invoice() {
                                       textAlign: "center",
                                     }}
                                   >
-                                    <FaPlus
-                                      style={{
-                                        color: "#28a745",
-                                        cursor: "pointer",
-                                        fontSize: "0.9rem",
-                                      }}
-                                      onClick={() => handlePlusClick(index)}
-                                    />
+                                    <OverlayTrigger
+                                      trigger="click"
+                                      rootClose
+                                      placement="right"
+                                      container={document.body}
+                                      overlay={renderDetailPopover(invoice)}
+                                    >
+                                      <Button
+                                        variant="link"
+                                        className="p-0 border-0 lh-1 align-middle"
+                                        style={{ textDecoration: "none" }}
+                                        title="Show booking details"
+                                      >
+                                        <FaPlus
+                                          style={{
+                                            color: "#28a745",
+                                            fontSize: "0.9rem",
+                                          }}
+                                        />
+                                      </Button>
+                                    </OverlayTrigger>
                                   </td>
-                                  <td style={baseCellStyle}>
+                                  <td
+                                    style={baseCellStyle}
+                                    title={invoice.agentName || "-"}
+                                  >
                                     <span className="fw-medium text-dark">
                                       {invoice.agentName || "-"}
                                     </span>
                                   </td>
-                                  <td style={baseCellStyle}>
+                                  <td
+                                    style={baseCellStyle}
+                                    title={invoice.bookingCode || "-"}
+                                  >
                                     <span className="fw-bold text-primary">
                                       {invoice.bookingCode || "-"}
                                     </span>
                                   </td>
-                                  <td style={baseCellStyle}>
+                                  <td style={baseCellStyle} title={bookingDate}>
                                     <span className="text-dark">
-                                      {formatDateTime(invoice.bookingDate)}
+                                      {bookingDate}
                                     </span>
                                   </td>
-                                  <td style={baseCellStyle}>
+                                  <td
+                                    style={baseCellStyle}
+                                    title={invoice.hotelName || "-"}
+                                  >
                                     <span className="fw-medium text-dark">
                                       {invoice.hotelName || "-"}
                                     </span>
@@ -791,98 +905,68 @@ export default function Invoice() {
                                       textAlign: "right",
                                     }}
                                   >
-                                  <span className="fw-bold text-dark">{formatBookingAmount(invoice)}</span>
+                                    <span className="fw-bold text-dark">
+                                      {formatBookingAmount(invoice)}
+                                    </span>
                                   </td>
                                   <td
                                     style={{
                                       ...baseCellStyle,
                                       textAlign: "center",
+                                      // Tighter than the other cells so the
+                                      // buttons keep the row height, and so
+                                      // their labels get the full column.
+                                      padding: "0.1rem 0.3rem",
+                                      // Nothing to truncate here, and visible
+                                      // overflow lets the hover shadow show.
+                                      overflow: "visible",
                                     }}
                                   >
-                                    <div className="d-flex gap-2 justify-content-center align-items-center">
-                                      <FaFileInvoice
-                                        style={{
-                                          color: "#0d6efd",
-                                          cursor: "pointer",
-                                          fontSize: "1.1rem",
-                                        }}
+                                    <div className="d-flex gap-1 justify-content-center align-items-center">
+                                      <button
+                                        type="button"
+                                        className="invoice-action-btn invoice-action-proforma"
                                         onClick={() =>
                                           handleInvoiceVoucherClick(invoice)
                                         }
-                                        title="Invoice Voucher"
-                                      />
-                                      <FaFileInvoiceDollar
-                                        style={{
-                                          color: "#ffc107",
-                                          cursor: "pointer",
-                                          fontSize: "1.1rem",
-                                        }}
+                                        title="Generate proforma invoice"
+                                        aria-label={`Proforma invoice for booking ${
+                                          invoice.bookingCode || ""
+                                        }`}
+                                      >
+                                        <FaFileInvoice />
+                                        <span className="invoice-action-label">
+                                          Proforma
+                                        </span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="invoice-action-btn invoice-action-tax"
                                         onClick={() =>
                                           handleTaxVoucherClick(invoice)
                                         }
-                                        title="Tax Voucher"
-                                      />
+                                        title="Generate tax invoice"
+                                        aria-label={`Tax invoice for booking ${
+                                          invoice.bookingCode || ""
+                                        }`}
+                                      >
+                                        <FaReceipt />
+                                        <span className="invoice-action-label">
+                                          Tax
+                                        </span>
+                                      </button>
                                     </div>
                                   </td>
                                 </tr>
-                                {expandedRows.has(index) && (
-                                  <tr
-                                    style={{
-                                      backgroundColor:
-                                        index % 2 === 0 ? "#f0f8ff" : "#e8f4f8",
-                                    }}
-                                  >
-                                    <td
-                                      colSpan={11}
-                                      style={{
-                                        ...baseCellStyle,
-                                        padding: "0.75rem 1rem",
-                                        backgroundColor: "#f8f9fa",
-                                      }}
-                                    >
-                                      <div className="ms-4">
-                                        <div className="mb-2">
-                                          <strong>Hotel name:</strong>{" "}
-                                          <span>
-                                            {invoice.hotelName || "-"}
-                                          </span>
-                                        </div>
-                                        <div className="mb-2">
-                                          <strong>Date:</strong>{" "}
-                                          <span>
-                                            {formatDateShort(
-                                              invoice.checkInDate,
-                                            ) || "-"}{" "}
-                                            to{" "}
-                                            {formatDateShort(
-                                              invoice.checkOutDate,
-                                            ) || "-"}
-                                          </span>
-                                        </div>
-                                        <div>
-                                          <strong>Confirmation code:</strong>{" "}
-                                          <code
-                                            className="bg-white px-2 py-1 rounded"
-                                            style={{
-                                              fontSize: "0.75rem",
-                                              color: "#495057",
-                                            }}
-                                          >
-                                            {invoice.confirmationCode || "-"}
-                                          </code>
-                                        </div>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                )}
                               </React.Fragment>
                             );
                           })}
                         </tbody>
                       </Table>
                     </div>
-                    {/* Pagination - Following BookingReport logic pattern */}
-                    <div className="d-flex justify-content-between align-items-center p-3 border-top bg-light">
+                    {/* Pagination - Following BookingReport logic pattern.
+                        flex-shrink-0 keeps it pinned below the rows. */}
+                    <div className="d-flex flex-wrap gap-2 justify-content-between align-items-center p-1 border-top bg-light flex-shrink-0 invoice-no-print">
                       <div>
                         <small className="text-muted">
                           Showing{" "}
@@ -947,33 +1031,13 @@ export default function Invoice() {
                     </div>
                   </Card.Body>
                 </Card>
-              ) : invoiceList.length === 0 && !error ? (
-                <Card
-                  className="shadow-sm border-0"
-                  style={{ borderRadius: "8px" }}
-                >
-                  <Card.Body>
-                    <div className="text-center py-5 text-muted">
-                      <FaInbox
-                        style={{
-                          fontSize: "2.5rem",
-                          marginBottom: "10px",
-                          color: "#adb5bd",
-                        }}
-                      />
-                      <p className="mt-2 mb-0 fs-5">
-                        Please select an agent and click Search to view invoices
-                      </p>
-                    </div>
-                  </Card.Body>
-                </Card>
               ) : (
                 <Card
-                  className="shadow-sm border-0"
+                  className="shadow-sm border-0 flex-grow-1"
                   style={{ borderRadius: "8px" }}
                 >
-                  <Card.Body>
-                    <div className="text-center py-5 text-muted">
+                  <Card.Body className="d-flex align-items-center justify-content-center h-100">
+                    <div className="text-center text-muted">
                       <FaInbox
                         style={{
                           fontSize: "2.5rem",
@@ -981,13 +1045,28 @@ export default function Invoice() {
                           color: "#adb5bd",
                         }}
                       />
+                      {/* The list loads unfiltered on mount, so an empty result
+                          only ever means "nothing matched" or "nothing exists". */}
                       <p className="mt-2 mb-0 fs-5">
-                        No invoice data available
+                        {hasAppliedFilters
+                          ? "No invoices match the selected criteria"
+                          : "No invoice data available"}
                       </p>
+                      {hasAppliedFilters && (
+                        <Button
+                          variant="outline-secondary"
+                          className="mt-3"
+                          onClick={handleReset}
+                          disabled={isLoading}
+                        >
+                          Clear filters
+                        </Button>
+                      )}
                     </div>
                   </Card.Body>
                 </Card>
-              )}
+                )}
+              </div>
             </Card.Body>
           </Card>
 
