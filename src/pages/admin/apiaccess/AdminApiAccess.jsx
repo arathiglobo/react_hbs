@@ -80,6 +80,12 @@ const CREDENTIAL_SCHEMAS = {
     { key: "password", label: "Password (juniper.api.password)", type: "password" },
     { key: "language", label: "Language (juniper.api.language)", type: "text" },
   ],
+  // Keys map to GrnCredentials.fromMap() on the backend, which accepts
+  // baseUrl/base-url/base_url/url and apiKey/api-key/api_key/key.
+  GRN: [
+    { key: "baseUrl", label: "Base URL (grn.api.base-url)", type: "text" },
+    { key: "apiKey", label: "API Key (grn.api.key)", type: "password" },
+  ],
   // INHOUSE reads from the app's own DB — no external credentials to set.
   INHOUSE: [],
 };
