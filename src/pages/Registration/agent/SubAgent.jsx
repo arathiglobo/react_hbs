@@ -5,7 +5,9 @@ import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
-import { FaEdit, FaTrash, FaPlus, FaSearch, FaChevronDown, FaUndo, FaTimes, FaCheck, FaSignInAlt, FaCreditCard, FaEye, FaEyeSlash } from "react-icons/fa";
+import { FaEdit, FaTrash, FaPlus, FaSearch, FaChevronDown, FaUndo, FaTimes, FaCheck, FaSignInAlt, FaCreditCard, FaEye, FaEyeSlash, FaToggleOn, FaToggleOff } from "react-icons/fa";
+import { formatDateTimeDisplay } from "../../../utils/dateUtils";
+import AgentSelect from "../../../components/AgentSelect";
 
 // Searchable Select Component for large lists
 const SearchableSelect = ({ label, name, value, options, onChange, placeholder, onSearch, isLoading, error, required }) => {
@@ -115,6 +117,18 @@ const formatMarkupOption = (m) => {
   return `${m.name || ""} - ${value}${isPercent ? "%" : ""}`;
 };
 
+const sortMarkupTypesByPercentage = (items = []) => {
+  return [...items].sort((a, b) => {
+    const aMarkup = Number(a?.markup);
+    const bMarkup = Number(b?.markup);
+    const aValue = Number.isFinite(aMarkup) ? aMarkup : Number.POSITIVE_INFINITY;
+    const bValue = Number.isFinite(bMarkup) ? bMarkup : Number.POSITIVE_INFINITY;
+
+    if (aValue !== bValue) return aValue - bValue;
+    return String(a?.name || "").localeCompare(String(b?.name || ""));
+  });
+};
+
 export default function SubAgent() {
   const [items, setItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -129,6 +143,8 @@ export default function SubAgent() {
   const [places, setPlaces] = useState([]);
   const [currencies, setCurrencies] = useState([]);
   const [markupTypes, setMarkupTypes] = useState([]);
+  // Main-agent options for the owner picker — only fetched for admin/staff.
+  const [agents, setAgents] = useState([]);
   // The logged-in MAIN agent's currency. A sub-agent must inherit it and
   // cannot pick a different one, so the Currency field is locked to this
   // single value. Resolved once on mount (personalProfile -> own agent id ->
@@ -161,20 +177,48 @@ export default function SubAgent() {
     userroles: "",
   });
 
+  // ─── Credit Limit modal state ───────────────────────────────────────────────
+  // Mirrors the Manage Credit Limit modal on registration/agent/view/{id}
+  // (AgentView.jsx) so both screens behave identically. The only difference is
+  // the endpoint family: a sub-agent's credit lives in its own
+  // /api/sub-agent-credit-limit/* tables, because sub_agent_register ids and
+  // agent ids are unrelated sequences.
   const [showCreditLimitModal, setShowCreditLimitModal] = useState(false);
   const [creditLimitType, setCreditLimitType] = useState("initial");
+  // Update Credit Limit — whether the entered amount is added to or subtracted
+  // from the current total. The amount field always takes a positive number;
+  // this flips its sign before it's sent as additionalCredit.
+  const [creditAdjustDirection, setCreditAdjustDirection] = useState("add");
   const [hasInitialCredit, setHasInitialCredit] = useState(false);
+  const [creditRowExists, setCreditRowExists] = useState(false);
   const [creditLimitFormData, setCreditLimitFormData] = useState({
     addCreditLimit: "",
     remarks: "",
-    totalCreditLimit: "",
-    availableCreditLimit: "",
-    usedCreditLimit: "",
+    totalCreditLimit: "0",
+    availableCreditLimit: "0",
+    usedCreditLimit: "0",
+    // "Paid Through" dropdown.
+    paymentMode: "",
   });
   const [creditLimitErrors, setCreditLimitErrors] = useState({
     addCreditLimit: "",
     remarks: "",
   });
+
+  // ─── Temporary Credit Limit state (extends the Credit Limit modal) ──────────
+  const [tempCredits, setTempCredits] = useState([]);
+  const [tempCreditsLoading, setTempCreditsLoading] = useState(false);
+  const [showTempCreditForm, setShowTempCreditForm] = useState(false);
+  const [editingTempCreditId, setEditingTempCreditId] = useState(null);
+  const [tempCreditTogglingId, setTempCreditTogglingId] = useState(null);
+  const [tempCreditFormData, setTempCreditFormData] = useState({
+    amount: "",
+    startDateTime: "",
+    endDateTime: "",
+    remarks: "",
+  });
+  const [tempCreditErrors, setTempCreditErrors] = useState({});
+  const [tempCreditSaving, setTempCreditSaving] = useState(false);
 
   const initialFormState = {
     businessType: "",
@@ -195,10 +239,29 @@ export default function SubAgent() {
     currency: "",
     status: "Active",
     faxNumber: "",
-    telephoneNumber: ""
+    telephoneNumber: "",
+    // Owning main agent. Only filled in (and only shown) for admin/staff
+    // logins — see isAgentLogin below.
+    mainAgentId: ""
   };
 
   const mainAgentName = localStorage.getItem("UserName") || "";
+
+  // A sub agent always belongs to a main agent. An AGENT login owns the sub
+  // agents it creates, so the backend resolves the parent from the JWT and the
+  // form hides the field. An ADMIN / STAFF login has no agent identity of its
+  // own (an admin's user_accounts.user_id is null), so it must pick the parent
+  // explicitly — without it the backend cannot resolve an owner at all.
+  // Role resolution mirrors Sidebar.jsx.
+  const storedRoles = (localStorage.getItem("userRole") || "")
+    .split(",")
+    .map((r) => r.trim().toLowerCase())
+    .filter(Boolean);
+  const activeRole =
+    (localStorage.getItem("currentActiveRole") || "").toLowerCase() ||
+    storedRoles[0] ||
+    "";
+  const isAgentLogin = activeRole === "agent";
 
   const [formData, setFormData] = useState(initialFormState);
   const [validationErrors, setValidationErrors] = useState({});
@@ -273,11 +336,23 @@ export default function SubAgent() {
       ]);
       setCategories(catRes.data || []);
       setCurrencies(currRes.data || []);
-      setMarkupTypes(Array.isArray(markupRes.data) ? markupRes.data : []);
+      setMarkupTypes(sortMarkupTypesByPercentage(Array.isArray(markupRes.data) ? markupRes.data : []));
       setRolesList(rolesRes.data || []);
-      fetchCountries(""); 
+      fetchCountries("");
     } catch (err) {
       console.error("Error fetching initial master data", err);
+    }
+  };
+
+  // Main agents to choose an owner from. Only an admin/staff login needs this —
+  // an agent login is always its own sub agents' parent.
+  const fetchAgents = async () => {
+    try {
+      const res = await axiosInstance.get("/api/agent");
+      setAgents(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error("Error fetching agents", err);
+      setAgents([]);
     }
   };
 
@@ -304,6 +379,8 @@ export default function SubAgent() {
     fetchSubAgents();
     fetchInitialMasterData();
     resolveMainAgentCurrency();
+    if (!isAgentLogin) fetchAgents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Keep the form's currency pinned to the main agent's currency once it
@@ -355,7 +432,12 @@ export default function SubAgent() {
     if (!formData.address) errors.address = "Required";
     if (!formData.markup) errors.markup = "Required";
     if (!formData.status) errors.status = "Required";
-    
+    // Admin/staff must name the owning main agent; an agent login is implicitly
+    // the owner and never sees the field.
+    if (!isAgentLogin && !formData.mainAgentId) {
+      errors.mainAgentId = "Select the main agent this sub agent belongs to";
+    }
+
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -376,6 +458,9 @@ export default function SubAgent() {
           ? Number(mainAgentCurrency.id)
           : (formData.currency ? parseInt(formData.currency) : null),
         markup: formData.markup ? parseInt(formData.markup) : null,
+        // Only meaningful for admin/staff — the backend ignores it for an
+        // agent login and uses the authenticated agent instead.
+        mainAgentId: formData.mainAgentId ? parseInt(formData.mainAgentId) : null,
       };
 
       await axiosInstance.post("/api/sub-agent/register", payload);
@@ -486,6 +571,7 @@ export default function SubAgent() {
             ? String(mainAgentCurrency.id)
             : (data.currency ? String(data.currency) : ""),
           markup: data.markup ? String(data.markup) : "",
+          mainAgentId: data.mainAgentId ? String(data.mainAgentId) : "",
         });
       } catch (err) {
         toast.error("Failed to fetch sub-agent details");
@@ -593,6 +679,23 @@ export default function SubAgent() {
     }
   };
 
+  // ─── Credit Limit ───────────────────────────────────────────────────────────
+
+  // Temporary-credit rows for the sub-agent currently open in the modal.
+  const fetchTempCredits = async (subAgentId) => {
+    setTempCreditsLoading(true);
+    try {
+      const res = await axiosInstance.get(
+        `/api/sub-agent-credit-limit/temporary/sub-agent/${subAgentId}`,
+      );
+      setTempCredits(Array.isArray(res.data) ? res.data : []);
+    } catch (_) {
+      setTempCredits([]);
+    } finally {
+      setTempCreditsLoading(false);
+    }
+  };
+
   const handleCreditLimit = async (item) => {
     setEditing(item);
     setCreditLimitFormData({
@@ -601,65 +704,289 @@ export default function SubAgent() {
       totalCreditLimit: "0",
       availableCreditLimit: "0",
       usedCreditLimit: "0",
+      paymentMode: "",
     });
     setCreditLimitErrors({ addCreditLimit: "", remarks: "" });
+    setCreditAdjustDirection("add");
+    setTempCredits([]);
+    setShowTempCreditForm(false);
+    setEditingTempCreditId(null);
 
     try {
-      const response = await axiosInstance.get(`/api/agent-credit-limit/agent/${item.id}`);
-      const creditData = response.data;
+      const response = await axiosInstance.get(
+        `/api/sub-agent-credit-limit/sub-agent/${item.id}`,
+      );
+      // 204 No Content (no credit limit yet) arrives as an empty body.
+      const creditData = response.data || null;
       if (creditData && Number(creditData.totalCreditLimit) > 0) {
+        // Second and subsequent visits — the initial limit is already set, so
+        // the modal opens on Update and "Add Initial Credit Limit" is locked.
+        setCreditRowExists(true);
         setHasInitialCredit(true);
         setCreditLimitType("update");
-        setCreditLimitFormData(prev => ({
+        setCreditLimitFormData((prev) => ({
           ...prev,
-          totalCreditLimit: creditData.totalCreditLimit || "0",
-          availableCreditLimit: creditData.availableCreditLimit || "0",
-          usedCreditLimit: creditData.usedCreditLimit || "0",
+          totalCreditLimit: creditData.totalCreditLimit ?? "0",
+          availableCreditLimit: creditData.availableCreditLimit ?? "0",
+          usedCreditLimit: creditData.usedCreditLimit ?? "0",
+          paymentMode: creditData.paymentMode || "",
         }));
+        fetchTempCredits(item.id);
       } else {
+        // First visit — Add Initial Credit Limit only.
+        setCreditRowExists(Boolean(creditData));
         setHasInitialCredit(false);
         setCreditLimitType("initial");
       }
-    } catch (error) {
+    } catch (_) {
+      setCreditRowExists(false);
       setHasInitialCredit(false);
       setCreditLimitType("initial");
     }
     setShowCreditLimitModal(true);
   };
 
+  const validateCreditLimitForm = (data, type) => {
+    const newErrors = {};
+    if (!data.addCreditLimit.toString().trim()) {
+      newErrors.addCreditLimit =
+        type === "initial"
+          ? "Add Credit Limit is required"
+          : "Add-on Credit Limit is required";
+    } else if (isNaN(data.addCreditLimit)) {
+      newErrors.addCreditLimit =
+        type === "initial"
+          ? "Add Credit Limit must be a number"
+          : "Add-on Credit Limit must be a number";
+    }
+    if (type === "update" && !data.remarks.trim()) {
+      newErrors.remarks = "Remarks is required";
+    }
+    return newErrors;
+  };
+
   const handleCreditLimitSubmit = async () => {
-    if (!creditLimitFormData.addCreditLimit) {
-      setCreditLimitErrors({ addCreditLimit: "Amount is required" });
+    const errors = validateCreditLimitForm(creditLimitFormData, creditLimitType);
+    if (Object.keys(errors).length > 0) {
+      setCreditLimitErrors(errors);
       return;
     }
 
     try {
       setIsLoading(true);
       const addAmount = parseFloat(creditLimitFormData.addCreditLimit);
+      const pm = creditLimitFormData.paymentMode || undefined;
+      const subAgentId = Number(editing?.id);
       let response;
+
       if (creditLimitType === "initial") {
-        response = await axiosInstance.post("/api/agent-credit-limit/create", null, {
-          params: { agentId: editing?.id, totalCreditLimit: addAmount }
-        });
+        if (creditRowExists) {
+          // A row already exists but sits at zero (e.g. a previous Reduce took
+          // it down to 0), so /create would be rejected as a duplicate — top it
+          // back up through the update path instead.
+          response = await axiosInstance.put("/api/sub-agent-credit-limit/update", {
+            subAgentId,
+            additionalCredit: addAmount,
+            totalCreditLimit: parseFloat(creditLimitFormData.totalCreditLimit) || 0,
+            availableCreditLimit:
+              parseFloat(creditLimitFormData.availableCreditLimit) || 0,
+            paymentMode: pm,
+          });
+        } else {
+          response = await axiosInstance.post(
+            "/api/sub-agent-credit-limit/create",
+            null,
+            {
+              params: {
+                subAgentId,
+                totalCreditLimit: addAmount,
+                ...(pm ? { paymentMode: pm } : {}),
+              },
+            },
+          );
+        }
       } else {
-        response = await axiosInstance.put("/api/agent-credit-limit/update", {
-          agentId: editing?.id,
-          additionalCredit: addAmount,
+        // Reduce flips the entered (always-positive) amount negative — the
+        // backend applies the same signed delta to both total and available.
+        const signedAmount =
+          creditAdjustDirection === "reduce"
+            ? -Math.abs(addAmount)
+            : Math.abs(addAmount);
+        response = await axiosInstance.put("/api/sub-agent-credit-limit/update", {
+          subAgentId,
+          additionalCredit: signedAmount,
           remarks: creditLimitFormData.remarks,
-          totalCreditLimit: creditLimitFormData.totalCreditLimit,
-          availableCreditLimit: creditLimitFormData.availableCreditLimit
+          totalCreditLimit: parseFloat(creditLimitFormData.totalCreditLimit) || 0,
+          availableCreditLimit:
+            parseFloat(creditLimitFormData.availableCreditLimit) || 0,
+          paymentMode: pm,
         });
       }
 
       if (response.data) {
-        toast.success("Credit limit updated successfully!");
-        setShowCreditLimitModal(false);
-        fetchSubAgents();
+        toast.success(
+          creditLimitType === "initial"
+            ? "Initial credit limit created successfully!"
+            : "Credit limit updated successfully!",
+        );
+        // Close on success — same as the agent screen. Re-opening Credit now
+        // lands on "Update Credit Limit" with the stored balances.
+        setCreditRowExists(true);
+        setHasInitialCredit(true);
+        closeCreditLimitModal();
       }
     } catch (error) {
-      toast.error("Failed to update credit limit");
+      toast.error(
+        error.response?.data?.message || "Failed to update credit limit",
+      );
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // ─── Temporary Credit Limit — Add / Edit / Delete / Toggle ──────────────────
+
+  // datetime-local inputs need "yyyy-MM-ddTHH:mm"; the backend returns a plain
+  // LocalDateTime ISO string ("...THH:mm:ss").
+  const toDatetimeLocalValue = (value) => (value ? String(value).slice(0, 16) : "");
+
+  const openAddTempCreditForm = () => {
+    setEditingTempCreditId(null);
+    setTempCreditFormData({ amount: "", startDateTime: "", endDateTime: "", remarks: "" });
+    setTempCreditErrors({});
+    setShowTempCreditForm(true);
+  };
+
+  const openEditTempCreditForm = (row) => {
+    setEditingTempCreditId(row.id);
+    setTempCreditFormData({
+      amount: row.amount ?? "",
+      startDateTime: toDatetimeLocalValue(row.startDateTime),
+      endDateTime: toDatetimeLocalValue(row.endDateTime),
+      remarks: row.remarks || "",
+    });
+    setTempCreditErrors({});
+    setShowTempCreditForm(true);
+  };
+
+  const closeTempCreditForm = () => {
+    setShowTempCreditForm(false);
+    setEditingTempCreditId(null);
+    setTempCreditFormData({ amount: "", startDateTime: "", endDateTime: "", remarks: "" });
+    setTempCreditErrors({});
+  };
+
+  const handleTempCreditFormChange = (e) => {
+    const { name, value } = e.target;
+    setTempCreditFormData((prev) => ({ ...prev, [name]: value }));
+    if (tempCreditErrors[name]) {
+      setTempCreditErrors((prev) => ({ ...prev, [name]: "" }));
+    }
+  };
+
+  const validateTempCreditForm = (data) => {
+    const errors = {};
+    if (!data.amount.toString().trim()) {
+      errors.amount = "Amount is required";
+    } else if (isNaN(data.amount) || Number(data.amount) <= 0) {
+      errors.amount = "Amount must be a positive number";
+    }
+    if (!data.startDateTime) errors.startDateTime = "Start date & time is required";
+    if (!data.endDateTime) errors.endDateTime = "End date & time is required";
+    if (
+      data.startDateTime &&
+      data.endDateTime &&
+      new Date(data.endDateTime) <= new Date(data.startDateTime)
+    ) {
+      errors.endDateTime = "End date & time must be after the start date & time";
+    }
+    return errors;
+  };
+
+  const handleTempCreditSubmit = async () => {
+    const errors = validateTempCreditForm(tempCreditFormData);
+    if (Object.keys(errors).length > 0) {
+      setTempCreditErrors(errors);
+      return;
+    }
+    setTempCreditSaving(true);
+    try {
+      const payload = {
+        amount: Number(tempCreditFormData.amount),
+        startDateTime: tempCreditFormData.startDateTime,
+        endDateTime: tempCreditFormData.endDateTime,
+        remarks: tempCreditFormData.remarks || undefined,
+      };
+      if (editingTempCreditId) {
+        await axiosInstance.put(
+          `/api/sub-agent-credit-limit/temporary/${editingTempCreditId}`,
+          payload,
+        );
+        toast.success("Temporary credit limit updated successfully!");
+      } else {
+        await axiosInstance.post("/api/sub-agent-credit-limit/temporary", {
+          subAgentId: Number(editing?.id),
+          ...payload,
+        });
+        toast.success("Temporary credit limit added successfully!");
+      }
+      closeTempCreditForm();
+      await fetchTempCredits(editing?.id);
+    } catch (e) {
+      toast.error(
+        e.response?.data?.message || "Failed to save temporary credit limit",
+      );
+    } finally {
+      setTempCreditSaving(false);
+    }
+  };
+
+  const handleDeleteTempCredit = (row) => {
+    Swal.fire({
+      title: "Delete this temporary credit limit?",
+      html: `Amount: <b>${row.amount}</b><br/>This removes it immediately — it will no longer count toward the sub agent's available credit.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete",
+    }).then(async (result) => {
+      if (!result.isConfirmed) return;
+      try {
+        await axiosInstance.delete(
+          `/api/sub-agent-credit-limit/temporary/${row.id}`,
+        );
+        toast.success("Temporary credit limit deleted");
+        await fetchTempCredits(editing?.id);
+      } catch (e) {
+        toast.error(
+          e.response?.data?.message || "Failed to delete temporary credit limit",
+        );
+      }
+    });
+  };
+
+  const handleToggleTempCreditEnabled = async (row) => {
+    const nextEnabled = !row.enabled;
+    setTempCreditTogglingId(row.id);
+    try {
+      await axiosInstance.patch(
+        `/api/sub-agent-credit-limit/temporary/${row.id}/status`,
+        { enabled: nextEnabled },
+      );
+      toast.success(
+        nextEnabled
+          ? "Temporary credit limit activated"
+          : "Temporary credit limit deactivated",
+      );
+      await fetchTempCredits(editing?.id);
+    } catch (e) {
+      toast.error(
+        e.response?.data?.message ||
+          "Failed to update temporary credit limit status",
+      );
+    } finally {
+      setTempCreditTogglingId(null);
     }
   };
 
@@ -701,15 +1028,37 @@ export default function SubAgent() {
 
   const closeCreditLimitModal = () => {
     setShowCreditLimitModal(false);
+    setCreditLimitType("initial");
+    setCreditRowExists(false);
+    setHasInitialCredit(false);
+    setCreditLimitFormData({
+      addCreditLimit: "",
+      remarks: "",
+      totalCreditLimit: "0",
+      availableCreditLimit: "0",
+      usedCreditLimit: "0",
+      paymentMode: "",
+    });
+    setCreditLimitErrors({ addCreditLimit: "", remarks: "" });
+    setCreditAdjustDirection("add");
+    setTempCredits([]);
+    setShowTempCreditForm(false);
+    setEditingTempCreditId(null);
   };
 
   const handleCreditLimitChange = (e) => {
     const { name, value } = e.target;
     setCreditLimitFormData(prev => ({ ...prev, [name]: value }));
+    if (creditLimitErrors[name]) {
+      setCreditLimitErrors(prev => ({ ...prev, [name]: "" }));
+    }
   };
 
   const handleCreditLimitTypeChange = (e) => {
     setCreditLimitType(e.target.value);
+    setCreditLimitFormData(prev => ({ ...prev, addCreditLimit: "", remarks: "" }));
+    setCreditLimitErrors({ addCreditLimit: "", remarks: "" });
+    setCreditAdjustDirection("add");
   };
 
   // Display label for the (locked) main-agent currency — "AED - UAE dirham"
@@ -748,7 +1097,12 @@ export default function SubAgent() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-3 border-0">
             <Card.Header className="bg-white border-0 py-3 d-flex justify-content-between align-items-center border-bottom">
-              <h5 className="mb-0 fw-bold text-dark">Subagent</h5>
+              {/* Title markup matches SubUser.jsx ("Sub User Registration") so
+                  both registration screens share a size and weight. The brand
+                  red comes from the site-wide card-header rule in custom.scss —
+                  no colour is set here. Bootstrap's `text-dark` was previously
+                  overriding that rule (colour utilities carry !important). */}
+              <span className="fw-semibold">Sub Agent Registration</span>
               <div className="d-flex gap-2">
                 <Button className="btn-indigo d-flex align-items-center gap-2" size="sm" onClick={() => handleOpen()}>
                   Create +
@@ -782,7 +1136,7 @@ export default function SubAgent() {
                   <tr>
                     <th className="ps-4 py-2 small">S.N</th>
                     <th className="py-2 small">Company</th>
-                    <th className="py-2 small">Name</th>
+                    <th className="py-2 small">Sub Agent Name</th>
                     <th className="py-2 small">Contact</th>
                     <th className="py-2 small">Country</th>
                     <th className="py-2 small">City</th>
@@ -933,6 +1287,32 @@ export default function SubAgent() {
                   <div className="custom-fieldset">
                     <div className="custom-legend">Agent Details</div>
                     <Row className="g-3">
+                      {/* Owning main agent — admin/staff only. An agent login
+                          is implicitly the owner, so the field is hidden and
+                          the backend resolves the parent from the JWT. */}
+                      {!isAgentLogin && (
+                        <Col md={12}>
+                          <Form.Group>
+                            <Form.Label className="form-label-custom">
+                              <span className="text-danger">* </span>Main Agent
+                            </Form.Label>
+                            <AgentSelect
+                              agents={agents}
+                              value={formData.mainAgentId}
+                              onChange={(id) =>
+                                handleChange({ target: { name: "mainAgentId", value: id } })
+                              }
+                              placeholder="Select the main agent this sub agent belongs to"
+                              isInvalid={!!validationErrors.mainAgentId}
+                            />
+                            {validationErrors.mainAgentId && (
+                              <div className="text-danger" style={{ fontSize: '0.7rem', marginTop: 2 }}>
+                                {validationErrors.mainAgentId}
+                              </div>
+                            )}
+                          </Form.Group>
+                        </Col>
+                      )}
                       <Col md={4}>
                         <Form.Group>
                           <Form.Label className="form-label-custom"><span className="text-danger">* </span>Company Name</Form.Label>
@@ -1321,7 +1701,10 @@ export default function SubAgent() {
                   </div>
                   {showRolesDropdown && (
                     <div className="border rounded mt-1 bg-white shadow-sm" style={{ maxHeight: '150px', overflowY: 'auto' }}>
-                      {rolesList.map(role => (
+                      {/* Sub-agent creation page — the only meaningful role
+                          here is SUB_AGENT, so hide every other option to
+                          prevent operators from picking the wrong bucket. */}
+                      {rolesList.filter(r => r.roleName === "SUB_AGENT").map(role => (
                         <div key={role.id} className="p-2 cursor-pointer hover-bg-light" onClick={() => toggleRole(role.id)} onMouseEnter={e => e.target.style.backgroundColor='#f8f9fa'} onMouseLeave={e => e.target.style.backgroundColor=''}>
                           {role.roleName}
                         </div>
@@ -1338,41 +1721,432 @@ export default function SubAgent() {
             </Modal.Footer>
           </Modal>
 
-          {/* Credit Limit Modal */}
-          <Modal show={showCreditLimitModal} onHide={closeCreditLimitModal} centered backdrop="static">
-            <Modal.Header closeButton>
+          {/* Credit Limit Modal — mirrors the Manage Credit Limit modal on
+              registration/agent/view/{id} (AgentView.jsx). First open shows
+              "Add Initial Credit Limit" only; once a limit exists the modal
+              opens on Update with the Add/Reduce controls, the readonly
+              balances and the Temporary Credit Limit list. */}
+          <Modal
+            show={showCreditLimitModal}
+            onHide={closeCreditLimitModal}
+            centered
+            size="xl"
+            backdrop="static"
+            keyboard={false}
+          >
+            <Modal.Header closeButton={!isLoading}>
               <Modal.Title>Manage Credit Limit - {editing?.companyName}</Modal.Title>
             </Modal.Header>
             <Modal.Body>
               <Form>
-                <Form.Group className="mb-3">
-                  <Form.Label className="fw-bold">Action:</Form.Label>
-                  <div className="d-flex gap-3">
-                    <Form.Check type="radio" id="initial" name="type" value="initial" label="Initial" checked={creditLimitType === "initial"} onChange={handleCreditLimitTypeChange} disabled={hasInitialCredit} />
-                    <Form.Check type="radio" id="update" name="type" value="update" label="Update" checked={creditLimitType === "update"} onChange={handleCreditLimitTypeChange} disabled={!hasInitialCredit} />
-                  </div>
+                <Form.Group className="mb-4">
+                  <Form.Label className="fw-bold">Select Action:</Form.Label>
+                  <Row>
+                    <Col xs="auto">
+                      <Form.Check
+                        type="radio"
+                        id="sub-agent-initial-credit"
+                        name="creditLimitType"
+                        value="initial"
+                        label="Add Initial Credit Limit"
+                        checked={creditLimitType === "initial"}
+                        onChange={handleCreditLimitTypeChange}
+                        disabled={hasInitialCredit}
+                        className="mb-2"
+                      />
+                    </Col>
+                    <Col xs="auto">
+                      <Form.Check
+                        type="radio"
+                        id="sub-agent-update-credit"
+                        name="creditLimitType"
+                        value="update"
+                        label="Update Credit Limit"
+                        checked={creditLimitType === "update"}
+                        onChange={handleCreditLimitTypeChange}
+                        disabled={!hasInitialCredit}
+                        className="mb-2"
+                      />
+                    </Col>
+                  </Row>
                 </Form.Group>
-                <Form.Group className="mb-3">
-                  <Form.Label>{creditLimitType === "initial" ? "Initial Credit Limit" : "Add-on Credit Limit"}</Form.Label>
-                  <Form.Control type="number" name="addCreditLimit" value={creditLimitFormData.addCreditLimit} onChange={handleCreditLimitChange} isInvalid={!!creditLimitErrors.addCreditLimit} />
-                </Form.Group>
-                {creditLimitType === "update" && (
+                <hr className="my-3" />
+                {creditLimitType === "initial" ? (
+                  <Row>
+                    <Col md={6}>
+                      <Form.Group className="mb-3">
+                        <Form.Label>
+                          <span className="text-danger">*</span>Add Credit Limit
+                        </Form.Label>
+                        <Form.Control
+                          type="number"
+                          name="addCreditLimit"
+                          value={creditLimitFormData.addCreditLimit}
+                          onChange={handleCreditLimitChange}
+                          placeholder="Enter initial credit limit amount"
+                          isInvalid={!!creditLimitErrors.addCreditLimit}
+                          min="0"
+                          step="0.01"
+                        />
+                        <Form.Control.Feedback type="invalid">
+                          {creditLimitErrors.addCreditLimit}
+                        </Form.Control.Feedback>
+                      </Form.Group>
+                    </Col>
+                    <Col md={6}>
+                      <Form.Group className="mb-3">
+                        <Form.Label>Paid Through</Form.Label>
+                        <Form.Select
+                          name="paymentMode"
+                          value={creditLimitFormData.paymentMode}
+                          onChange={handleCreditLimitChange}
+                          style={selectStyle}
+                        >
+                          <option value="">SELECT</option>
+                          <option value="CASH">Cash</option>
+                          <option value="CREDIT_CARD">Credit Card</option>
+                          <option value="BANK_TRANSFER">Bank Transfer</option>
+                        </Form.Select>
+                      </Form.Group>
+                    </Col>
+                  </Row>
+                ) : (
                   <>
                     <Form.Group className="mb-3">
-                      <Form.Label>Remarks</Form.Label>
-                      <Form.Control as="textarea" name="remarks" value={creditLimitFormData.remarks} onChange={handleCreditLimitChange} />
+                      <Form.Label className="fw-bold d-block">Add or Reduce</Form.Label>
+                      <Form.Check
+                        inline
+                        type="radio"
+                        id="sub-agent-credit-adjust-add"
+                        name="creditAdjustDirection"
+                        value="add"
+                        label="Add"
+                        checked={creditAdjustDirection === "add"}
+                        onChange={() => setCreditAdjustDirection("add")}
+                      />
+                      <Form.Check
+                        inline
+                        type="radio"
+                        id="sub-agent-credit-adjust-reduce"
+                        name="creditAdjustDirection"
+                        value="reduce"
+                        label="Reduce"
+                        checked={creditAdjustDirection === "reduce"}
+                        onChange={() => setCreditAdjustDirection("reduce")}
+                      />
                     </Form.Group>
                     <Row>
-                       <Col><Form.Label className="small">Total: {creditLimitFormData.totalCreditLimit}</Form.Label></Col>
-                       <Col><Form.Label className="small">Available: {creditLimitFormData.availableCreditLimit}</Form.Label></Col>
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>
+                            <span className="text-danger">*</span>
+                            {creditAdjustDirection === "reduce"
+                              ? "Reduce Credit Limit By"
+                              : "Add-on Credit Limit"}
+                          </Form.Label>
+                          <Form.Control
+                            type="number"
+                            name="addCreditLimit"
+                            value={creditLimitFormData.addCreditLimit}
+                            onChange={handleCreditLimitChange}
+                            placeholder={
+                              creditAdjustDirection === "reduce"
+                                ? "Enter amount to reduce"
+                                : "Enter amount to add"
+                            }
+                            isInvalid={!!creditLimitErrors.addCreditLimit}
+                            min="0"
+                            step="0.01"
+                          />
+                          <Form.Control.Feedback type="invalid">
+                            {creditLimitErrors.addCreditLimit}
+                          </Form.Control.Feedback>
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>
+                            <span className="text-danger">*</span>Remarks
+                          </Form.Label>
+                          <Form.Control
+                            as="textarea"
+                            rows={3}
+                            name="remarks"
+                            value={creditLimitFormData.remarks}
+                            onChange={handleCreditLimitChange}
+                            placeholder="Enter remarks"
+                            isInvalid={!!creditLimitErrors.remarks}
+                          />
+                          <Form.Control.Feedback type="invalid">
+                            {creditLimitErrors.remarks}
+                          </Form.Control.Feedback>
+                        </Form.Group>
+                      </Col>
+                      <Col md={6}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Paid Through</Form.Label>
+                          <Form.Select
+                            name="paymentMode"
+                            value={creditLimitFormData.paymentMode}
+                            onChange={handleCreditLimitChange}
+                            style={selectStyle}
+                          >
+                            <option value="">SELECT</option>
+                            <option value="CASH">Cash</option>
+                            <option value="CREDIT_CARD">Credit Card</option>
+                            <option value="BANK_TRANSFER">Bank Transfer</option>
+                          </Form.Select>
+                        </Form.Group>
+                      </Col>
                     </Row>
+                    <hr className="my-3" />
+                    <Row>
+                      <Col md={4}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Total Credit Limit</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={creditLimitFormData.totalCreditLimit}
+                            readOnly
+                            className="bg-light"
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={4}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Available Credit Limit</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={creditLimitFormData.availableCreditLimit}
+                            readOnly
+                            className="bg-light"
+                          />
+                        </Form.Group>
+                      </Col>
+                      <Col md={4}>
+                        <Form.Group className="mb-3">
+                          <Form.Label>Used Credit Limit</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={creditLimitFormData.usedCreditLimit}
+                            readOnly
+                            className="bg-light"
+                          />
+                        </Form.Group>
+                      </Col>
+                    </Row>
+                  </>
+                )}
+
+                {/* ---- Temporary Credit Limit — only available once a regular
+                    credit limit exists (mirrors the backend guard). ---- */}
+                {hasInitialCredit && (
+                  <>
+                    <hr className="my-3" />
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                      <span className="fw-bold">Temporary Credit Limit</span>
+                      {!showTempCreditForm && (
+                        <Button
+                          size="sm"
+                          variant="outline-primary"
+                          className="d-inline-flex align-items-center gap-1"
+                          onClick={openAddTempCreditForm}
+                        >
+                          <FaPlus size={11} /> Add Temporary Credit
+                        </Button>
+                      )}
+                    </div>
+
+                    {showTempCreditForm ? (
+                      <div className="border rounded p-3 mb-3 bg-light">
+                        <Row>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>
+                                <span className="text-danger">*</span>Temporary Credit Limit Amount
+                              </Form.Label>
+                              <Form.Control
+                                type="number"
+                                name="amount"
+                                value={tempCreditFormData.amount}
+                                onChange={handleTempCreditFormChange}
+                                placeholder="Enter amount"
+                                isInvalid={!!tempCreditErrors.amount}
+                                min="0"
+                                step="0.01"
+                              />
+                              <Form.Control.Feedback type="invalid">
+                                {tempCreditErrors.amount}
+                              </Form.Control.Feedback>
+                            </Form.Group>
+                          </Col>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>Remarks</Form.Label>
+                              <Form.Control
+                                type="text"
+                                name="remarks"
+                                value={tempCreditFormData.remarks}
+                                onChange={handleTempCreditFormChange}
+                                placeholder="Optional"
+                              />
+                            </Form.Group>
+                          </Col>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>
+                                <span className="text-danger">*</span>Start Date &amp; Time
+                              </Form.Label>
+                              <Form.Control
+                                type="datetime-local"
+                                name="startDateTime"
+                                value={tempCreditFormData.startDateTime}
+                                onChange={handleTempCreditFormChange}
+                                isInvalid={!!tempCreditErrors.startDateTime}
+                              />
+                              <Form.Control.Feedback type="invalid">
+                                {tempCreditErrors.startDateTime}
+                              </Form.Control.Feedback>
+                            </Form.Group>
+                          </Col>
+                          <Col md={6}>
+                            <Form.Group className="mb-3">
+                              <Form.Label>
+                                <span className="text-danger">*</span>End Date &amp; Time
+                              </Form.Label>
+                              <Form.Control
+                                type="datetime-local"
+                                name="endDateTime"
+                                value={tempCreditFormData.endDateTime}
+                                onChange={handleTempCreditFormChange}
+                                isInvalid={!!tempCreditErrors.endDateTime}
+                              />
+                              <Form.Control.Feedback type="invalid">
+                                {tempCreditErrors.endDateTime}
+                              </Form.Control.Feedback>
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                        <div className="d-flex justify-content-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline-secondary"
+                            onClick={closeTempCreditForm}
+                            disabled={tempCreditSaving}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            onClick={handleTempCreditSubmit}
+                            disabled={tempCreditSaving}
+                          >
+                            {tempCreditSaving
+                              ? "Saving..."
+                              : editingTempCreditId
+                                ? "Update"
+                                : "Save"}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : tempCreditsLoading ? (
+                      <div className="text-center py-3">
+                        <Spinner animation="border" size="sm" />
+                      </div>
+                    ) : tempCredits.length === 0 ? (
+                      <div className="text-muted small mb-3">
+                        No temporary credit limits added yet.
+                      </div>
+                    ) : (
+                      <div className="table-responsive mb-3 border rounded" style={{ minWidth: 0 }}>
+                        <table className="table align-middle mb-0" style={{ minWidth: "760px" }}>
+                          <thead>
+                            <tr style={{ fontSize: "0.75rem", backgroundColor: "#f8f9fa" }}>
+                              <th className="py-3 px-3">Amount</th>
+                              <th className="py-3 px-3">Available</th>
+                              <th className="py-3 px-3">Start</th>
+                              <th className="py-3 px-3">End</th>
+                              <th className="py-3 px-3">Remarks</th>
+                              <th className="py-3 px-3">Status</th>
+                              <th className="py-3 px-3 text-center" style={{ width: "160px" }}>
+                                Actions
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody style={{ fontSize: "0.82rem" }}>
+                            {tempCredits.map((row) => (
+                              <tr key={row.id}>
+                                <td className="py-2 px-3">{row.amount}</td>
+                                <td className="py-2 px-3">{row.availableAmount}</td>
+                                <td className="py-2 px-3 text-nowrap">
+                                  {formatDateTimeDisplay(row.startDateTime)}
+                                </td>
+                                <td className="py-2 px-3 text-nowrap">
+                                  {formatDateTimeDisplay(row.endDateTime)}
+                                </td>
+                                <td className="py-2 px-3">{row.remarks || "-"}</td>
+                                <td className="py-2 px-3">
+                                  <Button
+                                    size="sm"
+                                    variant={row.status === "Active" ? "success" : "outline-secondary"}
+                                    className="d-inline-flex align-items-center gap-1"
+                                    disabled={tempCreditTogglingId === row.id}
+                                    title={row.enabled ? "Click to deactivate" : "Click to activate"}
+                                    onClick={() => handleToggleTempCreditEnabled(row)}
+                                  >
+                                    {row.status === "Active" ? <FaToggleOn /> : <FaToggleOff />}
+                                    {row.status}
+                                  </Button>
+                                </td>
+                                <td className="py-2 px-3">
+                                  <div className="d-flex justify-content-center gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline-primary"
+                                      onClick={() => openEditTempCreditForm(row)}
+                                    >
+                                      Edit
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline-danger"
+                                      onClick={() => handleDeleteTempCredit(row)}
+                                    >
+                                      Delete
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </>
                 )}
               </Form>
             </Modal.Body>
             <Modal.Footer>
-              <Button variant="secondary" onClick={closeCreditLimitModal}>Cancel</Button>
-              <Button variant="primary" onClick={handleCreditLimitSubmit} disabled={isLoading}>Save</Button>
+              <Button variant="secondary" onClick={closeCreditLimitModal} disabled={isLoading}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleCreditLimitSubmit} disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <span
+                      className="spinner-border spinner-border-sm me-2"
+                      role="status"
+                      aria-hidden="true"
+                    ></span>
+                    {creditLimitType === "initial" ? "Creating..." : "Updating..."}
+                  </>
+                ) : creditLimitType === "initial" ? (
+                  "Save"
+                ) : (
+                  "Update"
+                )}
+              </Button>
             </Modal.Footer>
           </Modal>
         </main>

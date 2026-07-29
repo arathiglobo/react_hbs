@@ -111,7 +111,9 @@ export default function AgentApprovalDetail() {
     try {
       setActionLoading("approve");
       await axiosInstance.put(`/api/agent-external-register/${id}/approve`);
-      toast.success("Agent approved. They can now log in.");
+      // The backend emails the official approval notice to the agent as part
+      // of this call (async, best-effort) — surfaced here so the admin knows.
+      toast.success("Agent approved. They can now log in — approval email sent.");
       fetchDetail();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Approval failed.");
@@ -136,7 +138,9 @@ export default function AgentApprovalDetail() {
       await axiosInstance.put(`/api/agent-external-register/${id}/reject`, {
         remarks: trimmed,
       });
-      toast.success("Registration request rejected.");
+      // Remarks entered here are quoted back to the agent as the stated
+      // reason in the rejection email the backend sends.
+      toast.success("Registration request rejected — rejection email sent.");
       setShowRejectModal(false);
       fetchDetail();
     } catch (err) {
@@ -434,7 +438,9 @@ export default function AgentApprovalDetail() {
               <p className="text-muted mb-3" style={{ fontSize: "0.85rem" }}>
                 Please provide a reason for rejecting{" "}
                 <strong>{reg?.companyName || "this agent"}</strong>'s registration
-                request. The remarks will be visible in the request details.
+                request. The remarks will be visible in the request details and
+                are included as the stated reason in the rejection email sent to
+                the agent.
               </p>
               <Form.Group>
                 <Form.Label className="fw-semibold" style={{ fontSize: "0.85rem" }}>

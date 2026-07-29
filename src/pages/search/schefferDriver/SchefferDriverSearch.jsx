@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { Card, Row, Col, Form, Button, Spinner, Badge } from "react-bootstrap";
-import { FaCar, FaSearch, FaClock, FaRoad } from "react-icons/fa";
+import { Card, Row, Col, Form, Button, Spinner, Badge, Modal } from "react-bootstrap";
+import { FaCar, FaSearch, FaClock, FaRoad, FaEye } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
 import Select from "react-select";
 import axiosInstance from "../../../components/AxiosInstance";
@@ -140,6 +140,12 @@ export const SchefferDriverSearch = () => {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+  const [showCabDetailModal, setShowCabDetailModal] = useState(false);
+  const [selectedCabResult, setSelectedCabResult] = useState(null);
+  const [selectedCabConfig, setSelectedCabConfig] = useState(null);
+  const [selectedCabRateDetails, setSelectedCabRateDetails] = useState(null);
+  const [selectedCabZoneDetails, setSelectedCabZoneDetails] = useState(null);
+  const [cabDetailLoading, setCabDetailLoading] = useState(false);
   // When results are on screen the big search form collapses into a sticky
   // summary strip. Clicking "Modify Search" flips this true to re-expand it.
   const [isEditingSearch, setIsEditingSearch] = useState(false);
@@ -524,6 +530,89 @@ export const SchefferDriverSearch = () => {
     });
   };
 
+  const getCabImageUrl = (imagePath) => {
+    if (!imagePath) return "";
+    if (typeof imagePath !== "string") return "";
+    if (imagePath.startsWith("http") || imagePath.startsWith("blob:")) {
+      return imagePath;
+    }
+    if (imagePath.includes("\\") || imagePath.includes(":")) {
+      const filename = imagePath.split("\\").pop();
+      return `${process.env.REACT_APP_API_BASE_URL}/api/files/${filename}`;
+    }
+    if (imagePath.startsWith("/")) {
+      return `${process.env.REACT_APP_API_BASE_URL}${imagePath}`;
+    }
+    return `${process.env.REACT_APP_API_BASE_URL}/api/files/${imagePath}`;
+  };
+
+  const handleViewCab = async (card) => {
+    setSelectedCabResult(card);
+    setSelectedCabConfig(null);
+    setSelectedCabRateDetails(null);
+    setSelectedCabZoneDetails(null);
+    setShowCabDetailModal(true);
+
+    const cabId = card?.cabId || card?.cabid;
+    const providerId = card?.cabProviderId;
+    const rateId = card?.rentalRateId || card?.cabRateId || card?.cabratesId;
+    const requests = [];
+
+    setCabDetailLoading(true);
+
+    if (providerId && cabId) {
+      requests.push(
+        axiosInstance
+          .get(`/api/SchefferDriver/cabs/${providerId}`)
+          .then((res) => {
+            const cabList = Array.isArray(res.data)
+              ? res.data
+              : Array.isArray(res.data?.data)
+              ? res.data.data
+              : Array.isArray(res.data?.cabs)
+              ? res.data.cabs
+              : [];
+            const matchingCab = cabList.find(
+              (cab) => String(cab.cabId || cab.id) === String(cabId),
+            );
+            setSelectedCabConfig(matchingCab || null);
+          }),
+      );
+    }
+
+    if (rateId) {
+      requests.push(
+        axiosInstance
+          .get(`/api/scheffer-rental-rates/${rateId}`)
+          .then((res) => setSelectedCabRateDetails(res.data || null)),
+      );
+    }
+
+    if (providerId && cabId) {
+      requests.push(
+        axiosInstance
+          .get(`/api/scheffer-zones/by-provider/${providerId}`)
+          .then((res) => {
+            const zones = Array.isArray(res.data) ? res.data : [];
+            const matchingZone = zones.find((zone) => String(zone.cabId) === String(cabId));
+            setSelectedCabZoneDetails(matchingZone || null);
+          }),
+      );
+    }
+
+    if (requests.length === 0) {
+      setCabDetailLoading(false);
+      return;
+    }
+
+    const results = await Promise.allSettled(requests);
+    if (results.some((result) => result.status === "rejected")) {
+      console.error("Failed to load one or more cab detail sections:", results);
+      toast.error("Some cab details could not be loaded. Showing available details.");
+    }
+    setCabDetailLoading(false);
+  };
+
   const customSelectStyles = {
     control: (base) => ({
       ...base,
@@ -536,9 +625,116 @@ export const SchefferDriverSearch = () => {
 
   const money = (v) => (v == null ? "-" : `${Number(v).toLocaleString()} AED`);
 
+  const formatDetailValue = (value) => {
+    if (value == null || value === "") return "-";
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    if (Array.isArray(value)) return value.length ? `${value.length} item(s)` : "-";
+    if (typeof value === "object") return "-";
+    return String(value);
+  };
+
+  const DetailItem = ({ label, value }) => (
+    <Col md={6}>
+      <div className="border rounded-3 p-2 h-100 bg-white">
+        <div className="text-muted small">{label}</div>
+        <div className="fw-semibold text-dark" style={{ wordBreak: "break-word" }}>
+          {formatDetailValue(value)}
+        </div>
+      </div>
+    </Col>
+  );
+
+  const PolicyList = ({ rows, emptyText }) => {
+    const cleanRows = Array.isArray(rows)
+      ? rows.filter((row) => row != null && String(row).trim() !== "")
+      : [];
+    if (cleanRows.length === 0) {
+      return <div className="text-muted small">{emptyText}</div>;
+    }
+    return (
+      <ol className="mb-0 ps-3">
+        {cleanRows.map((row, index) => (
+          <li key={`${row}-${index}`} className="small mb-1">
+            {row}
+          </li>
+        ))}
+      </ol>
+    );
+  };
+
+  const formatZoneLocation = (loc) => {
+    if (!loc) return "-";
+    const name = loc.locationName || loc.name || loc.label || "-";
+    const source = loc.source ? ` (${loc.source})` : "";
+    return `${name}${source}`;
+  };
+
   // Results are on screen once a search has run. Collapse the full form into
   // the sticky summary strip then, unless the user chose to modify the search.
   const collapseSearch = hasSearched && !isEditingSearch;
+  const selectedCabImage =
+    getCabImageUrl(
+      selectedCabConfig?.cabImage ||
+        selectedCabConfig?.cabpic ||
+        selectedCabConfig?.cabPic ||
+        selectedCabResult?.cabPic ||
+        selectedCabResult?.cabpic,
+    ) ||
+    selectedCabResult?.cabPic ||
+    selectedCabResult?.cabpic;
+  const selectedCabLocations = Array.isArray(selectedCabConfig?.cabLocationDTOList)
+    ? selectedCabConfig.cabLocationDTOList
+    : Array.isArray(selectedCabConfig?.locations)
+    ? selectedCabConfig.locations
+    : [];
+  const hiddenDetailKeys = new Set([
+    "cabLocationDTOList",
+    "locations",
+    "cabImage",
+    "cabpic",
+    "cabPic",
+    "cabProviderId",
+    "cabId",
+    "id",
+    "name",
+    "cabName",
+    "cabCode",
+    "cabType",
+    "countryid",
+    "countryId",
+    "countryName",
+    "placeid",
+    "placeId",
+    "placeName",
+    "stateName",
+    "maxCapacity",
+    "maxLuggageCapacity",
+  ]);
+  const additionalCabDetails = Object.entries(selectedCabConfig || {}).filter(
+    ([key, value]) =>
+      !hiddenDetailKeys.has(key) &&
+      value != null &&
+      value !== "" &&
+      typeof value !== "object",
+  );
+  const selectedRateId =
+    selectedCabResult?.rentalRateId ||
+    selectedCabResult?.cabRateId ||
+    selectedCabResult?.cabratesId;
+  const selectedRateTerms = Array.isArray(selectedCabRateDetails?.termsAndConditions)
+    ? selectedCabRateDetails.termsAndConditions
+    : [];
+  const selectedRateCancellationPolicies = Array.isArray(
+    selectedCabRateDetails?.cancellationPolicies,
+  )
+    ? selectedCabRateDetails.cancellationPolicies
+    : [];
+  const selectedZonePickupLocations = Array.isArray(selectedCabZoneDetails?.pickupLocations)
+    ? selectedCabZoneDetails.pickupLocations
+    : [];
+  const selectedZoneDropoffLocations = Array.isArray(selectedCabZoneDetails?.dropoffLocations)
+    ? selectedCabZoneDetails.dropoffLocations
+    : [];
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -612,23 +808,39 @@ export const SchefferDriverSearch = () => {
                           <Form.Label className="fw-semibold text-dark">
                             Agent <span className="text-danger">*</span>
                           </Form.Label>
-                          <Form.Select
-                            style={{ height: "42px" }}
-                            className="form-control-modern"
-                            value={agent}
-                            isInvalid={!!validationErrors.agent}
-                            onChange={(e) => {
-                              setAgent(e.target.value);
-                              if (e.target.value) clearError("agent");
-                            }}
-                          >
-                            <option value="">Select Agent</option>
-                            {agents.map((a) => (
-                              <option key={a.id} value={a.id}>
-                                {a.companyName}
-                              </option>
-                            ))}
-                          </Form.Select>
+                          <Select
+  options={agents.map((a) => ({
+    value: a.id,
+    label: a.companyName,
+  }))}
+  value={
+    agents
+      .map((a) => ({
+        value: a.id,
+        label: a.companyName,
+      }))
+      .find((a) => String(a.value) === String(agent)) || null
+  }
+  onChange={(selected) => {
+    setAgent(selected ? selected.value : "");
+    if (selected) clearError("agent");
+  }}
+  placeholder="Select Agent"
+  isSearchable
+  isClearable
+  menuPortalTarget={document.body}
+  styles={{
+    ...customSelectStyles,
+    control: (base) => ({
+      ...customSelectStyles.control(base),
+      borderColor: validationErrors.agent ? "#dc3545" : "#dee2e6",
+    }),
+    menuPortal: (base) => ({
+      ...base,
+      zIndex: 9999,
+    }),
+  }}
+/>
                           {validationErrors.agent && (
                             <div className="text-danger small mt-1">
                               {validationErrors.agent}
@@ -1212,6 +1424,14 @@ export const SchefferDriverSearch = () => {
                                       )}
                                       <div className="d-flex gap-2 justify-content-md-end">
                                         <Button
+                                          variant="outline-primary"
+                                          className="px-3 fw-semibold d-inline-flex align-items-center gap-1"
+                                          onClick={() => handleViewCab(card)}
+                                        >
+                                          <FaEye size={14} />
+                                          View
+                                        </Button>
+                                        <Button
                                           variant="danger"
                                           className="px-4 fw-semibold"
                                           onClick={() => handleBookNow(card)}
@@ -1243,6 +1463,273 @@ export const SchefferDriverSearch = () => {
           </Card>
         </main>
       </div>
+      <Modal
+        show={showCabDetailModal}
+        onHide={() => setShowCabDetailModal(false)}
+        size="xl"
+        centered
+        scrollable
+      >
+        <Modal.Header closeButton>
+          <Modal.Title className="fw-bold" style={{ fontSize: "1.05rem" }}>
+            Chauffeur / Cab Details
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ backgroundColor: "#f8fafc" }}>
+          {!selectedCabResult ? (
+            <div className="text-center text-muted py-4">No cab selected.</div>
+          ) : (
+            <>
+              <Row className="g-3 mb-3">
+                <Col md={4}>
+                  <div className="bg-white border rounded-3 p-2 h-100">
+                    <div style={{ height: "220px", overflow: "hidden", borderRadius: "8px" }}>
+                      <LazyImage
+                        src={selectedCabImage}
+                        alt={
+                          selectedCabConfig?.name ||
+                          selectedCabResult?.cabName ||
+                          "Chauffeur Vehicle"
+                        }
+                      />
+                    </div>
+                  </div>
+                </Col>
+                <Col md={8}>
+                  <div className="bg-white border rounded-3 p-3 h-100">
+                    <div className="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-2">
+                      <div>
+                        <h5 className="mb-1">
+                          {selectedCabConfig?.name ||
+                            selectedCabConfig?.cabName ||
+                            selectedCabResult?.cabName ||
+                            "Chauffeur Vehicle"}
+                        </h5>
+                        <div className="text-muted small">
+                          {selectedCabResult?.cabProviderName || "Supplier not available"}
+                        </div>
+                      </div>
+                      <Badge bg="success">Available</Badge>
+                    </div>
+                    {cabDetailLoading && (
+                      <div className="small text-muted mb-2">
+                        <Spinner animation="border" size="sm" className="me-2" />
+                        Loading complete cab configuration...
+                      </div>
+                    )}
+                    <Row className="g-2">
+                      <DetailItem label="Cab Code" value={selectedCabConfig?.cabCode} />
+                      <DetailItem
+                        label="Cab Type"
+                        value={selectedCabConfig?.cabType || selectedCabResult?.cabType}
+                      />
+                      <DetailItem
+                        label="Country"
+                        value={
+                          selectedCabConfig?.countryName ||
+                          selectedCabConfig?.countryid ||
+                          selectedCabConfig?.countryId
+                        }
+                      />
+                      <DetailItem
+                        label="State / Place"
+                        value={
+                          selectedCabConfig?.placeName ||
+                          selectedCabConfig?.stateName ||
+                          selectedCabConfig?.place ||
+                          selectedCabConfig?.placeid ||
+                          selectedCabConfig?.placeId ||
+                          selectedCabResult?.cityName
+                        }
+                      />
+                      <DetailItem
+                        label="Max Capacity"
+                        value={
+                          selectedCabConfig?.maxCapacity ??
+                          selectedCabResult?.maxCapacity ??
+                          selectedCabResult?.vehicleMaxCapacity
+                        }
+                      />
+                      <DetailItem
+                        label="Max Luggage"
+                        value={
+                          selectedCabConfig?.maxLuggageCapacity ??
+                          selectedCabResult?.maxLuggageCapacity ??
+                          selectedCabResult?.maxLuggage ??
+                          selectedCabResult?.vehicleMaxLuggage ??
+                          selectedCabResult?.luggageCapacity ??
+                          selectedCabResult?.luggage
+                        }
+                      />
+                    </Row>
+                  </div>
+                </Col>
+              </Row>
+
+              <div className="bg-white border rounded-3 p-3 mb-3">
+                <div className="fw-bold mb-2">Search & Rate Details</div>
+                <Row className="g-2">
+                  <DetailItem label="City" value={selectedCabResult?.cityName} />
+                  <DetailItem label="Package" value={selectedCabResult?.packageName} />
+                  <DetailItem
+                    label="Transfer Type"
+                    value={
+                      String(selectedCabResult?.types || "").toUpperCase() === "SIC"
+                        ? "Shared (SIC)"
+                        : selectedCabResult?.types
+                        ? "Private Transfer"
+                        : "-"
+                    }
+                  />
+                  <DetailItem label="Hours Included" value={selectedCabResult?.hoursIncluded} />
+                  <DetailItem label="KM Included" value={selectedCabResult?.kmIncluded} />
+                  <DetailItem
+                    label="Base Price"
+                    value={money(selectedCabResult?.basePrice)}
+                  />
+                  <DetailItem
+                    label="Selling Price"
+                    value={money(
+                      selectedCabResult?.basePriceWithMarkup ??
+                        selectedCabResult?.basePrice,
+                    )}
+                  />
+                  <DetailItem label="Rental Rate ID" value={selectedRateId} />
+                </Row>
+              </div>
+
+              <Row className="g-3 mb-3">
+                <Col md={6}>
+                  <div className="bg-white border rounded-3 p-3 h-100">
+                    <div className="fw-bold mb-2">Cancellation Policies</div>
+                    <PolicyList
+                      rows={selectedRateCancellationPolicies}
+                      emptyText={
+                        selectedRateId
+                          ? "No cancellation policy configured for this rate."
+                          : "Rate details are not available for this cab."
+                      }
+                    />
+                  </div>
+                </Col>
+                <Col md={6}>
+                  <div className="bg-white border rounded-3 p-3 h-100">
+                    <div className="fw-bold mb-2">Terms &amp; Conditions</div>
+                    <PolicyList
+                      rows={selectedRateTerms}
+                      emptyText={
+                        selectedRateId
+                          ? "No terms and conditions configured for this rate."
+                          : "Rate details are not available for this cab."
+                      }
+                    />
+                  </div>
+                </Col>
+              </Row>
+
+              <div className="bg-white border rounded-3 p-3 mb-3">
+                <div className="fw-bold mb-2">Zone Details</div>
+                {!selectedCabZoneDetails ? (
+                  <div className="text-muted small">No zone details configured for this cab.</div>
+                ) : (
+                  <Row className="g-3">
+                    <Col md={6}>
+                      <div className="border rounded-3 p-2 h-100">
+                        <div className="text-muted small fw-semibold mb-1">Pickup Locations</div>
+                        {selectedZonePickupLocations.length > 0 ? (
+                          <ol className="mb-0 ps-3">
+                            {selectedZonePickupLocations.map((loc, index) => (
+                              <li key={loc.id || `${loc.locationId}-${index}`} className="small mb-1">
+                                {formatZoneLocation(loc)}
+                              </li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <div className="text-muted small">No pickup locations configured.</div>
+                        )}
+                      </div>
+                    </Col>
+                    <Col md={6}>
+                      <div className="border rounded-3 p-2 h-100">
+                        <div className="text-muted small fw-semibold mb-1">Dropoff Locations</div>
+                        {selectedZoneDropoffLocations.length > 0 ? (
+                          <ol className="mb-0 ps-3">
+                            {selectedZoneDropoffLocations.map((loc, index) => (
+                              <li key={loc.id || `${loc.locationId}-${index}`} className="small mb-1">
+                                {formatZoneLocation(loc)}
+                              </li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <div className="text-muted small">No dropoff locations configured.</div>
+                        )}
+                      </div>
+                    </Col>
+                  </Row>
+                )}
+              </div>
+
+              {selectedCabLocations.length > 0 && (
+                <div className="bg-white border rounded-3 p-3 mb-3">
+                  <div className="fw-bold mb-2">Configured Pickup / Dropoff Locations</div>
+                  <div className="table-responsive">
+                    <table className="table table-sm mb-0">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Pickup</th>
+                          <th>Dropoff</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedCabLocations.map((loc, index) => (
+                          <tr key={loc.cablocationId || loc.id || index}>
+                            <td>{index + 1}</td>
+                            <td>{loc.pickup || loc.pickupName || "-"}</td>
+                            <td>{loc.dropOff || loc.dropoff || loc.dropoffName || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {additionalCabDetails.length > 0 && (
+                <div className="bg-white border rounded-3 p-3">
+                  <div className="fw-bold mb-2">Additional Cab Configuration</div>
+                  <Row className="g-2">
+                    {additionalCabDetails.map(([key, value]) => (
+                      <DetailItem
+                        key={key}
+                        label={key.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase())}
+                        value={value}
+                      />
+                    ))}
+                  </Row>
+                </div>
+              )}
+            </>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowCabDetailModal(false)}>
+            Close
+          </Button>
+          {selectedCabResult && (
+            <Button
+              variant="danger"
+              onClick={() => {
+                const card = selectedCabResult;
+                setShowCabDetailModal(false);
+                handleBookNow(card);
+              }}
+            >
+              Book Now
+            </Button>
+          )}
+        </Modal.Footer>
+      </Modal>
       {showMapModal && (
         <MapModal
           show={showMapModal}

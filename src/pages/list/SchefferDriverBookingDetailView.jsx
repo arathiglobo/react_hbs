@@ -36,7 +36,7 @@
  * Only the presentation changed; every data field, endpoint and handler is
  * preserved exactly.
  */
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Container,
   Row,
@@ -175,6 +175,58 @@ const formatDateTime = (dateStr) => {
   return `${formatDate(dateStr)} ${hrs}:${min}:${sec}`;
 };
 
+const formatIsoDate = (date) => {
+  if (!date || isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+    2,
+    "0",
+  )}-${String(date.getDate()).padStart(2, "0")}`;
+};
+
+const parseBookingDate = (value) => {
+  if (!value) return null;
+  const text = String(value).trim();
+  const ddmmyyyy = text.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (ddmmyyyy) {
+    const [, day, month, year] = ddmmyyyy;
+    const d = new Date(Number(year), Number(month) - 1, Number(day));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return parseLocal(text);
+};
+
+const extractPolicyDays = (policy) => {
+  if (!policy) return null;
+  if (typeof policy === "object") {
+    return Number(
+      policy.noOfNights ??
+        policy.noOfDays ??
+        policy.days ??
+        policy.cancellationDays,
+    );
+  }
+  const match = String(policy).match(/less than\s+(\d+)\s+days/i);
+  if (match) return Number(match[1]);
+  const fallback = String(policy).match(/(\d+)\s*days/i);
+  return fallback ? Number(fallback[1]) : null;
+};
+
+const calculateSchefferDeadlineDate = (booking, policies) => {
+  const pickup = parseBookingDate(booking?.pickupDate);
+  if (!pickup || !Array.isArray(policies) || policies.length === 0) return "";
+
+  const maxDays = policies
+    .map(extractPolicyDays)
+    .filter((days) => Number.isFinite(days) && days >= 0)
+    .reduce((max, days) => Math.max(max, days), null);
+
+  if (maxDays == null) return "";
+  const deadline = new Date(pickup);
+  deadline.setDate(deadline.getDate() - maxDays);
+  deadline.setHours(0, 0, 0, 0);
+  return formatIsoDate(deadline);
+};
+
 const formatTimeOnly = (dateStr) => {
   const d = parseLocal(dateStr);
   if (!d) return "-";
@@ -226,6 +278,24 @@ const StatusBadge = ({ status }) => {
         </React.Fragment>
       ))}
     </span>
+  );
+};
+
+const RatePolicyRows = ({ rows, emptyText }) => {
+  const cleanRows = Array.isArray(rows)
+    ? rows.filter((row) => row != null && String(row).trim() !== "")
+    : [];
+
+  if (cleanRows.length === 0) {
+    return <span style={{ color: "#888", fontStyle: "italic" }}>{emptyText}</span>;
+  }
+
+  return (
+    <ul style={{ marginBottom: 0, paddingLeft: "18px" }}>
+      {cleanRows.map((row, index) => (
+        <li key={`rate-policy-${index}`}>{row}</li>
+      ))}
+    </ul>
   );
 };
 
@@ -282,6 +352,13 @@ export default function SchefferDriverBookingDetailView() {
   const [remarkInput, setRemarkInput] = useState("");
   const [savingRemark, setSavingRemark] = useState(false);
 
+  // Notes - inline list + add modal, matching the hotel booking detail view.
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [noteInput, setNoteInput] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+  const [bookingNotes, setBookingNotes] = useState([]);
+  const [notesLoading, setNotesLoading] = useState(true);
+
   // Resend Mail to Agent
   const [resendingMail, setResendingMail] = useState(false);
 
@@ -298,6 +375,8 @@ export default function SchefferDriverBookingDetailView() {
   // Fallback luggage capacity fetched from cab registration when the booking
   // record doesn't carry maxLuggageCapacity
   const [cabMaxLuggageCapacity, setCabMaxLuggageCapacity] = useState(null);
+  const [rateCancellationPolicies, setRateCancellationPolicies] = useState([]);
+  const [rateTermsAndConditions, setRateTermsAndConditions] = useState([]);
 
 const getPickupLandmarkAddress = (b) => {
   if (!b) return "";
@@ -347,6 +426,63 @@ const getPickupLandmarkAddress = (b) => {
     fetchBooking();
     // eslint-disable-next-line
   }, [id]);
+
+  const fetchSchefferNotes = useCallback(async () => {
+    if (!id) return;
+    setNotesLoading(true);
+    try {
+      const res = await axiosInstance.get(`/api/scheffer/${id}/notes`);
+      setBookingNotes(Array.isArray(res.data) ? res.data : []);
+    } catch (e) {
+      setBookingNotes([]);
+    } finally {
+      setNotesLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    fetchSchefferNotes();
+  }, [fetchSchefferNotes]);
+
+  useEffect(() => {
+    const rateId =
+      details?.rentalRateId ??
+      details?.schefferRentalRateId ??
+      details?.rateId;
+    if (!rateId) {
+      setRateCancellationPolicies([]);
+      setRateTermsAndConditions([]);
+      return undefined;
+    }
+
+    let alive = true;
+    axiosInstance
+      .get(`/api/scheffer-rental-rates/${rateId}`)
+      .then((res) => {
+        if (!alive) return;
+        const list = Array.isArray(res?.data?.cancellationPolicies)
+          ? res.data.cancellationPolicies
+          : [];
+        const terms = Array.isArray(res?.data?.termsAndConditions)
+          ? res.data.termsAndConditions
+          : [];
+        setRateCancellationPolicies(list);
+        setRateTermsAndConditions(terms);
+      })
+      .catch(() => {
+        if (alive) {
+          setRateCancellationPolicies([]);
+          setRateTermsAndConditions([]);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [
+    details?.rentalRateId,
+    details?.schefferRentalRateId,
+    details?.rateId,
+  ]);
 
   // When booking details load and maxLuggageCapacity is not stored in the
   // booking record (pre-fix old bookings), try to fetch it from the cab
@@ -504,6 +640,14 @@ const getPickupLandmarkAddress = (b) => {
     : normalizedStatus === "RECONFIRMED"
     ? "Confirmed/Reconfirmed"
     : details?.confirmationStatus || details?.status || "Confirmed";
+
+  const policyDeadlineDate = calculateSchefferDeadlineDate(
+    details,
+    rateCancellationPolicies,
+  );
+  const displayDeadlineDate =
+    policyDeadlineDate ||
+    (details?.deadlineDate ? String(details.deadlineDate).slice(0, 10) : "");
 
   // ── Cancel ──────────────────────────────────────────────────────
   const openCancelModal = () => {
@@ -751,6 +895,42 @@ const getPickupLandmarkAddress = (b) => {
   };
 
   // ── Resend Mail to Agent ───────────────────────────────────────────
+  const openNotesModal = () => {
+    setNoteInput("");
+    setShowNotesModal(true);
+  };
+
+  const saveNote = async () => {
+    const text = (noteInput || "").trim();
+    if (!text) {
+      toast.error("Note cannot be empty");
+      return;
+    }
+    try {
+      setSavingNote(true);
+      const createdBy =
+        localStorage.getItem("UserName") ||
+        sessionStorage.getItem("UserName") ||
+        "unknown";
+      const res = await axiosInstance.post(`/api/scheffer/${bookingId}/notes`, {
+        note: text,
+        createdBy,
+      });
+      if (res.data && res.data.success !== false) {
+        toast.success(res.data?.message || "Note saved");
+        setShowNotesModal(false);
+        setNoteInput("");
+        await fetchSchefferNotes();
+      } else {
+        toast.error(res.data?.message || "Failed to save note");
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to save note");
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
   const resendMailToAgent = async () => {
     try {
       setResendingMail(true);
@@ -843,15 +1023,7 @@ const getPickupLandmarkAddress = (b) => {
                           })`}
                         />
                         <InfoRow
-                          label={
-                            <>
-                              <FaMapMarkerAlt
-                                className="me-1"
-                                style={{ color: "#16a34a" }}
-                              />
-                              Pickup
-                            </>
-                          }
+                          label="Pickup"
                           value={`${fmtDate(details.pickupDate)} — ${
                             details.pickupName || "-"
                           }${
@@ -859,27 +1031,7 @@ const getPickupLandmarkAddress = (b) => {
                           }`}
                         />
                         <InfoRow
-                          label={
-                            <>
-                              <FaMapMarkerAlt
-                                className="me-1"
-                                style={{ color: "#16a34a" }}
-                              />
-                              Pickup Landmark Address
-                            </>
-                          }
-                          value={getPickupLandmarkAddress(details) || "-"}
-                        />
-                        <InfoRow
-                          label={
-                            <>
-                              <FaMapMarkerAlt
-                                className="me-1"
-                                style={{ color: "#dc2626" }}
-                              />
-                              Dropoff
-                            </>
-                          }
+                          label="Dropoff"
                           value={`${fmtDate(details.dropOffDate)} — ${
                             details.dropoffName || "-"
                           }${
@@ -887,18 +1039,6 @@ const getPickupLandmarkAddress = (b) => {
                               ? ` @ ${details.dropoffTime}`
                               : ""
                           }`}
-                        />
-                        <InfoRow
-                          label="Deadline Date"
-                          value={
-                            details.deadlineDate ? (
-                              <span style={{ color: "#dc2626", fontWeight: 600 }}>
-                                {`${String(details.deadlineDate).slice(0, 10)} 02:00 PM (UAE)`}
-                              </span>
-                            ) : (
-                              "-"
-                            )
-                          }
                         />
                       </Col>
                       <Col md={6}>
@@ -928,6 +1068,22 @@ const getPickupLandmarkAddress = (b) => {
                             }
                             return details.luggage ? "Yes" : "No";
                           })()}
+                        />
+                        <InfoRow
+                          label="Pickup Landmark"
+                          value={getPickupLandmarkAddress(details) || "-"}
+                        />
+                        <InfoRow
+                          label="Deadline Date"
+                          value={
+                            displayDeadlineDate ? (
+                              <span style={{ color: "#dc2626", fontWeight: 600 }}>
+                                {`${displayDeadlineDate} 02:00 PM (UAE)`}
+                              </span>
+                            ) : (
+                              "-"
+                            )
+                          }
                         />
                         {(details.transporter || details.driverName) && (
                           <InfoRow
@@ -1220,6 +1376,38 @@ const getPickupLandmarkAddress = (b) => {
                 </div>
 
                 {/* ── Remarks ──────────────────────────────────────── */}
+                <div style={card}>
+                  <div style={SECTION_HEADER}>Cancellation Policy</div>
+                  <div
+                    style={{
+                      padding: "12px 16px",
+                      fontSize: "0.82rem",
+                      color: "#222",
+                    }}
+                  >
+                    <RatePolicyRows
+                      rows={rateCancellationPolicies}
+                      emptyText="No cancellation policy configured for this chauffeur rate."
+                    />
+                  </div>
+                </div>
+
+                <div style={card}>
+                  <div style={SECTION_HEADER}>Terms & Conditions</div>
+                  <div
+                    style={{
+                      padding: "12px 16px",
+                      fontSize: "0.82rem",
+                      color: "#222",
+                    }}
+                  >
+                    <RatePolicyRows
+                      rows={rateTermsAndConditions}
+                      emptyText="No terms and conditions configured for this chauffeur rate."
+                    />
+                  </div>
+                </div>
+
                 {details.remarks && (
                   <div style={card}>
                     <div style={SECTION_HEADER}>Remarks</div>
@@ -1235,6 +1423,69 @@ const getPickupLandmarkAddress = (b) => {
                     </div>
                   </div>
                 )}
+
+                <div style={card}>
+                  <div style={SECTION_HEADER}>
+                    Notes{" "}
+                    {bookingNotes.length > 0 && (
+                      <span
+                        style={{
+                          fontSize: "0.7rem",
+                          fontWeight: 600,
+                          color: "#c0392b",
+                          background: "#fdecea",
+                          borderRadius: "99px",
+                          padding: "2px 9px",
+                          marginLeft: 6,
+                          letterSpacing: ".02em",
+                        }}
+                      >
+                        {bookingNotes.length}
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    style={{
+                      padding: "10px 16px",
+                      fontSize: "0.83rem",
+                      color: "#333",
+                    }}
+                  >
+                    {notesLoading ? (
+                      <span className="text-muted">Loading notes...</span>
+                    ) : bookingNotes.length === 0 ? (
+                      <span className="text-muted">No notes yet.</span>
+                    ) : (
+                      bookingNotes.map((n, idx) => (
+                        <div
+                          key={n.id || n.noteId || idx}
+                          style={{
+                            borderLeft: "3px solid #c0392b",
+                            background: "#fafafa",
+                            padding: "10px 12px",
+                            marginBottom: 8,
+                            borderRadius: 4,
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "0.72rem",
+                              color: "#777",
+                              marginBottom: 4,
+                              letterSpacing: ".01em",
+                            }}
+                          >
+                            {n.createdBy ? `${n.createdBy} - ` : ""}
+                            {formatDateTime(n.createdDate || n.createdAt)}
+                          </div>
+                          <div style={{ whiteSpace: "pre-wrap" }}>
+                            {n.note || n.noteText || "-"}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
 
                 {/* Related Sub-Bookings created through Add New Item.
                     The hotel detail page shows these links after the child
@@ -1473,11 +1724,7 @@ const getPickupLandmarkAddress = (b) => {
 
                   <button
                     style={BTN_NEUTRAL}
-                    onClick={() =>
-                      navigate(
-                        `/booking-details/scheffer-driver-booking/${bookingId}/notes`,
-                      )
-                    }
+                    onClick={openNotesModal}
                   >
                     NOTES
                   </button>
@@ -2049,6 +2296,53 @@ const getPickupLandmarkAddress = (b) => {
             disabled={savingRemark}
           >
             {savingRemark ? (
+              <>
+                <Spinner animation="border" size="sm" className="me-2" />
+                Saving...
+              </>
+            ) : (
+              "Save"
+            )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal
+        show={showNotesModal}
+        onHide={() => {
+          if (!savingNote) setShowNotesModal(false);
+        }}
+        centered
+        backdrop="static"
+        keyboard={false}
+      >
+        <Modal.Header closeButton={!savingNote}>
+          <Modal.Title style={{ fontSize: "1rem" }}>Add Note</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form.Group>
+            <Form.Label className="fw-semibold">Note</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={5}
+              placeholder="Type your note here. You can enter long paragraphs."
+              value={noteInput}
+              onChange={(e) => setNoteInput(e.target.value)}
+              disabled={savingNote}
+              style={{ resize: "vertical" }}
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button
+            variant="outline-secondary"
+            onClick={() => setShowNotesModal(false)}
+            disabled={savingNote}
+          >
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={saveNote} disabled={savingNote}>
+            {savingNote ? (
               <>
                 <Spinner animation="border" size="sm" className="me-2" />
                 Saving...

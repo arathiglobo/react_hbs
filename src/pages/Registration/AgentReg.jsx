@@ -27,6 +27,10 @@ import {
   FaBan,
 } from "react-icons/fa";
 
+// Rows per page for the agent list. Sent as `limit` and used to turn the
+// backend's X-Total-Count into a page count, so both always agree.
+const AGENT_PAGE_SIZE = 10;
+
 // Pull the exact, human-readable error out of an axios error so the toast
 // shows what the backend actually said (handles a plain-string body, the
 // common { message } / { error } shapes, a { errors: [...] } list, and a
@@ -50,6 +54,33 @@ const getServerErrorMessage = (error, fallback = "Something went wrong") => {
     if (msgs.length) return msgs.join(", ");
   }
   return error?.message || fallback;
+};
+
+// Build the Markup dropdown label. The /api/markupType master returns
+// { name, markup, markupType } where markupType is "Percent" | "Amount", so
+// "Gold" (markup 6, Percent) renders as "Gold - 6%" and an Amount type like
+// "Discovery" (markup 0) as "Discovery - 0". Falls back to just the name when
+// the markup value is missing. Mirrors the public Register form and SubAgent.
+const formatMarkupOption = (m) => {
+  if (!m) return "";
+  const value = m.markup;
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return m.name || "";
+  }
+  const isPercent = String(m.markupType || "").toLowerCase() === "percent";
+  return `${m.name || ""} - ${value}${isPercent ? "%" : ""}`;
+};
+
+const sortMarkupTypesByPercentage = (items = []) => {
+  return [...items].sort((a, b) => {
+    const aMarkup = Number(a?.markup);
+    const bMarkup = Number(b?.markup);
+    const aValue = Number.isFinite(aMarkup) ? aMarkup : Number.POSITIVE_INFINITY;
+    const bValue = Number.isFinite(bMarkup) ? bMarkup : Number.POSITIVE_INFINITY;
+
+    if (aValue !== bValue) return aValue - bValue;
+    return String(a?.name || "").localeCompare(String(b?.name || ""));
+  });
 };
 
 // SearchableSelect Component
@@ -423,6 +454,10 @@ const AgentReg = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  // Total rows matching the active search, straight from X-Total-Count. The
+  // pager and the "Showing x of y" caption both derive from this instead of
+  // guessing from the current page's length.
+  const [totalAgents, setTotalAgents] = useState(0);
   const [search, setSearch] = useState("");
   const [searchTimeout, setSearchTimeout] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -715,7 +750,9 @@ const AgentReg = () => {
   const markupList = async () => {
     try {
       const response = await axiosInstance.get(`/api/markupType`);
-      setMarkup(Array.isArray(response.data) ? response.data : []);
+      setMarkup(
+        sortMarkupTypesByPercentage(Array.isArray(response.data) ? response.data : [])
+      );
     } catch (error) {
      // console.log("axios call error for markup list : ", error);
     }
@@ -977,17 +1014,22 @@ const AgentReg = () => {
     setError("");
   };
 
+  // Guards against out-of-order responses: a slow request for an earlier
+  // search term must not repaint the table after a newer one has answered.
+  const agentFetchSeqRef = useRef(0);
+
   const fetchAgentList = async (
     pageNum = 0,
     searchTerm = search,
     sortOverride = sortField,
     dirOverride = sortDir,
   ) => {
+    const fetchSeq = ++agentFetchSeqRef.current;
     setIsLoading(true);
     try {
       const params = new URLSearchParams({
         page: pageNum.toString(),
-        limit: "10",
+        limit: String(AGENT_PAGE_SIZE),
       });
 
       if (searchTerm && searchTerm.trim()) {
@@ -1004,26 +1046,53 @@ const AgentReg = () => {
 
       const res = await axiosInstance.get(`/api/agent?${params.toString()}`);
 
+      // A newer search already fired — drop this stale response rather than
+      // letting it overwrite fresher results.
+      if (fetchSeq !== agentFetchSeqRef.current) return;
+
       if (res.data && Array.isArray(res.data)) {
         setItems(res.data);
-        if (res.data.length < 10) {
+
+        // Size the pager from the backend's real match count. The previous
+        // guess (Math.max of the old value and pageNum + 2) could only ever
+        // grow, so after paging deeper or running a broad search the pager
+        // kept offering pages a narrower search no longer had — clicking one
+        // showed an empty table. Fall back to the page-length heuristic only
+        // if the header is absent (older backend).
+        const rawTotal = Number(res.headers?.["x-total-count"]);
+        if (Number.isFinite(rawTotal) && rawTotal >= 0) {
+          setTotalAgents(rawTotal);
+          setTotalPages(Math.ceil(rawTotal / AGENT_PAGE_SIZE));
+        } else if (res.data.length < AGENT_PAGE_SIZE) {
+          setTotalAgents(pageNum * AGENT_PAGE_SIZE + res.data.length);
           setTotalPages(pageNum + 1);
         } else {
-          setTotalPages(Math.max(totalPages, pageNum + 2));
+          setTotalAgents(0);
+          setTotalPages(pageNum + 2);
         }
+
         setPage(pageNum);
       } else {
         setItems([]);
+        setTotalAgents(0);
         setTotalPages(0);
         setPage(0);
       }
     } catch (err) {
-      toast.error("Failed to load agents");
-      setItems([]);
-      setTotalPages(0);
-      setPage(0);
+      // Same staleness rule as the success path — a superseded request must
+      // not blank the table or raise a toast for a search the operator has
+      // already moved on from.
+      if (fetchSeq === agentFetchSeqRef.current) {
+        toast.error("Failed to load agents");
+        setItems([]);
+        setTotalAgents(0);
+        setTotalPages(0);
+        setPage(0);
+      }
     } finally {
-      setIsLoading(false);
+      if (fetchSeq === agentFetchSeqRef.current) {
+        setIsLoading(false);
+      }
     }
 
     // In parallel refresh the pending-approval set so the status column
@@ -1347,7 +1416,18 @@ const AgentReg = () => {
     }
   };
 
+  // Debounced search. Skip the very first run: the mount effect above already
+  // loaded page 0, so without this guard every page load fired two identical
+  // /api/agent requests — and if the operator started typing inside that 500ms
+  // window the un-debounced mount response could land last and repaint the
+  // table with unfiltered rows.
+  const agentSearchInitialRef = useRef(true);
   useEffect(() => {
+    if (agentSearchInitialRef.current) {
+      agentSearchInitialRef.current = false;
+      return;
+    }
+
     const delayDebounce = setTimeout(() => {
       fetchAgentList(0, search);
     }, 500);
@@ -2415,33 +2495,39 @@ const AgentReg = () => {
                 </tbody>
               </Table>
 
-              {totalPages > 1 && (
+              {items.length > 0 && (
                 <div className="d-flex justify-content-between align-items-center p-3 border-top">
                   <div>
-                    <small className="text-muted">
-                      Showing {items.length} of {totalPages * 10} agents
-                    </small>
+                    {totalAgents > 0 && (
+                      <small className="text-muted">
+                        Showing {page * AGENT_PAGE_SIZE + 1}–
+                        {page * AGENT_PAGE_SIZE + items.length} of {totalAgents}{" "}
+                        {totalAgents === 1 ? "agent" : "agents"}
+                      </small>
+                    )}
                   </div>
                   <div>
-                    <Pagination className="mb-0">
-                      <Pagination.Prev
-                        disabled={page === 0}
-                        onClick={() => fetchAgentList(page - 1, search)}
-                      />
-                      {[...Array(totalPages).keys()].map((num) => (
-                        <Pagination.Item
-                          key={num}
-                          active={num === page}
-                          onClick={() => fetchAgentList(num, search)}
-                        >
-                          {num + 1}
-                        </Pagination.Item>
-                      ))}
-                      <Pagination.Next
-                        disabled={page === totalPages - 1}
-                        onClick={() => fetchAgentList(page + 1, search)}
-                      />
-                    </Pagination>
+                    {totalPages > 1 && (
+                      <Pagination className="mb-0">
+                        <Pagination.Prev
+                          disabled={page === 0}
+                          onClick={() => fetchAgentList(page - 1, search)}
+                        />
+                        {[...Array(totalPages).keys()].map((num) => (
+                          <Pagination.Item
+                            key={num}
+                            active={num === page}
+                            onClick={() => fetchAgentList(num, search)}
+                          >
+                            {num + 1}
+                          </Pagination.Item>
+                        ))}
+                        <Pagination.Next
+                          disabled={page === totalPages - 1}
+                          onClick={() => fetchAgentList(page + 1, search)}
+                        />
+                      </Pagination>
+                    )}
                   </div>
                 </div>
               )}
@@ -2911,7 +2997,7 @@ const AgentReg = () => {
                             {Array.isArray(markup) &&
                               markup.map((mar) => (
                                 <option key={mar.id} value={mar.id}>
-                                  {mar.name}
+                                  {formatMarkupOption(mar)}
                                 </option>
                               ))}
                           </Form.Select>

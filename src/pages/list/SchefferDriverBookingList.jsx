@@ -240,15 +240,16 @@ const SchefferDriverBookingList = ({
 
   // Flatten the three buckets into one list, tagging each row with the
   // bucket it came from so the Status column / filter can use it.
-  const allRows = useMemo(() => {
-    const tag = (arr, bucket) =>
-      (arr || []).map((b) => ({ ...b, __bucket: bucket }));
-    return [
-      ...tag(data.upcoming, "upcoming"),
-      ...tag(data.completed, "completed"),
-      ...tag(data.cancelled, "cancelled"),
-    ];
-  }, [data]);
+ const allRows = useMemo(() => {
+  const tag = (arr, bucket) =>
+    (arr || []).map((b) => ({ ...b, __bucket: bucket }));
+
+  return [
+    ...tag(data.upcoming, "upcoming"),
+    ...tag(data.completed, "completed"),
+    ...tag(data.cancelled, "cancelled"),
+  ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}, [data]);
 
   const filteredBookings = useMemo(() => {
     const needle = search.trim().toLowerCase();

@@ -890,7 +890,7 @@ const SchefferDriverBookingPage = () => {
                       <Col xs={12}>
                         <Form.Group>
                           <Form.Label className="small text-muted fw-semibold">
-                            Pickup Landmark / Address
+                            Pickup Landmark 
                           </Form.Label>
                           <Form.Control
                             as="textarea"
@@ -1199,7 +1199,7 @@ const SchefferDriverBookingPage = () => {
                       <div className="sdbp-summary-row d-flex justify-content-between align-items-start py-2 border-bottom small">
                         <div className="text-muted fw-medium">
                           <FaMapMarkerAlt className="me-2 text-success" />
-                          Pickup Landmark Address
+                          Pickup Landmark 
                         </div>
                         <div className="text-dark fw-semibold text-end">
                           {contactDetails.pickupLandmark}
@@ -1538,7 +1538,7 @@ const SchefferDriverBookingPage = () => {
                   )}
                   {contactDetails.pickupLandmark && (
                     <tr>
-                      <td className="fw-semibold">Pickup Landmark Address</td>
+                      <td className="fw-semibold">Pickup Landmark </td>
                       <td colSpan={2}>{contactDetails.pickupLandmark}</td>
                     </tr>
                   )}

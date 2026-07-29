@@ -208,14 +208,32 @@ top: auto;
   transform: none;
 }
 
-/* Center the long "Booking List" submenu vertically in the viewport
-   as a compact, internally scrollable panel */
+/* Flyout panel for the tall menus (Booking List / New Booking /
+   Registration), anchored to the TOP of its own nav item so it opens level
+   with the label that was clicked.
+
+   Previously this was `position: fixed` + `top: 50%` + translateY(-50%),
+   which centred the panel in the VIEWPORT rather than beside its item — on
+   the agent dashboard the two-entry Registration menu landed halfway down
+   the page, visually detached from the "Registration" row. Anchoring with
+   `position: absolute` + `top: 0` inside `.nav-item-has-children`
+   (position: relative) puts it exactly where it belongs.
+
+   `left: 100%` follows the nav item's own right edge, so the 12rem / 11rem
+   responsive sidebar widths stay aligned too — the old hardcoded
+   `left: 13rem` only lined up at the widest breakpoint. The inline
+   `margin-left: 12px` set in Sidebar.jsx then clears the sidebar's 0.75rem
+   padding so the panel sits flush against the sidebar's right edge.
+
+   Height stays capped and scrolls internally so a long menu can't run off
+   the bottom of the screen. */
 .nav-item-has-children.submenu-center .submenu {
-  position: fixed;
-  top: 50% !important;
+  position: absolute;
+  top: 0 !important;
   bottom: auto !important;
-  left: 13rem;          /* matches the 13rem sidebar width */
-  transform: translateY(-50%);
+  left: 100%;
+  transform: none;
+  margin-top: 0 !important;       /* flush with the top of the nav item */
   max-height: 22rem !important;   /* compact height, scrolls internally */
 }
 
