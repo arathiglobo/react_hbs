@@ -1538,9 +1538,12 @@ const AgentReg = () => {
       // Scope the check to the AGENT user type so entities of other types that
       // share the same numeric id don't resolve to this agent's account.
       const agentRole = rolesList.find((r) => r.roleName === "AGENT");
+      // subUserType=AGENT_MAIN disambiguates from sub-agent / sub-user rows
+      // that share the same (user_id, user_type_id) — see UserRepository
+      // fetchUserAccountIdByUserTypeAndSubType.
       const response = await axiosInstance.post(
         agentRole
-          ? `/auth/checkRegisteredUserExist/${item.id}?userTypeId=${agentRole.id}`
+          ? `/auth/checkRegisteredUserExist/${item.id}?userTypeId=${agentRole.id}&subUserType=AGENT_MAIN`
           : `/auth/checkRegisteredUserExist/${item.id}`
       );
 

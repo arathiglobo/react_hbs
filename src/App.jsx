@@ -322,6 +322,8 @@ import AdminApiAccess from "./pages/admin/apiaccess/AdminApiAccess";
 // Super Admin — per-role sidebar visibility (Assign Menu)
 import AssignMenu from "./pages/master/AssignMenu";
 import UserRoles from "./pages/master/UserRoles";
+import LoginLogs from "./pages/user-management/LoginLogs";
+import RoleAssign from "./pages/user-management/RoleAssign";
 
 
 export default function App() {
@@ -490,6 +492,13 @@ export default function App() {
             SuperAdminOnlyGuard so a direct URL from a non-super_admin
             account gets 403 even if this PrivateRoute passes. */}
         <Route path="/masters/assign-menu" element={<PrivateRoute roles={["super_admin"]}><AssignMenu /></PrivateRoute>} />
+
+        {/* Super Admin — User Management group (sidebar: after Super Admin
+            Dashboard). Both endpoints are super_admin-only in the backend
+            via SuperAdminOnlyGuard, so the PrivateRoute role gate mirrors
+            that surface. */}
+        <Route path="/user-management/login-logs" element={<PrivateRoute roles={["super_admin"]}><LoginLogs /></PrivateRoute>} />
+        <Route path="/user-management/role-assign" element={<PrivateRoute roles={["super_admin"]}><RoleAssign /></PrivateRoute>} />
 
        {/* New Booking */}
         <Route path="/new-booking/hotel" element={<PrivateRoute><HotelSearch /></PrivateRoute>} /> 
