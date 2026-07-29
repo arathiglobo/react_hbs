@@ -616,8 +616,10 @@ export default function SubAgent() {
       // share the same numeric id don't resolve to this agent's account (the
       // backend keys user_accounts by user_id + user_type_id).
       const agentRole = rolesList.find((r) => r.roleName === "AGENT");
+      // subUserType=SUB_AGENT keeps this from returning a MAIN-agent /
+      // SUB_USER row that happens to share the same numeric id.
       const checkUrl = agentRole
-        ? `/auth/checkRegisteredUserExist/${item.id}?userTypeId=${agentRole.id}`
+        ? `/auth/checkRegisteredUserExist/${item.id}?userTypeId=${agentRole.id}&subUserType=SUB_AGENT`
         : `/auth/checkRegisteredUserExist/${item.id}`;
       const response = await axiosInstance.post(checkUrl);
       if (response.data) {
@@ -1135,9 +1137,9 @@ export default function SubAgent() {
                 <thead style={{ backgroundColor: '#2d3e50', color: 'white' }}>
                   <tr>
                     <th className="ps-4 py-2 small">S.N</th>
-                    <th className="py-2 small">Company</th>
-                    <th className="py-2 small">Sub Agent Name</th>
+                    <th className="py-2 small">Company(Agent)</th>
                     <th className="py-2 small">Contact</th>
+                    <th className="py-2 small">Email</th>
                     <th className="py-2 small">Country</th>
                     <th className="py-2 small">City</th>
                     <th className="text-center py-2 small">Actions</th>
