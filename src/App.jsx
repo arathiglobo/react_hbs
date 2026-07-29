@@ -322,6 +322,7 @@ import AdminApiAccess from "./pages/admin/apiaccess/AdminApiAccess";
 // Super Admin — per-role sidebar visibility (Assign Menu)
 import AssignMenu from "./pages/master/AssignMenu";
 import UserRoles from "./pages/master/UserRoles";
+import FlightSearch from "./pages/search/flight/FlightSearch";
 
 
 export default function App() {
@@ -503,6 +504,9 @@ export default function App() {
             to Mecca + Medina and downstream routes stay religious-only.
             Normal /new-booking/hotel is untouched. */}
         <Route path="/new-booking/religious" element={<PrivateRoute><HotelSearchReligious /></PrivateRoute>} />
+
+
+         <Route path="/new-booking/flight" element={<PrivateRoute><FlightSearch/></PrivateRoute>} />
         {/* Dedicated 24-Hour Check-In room list + booking page — same
             components as /room-list and /hotel-booking-page but with
             `force24Hour` so the post-rate-pick navigation and the
@@ -568,6 +572,8 @@ export default function App() {
             with `religiousOnly` so only isReligiousBooking=true rows
             surface here (and are excluded from the standard list). */}
         <Route path="/booking-details/religious-booking-list" element={<PrivateRoute><ReligiousBookingList /> </PrivateRoute>}/>
+
+        <Route path="/booking-details/flight-booking-list" element={<PrivateRoute><FlightBookingList /> </PrivateRoute>}/>
         {/* Last Minute Bookings list — view + cancel from this page */}
         <Route path="/booking-details/last-minute-booking-list" element={<PrivateRoute><LastMinuteBookingList /></PrivateRoute>}/>
         {/* Last-minute bookings are the same HotelBooking entity, so their
