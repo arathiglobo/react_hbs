@@ -45,6 +45,7 @@ const COLUMN_WIDTHS = {
   bookingDetails: "240px",
   nights: "70px",
   total: "110px",
+  paymentStatus: "110px",
   status: "110px",
   action: "70px",
 };
@@ -94,6 +95,54 @@ const deriveDisplayStatus = (b) => {
   if (engine === "CONFIRMED" || conf === "confirmed") return "Confirmed";
   if (engine === "REQUESTED" || conf === "requested") return "Requested";
   return b?.confirmationStatus || "Confirmed";
+};
+
+// Resolve the Payment Status label from the booking's DISPLAYED status — same
+// mapping as /booking-details/hotel-booking-list:
+//   Confirmed   → Payment Pending
+//   ReConfirmed → Paid
+//   Cancelled   → Paid when the booking had been reconfirmed before it was
+//                 cancelled, otherwise Un-Paid
+// Anything else — an On Request room still awaiting confirmation, Requested,
+// Rejected, or an unknown/empty status — has no defined mapping and renders "-".
+//
+// A cancelled booking reports whether the money had already been collected at
+// the point of cancellation rather than the cancellation itself: a history that
+// reached ReConfirmed was paid, one that stopped at On Request / Confirmed
+// never was.
+//
+// It is deliberately fed the label already computed by deriveDisplayStatus so
+// this column can never disagree with the adjacent Status column.
+const getPaymentStatusLabel = (booking, displayStatus) => {
+  const normalized = String(displayStatus || "").replace(/\s+/g, "").toLowerCase();
+  if (!normalized) return "-";
+
+  if (normalized === "cancelled" || normalized === "canceled") {
+    // Whether the money had been collected before the cancellation. The
+    // last-minute cancel endpoint (PATCH /api/last-minute-booking/{id}/cancel)
+    // only stamps is_cancelled + cancelled_at — it leaves confirmationStatus and
+    // cancelledFromStatus untouched — so the persisted `reconfirmation` flag is
+    // the signal that survives for rows cancelled through that route. The
+    // compound-status and cancelledFromStatus checks mirror the hotel list and
+    // cover bookings cancelled through the shared booking-cancellation flow.
+    const segments = String(booking?.confirmationStatus || "")
+      .split("/")
+      .map((seg) => seg.replace(/\s+/g, "").toLowerCase())
+      .filter(Boolean);
+    const cancelledFromNormalized = String(booking?.cancelledFromStatus || "")
+      .replace(/\s+/g, "")
+      .toLowerCase();
+    const wasReconfirmedBeforeCancel =
+      booking?.reconfirmation === true ||
+      segments.includes("reconfirmed") ||
+      cancelledFromNormalized.includes("reconfirmed");
+    return wasReconfirmedBeforeCancel ? "Paid" : "Un-Paid";
+  }
+
+  if (normalized === "reconfirmed") return "Paid";
+  if (normalized === "confirmed") return "Payment Pending";
+
+  return "-";
 };
 
 // Every customer/guest name on a booking. The backend now sends a
@@ -574,6 +623,12 @@ export default function LastMinuteBookingList() {
                             <th style={{ ...baseHeaderStyle, textAlign: "right", width: COLUMN_WIDTHS.total }}>
                               Total
                             </th>
+                            {/* Payment Status column — same mapping as
+                                /booking-details/hotel-booking-list. See
+                                getPaymentStatusLabel. */}
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentStatus }}>
+                              Payment Status
+                            </th>
                             <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
                               Status
                             </th>
@@ -697,6 +752,40 @@ export default function LastMinuteBookingList() {
                                         ? `AED ${Number(b.totalRate).toFixed(2)}`
                                         : "-"}
                                   </span>
+                                </td>
+                                {/* Payment Status cell — derived from the
+                                    booking's displayed Status: Confirmed →
+                                    Payment Pending, ReConfirmed → Paid, a
+                                    cancellation → Paid or Un-Paid depending on
+                                    whether it had been reconfirmed. See
+                                    getPaymentStatusLabel. */}
+                                <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentStatus }}>
+                                  {(() => {
+                                    const label = getPaymentStatusLabel(b, statusText);
+                                    if (label === "-") {
+                                      return <span className="text-muted">-</span>;
+                                    }
+                                    // Same palette as the hotel list — green
+                                    // settled, red never collected, orange still
+                                    // outstanding.
+                                    const color =
+                                      label === "Paid"
+                                        ? "#06a301"
+                                        : label === "Un-Paid"
+                                          ? "#dc3545"
+                                          : "#e67e22";
+                                    return (
+                                      <span
+                                        style={{
+                                          color,
+                                          fontSize: "0.82rem",
+                                          fontWeight: "600",
+                                        }}
+                                      >
+                                        {label}
+                                      </span>
+                                    );
+                                  })()}
                                 </td>
                                 <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
                                   <StatusPill meta={sMeta} raw={statusText} />
