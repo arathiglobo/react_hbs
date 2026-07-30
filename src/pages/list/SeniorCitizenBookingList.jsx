@@ -58,6 +58,7 @@ const COLUMN_WIDTHS = {
   bookingDetails: "230px",
   deadlineDate: "105px",
   paymentMode: "110px",
+  paymentStatus: "110px",
   status: "120px",
   action: "70px",
 };
@@ -113,6 +114,64 @@ const getPaymentModeLabel = (booking) => {
   if (norm === "BANK_TRANSFER" || norm === "BANK TRANSFER") return "Bank Transfer";
   if (norm === "CHEQUE") return "Cheque";
   if (norm) return raw;
+  return "-";
+};
+
+// Resolve the Payment Status label from the booking's DISPLAYED status — same
+// mapping as /booking-details/hotel-booking-list:
+//   Confirmed                      → Payment Pending
+//   ReConfirmed                    → Paid
+//   ReConfirmed/Cancelled          → Paid
+//   Confirmed/Cancelled            → Un-Paid
+//   On Request/Confirmed/Cancelled → Un-Paid
+// plus the Day-Stay rule: a live On Request booking — whether or not step-1
+// Confirm has landed — reads "Payment Pending", because the money has not been
+// collected yet.
+// Anything else — Not Confirmed, or an unknown/empty status — has no defined
+// mapping and renders "-".
+//
+// A cancelled booking reports whether the money had already been collected at
+// the point of cancellation rather than the cancellation itself: a history that
+// reached ReConfirmed was paid, one that stopped at On Request / Confirmed
+// never was.
+//
+// This takes the label built by `statusMetaFor` — the same value the Status cell
+// renders — so the two columns can never disagree. That label is all that is
+// needed: the senior-citizen list row carries no `reconfirmation` /
+// `cancelledFromStatus` field, but statusMetaFor already folds both the On
+// Request chain and the pre-cancellation state into the label itself
+// ("On Request/Confirmed / Cancelled", "ReConfirmed / Cancelled"), which is
+// exactly what the segment split below reads.
+const getPaymentStatusLabel = (displayStatus) => {
+  const segments = String(displayStatus || "")
+    .split("/")
+    .map((seg) => seg.replace(/\s+/g, "").toLowerCase())
+    .filter(Boolean);
+  if (segments.length === 0) return "-";
+
+  // Cancelled histories are settled by what the booking reached BEFORE the
+  // cancellation, so check this ahead of everything else — statusMetaFor puts
+  // "Cancelled" last in the compound, and only a ReConfirmed history was paid.
+  const latest = segments[segments.length - 1];
+  if (latest === "cancelled" || latest === "canceled") {
+    return segments.includes("reconfirmed") ? "Paid" : "Un-Paid";
+  }
+
+  // On Request → Payment Pending. Covers both "On Request" and, after step-1
+  // Confirm, "On Request/Confirmed". A reconfirmed booking never carries the
+  // On Request chain (see statusMetaFor), so it falls through to "Paid".
+  if (segments.includes("onrequest")) return "Payment Pending";
+
+  // Collapse a confirm-history compound ("Confirmed / ReConfirmed") to its
+  // LATEST segment, exactly as the hotel list does.
+  const isConfirmHistoryCompound =
+    segments.length > 1 &&
+    segments.every((seg) => ["confirmed", "reconfirmed"].includes(seg));
+  const effective = isConfirmHistoryCompound ? latest : segments.join("/");
+
+  if (effective === "reconfirmed") return "Paid";
+  if (effective === "confirmed") return "Payment Pending";
+
   return "-";
 };
 
@@ -379,7 +438,8 @@ export default function SeniorCitizenBookingList() {
     setPage(0);
   };
 
-  const colSpan = role === "admin" ? 11 : 10;
+  // +1 for the Payment Status column.
+  const colSpan = role === "admin" ? 12 : 11;
 
   const baseCellStyle = {
     padding: "0.5rem 0.6rem",
@@ -593,6 +653,12 @@ export default function SeniorCitizenBookingList() {
                           <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentMode }}>
                             Payment Mode
                           </th>
+                          {/* Payment Status — same mapping as
+                              /booking-details/hotel-booking-list. See
+                              getPaymentStatusLabel. */}
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentStatus }}>
+                            Payment Status
+                          </th>
                           <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
                             Status
                           </th>
@@ -752,6 +818,46 @@ export default function SeniorCitizenBookingList() {
                                   ) : (
                                     <span style={{ color: "#000" }}>{payLabel}</span>
                                   )}
+                                </td>
+                                {/* Payment Status — derived from the same label
+                                    the Status cell renders (st.raw): Confirmed /
+                                    On Request → Payment Pending, ReConfirmed →
+                                    Paid, a cancellation → Paid or Un-Paid
+                                    depending on whether it had been reconfirmed.
+                                    See getPaymentStatusLabel. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.paymentStatus,
+                                  }}
+                                >
+                                  {(() => {
+                                    const payStatusLabel = getPaymentStatusLabel(st.raw);
+                                    if (payStatusLabel === "-") {
+                                      return <span className="text-muted">-</span>;
+                                    }
+                                    // Same palette as the hotel list — green
+                                    // settled, red never collected, orange still
+                                    // outstanding.
+                                    const color =
+                                      payStatusLabel === "Paid"
+                                        ? "#06a301"
+                                        : payStatusLabel === "Un-Paid"
+                                          ? "#dc3545"
+                                          : "#e67e22";
+                                    return (
+                                      <span
+                                        style={{
+                                          color,
+                                          fontSize: "0.82rem",
+                                          fontWeight: "600",
+                                        }}
+                                      >
+                                        {payStatusLabel}
+                                      </span>
+                                    );
+                                  })()}
                                 </td>
                                 <td
                                   style={{
