@@ -25,7 +25,7 @@ const Login = () => {
   // /auth/verify-login-otp. No token is stored until the code is verified.
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otpUsername, setOtpUsername] = useState("");
-  const [otpMaskedEmail, setOtpMaskedEmail] = useState("");
+  const [otpEmail, setOtpEmail] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [otpError, setOtpError] = useState(null);
   const [otpSubmitting, setOtpSubmitting] = useState(false);
@@ -207,7 +207,7 @@ const Login = () => {
       // OTP popup instead of completing the login here.
       if (response.data?.otpRequired) {
         setOtpUsername(response.data.username || username);
-        setOtpMaskedEmail(response.data.maskedEmail || "");
+        setOtpEmail(response.data.otpEmail || "");
         setOtpCode("");
         setOtpError(null);
         setOtpResendIn(30);
@@ -263,7 +263,7 @@ const Login = () => {
         { username: otpUsername },
         { withCredentials: true },
       );
-      if (res.data?.maskedEmail) setOtpMaskedEmail(res.data.maskedEmail);
+      if (res.data?.otpEmail) setOtpEmail(res.data.otpEmail);
       setOtpCode("");
       setOtpResendIn(30);
       toast.success("A new verification code has been sent to your email.");
@@ -282,7 +282,7 @@ const Login = () => {
     setOtpCode("");
     setOtpError(null);
     setOtpUsername("");
-    setOtpMaskedEmail("");
+    setOtpEmail("");
     setOtpResendIn(0);
   };
 
@@ -673,9 +673,12 @@ const Login = () => {
               </h5>
               <p style={{ margin: "8px 0 0", color: "#6c757d", fontSize: 14 }}>
                 We&apos;ve emailed a 6-digit verification code
-                {otpMaskedEmail ? (
+                {otpEmail ? (
                   <>
-                    {" "}to <strong>{otpMaskedEmail}</strong>
+                    {" "}to{" "}
+                    <strong style={{ wordBreak: "break-word" }}>
+                      {otpEmail}
+                    </strong>
                   </>
                 ) : null}
                 . Enter it below to finish signing in.
