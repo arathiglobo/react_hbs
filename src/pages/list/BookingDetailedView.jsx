@@ -20,6 +20,49 @@ import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 
+// Reverse-geocode browser coordinates to a readable address for the
+// Booking History audit trail. Tries OpenStreetMap Nominatim first
+// (street-level detail), then BigDataCloud (locality-level, keyless).
+// Returns null when neither responds so the caller keeps its IP-derived
+// fallback. Mirrors the same helper in HotelBookingPage.jsx.
+async function reverseGeocode(lat, lon) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=16&addressdetails=1`,
+      { headers: { Accept: "application/json" } }
+    );
+    if (res.ok) {
+      const a = (await res.json())?.address || {};
+      const parts = [
+        a.road,
+        a.neighbourhood || a.suburb,
+        a.village || a.town || a.city || a.municipality,
+        a.state,
+        a.postcode,
+        a.country,
+      ].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255); // DB column is VARCHAR(255)
+    }
+  } catch {
+    // fall through to BigDataCloud
+  }
+  try {
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`
+    );
+    if (res.ok) {
+      const d = await res.json();
+      const parts = [d.locality, d.city, d.principalSubdivision, d.countryName].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255);
+    }
+  } catch {
+    // give up — caller keeps the IP-based fallback
+  }
+  return null;
+}
+
 const BUTTON_STYLE = {
   backgroundColor: "#c0392b",
   color: "#fff",
@@ -347,6 +390,42 @@ export default function BookingDetailedView() {
   // "no viable payment path" idea as HotelBookingPage's create flow.
   const [showNoPaymentPathModal, setShowNoPaymentPathModal] = useState(false);
 
+  // Operator location snapshot for the Booking History audit trail. Resolved
+  // once on mount and sent on the reconfirm-status PATCH body so the BE can
+  // stamp confirmed_location / reconfirmed_location the same way the Create
+  // flow stamps booking_location. The IP is NOT resolved here — browsers only
+  // see the shared public/NAT IP; BookingConfirmationController fills it in
+  // from the HTTP request itself. Same two-step resolution as
+  // HotelBookingPage.jsx: coarse IP-derived city first, precise geolocation
+  // second (only if it lands and permission is granted).
+  const [operatorLocation, setOperatorLocation] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("https://ipapi.co/json/")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((info) => {
+        if (cancelled || !info) return;
+        setOperatorLocation((prev) =>
+          // Never clobber a precise geolocation result that already landed.
+          prev ||
+          [info.city, info.region, info.country_name].filter(Boolean).join(", ") ||
+          null
+        );
+      })
+      .catch(() => {});
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async ({ coords }) => {
+          const precise = await reverseGeocode(coords.latitude, coords.longitude);
+          if (!cancelled && precise) setOperatorLocation(precise);
+        },
+        () => {}, // denied / unavailable — keep the IP-derived fallback
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+      );
+    }
+    return () => { cancelled = true; };
+  }, []);
+
   // ── Add New Item (amendment) selection modal + cross-type sub-bookings ──
   const [showAddItemModal, setShowAddItemModal] = useState(false);
   const [selectedAddItemType, setSelectedAddItemType] = useState(
@@ -632,7 +711,15 @@ export default function BookingDetailedView() {
       // this point (we've already gated it behind the FE pre-check below).
       const response = await axiosInstance.patch(
         `/api/booking-confirmation/${id}/confirmation-status`,
-        { action: "CONFIRM", confirmStatus: true },
+        {
+          action: "CONFIRM",
+          confirmStatus: true,
+          // Booking History audit — BE stamps this onto confirmed_location /
+          // reconfirmed_location. May be null if the operator denied
+          // geolocation and the IP-derived fallback also failed; the BE
+          // treats null as "no capture" and the history row shows "-".
+          bookingLocation: operatorLocation,
+        },
       );
       if (response.data && response.data.success === true) {
         setShowConfirmModal(false);
@@ -1229,6 +1316,10 @@ export default function BookingDetailedView() {
         action: "Booking Confirmed",
         at: booking.confirmedDate,
         by: booking.confirmedBy || "-",
+        // Per-action audit captured on the CONFIRM PATCH. Legacy rows
+        // confirmed before this was captured have both null and render "-".
+        location: booking.confirmedLocation,
+        ip: booking.confirmedIp,
       });
     }
     if (booking.reconfirmedDate) {
@@ -1236,6 +1327,8 @@ export default function BookingDetailedView() {
         action: "Booking Reconfirmed",
         at: booking.reconfirmedDate,
         by: booking.reconfirmedBy || "-",
+        location: booking.reconfirmedLocation,
+        ip: booking.reconfirmedIp,
       });
     }
     if (booking.cancelledAt) {
