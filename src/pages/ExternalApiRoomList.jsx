@@ -1574,28 +1574,54 @@ const ExternalApiRoomList = () => {
                               // earlier picks per the vendor's Options[]
                               // combinations. Options entries look like
                               // "1,28" — one index per room slot in order.
+                              // atharvaFixedOption / atharvaOptions are
+                              // per-VENDOR (Atharva returns multiple vendors
+                              // per hotel, each with its own FixedOption +
+                              // Options[]), so they're carried on the RATE
+                              // itself — reading them off `hotel.*` would
+                              // cross-apply one vendor's Options[] to
+                              // another vendor's rate.
                               .filter((rate) => {
                                 if (
                                   String(roomData?.payload?.apiId || "") !== "3" ||
                                   !isMultiRoom ||
-                                  hotel?.atharvaFixedOption !== true ||
-                                  !Array.isArray(hotel?.atharvaOptions) ||
-                                  hotel.atharvaOptions.length === 0 ||
+                                  rate?.atharvaFixedOption !== true ||
+                                  !Array.isArray(rate?.atharvaOptions) ||
+                                  rate.atharvaOptions.length === 0 ||
                                   rate?.atharvaIndex == null
                                 ) {
                                   return true;
                                 }
-                                // Collect indices from any earlier slot with
-                                // a selection; positions without a selection
-                                // become wildcards (any Option row matches).
+                                // Collect indices + vendor hKeys from any
+                                // earlier slot with a selection; positions
+                                // without a selection become wildcards.
                                 const requiredIndices = selectedRooms.map(
                                   (r) => r?.selectedRate?.atharvaIndex ?? null,
                                 );
+                                const earlierPickHKey = selectedRooms
+                                  .slice(0, roomSlotIndex)
+                                  .map((r) => r?.selectedRate?.hKey)
+                                  .find((k) => k);
                                 const hasEarlierPick = requiredIndices
                                   .slice(0, roomSlotIndex)
                                   .some((v) => v != null);
                                 if (!hasEarlierPick) return true;
-                                return hotel.atharvaOptions.some((opt) => {
+                                // Cross-vendor guard — Options[] indices
+                                // are only meaningful within the picked
+                                // vendor. A candidate from a different
+                                // vendor could false-match by index
+                                // coincidence and then trip 1005: Invalid
+                                // RateKey at prebook (handleRateSelect
+                                // blocks the click too, but hiding the
+                                // rate up front is the cleaner UX).
+                                if (
+                                  earlierPickHKey &&
+                                  rate.hKey &&
+                                  rate.hKey !== earlierPickHKey
+                                ) {
+                                  return false;
+                                }
+                                return rate.atharvaOptions.some((opt) => {
                                   const parts = String(opt)
                                     .split(",")
                                     .map((p) => Number(p.trim()));

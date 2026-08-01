@@ -1569,7 +1569,7 @@ export default function HotelSearch({
         "inhouse",
         // "iwtx",
         // "x3",
-        // "ratehawk",
+        "ratehawk",
         // "darina",
         // "atharva",
         // "jumeirah",
