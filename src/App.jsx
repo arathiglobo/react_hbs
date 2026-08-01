@@ -323,6 +323,8 @@ import AdminApiAccess from "./pages/admin/apiaccess/AdminApiAccess";
 import AssignMenu from "./pages/master/AssignMenu";
 import UserRoles from "./pages/master/UserRoles";
 import FlightSearch from "./pages/search/flight/FlightSearch";
+import FlightBestPriceCheck from "./pages/search/flight/FlightBestPriceCheck";
+import FlightBookPlaceholder from "./pages/search/flight/FlightBookPlaceholder";
 import FlightBookingList from "./pages/list/FlightBookingList";
 
 
@@ -509,6 +511,20 @@ export default function App() {
 
 
          <Route path="/new-booking/flight" element={<PrivateRoute><FlightSearch/></PrivateRoute>} />
+         {/* Fare Details / Best Price Check — reached from the "View Fares"
+             button on each flight search-result card. Selected recommendation
+             is passed via React Router state so the URL stays clean. */}
+         <Route path="/new-booking/flightBestPriceCheck" element={<PrivateRoute><FlightBestPriceCheck/></PrivateRoute>} />
+         {/* Flight booking form — placeholder for the upcoming flow.
+             Both routes point at the same placeholder for now:
+             - /new-booking/flightBook was the initial placeholder path
+             - /new-booking/flightBookPage is what Book Now on
+               /new-booking/flightBestPriceCheck currently navigates to,
+               and is the eventual home of the real passenger-form page.
+             Keeping both wired ensures neither link 404s while the real
+             page is under construction. */}
+         <Route path="/new-booking/flightBook" element={<PrivateRoute><FlightBookPlaceholder/></PrivateRoute>} />
+         <Route path="/new-booking/flightBookPage" element={<PrivateRoute><FlightBookPlaceholder/></PrivateRoute>} />
         {/* Dedicated 24-Hour Check-In room list + booking page — same
             components as /room-list and /hotel-booking-page but with
             `force24Hour` so the post-rate-pick navigation and the

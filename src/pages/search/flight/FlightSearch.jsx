@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Card,
   Row,
@@ -24,8 +25,15 @@ import CountrySelect from "./CountrySelect";
 import FlightResults from "./FlightResults";
 import "../../../styles/HotelSearch.css";
 
-/* Amadeus cabin codes. Values match backend {@code normalizeCabin} mapping. */
+/* Amadeus cabin codes. Values match backend {@code normalizeCabin} mapping.
+ * An empty value (Any Cabin) is the safe default — it tells the backend
+ * NOT to send a <travelFlightInfo><cabinId> block, so Amadeus returns
+ * recommendations across every cabin the fare is available in (Economy +
+ * Premium Economy + Business + First). Sending a specific cabin like "M"
+ * on every search silently drops premium fares and cuts the result count
+ * (observed: DXB→BOM returned 48 rows in Economy-only vs. 67 with any-cabin). */
 const CABIN_OPTIONS = [
+  { value: "",  label: "Any Cabin" },
   { value: "M", label: "Economy" },
   { value: "W", label: "Premium Economy" },
   { value: "C", label: "Business" },
@@ -59,12 +67,15 @@ const toDdMmYyyy = (isoDate) => {
 const emptyLeg = () => ({ fromLoc: null, toLoc: null, departure: "" });
 
 const FlightSearch = () => {
+  const navigate = useNavigate();
   const [journeyType, setJourneyType] = useState("1");
   const [legs, setLegs] = useState([emptyLeg()]);
   const [adult, setAdult] = useState("1");
   const [children, setChildren] = useState("0");
   const [infant, setInfant] = useState("0");
-  const [classOfService, setClassOfService] = useState("M");
+  // Default to "Any Cabin" (blank) — see CABIN_OPTIONS comment for why.
+  // The user can still narrow via the Class dropdown when they want to.
+  const [classOfService, setClassOfService] = useState("");
   // Native country is now a full CountrySuggestion object so the dropdown
   // can render the selected name back to the user; we send its code as the
   // request payload's nativeCountry value.
@@ -96,14 +107,22 @@ const FlightSearch = () => {
   const [results, setResults] = useState([]);
   const [searched, setSearched] = useState(false);
 
-  // Round-trip is a 2-leg one-way + return; keep the legs array in sync.
+  // Round-trip is a 2-leg one-way + return; keep the legs array in sync
+  // with the journey type in BOTH directions — expand when switching to a
+  // wider type, and trim when switching to a narrower one. Without the
+  // trim, a user who added 4 legs on Multi-city and then switched back to
+  // Round-trip would still POST 4 legs to Amadeus, silently over-searching.
   const onJourneyTypeChange = (v) => {
     setJourneyType(v);
     if (v === "1") {
-      setLegs([emptyLeg()]);
-    } else if (v === "2" && legs.length < 2) {
-      setLegs([legs[0] || emptyLeg(), emptyLeg()]);
+      // One-way: exactly 1 leg; keep the first if the user already picked one.
+      setLegs(legs.length ? [legs[0]] : [emptyLeg()]);
+    } else if (v === "2") {
+      // Round-trip: exactly 2 legs. Grow to 2 if shorter; truncate to 2 if longer.
+      if (legs.length < 2) setLegs([legs[0] || emptyLeg(), emptyLeg()]);
+      else if (legs.length > 2) setLegs(legs.slice(0, 2));
     } else if (v === "3" && legs.length < 2) {
+      // Multi-city needs at least 2 legs; expand from 1.
       setLegs([legs[0] || emptyLeg(), emptyLeg()]);
     }
   };
@@ -371,11 +390,25 @@ const FlightSearch = () => {
             searched={searched}
             results={results}
             onSelect={(rec) => {
-              // Placeholder: downstream booking page will consume this rec.
-              // Existing search behaviour is unchanged; we just surface the
-              // pick to whoever wires the booking route later.
-              toast.success(`Selected ${rec.validatingCarrier || "flight"} · ${
-                (rec.pricing?.currency || "AED")} ${(rec.pricing?.totalRateWithMarkup ?? rec.pricing?.total ?? "")}`);
+              // Hand the selected recommendation to the Best Price Check
+              // page via router state so the URL stays clean and we don't
+              // have to reserialize the full itinerary through query params.
+              // The page calls /custom/amadeus/fareInformationPrice on mount
+              // to reprice it against Amadeus TIPNRQ 24.3.
+              navigate(
+                `/new-booking/flightBestPriceCheck${agentId ? `?agentId=${encodeURIComponent(agentId)}` : ""}`,
+                {
+                  state: {
+                    rec,
+                    pax: {
+                      adult: Number(adult) || 1,
+                      children: Number(children) || 0,
+                      infant: Number(infant) || 0,
+                    },
+                    fareCurrency: rec?.pricing?.currency || null,
+                  },
+                },
+              );
             }}
           />
         </main>

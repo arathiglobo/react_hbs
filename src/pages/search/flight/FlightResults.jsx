@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Card, Row, Col, Button, Badge, Collapse, Spinner, Alert, Form } from "react-bootstrap";
+import { Card, Row, Col, Button, Badge, Collapse, Spinner, Alert, Form, Pagination } from "react-bootstrap";
 import {
   FaPlaneDeparture,
   FaPlaneArrival,
@@ -12,6 +12,12 @@ import {
   FaSearch,
 } from "react-icons/fa";
 import axiosInstance from "../../../components/AxiosInstance";
+
+// Same rows-per-page choices as the Hotel Booking list so the two pages
+// behave identically for the user; 10 is the initial page size to match
+// the requirement ("Display 10–20 results per page — same behaviour as
+// Hotel Booking").
+const PER_PAGE_OPTIONS = [10, 20, 50];
 
 /*
  * Flight search results panel.
@@ -68,16 +74,31 @@ const CABIN_LABELS = {
 
 const cabinLabel = (code) => CABIN_LABELS[code] || code || "Economy";
 
+// Module-level cache of logo URLs known to 404. Populated by the first
+// AirlineLogo card that tries a URL and fails; every subsequent card with
+// the same URL skips the <img> entirely and renders the monogram straight
+// away. Without this, a 49-row DXB→BOM result would produce dozens of
+// duplicate 404s in the network tab (one per row per carrier — AirHex
+// doesn't stock every IATA code).
+const brokenLogoSrcs = new Set();
+
 // Fallback airline logo if the DB row has no logo_url — a monogram circle
 // built from the carrier code so the layout stays stable.
 const AirlineLogo = ({ src, code }) => {
-  const [broken, setBroken] = useState(false);
+  // Ignore the src if we've already discovered it's broken in this
+  // session. First-time-broken paths still hit the img → onError → cache
+  // path below; second-and-later paths render the fallback immediately.
+  const known = src && brokenLogoSrcs.has(src);
+  const [broken, setBroken] = useState(known);
   if (src && !broken) {
     return (
       <img
         src={src}
         alt={code || "airline"}
-        onError={() => setBroken(true)}
+        onError={() => {
+          brokenLogoSrcs.add(src);
+          setBroken(true);
+        }}
         style={{ width: 56, height: 56, objectFit: "contain", background: "#fff", borderRadius: 8, padding: 4, border: "1px solid #eef1f5" }}
       />
     );
@@ -153,6 +174,12 @@ const FlightCard = ({ rec, onSelect, convert }) => {
   const firstSeg = firstLeg?.segments?.[0];
   const airline = firstSeg?.airLineName || rec.validatingCarrier || "";
   const carrier = firstSeg?.marketingCarrier || rec.validatingCarrier;
+  // Prefer "Air India (AI)" — falls back to just the code when the
+  // AmadeusAirlines lookup did not return a friendly name for this
+  // carrier (e.g. code not present in the master table yet).
+  const airlineDisplay = airline && carrier && airline !== carrier
+    ? `${airline} (${carrier})`
+    : (airline || carrier || "");
   const cabin = firstSeg?.cabin;
   const pax0 = rec.passengers?.[0];
   const fd = pax0?.fareDetails;
@@ -171,10 +198,9 @@ const FlightCard = ({ rec, onSelect, convert }) => {
                 <AirlineLogo src={firstSeg?.airlineLogo} code={carrier} />
               </Col>
               <Col>
-                <div style={{ fontWeight: 600, fontSize: 15 }}>{airline || carrier}</div>
+                <div style={{ fontWeight: 600, fontSize: 15 }}>{airlineDisplay}</div>
                 <div className="text-muted" style={{ fontSize: 12 }}>
-                  {carrier}
-                  {firstSeg?.flightNumber ? ` · ${carrier}${firstSeg.flightNumber}` : ""}
+                  {firstSeg?.flightNumber ? `${carrier}${firstSeg.flightNumber}` : carrier}
                   {cabin ? ` · ${cabinLabel(cabin)}` : ""}
                 </div>
               </Col>
@@ -189,7 +215,11 @@ const FlightCard = ({ rec, onSelect, convert }) => {
                   <Row className="g-2 align-items-center">
                     <Col xs={3}>
                       <div style={{ fontWeight: 700, fontSize: 18 }}>{fmtTime(first?.departureDateTime)}</div>
-                      <div className="text-muted" style={{ fontSize: 12 }}>{first?.departureAirportCode || leg.from}</div>
+                      <div className="text-muted" style={{ fontSize: 12 }}>
+                        {first?.departureCityName
+                          ? `${first.departureCityName} (${first?.departureAirportCode || leg.from})`
+                          : (first?.departureAirportCode || leg.from)}
+                      </div>
                       <div className="text-muted" style={{ fontSize: 11 }}>{fmtDate(first?.departureDateTime)}</div>
                     </Col>
                     <Col xs={6} className="text-center">
@@ -211,7 +241,11 @@ const FlightCard = ({ rec, onSelect, convert }) => {
                     </Col>
                     <Col xs={3} className="text-end">
                       <div style={{ fontWeight: 700, fontSize: 18 }}>{fmtTime(last?.arrivalDateTime)}</div>
-                      <div className="text-muted" style={{ fontSize: 12 }}>{last?.arrivalAirportCode || leg.to}</div>
+                      <div className="text-muted" style={{ fontSize: 12 }}>
+                        {last?.arrivalCityName
+                          ? `${last.arrivalCityName} (${last?.arrivalAirportCode || leg.to})`
+                          : (last?.arrivalAirportCode || leg.to)}
+                      </div>
                       <div className="text-muted" style={{ fontSize: 11 }}>{fmtDate(last?.arrivalDateTime)}</div>
                     </Col>
                   </Row>
@@ -368,6 +402,11 @@ const FlightResults = ({ loading, error, searched, results, onSelect }) => {
   const [draftFilters, setDraftFilters] = useState(emptyFilters());
   const [appliedFilters, setAppliedFilters] = useState(emptyFilters());
   const [currencyOptions, setCurrencyOptions] = useState([]);
+  // Client-side pagination — same shape as the Hotel Booking list. Amadeus
+  // already returns the full recommendation list in one call, so paging
+  // here means slicing the filtered/sorted rows for the current page.
+  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPerPage, setCurrentPerPage] = useState(PER_PAGE_OPTIONS[0]);
 
   // Currency list mirrors /new-booking/hotel's master_currency lookup
   // (currencyCode + value = multiplier). Loaded once; independent of search.
@@ -393,11 +432,19 @@ const FlightResults = ({ loading, error, searched, results, onSelect }) => {
   }, []);
 
   // A fresh search should not carry over the previous search's filter
-  // selections.
+  // selections — and must reset back to the first page.
   useEffect(() => {
     setDraftFilters(emptyFilters());
     setAppliedFilters(emptyFilters());
+    setCurrentPage(1);
   }, [results]);
+
+  // Any filter/sort change (applied via the Apply Filters button) or a
+  // page-size change should snap the user back to page 1 so they don't
+  // end up on a page that no longer has any rows for the new set.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [appliedFilters, currentPerPage]);
 
   // Airline checklist is derived from the full (unfiltered) result set so
   // unchecking an airline doesn't make its own checkbox disappear.
@@ -453,6 +500,24 @@ const FlightResults = ({ loading, error, searched, results, onSelect }) => {
 
     return list;
   }, [rows, appliedFilters]);
+
+  // Total pages after filters — always at least 1 so the pager still
+  // renders (disabled) even when there are no visible rows.
+  const totalPages = Math.max(1, Math.ceil(visibleRows.length / currentPerPage));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageStart = (safePage - 1) * currentPerPage;
+  const pageEnd = Math.min(pageStart + currentPerPage, visibleRows.length);
+  const paginatedRows = visibleRows.slice(pageStart, pageEnd);
+
+  const handlePageChange = (n) => {
+    if (n < 1 || n > totalPages) return;
+    setCurrentPage(n);
+    // Keep the user oriented — scroll the results panel to the top
+    // when they page. Matches the Hotel list's feel.
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
 
   const toggleDraft = (key, value) => {
     setDraftFilters((f) => {
@@ -638,11 +703,16 @@ const FlightResults = ({ loading, error, searched, results, onSelect }) => {
 
         {/* Results */}
         <Col lg={9}>
-          <div className="mb-2 d-flex justify-content-between align-items-center">
+          <div className="mb-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
               <strong>{visibleRows.length}</strong> flight{visibleRows.length !== 1 ? "s" : ""} found
               {visibleRows.length !== rows.length && (
                 <span className="text-muted small ms-1">(filtered from {rows.length})</span>
+              )}
+              {visibleRows.length > 0 && (
+                <span className="text-muted small ms-2">
+                  Showing {pageStart + 1}-{pageEnd} of {visibleRows.length}
+                </span>
               )}
             </div>
             <div className="text-muted" style={{ fontSize: 12 }}>
@@ -660,9 +730,89 @@ const FlightResults = ({ loading, error, searched, results, onSelect }) => {
               </Card.Body>
             </Card>
           ) : (
-            visibleRows.map((r) => (
-              <FlightCard key={r.id ?? r.recommendationIndex} rec={r} onSelect={onSelect} convert={convert} />
-            ))
+            <>
+              {paginatedRows.map((r) => (
+                <FlightCard key={r.id ?? r.recommendationIndex} rec={r} onSelect={onSelect} convert={convert} />
+              ))}
+
+              {/* Pagination bar — same shape / behaviour as Hotel Booking
+                  list (sliding 5-page window, Prev/Next, rows-per-page
+                  select). Kept purely client-side because Amadeus returns
+                  the full recommendation set in the single search call. */}
+              <Card className="mt-3 shadow-sm">
+                <Card.Body className="p-2 d-flex flex-wrap align-items-center justify-content-between gap-2">
+                  <div className="text-muted" style={{ fontSize: "0.85rem" }}>
+                    Showing{" "}
+                    <span className="fw-semibold text-dark">{pageStart + 1}</span>
+                    {" "}to{" "}
+                    <span className="fw-semibold text-dark">{pageEnd}</span>
+                    {" "}of{" "}
+                    <span className="fw-semibold text-dark">{visibleRows.length}</span>
+                    {" "}flights
+                  </div>
+                  <div className="d-flex align-items-center gap-2">
+                    <span className="text-muted" style={{ fontSize: "0.8rem" }}>
+                      Rows per page
+                    </span>
+                    <Form.Select
+                      size="sm"
+                      value={currentPerPage}
+                      onChange={(e) => setCurrentPerPage(Number(e.target.value))}
+                      style={{ width: "auto", fontSize: "0.8rem" }}
+                    >
+                      {PER_PAGE_OPTIONS.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </Form.Select>
+                  </div>
+                  <Pagination className="mb-0">
+                    <Pagination.Prev
+                      disabled={safePage === 1}
+                      onClick={() => handlePageChange(safePage - 1)}
+                      style={{
+                        cursor: safePage === 1 ? "not-allowed" : "pointer",
+                        opacity: safePage === 1 ? 0.5 : 1,
+                      }}
+                    />
+                    {(() => {
+                      // Sliding 5-page window centred on the current page.
+                      // Matches HotelBookingList's paginator so the two
+                      // pages feel identical to the user.
+                      const windowSize = 5;
+                      const startPage = Math.max(
+                        1,
+                        Math.min(
+                          safePage - Math.floor(windowSize / 2),
+                          totalPages - windowSize + 1,
+                        ),
+                      );
+                      const endPage = Math.min(totalPages, startPage + windowSize - 1);
+                      return Array.from(
+                        { length: endPage - startPage + 1 },
+                        (_, i) => startPage + i,
+                      ).map((n) => (
+                        <Pagination.Item
+                          key={n}
+                          active={safePage === n}
+                          onClick={() => handlePageChange(n)}
+                          style={{ cursor: "pointer", minWidth: 38, textAlign: "center" }}
+                        >
+                          {n}
+                        </Pagination.Item>
+                      ));
+                    })()}
+                    <Pagination.Next
+                      disabled={safePage === totalPages}
+                      onClick={() => handlePageChange(safePage + 1)}
+                      style={{
+                        cursor: safePage === totalPages ? "not-allowed" : "pointer",
+                        opacity: safePage === totalPages ? 0.5 : 1,
+                      }}
+                    />
+                  </Pagination>
+                </Card.Body>
+              </Card>
+            </>
           )}
         </Col>
       </Row>
