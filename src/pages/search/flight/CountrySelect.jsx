@@ -1,13 +1,17 @@
 import React, { useEffect, useRef, useState } from "react";
-import { FaGlobe } from "react-icons/fa";
+import { FaGlobe, FaMapMarkerAlt } from "react-icons/fa";
 import axiosInstance from "../../../components/AxiosInstance";
 
 /*
  * Country search for the Native Country field on /new-booking/flight.
- * Same UX pattern as FlightLocationSelect but hits /custom/amadeus/countries
- * and shows a smaller row (code · name). On focus with an empty query the
- * backend returns the top-25 alphabetical list, so the dropdown is useful
- * even before the user types anything.
+ *
+ * Behaviour and visual layout deliberately mirror FlightLocationSelect
+ * (the From/To picker) so the two fields feel identical to the user:
+ *   - Fetches on empty focus so the top-25 default list appears immediately
+ *     (backend /custom/amadeus/countries already returns an alphabetical
+ *     top-25 for a blank/short query).
+ *   - Two-line row: bigger blue main line with a location pin + "Name (CODE)"
+ *     display, small gray meta line "Country · CODE" underneath.
  */
 const CountrySelect = ({
   label = "Native Country of Guest",
@@ -40,13 +44,13 @@ const CountrySelect = ({
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  // Only hit the endpoint after the user has typed at least 2 characters —
-  // matches the From/To behaviour, avoids a top-25 dump on focus, and rules
-  // out a bad top-25 response as a source of the "Aw Snap" OOM.
+  // Debounced fetch — matches FlightLocationSelect's pattern exactly. Runs
+  // even for an empty query so the moment the user focuses the field they
+  // see the backend's default top-25 country list; typing narrows it via
+  // the same endpoint. 250ms debounce is snappy without hammering the API.
   useEffect(() => {
     if (!open) return;
     const q = input.trim();
-    if (q.length < 2) { setItems([]); return; }
     if (abortRef.current) abortRef.current.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -54,7 +58,7 @@ const CountrySelect = ({
       setLoading(true);
       try {
         const res = await axiosInstance.get("/custom/amadeus/countries", {
-          params: { q },
+          params: q ? { q } : {},
           signal: controller.signal,
         });
         // Hard cap the rendered list — never render more than 50 rows even
@@ -145,13 +149,18 @@ const CountrySelect = ({
                 cursor: "pointer",
                 background: i === highlight ? "#e7f1ff" : "transparent",
                 borderBottom: "1px solid #f1f3f5",
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
               }}
             >
-              <span style={{ fontSize: 14 }}>{s.name}</span>
-              <span style={{ fontSize: 12, color: "#6c757d" }}>{s.code}</span>
+              {/* Two-line row matches FlightLocationSelect exactly: bigger
+                  blue main line with a location pin + "Name (CODE)", small
+                  gray meta line "Country · CODE" underneath. */}
+              <div style={{ fontSize: 14, color: "#0d6efd", fontWeight: 500 }}>
+                <FaMapMarkerAlt style={{ marginRight: 6, opacity: 0.7 }} />
+                {s.name}{s.code ? ` (${s.code})` : ""}
+              </div>
+              <div style={{ fontSize: 12, color: "#6c757d" }}>
+                Country{s.code ? ` · ${s.code}` : ""}
+              </div>
             </div>
           ))}
         </div>
