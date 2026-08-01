@@ -323,6 +323,8 @@ import AdminApiAccess from "./pages/admin/apiaccess/AdminApiAccess";
 import AssignMenu from "./pages/master/AssignMenu";
 import UserRoles from "./pages/master/UserRoles";
 import FlightSearch from "./pages/search/flight/FlightSearch";
+import FlightBookingList from "./pages/list/FlightBookingList";
+
 
 
 export default function App() {
@@ -573,7 +575,7 @@ export default function App() {
             surface here (and are excluded from the standard list). */}
         <Route path="/booking-details/religious-booking-list" element={<PrivateRoute><ReligiousBookingList /> </PrivateRoute>}/>
 
-        <Route path="/booking-details/flight-booking-list" element={<PrivateRoute><FlightBookingList /> </PrivateRoute>}/>
+        <Route path="/booking-details/flight-booking-list" element={<PrivateRoute><FlightBookingList/> </PrivateRoute>}/>
         {/* Last Minute Bookings list — view + cancel from this page */}
         <Route path="/booking-details/last-minute-booking-list" element={<PrivateRoute><LastMinuteBookingList /></PrivateRoute>}/>
         {/* Last-minute bookings are the same HotelBooking entity, so their
