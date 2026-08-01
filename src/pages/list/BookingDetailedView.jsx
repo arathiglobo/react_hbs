@@ -657,7 +657,11 @@ export default function BookingDetailedView() {
     }
     try {
       setCancellingBooking(true);
-      const params = { reason };
+      // Booking History audit — BE stamps this onto cancelled_location.
+      // May be null if the operator denied geolocation and the IP-derived
+      // fallback also failed; the BE treats null as "no capture" and the
+      // "Booking Cancelled" history row renders "-".
+      const params = { reason, bookingLocation: operatorLocation };
       const response = await axiosInstance.delete(
         `/api/hotel-booking/${id}/cancel`,
         { params },
@@ -1336,6 +1340,10 @@ export default function BookingDetailedView() {
         action: "Booking Cancelled",
         at: booking.cancelledAt,
         by: booking.cancelledBy || "-",
+        // Per-action audit captured on the DELETE. Legacy rows cancelled
+        // before this was captured have both null and render "-".
+        location: booking.cancelledLocation,
+        ip: booking.cancelledIp,
       });
     }
     return events.sort((a, b) => {
