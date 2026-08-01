@@ -86,6 +86,22 @@ const CREDENTIAL_SCHEMAS = {
     { key: "baseUrl", label: "Base URL (grn.api.base-url)", type: "text" },
     { key: "apiKey", label: "API Key (grn.api.key)", type: "password" },
   ],
+  // IWay (i'way BS Transfers). Keys map to IwayAuthService.pick* on the
+  // backend — same DB-first-with-properties-fallback pattern as ATHARVA
+  // / IWTX. Base URL is the "/transnextgen" prefix only; the /v4 (or
+  // whatever version the API is on) is set separately so ops can move
+  // to a new major without editing the base URL.
+  IWAY: [
+    { key: "baseUrl", label: "Base URL (iway.api.baseUrl)", type: "text" },
+    { key: "version", label: "API Version (v4)", type: "text" },
+    { key: "userId", label: "User ID (iway.api.userId)", type: "text" },
+    { key: "login", label: "Login (iway.api.login)", type: "text" },
+    { key: "password", label: "Password (iway.api.password)", type: "password" },
+    { key: "currency", label: "Default Currency (e.g. AED)", type: "text" },
+    { key: "lang", label: "Response Language (e.g. en)", type: "text" },
+    { key: "imagesUrl", label: "Images URL (car photos base)", type: "text" },
+    { key: "platform", label: "Platform ID (guide §11.6 — 7 for API)", type: "text" },
+  ],
   // INHOUSE reads from the app's own DB — no external credentials to set.
   INHOUSE: [],
 };
