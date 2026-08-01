@@ -208,6 +208,11 @@ const ExternalApiRoomList = () => {
   const [prebookError, setPrebookError] = useState(null);
   // rateKey -> AtharvaPreBookResponseDTO (fresh tokenId/hKey/rateKey/policies)
   const [atharvaPrebookCache, setAtharvaPrebookCache] = useState({});
+  // rateKey -> GrnRecheckResponseDTO (fresh price/policy/grnSearchId).
+  // Populated the first time the guest opens the Cancellation Policies &
+  // Terms modal for a GRN rate; subsequent opens are instant and the
+  // booking payload will pull `grnSearchId` back out of here.
+  const [grnRecheckCache, setGrnRecheckCache] = useState({});
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -219,6 +224,11 @@ const ExternalApiRoomList = () => {
     RATEHAWK: 14,
     DARINA: 16,
     ATHARVA: 3,
+    // GRN Connect. Rate-recheck path lives at /api/hotel-booking/grn/recheck
+    // and is called only when the guest opens the Cancellation Policies &
+    // Terms modal for a GRN rate — never on page load. apiId=20 avoids
+    // colliding with the existing Juniper booking's apiId=17.
+    GRN: 20,
   };
 
   const activeUserRole = localStorage.getItem("currentActiveRole");
@@ -286,6 +296,56 @@ const ExternalApiRoomList = () => {
     }
   };
 
+  /**
+   * Fetch GRN Rate Recheck for a single selected rate. Turns GRN's response
+   * into the same {policyText, fromDate, value, percentOrAmount} rows the
+   * modal already renders for other suppliers. On success caches the
+   * response against the rate's `rateKey` so opening the modal again is
+   * free and the booking payload can pull the fresh grnSearchId / rateKey /
+   * groupCode back out.
+   */
+  const fetchGrnRecheck = async (rate) => {
+    if (!rate?.rateKey) {
+      return {
+        success: false,
+        message: "GRN recheck: rate is missing rateKey — cannot verify policy.",
+      };
+    }
+    if (grnRecheckCache[rate.rateKey]) {
+      return grnRecheckCache[rate.rateKey];
+    }
+    const { payload } = roomData || {};
+    const req = {
+      hotelCode: payload?.hotelCode,
+      checkInDate: payload?.checkInDate,
+      checkOutDate: payload?.checkOutDate,
+      nationality: payload?.nationality,
+      agentId: payload?.agentId ? String(payload.agentId) : null,
+      rooms: payload?.rooms || [],
+      rateKey: rate.rateKey,
+      groupCode: rate.tokenId || null,
+      roomCode: rate.roomTypeCode || null,
+    };
+    try {
+      const resp = await axiosInstance.post(
+        "/api/hotel-booking/grn/recheck",
+        req,
+      );
+      const data = resp?.data || {};
+      if (data.success) {
+        setGrnRecheckCache((prev) => ({ ...prev, [rate.rateKey]: data }));
+      }
+      return data;
+    } catch (err) {
+      const backendMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Recheck request failed";
+      return { success: false, message: backendMsg };
+    }
+  };
+
   const openPoliciesModal = async (rate, hotelDetail) => {
     const label = [rate?.roomCategory, rate?.mealPlan]
       .filter(Boolean)
@@ -305,6 +365,51 @@ const ExternalApiRoomList = () => {
 
     const supplierApiId = resolveApiId(hotelDetail);
     const isAtharva = supplierApiId === apiIdMapping.ATHARVA;
+    const isGrn = supplierApiId === apiIdMapping.GRN;
+
+    // GRN: policies come from a real-time recheck call. The Room List's
+    // policy rows are the search-time snapshot; recheck gives us GRN's
+    // authoritative price + cancellation + inclusions before the guest
+    // proceeds to booking. Opens the modal immediately with the search-time
+    // policies as a fallback, then swaps them for the rechecked values.
+    if (isGrn) {
+      const fallbackCancellation = Array.isArray(rate?.cancellationPolicies)
+        ? rate.cancellationPolicies
+        : [];
+      setPrebookError(null);
+      setPoliciesModalData({
+        cancellationPolicies: fallbackCancellation,
+        termsAndConditions: inlineTerms,
+        selectedRoomLabel: label,
+        nonRefundable: isNonRefundable,
+      });
+      setShowPoliciesModal(true);
+      setPrebookLoading(true);
+      try {
+        const recheck = await fetchGrnRecheck(rate);
+        if (recheck?.success) {
+          setPoliciesModalData({
+            cancellationPolicies: recheck.cancellationPolicies || fallbackCancellation,
+            termsAndConditions: inlineTerms,
+            selectedRoomLabel: label,
+            // GRN's rate_comments carry pax_comments / remarks / MandatoryTax
+            // etc — surface any of them as the top-of-modal notice so the
+            // guest sees GRN's own remarks before proceeding.
+            remark: recheck.policyText || null,
+            nonRefundable:
+              typeof recheck.nonRefundable === "boolean"
+                ? recheck.nonRefundable
+                : isNonRefundable,
+          });
+        } else {
+          setPrebookError(recheck?.message || "Recheck failed.");
+          console.warn("GRN recheck: no policy returned:", recheck?.message);
+        }
+      } finally {
+        setPrebookLoading(false);
+      }
+      return;
+    }
 
     // Non-ATHARVA: policies come from the search response, same as before.
     if (!isAtharva) {
@@ -616,6 +721,12 @@ const ExternalApiRoomList = () => {
     const prebookRoom = prebook?.rooms?.find(
       (r) => (r.roomSrNo ?? null) === roomNo,
     );
+    // GRN recheck-time flag: pan_required=true means the booking page must
+    // render mandatory PAN input on the primary guest form. Read from the
+    // cached recheck response (populated when the operator opened the
+    // Cancellation Policies modal). Falls back to false when recheck wasn't
+    // run yet or the rate isn't GRN.
+    const grnRecheck = rate?.rateKey ? grnRecheckCache[rate.rateKey] : null;
 
     return {
       roomNo,
@@ -666,6 +777,10 @@ const ExternalApiRoomList = () => {
       // 2 days, computed on the backend). Booking page renders this in the
       // cancellation accordion header. Null when prebook wasn't run yet.
       atharvaDisplayDeadlineDate: prebook?.displayDeadlineDate || null,
+      // GRN-only carry: whether the rechecked rate requires PAN on the
+      // holder. Booking page uses this to render the PAN input card.
+      // Defaults to false; other suppliers just ignore this key.
+      panRequired: grnRecheck?.panRequired === true,
     };
   };
 
@@ -690,6 +805,46 @@ const ExternalApiRoomList = () => {
         );
         return;
       }
+    }
+
+    // GRN (apiId=20) bundled multi-room: one rate_key covers ALL rooms.
+    // Our GRN room-list refetch uses `?bundled=true`, so every rate the
+    // operator sees here IS a complete bundle across all requested rooms
+    // with a fixed pax split (see docs — a bundled rate returns rooms[]
+    // with one entry per physical room in the search request). Picking a
+    // "different" rate per room silently drops all but Room 1's on the
+    // backend (GrnHotelBookingService reads req.getRooms().get(0)
+    // .getRateKey()) and both rooms get booked as Room 1's type —
+    // producing a Single-Standard-for-both when the operator asked for
+    // Single+Double. Mirror the selection across every room so what the
+    // operator picks in ANY accordion is what actually gets booked.
+    //
+    // Non-bundled / partial-bundled support is out of scope for Phase 1
+    // (bundled=true refetch + isBundledRate filter guarantee everything
+    // reaching this handler is a bundled rate). When that flow is added,
+    // this branch will need a bundled-vs-non-bundled check on rate.
+    if (currentApiId === "20" && selectedRooms.length > 1) {
+      setSelectedRooms((prev) => {
+        const currentlySelectedInClicked =
+          prev[roomIndex]?.selectedRate === rate;
+        if (currentlySelectedInClicked) {
+          // Toggle-off: clear the rate from every room in the bundle.
+          return prev.map((r) => ({
+            ...r,
+            selectedRate: null,
+            hotelId: null,
+            hotelName: null,
+          }));
+        }
+        // Select same rate for every room in the bundle.
+        return prev.map((r) => ({
+          ...r,
+          selectedRate: rate,
+          hotelId,
+          hotelName,
+        }));
+      });
+      return;
     }
 
     setSelectedRooms((prev) =>

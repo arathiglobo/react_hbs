@@ -364,7 +364,12 @@ const CityMapping = () => {
     Jumeirah: { showCountry: true, showCity: true },
     X3: { showCountry: true, showCity: true },
     Ratehawk: { showCountry: true, showCity: true },
-    Atharva: { showCountry: true, showCity: true }, 
+    Atharva: { showCountry: true, showCity: true },
+    // GRN uses the same shape as the other suppliers — country picker
+    // (2-letter ISO code) then city picker keyed by countryId. Without
+    // this entry the Platform Country/City AsyncSelects render as `undefined`
+    // and the user can never pick a GRN city to map.
+    Grn: { showCountry: true, showCity: true },
     // add more platforms as needed
   };
 

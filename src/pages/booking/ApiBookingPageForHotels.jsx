@@ -129,6 +129,10 @@ const ApiBookingPageForHotels = () => {
   // per the vendor's PANCardType enum. Corporate/Trust/etc. can be picked in
   // the dropdown if the booking is on behalf of an entity.
   const [panCardType, setPanCardType] = useState("2");
+  // GRN-optional PAN Company Name — forwarded to holder.pan_company_name
+  // for corporate PANs. Only rendered when the selected rate is GRN AND
+  // panRequired=true. Left empty for personal PANs (no impact on GRN).
+  const [panCompanyName, setPanCompanyName] = useState("");
 
   // ─────────────────────────── effects ────────────────────────────────
   useEffect(() => {
@@ -248,6 +252,25 @@ const ApiBookingPageForHotels = () => {
     return n === "IN" || n === "IND" || n === "INDIA";
   };
 
+  // GRN-only PAN requirement: rate's pan_required=true (set from the recheck
+  // response and carried through on each selectedRate). Independent of the
+  // guest's nationality — GRN flags per-rate, not per-nationality. When true,
+  // the same PAN input card renders (shared with Atharva) and the payload
+  // sends holder.pan_number / pan_company_name. Any selectedRate having the
+  // flag is sufficient — a mixed multi-room booking with even one
+  // pan_required rate needs PAN.
+  const requiresGrnPan = () => {
+    if (!bookingData) return false;
+    if (Number(bookingData?.payload?.apiId) !== 20) return false;
+    const rates = bookingData?.selectedRate || [];
+    return rates.some((r) => r?.panRequired === true);
+  };
+
+  // Unified PAN-required check that either supplier can trigger. Kept as a
+  // helper so the PAN input card, validation, and payload builder all share
+  // one truth source and can't drift.
+  const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
+
   const validateForm = () => {
     const errors = {};
     let hasErrors = false;
@@ -279,21 +302,26 @@ const ApiBookingPageForHotels = () => {
       });
     });
 
-    // ATHARVA (apiId=3) + Indian primary guest: PAN is mandatory. The vendor
-    // rejects HCreateBooking with error 3006 otherwise, and the operator sees
-    // a swallowed "no status returned" failure. Length-only check (10 chars);
-    // the strict ABCDE1234F format is not enforced here per product decision.
-    if (requiresAtharvaPan()) {
+    // PAN mandatory when either supplier requires it:
+    //   • ATHARVA (apiId=3) + Indian primary guest — vendor rejects
+    //     HCreateBooking with error 3006 otherwise.
+    //   • GRN (apiId=20) + rate.pan_required=true — GRN rejects the
+    //     create-booking call and returns an error envelope.
+    // Length-only check (10 chars) — strict ABCDE1234F format is not
+    // enforced here per product decision. PAN Card Type is Atharva-only
+    // so it's still gated on requiresAtharvaPan().
+    if (requiresPan()) {
       const trimmed = (panCardNo || "").trim().toUpperCase();
       if (!trimmed) {
-        errors.panCardNo =
-          "PAN Card No is required (Indian primary guest booking with Atharva).";
+        errors.panCardNo = requiresAtharvaPan()
+          ? "PAN Card No is required (Indian primary guest booking with Atharva)."
+          : "PAN Card No is required (this GRN rate mandates PAN on the holder).";
         hasErrors = true;
       } else if (trimmed.length !== 10) {
         errors.panCardNo = "PAN must be 10 characters.";
         hasErrors = true;
       }
-      if (!panCardType) {
+      if (requiresAtharvaPan() && !panCardType) {
         errors.panCardType = "PAN Card Type is required.";
         hasErrors = true;
       }
@@ -609,13 +637,20 @@ const ApiBookingPageForHotels = () => {
           passportNo: "",
           agentLpo: "",
           nativeCountry: bookingData.payload.nationality,
-          // ATHARVA-only carriers (apiId=3, Indian primary guest). Emit them
-          // only when the PAN gate applies so non-Atharva payloads stay byte-
-          // for-byte identical to before this change.
-          panCardNo: requiresAtharvaPan()
+          // PAN carriers — populated when either Atharva (Indian primary
+          // guest) or GRN (rate.pan_required=true) requires them. panCardNo
+          // is the shared PAN number field forwarded to Atharva's PANCardNo
+          // and GRN's holder.pan_number. panCardType is Atharva-only.
+          // panCompanyName is GRN-only (optional, for corporate PANs).
+          // When neither supplier requires PAN, the fields stay null so
+          // non-PAN payloads are byte-for-byte identical to before.
+          panCardNo: requiresPan()
             ? (panCardNo || "").trim().toUpperCase()
             : null,
           panCardType: requiresAtharvaPan() ? panCardType || "2" : null,
+          panCompanyName: requiresGrnPan()
+            ? (panCompanyName || "").trim() || null
+            : null,
         },
         rooms: rooms.map((room, roomIndex) => {
           const rate = bookingData.selectedRate[roomIndex] || {};
@@ -744,7 +779,17 @@ const ApiBookingPageForHotels = () => {
 
       if (bookingResponse && isSuccess) {
         toast.success(bookingResponse.message);
-        navigate("/booking-details/hotel-booking-list");
+        // GRN-only routing (apiId=20): the client wants a Reconfirmed GRN
+        // booking to land directly on its Booking Detail page (mirrors the
+        // Inhouse LongStay / DayStay flow), NOT the list view. Every other
+        // supplier keeps the existing list-page redirect so IWTX / X3 /
+        // ATHARVA / DARINA / JUMEIRAH / JUNIPER flows are untouched.
+        const isGrn = Number(effectivePayload.apiId) === 20;
+        if (isGrn && bookingResponse.bookingId) {
+          navigate(`/booking-details/hotel-booking/${bookingResponse.bookingId}`);
+        } else {
+          navigate("/booking-details/hotel-booking-list");
+        }
       } else {
         // Surface backend / IWTX validation message when present (e.g.
         // "invalid_passengers[0].gender") instead of the generic
@@ -1209,23 +1254,28 @@ const ApiBookingPageForHotels = () => {
                     </Card.Body>
                   </Card>
 
-                  {/* ATHARVA (apiId=3) + Indian primary guest ONLY:
-                      PAN Card capture. Atharva §6.1 documents PAN as
-                      MANDATORY for Indian nationals booking a hotel
-                      outside India; omitting it makes HCreateBooking
-                      reject with error 3006 ("Invalid PAN details") and
-                      the operator sees an opaque "no status returned"
-                      failure. Card is gated so every other supplier on
-                      this page (and Indian-domestic Atharva bookings)
-                      keeps its existing 4-card layout unchanged. */}
-                  {requiresAtharvaPan() && (
+                  {/* PAN Card capture — rendered when EITHER supplier
+                      requires PAN on the primary guest:
+                        • Atharva (apiId=3) + Indian primary guest —
+                          §6.1 mandates PAN or HCreateBooking rejects with
+                          error 3006 ("Invalid PAN details").
+                        • GRN (apiId=20) + rate.pan_required=true — GRN
+                          returns an error envelope when holder.pan_number
+                          is missing on a pan_required rate.
+                      The card is fully hidden when neither applies, so
+                      every other supplier / non-PAN rate keeps its
+                      existing 4-card layout unchanged. The PAN Card Type
+                      dropdown is Atharva-only; the PAN Company Name
+                      input is GRN-only (optional, for corporate PANs). */}
+                  {requiresPan() && (
                     <Card className="p-4 mb-2 shadow-sm border-0">
                       <h5 className="mb-1 fw-bold">
                         Primary Guest PAN Details
                       </h5>
                       <div className="text-muted small mb-3">
-                        PAN is required for Indian nationals booking with
-                        Atharva. Enter the primary guest's PAN card details.
+                        {requiresAtharvaPan()
+                          ? "PAN is required for Indian nationals booking with Atharva. Enter the primary guest's PAN card details."
+                          : "This GRN rate mandates PAN on the holder. Enter the primary guest's PAN details."}
                       </div>
                       <Row className="g-3">
                         <Col md={6}>
@@ -1260,44 +1310,66 @@ const ApiBookingPageForHotels = () => {
                             )}
                           </Form.Group>
                         </Col>
-                        <Col md={6}>
-                          <Form.Group>
-                            <Form.Label className="fw-semibold">
-                              PAN Card Type{" "}
-                              <span className="text-danger">*</span>
-                            </Form.Label>
-                            <Form.Select
-                              value={panCardType}
-                              isInvalid={!!validationErrors.panCardType}
-                              onChange={(e) => {
-                                setPanCardType(e.target.value);
-                                if (validationErrors.panCardType) {
-                                  setValidationErrors((prev) => {
-                                    const next = { ...prev };
-                                    delete next.panCardType;
-                                    return next;
-                                  });
+                        {requiresAtharvaPan() && (
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="fw-semibold">
+                                PAN Card Type{" "}
+                                <span className="text-danger">*</span>
+                              </Form.Label>
+                              <Form.Select
+                                value={panCardType}
+                                isInvalid={!!validationErrors.panCardType}
+                                onChange={(e) => {
+                                  setPanCardType(e.target.value);
+                                  if (validationErrors.panCardType) {
+                                    setValidationErrors((prev) => {
+                                      const next = { ...prev };
+                                      delete next.panCardType;
+                                      return next;
+                                    });
+                                  }
+                                }}
+                              >
+                                {/* Values are the Atharva PANCardType enum
+                                    per §6.1 — sent verbatim on the wire. */}
+                                <option value="2">Personal</option>
+                                <option value="1">Corporate</option>
+                                <option value="3">Government</option>
+                                <option value="4">Proprietor</option>
+                                <option value="5">Firm</option>
+                                <option value="6">HUF</option>
+                                <option value="7">Trust</option>
+                                <option value="8">Education Society</option>
+                              </Form.Select>
+                              {validationErrors.panCardType && (
+                                <Form.Control.Feedback type="invalid">
+                                  {validationErrors.panCardType}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                        )}
+                        {requiresGrnPan() && (
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="fw-semibold">
+                                PAN Company Name{" "}
+                                <span className="text-muted small">
+                                  (optional)
+                                </span>
+                              </Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={panCompanyName}
+                                placeholder="Only for corporate PANs"
+                                onChange={(e) =>
+                                  setPanCompanyName(e.target.value)
                                 }
-                              }}
-                            >
-                              {/* Values are the Atharva PANCardType enum
-                                  per §6.1 — sent verbatim on the wire. */}
-                              <option value="2">Personal</option>
-                              <option value="1">Corporate</option>
-                              <option value="3">Government</option>
-                              <option value="4">Proprietor</option>
-                              <option value="5">Firm</option>
-                              <option value="6">HUF</option>
-                              <option value="7">Trust</option>
-                              <option value="8">Education Society</option>
-                            </Form.Select>
-                            {validationErrors.panCardType && (
-                              <Form.Control.Feedback type="invalid">
-                                {validationErrors.panCardType}
-                              </Form.Control.Feedback>
-                            )}
-                          </Form.Group>
-                        </Col>
+                              />
+                            </Form.Group>
+                          </Col>
+                        )}
                       </Row>
                     </Card>
                   )}
