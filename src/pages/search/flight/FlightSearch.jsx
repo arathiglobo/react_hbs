@@ -365,17 +365,37 @@ const FlightSearch = () => {
                 </Row>
 
                 <Row className="g-3 mt-3">
-                  <Col md={{ span: 6, offset: 3 }}>
+                  <Col className="d-flex justify-content-center">
                     <Button
                       type="submit"
-                      variant="primary"
-                      style={{ width: "100%" }}
+                      size="lg"
                       disabled={loading}
+                      style={{
+                        background: "linear-gradient(135deg, #EC0B43 0%, #C90939 100%)",
+                        border: "none",
+                        borderRadius: 50,
+                        padding: "14px 40px",
+                        fontSize: "1.05rem",
+                        fontWeight: 600,
+                        letterSpacing: "0.02em",
+                        color: "#fff",
+                        boxShadow: "0 4px 15px rgba(236, 11, 67, 0.3)",
+                      }}
                     >
                       {loading ? (
-                        <><Spinner size="sm" animation="border" /> Searching…</>
+                        <>
+                          <Spinner
+                            animation="border"
+                            size="sm"
+                            className="me-2"
+                          />
+                          Searching…
+                        </>
                       ) : (
-                        <><FaSearch style={{ marginRight: 8 }} /> Search Flights</>
+                        <>
+                          <FaSearch className="me-2" />
+                          SEARCH FLIGHTS
+                        </>
                       )}
                     </Button>
                   </Col>

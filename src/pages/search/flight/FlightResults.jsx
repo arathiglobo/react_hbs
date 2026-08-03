@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Card, Row, Col, Button, Badge, Collapse, Spinner, Alert, Form, Pagination } from "react-bootstrap";
+import { Card, Row, Col, Button, Badge, Collapse, Spinner, Alert, Form, Pagination, Modal, Table } from "react-bootstrap";
 import {
   FaPlaneDeparture,
   FaPlaneArrival,
@@ -73,6 +73,95 @@ const CABIN_LABELS = {
 };
 
 const cabinLabel = (code) => CABIN_LABELS[code] || code || "Economy";
+
+// Fallback IATA airline-name dictionary — used when the backend's
+// amadeus_airlines master table lookup returns null / empty for a
+// carrier (typical for smaller / regional airlines the ops team hasn't
+// added yet). Not exhaustive; the master table is authoritative when it
+// has an entry — this only fires as a last resort so the header never
+// shows just the bare 2-letter code.
+const IATA_AIRLINE_FALLBACK = {
+  A3: "Aegean Airlines",
+  AA: "American Airlines",
+  AC: "Air Canada",
+  AF: "Air France",
+  AH: "Air Algérie",
+  AI: "Air India",
+  AM: "Aeroméxico",
+  AT: "Royal Air Maroc",
+  AY: "Finnair",
+  AZ: "ITA Airways",
+  BA: "British Airways",
+  BR: "EVA Air",
+  CA: "Air China",
+  CI: "China Airlines",
+  CX: "Cathay Pacific",
+  CZ: "China Southern",
+  DE: "Condor Flugdienst",
+  DL: "Delta Air Lines",
+  EK: "Emirates",
+  ET: "Ethiopian Airlines",
+  EY: "Etihad Airways",
+  FZ: "flydubai",
+  G9: "Air Arabia",
+  GF: "Gulf Air",
+  HR: "Hahn Air",
+  IB: "Iberia",
+  IX: "Air India Express",
+  JL: "Japan Airlines",
+  KE: "Korean Air",
+  KL: "KLM Royal Dutch Airlines",
+  KQ: "Kenya Airways",
+  KU: "Kuwait Airways",
+  LH: "Lufthansa",
+  LX: "SWISS",
+  LY: "El Al Israel Airlines",
+  ME: "Middle East Airlines",
+  MH: "Malaysia Airlines",
+  MS: "EgyptAir",
+  MU: "China Eastern",
+  NH: "All Nippon Airways",
+  OS: "Austrian Airlines",
+  OZ: "Asiana Airlines",
+  PK: "Pakistan International",
+  QF: "Qantas",
+  QR: "Qatar Airways",
+  RJ: "Royal Jordanian",
+  SA: "South African Airways",
+  SG: "SpiceJet",
+  SN: "Brussels Airlines",
+  SQ: "Singapore Airlines",
+  SU: "Aeroflot",
+  SV: "Saudia",
+  TG: "Thai Airways",
+  TK: "Turkish Airlines",
+  UA: "United Airlines",
+  UK: "Vistara",
+  UL: "SriLankan Airlines",
+  VN: "Vietnam Airlines",
+  VS: "Virgin Atlantic",
+  WY: "Oman Air",
+  XY: "flynas",
+  XQ: "SunExpress",
+  "6E": "IndiGo",
+  "9W": "Jet Airways",
+};
+
+/**
+ * Resolve a human airline name. Priority:
+ *   1) explicit name from the Amadeus master-table lookup (backend enrichment)
+ *   2) fallback dictionary above
+ *   3) null — so the caller knows there's no meaningful name and can
+ *      skip rendering a redundant "RJ RJ" span
+ */
+const resolveAirlineName = (name, code) => {
+  const trimmed = (name || "").trim();
+  if (trimmed && trimmed.toUpperCase() !== (code || "").toUpperCase()) {
+    return trimmed;
+  }
+  const fallback = code ? IATA_AIRLINE_FALLBACK[code.toUpperCase()] : null;
+  return fallback || null;
+};
 
 // Module-level cache of logo URLs known to 404. Populated by the first
 // AirlineLogo card that tries a URL and fails; every subsequent card with
@@ -169,17 +258,51 @@ const fmtAmount = (v, cur) => {
 /* ─── Single result card (matches /new-booking/hotel card shape) ─── */
 const FlightCard = ({ rec, onSelect, convert }) => {
   const [open, setOpen] = useState(false);
+  // Per-segment "Flight Info" modal state — key is `${legIndex}.${segIndex}`
+  // so multiple segments on the same card can each open independently.
+  const [infoTarget, setInfoTarget] = useState(null); // { segment, key }
+  const [infoData, setInfoData] = useState(null);
+  const [infoLoading, setInfoLoading] = useState(false);
+  const [infoError, setInfoError] = useState(null);
+
+  const openFlightInfo = (segment, key) => {
+    setInfoTarget({ segment, key });
+    setInfoData(null);
+    setInfoError(null);
+    setInfoLoading(true);
+    axiosInstance
+      .post("/custom/amadeus/flightInfo", {
+        origin: segment.departureAirportCode || segment.from,
+        destination: segment.arrivalAirportCode || segment.to,
+        marketingCarrier: segment.marketingCarrier,
+        flightNumber: segment.flightNumber,
+        departureDateTime: segment.departureDateTime,
+      })
+      .then((res) => {
+        const data = res?.data || {};
+        if (data.success === false) {
+          setInfoError(data.errorMessage || "Could not load flight info.");
+        } else {
+          setInfoData(data);
+        }
+      })
+      .catch((err) => {
+        setInfoError(
+          err?.response?.data?.message ||
+            err?.message ||
+            "Could not load flight info.",
+        );
+      })
+      .finally(() => setInfoLoading(false));
+  };
   const legs = rec.legs || [];
   const firstLeg = legs[0];
   const firstSeg = firstLeg?.segments?.[0];
-  const airline = firstSeg?.airLineName || rec.validatingCarrier || "";
   const carrier = firstSeg?.marketingCarrier || rec.validatingCarrier;
-  // Prefer "Air India (AI)" — falls back to just the code when the
-  // AmadeusAirlines lookup did not return a friendly name for this
-  // carrier (e.g. code not present in the master table yet).
-  const airlineDisplay = airline && carrier && airline !== carrier
-    ? `${airline} (${carrier})`
-    : (airline || carrier || "");
+  // Resolved airline name — prefers backend enrichment, then falls
+  // back to the IATA_AIRLINE_FALLBACK dictionary. Returns null when we
+  // have no meaningful name so the header doesn't render "RJ RJ".
+  const airlineName = resolveAirlineName(firstSeg?.airLineName, carrier);
   const cabin = firstSeg?.cabin;
   const pax0 = rec.passengers?.[0];
   const fd = pax0?.fareDetails;
@@ -193,37 +316,79 @@ const FlightCard = ({ rec, onSelect, convert }) => {
         <Row className="g-3">
           {/* Left column — airline + route summary */}
           <Col lg={8} md={7}>
-            <Row className="g-3 align-items-center">
-              <Col xs="auto">
-                <AirlineLogo src={firstSeg?.airlineLogo} code={carrier} />
-              </Col>
-              <Col>
-                <div style={{ fontWeight: 600, fontSize: 15 }}>{airlineDisplay}</div>
-                <div className="text-muted" style={{ fontSize: 12 }}>
-                  {firstSeg?.flightNumber ? `${carrier}${firstSeg.flightNumber}` : carrier}
-                  {cabin ? ` · ${cabinLabel(cabin)}` : ""}
-                </div>
-              </Col>
-            </Row>
+            {/* Airline header row: [logo] [code chip] full airline name.
+                Matches the old project's compact single-line header. */}
+            <div
+              className="d-flex align-items-center"
+              style={{
+                gap: 10,
+                paddingBottom: 10,
+                borderBottom: "1px solid #f1f3f5",
+                marginBottom: 12,
+              }}
+            >
+              <AirlineLogo src={firstSeg?.airlineLogo} code={carrier} />
+              {carrier && (
+                <span
+                  style={{
+                    background: "#f1f3f5",
+                    color: "#212529",
+                    padding: "2px 10px",
+                    borderRadius: 4,
+                    fontWeight: 700,
+                    fontSize: 13,
+                    letterSpacing: 0.5,
+                  }}
+                >
+                  {carrier}
+                </span>
+              )}
+              {/* Only render the name when we actually resolved one —
+                  prevents the "RJ RJ" repetition when neither the DB
+                  nor the fallback dictionary knows the carrier. */}
+              {airlineName && (
+                <span style={{ fontWeight: 600, fontSize: 15 }}>
+                  {airlineName}
+                </span>
+              )}
+            </div>
 
-            {/* Per-leg summary row */}
+            {/* Per-leg summary row with "Depart {date}" heading above the times. */}
             {legs.map((leg, i) => {
               const first = leg.segments?.[0];
               const last = leg.segments?.[leg.segments.length - 1];
+              const departLabel = fmtDate(first?.departureDateTime);
               return (
-                <div key={i} style={{ marginTop: 14, borderTop: i > 0 ? "1px dashed #e9ecef" : "none", paddingTop: i > 0 ? 10 : 0 }}>
+                <div
+                  key={i}
+                  style={{
+                    marginTop: i > 0 ? 14 : 0,
+                    borderTop: i > 0 ? "1px dashed #e9ecef" : "none",
+                    paddingTop: i > 0 ? 10 : 0,
+                  }}
+                >
+                  {departLabel && (
+                    <div
+                      className="text-muted"
+                      style={{ fontSize: 12, fontWeight: 600, marginBottom: 4 }}
+                    >
+                      Depart {new Date(first?.departureDateTime).toLocaleDateString(
+                        undefined,
+                        { weekday: "short", day: "2-digit", month: "short" },
+                      )}
+                    </div>
+                  )}
                   <Row className="g-2 align-items-center">
-                    <Col xs={3}>
-                      <div style={{ fontWeight: 700, fontSize: 18 }}>{fmtTime(first?.departureDateTime)}</div>
+                    <Col xs={4}>
+                      <div style={{ fontWeight: 700, fontSize: 22 }}>{fmtTime(first?.departureDateTime)}</div>
                       <div className="text-muted" style={{ fontSize: 12 }}>
                         {first?.departureCityName
                           ? `${first.departureCityName} (${first?.departureAirportCode || leg.from})`
                           : (first?.departureAirportCode || leg.from)}
                       </div>
-                      <div className="text-muted" style={{ fontSize: 11 }}>{fmtDate(first?.departureDateTime)}</div>
                     </Col>
-                    <Col xs={6} className="text-center">
-                      <div className="text-muted" style={{ fontSize: 12 }}>
+                    <Col xs={4} className="text-center">
+                      <div className="text-muted" style={{ fontSize: 12, fontWeight: 500 }}>
                         <FaClock style={{ marginRight: 4 }} />
                         {legDuration(leg) || "—"}
                       </div>
@@ -234,62 +399,91 @@ const FlightCard = ({ rec, onSelect, convert }) => {
                           position: "absolute", right: -6, top: -8, color: "#0d6efd",
                         }} />
                       </div>
-                      <Badge bg={leg.segments?.length > 1 ? "warning" : "success"} style={{ fontSize: 11 }}>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: leg.segments?.length > 1 ? "#b45309" : "#15803d",
+                        }}
+                      >
                         {stopsLabel(leg)}
                         {stopCities(leg).length > 0 ? ` · via ${stopCities(leg).join(", ")}` : ""}
-                      </Badge>
+                      </div>
                     </Col>
-                    <Col xs={3} className="text-end">
-                      <div style={{ fontWeight: 700, fontSize: 18 }}>{fmtTime(last?.arrivalDateTime)}</div>
+                    <Col xs={4} className="text-end">
+                      <div style={{ fontWeight: 700, fontSize: 22 }}>{fmtTime(last?.arrivalDateTime)}</div>
                       <div className="text-muted" style={{ fontSize: 12 }}>
                         {last?.arrivalCityName
                           ? `${last.arrivalCityName} (${last?.arrivalAirportCode || leg.to})`
                           : (last?.arrivalAirportCode || leg.to)}
                       </div>
-                      <div className="text-muted" style={{ fontSize: 11 }}>{fmtDate(last?.arrivalDateTime)}</div>
                     </Col>
                   </Row>
                 </div>
               );
             })}
 
-            <div className="mt-3 d-flex" style={{ gap: 12, flexWrap: "wrap" }}>
+            <div className="mt-3">
               <span className="text-muted" style={{ fontSize: 12 }}>
                 <FaSuitcase style={{ marginRight: 4 }} />
                 Baggage: {fd?.baggageDetails?.checkInBaggage ||
                   (fd?.baggage ? `${fd.baggage.allowance ?? ""} ${fd.baggage.unit ?? ""}`.trim() : "As per airline")}
               </span>
-              <Button
-                variant="link"
-                size="sm"
-                style={{ padding: 0, fontSize: 12 }}
-                onClick={() => setOpen((o) => !o)}
-                aria-expanded={open}
-              >
-                {open ? <FaChevronUp /> : <FaChevronDown />} {open ? "Hide" : "Show"} flight details
-              </Button>
             </div>
           </Col>
 
-          {/* Right column — price + CTA */}
+          {/* Right column — price + CTA + expander chevron */}
           <Col lg={4} md={5} className="d-flex flex-column align-items-end justify-content-between">
-            <div className="text-end">
-              <div className="text-muted" style={{ fontSize: 12 }}>
-                Total ({totalConv.code || "AED"})
+            <div className="d-flex align-items-start" style={{ gap: 10, width: "100%", justifyContent: "flex-end" }}>
+              <div className="text-end">
+                <div className="text-muted" style={{ fontSize: 12 }}>
+                  Total ({totalConv.code || "AED"})
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: "#0d6efd" }}>
+                  {fmtAmount(totalConv.amount, totalConv.code)}
+                </div>
+                <div className="text-muted" style={{ fontSize: 11 }}>
+                  tax {fmtAmount(taxConv.amount, taxConv.code)}
+                </div>
+                <div
+                  className="mt-1"
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: rec.pricing?.refundable ? "#15803d" : "#6b7280",
+                  }}
+                >
+                  {rec.pricing?.fareType || (rec.pricing?.refundable ? "Refundable" : "Non-refundable")}
+                </div>
               </div>
-              <div style={{ fontSize: 22, fontWeight: 700, color: "#0d6efd" }}>
-                {fmtAmount(totalConv.amount, totalConv.code)}
-              </div>
-              <div className="text-muted" style={{ fontSize: 11 }}>
-                tax {fmtAmount(taxConv.amount, taxConv.code)}
-              </div>
-              <Badge
-                bg={rec.pricing?.refundable ? "success" : "secondary"}
-                className="mt-1"
-                style={{ fontSize: 11 }}
+              {/* Circular chevron toggle — matches the old project's
+                  blue arrow next to the Refundable label. Rotates 180°
+                  when expanded so the arrow points up. */}
+              <button
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                aria-expanded={open}
+                aria-label={open ? "Hide flight details" : "Show flight details"}
+                title={open ? "Hide flight details" : "Show flight details"}
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: "50%",
+                  background: "#0d6efd",
+                  color: "#fff",
+                  border: "none",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  boxShadow: "0 2px 6px rgba(13, 110, 253, 0.35)",
+                  transition: "transform 0.2s ease",
+                  transform: open ? "rotate(180deg)" : "rotate(0deg)",
+                  flexShrink: 0,
+                }}
               >
-                {rec.pricing?.fareType || (rec.pricing?.refundable ? "Refundable" : "Non-refundable")}
-              </Badge>
+                <FaChevronDown style={{ fontSize: 14 }} />
+              </button>
             </div>
             <Button
               variant="primary"
@@ -307,54 +501,204 @@ const FlightCard = ({ rec, onSelect, convert }) => {
           <div className="mt-3 pt-3" style={{ borderTop: "1px solid #f1f3f5" }}>
             {legs.map((leg, i) => (
               <div key={i} className="mb-3">
-                <div style={{ fontWeight: 600, marginBottom: 6 }}>
-                  Leg {leg.legIndex || i + 1}: {leg.from} → {leg.to}
-                  <span className="text-muted ms-2" style={{ fontSize: 12 }}>
-                    {legDuration(leg)}
-                  </span>
-                </div>
                 {leg.segments?.map((s, j) => (
                   <div
                     key={j}
-                    style={{ padding: 8, background: "#f8f9fa", borderRadius: 6, marginBottom: 6, fontSize: 13 }}
+                    style={{
+                      padding: "16px 18px",
+                      background: "#fff",
+                      border: "1px solid #e5e7eb",
+                      borderRadius: 12,
+                      marginBottom: 10,
+                    }}
                   >
                     <Row className="g-2 align-items-center">
-                      <Col md={3}>
-                        <FaPlaneDeparture className="text-muted" style={{ marginRight: 6 }} />
-                        <strong>{s.departureAirportCode}</strong> {fmtTime(s.departureDateTime)}
-                        <div className="text-muted" style={{ fontSize: 11 }}>
-                          {fmtDate(s.departureDateTime)} {s.departureTerminal ? `· T${s.departureTerminal}` : ""}
+                      {/* Airline logo + flight number */}
+                      <Col md={2} className="d-flex align-items-center" style={{ gap: 10 }}>
+                        <AirlineLogo src={s.airlineLogo} code={s.marketingCarrier} />
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>
+                          [{s.marketingCarrier}] - {s.flightNumber}
                         </div>
                       </Col>
-                      <Col md={2} className="text-center">
-                        <FaClock style={{ opacity: 0.6, marginRight: 4 }} />
-                        <span className="text-muted" style={{ fontSize: 12 }}>
-                          {durationBetween(s.departureDateTime, s.arrivalDateTime)}
-                        </span>
-                      </Col>
+
+                      {/* Departure — big time + airport code pill + date + terminal */}
                       <Col md={3}>
-                        <FaPlaneArrival className="text-muted" style={{ marginRight: 6 }} />
-                        <strong>{s.arrivalAirportCode}</strong> {fmtTime(s.arrivalDateTime)}
-                        <div className="text-muted" style={{ fontSize: 11 }}>
-                          {fmtDate(s.arrivalDateTime)} {s.arrivalTerminal ? `· T${s.arrivalTerminal}` : ""}
+                        <div className="d-flex align-items-center" style={{ gap: 8 }}>
+                          <div style={{ fontWeight: 700, fontSize: 22 }}>
+                            {fmtTime(s.departureDateTime)}
+                          </div>
+                          <span
+                            style={{
+                              background: "#dbeafe",
+                              color: "#1e40af",
+                              padding: "2px 8px",
+                              borderRadius: 4,
+                              fontWeight: 700,
+                              fontSize: 12,
+                            }}
+                          >
+                            {s.departureAirportCode}
+                          </span>
                         </div>
-                      </Col>
-                      <Col md={4}>
-                        <span style={{ fontSize: 12 }}>
-                          <strong>{s.marketingCarrier}{s.flightNumber}</strong>
-                          {s.aircraft ? ` · ${s.aircraft}` : ""}
-                          {s.cabin ? ` · ${cabinLabel(s.cabin)}` : ""}
-                          {s.bookingClass ? ` (${s.bookingClass})` : ""}
-                        </span>
-                        {s.airLineName && (
-                          <div className="text-muted" style={{ fontSize: 11 }}>{s.airLineName}</div>
+                        <div className="text-muted" style={{ fontSize: 11, marginTop: 2 }}>
+                          {fmtDate(s.departureDateTime)}
+                        </div>
+                        {s.departureTerminal && (
+                          <span
+                            style={{
+                              display: "inline-block",
+                              marginTop: 4,
+                              background: "#f1f3f5",
+                              padding: "2px 8px",
+                              borderRadius: 4,
+                              fontSize: 11,
+                            }}
+                          >
+                            Terminal {s.departureTerminal}
+                          </span>
                         )}
+                      </Col>
+
+                      {/* Middle — duration / NON STOP / aircraft / class stacked */}
+                      <Col md={2} className="text-center">
+                        <div
+                          style={{
+                            background: "#dbeafe",
+                            color: "#1e40af",
+                            padding: "6px 10px",
+                            borderRadius: 8,
+                            display: "inline-block",
+                            minWidth: 90,
+                          }}
+                        >
+                          <div style={{ fontSize: 13, fontWeight: 700 }}>
+                            {durationBetween(s.departureDateTime, s.arrivalDateTime)}
+                          </div>
+                          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.5 }}>
+                            NON STOP
+                          </div>
+                        </div>
+                        {s.aircraft && (
+                          <div className="text-muted mt-1" style={{ fontSize: 11 }}>
+                            {s.aircraft}
+                          </div>
+                        )}
+                        {s.bookingClass && (
+                          <div
+                            className="mt-1"
+                            style={{
+                              display: "inline-block",
+                              background: "#f1f3f5",
+                              padding: "1px 8px",
+                              borderRadius: 4,
+                              fontSize: 11,
+                              fontWeight: 600,
+                            }}
+                          >
+                            {s.bookingClass}
+                          </div>
+                        )}
+                      </Col>
+
+                      {/* Arrival — big time + airport code pill + date + terminal */}
+                      <Col md={3}>
+                        <div className="d-flex align-items-center justify-content-end" style={{ gap: 8 }}>
+                          <div style={{ fontWeight: 700, fontSize: 22 }}>
+                            {fmtTime(s.arrivalDateTime)}
+                          </div>
+                          <span
+                            style={{
+                              background: "#dcfce7",
+                              color: "#15803d",
+                              padding: "2px 8px",
+                              borderRadius: 4,
+                              fontWeight: 700,
+                              fontSize: 12,
+                            }}
+                          >
+                            {s.arrivalAirportCode}
+                          </span>
+                        </div>
+                        <div className="text-muted text-end" style={{ fontSize: 11, marginTop: 2 }}>
+                          {fmtDate(s.arrivalDateTime)}
+                        </div>
+                        {s.arrivalTerminal && (
+                          <div className="text-end">
+                            <span
+                              style={{
+                                display: "inline-block",
+                                marginTop: 4,
+                                background: "#f1f3f5",
+                                padding: "2px 8px",
+                                borderRadius: 4,
+                                fontSize: 11,
+                              }}
+                            >
+                              Terminal {s.arrivalTerminal}
+                            </span>
+                          </div>
+                        )}
+                      </Col>
+
+                      {/* Flight Info link on the right */}
+                      <Col md={2} className="text-end">
+                        <Button
+                          variant="outline-primary"
+                          size="sm"
+                          style={{ fontSize: 11, padding: "4px 10px" }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openFlightInfo(s, `${leg.legIndex || i + 1}.${j}`);
+                          }}
+                        >
+                          <FaInfoCircle style={{ marginRight: 4 }} />
+                          Flight info
+                        </Button>
                       </Col>
                     </Row>
                   </div>
                 ))}
               </div>
             ))}
+
+            {/* Cancellation policy strip — matches old project's summary bar
+                below the flight card. Shows stops badge + refund policy. */}
+            <div
+              className="d-flex align-items-center flex-wrap"
+              style={{
+                gap: 16,
+                padding: "12px 16px",
+                background: "#fefce8",
+                border: "1px solid #fde68a",
+                borderRadius: 10,
+                marginBottom: 8,
+              }}
+            >
+              <Badge
+                bg={legs[0]?.segments?.length > 1 ? "warning" : "primary"}
+                style={{ fontSize: 12, padding: "8px 14px", letterSpacing: 0.5 }}
+              >
+                {stopsLabel(legs[0] || {}).toUpperCase()}
+              </Badge>
+              <div style={{ fontSize: 13 }}>
+                <strong>Cancellation Policy:</strong>{" "}
+                <span
+                  style={{
+                    color: rec.pricing?.refundable ? "#15803d" : "#b91c1c",
+                    fontWeight: 600,
+                  }}
+                >
+                  {rec.pricing?.refundable
+                    ? "Refundable"
+                    : "Non-Refundable After Departure"}
+                </span>
+                <div className="text-muted" style={{ fontSize: 11, marginTop: 2 }}>
+                  {rec.pricing?.refundable
+                    ? "Ticket refund allowed per airline rules"
+                    : "Tickets are non-refundable after departure"}
+                </div>
+              </div>
+            </div>
 
             {/* Fare details */}
             <div className="pt-2" style={{ borderTop: "1px solid #f1f3f5" }}>
@@ -387,7 +731,194 @@ const FlightCard = ({ rec, onSelect, convert }) => {
           </div>
         </Collapse>
       </Card.Body>
+
+      {/* Flight Info modal — per-segment operational detail from
+          Air_FlightInfo (equipment, terminals, gates, mileage, cabin
+          capacity). Fetches on open. */}
+      <FlightInfoModal
+        target={infoTarget}
+        loading={infoLoading}
+        error={infoError}
+        data={infoData}
+        onClose={() => setInfoTarget(null)}
+      />
     </Card>
+  );
+};
+
+/* ─── FlightInfoModal — modal rendering Air_FlightInfo response ─── */
+const FlightInfoModal = ({ target, loading, error, data, onClose }) => {
+  const show = !!target;
+  const s = target?.segment || {};
+  const formatDuration = (mins) => {
+    if (mins == null) return "—";
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${h}h ${String(m).padStart(2, "0")}m`;
+  };
+  const cabinName = (c) =>
+    ({ F: "First", C: "Business", W: "Premium Economy", M: "Economy", Y: "Economy" }[c] || c);
+
+  return (
+    <Modal show={show} onHide={onClose} size="lg" centered scrollable>
+      <Modal.Header closeButton>
+        <Modal.Title style={{ fontSize: 18 }}>
+          <FaInfoCircle style={{ marginRight: 8, color: "#0d6efd" }} />
+          Flight Info
+          {s.marketingCarrier && s.flightNumber && (
+            <span className="text-muted ms-2" style={{ fontSize: 14, fontWeight: 400 }}>
+              · {s.marketingCarrier}
+              {s.flightNumber} · {s.departureAirportCode || s.from} →{" "}
+              {s.arrivalAirportCode || s.to}
+            </span>
+          )}
+        </Modal.Title>
+      </Modal.Header>
+      <Modal.Body>
+        {loading && (
+          <div className="text-center py-4">
+            <Spinner animation="border" variant="primary" />
+            <div className="text-muted mt-3">Fetching flight details from Amadeus…</div>
+          </div>
+        )}
+        {!loading && error && (
+          <Alert variant="danger" className="mb-0" style={{ fontSize: 13 }}>
+            {error}
+          </Alert>
+        )}
+        {!loading && !error && data && (
+          <>
+            <Row className="g-3 mb-3">
+              <Col md={6}>
+                <div className="text-muted small">Aircraft</div>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>
+                  {data.aircraftType || "—"}
+                  {data.aircraftDescription && (
+                    <span
+                      className="text-muted ms-2"
+                      style={{ fontSize: 12, fontWeight: 400 }}
+                    >
+                      {data.aircraftDescription}
+                    </span>
+                  )}
+                </div>
+              </Col>
+              <Col md={3}>
+                <div className="text-muted small">Duration</div>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>
+                  {formatDuration(data.durationMinutes)}
+                </div>
+              </Col>
+              <Col md={3}>
+                <div className="text-muted small">Stops</div>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>
+                  {data.numberOfStops != null ? data.numberOfStops : "—"}
+                </div>
+              </Col>
+            </Row>
+
+            <Row className="g-3 mb-3">
+              <Col md={6}>
+                <div className="text-muted small">Departure</div>
+                <div style={{ fontSize: 13 }}>
+                  <strong>{data.origin}</strong>
+                  {data.departureTerminal && ` · Terminal ${data.departureTerminal}`}
+                  {data.departureGate && ` · Gate ${data.departureGate}`}
+                </div>
+              </Col>
+              <Col md={6}>
+                <div className="text-muted small">Arrival</div>
+                <div style={{ fontSize: 13 }}>
+                  <strong>{data.destination}</strong>
+                  {data.arrivalTerminal && ` · Terminal ${data.arrivalTerminal}`}
+                  {data.arrivalGate && ` · Gate ${data.arrivalGate}`}
+                </div>
+              </Col>
+            </Row>
+
+            {(data.flightMileage != null ||
+              (data.intermediateStops && data.intermediateStops.length > 0)) && (
+              <Row className="g-3 mb-3">
+                {data.flightMileage != null && (
+                  <Col md={6}>
+                    <div className="text-muted small">Mileage</div>
+                    <div style={{ fontSize: 13 }}>
+                      {data.flightMileage} {data.mileageUnit || ""}
+                    </div>
+                  </Col>
+                )}
+                {data.intermediateStops && data.intermediateStops.length > 0 && (
+                  <Col md={6}>
+                    <div className="text-muted small">Intermediate stops</div>
+                    <div style={{ fontSize: 13 }}>
+                      {data.intermediateStops.join(" → ")}
+                    </div>
+                  </Col>
+                )}
+              </Row>
+            )}
+
+            {data.cabinCapacities && data.cabinCapacities.length > 0 && (
+              <div className="mb-3">
+                <div className="text-muted small mb-1">Cabin capacity</div>
+                <Table size="sm" bordered className="mb-0" style={{ fontSize: 13 }}>
+                  <thead style={{ background: "#f8f9fa" }}>
+                    <tr>
+                      <th>Cabin</th>
+                      <th className="text-end">Seats</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.cabinCapacities.map((c, i) => (
+                      <tr key={i}>
+                        <td>{cabinName(c.classDesignator)}</td>
+                        <td className="text-end">{c.seats}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </div>
+            )}
+
+            {data.bookingClasses && data.bookingClasses.length > 0 && (
+              <div className="mb-3">
+                <div className="text-muted small mb-1">
+                  Booking class availability
+                </div>
+                <div className="d-flex flex-wrap" style={{ gap: 6 }}>
+                  {data.bookingClasses.map((bc, i) => (
+                    <Badge
+                      key={i}
+                      bg={bc.status === "0" || bc.status === "C" ? "secondary" : "primary"}
+                      style={{ fontSize: 12, padding: "6px 10px" }}
+                    >
+                      {bc.designator}
+                      {bc.status ? ` (${bc.status})` : ""}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {data.notes && data.notes.length > 0 && (
+              <Alert variant="info" className="mb-0" style={{ fontSize: 12 }}>
+                <strong>Notes</strong>
+                <ul className="mb-0 mt-1" style={{ paddingLeft: 18 }}>
+                  {data.notes.map((n, i) => (
+                    <li key={i}>{n}</li>
+                  ))}
+                </ul>
+              </Alert>
+            )}
+          </>
+        )}
+      </Modal.Body>
+      <Modal.Footer>
+        <Button variant="secondary" onClick={onClose}>
+          Close
+        </Button>
+      </Modal.Footer>
+    </Modal>
   );
 };
 

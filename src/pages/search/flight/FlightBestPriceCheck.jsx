@@ -398,7 +398,7 @@ const FlightBestPriceCheck = () => {
       // agent context (and everything else the booking page needs) travels
       // in React Router state instead so the URL stays shareable-clean.
       "/new-booking/flightBookPage",
-      { state: { rec, pax, fare, fareCurrency, selectedFamily: family } },
+      { state: { rec, pax, fare, fareCurrency, selectedFamily: family, agentId } },
     );
   };
 
@@ -691,8 +691,9 @@ const FlightBestPriceCheck = () => {
                   </pre>
                 </>
               ) : (
-                <Alert variant="secondary" className="mb-0">
-                  Amadeus returned no rule text for this fare.
+                <Alert variant="info" className="mb-0" style={{ fontSize: 13 }}>
+                  {rulesData.notice ||
+                    "Amadeus returned no rule text for this fare. This is typical for airline-negotiated or private fares where rule details are not published via the standard Fare_CheckRules payload. Contact the airline directly or consult the fare's contract terms for the applicable rules."}
                 </Alert>
               )}
             </>

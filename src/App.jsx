@@ -325,6 +325,7 @@ import UserRoles from "./pages/master/UserRoles";
 import FlightSearch from "./pages/search/flight/FlightSearch";
 import FlightBestPriceCheck from "./pages/search/flight/FlightBestPriceCheck";
 import FlightBookPlaceholder from "./pages/search/flight/FlightBookPlaceholder";
+import FlightBookPage from "./pages/search/flight/FlightBookPage";
 import FlightBookingList from "./pages/list/FlightBookingList";
 
 
@@ -523,8 +524,11 @@ export default function App() {
                and is the eventual home of the real passenger-form page.
              Keeping both wired ensures neither link 404s while the real
              page is under construction. */}
+         {/* /new-booking/flightBook stays on the placeholder for backwards
+             compat; the real booking form lives at /flightBookPage — that's
+             where "Book Now" on the Fare Details page navigates. */}
          <Route path="/new-booking/flightBook" element={<PrivateRoute><FlightBookPlaceholder/></PrivateRoute>} />
-         <Route path="/new-booking/flightBookPage" element={<PrivateRoute><FlightBookPlaceholder/></PrivateRoute>} />
+         <Route path="/new-booking/flightBookPage" element={<PrivateRoute><FlightBookPage/></PrivateRoute>} />
         {/* Dedicated 24-Hour Check-In room list + booking page — same
             components as /room-list and /hotel-booking-page but with
             `force24Hour` so the post-rate-pick navigation and the
