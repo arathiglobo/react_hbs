@@ -133,6 +133,7 @@ import PolicyCreate from "./pages/HotelActions/Policy/PolicyCreate";
 import CompanyProfile from "./pages/CompanyProfile";
 import Profile from "./pages/Profile/Profile";
 import ChangePassword from "./pages/Profile/ChangePassword";
+import TwoFactorAuth from "./pages/Profile/TwoFactorAuth";
 import Logout from "./pages/Profile/Logout";
 import MakePkgCombineSearch from "./pages/search/MakePkgCombineSearch";
 import AccomodationRoomList from "./pages/roomlist/makeyourownpkg/AccomodationRoomList";
@@ -398,6 +399,10 @@ export default function App() {
         {/* Topbar profile  */}
         <Route path="/view-profile" element={<PrivateRoute><Profile /> </PrivateRoute> }/>
         <Route path="/change-password" element={<PrivateRoute><ChangePassword /> </PrivateRoute> }/>
+        {/* Two-factor authentication is an agent-only feature — only agent
+            logins are challenged for a second factor, so the enrolment page is
+            scoped to them. The backend refuses non-agent callers as well. */}
+        <Route path="/two-factor-authentication" element={<PrivateRoute roles={["agent"]}><TwoFactorAuth /> </PrivateRoute> }/>
         <Route path="/log-out" element={<PrivateRoute><Logout /> </PrivateRoute> }/>
 
         {/* Masters */}
