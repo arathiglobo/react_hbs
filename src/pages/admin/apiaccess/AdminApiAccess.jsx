@@ -86,6 +86,18 @@ const CREDENTIAL_SCHEMAS = {
     { key: "baseUrl", label: "Base URL (grn.api.base-url)", type: "text" },
     { key: "apiKey", label: "API Key (grn.api.key)", type: "password" },
   ],
+  // Keys map to GoGlobalCredentials.fromMap() on the backend, which also
+  // accepts base-url/base_url/url, agencyId/agency-id, userName/username
+  // and passwd/pwd. GoGlobal issues a DEDICATED endpoint per client, so
+  // baseUrl is the origin only and servicePath is appended to it — leave
+  // servicePath blank to fall back to goglobal.api.service-path.
+  GOGLOBAL: [
+    { key: "baseUrl", label: "Base URL (goglobal.api.base-url)", type: "text" },
+    { key: "servicePath", label: "Service Path — optional (goglobal.api.service-path)", type: "text" },
+    { key: "agency", label: "Agency ID (goglobal.api.agency)", type: "text" },
+    { key: "user", label: "User (goglobal.api.user)", type: "text" },
+    { key: "password", label: "Password (goglobal.api.password)", type: "password" },
+  ],
   // INHOUSE reads from the app's own DB — no external credentials to set.
   INHOUSE: [],
 };

@@ -671,6 +671,7 @@ export default function HotelSearch({
      { value: "jumeirah", label: "Jumeirah" },
      { value: "ratehawk", label: "Ratehawk" },
      { value: "darina", label: "Darina" },
+     { value: "goglobal", label: "GoGlobal" },
   ];
 
   // Narrows the Channel sidebar filter (and the SearchProgressBar pills)
