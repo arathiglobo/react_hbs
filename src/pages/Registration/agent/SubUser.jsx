@@ -1,11 +1,130 @@
-import React, { useEffect, useState } from "react";
-import { Badge, Card, Button, Table, Modal, Form, Pagination, InputGroup } from "react-bootstrap";
+import React, { useEffect, useRef, useState } from "react";
+import { Badge, Card, Button, Table, Modal, Form, Pagination, InputGroup, Spinner } from "react-bootstrap";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import { FaEdit, FaTrash, FaSignInAlt, FaEye, FaEyeSlash } from "react-icons/fa";
+
+// Searchable Select — same component pattern as SubAgent.jsx. Accepts an
+// optional onSearch callback for server-side search (used for the Country
+// list, which is paginated on the API); when absent, falls back to a plain
+// client-side filter over the pre-loaded options (used for City, which is
+// fully loaded once the country is picked).
+const SearchableSelect = ({ label, name, value, options, onChange, placeholder, onSearch, isLoading, error, required, disabled }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const handleSelect = (option) => {
+    onChange({ target: { name, value: option.id } });
+    setIsOpen(false);
+    setSearchTerm("");
+  };
+
+  const selectedOption = options.find((opt) => String(opt.id) === String(value));
+  // Client-side filter — kicks in only when the caller isn't doing server-side
+  // search. Matches on any of the label-carrying fields the render uses below.
+  const visibleOptions = onSearch || !searchTerm
+    ? options
+    : options.filter((opt) => {
+        const label = opt.name || opt.stateName || opt.cityName || "";
+        return label.toLowerCase().includes(searchTerm.toLowerCase());
+      });
+
+  return (
+    <Form.Group className="mb-3" ref={dropdownRef}>
+      <Form.Label className="small fw-bold">
+        {required && <span className="text-danger">* </span>}
+        {label}
+      </Form.Label>
+      <div className="position-relative">
+        <div
+          className={`form-select ${error ? "is-invalid" : ""} ${disabled ? "bg-light" : ""}`}
+          onClick={() => !disabled && setIsOpen(!isOpen)}
+          style={{
+            cursor: disabled ? "not-allowed" : "pointer",
+            fontSize: "0.85rem",
+            minHeight: "35px",
+            backgroundColor: disabled ? "#e9ecef" : "#fff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            paddingRight: "2rem",
+            backgroundImage:
+              'url("data:image/svg+xml,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 16 16\'%3e%3cpath fill=\'none\' stroke=\'%23343a40\' stroke-linecap=\'round\' stroke-linejoin=\'round\' stroke-width=\'2\' d=\'m2 5 6 6 6-6\'/%3e%3c/svg%3e")',
+            backgroundRepeat: "no-repeat",
+            backgroundPosition: "right .75rem center",
+            backgroundSize: "12px 9px",
+          }}
+        >
+          <span className={selectedOption ? "" : "text-muted"}>
+            {selectedOption
+              ? (selectedOption.name || selectedOption.stateName || selectedOption.cityName)
+              : (placeholder || "SELECT")}
+          </span>
+        </div>
+        {error && (
+          <div className="invalid-feedback d-block" style={{ fontSize: "0.7rem" }}>
+            {error}
+          </div>
+        )}
+        {isOpen && !disabled && (
+          <div
+            className="position-absolute w-100 bg-white shadow-lg rounded-2 border mt-1"
+            style={{ zIndex: 1050, maxHeight: "200px", overflowY: "auto" }}
+          >
+            <div className="p-2 border-bottom sticky-top bg-white">
+              <Form.Control
+                size="sm"
+                autoFocus
+                placeholder="Search..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  if (onSearch) onSearch(e.target.value);
+                }}
+              />
+            </div>
+            <div className="py-1">
+              {isLoading ? (
+                <div className="text-center py-2">
+                  <Spinner animation="border" size="sm" />
+                </div>
+              ) : visibleOptions.length > 0 ? (
+                visibleOptions.map((opt) => (
+                  <div
+                    key={opt.id}
+                    className="px-3 py-1"
+                    style={{ cursor: "pointer", fontSize: "0.85rem" }}
+                    onClick={() => handleSelect(opt)}
+                    onMouseEnter={(e) => (e.target.style.backgroundColor = "#f8f9fa")}
+                    onMouseLeave={(e) => (e.target.style.backgroundColor = "transparent")}
+                  >
+                    {opt.name || opt.stateName || opt.cityName}
+                  </div>
+                ))
+              ) : (
+                <div className="px-3 py-1 text-muted small text-center">No options found</div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </Form.Group>
+  );
+};
 
 const formatMarkupOption = (m) => {
   if (!m) return "";
@@ -57,6 +176,9 @@ export default function SubUser() {
   // province/state master — the place level isn't captured for sub-users.)
   const [countries, setCountries] = useState([]);
   const [provinces, setProvinces] = useState([]);
+  // Loading indicator for the searchable Country dropdown (debounced search).
+  const [isDataLoading, setIsDataLoading] = useState({ countries: false, provinces: false });
+  const searchTimeoutRef = useRef(null);
   // Markup Type + Currency master lists. Currency is displayed read-only after
   // resolving the logged-in sub-agent/main-agent currency.
   const [markupTypes, setMarkupTypes] = useState([]);
@@ -248,8 +370,10 @@ export default function SubUser() {
       // this sub-user's account (backend keys user_accounts by user_id +
       // user_type_id).
       const agentRole = rolesList.find((r) => r.roleName === "AGENT");
+      // subUserType=SUB_USER keeps this from returning a MAIN-agent /
+      // SUB_AGENT row that happens to share the same numeric id.
       const checkUrl = agentRole
-        ? `/auth/checkRegisteredUserExist/${item.id}?userTypeId=${agentRole.id}`
+        ? `/auth/checkRegisteredUserExist/${item.id}?userTypeId=${agentRole.id}&subUserType=SUB_USER`
         : `/auth/checkRegisteredUserExist/${item.id}`;
       const response = await axiosInstance.post(checkUrl);
       if (response.data) {
@@ -347,13 +471,28 @@ export default function SubUser() {
   }, []);
 
   // ── Country → Province → City master loading (mirrors the agent forms) ──
-  const fetchCountries = async () => {
+  // Country list is server-paginated (SearchableSelect drives the search via
+  // handleCountrySearch below); limit=50 keeps the payload lean since the
+  // search box narrows it further as the user types.
+  const fetchCountries = async (search = "") => {
+    setIsDataLoading((prev) => ({ ...prev, countries: true }));
     try {
-      const res = await axiosInstance.get("/api/country?page=0&limit=300&search=");
+      const res = await axiosInstance.get(
+        `/api/country?page=0&limit=50&search=${encodeURIComponent(search)}`
+      );
       setCountries(res.data || []);
     } catch (err) {
       setCountries([]);
+    } finally {
+      setIsDataLoading((prev) => ({ ...prev, countries: false }));
     }
+  };
+
+  const handleCountrySearch = (val) => {
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => {
+      fetchCountries(val);
+    }, 500);
   };
 
   const fetchProvinces = async (countryId) => {
@@ -361,11 +500,14 @@ export default function SubUser() {
       setProvinces([]);
       return;
     }
+    setIsDataLoading((prev) => ({ ...prev, provinces: true }));
     try {
       const res = await axiosInstance.get(`/api/province/getByCountryId/${countryId}`);
       setProvinces(res.data || []);
     } catch (err) {
       setProvinces([]);
+    } finally {
+      setIsDataLoading((prev) => ({ ...prev, provinces: false }));
     }
   };
 
@@ -610,46 +752,37 @@ export default function SubUser() {
                     </Form.Group>
                   </div>
                   <div className="col-md-6 mb-3">
-                    <Form.Group>
-                      <Form.Label className="small fw-bold">Country</Form.Label>
-                      <Form.Select
-                        value={formData.countryId}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            countryId: e.target.value,
-                            // Reset the dependent City selection when country changes.
-                            provinceId: "",
-                          })
-                        }
-                      >
-                        <option value="">Select country</option>
-                        {countries.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </Form.Select>
-                    </Form.Group>
+                    <SearchableSelect
+                      label="Country"
+                      name="countryId"
+                      value={formData.countryId}
+                      options={countries}
+                      placeholder="Select country"
+                      onSearch={handleCountrySearch}
+                      isLoading={isDataLoading.countries}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          countryId: e.target.value,
+                          // Reset the dependent City selection when country changes.
+                          provinceId: "",
+                        })
+                      }
+                    />
                   </div>
                   <div className="col-md-6 mb-3">
-                    <Form.Group>
-                      <Form.Label className="small fw-bold">City</Form.Label>
-                      <Form.Select
-                        value={formData.provinceId}
-                        disabled={!formData.countryId}
-                        onChange={(e) =>
-                          setFormData({ ...formData, provinceId: e.target.value })
-                        }
-                      >
-                        <option value="">Select city</option>
-                        {provinces.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name || p.stateName}
-                          </option>
-                        ))}
-                      </Form.Select>
-                    </Form.Group>
+                    <SearchableSelect
+                      label="City"
+                      name="provinceId"
+                      value={formData.provinceId}
+                      options={provinces}
+                      placeholder="Select city"
+                      disabled={!formData.countryId}
+                      isLoading={isDataLoading.provinces}
+                      onChange={(e) =>
+                        setFormData({ ...formData, provinceId: e.target.value })
+                      }
+                    />
                   </div>
                   <div className="col-md-12 mb-3">
                     <Form.Group>

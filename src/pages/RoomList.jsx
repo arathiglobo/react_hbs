@@ -31,6 +31,7 @@ import {
   FaMoneyBillWave,
   FaShieldAlt,
   FaGlobe,
+  FaExclamationTriangle,
 } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/RoomList.css";
@@ -369,17 +370,34 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
     return required > available;
   };
 
+  // Refundability is owned by the contract rate (the Refundable / Non
+  // Refundable radios on the Contract Rate page persist `refundable`) and
+  // reaches the room list inverted as `nonRefundable`. Providers disagree on
+  // the encoding — inhouse sends boolean / "true", IWTX and X3 send "Y" / "N"
+  // — so normalise before testing. Anything unrecognised (null, undefined,
+  // "") is treated as refundable, i.e. the safe/no-popup case.
+  const isNonRefundableRate = (nonRefundable) => {
+    const value = String(nonRefundable).trim().toLowerCase();
+    return value === "true" || value === "y" || value === "yes";
+  };
+
   const handleBooking = async (rate, skipCreditCheck = false) => {
     const { payload, hotels } = roomData;
     const hotelsdetail = hotels[0];
 
     // Single-room credit gate. `roomRateBasedOnRoomCount` is the total for
     // the whole search (per-room rate × numberOfRooms) so it's already the
-    // full payable amount for this booking. When the balance is short we
-    // raise a modal — and once the user clicks OK, we re-enter this
-    // function with skipCreditCheck=true so the rest of the flow runs
-    // unchanged (booking page can then handle online payment).
-    if (!skipCreditCheck && isInsufficientBalance(rate.roomRateBasedOnRoomCount)) {
+    // full payable amount for this booking. The gate is limited to
+    // NON-REFUNDABLE rates — a refundable booking can still be cancelled, so
+    // it goes straight through without the popup. When the balance is short
+    // on a non-refundable rate we raise a modal — and once the user clicks
+    // OK, we re-enter this function with skipCreditCheck=true so the rest of
+    // the flow runs unchanged (booking page can then handle online payment).
+    if (
+      !skipCreditCheck &&
+      isNonRefundableRate(rate.nonRefundable) &&
+      isInsufficientBalance(rate.roomRateBasedOnRoomCount)
+    ) {
       setPendingBookingFn(() => () => handleBooking(rate, true));
       setShowInsufficientCreditModal(true);
       return;
@@ -577,10 +595,8 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
       const anyRoomOnRequest = selectedRooms.some(
         (r) => r.selectedRate?.roomStatus === "On Request",
       );
-      const anyRoomNonRefundable = selectedRooms.some(
-        (r) =>
-          r.selectedRate?.nonRefundable === true ||
-          r.selectedRate?.nonRefundable === "true",
+      const anyRoomNonRefundable = selectedRooms.some((r) =>
+        isNonRefundableRate(r.selectedRate?.nonRefundable),
       );
       // When no room is On Request, fall back to the primary room's own
       // status string rather than a hardcoded value — preserves prior
@@ -593,10 +609,17 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
 
       // Multi-room credit gate. Each slot is ONE room, so sum(totalRate)
       // across slots is the full payable amount — matches what we send
-      // as `combinedSelectedRate.rate` below. On insufficient credit we
-      // raise the same popup the single-room flow uses; OK re-enters
-      // this function with skipCreditCheck=true to continue normally.
-      if (!skipCreditCheck && isInsufficientBalance(sum("totalRate"))) {
+      // as `combinedSelectedRate.rate` below. As in the single-room flow the
+      // gate only applies when the booking is non-refundable; here that means
+      // ANY selected room being non-refundable makes the whole booking
+      // non-refundable, which is the same rule `overallNonRefundable` uses.
+      // On insufficient credit we raise the same popup the single-room flow
+      // uses; OK re-enters this function with skipCreditCheck=true.
+      if (
+        !skipCreditCheck &&
+        anyRoomNonRefundable &&
+        isInsufficientBalance(sum("totalRate"))
+      ) {
         setPendingBookingFn(() => () => handleProceedBooking(true));
         setShowInsufficientCreditModal(true);
         return;
@@ -1062,11 +1085,24 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                   Your available credit limit is not enough to cover this
                   booking.
                 </p>
-                <p className="mb-0 text-muted small">
+                <p className="mb-3 text-muted small">
                   You can still continue — please choose{" "}
                   <strong>online payment</strong> on the booking page to
                   complete this reservation.
                 </p>
+                {/* Non-refundable warning — sits directly above the action
+                    buttons so the agent sees it before confirming. */}
+                <Alert
+                  variant="warning"
+                  className="mb-0 py-2 px-3 d-flex align-items-start gap-2"
+                >
+                  <FaExclamationTriangle className="mt-1 flex-shrink-0" />
+                  <span className="small">
+                    <strong>Please note:</strong> this is a non-refundable
+                    booking — once confirmed, it cannot be cancelled or
+                    refunded.
+                  </span>
+                </Alert>
               </Modal.Body>
               <Modal.Footer>
                 <Button

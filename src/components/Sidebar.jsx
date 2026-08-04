@@ -281,6 +281,20 @@ export default function Sidebar() {
       roles: ["admin", "agent", "staff", "extranet", "super_admin"],
     },
     {
+      // super_admin-only sidebar group that surfaces the identity-and-access
+      // tools together: Roles (master), Login Logs (audit trail), Role
+      // Assign (attach roles to users). Kept above Manage Masters so it's
+      // the first stop after the dashboard.
+      code: "top_user_management",
+      label: "User Management",
+      roles: ["super_admin"],
+      children: [
+        { label: "Roles",       to: "/masters/user-roles" },
+        { label: "Login Logs",  to: "/user-management/login-logs" },
+        { label: "Role Assign", to: "/user-management/role-assign" },
+      ],
+    },
+    {
       code: "top_manage_masters",
       label: "Manage Masters",
       // to: "/manage-masters",
