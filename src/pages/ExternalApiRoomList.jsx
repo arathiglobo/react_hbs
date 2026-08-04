@@ -181,6 +181,14 @@ const ExternalApiRoomList = () => {
   // per-rate radio / bottom "Continue with Booking" flow lines up.
   const [selectedRooms, setSelectedRooms] = useState([]);
 
+  // GRN-only bundle mode toggle (visible only for GRN multi-room searches).
+  // "bundled"  = default, one rate covers all rooms (certified flow).
+  // "non-bundled" = per-room rate picker; each room gets its own rateKey,
+  //                 all picks must share the same group_code (tokenId).
+  // Toggling clears selections so an incompatible mid-flight pick can't leak
+  // into the booking payload. Non-GRN hotels ignore this state entirely.
+  const [bundleMode, setBundleMode] = useState("bundled");
+
   // Agent credit gate. Same pattern as Inhouse — soft warning, never
   // blocks; user clicks "OK, continue" and we resume the queued booking
   // handler with skipCreditCheck=true so downstream flow is unchanged.
@@ -592,7 +600,19 @@ const ExternalApiRoomList = () => {
           return;
         }
 
-        const res = await axiosInstance.post("/api/hotel-rooms/search", payload);
+        // For GRN multi-room searches, ask the backend to include
+        // non-bundled + partial-bundled rates alongside bundled ones in the
+        // response. The rates come back tagged with a `bundleType` field so
+        // the UI can toggle between "Book as one package" (bundled) and
+        // "Pick per room" (non-bundled) without a second network trip.
+        // Single-room and non-GRN searches are unaffected — the flag is
+        // GRN-scoped on the backend and other suppliers ignore it.
+        const isGrnMultiRoom =
+          Number(payload?.apiId) === 20 && (payload?.rooms || []).length > 1;
+        const searchBody = isGrnMultiRoom
+          ? { ...payload, includeNonBundled: true }
+          : payload;
+        const res = await axiosInstance.post("/api/hotel-rooms/search", searchBody);
 
         if (!res.data || res.data.success === false) {
           const message = res.data?.message || "Search failed. Please try again.";
@@ -680,6 +700,48 @@ const ExternalApiRoomList = () => {
   const allRoomsSelected =
     selectedRooms.length > 0 &&
     selectedRooms.every((r) => r.selectedRate !== null);
+
+  // GRN non-bundled UI is only relevant for a multi-room GRN search — the
+  // toggle, per-room picker, and group_code guard are all no-ops otherwise.
+  // Derived once so all downstream render code (filter chain, click handler,
+  // empty-state message) reads a single truthy value.
+  const isGrnMultiRoomFlow =
+    Number(roomData?.payload?.apiId) === 20 && isMultiRoom;
+  const isNonBundledMode = isGrnMultiRoomFlow && bundleMode === "non-bundled";
+
+  // For the empty-state banner: does the search response actually contain
+  // any non-bundled / partial-bundled rates? Some hotels have bundled-only
+  // inventory even when includeNonBundled=true is set — in that case the
+  // "Pick per room" mode has nothing to render and the user is stuck
+  // wondering why. Precomputing this lets the toggle show a helpful
+  // message instead of an empty accordion.
+  const hasNonBundledRates =
+    isGrnMultiRoomFlow &&
+    (roomData?.hotels || []).some((h) =>
+      (h?.roomCategories || []).some((c) =>
+        (c?.availableRates || []).some(
+          (r) => r?.bundleType === "non-bundled" || r?.bundleType === "partial-bundled",
+        ),
+      ),
+    );
+
+  // Handler for the mode toggle. Switching modes ALWAYS clears prior picks so
+  // (a) a bundled rate can't leak into the per-room picker (or vice versa) and
+  // (b) the group_code / rateKey combos stay coherent when the picker
+  // re-renders with the new rate set.
+  const switchBundleMode = (nextMode) => {
+    if (nextMode === bundleMode) return;
+    setBundleMode(nextMode);
+    setSelectedRooms((prev) =>
+      prev.map((r) => ({
+        ...r,
+        selectedRate: null,
+        hotelId: null,
+        hotelName: null,
+      })),
+    );
+    setActiveAccordions({});
+  };
 
   // ─────────────────── credit / booking handlers ──────────────────────
   const isInsufficientBalance = (requiredAmount) => {
@@ -808,22 +870,18 @@ const ExternalApiRoomList = () => {
     }
 
     // GRN (apiId=20) bundled multi-room: one rate_key covers ALL rooms.
-    // Our GRN room-list refetch uses `?bundled=true`, so every rate the
-    // operator sees here IS a complete bundle across all requested rooms
-    // with a fixed pax split (see docs — a bundled rate returns rooms[]
-    // with one entry per physical room in the search request). Picking a
-    // "different" rate per room silently drops all but Room 1's on the
-    // backend (GrnHotelBookingService reads req.getRooms().get(0)
-    // .getRateKey()) and both rooms get booked as Room 1's type —
-    // producing a Single-Standard-for-both when the operator asked for
-    // Single+Double. Mirror the selection across every room so what the
-    // operator picks in ANY accordion is what actually gets booked.
+    // A bundled rate returns rooms[] with one entry per physical room in
+    // the search request; the backend then builds a single booking_items[]
+    // with the requested pax split. Mirror the selection across every room
+    // so what the operator picks in ANY accordion is what actually gets
+    // booked (avoids the Room-1-only bug that produced Single-Standard-for
+    // -both when the operator asked for Single+Double).
     //
-    // Non-bundled / partial-bundled support is out of scope for Phase 1
-    // (bundled=true refetch + isBundledRate filter guarantee everything
-    // reaching this handler is a bundled rate). When that flow is added,
-    // this branch will need a bundled-vs-non-bundled check on rate.
-    if (currentApiId === "20" && selectedRooms.length > 1) {
+    // NON-BUNDLED mode (bundleMode === "non-bundled"): the user picks a
+    // different rate per room, all sharing the same group_code (enforced
+    // by the picker filter above + the backend guard). Fall through to the
+    // generic per-slot setter below — do NOT mirror.
+    if (currentApiId === "20" && selectedRooms.length > 1 && bundleMode === "bundled") {
       setSelectedRooms((prev) => {
         const currentlySelectedInClicked =
           prev[roomIndex]?.selectedRate === rate;
@@ -1647,6 +1705,58 @@ const ExternalApiRoomList = () => {
             {/* Room categories area — grid/list toggle + filter sidebar +
                 per-room accordion (only in multi-room mode). */}
             <div className="room-categories-section">
+              {/* GRN multi-room mode toggle. Bundled = default certified
+                  flow; Non-bundled = per-room picker (all picks must share
+                  the same group_code, enforced below). Hidden completely
+                  for single-room or non-GRN searches. */}
+              {isGrnMultiRoomFlow && (
+                <div className="mb-3 p-3 rounded shadow-sm bg-white border">
+                  <div className="d-flex flex-wrap align-items-center gap-3">
+                    <div>
+                      <div className="fw-semibold">Booking mode</div>
+                      <small className="text-muted">
+                        {bundleMode === "bundled"
+                          ? "One package rate covers all rooms."
+                          : "Pick a different rate for each room (must share the same rate group)."}
+                      </small>
+                    </div>
+                    <div className="btn-group ms-auto" role="group" aria-label="Booking mode">
+                      <Button
+                        variant={
+                          bundleMode === "bundled" ? "primary" : "outline-primary"
+                        }
+                        size="sm"
+                        onClick={() => switchBundleMode("bundled")}
+                      >
+                        Book as one package
+                      </Button>
+                      <Button
+                        variant={
+                          bundleMode === "non-bundled" ? "primary" : "outline-primary"
+                        }
+                        size="sm"
+                        onClick={() => switchBundleMode("non-bundled")}
+                        disabled={!hasNonBundledRates}
+                        title={
+                          hasNonBundledRates
+                            ? "Pick a different rate for each room"
+                            : "This hotel doesn't have per-room rates for your search"
+                        }
+                      >
+                        Pick per room
+                      </Button>
+                    </div>
+                  </div>
+                  {isNonBundledMode && !hasNonBundledRates && (
+                    <Alert variant="warning" className="mt-3 mb-0">
+                      This hotel doesn't offer non-bundled (per-room) rates
+                      for your dates and occupancy. Switch back to
+                      <b> Book as one package</b> to see available rates.
+                    </Alert>
+                  )}
+                </div>
+              )}
+
               <div className="d-flex justify-content-between align-items-center mb-4">
                 <h4 className="mb-0">Available Room Categories</h4>
                 <div className="btn-group shadow-sm gap-1" role="group">
@@ -1705,6 +1815,61 @@ const ExternalApiRoomList = () => {
                               category.availableRates || []
                             )
                               .filter(rateMatches)
+                              // GRN multi-room bundle-mode filter. When the
+                              // user toggles "Book as one package" show only
+                              // bundled rates (or rates that have no
+                              // bundleType tag — those come from the certified
+                              // bundled-only fetch and are always bundled).
+                              // When they toggle "Pick per room" show only
+                              // non-bundled + partial-bundled. No-op for
+                              // non-GRN suppliers and single-room searches.
+                              .filter((rate) => {
+                                if (!isGrnMultiRoomFlow) return true;
+                                const bt = rate?.bundleType;
+                                if (bundleMode === "bundled") {
+                                  return bt == null || bt === "bundled";
+                                }
+                                return bt === "non-bundled" || bt === "partial-bundled";
+                              })
+                              // GRN non-bundled group_code guard. Once ANY
+                              // slot has picked a rate, every OTHER slot may
+                              // only show rates whose tokenId (group_code)
+                              // matches — GRN rejects the booking if the
+                              // picked rates come from different groups. The
+                              // backend has the same guard as a safety net;
+                              // this UI check exists so the user sees why an
+                              // incompatible rate isn't clickable, before
+                              // they invest attention in picking it.
+                              .filter((rate) => {
+                                if (!isNonBundledMode) return true;
+                                const anchor = selectedRooms.find(
+                                  (r, i) => i !== roomSlotIndex && r?.selectedRate,
+                                );
+                                const anchorGroup = anchor?.selectedRate?.tokenId;
+                                if (!anchorGroup) return true;
+                                return rate?.tokenId === anchorGroup;
+                              })
+                              // GRN non-bundled per-room occupancy filter.
+                              // Non-bundled rates are occupancy-specific — a
+                              // 2A/0C rate cannot accept a child pax, and
+                              // GRN 500s with a generic "Something went wrong"
+                              // instead of a proper validation error. Show
+                              // each rate ONLY in the room card whose
+                              // adults+children match the rate's
+                              // paxAdults+paxChildren. When the rate object
+                              // doesn't carry those fields (bundled rates,
+                              // other suppliers) the filter passes through.
+                              .filter((rate) => {
+                                if (!isNonBundledMode) return true;
+                                if (rate?.paxAdults == null) return true;
+                                const searchRoom = roomData?.payload?.rooms?.[roomSlotIndex];
+                                if (!searchRoom) return true;
+                                const roomAdults = Number(searchRoom.adults) || 0;
+                                const roomChildren = Number(searchRoom.children) || 0;
+                                const rateAdults = Number(rate.paxAdults) || 0;
+                                const rateChildren = Number(rate.paxChildren) || 0;
+                                return rateAdults === roomAdults && rateChildren === roomChildren;
+                              })
                               // ATHARVA (apiId=3) multi-room disambiguation:
                               // the search response mixes rates for every
                               // RoomSrNo into one vendor list, so each slot

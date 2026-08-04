@@ -779,17 +779,12 @@ const ApiBookingPageForHotels = () => {
 
       if (bookingResponse && isSuccess) {
         toast.success(bookingResponse.message);
-        // GRN-only routing (apiId=20): the client wants a Reconfirmed GRN
-        // booking to land directly on its Booking Detail page (mirrors the
-        // Inhouse LongStay / DayStay flow), NOT the list view. Every other
-        // supplier keeps the existing list-page redirect so IWTX / X3 /
-        // ATHARVA / DARINA / JUMEIRAH / JUNIPER flows are untouched.
-        const isGrn = Number(effectivePayload.apiId) === 20;
-        if (isGrn && bookingResponse.bookingId) {
-          navigate(`/booking-details/hotel-booking/${bookingResponse.bookingId}`);
-        } else {
-          navigate("/booking-details/hotel-booking-list");
-        }
+        // All suppliers land on the booking list after a successful confirm
+        // (matches IWTX / X3 / ATHARVA / DARINA / JUMEIRAH / JUNIPER). GRN
+        // used to route straight to its detail page instead but the client
+        // asked for uniform post-confirm UX — the detail page is still one
+        // click away from the list row.
+        navigate("/booking-details/hotel-booking-list");
       } else {
         // Surface backend / IWTX validation message when present (e.g.
         // "invalid_passengers[0].gender") instead of the generic
