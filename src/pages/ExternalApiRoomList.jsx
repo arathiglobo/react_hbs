@@ -60,6 +60,35 @@ const renderPolicyValidity = (fromDate, toDate) => {
  * spec. Returns null when the field is missing or the string doesn't parse,
  * so the pill silently disappears for non-Atharva rates and malformed rows.
  */
+/**
+ * Darina (apiId 16) per-rate free-cancellation deadline pill.
+ * BE emits `rate.deadlineDate` as ISO `yyyy-MM-dd` — the toDate of the
+ * "Free cancellation until X" band from Darina's WithFullResponseControl
+ * search response. We render "Free cancellation until DD MMM YYYY, 11:59 PM UAE"
+ * so the operator sees the exact cut-off before opening the policy modal.
+ * Returns null for missing / malformed input.
+ */
+const renderDarinaDeadlinePill = (deadlineDate) => {
+  if (!deadlineDate || typeof deadlineDate !== "string") return null;
+  const parts = deadlineDate.trim().split("-");
+  if (parts.length !== 3) return null;
+  const [y, mm, d] = parts;
+  const monthNames = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+  const monIdx = parseInt(mm, 10) - 1;
+  if (!y || !d || Number.isNaN(monIdx) || monIdx < 0 || monIdx > 11) return null;
+  return (
+    <span
+      className="text-danger fw-normal"
+      title="deadline date"
+    >
+      Deadline Date:  {parseInt(d, 10)} {monthNames[monIdx]} {y}
+    </span>
+  );
+};
+
 const renderAtharvaDeadlinePill = (deadlineDate) => {
   if (!deadlineDate || typeof deadlineDate !== "string") return null;
   const parts = deadlineDate.trim().split("-");
@@ -666,6 +695,11 @@ const ExternalApiRoomList = () => {
       // 2 days, computed on the backend). Booking page renders this in the
       // cancellation accordion header. Null when prebook wasn't run yet.
       atharvaDisplayDeadlineDate: prebook?.displayDeadlineDate || null,
+      // Darina (apiId 16) free-cancellation deadline (ISO yyyy-MM-dd). BE
+      // emits it on rate.deadlineDate as the "Free cancellation until X"
+      // band's toDate. Carried through so the booking page's accordion
+      // header can show it and the outbound payload can echo it back.
+      deadlineDate: rate?.deadlineDate || null,
     };
   };
 
@@ -1811,15 +1845,33 @@ const ExternalApiRoomList = () => {
                                                       sourced from HSearchByHotelCode_V2. Sits directly
                                                       above the Cancellation link so the operator
                                                       sees the cut-off before opening the policy
-                                                      modal. Helper returns null when the rate has
-                                                      no deadlineDate (non-Atharva or malformed). */}
-                                                  {rate.deadlineDate && (
-                                                    <div className="feature-item">
-                                                      {renderAtharvaDeadlinePill(
-                                                        rate.deadlineDate,
-                                                      )}
-                                                    </div>
-                                                  )}
+                                                      modal. Guarded on apiId now that Darina also
+                                                      populates rate.deadlineDate (ISO yyyy-MM-dd) —
+                                                      the Atharva helper expects DD-MMM-YYYY. */}
+                                                  {resolveApiId(hotel) ===
+                                                    apiIdMapping.ATHARVA &&
+                                                    rate.deadlineDate && (
+                                                      <div className="feature-item">
+                                                        {renderAtharvaDeadlinePill(
+                                                          rate.deadlineDate,
+                                                        )}
+                                                      </div>
+                                                    )}
+
+                                                  {/* Darina (apiId 16) free-cancellation deadline —
+                                                      BE emits rate.deadlineDate in ISO yyyy-MM-dd
+                                                      as the "Free cancellation until X" band's
+                                                      toDate. Hidden for non-refundable / no-free
+                                                      band rates (deadlineDate is null there). */}
+                                                  {resolveApiId(hotel) ===
+                                                    apiIdMapping.DARINA &&
+                                                    rate.deadlineDate && (
+                                                      <div className="feature-item">
+                                                        {renderDarinaDeadlinePill(
+                                                          rate.deadlineDate,
+                                                        )}
+                                                      </div>
+                                                    )}
 
                                                   <div className="feature-item">
                                                     <Button
@@ -1934,16 +1986,31 @@ const ExternalApiRoomList = () => {
                                                       </span>
                                                     </div>
                                                     {/* ATHARVA (apiId 3) per-rate DeadLineDate pill,
-                                                        sourced from HSearchByHotelCode_V2. Helper
-                                                        returns null when the rate has no
-                                                        deadlineDate (non-Atharva or malformed). */}
-                                                    {rate.deadlineDate && (
-                                                      <div className="feature-item d-flex align-items-center">
-                                                        {renderAtharvaDeadlinePill(
-                                                          rate.deadlineDate,
-                                                        )}
-                                                      </div>
-                                                    )}
+                                                        sourced from HSearchByHotelCode_V2. Guarded
+                                                        on apiId now that Darina also populates
+                                                        rate.deadlineDate (different format). */}
+                                                    {resolveApiId(hotel) ===
+                                                      apiIdMapping.ATHARVA &&
+                                                      rate.deadlineDate && (
+                                                        <div className="feature-item d-flex align-items-center">
+                                                          {renderAtharvaDeadlinePill(
+                                                            rate.deadlineDate,
+                                                          )}
+                                                        </div>
+                                                      )}
+                                                    {/* Darina (apiId 16) free-cancellation deadline
+                                                        pill. BE emits ISO yyyy-MM-dd; helper renders
+                                                        "Free cancellation until DD MMM YYYY,
+                                                        11:59 PM UAE". */}
+                                                    {resolveApiId(hotel) ===
+                                                      apiIdMapping.DARINA &&
+                                                      rate.deadlineDate && (
+                                                        <div className="feature-item d-flex align-items-center">
+                                                          {renderDarinaDeadlinePill(
+                                                            rate.deadlineDate,
+                                                          )}
+                                                        </div>
+                                                      )}
                                                     <div className="feature-item d-flex align-items-center">
                                                       <Button
                                                         variant="link"

@@ -135,6 +135,45 @@ const ApiBookingPageForHotels = () => {
     const storedData = sessionStorage.getItem("bookingData");
     if (storedData) {
       const parsedData = JSON.parse(storedData);
+
+      // Diagnostic: dump the exact bookingData handed off from
+      // /api-room-list so we can see whether Darina-specific fields
+      // (deadlineDate, cancellationPolicies, apiId) survive the transfer.
+      // Grouped for readability — collapse "BookingPage: incoming data"
+      // in DevTools console.
+      // eslint-disable-next-line no-console
+      console.groupCollapsed(
+        "%cBookingPage: incoming data from /api-room-list",
+        "color:#0d6efd;font-weight:bold",
+      );
+      // eslint-disable-next-line no-console
+      console.log("bookingData (full):", parsedData);
+      // eslint-disable-next-line no-console
+      console.log("bookingData.payload.apiId:", parsedData?.payload?.apiId,
+        "typeof:", typeof parsedData?.payload?.apiId);
+      // eslint-disable-next-line no-console
+      console.log(
+        "bookingData.selectedRate (per slot deadline + cancellation):",
+        (parsedData?.selectedRate || []).map((slot, i) => ({
+          index: i,
+          roomCategory: slot?.roomCategory,
+          mealPlan: slot?.mealPlan,
+          deadlineDate: slot?.deadlineDate,
+          nonRefundable: slot?.nonRefundable,
+          cancellationPolicy_count:
+            Array.isArray(slot?.cancellationPolicy)
+              ? slot.cancellationPolicy.length
+              : slot?.cancellationPolicy
+                ? 1
+                : 0,
+          cancellationPolicy_first: Array.isArray(slot?.cancellationPolicy)
+            ? slot.cancellationPolicy[0]
+            : slot?.cancellationPolicy,
+        })),
+      );
+      // eslint-disable-next-line no-console
+      console.groupEnd();
+
       setBookingData(parsedData);
 
       const initialRooms = parsedData.payload.rooms.map((room) => ({
@@ -644,6 +683,12 @@ const ApiBookingPageForHotels = () => {
             // prebook was skipped still round-trips. Ignored by other
             // suppliers (RoomBookingRequest.rateKey is @Nullable).
             rateKey: rate.atharvaRateKey || null,
+            // Darina free-cancellation deadline shown to the customer at
+            // rate-selection time (ISO yyyy-MM-dd). BE audits this in
+            // DarinaHotelBookingService so we know exactly which cut-off
+            // was in effect when the booking was confirmed. Null / ignored
+            // by other suppliers.
+            cancellationDeadline: rate.deadlineDate || null,
             guests: room.guests.map((guest) => ({
               salutation: guest.salutation,
               firstName: guest.firstName,
@@ -981,6 +1026,52 @@ const ApiBookingPageForHotels = () => {
                                           title="Cancel by this date/time to avoid charges"
                                         >
                                           | Deadline: {d} {monthNames[idx]}{" "}
+                                          {y}, 11:59 PM (UAE)
+                                        </span>
+                                      );
+                                    })()}
+                                  {/* Darina (apiId 16) free-cancellation deadline
+                                      — slot.deadlineDate is ISO yyyy-MM-dd from
+                                      the search-time cancellation ladder (the
+                                      "Free cancellation until X" band's toDate). */}
+                                  {bookingData?.payload?.apiId === 16 &&
+                                    slot.deadlineDate &&
+                                    (() => {
+                                      const parts =
+                                        slot.deadlineDate.split("-");
+                                      if (parts.length !== 3) return null;
+                                      const [y, m, d] = parts;
+                                      const monthNames = [
+                                        "Jan",
+                                        "Feb",
+                                        "Mar",
+                                        "Apr",
+                                        "May",
+                                        "Jun",
+                                        "Jul",
+                                        "Aug",
+                                        "Sep",
+                                        "Oct",
+                                        "Nov",
+                                        "Dec",
+                                      ];
+                                      const idx = parseInt(m, 10) - 1;
+                                      if (
+                                        !y ||
+                                        !d ||
+                                        Number.isNaN(idx) ||
+                                        idx < 0 ||
+                                        idx > 11
+                                      )
+                                        return null;
+                                      return (
+                                        <span
+                                          className="ms-2 small fw-normal"
+                                          style={{ opacity: 0.95 }}
+                                          title="Free cancellation until this date/time"
+                                        >
+                                          | Free cancellation until{" "}
+                                          {parseInt(d, 10)} {monthNames[idx]}{" "}
                                           {y}, 11:59 PM (UAE)
                                         </span>
                                       );
