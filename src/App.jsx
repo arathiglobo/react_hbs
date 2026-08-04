@@ -49,6 +49,12 @@ import MarketType from "./pages/master/MarketType";
 import Region from "./pages/master/Region";
 import Province from "./pages/master/Province";
 import CityMapping from "./pages/master/CityMapping";
+// Transfer Location Mapping — master → i'way location translation screens.
+// The hotel one is aliased because ./pages/master/HotelMapping (supplier
+// hotel-inventory mapping) already owns the HotelMapping name below.
+import TransferAirportMapping from "./pages/master/transferMapping/AirportMapping";
+import TransferPlaceMapping from "./pages/master/transferMapping/PlaceMapping";
+import TransferHotelMapping from "./pages/master/transferMapping/HotelMapping";
 
 import AgentReg from "./pages/Registration/AgentReg";
 import HotelReg from "./pages/Registration/HotelReg";
@@ -443,6 +449,9 @@ export default function App() {
         <Route path="/masters/visa-information" element={<PrivateRoute><VisaDetails /></PrivateRoute>} />
         <Route path="/masters/terms-and-conditions" element={<PrivateRoute><TermsAndConditions /></PrivateRoute>} />
         <Route path="/masters/hotel-mapping" element={<PrivateRoute><HotelMapping /></PrivateRoute>} />
+        <Route path="/masters/transfer-airport-mapping" element={<PrivateRoute><TransferAirportMapping /></PrivateRoute>} />
+        <Route path="/masters/transfer-place-mapping" element={<PrivateRoute><TransferPlaceMapping /></PrivateRoute>} />
+        <Route path="/masters/transfer-hotel-mapping" element={<PrivateRoute><TransferHotelMapping /></PrivateRoute>} />
         <Route path="/masters/hotel-upcooming-mapped-list" element={<PrivateRoute><HotelMappingBulkList /></PrivateRoute>} />
         <Route path="/masters/fetch-new-hotels" element={<FetchNewHotels />} />
      

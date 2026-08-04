@@ -333,8 +333,20 @@ export default function Sidebar() {
           children: [
             // { label: "Country", to: "/masters/country-mapping" },
             { label: "City", to: "/masters/city-mapping" },
-            { label: "Hotel", to: "/masters/hotel-mapping" }, 
+            { label: "Hotel", to: "/masters/hotel-mapping" },
             { label: "Fetch Hotels", to: "/masters/fetch-new-hotels" },
+            // Nested subgroup — a child carrying its own `children` renders as
+            // a collapsible accordion inside the group (see the group renderer
+            // below). Translates our location masters to i'way's own locations
+            // before the transfer search calls the supplier.
+            {
+              label: "Transfer Location Mapping",
+              children: [
+                { label: "Airport Mapping", to: "/masters/transfer-airport-mapping" },
+                { label: "Hotel Mapping", to: "/masters/transfer-hotel-mapping" },
+                { label: "Place Mapping", to: "/masters/transfer-place-mapping" },
+              ],
+            },
           ],
         },
         {
@@ -1143,16 +1155,65 @@ export default function Sidebar() {
                             </button>
                             {isOpen && (
                               <div className="submenu-children">
-                                {group.children.map((sub) => (
-                                  <Nav.Link
-                                    as={Link}
-                                    to={sub.to}
-                                    key={`${groupKey}-${sub.label}`}
-                                    className="submenu-link"
-                                  >
-                                    {sub.label}
-                                  </Nav.Link>
-                                ))}
+                                {group.children.map((sub) => {
+                                  // A child with its own children is a nested
+                                  // subgroup, not a link — render it as a
+                                  // second-level accordion.
+                                  if (
+                                    Array.isArray(sub.children) &&
+                                    sub.children.length > 0
+                                  ) {
+                                    const subKey = `${groupKey}-${sub.label}`;
+                                    const subOpen = !!openGroups[subKey];
+                                    return (
+                                      <div
+                                        key={subKey}
+                                        className="submenu-group"
+                                        style={{ marginLeft: 8 }}
+                                      >
+                                        <button
+                                          type="button"
+                                          className={`submenu-accordion-header d-flex justify-content-between align-items-center ${
+                                            subOpen ? "open" : ""
+                                          }`}
+                                          onClick={(e) => {
+                                            e.preventDefault();
+                                            toggleGroup(subKey);
+                                          }}
+                                        >
+                                          <span>{sub.label}</span>
+                                          <span className="caret-small">
+                                            {subOpen ? "▴" : "▾"}
+                                          </span>
+                                        </button>
+                                        {subOpen && (
+                                          <div className="submenu-children">
+                                            {sub.children.map((leaf) => (
+                                              <Nav.Link
+                                                as={Link}
+                                                to={leaf.to}
+                                                key={`${subKey}-${leaf.label}`}
+                                                className="submenu-link"
+                                              >
+                                                {leaf.label}
+                                              </Nav.Link>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  }
+                                  return (
+                                    <Nav.Link
+                                      as={Link}
+                                      to={sub.to}
+                                      key={`${groupKey}-${sub.label}`}
+                                      className="submenu-link"
+                                    >
+                                      {sub.label}
+                                    </Nav.Link>
+                                  );
+                                })}
                               </div>
                             )}
                           </div>
@@ -1319,17 +1380,66 @@ export default function Sidebar() {
                               </button>
                               {isOpen && (
                                 <div className="submenu-children">
-                                  {group.children.map((sub) => (
-                                    <Nav.Link
-                                      as={Link}
-                                      to={sub.to}
-                                      key={`${groupKey}-mobile-${sub.label}`}
-                                      onClick={handleClose}
-                                      className="submenu-link"
-                                    >
-                                      {sub.label}
-                                    </Nav.Link>
-                                  ))}
+                                  {group.children.map((sub) => {
+                                    // Same nested-subgroup handling as the
+                                    // desktop sidebar above.
+                                    if (
+                                      Array.isArray(sub.children) &&
+                                      sub.children.length > 0
+                                    ) {
+                                      const subKey = `${groupKey}-${sub.label}`;
+                                      const subOpen = !!openGroups[subKey];
+                                      return (
+                                        <div
+                                          key={`${subKey}-mobile`}
+                                          className="submenu-group"
+                                          style={{ marginLeft: 8 }}
+                                        >
+                                          <button
+                                            type="button"
+                                            className={`submenu-accordion-header d-flex justify-content-between align-items-center ${
+                                              subOpen ? "open" : ""
+                                            }`}
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              toggleGroup(subKey);
+                                            }}
+                                          >
+                                            <span>{sub.label}</span>
+                                            <span className="caret-small">
+                                              {subOpen ? "▴" : "▾"}
+                                            </span>
+                                          </button>
+                                          {subOpen && (
+                                            <div className="submenu-children">
+                                              {sub.children.map((leaf) => (
+                                                <Nav.Link
+                                                  as={Link}
+                                                  to={leaf.to}
+                                                  key={`${subKey}-mobile-${leaf.label}`}
+                                                  onClick={handleClose}
+                                                  className="submenu-link"
+                                                >
+                                                  {leaf.label}
+                                                </Nav.Link>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    }
+                                    return (
+                                      <Nav.Link
+                                        as={Link}
+                                        to={sub.to}
+                                        key={`${groupKey}-mobile-${sub.label}`}
+                                        onClick={handleClose}
+                                        className="submenu-link"
+                                      >
+                                        {sub.label}
+                                      </Nav.Link>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
