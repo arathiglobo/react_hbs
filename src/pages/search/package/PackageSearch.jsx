@@ -6,6 +6,13 @@ import Select from "react-select";
 import axiosInstance from "../../../components/AxiosInstance";
 import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
+import AgentSelect from "../../../components/AgentSelect";
+// Same OK / Cancel calendar+time picker used on Occupancy & Minimum Length's
+// Validity From / Validity To fields — reused here so Arrival / Departure on
+// the Package Search page render the identical popup.
+import DateTimeApplyPicker, {
+  parseLocalDateTime,
+} from "../../../components/DateTimeApplyPicker";
 import {
   FaSearch,
   FaEye,
@@ -27,6 +34,12 @@ import {
 } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
+// Reuse /new-booking/hotel's sidebar + sort-bar visual system verbatim
+// (.leftside, .left-fixed, .filtersection, .filter-checkbox-list,
+// .sort-pill, .clear-pill, .modern-select-sm) so both pages read as one.
+// Imported first so package-specific overrides in PackageSearch.css below
+// keep winning at the same specificity.
+import "../../../styles/HotelSearch.css";
 import "../../../styles/PackageSearch.css";
 
 // ─────────────────────────────────────────────
@@ -117,7 +130,7 @@ function RoomGuestSelector({ value, onChange }) {
                 <Counter
                   value={room.adults}
                   min={1}
-                  max={3}
+                  max={4}
                   onChange={(v) => setAdults(i, v)}
                 />
               </div>
@@ -205,10 +218,46 @@ function RoomGuestSelector({ value, onChange }) {
 }
 
 const PackageSearch = () => {
+  // Agent logins book under themselves, so the manual Agent picker is hidden
+  // and the agent-required validation is skipped. Mirrors the same rule on
+  // /new-booking/hotel (HotelSearch.jsx) — currentActiveRole isn't set for
+  // single-role logins, so fall back to userRole.
+  const activeRole = (localStorage.getItem("currentActiveRole") || "")
+    .trim()
+    .toUpperCase();
+  const storedRoles = (localStorage.getItem("userRole") || "").toUpperCase();
+  const isAgentRole = activeRole
+    ? activeRole === "AGENT"
+    : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
+
+  // Logged-in agent's name — for agent logins the booking is "done by" the
+  // agent themselves, so the "Booking Done By Employee" picker is hidden and
+  // this name is shown instead. Empty for admin/staff.
+  const loggedInAgentName =
+    localStorage.getItem("UserName") ||
+    sessionStorage.getItem("UserName") ||
+    "";
+
   const [agents, setAgents] = useState([]);
   const [agentId, setAgentId] = useState("");
+  // For agent logins the Agent picker is hidden, so the agent's own id is
+  // resolved here instead — otherwise the search would run with no agent and
+  // the agent's markup would silently not be applied. Same resolution order
+  // as /new-booking/hotel: cached userId, else /api/personalProfile/{UserName}.
+  const [selfAgentId, setSelfAgentId] = useState("");
   const [destinationOptions, setDestinationOptions] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState(null);
+  // Nationality filter — mirrors /new-booking/hotel. Sent with the search so
+  // the backend keeps only packages priced for that nationality's market
+  // type, and carried into the booking as the pax native country.
+  const [nationalityList, setNationalityList] = useState([]);
+  const [selectedNationality, setSelectedNationality] = useState(null);
+  const [isNationalityLoading, setIsNationalityLoading] = useState(false);
+  // Optional "Booking Done By Employee" selector — mirrors
+  // /new-booking/hotel. Carried through to the booking page so it is
+  // persisted on the new PackageBooking row.
+  const [employees, setEmployees] = useState([]);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
   // Rooms & Guests filter — mirrors /new-booking/hotel (HotelSearch.jsx).
   // Each room holds its own adult/children counts and per-child ages.
   const [rooms, setRooms] = useState([
@@ -229,13 +278,29 @@ const PackageSearch = () => {
   // When results are on screen the big search form collapses into a sticky
   // summary strip. Clicking "Modify Search" flips this true to re-expand it.
   const [isEditingSearch, setIsEditingSearch] = useState(false);
+
+  // ── Results-side filters (mirror /new-booking/hotel's left sidebar +
+  //    top sort bar). All applied client-side against `results`. ──
+  //  Package Name search         ↔ Hotel Name search
+  //  Package Type checkboxes     ↔ Hotel Type
+  //  Package Category checkboxes ↔ Channel
+  //  Package Includes checkboxes ↔ Available Deals
+  //  Duration dropdown           ↔ All Stars
+  //  Low / High / Clear          ↔ same
+  const [packageSearchTerm, setPackageSearchTerm] = useState("");
+  const [packageTypeFilter, setPackageTypeFilter] = useState([]);
+  const [packageCategoryFilter, setPackageCategoryFilter] = useState([]);
+  const [packageIncludesFilter, setPackageIncludesFilter] = useState([]);
+  const [durationFilter, setDurationFilter] = useState(null);
+  const [sortBy, setSortBy] = useState("priceAsc");
   const [progress, setProgress] = useState(0);
   const progressRef = useRef(null);
   const resultsRef = useRef(null);
 
   // After a fresh search, jump the viewport to the results so the operator
-  // sees them without having to scroll past the search card. Fires once the
-  // first batch of packages actually arrives.
+  // sees them without having to scroll past the search card. Keyed on the
+  // raw `results` (not filteredResults) so a sidebar-filter tweak doesn't
+  // re-scroll the page after the initial land.
   useEffect(() => {
     if (!hasSearched || results.length === 0) return;
     const id = window.setTimeout(() => {
@@ -261,17 +326,53 @@ const PackageSearch = () => {
     };
   };
 
-  // Add one calendar day to a datetime-local string (yyyy-MM-ddTHH:mm),
-  // preserving the time-of-day. Used to auto-fill Departure from Arrival.
-  const addOneDayLocal = (dtLocal) => {
+  // Add N calendar days to a datetime-local string (yyyy-MM-ddTHH:mm). The
+  // time-of-day is taken from `timeFrom` when supplied, otherwise the source
+  // value's own time is preserved. Used to auto-fill Departure from Arrival
+  // and to re-derive Departure when the Nights field is edited.
+  const addDaysLocal = (dtLocal, days, timeFrom) => {
     if (!dtLocal) return "";
     const d = new Date(dtLocal);
     if (Number.isNaN(d.getTime())) return "";
-    d.setDate(d.getDate() + 1);
+    d.setDate(d.getDate() + days);
+    if (timeFrom) {
+      const t = new Date(timeFrom);
+      if (!Number.isNaN(t.getTime())) {
+        d.setHours(t.getHours(), t.getMinutes(), 0, 0);
+      }
+    }
     const pad = (n) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
       d.getDate(),
     )}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const addOneDayLocal = (dtLocal) => addDaysLocal(dtLocal, 1);
+
+  // Nights in the selected travel window — the package equivalent of the
+  // Check-In → Nights → Check-Out triple on /new-booking/hotel. Derived from
+  // Arrival/Departure (single source of truth) so the two can never drift.
+  const nights = React.useMemo(() => {
+    if (!arrivalDateTime || !departureDateTime) return 0;
+    const a = new Date(arrivalDateTime);
+    const d = new Date(departureDateTime);
+    if (Number.isNaN(a.getTime()) || Number.isNaN(d.getTime())) return 0;
+    const dayOnly = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate());
+    const diff = Math.round(
+      (dayOnly(d) - dayOnly(a)) / (24 * 60 * 60 * 1000),
+    );
+    return diff > 0 ? diff : 0;
+  }, [arrivalDateTime, departureDateTime]);
+
+  // Editing Nights moves Departure, keeping whatever departure time-of-day the
+  // user already picked (falling back to the arrival time).
+  const handleNightsChange = (value) => {
+    const n = parseInt(value, 10);
+    if (!arrivalDateTime || Number.isNaN(n) || n < 1) return;
+    setDepartureDateTime(
+      addDaysLocal(arrivalDateTime, n, departureDateTime || arrivalDateTime),
+    );
+    setErrors((prev) => ({ ...prev, departureDateTime: null }));
   };
 
   // ─────────────────────────────────────────────
@@ -357,18 +458,124 @@ const PackageSearch = () => {
     }, 300),
   ).current;
 
+  // ─────────────────────────────────────────────
+  // API: Fetch Nationalities (Initial & Search)
+  // Same /api/country source and option shape used by /new-booking/hotel.
+  // ─────────────────────────────────────────────
+  const loadInitialNationalities = async () => {
+    try {
+      setIsNationalityLoading(true);
+      const response = await axiosInstance.get("/api/country?limit=50");
+      const options = Array.isArray(response.data)
+        ? response.data.map((country) => ({
+            value: country.id,
+            label: country.name,
+            code: country.countryCode,
+          }))
+        : [];
+      setNationalityList(options);
+    } catch (error) {
+      console.error("Error loading nationalities:", error);
+      setNationalityList([]);
+    } finally {
+      setIsNationalityLoading(false);
+    }
+  };
+
+  const debouncedCountrySearch = useRef(
+    debounce(async (searchText = "") => {
+      if (!searchText || searchText.length < 2) return;
+      setIsNationalityLoading(true);
+      try {
+        const response = await axiosInstance.get(
+          `/api/country?search=${searchText}`,
+        );
+        const options = Array.isArray(response.data)
+          ? response.data.map((country) => ({
+              value: country.id,
+              label: country.name,
+              code: country.countryCode,
+            }))
+          : [];
+        setNationalityList(options);
+      } catch (error) {
+        console.error("Error searching nationalities:", error);
+        setNationalityList([]);
+      } finally {
+        setIsNationalityLoading(false);
+      }
+    }, 300),
+  ).current;
+
+  const handleCountryInputChange = (inputValue) => {
+    if (inputValue && inputValue.length >= 2) {
+      debouncedCountrySearch(inputValue);
+    }
+  };
+
+  // ─────────────────────────────────────────────
+  // API: Fetch Employees (Booking Done By Employee)
+  // ─────────────────────────────────────────────
+  const fetchEmployees = async () => {
+    try {
+      const response = await axiosInstance.get("/api/employee?page=0&limit=1000");
+      setEmployees(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error("Error fetching employees:", error);
+      setEmployees([]);
+    }
+  };
+
   useEffect(() => {
     fetchAgents();
     loadInitialDestinations();
+    loadInitialNationalities();
+    fetchEmployees();
   }, []);
+
+  // Agent logins: resolve the agent's own id so the search still carries an
+  // agent (and therefore their markup) even though the picker is hidden.
+  useEffect(() => {
+    if (!isAgentRole) return undefined;
+    const cached = localStorage.getItem("userId");
+    if (cached) {
+      setSelfAgentId(cached);
+      return undefined;
+    }
+    const userName =
+      localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+    if (!userName) return undefined;
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/personalProfile/${userName}`)
+      .then((res) => {
+        if (cancelled) return;
+        if (res?.data?.id != null) {
+          const idv = String(res.data.id);
+          localStorage.setItem("userId", idv);
+          setSelfAgentId(idv);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isAgentRole]);
+
+  // The agent the search/booking runs under: the picked one for admin/staff,
+  // the logged-in agent's own id for agent logins.
+  const effectiveAgentId = isAgentRole ? selfAgentId : agentId;
 
   // ─────────────────────────────────────────────
   // Form Submission
   // ─────────────────────────────────────────────
   const validateForm = () => {
     const newErrors = {};
+    if (!selectedNationality) newErrors.nationality = "Nationality is required";
     if (!selectedDestination) newErrors.destination = "Destination is required";
-    if (!agentId) newErrors.agent = "Agent is required";
+    // Agent logins book under themselves (the picker is hidden), so the agent
+    // is never set manually — skip this check for them, as HotelSearch does.
+    if (!isAgentRole && !agentId) newErrors.agent = "Agent is required";
     // Flight Details are mandatory — both ends must be provided and the
     // departure must be strictly after the arrival.
     if (!arrivalDateTime)
@@ -398,6 +605,9 @@ const PackageSearch = () => {
     setHasSearched(true);
     setIsEditingSearch(false);
     setResults([]);
+    // Fresh search — drop any leftover sidebar-filter picks from the previous
+    // result set so a stale checkbox can't silently hide every new package.
+    clearResultFilters();
 
     try {
       const totalAdults = rooms.reduce((a, r) => a + (r.adults || 0), 0);
@@ -405,7 +615,11 @@ const PackageSearch = () => {
       const payload = {
         countryId: selectedDestination.countryId || "",
         cityId: selectedDestination.value || "",
-        agentId: agentId || "",
+        agentId: effectiveAgentId || "",
+        // Nationality filter — the backend resolves this country's market type
+        // and keeps only packages that have a rate priced for that market
+        // (rates with no market restriction always qualify).
+        nationalityId: selectedNationality?.value || "",
         // Flight Details filter — sent only when both ends are provided.
         arrivalDateTime: arrivalDateTime || "",
         departureDateTime: departureDateTime || "",
@@ -457,12 +671,27 @@ const PackageSearch = () => {
     // preserved across windows, so we pipe the context through query
     // params and let PackageBooking read it back from either source.
     const params = new URLSearchParams();
-    if (agentId) params.set("agentId", agentId);
+    if (effectiveAgentId) params.set("agentId", effectiveAgentId);
     if (selectedDestination?.countryId)
       params.set("destinationCountryId", String(selectedDestination.countryId));
     if (pkg.rate != null) params.set("searchRate", String(pkg.rate));
     if (pkg.rateType) params.set("searchRateType", pkg.rateType);
     params.set("searchCurrency", pkg.currencyCode || "AED");
+
+    // Nationality picked on the search page → seeds the booking's native
+    // country (the "Pax passport" field on Pax Information), which the
+    // Hotels / Cabs / Activities steps use for their rate lookups.
+    if (selectedNationality?.value != null) {
+      params.set("nationalityId", String(selectedNationality.value));
+      params.set("nationalityName", selectedNationality.label || "");
+    }
+
+    // "Booking Done By" — for agent logins the booking is done by the agent
+    // themselves; admin/staff may pick an employee. Persisted on the booking.
+    if (!isAgentRole && selectedEmployee?.value != null) {
+      params.set("employeeId", String(selectedEmployee.value));
+      params.set("employeeName", selectedEmployee.label || "");
+    }
 
     // Carry the Rooms & Guests selection into the booking page so its Pax
     // counts default to what was chosen on the search screen. A package
@@ -536,6 +765,143 @@ const PackageSearch = () => {
     (a) => String(a.id) === String(agentId),
   )?.companyName;
 
+  // ── Filter option lists ──
+  // Package Includes filter — mirrors "Available Deals" on the hotel page.
+  // Backed by the containHotel / containCab / containActivity flags on the
+  // package (returned by the search response).
+  const packageIncludesOptions = [
+    { value: "hotel", label: "Hotel", flag: "containHotel" },
+    { value: "cab", label: "Cab", flag: "containCab" },
+    { value: "activity", label: "Activity", flag: "containActivity" },
+  ];
+
+  // Duration buckets — mirrors the "All Stars" top-of-results dropdown. Each
+  // option carries a predicate that runs against the package's numeric
+  // duration (backend returns a string like "3", so we parse defensively).
+  const durationOptions = [
+    { value: "1", label: "1 Night", test: (n) => n === 1 },
+    { value: "2", label: "2 Nights", test: (n) => n === 2 },
+    { value: "3-5", label: "3–5 Nights", test: (n) => n >= 3 && n <= 5 },
+    { value: "6-10", label: "6–10 Nights", test: (n) => n >= 6 && n <= 10 },
+    { value: "10+", label: "10+ Nights", test: (n) => n > 10 },
+  ];
+
+  // Package Type and Package Category options are derived from the results
+  // themselves (only what's actually available is shown), so a checkbox never
+  // narrows to zero from the outset. Category is a comma-joined string on
+  // the response ("Triple Sharing, Single Sharing"), so we split it.
+  const packageTypeOptions = React.useMemo(() => {
+    const seen = new Set();
+    const options = [];
+    results.forEach((p) => {
+      const t = (p.packageType || "").trim();
+      if (!t || t === "N/A" || seen.has(t.toLowerCase())) return;
+      seen.add(t.toLowerCase());
+      options.push({ value: t, label: t });
+    });
+    return options.sort((a, b) => a.label.localeCompare(b.label));
+  }, [results]);
+
+  const packageCategoryOptions = React.useMemo(() => {
+    const seen = new Set();
+    const options = [];
+    results.forEach((p) => {
+      const raw = (p.packageCategory || "").trim();
+      if (!raw || raw === "N/A") return;
+      raw.split(",").forEach((c) => {
+        const name = c.trim();
+        if (!name || seen.has(name.toLowerCase())) return;
+        seen.add(name.toLowerCase());
+        options.push({ value: name, label: name });
+      });
+    });
+    return options.sort((a, b) => a.label.localeCompare(b.label));
+  }, [results]);
+
+  // ── Client-side filter + sort ──
+  // All narrowing runs against the last search's `results` (no re-fetch on
+  // filter change), matching how /new-booking/hotel does it.
+  const filteredResults = React.useMemo(() => {
+    let items = Array.isArray(results) ? [...results] : [];
+
+    const term = packageSearchTerm.trim().toLowerCase();
+    if (term) {
+      items = items.filter((p) =>
+        (p.packageName || "").toLowerCase().includes(term),
+      );
+    }
+
+    if (packageTypeFilter.length > 0) {
+      const picked = new Set(
+        packageTypeFilter.map((t) => (t.value || "").toLowerCase()),
+      );
+      items = items.filter((p) =>
+        picked.has((p.packageType || "").toLowerCase()),
+      );
+    }
+
+    if (packageCategoryFilter.length > 0) {
+      const picked = new Set(
+        packageCategoryFilter.map((c) => (c.value || "").toLowerCase()),
+      );
+      items = items.filter((p) => {
+        const cats = (p.packageCategory || "")
+          .split(",")
+          .map((c) => c.trim().toLowerCase())
+          .filter(Boolean);
+        return cats.some((c) => picked.has(c));
+      });
+    }
+
+    if (packageIncludesFilter.length > 0) {
+      // AND semantics — a picked include must be present on the package.
+      // The backend returns each flag as 1/0 (Integer) or true/false; treat
+      // both as truthy.
+      items = items.filter((p) =>
+        packageIncludesFilter.every((inc) => {
+          const v = p[inc.flag];
+          return v === 1 || v === true || v === "1";
+        }),
+      );
+    }
+
+    if (durationFilter) {
+      items = items.filter((p) => {
+        const n = parseInt(String(p.duration || "").trim(), 10);
+        if (Number.isNaN(n)) return false;
+        return durationFilter.test(n);
+      });
+    }
+
+    // Sort by rate. The backend returns rate as a string, so we parse.
+    const rateOf = (p) => {
+      const n = parseFloat(String(p.rate || "").replace(/,/g, ""));
+      return Number.isNaN(n) ? 0 : n;
+    };
+    if (sortBy === "priceAsc") items.sort((a, b) => rateOf(a) - rateOf(b));
+    else if (sortBy === "priceDesc")
+      items.sort((a, b) => rateOf(b) - rateOf(a));
+
+    return items;
+  }, [
+    results,
+    packageSearchTerm,
+    packageTypeFilter,
+    packageCategoryFilter,
+    packageIncludesFilter,
+    durationFilter,
+    sortBy,
+  ]);
+
+  const clearResultFilters = () => {
+    setPackageSearchTerm("");
+    setPackageTypeFilter([]);
+    setPackageCategoryFilter([]);
+    setPackageIncludesFilter([]);
+    setDurationFilter(null);
+    setSortBy("priceAsc");
+  };
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
@@ -553,18 +919,31 @@ const PackageSearch = () => {
                     {selectedDestination.label}
                   </span>
                 )}
-                {selectedAgentName && (
-                  <span className="hs-summary-chip">{selectedAgentName}</span>
-                )}
-                <span className="hs-summary-chip">
-                  {rooms.reduce((a, r) => a + r.adults, 0)} adults ·{" "}
-                  {rooms.reduce((a, r) => a + r.children, 0)} Child
-                </span>
                 {arrivalDateTime && departureDateTime && (
                   <span className="hs-summary-chip">
                     ✈ {arrivalDateTime.replace("T", " ")} →{" "}
                     {departureDateTime.replace("T", " ")}
                   </span>
+                )}
+                {nights > 0 && (
+                  <span className="hs-summary-chip">
+                    {nights} night{nights > 1 ? "s" : ""}
+                  </span>
+                )}
+                <span className="hs-summary-chip">
+                  {rooms.reduce((a, r) => a + r.adults, 0)} adults
+                  {rooms.reduce((a, r) => a + r.children, 0)
+                    ? `, ${rooms.reduce((a, r) => a + r.children, 0)} child`
+                    : ""}{" "}
+                  · {rooms.length} room{rooms.length > 1 ? "s" : ""}
+                </span>
+                {selectedNationality?.label && (
+                  <span className="hs-summary-chip">
+                    {selectedNationality.label}
+                  </span>
+                )}
+                {selectedAgentName && (
+                  <span className="hs-summary-chip">{selectedAgentName}</span>
                 )}
               </div>
               <Button
@@ -598,40 +977,54 @@ const PackageSearch = () => {
               </div>
 
               <Form onSubmit={handleSearchSubmit}>
+                {/*
+                  Search criteria order — kept identical to /new-booking/hotel
+                  (HotelSearch.jsx) so both booking flows read the same way:
+                    1. Agent
+                    2. Destination / City
+                    3. Nationality
+                    4. Booking Done By (Employee)
+                    5. Arrival   (the package equivalent of Check-In)
+                    6. Nights    (derived from the travel window)
+                    7. Departure (the package equivalent of Check-Out)
+                    8. Rooms & Guests
+                  Row totals stay 12 on lg — first row is Agent + Destination +
+                  Nationality + Booking Done By (4/4/4/4), second row is
+                  Arrival + Nights + Departure + Rooms & Guests (3/2/3/4).
+                */}
                 <Row className="g-4">
-                  {/* Agent Dropdown */}
-                  <Col lg={4} md={6}>
-                    <Form.Group>
-                      <Form.Label>Agent</Form.Label>
-                      <Form.Select
-                        className="form-control-modern"
-                        value={agentId}
-                        onChange={(e) => {
-                          setAgentId(e.target.value);
-                          if (e.target.value)
-                            setErrors((prev) => ({ ...prev, agent: null }));
-                        }}
-                      >
-                        <option value="">Select Agent</option>
-                        {agents.map((agent) => (
-                          <option key={agent.id} value={agent.id}>
-                            {agent.companyName}
-                          </option>
-                        ))}
-                      </Form.Select>
-                      {errors.agent && (
-                        <div className="text-danger small mt-1">
-                          {errors.agent}
-                        </div>
-                      )}
-                      <AgentBalanceDisplay agentId={agentId} />
-                    </Form.Group>
-                  </Col>
+                  {/* 1. Agent */}
+                  {!isAgentRole && (
+                    <Col lg={4} md={6}>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold text-dark">
+                          Agent
+                        </Form.Label>
+                        <AgentSelect
+                          agents={agents}
+                          value={agentId}
+                          isInvalid={!!errors.agent}
+                          onChange={(v) => {
+                            setAgentId(v);
+                            if (v) setErrors((prev) => ({ ...prev, agent: null }));
+                          }}
+                        />
+                        {errors.agent && (
+                          <div className="text-danger small mt-1">
+                            {errors.agent}
+                          </div>
+                        )}
+                        <AgentBalanceDisplay agentId={agentId} />
+                      </Form.Group>
+                    </Col>
+                  )}
 
-                  {/* Destination Dropdown */}
+                  {/* 2. Destination / City */}
                   <Col lg={4} md={6}>
                     <Form.Group>
-                      <Form.Label>Destination</Form.Label>
+                      <Form.Label className="fw-semibold text-dark">
+                        Destination / City
+                      </Form.Label>
                       <Select
                         className="modern-select"
                         classNamePrefix="react-select"
@@ -647,9 +1040,14 @@ const PackageSearch = () => {
                               destination: null,
                             }));
                         }}
-                        placeholder="Search for Country or City..."
+                        placeholder="Where do you want to go?"
                         isSearchable
                         isClearable
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          control: (base) => ({ ...base, minHeight: "42px" }),
+                        }}
                       />
                       {errors.destination && (
                         <div className="text-danger small mt-1">
@@ -659,12 +1057,199 @@ const PackageSearch = () => {
                     </Form.Group>
                   </Col>
 
-                  {/* Rooms & Guests — mirrors /new-booking/hotel's selector.
-                      The summary button shows the aggregate adults/children and
-                      toggles the expandable RoomGuestSelector for adjusting the
-                      adults/children counts. */}
+                  {/* 3. Nationality */}
                   <Col lg={4} md={6}>
-                    <Form.Label>Number of Adults and Children</Form.Label>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Nationality <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Select
+                        className="modern-select"
+                        classNamePrefix="react-select"
+                        options={nationalityList}
+                        value={selectedNationality}
+                        isLoading={isNationalityLoading}
+                        onInputChange={handleCountryInputChange}
+                        onChange={(option) => {
+                          setSelectedNationality(option);
+                          if (option)
+                            setErrors((prev) => ({
+                              ...prev,
+                              nationality: null,
+                            }));
+                        }}
+                        placeholder="Select nationality"
+                        isSearchable
+                        isClearable
+                        menuPortalTarget={document.body}
+                        styles={{
+                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          control: (base) => ({ ...base, minHeight: "42px" }),
+                        }}
+                      />
+                      {errors.nationality && (
+                        <div className="text-danger small mt-1">
+                          {errors.nationality}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  {/* 4. Booking Done By — for AGENT logins the booking is done
+                      by the logged-in agent, so the staff-employee picker is
+                      hidden and the agent's own name is shown (read-only).
+                      Admin/staff keep the optional employee dropdown. */}
+                  {isAgentRole ? (
+                    <Col lg={4} md={6}>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold text-dark">
+                          Booking Done By
+                        </Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={loggedInAgentName || "—"}
+                          readOnly
+                          disabled
+                          className="form-control-modern"
+                          style={{ height: "42px" }}
+                        />
+                      </Form.Group>
+                    </Col>
+                  ) : (
+                    <Col lg={4} md={6}>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold text-dark">
+                          Booking Done By Employee{" "}
+                          <span className="text-muted small">(optional)</span>
+                        </Form.Label>
+                        <Select
+                          className="modern-select"
+                          classNamePrefix="react-select"
+                          options={employees.map((e) => ({
+                            value: e.employeeId,
+                            label: `${e.firstName || ""} ${e.lastName || ""}`.trim(),
+                          }))}
+                          value={selectedEmployee}
+                          onChange={(option) => setSelectedEmployee(option)}
+                          placeholder="Select employee"
+                          isSearchable
+                          isClearable
+                          menuPortalTarget={document.body}
+                          styles={{
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                            control: (base) => ({ ...base, minHeight: "42px" }),
+                          }}
+                        />
+                      </Form.Group>
+                    </Col>
+                  )}
+
+                  {/* 5. Arrival — the package flow's Check-In. Together with
+                      Departure it is the Flight Details filter: the backend
+                      drops packages with no rate valid for the window and
+                      flags those whose itinerary runs longer than it. */}
+                  <Col lg={3} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        <FaPlaneDeparture className="me-2" />
+                        Arrival (Date &amp; Time){" "}
+                        <span className="text-danger">*</span>
+                      </Form.Label>
+                      <DateTimeApplyPicker
+                        value={arrivalDateTime}
+                        isInvalid={!!errors.arrivalDateTime}
+                        placeholder="Select arrival date & time"
+                        onApply={(newArrival) => {
+                          setArrivalDateTime(newArrival);
+                          setErrors((prev) => ({
+                            ...prev,
+                            arrivalDateTime: null,
+                            departureDateTime: null,
+                          }));
+                          // Auto-fill Departure the same way the native input
+                          // path did: next day at the same time when it's
+                          // empty or no longer after the new Arrival; leave a
+                          // valid later value the user picked themselves.
+                          if (newArrival) {
+                            const nextDay = addOneDayLocal(newArrival);
+                            setDepartureDateTime((prev) => {
+                              if (!prev) return nextDay;
+                              if (new Date(prev) <= new Date(newArrival))
+                                return nextDay;
+                              return prev;
+                            });
+                          }
+                        }}
+                      />
+                      {errors.arrivalDateTime && (
+                        <div className="text-danger small mt-1">
+                          {errors.arrivalDateTime}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  {/* 6. Nights — same position and behaviour as the Nights
+                      field on /new-booking/hotel: editing it moves Departure.
+                      Disabled until an Arrival is picked (there is nothing to
+                      count from). */}
+                  <Col lg={2} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Nights
+                      </Form.Label>
+                      <Form.Control
+                        type="number"
+                        min={1}
+                        className="form-control-modern"
+                        style={{ height: "42px" }}
+                        value={nights || ""}
+                        disabled={!arrivalDateTime}
+                        onChange={(e) => handleNightsChange(e.target.value)}
+                      />
+                    </Form.Group>
+                  </Col>
+
+                  {/* 7. Departure — the package flow's Check-Out. */}
+                  <Col lg={3} md={6}>
+                    <Form.Group>
+                      <Form.Label className="fw-semibold text-dark">
+                        Departure (Date &amp; Time){" "}
+                        <span className="text-danger">*</span>
+                      </Form.Label>
+                      <DateTimeApplyPicker
+                        value={departureDateTime}
+                        isInvalid={!!errors.departureDateTime}
+                        placeholder="Select departure date & time"
+                        minDate={
+                          arrivalDateTime
+                            ? parseLocalDateTime(arrivalDateTime)
+                            : undefined
+                        }
+                        onApply={(newDep) => {
+                          setDepartureDateTime(newDep);
+                          setErrors((prev) => ({
+                            ...prev,
+                            departureDateTime: null,
+                          }));
+                        }}
+                      />
+                      {errors.departureDateTime && (
+                        <div className="text-danger small mt-1">
+                          {errors.departureDateTime}
+                        </div>
+                      )}
+                    </Form.Group>
+                  </Col>
+
+                  {/* 8. Rooms & Guests — mirrors /new-booking/hotel's selector.
+                      A package booking resolves ONE package category for the
+                      whole party, so the room count is fixed at 1 and the
+                      hotel page's "Add Room" button is deliberately absent. */}
+                  <Col lg={4} md={6}>
+                    <Form.Label className="fw-semibold text-dark">
+                      Rooms &amp; Guests
+                    </Form.Label>
                     <div className="d-flex flex-wrap gap-2">
                       <Button
                         variant="outline-primary"
@@ -672,8 +1257,11 @@ const PackageSearch = () => {
                         type="button"
                         onClick={() => setRoomsOpen((o) => !o)}
                       >
-                        {rooms.reduce((a, r) => a + r.adults, 0)} adults ·{" "}
-                        {rooms.reduce((a, r) => a + r.children, 0)} Child
+                        {rooms.reduce((a, r) => a + r.adults, 0)} adults
+                        {rooms.reduce((a, r) => a + r.children, 0)
+                          ? `, ${rooms.reduce((a, r) => a + r.children, 0)} child`
+                          : ""}{" "}
+                        · {rooms.length} room{rooms.length > 1 ? "s" : ""}
                         <span className="float-end">
                           {roomsOpen ? "▴" : "▾"}
                         </span>
@@ -690,94 +1278,6 @@ const PackageSearch = () => {
                     </Col>
                   </Row>
                 )}
-
-                {/* Flight Details filter — arrival & departure date/time.
-                    Mandatory: both ends must be set. The backend flags
-                    packages whose itinerary is longer than this travel
-                    window so the user is warned before booking. */}
-                <Row className="mt-3">
-                  <Col xs={12}>
-                    <div className="flight-details-group">
-                      <div className="flight-details-title">
-                        <FaPlaneDeparture className="me-2" />
-                        Flight Details <span className="text-danger">*</span>
-                        <span className="flight-details-hint">
-                          Filter packages that fit your travel window
-                        </span>
-                      </div>
-                      <Row className="g-3">
-                        <Col md={6}>
-                          <Form.Group>
-                            <Form.Label>
-                              Arrival (Date &amp; Time){" "}
-                              <span className="text-danger">*</span>
-                            </Form.Label>
-                            <Form.Control
-                              type="datetime-local"
-                              className="form-control-modern"
-                              value={arrivalDateTime}
-                              onChange={(e) => {
-                                const newArrival = e.target.value;
-                                setArrivalDateTime(newArrival);
-                                setErrors((prev) => ({
-                                  ...prev,
-                                  arrivalDateTime: null,
-                                  departureDateTime: null,
-                                }));
-                                // Auto-fill Departure with the next day at the
-                                // same time when it's empty or no longer after
-                                // the new Arrival. Leaves a valid later value
-                                // the user picked themselves alone.
-                                if (newArrival) {
-                                  const nextDay = addOneDayLocal(newArrival);
-                                  setDepartureDateTime((prev) => {
-                                    if (!prev) return nextDay;
-                                    if (
-                                      new Date(prev) <= new Date(newArrival)
-                                    )
-                                      return nextDay;
-                                    return prev;
-                                  });
-                                }
-                              }}
-                            />
-                            {errors.arrivalDateTime && (
-                              <div className="text-danger small mt-1">
-                                {errors.arrivalDateTime}
-                              </div>
-                            )}
-                          </Form.Group>
-                        </Col>
-                        <Col md={6}>
-                          <Form.Group>
-                            <Form.Label>
-                              Departure (Date &amp; Time){" "}
-                              <span className="text-danger">*</span>
-                            </Form.Label>
-                            <Form.Control
-                              type="datetime-local"
-                              className="form-control-modern"
-                              value={departureDateTime}
-                              min={arrivalDateTime || undefined}
-                              onChange={(e) => {
-                                setDepartureDateTime(e.target.value);
-                                setErrors((prev) => ({
-                                  ...prev,
-                                  departureDateTime: null,
-                                }));
-                              }}
-                            />
-                            {errors.departureDateTime && (
-                              <div className="text-danger small mt-1">
-                                {errors.departureDateTime}
-                              </div>
-                            )}
-                          </Form.Group>
-                        </Col>
-                      </Row>
-                    </div>
-                  </Col>
-                </Row>
 
                 <div className="d-flex justify-content-center mt-5">
                   <Button
@@ -823,8 +1323,8 @@ const PackageSearch = () => {
                 </div>
                 <h4 className="fw-bold text-dark mb-2">Ready to Search?</h4>
                 <p className="text-muted mx-auto" style={{ maxWidth: "500px" }}>
-                  Select a destination and an agent to discover available travel
-                  packages and special offers.
+                  Select an agent, destination, nationality and travel window to
+                  discover available travel packages and special offers.
                 </p>
               </Card.Body>
             </Card>
@@ -834,96 +1334,363 @@ const PackageSearch = () => {
               <div className="d-flex justify-content-between align-items-center mb-3">
                 <h5 className="fw-bold mb-0 text-dark">Search Results</h5>
                 <span className="text-muted fw-medium">
-                  {results.length} Packages Found
+                  {filteredResults.length}
+                  {filteredResults.length !== results.length
+                    ? ` of ${results.length}`
+                    : ""}{" "}
+                  Package{results.length === 1 ? "" : "s"} Found
                 </span>
               </div>
 
-              {/* Card Grid */}
-              <Row className="g-3">
-                {results.map((pkg) => (
-                  <Col key={pkg.packageId} xl={4} lg={4} md={6}>
-                    <div className="result-card-wrap">
-                      <Card className="result-card border-0">
-                        {/* Image */}
-                        <div className="package-image-wrap">
-                          <img
-                            src={
-                              getImageUrl(pkg.packageImage) ||
-                              "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=800&q=80"
-                            }
-                            alt={pkg.packageName}
-                            className="package-image"
-                            onError={(e) => {
-                              e.target.onerror = null;
-                              e.target.src =
-                                "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=800&q=80";
-                            }}
-                          />
-                          <div className="duration-badge">
-                            <FaClock className="me-1 mb-1" size={11} />
-                            {pkg.duration} Night(s)
+              <Row className="g-4">
+                {/* ── Left Sidebar — mirrors /new-booking/hotel's sidebar ── */}
+                <Col lg={3} className="leftside d-none d-lg-block">
+                  <div className="left-fixed">
+                    <Card className="shadow-sm rounded-xl filtersection">
+                      <Card.Body className="p-2">
+                        {/* Package Name search (↔ Search Hotel Name) */}
+                        <Form.Control
+                          type="text"
+                          placeholder="Search Package Name..."
+                          className="ps-3 mb-2"
+                          value={packageSearchTerm}
+                          onChange={(e) =>
+                            setPackageSearchTerm(e.target.value)
+                          }
+                        />
+
+                        <hr />
+
+                        {/* Package Type (↔ Hotel Type) */}
+                        <Form.Group className="mb-2">
+                          <Form.Label className="fw-semibold small">
+                            Package Type
+                          </Form.Label>
+                          <div className="filter-checkbox-list">
+                            {packageTypeOptions.length === 0 ? (
+                              <div className="text-muted small px-1">
+                                No types available
+                              </div>
+                            ) : (
+                              packageTypeOptions.map((item) => (
+                                <Form.Check
+                                  key={item.value}
+                                  type="checkbox"
+                                  id={`pkg-type-${item.value}`}
+                                  label={item.label}
+                                  checked={packageTypeFilter.some(
+                                    (t) => t.value === item.value,
+                                  )}
+                                  onChange={(e) => {
+                                    if (e.target.checked)
+                                      setPackageTypeFilter([
+                                        ...packageTypeFilter,
+                                        item,
+                                      ]);
+                                    else
+                                      setPackageTypeFilter(
+                                        packageTypeFilter.filter(
+                                          (t) => t.value !== item.value,
+                                        ),
+                                      );
+                                  }}
+                                />
+                              ))
+                            )}
                           </div>
+                        </Form.Group>
+
+                        <hr />
+
+                        {/* Package Category (↔ Channel) */}
+                        <Form.Group className="mb-2">
+                          <Form.Label className="fw-semibold small">
+                            Package Category
+                          </Form.Label>
+                          <div className="filter-checkbox-list">
+                            {packageCategoryOptions.length === 0 ? (
+                              <div className="text-muted small px-1">
+                                No categories available
+                              </div>
+                            ) : (
+                              packageCategoryOptions.map((item) => (
+                                <Form.Check
+                                  key={item.value}
+                                  type="checkbox"
+                                  id={`pkg-cat-${item.value}`}
+                                  label={item.label}
+                                  checked={packageCategoryFilter.some(
+                                    (c) => c.value === item.value,
+                                  )}
+                                  onChange={(e) => {
+                                    if (e.target.checked)
+                                      setPackageCategoryFilter([
+                                        ...packageCategoryFilter,
+                                        item,
+                                      ]);
+                                    else
+                                      setPackageCategoryFilter(
+                                        packageCategoryFilter.filter(
+                                          (c) => c.value !== item.value,
+                                        ),
+                                      );
+                                  }}
+                                />
+                              ))
+                            )}
+                          </div>
+                        </Form.Group>
+
+                        <hr />
+
+                        {/* Package Includes (↔ Available Deals) */}
+                        <Form.Group>
+                          <Form.Label className="fw-semibold small d-flex justify-content-between align-items-center">
+                            <span>Package Includes</span>
+                            {packageIncludesFilter.length > 0 && (
+                              <span
+                                role="button"
+                                className="text-primary small"
+                                style={{
+                                  cursor: "pointer",
+                                  fontWeight: 500,
+                                }}
+                                onClick={() => setPackageIncludesFilter([])}
+                              >
+                                Clear
+                              </span>
+                            )}
+                          </Form.Label>
+                          <div className="filter-checkbox-list">
+                            {packageIncludesOptions.map((item) => (
+                              <Form.Check
+                                key={item.value}
+                                type="checkbox"
+                                id={`pkg-inc-${item.value}`}
+                                label={item.label}
+                                checked={packageIncludesFilter.some(
+                                  (i) => i.value === item.value,
+                                )}
+                                onChange={(e) => {
+                                  if (e.target.checked)
+                                    setPackageIncludesFilter([
+                                      ...packageIncludesFilter,
+                                      item,
+                                    ]);
+                                  else
+                                    setPackageIncludesFilter(
+                                      packageIncludesFilter.filter(
+                                        (i) => i.value !== item.value,
+                                      ),
+                                    );
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </Form.Group>
+                      </Card.Body>
+                    </Card>
+                  </div>
+                </Col>
+
+                {/* ── Right Content — top sort bar + package cards ── */}
+                <Col lg={9}>
+                  <Card className="shadow-sm rounded-xl mb-3 filtersection">
+                    <Card.Body className="p-2">
+                      <div className="d-flex align-items-center gap-3 flex-wrap">
+                        {/* Duration dropdown (↔ All Stars) */}
+                        <Select
+                          options={durationOptions}
+                          value={durationFilter}
+                          onChange={setDurationFilter}
+                          placeholder="All Durations"
+                          isClearable
+                          className="modern-select-sm"
+                          menuPortalTarget={document.body}
+                          styles={{
+                            /* No left margin — the strip's `gap-3` on the
+                               parent already spaces the dropdown from the sort
+                               pills, so the extra 30px port from the hotel
+                               page's "All Stars" would push it away from the
+                               card's left edge with nothing filling the gap. */
+                            control: (base) => ({
+                              ...base,
+                              height: "36px",
+                              minHeight: "36px",
+                              width: "180px",
+                              background: "#ffffff",
+                              color: "#000000",
+                            }),
+                            menuPortal: (base) => ({
+                              ...base,
+                              zIndex: 9999,
+                            }),
+                            menu: (base) => ({ ...base, zIndex: 9999 }),
+                          }}
+                        />
+
+                        <div className="d-flex gap-2">
+                          <Button
+                            size="sm"
+                            className={`sort-pill ${sortBy === "priceAsc" ? "active" : ""}`}
+                            onClick={() => setSortBy("priceAsc")}
+                          >
+                            Low to High
+                          </Button>
+                          <Button
+                            size="sm"
+                            className={`sort-pill ${sortBy === "priceDesc" ? "active" : ""}`}
+                            onClick={() => setSortBy("priceDesc")}
+                          >
+                            High to Low
+                          </Button>
                         </div>
 
-                        {/* Body */}
-                        <Card.Body className="d-flex flex-column p-3">
-                          <span className="package-type-tag">
-                            {pkg.packageType}
-                          </span>
-                          <h6 className="package-name">{pkg.packageName}</h6>
-                          <p
-                            className="text-muted mb-3"
-                            style={{ fontSize: "0.78rem" }}
-                          >
-                            {pkg.packageCategory}
-                          </p>
+                        <Button
+                          className="clear-pill"
+                          variant="outline-primary"
+                          size="sm"
+                          onClick={clearResultFilters}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                    </Card.Body>
+                  </Card>
 
-                          {/* Flight Details filter warning — shown when the
-                              package itinerary is longer than the selected
-                              arrival→departure window. */}
-                          {pkg.exceedsTravelWindow && (
-                            <div className="pkg-window-warning" role="note">
-                              <FaExclamationTriangle
-                                className="pkg-window-warning-icon"
-                                aria-hidden="true"
-                              />
-                              <span>{pkg.travelWindowWarning}</span>
-                            </div>
-                          )}
+                  {/* Card Grid — narrowed to filteredResults. When filters
+                      strip every card, show an inline "no matches" panel
+                      instead of the top-level empty state so the sidebar
+                      stays on screen and the operator can loosen filters. */}
+                  {filteredResults.length > 0 ? (
+                    <Row className="g-3">
+                      {filteredResults.map((pkg) => (
+                        <Col key={pkg.packageId} xl={6} lg={6} md={6}>
+                          <div className="result-card-wrap">
+                            <Card className="result-card border-0">
+                              {/* Image */}
+                              <div className="package-image-wrap">
+                                <img
+                                  src={
+                                    getImageUrl(pkg.packageImage) ||
+                                    "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=800&q=80"
+                                  }
+                                  alt={pkg.packageName}
+                                  className="package-image"
+                                  onError={(e) => {
+                                    e.target.onerror = null;
+                                    e.target.src =
+                                      "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=800&q=80";
+                                  }}
+                                />
+                                <div className="duration-badge">
+                                  <FaClock className="me-1 mb-1" size={11} />
+                                  {pkg.duration} Night(s)
+                                </div>
+                              </div>
 
-                          {/* Price + Book */}
-                          <div className="price-box d-flex justify-content-between align-items-center mt-auto">
-                            <div>
-                              <span className="price-currency">AED </span>
-                              <span className="price-value">{pkg.rate}</span>
-                              <span className="price-unit">
-                                /{pkg.rateType}
-                              </span>
-                            </div>
-                            <Button
-                              variant="success"
-                              size="sm"
-                              className="px-2 d-flex align-items-center justify-content-center"
-                              onClick={() => handleView(pkg.packageId)}
-                            >
-                             <FaEye size={15}/>
-                              
-                            </Button>
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              className="rounded-pill px-3 fw-bold"
-                              style={{ fontSize: "0.78rem" }}
-                              onClick={() => handleBookNow(pkg)}
-                            >
-                              Book Now
-                            </Button>
+                              {/* Body */}
+                              <Card.Body className="d-flex flex-column p-3">
+                                <span className="package-type-tag">
+                                  {pkg.packageType}
+                                </span>
+                                <h6 className="package-name">
+                                  {pkg.packageName}
+                                </h6>
+                                <p
+                                  className="text-muted mb-3"
+                                  style={{ fontSize: "0.78rem" }}
+                                >
+                                  {pkg.packageCategory}
+                                </p>
+
+                                {/* Flight Details filter warning — shown when the
+                                    package itinerary is longer than the selected
+                                    arrival→departure window. */}
+                                {pkg.exceedsTravelWindow && (
+                                  <div
+                                    className="pkg-window-warning"
+                                    role="note"
+                                  >
+                                    <FaExclamationTriangle
+                                      className="pkg-window-warning-icon"
+                                      aria-hidden="true"
+                                    />
+                                    <span>{pkg.travelWindowWarning}</span>
+                                  </div>
+                                )}
+
+                                {/* Price + Book — the two action buttons live in
+                                    a right-hand cluster so the eye button no
+                                    longer jams between price and Book Now, and
+                                    the whole row wraps as a unit on narrow
+                                    columns (price above, actions below) instead
+                                    of the buttons breaking mid-word. */}
+                                <div className="price-box d-flex flex-wrap justify-content-between align-items-center gap-2 mt-auto">
+                                  <div className="price-line">
+                                    <span className="price-currency">AED</span>
+                                    <span className="price-value">
+                                      {pkg.rate}
+                                    </span>
+                                    <span className="price-unit">
+                                      /{pkg.rateType}
+                                    </span>
+                                  </div>
+                                  <div className="package-actions d-flex align-items-center gap-2">
+                                    <Button
+                                      variant="outline-success"
+                                      size="sm"
+                                      className="pkg-view-btn"
+                                      title="View package details"
+                                      aria-label="View package details"
+                                      onClick={() => handleView(pkg.packageId)}
+                                    >
+                                      <FaEye size={14} />
+                                    </Button>
+                                    <Button
+                                      variant="primary"
+                                      size="sm"
+                                      className="pkg-book-btn rounded-pill fw-bold"
+                                      onClick={() => handleBookNow(pkg)}
+                                    >
+                                      View Package
+                                    </Button>
+                                  </div>
+                                </div>
+                              </Card.Body>
+                            </Card>
                           </div>
-                        </Card.Body>
-                      </Card>
-                    </div>
-                  </Col>
-                ))}
+                        </Col>
+                      ))}
+                    </Row>
+                  ) : (
+                    <Card className="empty-state-card text-center py-4">
+                      <Card.Body>
+                        <div className="empty-state-icon text-muted opacity-50">
+                          <FaSearch />
+                        </div>
+                        <h6 className="fw-bold text-dark mb-2">
+                          No packages match the selected filters
+                        </h6>
+                        <p
+                          className="text-muted mx-auto small mb-3"
+                          style={{ maxWidth: "420px" }}
+                        >
+                          Try removing a package type, category or include —
+                          or clear the sidebar filters.
+                        </p>
+                        <Button
+                          variant="outline-primary"
+                          className="rounded-pill"
+                          size="sm"
+                          onClick={clearResultFilters}
+                        >
+                          Clear Filters
+                        </Button>
+                      </Card.Body>
+                    </Card>
+                  )}
+                </Col>
               </Row>
             </div>
           ) : (
@@ -935,7 +1702,7 @@ const PackageSearch = () => {
                 <h4 className="fw-bold text-dark mb-2">No Packages Found</h4>
                 <p className="text-muted mx-auto" style={{ maxWidth: "500px" }}>
                   We couldn't find any packages matching your selection. Try
-                  adjusting your destination or agent.
+                  adjusting your destination, nationality or travel window.
                 </p>
                 <Button
                   variant="outline-primary"
