@@ -544,6 +544,13 @@ export const CabSearch = () => {
         localStorage.getItem("makeYourOwnPackageAgentId") ||
         "";
       if (resolvedAgentId) params.set("agentId", resolvedAgentId);
+      // Opt in to the Transfer Location Mapping substitution — a mapped
+      // in-house record disappears from its own group and shows up as the
+      // i'way entry in `external`, so the Pickup / Drop dropdown never
+      // offers the same real-world place twice. The /registration/cabProvider
+      // zone modal deliberately leaves this off so every in-house record
+      // stays available for zone building.
+      params.set("applyIwayMapping", "true");
 
       const res = await axiosInstance.get(
         `/api/cab-search/lookup?${params.toString()}`,

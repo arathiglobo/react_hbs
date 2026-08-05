@@ -14,8 +14,24 @@ import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import axios from "axios";
+import Select from "react-select";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
+
+// Fixed catalog of special requirements a cab provider can advertise.
+// react-select `{value,label}[]` shape; the value doubles as the string
+// stored in the DB (cab_rate_special_requirements.description), so any
+// edit here reflects immediately in every downstream display.
+const SPECIAL_REQUIREMENTS_OPTIONS = [
+  { value: "Name Board", label: "Name Board" },
+  { value: "Child Seat", label: "Child Seat" },
+  { value: "Baby Seat", label: "Baby Seat" },
+  { value: "Booster Seat", label: "Booster Seat" },
+  { value: "Wheelchair Accessible", label: "Wheelchair Accessible" },
+  { value: "Extra Luggage", label: "Extra Luggage" },
+  { value: "Pet Friendly", label: "Pet Friendly" },
+  { value: "English Speaking Driver", label: "English Speaking Driver" },
+];
 import {
   FaEdit,
   FaTrash,
@@ -148,6 +164,11 @@ const CabRates = () => {
   const [termsRows, setTermsRows] = useState([newPolicyRow(1)]);
   const [cancellationRows, setCancellationRows] = useState([newPolicyRow(1)]);
 
+  // Special Requirements — multi-select picked from SPECIAL_REQUIREMENTS_OPTIONS.
+  // Held as the react-select `{value,label}[]` shape; flattened to string[]
+  // in transformToPayload and hydrated back to option-objects in handleEdit.
+  const [selectedSpecialRequirements, setSelectedSpecialRequirements] = useState([]);
+
   const addPolicyRow = (setter) =>
     setter((prev) => [...prev, newPolicyRow(Date.now())]);
   const removePolicyRow = (setter, id) =>
@@ -189,9 +210,10 @@ const CabRates = () => {
         validityTo: "",
       },
     ]);
-    // Reset T&C / cancellation rows
+    // Reset T&C / cancellation rows + special requirements picks
     setTermsRows([newPolicyRow(1)]);
     setCancellationRows([newPolicyRow(1)]);
+    setSelectedSpecialRequirements([]);
   };
 
   // ── Rate Grid helpers (per-grid: transfers + carRental) ───────────────
@@ -385,6 +407,12 @@ const CabRates = () => {
         .filter((v) => v.length > 0),
       cancellationPolicies: cancellationRows
         .map((r) => (r.value || "").trim())
+        .filter((v) => v.length > 0),
+      // Multi-select picks flatten to a plain string list — matches the
+      // @ElementCollection<String> shape on CabRates. Empty selection sends
+      // an empty array, which the backend treats as "no special services".
+      specialRequirements: (selectedSpecialRequirements || [])
+        .map((opt) => (opt?.value || "").trim())
         .filter((v) => v.length > 0),
     };
     return payload;
@@ -634,6 +662,10 @@ const CabRates = () => {
 
   // Map the server's list-of-strings policy fields back into the local
   // editable row shape (`{id, value}`). Empty input → one blank row.
+  // Also hydrates selectedSpecialRequirements from the same rate — the
+  // stored strings are matched back to their SPECIAL_REQUIREMENTS_OPTIONS
+  // entry when possible; unknown values (e.g. an option removed from the
+  // catalog) are kept as {value: x, label: x} so nothing silently vanishes.
   const populatePolicyRowsFromRate = (rate) => {
     const seed = (list) =>
       Array.isArray(list) && list.length > 0
@@ -641,6 +673,19 @@ const CabRates = () => {
         : [newPolicyRow(1)];
     setTermsRows(seed(rate?.termsAndConditions));
     setCancellationRows(seed(rate?.cancellationPolicies));
+
+    const seedSpecial = Array.isArray(rate?.specialRequirements)
+      ? rate.specialRequirements
+          .filter((v) => v != null && String(v).trim().length > 0)
+          .map((v) => {
+            const value = String(v);
+            const match = SPECIAL_REQUIREMENTS_OPTIONS.find(
+              (opt) => opt.value === value,
+            );
+            return match || { value, label: value };
+          })
+      : [];
+    setSelectedSpecialRequirements(seedSpecial);
   };
 
   // Helper: map a server-side cabRateDetailsDTOList into transfer rows.
@@ -1341,6 +1386,40 @@ const CabRates = () => {
                 </div>
 
                 {/* Car Rental rate grid removed from CabRates — handled in Scheffer/Lumousin pages */}
+
+                {/* ── Special Requirements ──────────────────────────────
+                    Multi-select of add-on services the provider actually
+                    supports for this rate (Name Board, Child Seat, etc.).
+                    Only these picks are offered to the customer on the
+                    Cab Booking page — nothing outside this list shows up
+                    there, so the operator's checkbox effectively gates
+                    what the customer can request. */}
+                <div className="border-top pt-3 mt-3">
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <h6 className="text-muted mb-0">Special Requirements</h6>
+                  </div>
+                  <Row>
+                    <Col md={12}>
+                      <Select
+                        isMulti
+                        isClearable
+                        closeMenuOnSelect={false}
+                        placeholder="Select the special requirements this rate supports"
+                        options={SPECIAL_REQUIREMENTS_OPTIONS}
+                        value={selectedSpecialRequirements}
+                        onChange={(vals) =>
+                          setSelectedSpecialRequirements(vals || [])
+                        }
+                        isDisabled={isViewMode}
+                        classNamePrefix="cabrate-special-req"
+                      />
+                      <Form.Text className="text-muted">
+                        Customers will only see the items you tick here as
+                        selectable options when booking this rate.
+                      </Form.Text>
+                    </Col>
+                  </Row>
+                </div>
 
                 {/* ── Terms & Conditions ────────────────────────────────
                     Dynamic list of free-form sentences saved per rate.

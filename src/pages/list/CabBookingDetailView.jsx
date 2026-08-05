@@ -1335,6 +1335,72 @@ export default function CabBookingDetailView() {
               </SectionBody>
             </div>
 
+            {/* ── Special Requirements ── Multi-select picks from the
+                provider's configured catalog + any free-text notes the
+                customer added on the booking page. Either can be absent. */}
+            {(Array.isArray(booking?.selectedSpecialRequirements) &&
+              booking.selectedSpecialRequirements.length > 0) ||
+            (booking?.specialRequirements &&
+              String(booking.specialRequirements).trim()) ? (
+              <div style={card}>
+                <SectionHeader>Special Requirements</SectionHeader>
+                <SectionBody>
+                  {Array.isArray(booking?.selectedSpecialRequirements) &&
+                    booking.selectedSpecialRequirements.length > 0 && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 6,
+                          marginBottom:
+                            booking?.specialRequirements &&
+                            String(booking.specialRequirements).trim()
+                              ? 8
+                              : 0,
+                        }}
+                      >
+                        {booking.selectedSpecialRequirements.map((item, i) => (
+                          <span
+                            key={`ssr-${i}`}
+                            style={{
+                              background: "#F1F3F5",
+                              color: "#222",
+                              padding: "2px 8px",
+                              borderRadius: 12,
+                              fontSize: "0.78rem",
+                            }}
+                          >
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  {booking?.specialRequirements &&
+                    String(booking.specialRequirements).trim() && (
+                      <div
+                        style={{
+                          fontSize: "0.82rem",
+                          color: "#222",
+                          whiteSpace: "pre-line",
+                        }}
+                      >
+                        <span
+                          style={{
+                            color: "#666",
+                            fontSize: "0.75rem",
+                            display: "block",
+                            marginBottom: 2,
+                          }}
+                        >
+                          Additional notes
+                        </span>
+                        {String(booking.specialRequirements).trim()}
+                      </div>
+                    )}
+                </SectionBody>
+              </div>
+            ) : null}
+
             {/* ── Remarks ── Saved via the "BOOKING REMARK" modal;
                 actionState.remarks refreshes on save (mergeActionState). */}
             <div style={card}>
