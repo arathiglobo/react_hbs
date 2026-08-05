@@ -604,6 +604,35 @@ const ApiBookingPageForHotels = () => {
                 rate.nonRefundable === "true" ||
                 rate.nonRefundable === "Y";
 
+              // Darina (apiId=16): rate.deadlineDate is the LIVE
+              // free-cancellation cut-off carried from
+              // CheckAvailabilityWithCancellation_NoCache_LiveCalculation
+              // (BE parses the "Free Cancellation" band's toDate). It is
+              // the deadline the operator sees in the room accordion.
+              // Use it verbatim — the generic "earliest cancellationPolicy
+              // fromDate minus 2 days" fallback below picks up the Free
+              // Cancellation band's FromDate instead of the cut-off, which
+              // reports a wildly earlier date (September vs December).
+              if (
+                bookingData?.payload?.apiId === 16 &&
+                !nonRefundable &&
+                rate.deadlineDate
+              ) {
+                const iso = String(rate.deadlineDate).slice(0, 10);
+                const parts = iso.split("-");
+                if (parts.length === 3) {
+                  const d = new Date(
+                    Number(parts[0]),
+                    Number(parts[1]) - 1,
+                    Number(parts[2]),
+                  );
+                  if (!isNaN(d.getTime())) {
+                    d.setHours(0, 0, 0, 0);
+                    return d;
+                  }
+                }
+              }
+
               if (nonRefundable === true) {
                 const today = new Date();
                 const deadline = new Date(today);
