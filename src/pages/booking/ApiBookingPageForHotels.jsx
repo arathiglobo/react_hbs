@@ -91,6 +91,12 @@ const ApiBookingPageForHotels = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
+  // Duplicate-booking modal — shown when the backend surfaces
+  // status="DUPLICATE" (GRN's error code 6000). GRN detects the duplicate
+  // on its side; we just render a clean modal so the operator knows the
+  // booking already exists and doesn't retry blindly.
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateMessage, setDuplicateMessage] = useState("");
   // Policy consent modal — shown first when the operator clicks Confirm
   // Booking. Cancellation policies come from the search-time rate object
   // (API-side hotels don't expose a /policies endpoint). Only after
@@ -785,6 +791,15 @@ const ApiBookingPageForHotels = () => {
         // asked for uniform post-confirm UX — the detail page is still one
         // click away from the list row.
         navigate("/booking-details/hotel-booking-list");
+      } else if (statusUpper === "DUPLICATE") {
+        // GRN error code 6000 — the exact booking already exists at the
+        // supplier. Show a dedicated modal (not a toast) so the operator
+        // has to acknowledge before continuing, and doesn't retry blindly.
+        setDuplicateMessage(
+          bookingResponse?.message ||
+            "Duplicate booking detected. This exact booking was already made. Please check your recent bookings before retrying.",
+        );
+        setShowDuplicateModal(true);
       } else {
         // Surface backend / IWTX validation message when present (e.g.
         // "invalid_passengers[0].gender") instead of the generic
@@ -2175,6 +2190,48 @@ const ApiBookingPageForHotels = () => {
                         <i className="bi bi-check-circle me-1"></i> Confirm
                       </>
                     )}
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* Duplicate-booking modal — opened when the backend replies
+                  status="DUPLICATE" (GRN error code 6000). Read-only
+                  acknowledgement; the operator dismisses and goes to check
+                  the existing booking. No retry action here on purpose. */}
+              <Modal
+                show={showDuplicateModal}
+                onHide={() => setShowDuplicateModal(false)}
+                centered
+                backdrop="static"
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>
+                    <i className="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+                    Duplicate Booking
+                  </Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                  <p className="mb-2">{duplicateMessage}</p>
+                  <p className="text-muted small mb-0">
+                    Please check the Hotel Bookings list for the existing
+                    reservation before retrying.
+                  </p>
+                </Modal.Body>
+                <Modal.Footer>
+                  <Button
+                    variant="outline-secondary"
+                    onClick={() => setShowDuplicateModal(false)}
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      setShowDuplicateModal(false);
+                      navigate("/booking-details/hotel-booking-list");
+                    }}
+                  >
+                    View Bookings
                   </Button>
                 </Modal.Footer>
               </Modal>
