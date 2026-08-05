@@ -238,27 +238,6 @@ const ExternalApiRoomList = () => {
   // rateKey -> AtharvaPreBookResponseDTO (fresh tokenId/hKey/rateKey/policies)
   const [atharvaPrebookCache, setAtharvaPrebookCache] = useState({});
 
-  // Darina live-rate re-check modal state. Per v5.1 docs the mandatory
-  // 3-call flow is:  cached search → live-calc re-check → SubmitBooking.
-  // When the operator clicks "View Details / Select" on an apiId=16 rate we
-  // POST /api/hotel-booking/darina/prebook (which calls
-  // CheckAvailabilityWithCancellation_NoCache_LiveCalculation), show the
-  // fresh price / cancellation ladder / deadline in this modal, and only
-  // after they Confirm do we hand off to the booking page with the FRESH
-  // <RequestID> stamped onto rate.contractTokenId (SubmitBooking's own
-  // <RequestID> must be the live-calc one, not the cached search value).
-  const [showDarinaLiveModal, setShowDarinaLiveModal] = useState(false);
-  const [darinaLiveLoading, setDarinaLiveLoading] = useState(false);
-  const [darinaLiveError, setDarinaLiveError] = useState(null);
-  // { originalRates: [rate...], liveRates: [prebookResp...], hotelObj }
-  // Kept as arrays so the multi-room "Continue with Booking" path can
-  // populate every slot in one modal — single-room path just uses index 0.
-  const [darinaLivePreview, setDarinaLivePreview] = useState({
-    originalRates: [],
-    liveRates: [],
-    hotelObj: null,
-  });
-
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -825,33 +804,75 @@ const ExternalApiRoomList = () => {
     const currentApiId = resolveApiId(hotel);
 
     // ─── DARINA (apiId=16) live-rate re-check per v5.1 docs. ────────────
-    // Cached search response → LIVE re-check → SubmitBooking is the
-    // documented mandatory flow. Show the fresh price, cancellation ladder
-    // and deadline in a modal, then hand off to booking with the FRESH
-    // <RequestID> replacing the search-time contractTokenId.
+    // Cached search response → LIVE re-check (CheckAvailabilityWithCancellation
+    // _NoCache_LiveCalculation) → SubmitBooking. Reuse the same
+    // "Fetching accurate rate…" spinner + "Room Details" confirm modal
+    // as IWTX/X3 (apiId 12/15) — Darina hands back a FRESH <RequestID>
+    // that gets stamped onto contractTokenId so SubmitBooking sends it.
     if (currentApiId === apiIdMapping.DARINA) {
-      setDarinaLiveError(null);
-      setDarinaLivePreview({
-        originalRates: [rate],
-        liveRates: [],
-        hotelObj: hotel,
-      });
-      setShowDarinaLiveModal(true);
-      setDarinaLiveLoading(true);
+      setLoadingRate(true);
       (async () => {
         try {
           const live = await fetchDarinaPrebook(rate);
           if (!live?.success) {
-            setDarinaLiveError(
+            setLoadingRate(false);
+            alert(
               live?.message ||
                 "Darina live-rate check failed. Please retry or reselect the rate.",
             );
-            setDarinaLivePreview((prev) => ({ ...prev, liveRates: [null] }));
-          } else {
-            setDarinaLivePreview((prev) => ({ ...prev, liveRates: [live] }));
+            return;
           }
-        } finally {
-          setDarinaLiveLoading(false);
+          // Build the same shape the Room Details modal reads (rate,
+          // roomCategory, mealPlan, nonRefundable, contractLabel) and the
+          // booking page's payload builder needs (contractTokenId,
+          // deadlineDate, cancellationPolicy, rateWithoutMarkup).
+          const accurateRates = [
+            {
+              roomNo: 1,
+              hotelId: hotel.hotelId,
+              hotelName: hotel.hotelName,
+              hotelCode: payload.hotelCode || hotel.hotelId,
+              roomCategory: live.roomCategory || rate.roomCategory,
+              mealPlan: live.mealPlan || rate.mealPlan,
+              // Contract label — surfaces "Live rate" so the operator
+              // knows the modal isn't showing search-time cached data.
+              contractLabel: rate.contractLabel || "Live rate (Darina)",
+              nonRefundable:
+                live.nonRefundable != null
+                  ? live.nonRefundable
+                  : rate.nonRefundable,
+              rate: live.rate ?? rate.totalRate,
+              rateWithoutMarkup:
+                live.rateWithoutMarkup ?? rate.totalRateWithoutMarkup,
+              currency: live.currency || "AED",
+              roomTypeCode: rate.roomTypeCode,
+              mealPlanCode: rate.mealPlanCode,
+              // FRESH Darina <RequestID> from live-calc — MUST replace
+              // the search-time contractTokenId so SubmitBooking works.
+              contractTokenId: live.contractTokenId || rate.contractTokenId,
+              // Live cancellation ladder + free-cancellation cut-off.
+              cancellationPolicy:
+                (live.cancellationPolicies?.length &&
+                  live.cancellationPolicies) ||
+                rate.cancellationPolicies,
+              deadlineDate: live.deadlineDate ?? rate.deadlineDate,
+            },
+          ];
+          setSelectedRate(accurateRates);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+        } catch (err) {
+          console.error("Darina live-rate fetch failed:", err);
+          setLoadingRate(false);
+          const backendMsg =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message;
+          alert(
+            backendMsg
+              ? `Unable to fetch live rate: ${backendMsg}`
+              : "Unable to fetch live rate. Please try again.",
+          );
         }
       })();
       return;
@@ -1019,32 +1040,66 @@ const ExternalApiRoomList = () => {
 
     // ─── DARINA multi-room live-rate re-check. One prebook per selected
     //    rate (Darina's live-calc op takes a single hotel + room type +
-    //    meal plan per call). Fire in parallel, stash results, show the
-    //    live-rate modal — Confirm hands off to booking with FRESH
-    //    contractTokenIds per room.
+    //    meal plan per call). Fire in parallel, stitch the responses
+    //    into the same "Room Details" modal IWTX/X3 use.
     if (currentApiId === apiIdMapping.DARINA) {
       const rates = selectedRooms.map((r) => r.selectedRate);
-      setDarinaLiveError(null);
-      setDarinaLivePreview({
-        originalRates: rates,
-        liveRates: [],
-        hotelObj: hotel,
-      });
-      setShowDarinaLiveModal(true);
-      setDarinaLiveLoading(true);
+      setLoadingRate(true);
       (async () => {
         try {
           const results = await Promise.all(rates.map((r) => fetchDarinaPrebook(r)));
           const firstFail = results.find((r) => !r?.success);
           if (firstFail) {
-            setDarinaLiveError(
+            setLoadingRate(false);
+            alert(
               firstFail.message ||
                 "One of the selected rates is no longer available. Please reselect.",
             );
+            return;
           }
-          setDarinaLivePreview((prev) => ({ ...prev, liveRates: results }));
-        } finally {
-          setDarinaLiveLoading(false);
+          const accurateRates = rates.map((r, i) => {
+            const live = results[i] || {};
+            return {
+              roomNo: i + 1,
+              hotelId: hotel.hotelId,
+              hotelName: hotel.hotelName,
+              hotelCode: payload.hotelCode || hotel.hotelId,
+              roomCategory: live.roomCategory || r.roomCategory,
+              mealPlan: live.mealPlan || r.mealPlan,
+              contractLabel: r.contractLabel || "Live rate (Darina)",
+              nonRefundable:
+                live.nonRefundable != null
+                  ? live.nonRefundable
+                  : r.nonRefundable,
+              rate: live.rate ?? r.totalRate,
+              rateWithoutMarkup:
+                live.rateWithoutMarkup ?? r.totalRateWithoutMarkup,
+              currency: live.currency || "AED",
+              roomTypeCode: r.roomTypeCode,
+              mealPlanCode: r.mealPlanCode,
+              contractTokenId: live.contractTokenId || r.contractTokenId,
+              cancellationPolicy:
+                (live.cancellationPolicies?.length &&
+                  live.cancellationPolicies) ||
+                r.cancellationPolicies,
+              deadlineDate: live.deadlineDate ?? r.deadlineDate,
+            };
+          });
+          setSelectedRate(accurateRates);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+        } catch (err) {
+          console.error("Darina multi-room live-rate fetch failed:", err);
+          setLoadingRate(false);
+          const backendMsg =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message;
+          alert(
+            backendMsg
+              ? `Unable to fetch live rate: ${backendMsg}`
+              : "Unable to fetch live rate. Please try again.",
+          );
         }
       })();
       return;
@@ -2404,7 +2459,7 @@ const ExternalApiRoomList = () => {
         </main>
       </div>
 
-      {/* Accurate-rate confirm modal (apiId 12/15). Preserves the ARRAY
+      {/* Accurate-rate confirm modal (apiId 12/15/16). Preserves the ARRAY
           shape ApiBookingPageForHotels reads from sessionStorage. */}
       <Modal
         show={showBookingModal}
@@ -2517,203 +2572,7 @@ const ExternalApiRoomList = () => {
               window.open("/api-booking-page-hotels", "_blank");
             }}
           >
-            Confirm Booking
-          </Button>
-        </Modal.Footer>
-      </Modal>
-
-      {/* Darina (apiId 16) LIVE-rate re-check modal. Per v5.1 docs this
-          call sits between the cached search response and SubmitBooking —
-          re-verifies price + availability + cancellation policy, and
-          returns a FRESH <RequestID> we forward as contractTokenId into
-          the booking payload. Multi-room shows one card per selected
-          rate; single-room path uses index 0. */}
-      <Modal
-        show={showDarinaLiveModal}
-        onHide={() => setShowDarinaLiveModal(false)}
-        size="lg"
-        aria-labelledby="darina-live-rate-modal"
-        centered
-        scrollable
-      >
-        <Modal.Header closeButton>
-          <Modal.Title id="darina-live-rate-modal">
-            Confirm Live Rate & Cancellation Policy
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body style={{ maxHeight: "70vh", overflowY: "auto" }}>
-          <div className="text-muted small mb-3">
-            Rates and cancellation policies are re-verified with Darina in
-            real time before booking.
-          </div>
-
-          {darinaLiveLoading && (
-            <div className="alert alert-info py-2 mb-3" role="status">
-              Fetching live rate from Darina…
-            </div>
-          )}
-          {darinaLiveError && (
-            <div className="alert alert-warning py-2 mb-3" role="alert">
-              {darinaLiveError}
-            </div>
-          )}
-
-          {darinaLivePreview.originalRates.map((origRate, idx) => {
-            const live = darinaLivePreview.liveRates[idx];
-            const priceDrifted =
-              live?.success &&
-              origRate?.totalRate != null &&
-              live?.rate != null &&
-              Number(live.rate).toFixed(2) !==
-                Number(origRate.totalRate).toFixed(2);
-            return (
-              <Card key={idx} className="mb-3 border">
-                <Card.Body>
-                  <div className="d-flex justify-content-between align-items-start mb-2">
-                    <div>
-                      <div className="fw-semibold">
-                        Room {idx + 1}: {origRate?.roomCategory}
-                      </div>
-                      <div className="small text-muted">
-                        {origRate?.mealPlan}
-                      </div>
-                    </div>
-                    <div className="text-end">
-                      <div className="small text-muted">Cached rate</div>
-                      <div className="fw-semibold">
-                        {formatPrice(origRate?.totalRate || 0)}
-                      </div>
-                    </div>
-                  </div>
-
-                  {live?.success ? (
-                    <>
-                      <div className="d-flex justify-content-between align-items-center py-2 border-top">
-                        <span className="small text-muted">Live rate</span>
-                        <span
-                          className={`fw-bold fs-5 ${
-                            priceDrifted ? "text-danger" : "text-primary"
-                          }`}
-                        >
-                          {formatPrice(live.rate || 0)}
-                        </span>
-                      </div>
-                      {priceDrifted && (
-                        <div className="small text-danger mb-2">
-                          Price changed vs. cached rate. Confirm the new price
-                          before booking.
-                        </div>
-                      )}
-
-                      {live.deadlineDate && (
-                        <div className="mb-2">
-                          <Badge bg="success" className="fw-normal">
-                            Free cancellation until {live.deadlineDate}
-                          </Badge>
-                        </div>
-                      )}
-                      {live.nonRefundable && (
-                        <div className="mb-2">
-                          <Badge bg="danger">Non-refundable</Badge>
-                        </div>
-                      )}
-
-                      {Array.isArray(live.cancellationPolicies) &&
-                        live.cancellationPolicies.length > 0 && (
-                          <>
-                            <div className="fw-semibold small mt-2 mb-1">
-                              Cancellation policy (live):
-                            </div>
-                            <ul className="mb-0 ps-3 small">
-                              {live.cancellationPolicies.map((p, i) => (
-                                <li key={i} className="mb-1">
-                                  {stripHtmlTags(p?.policyText)}
-                                </li>
-                              ))}
-                            </ul>
-                          </>
-                        )}
-                    </>
-                  ) : (
-                    !darinaLiveLoading && (
-                      <div className="alert alert-danger py-2 mb-0 small">
-                        {live?.message ||
-                          "Live rate not yet available for this room."}
-                      </div>
-                    )
-                  )}
-                </Card.Body>
-              </Card>
-            );
-          })}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button
-            variant="secondary"
-            onClick={() => setShowDarinaLiveModal(false)}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            disabled={
-              darinaLiveLoading ||
-              darinaLivePreview.liveRates.length === 0 ||
-              darinaLivePreview.liveRates.some((l) => !l?.success)
-            }
-            onClick={() => {
-              try {
-                const { originalRates, liveRates, hotelObj } = darinaLivePreview;
-                // Merge live values into the search-time rate object so
-                // mapRateForPayload downstream picks up the fresh price,
-                // deadline and — critically — the LIVE contractTokenId
-                // (Darina's fresh <RequestID>) that SubmitBooking needs.
-                const mergedRates = originalRates.map((r, i) => {
-                  const live = liveRates[i] || {};
-                  return {
-                    ...r,
-                    totalRate: live.rate ?? r.totalRate,
-                    totalRateWithoutMarkup:
-                      live.rateWithoutMarkup ?? r.totalRateWithoutMarkup,
-                    roomRateBasedOnRoomCount:
-                      live.rate ?? r.roomRateBasedOnRoomCount,
-                    roomRateBasedOnRoomCount_WithoutMarkup:
-                      live.rateWithoutMarkup ??
-                      r.roomRateBasedOnRoomCount_WithoutMarkup,
-                    contractTokenId:
-                      live.contractTokenId ?? r.contractTokenId,
-                    cancellationPolicies:
-                      (live.cancellationPolicies?.length &&
-                        live.cancellationPolicies) ||
-                      r.cancellationPolicies,
-                    deadlineDate: live.deadlineDate ?? r.deadlineDate,
-                    nonRefundable:
-                      live.nonRefundable != null
-                        ? live.nonRefundable
-                        : r.nonRefundable,
-                  };
-                });
-                const currentApiId = resolveApiId(hotelObj);
-                const bookingData = {
-                  selectedRate: mergedRates.map((mr, i) =>
-                    mapRateForPayload(mr, hotelObj, i + 1),
-                  ),
-                  hotelStaticData: roomData.meta,
-                  payload: { ...(roomData?.payload || {}), apiId: currentApiId },
-                };
-                sessionStorage.setItem(
-                  "bookingData",
-                  JSON.stringify(bookingData),
-                );
-                setShowDarinaLiveModal(false);
-                window.open("/api-booking-page-hotels", "_blank");
-              } catch (err) {
-                console.error("Error preparing Darina booking data:", err);
-                alert("Unable to proceed with booking. Please try again.");
-              }
-            }}
-          >
-            Confirm & Continue to Booking
+            Continue
           </Button>
         </Modal.Footer>
       </Modal>
