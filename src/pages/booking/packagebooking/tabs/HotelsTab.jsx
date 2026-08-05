@@ -465,7 +465,10 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           hotel grid — same fallback /room-list uses. */}
       <Row className="g-3 mb-3">
         <Col lg={3} md={4}>
-          <Card className="room-filters-card">
+          {/* h-100 makes the filters card stretch to match the height of the
+              adjacent "Hotels included in this package" section, keeping the
+              two columns visually aligned. */}
+          <Card className="room-filters-card h-100">
             <Card.Body className="p-3">
               <h6 className="filter-title mb-3">Filters</h6>
 
@@ -747,13 +750,12 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           flex-wrap: wrap;
         }
         .prg-hero-divider { color: #C5C5BE; font-weight: 400; }
-        /* "01 Nights / 02 Days" — brand gradient text, matching the page's
-           red→violet CTA buttons. */
+        /* "01 Nights / 02 Days" — rendered in solid black per design. */
         .prg-hero-title strong {
-          background: linear-gradient(135deg, #EC0B43 0%, #8b5cf6 100%);
-          -webkit-background-clip: text;
-          background-clip: text;
-          color: transparent;
+          background: none;
+          -webkit-background-clip: initial;
+          background-clip: initial;
+          color: #000000;
           font-weight: 800;
         }
         .prg-hero-sub {
@@ -907,15 +909,16 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           width: 34px;
           height: 34px;
           border-radius: 10px;
-          background: linear-gradient(135deg, #EC0B43, #8b5cf6);
-          color: #fff;
+          background: #ffffff;
+          color: #000000;
           font-weight: 700;
           font-size: 0.85rem;
           display: inline-flex;
           align-items: center;
           justify-content: center;
           flex-shrink: 0;
-          box-shadow: 0 4px 10px rgba(236, 11, 67, 0.28);
+          border: 1px solid #e5e7eb;
+          box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
         }
         .prg-day-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
         .prg-day-title-main {
@@ -1266,13 +1269,14 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           padding-left: 18px;
         }
 
-        /* Branded count pills ("2 days", "2 hotels") — the same red→violet
-           gradient as the page's CTAs. */
+        /* Count pills ("2 days", "2 hotels") — white box, black text,
+           matching the .prg-day-num day-index chips. */
         .prg-section-pill {
           padding: 3px 12px;
-          background: linear-gradient(135deg, #EC0B43, #8b5cf6);
-          color: #ffffff;
-          box-shadow: 0 2px 6px rgba(236, 11, 67, 0.25);
+          background: #ffffff;
+          color: #000000;
+          border: 1px solid #e5e7eb;
+          box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
         }
         /* Brand-red icons on the neutral section headers (Itinerary, Hotels)
            and the sidebar info card — Includes/Excludes keep their own

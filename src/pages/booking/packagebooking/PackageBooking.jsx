@@ -529,7 +529,13 @@ const PackageBooking = () => {
         <Sidebar />
         <main
           className="content-wrapper flex-grow-1 booking-stepper-container"
-          style={{ minWidth: 0, overflowX: "hidden" }}
+          /* overflowX must be `clip`, not `hidden`. `hidden` promotes the
+             other axis to `auto` and makes <main> a scroll container, which
+             breaks `position: sticky` on the Total Price sidebar (the sticky
+             element ends up anchored to <main> instead of the real page
+             scroll). `clip` prevents horizontal overflow the same way without
+             establishing a scroll container. */
+          style={{ minWidth: 0, overflowX: "clip" }}
         >
           <div className="container-fluid" style={{ paddingTop: "10px" }}>
             {/* Page heading — mirrors /room-list's "Accommodation" heading. */}
@@ -685,9 +691,11 @@ const PackageBooking = () => {
 
             {/* ── Price sidebar ── */}
             <Col lg={3}>
-              {/* The whole sidebar block flows with the page — it is neither
-                  pinned nor capped at the viewport height, so the operator can
-                  scroll past it exactly like any other content on the page. */}
+              {/* The sidebar block is sticky-pinned near the top of the
+                  viewport (see .sidebar-stack in PackageBooking_Stepper.css)
+                  so the Total Price stays visible while the operator scrolls
+                  through the main content. It unpins naturally when its
+                  column ends. */}
               <div className="sidebar-stack">
               <div className="price-sidebar-card">
                 <div className="price-sidebar-label">Total Price</div>
@@ -868,10 +876,10 @@ const PackageBooking = () => {
                   border-color: #2563eb !important;
                   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
                 }
-                /* Red "Cancellation Policies & Terms" link under Total Price.
-                   The outer button just centers a compact inline group so the
-                   shield sits IMMEDIATELY next to the text — even when the
-                   label wraps to two lines. */
+                /* Pure-red "Cancellation Policies & Terms" link under Total
+                   Price. The outer button just centers a compact inline group
+                   so the shield sits IMMEDIATELY next to the text — even when
+                   the label wraps to two lines. */
                 .price-policy-link {
                   display: flex;
                   align-items: flex-start;
@@ -879,7 +887,7 @@ const PackageBooking = () => {
                   width: 100%;
                   border: none;
                   background: transparent;
-                  color: #EC0B43;
+                  color: #FF0000;
                   font-weight: 700;
                   font-size: 0.82rem;
                   line-height: 1.35;
@@ -887,7 +895,7 @@ const PackageBooking = () => {
                   padding: 2px 0;
                   transition: color 0.15s ease;
                 }
-                .price-policy-link:hover { color: #b3082f; }
+                .price-policy-link:hover { color: #CC0000; }
                 .policy-link-icon {
                   flex-shrink: 0;
                   margin-right: 6px;

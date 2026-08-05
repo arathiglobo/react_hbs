@@ -493,14 +493,21 @@ margin: 1.25rem 0 0;
 }
 
 /* Sidebar block — Total Price + (on Pax Info step) Mode of payment + Book /
-   Hold cards. Neither sticky nor capped in height: the whole block flows with
-   the rest of the page so the operator scrolls past it exactly like any
-   other content, and the Total Price never overlaps a section they're trying
-   to read. Card-to-card spacing is owned by `.sidebar-pay-card { margin-top }`
-   (defined in the inline <style> block on PackageBooking.jsx), so this wrapper
-   deliberately sets no gap. */
+   Hold cards. Sticky-pinned near the top of the viewport so the operator can
+   always see the Total Price while scrolling through the Day-wise itinerary,
+   Hotels and Includes/Excludes sections. The sticky region is bounded by the
+   parent Col, so it unpins naturally as its column ends and never overlaps
+   content that follows. Card-to-card spacing is owned by
+   `.sidebar-pay-card { margin-top }` (defined in the inline <style> block on
+   PackageBooking.jsx), so this wrapper deliberately sets no gap. */
 .sidebar-stack {
     display: block;
+    position: sticky;
+    /* The global .topbar is sticky at the top of the viewport with a fixed
+       height of 60px (see custom.scss). Pin below it with a small breathing
+       gap so the "Total Price" heading never hides behind the topbar. */
+    top: 76px;
+    align-self: flex-start;
 }
 
 /* Matches the "Booking Summary" header on the hero .booking-summary card:
@@ -521,11 +528,11 @@ margin: 1.25rem 0 0;
     font-weight: 800;
     letter-spacing: -1px;
     line-height: 1;
-    /* Brand red→violet gradient text, matching the Confirm booking CTA. */
-    background: linear-gradient(135deg, #EC0B43 0%, #7c3aed 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    /* Rendered in pure red per design. */
+    background: none;
+    -webkit-background-clip: initial;
+    background-clip: initial;
+    color: #FF0000;
 }
 
 .price-sidebar-sub {
