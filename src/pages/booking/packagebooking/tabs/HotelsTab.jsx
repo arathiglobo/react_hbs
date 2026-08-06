@@ -644,21 +644,30 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         </Col>
       </Row>
 
-      {/* ────── Cancellation policy — moved here (below the hotels list) so it
-          reads as a full-width closing note instead of a cramped sidebar
-          card. ────── */}
-      <div className="prg-cxl-card mb-3">
-        <div className="prg-cxl-title">
-          <FaRegClock className="me-2" />Cancellation policy
-        </div>
-        {cancellationParts.map((p, i) => (
-          <div key={i} className={`prg-cxl-line prg-cxl-${p.tone}`}>{p.text}</div>
-        ))}
-        <div className="prg-cxl-note">
-          <FaShieldAlt className="me-2" />
-          This is a <strong>NON-REFUNDABLE</strong> package within the charge window.
-        </div>
-      </div>
+      {/* ────── Cancellation policy — rebuilt to match the room-list
+          "Cancellation Policy" box (see RoomList.jsx:2020-2047): plain white
+          card, red danger-toned h6 heading with the solid X-circle icon, and
+          a bulleted <ul> list. The NON-REFUNDABLE note is folded in as the
+          final list item, kept red so the emphasis carries over. ────── */}
+      <Card className="mb-3">
+        <Card.Body className="p-4">
+          <h6 className="text-danger mb-3">
+            <FaTimesCircle className="me-2" />
+            Cancellation Policy
+          </h6>
+          <ul className="mb-0 ps-3">
+            {cancellationParts.map((p, i) => (
+              <li key={i} className="mb-2">
+                <div style={{ whiteSpace: "pre-line" }}>{p.text}</div>
+              </li>
+            ))}
+            <li className="mb-0 text-danger">
+              <FaShieldAlt className="me-2" />
+              This is a <strong>NON-REFUNDABLE</strong> package within the charge window.
+            </li>
+          </ul>
+        </Card.Body>
+      </Card>
 
       {/* Mode of payment moved to the Pax Info step's right sidebar (below
           the Total Price card). T&C acceptance lives in the Confirm-booking

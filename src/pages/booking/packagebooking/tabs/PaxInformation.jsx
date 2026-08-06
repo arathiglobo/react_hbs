@@ -1034,14 +1034,19 @@ const PaxInformation = ({
                       }`}
                     >
                       <div className="d-flex align-items-start">
+                        {/* White chip with black digits — matches the day
+                            chips on the Package Details step (see
+                            .prg-day-num in HotelsTab.jsx). */}
                         <div
-                          className="me-3 d-flex align-items-center justify-content-center fw-bold text-white"
+                          className="me-3 d-flex align-items-center justify-content-center fw-bold"
                           style={{
                             width: 36,
                             height: 36,
                             borderRadius: 8,
-                            background:
-                              "linear-gradient(135deg, #EC0B43, #8b5cf6)",
+                            background: "#ffffff",
+                            color: "#000000",
+                            border: "1px solid #e5e7eb",
+                            boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)",
                             flexShrink: 0,
                             fontSize: "0.8rem",
                           }}

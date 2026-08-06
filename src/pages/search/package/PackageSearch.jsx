@@ -1,7 +1,18 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Card, Button, Row, Col, Form, Spinner, Modal } from "react-bootstrap";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
+// Same "Explore On Map" preview + modal as /new-booking/hotel — reused so
+// both search pages read as one system. Packages have no lat/lng, so the
+// modal opens with an empty markers array and shows its built-in
+// unavailable-location fallback.
+import MapModal from "../../../components/map/MapModal";
+import { ENABLE_MAP_PREVIEW } from "../../../config/featureFlags";
+// Packages only carry a text arrive-place/arrive-country (no lat/lng
+// anywhere in that chain — see PackageSearchResponseDTO on the backend).
+// This resolves an approximate marker position from those strings using a
+// local city/country centroid table — no third-party geocoding call.
+import { resolveApproxLocation } from "../../../utils/locationCentroids";
 import Select from "react-select";
 import axiosInstance from "../../../components/AxiosInstance";
 import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
@@ -278,6 +289,9 @@ const PackageSearch = () => {
   // When results are on screen the big search form collapses into a sticky
   // summary strip. Clicking "Modify Search" flips this true to re-expand it.
   const [isEditingSearch, setIsEditingSearch] = useState(false);
+  // "Explore on Map" modal — opened from the map preview at the top of the
+  // left results sidebar. Same pattern as /new-booking/hotel.
+  const [showMapModal, setShowMapModal] = useState(false);
 
   // ── Results-side filters (mirror /new-booking/hotel's left sidebar +
   //    top sort bar). All applied client-side against `results`. ──
@@ -893,6 +907,44 @@ const PackageSearch = () => {
     sortBy,
   ]);
 
+  // "Explore on Map" markers — one per currently-visible (filtered) package,
+  // approximated from arrivePlace/arriveCountryName (see
+  // utils/locationCentroids.js). Packages with no recognized place/country
+  // are skipped rather than guessed. When two or more packages resolve to
+  // the exact same coordinate, later ones are nudged outward along a
+  // golden-angle spiral so their pins don't stack exactly on top of each
+  // other.
+  const mapMarkers = useMemo(() => {
+    const seenCount = new Map();
+    return filteredResults
+      .map((pkg) => {
+        const coords = resolveApproxLocation(
+          pkg.arrivePlace,
+          pkg.arriveCountryName,
+        );
+        if (!coords) return null;
+
+        const key = `${coords[0].toFixed(3)},${coords[1].toFixed(3)}`;
+        const dupIndex = seenCount.get(key) || 0;
+        seenCount.set(key, dupIndex + 1);
+
+        let [lat, lng] = coords;
+        if (dupIndex > 0) {
+          const radius = 0.06 * dupIndex;
+          const angle = dupIndex * 137.5 * (Math.PI / 180);
+          lat += radius * Math.cos(angle);
+          lng += radius * Math.sin(angle);
+        }
+
+        const address = [pkg.arrivePlace, pkg.arriveCountryName]
+          .filter((v) => v && v !== "N/A")
+          .join(", ");
+
+        return { id: pkg.packageId, name: pkg.packageName, lat, lng, address };
+      })
+      .filter(Boolean);
+  }, [filteredResults]);
+
   const clearResultFilters = () => {
     setPackageSearchTerm("");
     setPackageTypeFilter([]);
@@ -1348,6 +1400,28 @@ const PackageSearch = () => {
                   <div className="left-fixed">
                     <Card className="shadow-sm rounded-xl filtersection">
                       <Card.Body className="p-2">
+                        {/* "Explore On Map" preview — same block as
+                            /new-booking/hotel's sidebar (see HotelSearch.jsx:
+                            .map-preview-wrapper + .map-overlay-btn). Styles
+                            resolve from HotelSearch.css which this page
+                            already imports. */}
+                        <div className="map-preview-wrapper mb-2">
+                          <img
+                            src="/images/map.jpg"
+                            alt="Map preview"
+                            className="map-preview-img"
+                          />
+                          {ENABLE_MAP_PREVIEW && (
+                            <button
+                              type="button"
+                              className="map-overlay-btn"
+                              onClick={() => setShowMapModal(true)}
+                            >
+                              EXPLORE ON MAP 📍
+                            </button>
+                          )}
+                        </div>
+
                         {/* Package Name search (↔ Search Hotel Name) */}
                         <Form.Control
                           type="text"
@@ -1565,99 +1639,113 @@ const PackageSearch = () => {
                   {filteredResults.length > 0 ? (
                     <Row className="g-3">
                       {filteredResults.map((pkg) => (
-                        <Col key={pkg.packageId} xl={6} lg={6} md={6}>
+                        /* Full-width row per package, mirroring the vertical
+                           list layout on /new-booking/hotel (HotelSearch.jsx
+                           uses <Col xs={12}> per hotel with an internal
+                           <Col md={4}> image + <Col md={8}> body split). */
+                        <Col key={pkg.packageId} xs={12}>
                           <div className="result-card-wrap">
                             <Card className="result-card border-0">
-                              {/* Image */}
-                              <div className="package-image-wrap">
-                                <img
-                                  src={
-                                    getImageUrl(pkg.packageImage) ||
-                                    "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=800&q=80"
-                                  }
-                                  alt={pkg.packageName}
-                                  className="package-image"
-                                  onError={(e) => {
-                                    e.target.onerror = null;
-                                    e.target.src =
-                                      "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=800&q=80";
-                                  }}
-                                />
-                                <div className="duration-badge">
-                                  <FaClock className="me-1 mb-1" size={11} />
-                                  {pkg.duration} Night(s)
-                                </div>
-                              </div>
-
-                              {/* Body */}
-                              <Card.Body className="d-flex flex-column p-3">
-                                <span className="package-type-tag">
-                                  {pkg.packageType}
-                                </span>
-                                <h6 className="package-name">
-                                  {pkg.packageName}
-                                </h6>
-                                <p
-                                  className="text-muted mb-3"
-                                  style={{ fontSize: "0.78rem" }}
-                                >
-                                  {pkg.packageCategory}
-                                </p>
-
-                                {/* Flight Details filter warning — shown when the
-                                    package itinerary is longer than the selected
-                                    arrival→departure window. */}
-                                {pkg.exceedsTravelWindow && (
-                                  <div
-                                    className="pkg-window-warning"
-                                    role="note"
-                                  >
-                                    <FaExclamationTriangle
-                                      className="pkg-window-warning-icon"
-                                      aria-hidden="true"
+                              <Row className="g-0">
+                                {/* Image — left third on md+, stacks on top on
+                                    xs/sm. .package-image-wrap--row (see
+                                    PackageSearch.css) fills the card height and
+                                    switches corner-rounding responsively. */}
+                                <Col md={4}>
+                                  <div className="package-image-wrap package-image-wrap--row">
+                                    <img
+                                      src={
+                                        getImageUrl(pkg.packageImage) ||
+                                        "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=800&q=80"
+                                      }
+                                      alt={pkg.packageName}
+                                      className="package-image"
+                                      onError={(e) => {
+                                        e.target.onerror = null;
+                                        e.target.src =
+                                          "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=800&q=80";
+                                      }}
                                     />
-                                    <span>{pkg.travelWindowWarning}</span>
+                                    <div className="duration-badge">
+                                      <FaClock className="me-1 mb-1" size={11} />
+                                      {pkg.duration} Night(s)
+                                    </div>
                                   </div>
-                                )}
+                                </Col>
 
-                                {/* Price + Book — the two action buttons live in
-                                    a right-hand cluster so the eye button no
-                                    longer jams between price and Book Now, and
-                                    the whole row wraps as a unit on narrow
-                                    columns (price above, actions below) instead
-                                    of the buttons breaking mid-word. */}
-                                <div className="price-box d-flex flex-wrap justify-content-between align-items-center gap-2 mt-auto">
-                                  <div className="price-line">
-                                    <span className="price-currency">AED</span>
-                                    <span className="price-value">
-                                      {pkg.rate}
+                                {/* Body — right two-thirds on md+. */}
+                                <Col md={8}>
+                                  <Card.Body className="d-flex flex-column p-3 h-100">
+                                    <span className="package-type-tag">
+                                      {pkg.packageType}
                                     </span>
-                                    <span className="price-unit">
-                                      /{pkg.rateType}
-                                    </span>
-                                  </div>
-                                  <div className="package-actions d-flex align-items-center gap-2">
-                                    <Button
-                                      variant="outline-success"
-                                      size="sm"
-                                      className="pkg-view-btn"
-                                      title="View package details"
-                                      aria-label="View package details"
-                                      onClick={() => handleView(pkg.packageId)}
+                                    <h6 className="package-name">
+                                      {pkg.packageName}
+                                    </h6>
+                                    <p
+                                      className="text-muted mb-3"
+                                      style={{ fontSize: "0.78rem" }}
                                     >
-                                      <FaEye size={14} />
-                                    </Button>
-                                    <Button
-                                      variant="primary"
-                                      size="sm"
-                                      className="pkg-book-btn rounded-pill fw-bold"
-                                      onClick={() => handleBookNow(pkg)}
-                                    >
-                                      View Package
-                                    </Button>
-                                  </div>
-                                </div>
-                              </Card.Body>
+                                      {pkg.packageCategory}
+                                    </p>
+
+                                    {/* Flight Details filter warning — shown when
+                                        the package itinerary is longer than the
+                                        selected arrival→departure window. */}
+                                    {pkg.exceedsTravelWindow && (
+                                      <div
+                                        className="pkg-window-warning"
+                                        role="note"
+                                      >
+                                        <FaExclamationTriangle
+                                          className="pkg-window-warning-icon"
+                                          aria-hidden="true"
+                                        />
+                                        <span>{pkg.travelWindowWarning}</span>
+                                      </div>
+                                    )}
+
+                                    {/* Price + Book — the two action buttons
+                                        live in a right-hand cluster so the eye
+                                        button no longer jams between price and
+                                        Book Now, and the whole row wraps as a
+                                        unit on narrow columns (price above,
+                                        actions below) instead of the buttons
+                                        breaking mid-word. */}
+                                    <div className="price-box d-flex flex-wrap justify-content-between align-items-center gap-2 mt-auto">
+                                      <div className="price-line">
+                                        <span className="price-currency">AED</span>
+                                        <span className="price-value">
+                                          {pkg.rate}
+                                        </span>
+                                        <span className="price-unit">
+                                          /{pkg.rateType}
+                                        </span>
+                                      </div>
+                                      <div className="package-actions d-flex align-items-center gap-2">
+                                        <Button
+                                          variant="outline-success"
+                                          size="sm"
+                                          className="pkg-view-btn"
+                                          title="View package details"
+                                          aria-label="View package details"
+                                          onClick={() => handleView(pkg.packageId)}
+                                        >
+                                          <FaEye size={14} />
+                                        </Button>
+                                        <Button
+                                          variant="primary"
+                                          size="sm"
+                                          className="pkg-book-btn rounded-pill fw-bold"
+                                          onClick={() => handleBookNow(pkg)}
+                                        >
+                                          View Package
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </Card.Body>
+                                </Col>
+                              </Row>
                             </Card>
                           </div>
                         </Col>
@@ -2118,6 +2206,20 @@ const PackageSearch = () => {
           )}
         </Modal.Footer>
       </Modal>
+
+      {/* Shared "Explore on Map" modal — one pin per currently-filtered
+          package, approximated from arrivePlace/arriveCountryName (see
+          mapMarkers above). Falls back to MapModal's built-in "location
+          currently unavailable" state when no package resolves to a known
+          place/country. */}
+      {ENABLE_MAP_PREVIEW && (
+        <MapModal
+          show={showMapModal}
+          onHide={() => setShowMapModal(false)}
+          markers={mapMarkers}
+          title="Explore on Map"
+        />
+      )}
     </div>
   );
 };

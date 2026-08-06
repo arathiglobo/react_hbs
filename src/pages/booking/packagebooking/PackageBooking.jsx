@@ -11,6 +11,7 @@ import {
   FaCheckCircle,
   FaShieldAlt,
   FaRegClock,
+  FaTimesCircle,
   FaFileContract,
   FaSuitcase,
   FaCalendarAlt,
@@ -935,47 +936,27 @@ const PackageBooking = () => {
           </Modal.Title>
         </Modal.Header>
         <Modal.Body className="p-4">
-          {/* Cancellation policy */}
-          <h6
-            className="fw-bold d-flex align-items-center mb-2"
-            style={{ color: "#92400e" }}
-          >
-            <FaRegClock className="me-2" /> Cancellation Policy
+          {/* Cancellation policy — matches the room-list "Cancellation Policy"
+              block (see RoomList.jsx:2020-2047) and the equivalent block on
+              the Package Details step (HotelsTab.jsx): red danger-toned h6
+              heading with the solid X-circle icon, and a bulleted <ul> list.
+              The NON-REFUNDABLE note is folded in as the final list item so
+              the emphasis carries over without a separate callout row. */}
+          <h6 className="text-danger mb-3">
+            <FaTimesCircle className="me-2" />
+            Cancellation Policy
           </h6>
-          <div className="mb-2">
+          <ul className="mb-0 ps-3">
             {cancellationParts.map((p, i) => (
-              <div
-                key={i}
-                className="small mb-2 p-2 rounded"
-                style={{
-                  background:
-                    p.tone === "ok"
-                      ? "rgba(16,185,129,0.12)"
-                      : p.tone === "warn"
-                        ? "rgba(249,115,22,0.14)"
-                        : "rgba(148,163,184,0.15)",
-                  color:
-                    p.tone === "ok"
-                      ? "#065f46"
-                      : p.tone === "warn"
-                        ? "#9a3412"
-                        : "#475569",
-                }}
-              >
-                {p.text}
-              </div>
+              <li key={i} className="mb-2">
+                <div style={{ whiteSpace: "pre-line" }}>{p.text}</div>
+              </li>
             ))}
-            <div
-              className="small mt-2 p-2 rounded d-flex align-items-center"
-              style={{ background: "rgba(239,68,68,0.1)", color: "#b91c1c" }}
-            >
-              <FaShieldAlt className="me-2 flex-shrink-0" />
-              <span>
-                This is a <strong>NON-REFUNDABLE</strong> package within the
-                charge window.
-              </span>
-            </div>
-          </div>
+            <li className="mb-0 text-danger">
+              <FaShieldAlt className="me-2" />
+              This is a <strong>NON-REFUNDABLE</strong> package within the charge window.
+            </li>
+          </ul>
 
           {/* Terms & Conditions */}
           <h6
