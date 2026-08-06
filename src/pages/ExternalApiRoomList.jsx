@@ -197,6 +197,16 @@ const ExternalApiRoomList = () => {
     useState(false);
   const [pendingBookingFn, setPendingBookingFn] = useState(null);
 
+  // GRN per-room "pick-count mismatch" modal. Multi-room GRN rates (a rate
+  // whose recheck-guaranteed rooms[] covers >1 slot) must be picked for the
+  // exact number of rooms they cover, otherwise GRN's booking API rejects
+  // with error 5126 "Rate key and rooms specified do not match". Instead of
+  // letting the user walk into that failure at the booking page, we check
+  // on the "Continue with Booking" click and pop this modal early.
+  const [showGrnPickMismatchModal, setShowGrnPickMismatchModal] =
+    useState(false);
+  const [grnPickMismatchMessages, setGrnPickMismatchMessages] = useState([]);
+
   // Cancellation Policies & Terms modal — sourced from the search
   // response; no extra API call for external suppliers.
   //
@@ -1084,6 +1094,42 @@ const ExternalApiRoomList = () => {
       return;
     }
 
+    // GRN per-room "pick-count" pre-check. A GRN non-bundled / partial-bundled
+    // rate whose numberOfRooms > 1 covers that many rooms — it MUST be picked
+    // for exactly that many matching slots, otherwise GRN's booking API
+    // rejects the payload with error 5126 "Rate key and rooms specified do
+    // not match". We catch the mismatch here (before navigating to the
+    // booking page) and show a modal with a clear message. Scoped strictly
+    // to GRN + non-bundled multi-room mode so bundled bookings, other
+    // suppliers, and single-room flows are untouched.
+    if (isNonBundledMode) {
+      const countsByRateKey = new Map();
+      const rateInfoByKey = new Map();
+      selectedRooms.forEach((r) => {
+        const rk = r?.selectedRate?.rateKey;
+        if (!rk) return;
+        countsByRateKey.set(rk, (countsByRateKey.get(rk) || 0) + 1);
+        if (!rateInfoByKey.has(rk)) rateInfoByKey.set(rk, r.selectedRate);
+      });
+      const mismatches = [];
+      countsByRateKey.forEach((assignedCount, rk) => {
+        const rate = rateInfoByKey.get(rk);
+        const expected = Number(rate?.numberOfRooms);
+        if (!expected || expected <= 1) return; // single-room rates: nothing to check
+        if (expected !== assignedCount) {
+          const label = rate?.roomTypeDescription || rate?.roomCategory || rk.slice(0, 12) + "…";
+          mismatches.push(
+            `"${label}" covers ${expected} room(s) but was picked for ${assignedCount} room(s). Please either pick this rate for exactly ${expected} matching room(s), or use "Book as one package" mode.`
+          );
+        }
+      });
+      if (mismatches.length > 0) {
+        setGrnPickMismatchMessages(mismatches);
+        setShowGrnPickMismatchModal(true);
+        return;
+      }
+    }
+
     const sum = (key) =>
       selectedRooms.reduce(
         (acc, r) => acc + (Number(r.selectedRate?.[key]) || 0),
@@ -1543,6 +1589,33 @@ const ExternalApiRoomList = () => {
                   }}
                 >
                   Back to Search
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            {/* GRN per-room "pick-count mismatch" modal — see the pre-check
+                in handleProceedBooking for the invariant this enforces. */}
+            <Modal
+              show={showGrnPickMismatchModal}
+              onHide={() => setShowGrnPickMismatchModal(false)}
+              centered
+            >
+              <Modal.Header closeButton>
+                <Modal.Title>Selection Doesn't Match Rate</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                {grnPickMismatchMessages.map((msg, i) => (
+                  <p key={i} className={i === grnPickMismatchMessages.length - 1 ? "mb-0" : ""}>
+                    {msg}
+                  </p>
+                ))}
+              </Modal.Body>
+              <Modal.Footer>
+                <Button
+                  variant="primary"
+                  onClick={() => setShowGrnPickMismatchModal(false)}
+                >
+                  OK
                 </Button>
               </Modal.Footer>
             </Modal>
