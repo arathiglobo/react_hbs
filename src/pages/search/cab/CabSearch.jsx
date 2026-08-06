@@ -1050,6 +1050,31 @@ export const CabSearch = () => {
     });
   };
 
+  // One location shape for every supplier. `source` + `id` drive the
+  // in-house zone matcher; `externalId` + coords drive coordinate-based
+  // suppliers. Whichever the operator picked, both legs receive the same
+  // object and each decides for itself whether it can serve it. Hoisted to
+  // component scope (not just the search-submit handler) so handleBookNow
+  // can reuse it to build the same origin/destination for the booking
+  // hand-off — the backend re-resolves it via IwayPlaceResolver exactly as
+  // it did at search time.
+  const toTransferLocation = (item, fallbackSource) => {
+    if (!item) return null;
+    return {
+      source: item.source || fallbackSource,
+      id: item.locationId ?? null,
+      externalId: item.externalId ?? null,
+      name: item.locationName || item.label || null,
+      subtitle: item.subtitle || null,
+      // IATA when known. The backend uses it to match a supplier airport
+      // back onto master_airport, which is what lets an i'way-picked
+      // airport still return in-house cabProvider rates.
+      code: item.code || null,
+      lat: item.lat ?? null,
+      lng: item.lng ?? null,
+    };
+  };
+
   const handleTransferSearchSubmit = async (e) => {
     e.preventDefault();
 
@@ -1072,27 +1097,6 @@ export const CabSearch = () => {
         sessionStorage.getItem("makeYourOwnPackageAgentId") ||
         localStorage.getItem("makeYourOwnPackageAgentId") ||
         "1";
-
-      // One location shape for every supplier. `source` + `id` drive the
-      // in-house zone matcher; `externalId` + coords drive coordinate-based
-      // suppliers. Whichever the operator picked, both legs receive the
-      // same object and each decides for itself whether it can serve it.
-      const toTransferLocation = (item, fallbackSource) => {
-        if (!item) return null;
-        return {
-          source: item.source || fallbackSource,
-          id: item.locationId ?? null,
-          externalId: item.externalId ?? null,
-          name: item.locationName || item.label || null,
-          subtitle: item.subtitle || null,
-          // IATA when known. The backend uses it to match a supplier airport
-          // back onto master_airport, which is what lets an i'way-picked
-          // airport still return in-house cabProvider rates.
-          code: item.code || null,
-          lat: item.lat ?? null,
-          lng: item.lng ?? null,
-        };
-      };
 
       const originLocation = toTransferLocation(pickupItem, "AIRPORT");
       const destinationLocation = toTransferLocation(dropoffItem, "HOTEL");
@@ -1320,19 +1324,7 @@ export const CabSearch = () => {
   };
 
   const handleBookNow = (cab, cabDetail) => {
-    // IWay rows are external-supplier offers — the /cab-booking-page
-    // flow only knows how to POST /api/cab/book (in-house cab tables).
-    // Until CabBookingPage learns the IWay POST /orders flow we stop
-    // the navigation with an informative toast so the operator isn't
-    // dropped into a broken checkout. Everything else below still runs
-    // for in-house rows.
-    if (cab?.channelType === "iway" || cab?.source === "IWAY") {
-      toast(
-        "IWay booking checkout will be wired up next — the search + rates are live now.",
-        { icon: "ℹ️", duration: 5000 },
-      );
-      return;
-    }
+    const isIway = cab?.channelType === "iway" || cab?.source === "IWAY";
     // Recompute the row's price the same way the table shows it so the
     // booking page receives a consistent total. We carry BOTH the
     // markup-applied price (`totalRate`, what the user pays) and the
@@ -1405,6 +1397,17 @@ export const CabSearch = () => {
         // through so the booking page / downstream invoice can apply
         // conversion. Null when the user didn't pick one.
         currencyCode: currency?.value || null,
+        // i'way booking fields — null/absent for in-house rows, so the
+        // existing in-house payload shape is completely unaffected.
+        // origin/destination reuse the exact same shape the /prices search
+        // request already sent, so the backend can re-resolve i'way
+        // place_id/coordinates via IwayPlaceResolver at booking time exactly
+        // as it did at search time.
+        apiType: isIway ? "IWAY" : null,
+        iwayPriceId: isIway ? (cab?.iwayPriceId ?? null) : null,
+        iwayPriceUid: isIway ? (cab?.iwayPriceUid ?? null) : null,
+        originLocation: isIway ? toTransferLocation(pickupItem, "AIRPORT") : null,
+        destinationLocation: isIway ? toTransferLocation(dropoffItem, "HOTEL") : null,
       },
     };
 
@@ -1808,7 +1811,13 @@ export const CabSearch = () => {
                             // Derive the category from the selection so the
                             // Departure-Time rule, booking hand-off and result
                             // labels keep working unchanged.
-                            setPickupKind(opt?.source || "");
+                            // IATA-first: i'way-native airports come back tagged
+                            // source="IWAY", so falling straight to opt.source
+                            // would classify DWC/DXB/etc. as generic "IWAY" and
+                            // downstream code (booking-page flight-number
+                            // input, TripServiceImpl.pickupIsAirport) would
+                            // never treat them as airports.
+                            setPickupKind(opt?.code ? "AIRPORT" : opt?.source || "");
                             if (opt) clearError("pickupItem");
                           }}
                           onInputChange={(input, { action }) => {
@@ -1912,7 +1921,10 @@ export const CabSearch = () => {
                           isLoading={isDropLocationsLoading}
                           onChange={(opt) => {
                             setDropoffItem(opt);
-                            const kind = opt?.source || "";
+                            // IATA-first, same reason as the pickup branch —
+                            // i'way-native airports are tagged source="IWAY"
+                            // and need the code fallback to classify as AIRPORT.
+                            const kind = opt?.code ? "AIRPORT" : opt?.source || "";
                             setDropoffKind(kind);
                             // Accommodation drops don't carry a departure
                             // time — clear any previously entered value so a

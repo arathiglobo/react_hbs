@@ -326,6 +326,14 @@ export default function CabBookingDetailView() {
   // Cancel (with reason)
   const [cancellationReason, setCancellationReason] = useState("");
 
+  // Cancel-modal preview — Free vs Penalty banner + refund figure the
+  // operator sees before confirming. Populated by /api/cab/{id}/cancel-preview
+  // on modal open. For i'way bookings this hits i'way's check-cancel
+  // (§11.13) server-side; in-house rows short-circuit to "full refund".
+  const [cancelPreview, setCancelPreview] = useState(null);
+  const [cancelPreviewLoading, setCancelPreviewLoading] = useState(false);
+  const [cancelPenaltyAcknowledged, setCancelPenaltyAcknowledged] = useState(false);
+
   // Client location captured when the Cancel / Reconfirm modals open, so the
   // History modal's "Booking Cancelled" / "Booking Reconfirmed" rows show
   // where the action was performed. IP is stamped server-side.
@@ -497,8 +505,22 @@ export default function CabBookingDetailView() {
   const openCancelModal = () => {
     setCancellationReason("");
     setCancelLocation(null);
+    setCancelPreview(null);
+    setCancelPenaltyAcknowledged(false);
     setShowCancelModal(true);
     resolveClientLocation(setCancelLocation);
+    // Fetch penalty preview so the modal can render Free/Penalty banner
+    // + refund amount before the operator confirms. Preview failure is
+    // non-blocking — the operator can still cancel (backend will re-check
+    // and reject if truly not allowed), but the banner just won't render.
+    if (booking?.custombookingId) {
+      setCancelPreviewLoading(true);
+      axiosInstance
+        .get(`/api/cab/${booking.custombookingId}/cancel-preview`)
+        .then((res) => setCancelPreview(res.data || null))
+        .catch(() => setCancelPreview(null))
+        .finally(() => setCancelPreviewLoading(false));
+    }
   };
 
   // ── Reconfirm ──
@@ -940,13 +962,17 @@ export default function CabBookingDetailView() {
 
   // Display status for the StatusBadge — cancelled shows red, otherwise the
   // live confirmation status (falling back to Confirmed) coloured green.
-  // The default "OK" confirmation status reads as "Confirmed" on this page;
-  // only "OK" is remapped — every other status (ReConfirmed, Rejected, …) is
-  // shown as-is. Display-only: the stored confirmationStatus is unchanged.
+  // Both "OK" (in-house default) and "PENDING_IWAY_PAYMENT" (legacy i'way
+  // bookings from before /orders/approve was wired) read as "Confirmed" on
+  // this page — once a row is persisted the customer's booking is settled
+  // from the agent's perspective, and the raw internal string shouldn't
+  // leak to the UI. Every other status (ReConfirmed, Rejected, …) is shown
+  // as-is. Display-only: the stored confirmationStatus is unchanged.
   const rawStatus = actionState.confirmationStatus || "Confirmed";
+  const normalizedRaw = String(rawStatus).trim().toUpperCase();
   const baseStatus = isCancelled
     ? "Cancelled"
-    : String(rawStatus).trim().toUpperCase() === "OK"
+    : normalizedRaw === "OK" || normalizedRaw === "PENDING_IWAY_PAYMENT"
       ? "Confirmed"
       : rawStatus;
   // Display-only relabels (mirror PackageBookingDetailView): a ReConfirmed
@@ -1985,6 +2011,104 @@ export default function CabBookingDetailView() {
             </p>
             <h5 className="mb-1">{booking.packageBookCode}</h5>
             <p className="text-primary small mb-3">{booking.cabName}</p>
+
+            {/* Cancellation-preview banner — Free / Penalty / Blocked. Only
+                rendered once the preview call has returned. Non-blocking:
+                a preview fetch failure just hides the banner and lets the
+                backend re-check on the actual cancel. */}
+            {cancelPreviewLoading && (
+              <div className="text-muted small mb-3">
+                <Spinner animation="border" size="sm" className="me-2" />
+                Checking cancellation eligibility…
+              </div>
+            )}
+            {!cancelPreviewLoading && cancelPreview && (
+              <div
+                className={`alert text-start ${
+                  !cancelPreview.allowed
+                    ? "alert-danger"
+                    : cancelPreview.hasPenalty
+                      ? "alert-warning"
+                      : "alert-success"
+                }`}
+                role="alert"
+              >
+                {!cancelPreview.allowed ? (
+                  <>
+                    <div className="fw-semibold mb-1">Cancellation blocked</div>
+                    <div className="small">
+                      {cancelPreview.message ||
+                        "This booking can no longer be cancelled."}
+                    </div>
+                  </>
+                ) : cancelPreview.hasPenalty ? (
+                  <>
+                    <div className="fw-semibold mb-1">
+                      Penalty window — 100% charge applies
+                    </div>
+                    <div className="small mb-2">
+                      The free-cancellation window has closed. i'way will
+                      charge the full trip cost as a penalty.
+                    </div>
+                    <div className="small">
+                      <div>
+                        Trip total:{" "}
+                        <b>
+                          {cancelPreview.totalAmount != null
+                            ? cancelPreview.totalAmount.toFixed(2)
+                            : "—"}{" "}
+                          {cancelPreview.currency || ""}
+                        </b>
+                      </div>
+                      <div>
+                        Penalty:{" "}
+                        <b>
+                          {cancelPreview.penaltyAmount != null
+                            ? cancelPreview.penaltyAmount.toFixed(2)
+                            : "—"}{" "}
+                          {cancelPreview.currency || ""}
+                        </b>
+                      </div>
+                      <div>
+                        Wallet refund:{" "}
+                        <b>
+                          {cancelPreview.refundAmount != null
+                            ? cancelPreview.refundAmount.toFixed(2)
+                            : "—"}{" "}
+                          {cancelPreview.currency || ""}
+                        </b>
+                      </div>
+                    </div>
+                    <Form.Check
+                      type="checkbox"
+                      className="mt-2"
+                      id="cancelPenaltyAck"
+                      label="I understand the agent will not be refunded for this cancellation."
+                      checked={cancelPenaltyAcknowledged}
+                      onChange={(e) =>
+                        setCancelPenaltyAcknowledged(e.target.checked)
+                      }
+                      disabled={cancelling}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <div className="fw-semibold mb-1">Free cancellation</div>
+                    <div className="small">
+                      Full wallet refund of{" "}
+                      <b>
+                        {cancelPreview.refundAmount != null
+                          ? cancelPreview.refundAmount.toFixed(2)
+                          : "—"}{" "}
+                        {cancelPreview.currency || ""}
+                      </b>{" "}
+                      will be credited.
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             <Form.Group controlId="cabCancellationReason" className="text-start">
               <Form.Label className="fw-semibold">
                 Cancellation Reason{" "}
@@ -2020,7 +2144,15 @@ export default function CabBookingDetailView() {
           <Button
             variant="danger"
             onClick={handleCancelBooking}
-            disabled={cancelling}
+            disabled={
+              cancelling ||
+              // Preview arrived and said "not allowed" — hard-block.
+              (cancelPreview && !cancelPreview.allowed) ||
+              // Penalty case requires explicit acknowledgement.
+              (cancelPreview &&
+                cancelPreview.hasPenalty &&
+                !cancelPenaltyAcknowledged)
+            }
           >
             {cancelling ? (
               <>

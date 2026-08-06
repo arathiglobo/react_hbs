@@ -174,6 +174,22 @@ const CabBookingPage = () => {
   // If accessed directly without state, we should probably redirect or show an error
   const hasValidState = !!cab && !!selectedOption && !!searchCriteria;
 
+  // i'way rows carry no in-house cabId (cab.cabid is a synthetic string like
+  // "iway-12345"), so every branch below that assumes a real Cab row needs
+  // to check this first.
+  const isIway = cab?.channelType === "iway" || cab?.source === "IWAY";
+
+  // Airport detection needs both signals because i'way-native airports come
+  // back tagged source="IWAY" (not "AIRPORT") from /transport-nodes — only
+  // the IATA code on the location object identifies them as airports. Used
+  // by the flight-number input render / validation / payload branches below.
+  const pickupIsAirport =
+    searchCriteria?.pickupType === "AIRPORT" ||
+    !!searchCriteria?.originLocation?.code;
+  const dropoffIsAirport =
+    searchCriteria?.dropoffType === "AIRPORT" ||
+    !!searchCriteria?.destinationLocation?.code;
+
   // Client location snapshot for the booking-history audit trail, resolved
   // once on page load and sent on the create payload. Location — browser
   // geolocation (GPS/WiFi) reverse-geocoded to a precise readable address;
@@ -552,7 +568,9 @@ const CabBookingPage = () => {
 
   useEffect(() => {
     const cabId = cab?.cabid || cab?.cabId;
-    if (!cabId) {
+    // i'way rows have no in-house Cab row to fetch policies for — cabId is a
+    // synthetic "iway-<priceId>" string, not a real PK.
+    if (!cabId || isIway) {
       setCabPolicies(emptyCabPolicies);
       return;
     }
@@ -726,6 +744,25 @@ const CabBookingPage = () => {
         errors[`guest_${leadIndex}_contactNumber`] = "Phone is required";
         hasErrors = true;
       }
+      // i'way's passengers[] entries require an email; the in-house flow
+      // never collected one, so this only applies to i'way bookings.
+      if (isIway && (!lead.emailId || !lead.emailId.trim())) {
+        errors[`guest_${leadIndex}_emailId`] = "Email is required for i'way bookings";
+        hasErrors = true;
+      }
+    }
+
+    // i'way's start_location.flight_number is mandatory when the pickup
+    // point is an airport (guide §12.4.5). pickupIsAirport also covers
+    // i'way-native airports whose pickupType arrived as "IWAY" but whose
+    // originLocation.code carries the IATA.
+    if (
+      isIway &&
+      pickupIsAirport &&
+      (!pickupDetails.flightNo || !pickupDetails.flightNo.trim())
+    ) {
+      errors.pickupFlightNo = "Flight number is required for an airport pickup";
+      hasErrors = true;
     }
 
     return { errors, hasErrors };
@@ -779,7 +816,25 @@ const CabBookingPage = () => {
       (parseFloat(prices.totalPrice) || totalRate) + tdNumber + hqNumber;
 
     const payload = {
-      cabId: cab.cabid,
+      // i'way offers have no in-house Cab row — cab.cabid is a synthetic
+      // "iway-<priceId>" string that would fail Jackson's Long binding on
+      // the backend, so send null and rely on apiType/iwayPriceId instead.
+      cabId: isIway ? null : cab.cabid,
+      // i'way booking fields — all null for in-house rows, so that payload
+      // is byte-for-byte unchanged from before this change.
+      apiType: isIway ? "IWAY" : null,
+      iwayPriceId: isIway ? (searchCriteria.iwayPriceId ?? null) : null,
+      iwayPriceUid: isIway ? (searchCriteria.iwayPriceUid ?? null) : null,
+      originLocation: isIway ? (searchCriteria.originLocation ?? null) : null,
+      destinationLocation: isIway ? (searchCriteria.destinationLocation ?? null) : null,
+      // Vehicle snapshot — captured now so the local voucher (which reads
+      // Vehicle / Vehicle Image / Transporter from the in-house Cab FK for
+      // in-house rows) can render the same slots for i'way rows without
+      // hitting i'way at voucher-generation time. In-house payloads leave
+      // these null and continue to render from the Cab entity as before.
+      iwayVehicleName: isIway ? (cab?.cabname ?? null) : null,
+      iwayVehicleImage: isIway ? (cab?.cabpic ?? null) : null,
+      iwayProviderName: isIway ? (cab?.cabProviderName ?? null) : null,
       noOfCabs: cab.noOfCabs || 1,
       pickupDate: formatDateToDDMMYYYY(searchCriteria.pickupDate),
       dropOffDate: formatDateToDDMMYYYY(searchCriteria.dropoffDate || searchCriteria.pickupDate),
@@ -837,8 +892,15 @@ const CabBookingPage = () => {
       // clean NULL instead of an empty-string artefact.
       pickupType: searchCriteria.pickupType || null,
       pickupName: searchCriteria.pickupName || null,
-      pickupTime:
-        searchCriteria.pickupType === "AIRPORT"
+      // i'way's start_location.time is required for EVERY route (not just
+      // airport pickups — e.g. a Hotel → Airport transfer still needs a car
+      // pickup time), unlike the in-house pickupTime column which the
+      // booking-detail view only ever renders for airport pickups. Source
+      // the always-collected search-time value for i'way instead of the
+      // in-house AIRPORT-only conditional below.
+      pickupTime: isIway
+        ? searchCriteria.arrivalTime || searchCriteria.pickupTime || null
+        : searchCriteria.pickupType === "AIRPORT"
           ? searchCriteria.pickupEstimatedArrivalTime ||
             searchCriteria.pickupTime ||
             null
@@ -848,7 +910,10 @@ const CabBookingPage = () => {
           ? pickupDetails.arrivingFrom || null
           : null,
       pickupFlightNo:
-        searchCriteria.pickupType === "AIRPORT"
+        // i'way-native airports arrive as pickupType="IWAY" + originLocation.code=IATA,
+        // so gate on pickupIsAirport (broader) for i'way and keep the existing
+        // strict AIRPORT check for the in-house flow.
+        (isIway ? pickupIsAirport : searchCriteria.pickupType === "AIRPORT")
           ? pickupDetails.flightNo || null
           : null,
       pickupGreetingSign:
@@ -872,7 +937,9 @@ const CabBookingPage = () => {
           ? dropoffDetails.departingTo || null
           : null,
       dropoffFlightNo:
-        searchCriteria.dropoffType === "AIRPORT"
+        // Same widened check as pickup — i'way-native airport drops arrive
+        // as dropoffType="IWAY" + destinationLocation.code=IATA.
+        (isIway ? dropoffIsAirport : searchCriteria.dropoffType === "AIRPORT")
           ? dropoffDetails.flightNo || null
           : null,
       dropoffTerminal:
@@ -928,7 +995,17 @@ const CabBookingPage = () => {
       const response = await axiosInstance.post("/api/cab/book", pendingPayload);
 
       if (response && (response.data?.success !== false && response.status === 200)) {
-        toast.success("Cab booked successfully!");
+        if (isIway) {
+          // No orders/approve call is wired up yet — the order exists on
+          // i'way's side but isn't paid/confirmed there, so say so rather
+          // than implying it's fully done.
+          toast.success(
+            "Booking received — pending confirmation with i'way.",
+            { duration: 6000 },
+          );
+        } else {
+          toast.success("Cab booked successfully!");
+        }
         setShowSummaryModal(false);
         navigate("/booking-details/cab-booking-list");
       } else {
@@ -936,7 +1013,13 @@ const CabBookingPage = () => {
       }
     } catch (error) {
       console.error("Booking error:", error);
-      toast.error("An error occurred during booking. Please try again.");
+      // Surface the backend's actual message when available (e.g. an i'way
+      // order-creation failure via IwayOrderCreationException) instead of a
+      // generic message.
+      toast.error(
+        error?.response?.data?.message ||
+          "An error occurred during booking. Please try again.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -1238,6 +1321,84 @@ const CabBookingPage = () => {
                           {validationErrors[`guest_${leadIndex}_contactNumber`]}
                         </Form.Control.Feedback>
                       </Col>
+                      {/* i'way's POST /orders needs a passenger email — the
+                          in-house flow never collected one, so this field is
+                          only shown (and required) for i'way bookings. */}
+                      {isIway && (
+                        <Col md={6}>
+                          <Form.Label className="small text-muted fw-semibold mb-1">
+                            Email <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Control
+                            size="sm"
+                            type="email"
+                            placeholder="guest@example.com"
+                            value={leadGuest.emailId || ""}
+                            onChange={(e) =>
+                              handleGuestChange(leadIndex, "emailId", e.target.value)
+                            }
+                            isInvalid={!!validationErrors[`guest_${leadIndex}_emailId`]}
+                          />
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors[`guest_${leadIndex}_emailId`]}
+                          </Form.Control.Feedback>
+                        </Col>
+                      )}
+                      {/* i'way requires start_location.flight_number whenever
+                          the pickup point is an airport (guide §12.4.5) —
+                          there was no input for this anywhere on the page
+                          before, so pickupDetails.flightNo always stayed
+                          empty. Shown for i'way bookings only; drop-off side
+                          is optional so it's collected but not required.
+                          pickupIsAirport also catches i'way-native airports
+                          whose pickupType is "IWAY" but whose originLocation
+                          carries an IATA code. */}
+                      {isIway && pickupIsAirport && (
+                        <Col md={6}>
+                          <Form.Label className="small text-muted fw-semibold mb-1">
+                            Pickup Flight Number{" "}
+                            <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Control
+                            size="sm"
+                            type="text"
+                            placeholder="e.g. EK123"
+                            value={pickupDetails.flightNo || ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setPickupDetails((prev) => ({ ...prev, flightNo: v }));
+                              if (validationErrors.pickupFlightNo) {
+                                setValidationErrors((prev) => {
+                                  const next = { ...prev };
+                                  delete next.pickupFlightNo;
+                                  return next;
+                                });
+                              }
+                            }}
+                            isInvalid={!!validationErrors.pickupFlightNo}
+                          />
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.pickupFlightNo}
+                          </Form.Control.Feedback>
+                        </Col>
+                      )}
+                      {isIway && dropoffIsAirport && (
+                        <Col md={6}>
+                          <Form.Label className="small text-muted fw-semibold mb-1">
+                            Drop-off Flight Number
+                          </Form.Label>
+                          <Form.Control
+                            size="sm"
+                            type="text"
+                            placeholder="e.g. EK456 (optional)"
+                            value={dropoffDetails.flightNo || ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setDropoffDetails((prev) => ({ ...prev, flightNo: v }));
+                            }}
+                          />
+                        </Col>
+                      )}
                     </Row>
                   </Card.Body>
                 </Card>
