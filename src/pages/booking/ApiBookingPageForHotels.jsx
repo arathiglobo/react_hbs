@@ -634,11 +634,11 @@ const ApiBookingPageForHotels = () => {
               }
 
               if (nonRefundable === true) {
-                const today = new Date();
-                const deadline = new Date(today);
-                deadline.setDate(today.getDate() - 2);
-                deadline.setHours(0, 0, 0, 0);
-                return deadline;
+                // Non-refundable rates have no free-cancellation window, so
+                // no deadline applies — send nothing rather than a fabricated
+                // "today - 2 days" date (which always lands in the past and
+                // confuses anything that reads deadlineDate literally).
+                return null;
               } else {
                 const policies = rate.cancellationPolicy || [];
                 if (policies.length === 0) return null;
