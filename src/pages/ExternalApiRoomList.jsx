@@ -60,6 +60,35 @@ const renderPolicyValidity = (fromDate, toDate) => {
  * spec. Returns null when the field is missing or the string doesn't parse,
  * so the pill silently disappears for non-Atharva rates and malformed rows.
  */
+/**
+ * Darina (apiId 16) per-rate free-cancellation deadline pill.
+ * BE emits `rate.deadlineDate` as ISO `yyyy-MM-dd` — the toDate of the
+ * "Free cancellation until X" band from Darina's WithFullResponseControl
+ * search response. We render "Free cancellation until DD MMM YYYY, 11:59 PM UAE"
+ * so the operator sees the exact cut-off before opening the policy modal.
+ * Returns null for missing / malformed input.
+ */
+const renderDarinaDeadlinePill = (deadlineDate) => {
+  if (!deadlineDate || typeof deadlineDate !== "string") return null;
+  const parts = deadlineDate.trim().split("-");
+  if (parts.length !== 3) return null;
+  const [y, mm, d] = parts;
+  const monthNames = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+  const monIdx = parseInt(mm, 10) - 1;
+  if (!y || !d || Number.isNaN(monIdx) || monIdx < 0 || monIdx > 11) return null;
+  return (
+    <span
+      className="text-danger fw-normal"
+      title="deadline date"
+    >
+      Deadline Date:  {parseInt(d, 10)} {monthNames[monIdx]} {y}
+    </span>
+  );
+};
+
 const renderAtharvaDeadlinePill = (deadlineDate) => {
   if (!deadlineDate || typeof deadlineDate !== "string") return null;
   const parts = deadlineDate.trim().split("-");
@@ -360,6 +389,50 @@ const ExternalApiRoomList = () => {
         err?.response?.data?.error ||
         err?.message ||
         "Recheck request failed";
+      return { success: false, message: backendMsg };
+    }
+  };
+
+  /**
+   * Call /api/hotel-booking/darina/prebook for a single rate (search-time
+   * values are enough — hotelCode + roomTypeCode + mealPlanCode + pax +
+   * dates + nationality). Returns the DarinaPreBookResponseDTO shape:
+   *   { success, message, contractTokenId, rate, ratePerNight,
+   *     rateWithoutMarkup, cancellationPolicies, deadlineDate,
+   *     nonRefundable, roomCategory, mealPlan }
+   */
+  const fetchDarinaPrebook = async (rate) => {
+    const payload = roomData?.payload || {};
+    const hotel = roomData?.hotels?.[0] || {};
+    const firstRoom = payload?.rooms?.[0] || {};
+    const req = {
+      agentId: payload?.agentId ? String(payload.agentId) : null,
+      nationality: payload?.nationality || null,
+      checkInDate: payload?.checkInDate,
+      checkOutDate: payload?.checkOutDate,
+      hotelCode: payload?.hotelCode || hotel?.hotelId || null,
+      roomTypeCode: rate?.roomTypeCode,
+      mealPlanCode: rate?.mealPlanCode,
+      // BE tolerates a null occupancyId; passing it when known helps the
+      // supplier pick the exact rate serial we saw at search time.
+      occupancyId: rate?.occupancyId || null,
+      contractTokenId: rate?.contractTokenId || null,
+      adults: firstRoom.adults ?? firstRoom.noOfAdult ?? 1,
+      children: firstRoom.children ?? firstRoom.noOfChild ?? 0,
+      childAges: firstRoom.childAges || [],
+    };
+    try {
+      const resp = await axiosInstance.post(
+        "/api/hotel-booking/darina/prebook",
+        req,
+      );
+      return resp?.data || { success: false, message: "Empty response" };
+    } catch (err) {
+      const backendMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Prebook request failed";
       return { success: false, message: backendMsg };
     }
   };
@@ -853,6 +926,11 @@ const ExternalApiRoomList = () => {
       // holder. Booking page uses this to render the PAN input card.
       // Defaults to false; other suppliers just ignore this key.
       panRequired: grnRecheck?.panRequired === true,
+      // Darina (apiId 16) free-cancellation deadline (ISO yyyy-MM-dd). BE
+      // emits it on rate.deadlineDate as the "Free cancellation until X"
+      // band's toDate. Carried through so the booking page's accordion
+      // header can show it and the outbound payload can echo it back.
+      deadlineDate: rate?.deadlineDate || null,
     };
   };
 
@@ -947,6 +1025,81 @@ const ExternalApiRoomList = () => {
     }
 
     const currentApiId = resolveApiId(hotel);
+
+    // ─── DARINA (apiId=16) live-rate re-check per v5.1 docs. ────────────
+    // Cached search response → LIVE re-check (CheckAvailabilityWithCancellation
+    // _NoCache_LiveCalculation) → SubmitBooking. Reuse the same
+    // "Fetching accurate rate…" spinner + "Room Details" confirm modal
+    // as IWTX/X3 (apiId 12/15) — Darina hands back a FRESH <RequestID>
+    // that gets stamped onto contractTokenId so SubmitBooking sends it.
+    if (currentApiId === apiIdMapping.DARINA) {
+      setLoadingRate(true);
+      (async () => {
+        try {
+          const live = await fetchDarinaPrebook(rate);
+          if (!live?.success) {
+            setLoadingRate(false);
+            alert(
+              live?.message ||
+                "Darina live-rate check failed. Please retry or reselect the rate.",
+            );
+            return;
+          }
+          // Build the same shape the Room Details modal reads (rate,
+          // roomCategory, mealPlan, nonRefundable, contractLabel) and the
+          // booking page's payload builder needs (contractTokenId,
+          // deadlineDate, cancellationPolicy, rateWithoutMarkup).
+          const accurateRates = [
+            {
+              roomNo: 1,
+              hotelId: hotel.hotelId,
+              hotelName: hotel.hotelName,
+              hotelCode: payload.hotelCode || hotel.hotelId,
+              roomCategory: live.roomCategory || rate.roomCategory,
+              mealPlan: live.mealPlan || rate.mealPlan,
+              // Contract label — surfaces "Live rate" so the operator
+              // knows the modal isn't showing search-time cached data.
+              contractLabel: rate.contractLabel || "Live rate (Darina)",
+              nonRefundable:
+                live.nonRefundable != null
+                  ? live.nonRefundable
+                  : rate.nonRefundable,
+              rate: live.rate ?? rate.totalRate,
+              rateWithoutMarkup:
+                live.rateWithoutMarkup ?? rate.totalRateWithoutMarkup,
+              currency: live.currency || "AED",
+              roomTypeCode: rate.roomTypeCode,
+              mealPlanCode: rate.mealPlanCode,
+              // FRESH Darina <RequestID> from live-calc — MUST replace
+              // the search-time contractTokenId so SubmitBooking works.
+              contractTokenId: live.contractTokenId || rate.contractTokenId,
+              // Live cancellation ladder + free-cancellation cut-off.
+              cancellationPolicy:
+                (live.cancellationPolicies?.length &&
+                  live.cancellationPolicies) ||
+                rate.cancellationPolicies,
+              deadlineDate: live.deadlineDate ?? rate.deadlineDate,
+            },
+          ];
+          setSelectedRate(accurateRates);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+        } catch (err) {
+          console.error("Darina live-rate fetch failed:", err);
+          setLoadingRate(false);
+          const backendMsg =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message;
+          alert(
+            backendMsg
+              ? `Unable to fetch live rate: ${backendMsg}`
+              : "Unable to fetch live rate. Please try again.",
+          );
+        }
+      })();
+      return;
+    }
 
     if (currentApiId === 12 || currentApiId === 15) {
       // Accurate-rate re-fetch for IWTX / X3 — same request the current
@@ -1143,6 +1296,73 @@ const ExternalApiRoomList = () => {
     }
 
     const currentApiId = resolveApiId(hotel);
+
+    // ─── DARINA multi-room live-rate re-check. One prebook per selected
+    //    rate (Darina's live-calc op takes a single hotel + room type +
+    //    meal plan per call). Fire in parallel, stitch the responses
+    //    into the same "Room Details" modal IWTX/X3 use.
+    if (currentApiId === apiIdMapping.DARINA) {
+      const rates = selectedRooms.map((r) => r.selectedRate);
+      setLoadingRate(true);
+      (async () => {
+        try {
+          const results = await Promise.all(rates.map((r) => fetchDarinaPrebook(r)));
+          const firstFail = results.find((r) => !r?.success);
+          if (firstFail) {
+            setLoadingRate(false);
+            alert(
+              firstFail.message ||
+                "One of the selected rates is no longer available. Please reselect.",
+            );
+            return;
+          }
+          const accurateRates = rates.map((r, i) => {
+            const live = results[i] || {};
+            return {
+              roomNo: i + 1,
+              hotelId: hotel.hotelId,
+              hotelName: hotel.hotelName,
+              hotelCode: payload.hotelCode || hotel.hotelId,
+              roomCategory: live.roomCategory || r.roomCategory,
+              mealPlan: live.mealPlan || r.mealPlan,
+              contractLabel: r.contractLabel || "Live rate (Darina)",
+              nonRefundable:
+                live.nonRefundable != null
+                  ? live.nonRefundable
+                  : r.nonRefundable,
+              rate: live.rate ?? r.totalRate,
+              rateWithoutMarkup:
+                live.rateWithoutMarkup ?? r.totalRateWithoutMarkup,
+              currency: live.currency || "AED",
+              roomTypeCode: r.roomTypeCode,
+              mealPlanCode: r.mealPlanCode,
+              contractTokenId: live.contractTokenId || r.contractTokenId,
+              cancellationPolicy:
+                (live.cancellationPolicies?.length &&
+                  live.cancellationPolicies) ||
+                r.cancellationPolicies,
+              deadlineDate: live.deadlineDate ?? r.deadlineDate,
+            };
+          });
+          setSelectedRate(accurateRates);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+        } catch (err) {
+          console.error("Darina multi-room live-rate fetch failed:", err);
+          setLoadingRate(false);
+          const backendMsg =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message;
+          alert(
+            backendMsg
+              ? `Unable to fetch live rate: ${backendMsg}`
+              : "Unable to fetch live rate. Please try again.",
+          );
+        }
+      })();
+      return;
+    }
 
     if (currentApiId === 12 || currentApiId === 15) {
       setLoadingRate(true);
@@ -1967,28 +2187,54 @@ const ExternalApiRoomList = () => {
                               // earlier picks per the vendor's Options[]
                               // combinations. Options entries look like
                               // "1,28" — one index per room slot in order.
+                              // atharvaFixedOption / atharvaOptions are
+                              // per-VENDOR (Atharva returns multiple vendors
+                              // per hotel, each with its own FixedOption +
+                              // Options[]), so they're carried on the RATE
+                              // itself — reading them off `hotel.*` would
+                              // cross-apply one vendor's Options[] to
+                              // another vendor's rate.
                               .filter((rate) => {
                                 if (
                                   String(roomData?.payload?.apiId || "") !== "3" ||
                                   !isMultiRoom ||
-                                  hotel?.atharvaFixedOption !== true ||
-                                  !Array.isArray(hotel?.atharvaOptions) ||
-                                  hotel.atharvaOptions.length === 0 ||
+                                  rate?.atharvaFixedOption !== true ||
+                                  !Array.isArray(rate?.atharvaOptions) ||
+                                  rate.atharvaOptions.length === 0 ||
                                   rate?.atharvaIndex == null
                                 ) {
                                   return true;
                                 }
-                                // Collect indices from any earlier slot with
-                                // a selection; positions without a selection
-                                // become wildcards (any Option row matches).
+                                // Collect indices + vendor hKeys from any
+                                // earlier slot with a selection; positions
+                                // without a selection become wildcards.
                                 const requiredIndices = selectedRooms.map(
                                   (r) => r?.selectedRate?.atharvaIndex ?? null,
                                 );
+                                const earlierPickHKey = selectedRooms
+                                  .slice(0, roomSlotIndex)
+                                  .map((r) => r?.selectedRate?.hKey)
+                                  .find((k) => k);
                                 const hasEarlierPick = requiredIndices
                                   .slice(0, roomSlotIndex)
                                   .some((v) => v != null);
                                 if (!hasEarlierPick) return true;
-                                return hotel.atharvaOptions.some((opt) => {
+                                // Cross-vendor guard — Options[] indices
+                                // are only meaningful within the picked
+                                // vendor. A candidate from a different
+                                // vendor could false-match by index
+                                // coincidence and then trip 1005: Invalid
+                                // RateKey at prebook (handleRateSelect
+                                // blocks the click too, but hiding the
+                                // rate up front is the cleaner UX).
+                                if (
+                                  earlierPickHKey &&
+                                  rate.hKey &&
+                                  rate.hKey !== earlierPickHKey
+                                ) {
+                                  return false;
+                                }
+                                return rate.atharvaOptions.some((opt) => {
                                   const parts = String(opt)
                                     .split(",")
                                     .map((p) => Number(p.trim()));
@@ -2178,15 +2424,33 @@ const ExternalApiRoomList = () => {
                                                       sourced from HSearchByHotelCode_V2. Sits directly
                                                       above the Cancellation link so the operator
                                                       sees the cut-off before opening the policy
-                                                      modal. Helper returns null when the rate has
-                                                      no deadlineDate (non-Atharva or malformed). */}
-                                                  {rate.deadlineDate && (
-                                                    <div className="feature-item">
-                                                      {renderAtharvaDeadlinePill(
-                                                        rate.deadlineDate,
-                                                      )}
-                                                    </div>
-                                                  )}
+                                                      modal. Guarded on apiId now that Darina also
+                                                      populates rate.deadlineDate (ISO yyyy-MM-dd) —
+                                                      the Atharva helper expects DD-MMM-YYYY. */}
+                                                  {resolveApiId(hotel) ===
+                                                    apiIdMapping.ATHARVA &&
+                                                    rate.deadlineDate && (
+                                                      <div className="feature-item">
+                                                        {renderAtharvaDeadlinePill(
+                                                          rate.deadlineDate,
+                                                        )}
+                                                      </div>
+                                                    )}
+
+                                                  {/* Darina (apiId 16) free-cancellation deadline —
+                                                      BE emits rate.deadlineDate in ISO yyyy-MM-dd
+                                                      as the "Free cancellation until X" band's
+                                                      toDate. Hidden for non-refundable / no-free
+                                                      band rates (deadlineDate is null there). */}
+                                                  {resolveApiId(hotel) ===
+                                                    apiIdMapping.DARINA &&
+                                                    rate.deadlineDate && (
+                                                      <div className="feature-item">
+                                                        {renderDarinaDeadlinePill(
+                                                          rate.deadlineDate,
+                                                        )}
+                                                      </div>
+                                                    )}
 
                                                   <div className="feature-item">
                                                     <Button
@@ -2301,16 +2565,31 @@ const ExternalApiRoomList = () => {
                                                       </span>
                                                     </div>
                                                     {/* ATHARVA (apiId 3) per-rate DeadLineDate pill,
-                                                        sourced from HSearchByHotelCode_V2. Helper
-                                                        returns null when the rate has no
-                                                        deadlineDate (non-Atharva or malformed). */}
-                                                    {rate.deadlineDate && (
-                                                      <div className="feature-item d-flex align-items-center">
-                                                        {renderAtharvaDeadlinePill(
-                                                          rate.deadlineDate,
-                                                        )}
-                                                      </div>
-                                                    )}
+                                                        sourced from HSearchByHotelCode_V2. Guarded
+                                                        on apiId now that Darina also populates
+                                                        rate.deadlineDate (different format). */}
+                                                    {resolveApiId(hotel) ===
+                                                      apiIdMapping.ATHARVA &&
+                                                      rate.deadlineDate && (
+                                                        <div className="feature-item d-flex align-items-center">
+                                                          {renderAtharvaDeadlinePill(
+                                                            rate.deadlineDate,
+                                                          )}
+                                                        </div>
+                                                      )}
+                                                    {/* Darina (apiId 16) free-cancellation deadline
+                                                        pill. BE emits ISO yyyy-MM-dd; helper renders
+                                                        "Free cancellation until DD MMM YYYY,
+                                                        11:59 PM UAE". */}
+                                                    {resolveApiId(hotel) ===
+                                                      apiIdMapping.DARINA &&
+                                                      rate.deadlineDate && (
+                                                        <div className="feature-item d-flex align-items-center">
+                                                          {renderDarinaDeadlinePill(
+                                                            rate.deadlineDate,
+                                                          )}
+                                                        </div>
+                                                      )}
                                                     <div className="feature-item d-flex align-items-center">
                                                       <Button
                                                         variant="link"
@@ -2573,7 +2852,7 @@ const ExternalApiRoomList = () => {
         </main>
       </div>
 
-      {/* Accurate-rate confirm modal (apiId 12/15). Preserves the ARRAY
+      {/* Accurate-rate confirm modal (apiId 12/15/16). Preserves the ARRAY
           shape ApiBookingPageForHotels reads from sessionStorage. */}
       <Modal
         show={showBookingModal}
@@ -2686,7 +2965,7 @@ const ExternalApiRoomList = () => {
               window.open("/api-booking-page-hotels", "_blank");
             }}
           >
-            Confirm Booking
+            Continue
           </Button>
         </Modal.Footer>
       </Modal>

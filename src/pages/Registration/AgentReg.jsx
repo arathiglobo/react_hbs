@@ -1172,30 +1172,33 @@ const AgentReg = () => {
   // duplicates inline before submit. While editing, the agent's own
   // current email is skipped so it isn't reported as a duplicate. A
   // failed check never blocks the user (server still validates on save).
-  useEffect(() => {
-    const email = (formData.personalEmail || "").trim();
-    const ownEmail = (editing?.personalEmail || "").trim().toLowerCase();
-    if (emailCheckTimer.current) clearTimeout(emailCheckTimer.current);
-    if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
-      email.toLowerCase() === ownEmail
-    ) {
-      setEmailExists(false);
-      setEmailChecking(false);
-      return undefined;
-    }
-    setEmailChecking(true);
-    emailCheckTimer.current = setTimeout(() => {
-      axiosInstance
-        .get("/api/agent/check-email", { params: { email } })
-        .then((res) => setEmailExists(Boolean(res.data?.exists)))
-        .catch(() => setEmailExists(false))
-        .finally(() => setEmailChecking(false));
-    }, 500);
-    return () => {
-      if (emailCheckTimer.current) clearTimeout(emailCheckTimer.current);
-    };
-  }, [formData.personalEmail, editing]);
+  // Disabled per requirement — the /registration/agent Update Agent form
+  // no longer enforces email uniqueness (frontend + backend duplicate
+  // checks are commented).
+  // useEffect(() => {
+  //   const email = (formData.personalEmail || "").trim();
+  //   const ownEmail = (editing?.personalEmail || "").trim().toLowerCase();
+  //   if (emailCheckTimer.current) clearTimeout(emailCheckTimer.current);
+  //   if (
+  //     !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+  //     email.toLowerCase() === ownEmail
+  //   ) {
+  //     setEmailExists(false);
+  //     setEmailChecking(false);
+  //     return undefined;
+  //   }
+  //   setEmailChecking(true);
+  //   emailCheckTimer.current = setTimeout(() => {
+  //     axiosInstance
+  //       .get("/api/agent/check-email", { params: { email } })
+  //       .then((res) => setEmailExists(Boolean(res.data?.exists)))
+  //       .catch(() => setEmailExists(false))
+  //       .finally(() => setEmailChecking(false));
+  //   }, 500);
+  //   return () => {
+  //     if (emailCheckTimer.current) clearTimeout(emailCheckTimer.current);
+  //   };
+  // }, [formData.personalEmail, editing]);
 
 
   // Validation function
@@ -1254,8 +1257,9 @@ const AgentReg = () => {
     const emailValue = getStringValue(data.personalEmail);
     if (emailValue && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue))
       newErrors.personalEmail = "Invalid email format";
-    else if (emailValue && emailExists)
-      newErrors.personalEmail = "An agent with this email already exists";
+    // Duplicate-email guard removed per requirement.
+    // else if (emailValue && emailExists)
+    //   newErrors.personalEmail = "An agent with this email already exists";
 
     const fmEmail = getStringValue(data.financeManagerEmail);
     if (fmEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fmEmail))
@@ -1538,9 +1542,12 @@ const AgentReg = () => {
       // Scope the check to the AGENT user type so entities of other types that
       // share the same numeric id don't resolve to this agent's account.
       const agentRole = rolesList.find((r) => r.roleName === "AGENT");
+      // subUserType=AGENT_MAIN disambiguates from sub-agent / sub-user rows
+      // that share the same (user_id, user_type_id) — see UserRepository
+      // fetchUserAccountIdByUserTypeAndSubType.
       const response = await axiosInstance.post(
         agentRole
-          ? `/auth/checkRegisteredUserExist/${item.id}?userTypeId=${agentRole.id}`
+          ? `/auth/checkRegisteredUserExist/${item.id}?userTypeId=${agentRole.id}&subUserType=AGENT_MAIN`
           : `/auth/checkRegisteredUserExist/${item.id}`
       );
 
@@ -3132,12 +3139,15 @@ const AgentReg = () => {
                                   {validationErrors.personalEmail}
                                 </Form.Control.Feedback>
                               )}
-                              {/* Live availability hint (agent.personal_email). */}
+                              {/* Live availability hint (agent.personal_email) — disabled per requirement. */}
+                              {/*
                               {!validationErrors.personalEmail && emailChecking && (
                                 <div className="text-muted small mt-1">
                                   Checking availability…
                                 </div>
                               )}
+                              */}
+                              {/*
                               {!validationErrors.personalEmail &&
                                 !emailChecking &&
                                 emailExists && (
@@ -3145,6 +3155,8 @@ const AgentReg = () => {
                                     An agent with this email already exists.
                                   </div>
                                 )}
+                              */}
+                              {/*
                               {!validationErrors.personalEmail &&
                                 !emailChecking &&
                                 !emailExists &&
@@ -3155,6 +3167,7 @@ const AgentReg = () => {
                                     Email is available.
                                   </div>
                                 )}
+                              */}
                             </Form.Group>
                           </Col>
                           <Col md={6}>
