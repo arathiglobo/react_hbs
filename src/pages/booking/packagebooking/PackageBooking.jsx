@@ -888,7 +888,7 @@ const PackageBooking = () => {
                   width: 100%;
                   border: none;
                   background: transparent;
-                  color: #FF0000;
+                  color: #EC0B43;
                   font-weight: 700;
                   font-size: 0.82rem;
                   line-height: 1.35;
@@ -896,7 +896,7 @@ const PackageBooking = () => {
                   padding: 2px 0;
                   transition: color 0.15s ease;
                 }
-                .price-policy-link:hover { color: #CC0000; }
+                .price-policy-link:hover { color: #b8092f; }
                 .policy-link-icon {
                   flex-shrink: 0;
                   margin-right: 6px;
