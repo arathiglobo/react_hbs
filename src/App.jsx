@@ -49,6 +49,7 @@ import MarketType from "./pages/master/MarketType";
 import Region from "./pages/master/Region";
 import Province from "./pages/master/Province";
 import CityMapping from "./pages/master/CityMapping";
+import MappedList from "./pages/master/MappedList";
 
 import AgentReg from "./pages/Registration/AgentReg";
 import HotelReg from "./pages/Registration/HotelReg";
@@ -441,6 +442,7 @@ export default function App() {
         <Route path="/masters/hotel-mapping" element={<PrivateRoute><HotelMapping /></PrivateRoute>} />
         <Route path="/masters/hotel-upcooming-mapped-list" element={<PrivateRoute><HotelMappingBulkList /></PrivateRoute>} />
         <Route path="/masters/fetch-new-hotels" element={<FetchNewHotels />} />
+        <Route path="/masters/mapped-list" element={<PrivateRoute><MappedList /></PrivateRoute>} />
      
         {/* :bar_chart: Reports */}
         <Route path="/report/booking" element={<ReportBooking />} />
