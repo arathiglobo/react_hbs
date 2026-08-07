@@ -36,6 +36,7 @@ const DEFAULT_PROGRESS_CHANNELS = [
   "darina",
   "atharva",
   "jumeirah",
+  "grn",
 ];
 
 function SearchProgressBar({ pollStatus, completedChannels, channels }) {
@@ -671,6 +672,10 @@ export default function HotelSearch({
      { value: "jumeirah", label: "Jumeirah" },
      { value: "ratehawk", label: "Ratehawk" },
      { value: "darina", label: "Darina" },
+     // GRN Connect — matches the "grn" apiType stamped on results by
+     // GrnHotelSearchApiCaller (lower-cased for the channel filter, uppercased
+     // when POSTed back as the `apiType` query param).
+     { value: "grn", label: "GRN" },
   ];
 
   // Narrows the Channel sidebar filter (and the SearchProgressBar pills)
@@ -1662,7 +1667,14 @@ export default function HotelSearch({
           }
         },
         2000,
-        20000,
+        // 60 s timeout — GRN Connect's fan-out over ~300 hotel codes for a
+        // Dubai search finishes in ~30-40 s against the sandbox. The prior
+        // 20 s ceiling would reject before GRN completed, and the catch
+        // below then set hasSearched=false, silently blocking every
+        // subsequent filter change (e.g. ticking Channel = GRN) from
+        // re-fetching. 60 s covers observed GRN latency; faster suppliers
+        // still resolve early via the finalStatus=COMPLETED check.
+        60000,
         2000,
       );
       // ── 24 Hour Check-In post-processing ───────────────────────────
@@ -1737,7 +1749,22 @@ export default function HotelSearch({
     // races by nameSearchSeqRef. Without this exemption, typing a hotel
     // name during the initial supplier poll silently no-ops until poll
     // completes, which is the "sometimes it doesn't work" symptom.
-    if (pollStatus === "IN_PROGRESS" && !finalHotelSearchTerm.trim()) return;
+    //
+    // Filter-driven fetches (channelType, starRating) are ALSO exempt from
+    // the guard: they issue a filtered /results call (e.g. apiType=GRN)
+    // that returns a different result set than the unfiltered poll, so
+    // the "double-write" concern doesn't apply. Blocking them meant that
+    // ticking Channel = GRN while a slow supplier (GRN itself, ~30-40 s
+    // for Dubai) was still polling silently zeroed the list.
+    const hasActiveFilter =
+      (channelType && channelType.length > 0) ||
+      !!starRating ||
+      (hotelType && hotelType.length > 0);
+    if (
+      pollStatus === "IN_PROGRESS" &&
+      !finalHotelSearchTerm.trim() &&
+      !hasActiveFilter
+    ) return;
     setIsLoading(true);
     fetchHotels(pageIndex, searchId, agent, finalHotelSearchTerm).finally(() =>
       setIsLoading(false),
@@ -1747,6 +1774,7 @@ export default function HotelSearch({
     sortBy,
     starRating,
     channelType,
+    hotelType,
     searchId,
     agent,
     hasSearched,
@@ -3010,6 +3038,13 @@ export default function HotelSearch({
                                             ratehawk: 14,
                                             darina: 16,
                                             atharva: 3,
+                                            // GRN Connect. Room list backend
+                                            // routes apiId=20 to the new
+                                            // GrnHotelRoomSearchService which
+                                            // returns bundled rates only.
+                                            // 20 avoids colliding with the
+                                            // existing Juniper booking's 17.
+                                            grn: 20,
                                           };
                                           const apiId =
                                             apiIdMapping[

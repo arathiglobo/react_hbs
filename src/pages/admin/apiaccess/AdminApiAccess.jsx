@@ -53,6 +53,13 @@ const CREDENTIAL_SCHEMAS = {
   IWTX: [
     { key: "url", label: "Search URL", type: "text" },
     { key: "availabilityUrl", label: "Availability URL", type: "text" },
+    // Booking + cancellation both derive their endpoint from this field
+    // (IwtxHotelBookingService.pickBookUrl reads "bookUrl", then falls
+    // back to "book_url", then to iwtx.api.book.url in
+    // application.properties). Without it, IWTX book/cancel throws
+    // "IWTX book URL is not configured" even though search works fine
+    // off the two URLs above.
+    { key: "bookUrl", label: "Book URL (iwtx.api.book.url)", type: "text" },
     { key: "password", label: "Password", type: "password" },
     { key: "code", label: "Code", type: "text" },
     { key: "token", label: "Token", type: "password" },
@@ -60,6 +67,12 @@ const CREDENTIAL_SCHEMAS = {
   X3: [
     { key: "url", label: "Search URL (x3.api.url)", type: "text" },
     { key: "availabilityUrl", label: "Availability URL (x3.api.availability.url)", type: "text" },
+    // Booking + cancellation both derive their endpoint from this field
+    // (X3HotelBookingService.pickBookUrl reads "bookUrl", then falls back
+    // to "book_url", then to x3.api.book.url in application.properties).
+    // Without it, X3 book/cancel throws "X3 book URL is not configured"
+    // even though search works fine off the two URLs above.
+    { key: "bookUrl", label: "Book URL (x3.api.book.url)", type: "text" },
     { key: "code", label: "Client Code (x3.api.code)", type: "text" },
     { key: "password", label: "Password (x3.api.password)", type: "password" },
     { key: "token", label: "Token (x3.api.token)", type: "password" },
