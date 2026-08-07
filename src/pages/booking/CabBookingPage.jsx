@@ -1220,6 +1220,125 @@ const CabBookingPage = () => {
                   </Card>
                 )}
 
+                {/* ── Contact Details — lead passenger's phone.
+                     Same value as the Lead row's Contact No.
+                     Placed above Special Requirements so operators fill
+                     the required contact fields before the optional notes. */}
+                <Card className="border rounded-3 mb-4 overflow-hidden shadow-sm">
+                  <Card.Header
+                    className="py-3 px-4 text-dark border-bottom"
+                    style={cardHeaderStyle}
+                  >
+                    <span className="fw-bold text-dark">Contact Details</span>
+                  </Card.Header>
+                  <Card.Body className="px-4 pt-3 pb-3">
+                    <Row className="g-3">
+                      <Col md={6}>
+                        <Form.Label className="small text-muted fw-semibold mb-1">
+                          Phone <span className="text-danger">*</span>
+                        </Form.Label>
+                        <Form.Control
+                          size="sm"
+                          type="text"
+                          placeholder="Please enter phone number"
+                          value={leadGuest.contactNumber || ""}
+                          onChange={(e) =>
+                            handleGuestChange(
+                              leadIndex,
+                              "contactNumber",
+                              e.target.value,
+                            )
+                          }
+                          isInvalid={
+                            !!validationErrors[`guest_${leadIndex}_contactNumber`]
+                          }
+                        />
+                        <Form.Control.Feedback type="invalid">
+                          {validationErrors[`guest_${leadIndex}_contactNumber`]}
+                        </Form.Control.Feedback>
+                      </Col>
+                      {/* i'way's POST /orders needs a passenger email — the
+                          in-house flow never collected one, so this field is
+                          only shown (and required) for i'way bookings. */}
+                      {isIway && (
+                        <Col md={6}>
+                          <Form.Label className="small text-muted fw-semibold mb-1">
+                            Email <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Control
+                            size="sm"
+                            type="email"
+                            placeholder="Please enter email address"
+                            value={leadGuest.emailId || ""}
+                            onChange={(e) =>
+                              handleGuestChange(leadIndex, "emailId", e.target.value)
+                            }
+                            isInvalid={!!validationErrors[`guest_${leadIndex}_emailId`]}
+                          />
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors[`guest_${leadIndex}_emailId`]}
+                          </Form.Control.Feedback>
+                        </Col>
+                      )}
+                      {/* i'way requires start_location.flight_number whenever
+                          the pickup point is an airport (guide §12.4.5) —
+                          there was no input for this anywhere on the page
+                          before, so pickupDetails.flightNo always stayed
+                          empty. Shown for i'way bookings only; drop-off side
+                          is optional so it's collected but not required.
+                          pickupIsAirport also catches i'way-native airports
+                          whose pickupType is "IWAY" but whose originLocation
+                          carries an IATA code. */}
+                      {isIway && pickupIsAirport && (
+                        <Col md={6}>
+                          <Form.Label className="small text-muted fw-semibold mb-1">
+                            Pickup Flight Number{" "}
+                            <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Control
+                            size="sm"
+                            type="text"
+                            placeholder="Please enter pickup flight number"
+                            value={pickupDetails.flightNo || ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setPickupDetails((prev) => ({ ...prev, flightNo: v }));
+                              if (validationErrors.pickupFlightNo) {
+                                setValidationErrors((prev) => {
+                                  const next = { ...prev };
+                                  delete next.pickupFlightNo;
+                                  return next;
+                                });
+                              }
+                            }}
+                            isInvalid={!!validationErrors.pickupFlightNo}
+                          />
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.pickupFlightNo}
+                          </Form.Control.Feedback>
+                        </Col>
+                      )}
+                      {isIway && dropoffIsAirport && (
+                        <Col md={6}>
+                          <Form.Label className="small text-muted fw-semibold mb-1">
+                            Drop-off Flight Number
+                          </Form.Label>
+                          <Form.Control
+                            size="sm"
+                            type="text"
+                            placeholder="e.g. EK456 (optional)"
+                            value={dropoffDetails.flightNo || ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setDropoffDetails((prev) => ({ ...prev, flightNo: v }));
+                            }}
+                          />
+                        </Col>
+                      )}
+                    </Row>
+                  </Card.Body>
+                </Card>
+
                 {/* ── Special Requirements ──────────────────────────────
                      Provider-configured multi-select up top (only what the
                      operator advertised for this rate) + a free-text
@@ -1283,123 +1402,6 @@ const CabBookingPage = () => {
                         {specialRequirements.length}/200
                       </span>
                     </div>
-                  </Card.Body>
-                </Card>
-
-                {/* ── Contact Details — lead passenger's phone.
-                     Same value as the Lead row's Contact No. */}
-                <Card className="border rounded-3 mb-4 overflow-hidden shadow-sm">
-                  <Card.Header
-                    className="py-3 px-4 text-dark border-bottom"
-                    style={cardHeaderStyle}
-                  >
-                    <span className="fw-bold text-dark">Contact Details</span>
-                  </Card.Header>
-                  <Card.Body className="px-4 pt-3 pb-3">
-                    <Row className="g-3">
-                      <Col md={6}>
-                        <Form.Label className="small text-muted fw-semibold mb-1">
-                          Phone <span className="text-danger">*</span>
-                        </Form.Label>
-                        <Form.Control
-                          size="sm"
-                          type="text"
-                          placeholder="+971 50 123 4567"
-                          value={leadGuest.contactNumber || ""}
-                          onChange={(e) =>
-                            handleGuestChange(
-                              leadIndex,
-                              "contactNumber",
-                              e.target.value,
-                            )
-                          }
-                          isInvalid={
-                            !!validationErrors[`guest_${leadIndex}_contactNumber`]
-                          }
-                        />
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors[`guest_${leadIndex}_contactNumber`]}
-                        </Form.Control.Feedback>
-                      </Col>
-                      {/* i'way's POST /orders needs a passenger email — the
-                          in-house flow never collected one, so this field is
-                          only shown (and required) for i'way bookings. */}
-                      {isIway && (
-                        <Col md={6}>
-                          <Form.Label className="small text-muted fw-semibold mb-1">
-                            Email <span className="text-danger">*</span>
-                          </Form.Label>
-                          <Form.Control
-                            size="sm"
-                            type="email"
-                            placeholder="guest@example.com"
-                            value={leadGuest.emailId || ""}
-                            onChange={(e) =>
-                              handleGuestChange(leadIndex, "emailId", e.target.value)
-                            }
-                            isInvalid={!!validationErrors[`guest_${leadIndex}_emailId`]}
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors[`guest_${leadIndex}_emailId`]}
-                          </Form.Control.Feedback>
-                        </Col>
-                      )}
-                      {/* i'way requires start_location.flight_number whenever
-                          the pickup point is an airport (guide §12.4.5) —
-                          there was no input for this anywhere on the page
-                          before, so pickupDetails.flightNo always stayed
-                          empty. Shown for i'way bookings only; drop-off side
-                          is optional so it's collected but not required.
-                          pickupIsAirport also catches i'way-native airports
-                          whose pickupType is "IWAY" but whose originLocation
-                          carries an IATA code. */}
-                      {isIway && pickupIsAirport && (
-                        <Col md={6}>
-                          <Form.Label className="small text-muted fw-semibold mb-1">
-                            Pickup Flight Number{" "}
-                            <span className="text-danger">*</span>
-                          </Form.Label>
-                          <Form.Control
-                            size="sm"
-                            type="text"
-                            placeholder="e.g. EK123"
-                            value={pickupDetails.flightNo || ""}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setPickupDetails((prev) => ({ ...prev, flightNo: v }));
-                              if (validationErrors.pickupFlightNo) {
-                                setValidationErrors((prev) => {
-                                  const next = { ...prev };
-                                  delete next.pickupFlightNo;
-                                  return next;
-                                });
-                              }
-                            }}
-                            isInvalid={!!validationErrors.pickupFlightNo}
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors.pickupFlightNo}
-                          </Form.Control.Feedback>
-                        </Col>
-                      )}
-                      {isIway && dropoffIsAirport && (
-                        <Col md={6}>
-                          <Form.Label className="small text-muted fw-semibold mb-1">
-                            Drop-off Flight Number
-                          </Form.Label>
-                          <Form.Control
-                            size="sm"
-                            type="text"
-                            placeholder="e.g. EK456 (optional)"
-                            value={dropoffDetails.flightNo || ""}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setDropoffDetails((prev) => ({ ...prev, flightNo: v }));
-                            }}
-                          />
-                        </Col>
-                      )}
-                    </Row>
                   </Card.Body>
                 </Card>
 

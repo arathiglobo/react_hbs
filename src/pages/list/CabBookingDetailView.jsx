@@ -960,33 +960,14 @@ export default function CabBookingDetailView() {
     .filter(Boolean)
     .join(" ");
 
-  // Display status for the StatusBadge — cancelled shows red, otherwise the
-  // live confirmation status (falling back to Confirmed) coloured green.
-  // Both "OK" (in-house default) and "PENDING_IWAY_PAYMENT" (legacy i'way
-  // bookings from before /orders/approve was wired) read as "Confirmed" on
-  // this page — once a row is persisted the customer's booking is settled
-  // from the agent's perspective, and the raw internal string shouldn't
-  // leak to the UI. Every other status (ReConfirmed, Rejected, …) is shown
-  // as-is. Display-only: the stored confirmationStatus is unchanged.
-  const rawStatus = actionState.confirmationStatus || "Confirmed";
-  const normalizedRaw = String(rawStatus).trim().toUpperCase();
-  const baseStatus = isCancelled
-    ? "Cancelled"
-    : normalizedRaw === "OK" || normalizedRaw === "PENDING_IWAY_PAYMENT"
-      ? "Confirmed"
-      : rawStatus;
-  // Display-only relabels (mirror PackageBookingDetailView): a ReConfirmed
-  // booking reads "Confirm/ReConfirmed" and a Cancelled one reads
-  // "ReConfirmed/Cancelled". The underlying state (isCancelled / the stored
-  // confirmationStatus) is unchanged, so the action-button gates still work off
-  // the real status.
-  const normalizedBase = String(baseStatus).trim().toUpperCase();
-  const displayStatus =
-    normalizedBase === "CANCELLED"
-      ? "ReConfirmed/Cancelled"
-      : normalizedBase === "RECONFIRMED"
-        ? "Confirm/ReConfirmed"
-        : baseStatus;
+  // Display status for the StatusBadge — cancelled shows red, everything
+  // else reads as "Reconfirmed". Rationale: any booking that survived
+  // create-order + approve + wallet deduction is fully committed on both
+  // sides, and the operator no longer has to press RECONFIRM manually.
+  // Legacy raw values ("OK", "CONFIRMED", "PENDING_IWAY_PAYMENT") all fold
+  // into the same "Reconfirmed" label so historic rows read consistently
+  // with new ones. The underlying confirmationStatus in the DB is unchanged.
+  const displayStatus = isCancelled ? "Cancelled" : "Reconfirmed";
 
   // Booking lifecycle events for the History modal — built from the row stub
   // already loaded (no extra API call), mirroring the Package / Hotel booking
@@ -1157,9 +1138,30 @@ export default function CabBookingDetailView() {
                           booking.pickupDate
                       )}
                     />
+                    {/* Reflects the value saved via "CONFIRMATION NO." —
+                        actionState.confirmationNumber is refreshed on save.
+                        Moved here from Guest Information (booking-level id,
+                        belongs with the other booking identifiers). */}
+                    <InfoRow
+                      label="Confirmation No."
+                      value={
+                        actionState.confirmationNumber ||
+                        booking.confirmationNumber
+                      }
+                    />
                   </Col>
                   <Col md={6}>
                     <InfoRow label="Agent" value={booking.agentName} />
+                    {/* Reflects the value saved via "ADD AGENT REFERENCE" —
+                        actionState.agentLpo is refreshed on save (mergeActionState),
+                        falling back to whatever the row stub carried. Renamed
+                        from "Agent LPO" and grouped next to Agent. */}
+                    <InfoRow
+                      label="Agent Reference"
+                      value={
+                        actionState.agentLpo || booking.agentLpo || booking.lpo
+                      }
+                    />
                     <InfoRow
                       label="Pickup"
                       value={
@@ -1199,7 +1201,11 @@ export default function CabBookingDetailView() {
               </SectionBody>
             </div>
 
-            {/* ── Guest Information ── */}
+            {/* ── Guest Information ──
+                 Passport No and Nationality removed on request; Agent
+                 Reference and Confirmation No. moved into Booking
+                 Information above, so this section is just the lead
+                 contact triad now. */}
             <div style={card}>
               <SectionHeader>Guest Information</SectionHeader>
               <SectionBody>
@@ -1207,39 +1213,11 @@ export default function CabBookingDetailView() {
                   <Col md={6}>
                     <InfoRow label="Guest Name" value={customerName} />
                     <InfoRow label="Email" value={booking.customer?.emailId} />
-                    <InfoRow
-                      label="Phone"
-                      value={booking.customer?.contactNumber}
-                    />
                   </Col>
                   <Col md={6}>
                     <InfoRow
-                      label="Passport No."
-                      value={booking.customer?.passportNumber}
-                    />
-                    <InfoRow
-                      label="Nationality"
-                      value={
-                        booking.customer?.nationality || booking.nationality
-                      }
-                    />
-                    {/* Reflects the value saved via "ADD AGENT REFERENCE" —
-                        actionState.agentLpo is refreshed on save (mergeActionState),
-                        falling back to whatever the row stub carried. */}
-                    <InfoRow
-                      label="Agent LPO"
-                      value={
-                        actionState.agentLpo || booking.agentLpo || booking.lpo
-                      }
-                    />
-                    {/* Reflects the value saved via "CONFIRMATION NO." —
-                        actionState.confirmationNumber is refreshed on save. */}
-                    <InfoRow
-                      label="Confirmation No."
-                      value={
-                        actionState.confirmationNumber ||
-                        booking.confirmationNumber
-                      }
+                      label="Phone"
+                      value={booking.customer?.contactNumber}
                     />
                   </Col>
                 </Row>
@@ -1269,7 +1247,7 @@ export default function CabBookingDetailView() {
                       <th style={{ width: 90 }}>Type</th>
                       <th>Name</th>
                       <th style={{ width: 80 }}>Age</th>
-                      <th>Passport</th>
+                      <th>Phone</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1292,7 +1270,15 @@ export default function CabBookingDetailView() {
                             .join(" ") || "—"}
                         </td>
                         <td>{g.age ?? "—"}</td>
-                        <td>{g.passportNo || "—"}</td>
+                        {/* We collect one phone per booking (lead only) — the
+                            per-guest form has no phone field. Show the lead
+                            passenger's number on the lead row; blank otherwise. */}
+                        <td>
+                          {g.contactNumber ||
+                            (g.isLead
+                              ? booking.customer?.contactNumber || "—"
+                              : "—")}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1538,11 +1524,12 @@ export default function CabBookingDetailView() {
                 </button>
               )}
 
-              {!showsFinalDocs && !isCancelled && (
-                <button style={BTN_TEAL} onClick={openConfirmModal}>
-                  RECONFIRM
-                </button>
-              )}
+              {/* Manual RECONFIRM removed — every successful booking is
+                  auto-reconfirmed at save time (TripServiceImpl.placeIwayOrder
+                  → confirmationStatus = "RECONFIRMED"), so this button had no
+                  new state to move to. The Reconfirm handler + modal remain
+                  in the file for potential future use / audit backfill but
+                  are no longer reachable from the UI. */}
 
               {!showsFinalDocs ? (
                 <>
