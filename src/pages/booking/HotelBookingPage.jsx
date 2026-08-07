@@ -23,9 +23,8 @@ import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
 // Dummy online-payment gateways shown when an agent's credit is short.
 // Each routes to /payment/<id> — a placeholder card-entry page.
 const PAYMENT_GATEWAYS = [
-  { id: "razorpay", name: "Razorpay", desc: "Cards, UPI, Net Banking" },
-  { id: "stripe", name: "Stripe", desc: "International cards" },
-  { id: "payu", name: "PayU", desc: "Cards & wallets" },
+  { id: "ccavenue", name: "CC Avenue", desc: "Cards, UPI, Net Banking" },
+  
 ];
 
 const SPECIAL_REQUEST_OPTIONS = [
@@ -699,23 +698,44 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
   //     path's bookings (Non-Refundable / Voucher-Now, insufficient credit)
   //     actually come back as — without it, the redirect to the Booking List
   //     below never ran even though the booking was created successfully.
+  // ── CC Avenue return handling ──
+  //   CC Avenue's redirect is a real browser navigation away to their domain
+  //   and back (via the backend's /api/payment/ccavenue/response redirect),
+  //   so — unlike the dummy-gateway flow above — React Router `state` never
+  //   survives the round trip. The backend instead appends the outcome as a
+  //   ?ccavenueOrderId=&ccavenueStatus= query string when it 302s the
+  //   browser back to this page. The status query param is only a hint —
+  //   before finalising anything we re-verify it against
+  //   GET /api/payment/ccavenue/status/{orderId}, which reflects what the
+  //   backend actually decrypted from CC Avenue, so a tampered/stale URL
+  //   can't force a booking through.
   useEffect(() => {
-    if (!location.state?.resumeCreate) return;
-    const stored = sessionStorage.getItem("hbpPendingCreatePayload");
-    // Strip the flag from history right away so remounts / reloads don't
-    // re-trigger. Do it before the async work so a fast re-render can't
-    // race the effect.
+    const searchParams = new URLSearchParams(location.search);
+    const ccavenueOrderId = searchParams.get("ccavenueOrderId");
+    const ccavenueStatus = searchParams.get("ccavenueStatus");
+
+    const resumeFromState = !!location.state?.resumeCreate;
+    const resumeFromCCAvenue = !!ccavenueOrderId;
+    if (!resumeFromState && !resumeFromCCAvenue) return;
+
+    // Strip the resume signal from history right away so remounts / reloads
+    // don't re-trigger. Do it before the async work so a fast re-render
+    // can't race the effect.
     navigate(location.pathname, { replace: true, state: {} });
-    if (!stored) return;
-    sessionStorage.removeItem("hbpPendingCreatePayload");
-    let payload;
-    try {
-      payload = JSON.parse(stored);
-    } catch (e) {
-      console.error("Malformed persisted create payload", e);
-      return;
-    }
-    (async () => {
+
+    const readPendingPayload = () => {
+      const stored = sessionStorage.getItem("hbpPendingCreatePayload");
+      sessionStorage.removeItem("hbpPendingCreatePayload");
+      if (!stored) return null;
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        console.error("Malformed persisted create payload", e);
+        return null;
+      }
+    };
+
+    const finalizeCreate = async (payload) => {
       try {
         setIsSubmitting(true);
         const response = await axiosInstance.post(
@@ -750,9 +770,49 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
       } finally {
         setIsSubmitting(false);
       }
+    };
+
+    if (resumeFromState) {
+      // Dummy-gateway path (unchanged) — payment "succeeded" locally, go
+      // straight to create.
+      const payload = readPendingPayload();
+      if (!payload) return;
+      finalizeCreate(payload);
+      return;
+    }
+
+    // CC Avenue path — verify server-side before creating the booking.
+    (async () => {
+      if (ccavenueStatus !== "success") {
+        toast.error("Payment was not completed. Please try again.");
+        sessionStorage.removeItem("hbpPendingCreatePayload");
+        return;
+      }
+      try {
+        const statusResponse = await axiosInstance.get(
+          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+        );
+        if (statusResponse.data?.status !== "SUCCESS") {
+          toast.error(
+            statusResponse.data?.statusMessage ||
+              "Payment was not successful. Please try again.",
+          );
+          sessionStorage.removeItem("hbpPendingCreatePayload");
+          return;
+        }
+      } catch (err) {
+        console.error("Could not verify CC Avenue payment status:", err);
+        toast.error(
+          "Could not verify payment status. Please contact support if you were charged.",
+        );
+        return;
+      }
+      const payload = readPendingPayload();
+      if (!payload) return;
+      finalizeCreate(payload);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state?.resumeCreate]);
+  }, [location.state?.resumeCreate, location.search]);
 
   const handleGuestChange = (roomIndex, guestIndex, field, value) => {
     setRooms((prevRooms) => {
@@ -2888,6 +2948,34 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
                           e,
                         );
                       }
+
+                      // ── CC Avenue: real billing-page redirect ──
+                      // Distinct from the dummy /payment/:gateway flow below
+                      // — the browser fully navigates away to CC Avenue's
+                      // hosted page and back, so the resume signal has to
+                      // travel as a URL query param (React Router state
+                      // doesn't survive a real cross-origin redirect). See
+                      // the ccavenueOrderId branch in the resume effect
+                      // above.
+                      if (selectedGateway === "ccavenue") {
+                        const guest = pendingPayload?.primaryGuest;
+                        const billingName = guest
+                          ? [guest.firstName, guest.lastName]
+                              .filter(Boolean)
+                              .join(" ")
+                          : "";
+                        navigate("/payment/ccavenue-redirect", {
+                          state: {
+                            amount: insufficientAmount,
+                            amountLabel: formatPrice(insufficientAmount),
+                            agentId: pendingPayload?.agentId || null,
+                            billingName,
+                            returnTo: location.pathname,
+                          },
+                        });
+                        return;
+                      }
+
                       navigate(`/payment/${selectedGateway}`, {
                         state: {
                           amountLabel: formatPrice(insufficientAmount),
