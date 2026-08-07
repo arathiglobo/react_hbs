@@ -49,6 +49,7 @@ import MarketType from "./pages/master/MarketType";
 import Region from "./pages/master/Region";
 import Province from "./pages/master/Province";
 import CityMapping from "./pages/master/CityMapping";
+import MappedList from "./pages/master/MappedList";
 
 import AgentReg from "./pages/Registration/AgentReg";
 import HotelReg from "./pages/Registration/HotelReg";
@@ -133,6 +134,7 @@ import PolicyCreate from "./pages/HotelActions/Policy/PolicyCreate";
 import CompanyProfile from "./pages/CompanyProfile";
 import Profile from "./pages/Profile/Profile";
 import ChangePassword from "./pages/Profile/ChangePassword";
+import TwoFactorAuth from "./pages/Profile/TwoFactorAuth";
 import Logout from "./pages/Profile/Logout";
 import MakePkgCombineSearch from "./pages/search/MakePkgCombineSearch";
 import AccomodationRoomList from "./pages/roomlist/makeyourownpkg/AccomodationRoomList";
@@ -399,6 +401,10 @@ export default function App() {
         {/* Topbar profile  */}
         <Route path="/view-profile" element={<PrivateRoute><Profile /> </PrivateRoute> }/>
         <Route path="/change-password" element={<PrivateRoute><ChangePassword /> </PrivateRoute> }/>
+        {/* Two-factor authentication is an agent-only feature — only agent
+            logins are challenged for a second factor, so the enrolment page is
+            scoped to them. The backend refuses non-agent callers as well. */}
+        <Route path="/two-factor-authentication" element={<PrivateRoute roles={["agent"]}><TwoFactorAuth /> </PrivateRoute> }/>
         <Route path="/log-out" element={<PrivateRoute><Logout /> </PrivateRoute> }/>
 
         {/* Masters */}
@@ -437,6 +443,7 @@ export default function App() {
         <Route path="/masters/hotel-mapping" element={<PrivateRoute><HotelMapping /></PrivateRoute>} />
         <Route path="/masters/hotel-upcooming-mapped-list" element={<PrivateRoute><HotelMappingBulkList /></PrivateRoute>} />
         <Route path="/masters/fetch-new-hotels" element={<FetchNewHotels />} />
+        <Route path="/masters/mapped-list" element={<PrivateRoute><MappedList /></PrivateRoute>} />
      
         {/* :bar_chart: Reports */}
         <Route path="/report/booking" element={<ReportBooking />} />

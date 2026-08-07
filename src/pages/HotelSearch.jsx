@@ -672,10 +672,8 @@ export default function HotelSearch({
      { value: "jumeirah", label: "Jumeirah" },
      { value: "ratehawk", label: "Ratehawk" },
      { value: "darina", label: "Darina" },
-     // GRN Connect — matches the "grn" apiType stamped on results by
-     // GrnHotelSearchApiCaller (lower-cased for the channel filter, uppercased
-     // when POSTed back as the `apiType` query param).
      { value: "grn", label: "GRN" },
+     { value: "goglobal", label: "GoGlobal" },
   ];
 
   // Narrows the Channel sidebar filter (and the SearchProgressBar pills)

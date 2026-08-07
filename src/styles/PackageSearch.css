@@ -150,6 +150,21 @@
     border-radius: 16px 16px 0 0;
 }
 
+/* Horizontal result-list layout (mirrors /new-booking/hotel's vertical list
+   of full-width rows). On xs/sm the image stacks above the body, so top
+   corners round; from md up the image sits to the left of the body, so only
+   the left corners round to match .result-card's own 16px radius. */
+.package-image-wrap--row {
+    height: 100%;
+    min-height: 160px;
+    border-radius: 16px 16px 0 0;
+}
+@media (min-width: 768px) {
+    .package-image-wrap--row {
+        border-radius: 16px 0 0 16px;
+    }
+}
+
 .package-image {
     width: 100%;
     height: 100%;
@@ -200,6 +215,19 @@
     margin-top: auto;
     padding-top: 10px;
     border-top: 1px solid #f1f5f9;
+    /* Wraps as a unit — price sits on its own line on very narrow columns
+       instead of shoving the Book Now button onto two lines. */
+    row-gap: 8px;
+}
+
+/* Price line stays intact: "AED  1060.00  /Per Person" never splits at the
+   space between the amount and the rate type. */
+.price-line {
+    display: inline-flex;
+    align-items: baseline;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .price-value {
@@ -212,13 +240,40 @@
     font-size: 0.78rem;
     font-weight: 600;
     color: #718096;
-    margin-right: 2px;
+    margin-right: 4px;
 }
 
 .price-unit {
     font-size: 0.72rem;
     color: #718096;
-    margin-left: 2px;
+    margin-left: 4px;
+}
+
+/* Right-hand action cluster (eye + Book Now).
+   The two buttons match in height so the row feels intentional; Book Now
+   never breaks mid-word. */
+.package-actions {
+    flex-shrink: 0;
+}
+
+.pkg-view-btn {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    line-height: 1;
+}
+
+.pkg-book-btn {
+    height: 34px;
+    padding: 0 14px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
 }
 
 @media (max-width: 768px) {
