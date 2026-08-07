@@ -8,28 +8,36 @@ import axiosInstance from "../../components/AxiosInstance";
 
 // Real CC Avenue redirect step (Non-Seamless billing page integration).
 // Reached from HotelBookingPage's "Select Payment Gateway" modal only when
-// CC Avenue is chosen. Calls the backend to get an encrypted request, then
-// auto-submits a hidden form POST to CC Avenue's hosted payment page — the
-// browser navigates away entirely, completes payment on CC Avenue's domain,
-// and CC Avenue posts the result straight back to the backend, which then
+// CC Avenue is chosen. Sends the FULL booking payload to the backend so it
+// can compute the payable amount server-side (client can't understate it)
+// and persist the payload for after-payment recovery, then auto-submits
+// the hidden form POST to CC Avenue's hosted payment page — the browser
+// navigates away entirely, completes payment on CC Avenue's domain, and
+// CC Avenue posts the result straight back to the backend, which then
 // 302-redirects here/back to the booking page with the outcome.
 export default function CCAvenueCheckoutPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const formRef = useRef(null);
 
-  const amount = location.state?.amount || 0;
-  const amountLabel = location.state?.amountLabel || "";
-  const agentId = location.state?.agentId || null;
+  const stateAmountLabel = location.state?.amountLabel || "";
   const billingName = location.state?.billingName || "";
   const returnTo = location.state?.returnTo || "/hotel-booking-page";
+  const bookingPayload = location.state?.bookingPayload || null;
 
   const [error, setError] = useState(null);
-  const [formFields, setFormFields] = useState(null); // { gatewayUrl, accessCode, encRequest }
+  // { gatewayUrl, accessCode, encRequest }
+  const [formFields, setFormFields] = useState(null);
+  // Server-authoritative payable amount (returned by /initiate). Shown to
+  // the operator so they see what will actually be charged, in case the
+  // client-side estimate they landed here with is stale.
+  const [serverAmountLabel, setServerAmountLabel] = useState("");
 
   useEffect(() => {
-    if (!amount || amount <= 0) {
-      setError("Missing payable amount — please go back and try again.");
+    if (!bookingPayload) {
+      setError(
+        "Missing booking details — please go back to the booking page and try again.",
+      );
       return;
     }
 
@@ -37,23 +45,37 @@ export default function CCAvenueCheckoutPage() {
 
     (async () => {
       try {
-        const response = await axiosInstance.post("/api/payment/ccavenue/initiate", {
-          amount,
-          agentId,
-          billingName,
-          returnPath: returnTo,
-        });
+        const response = await axiosInstance.post(
+          "/api/payment/ccavenue/initiate",
+          {
+            billingName,
+            returnPath: returnTo,
+            // The backend re-derives the payable amount from this payload
+            // and IGNORES any client-supplied amount — kept off the wire
+            // deliberately so a tampered client can't influence the charge.
+            bookingPayload,
+          },
+        );
         if (cancelled) return;
-        const { gatewayUrl, accessCode, encRequest } = response.data || {};
+        const { gatewayUrl, accessCode, encRequest, payableAmount, currency } =
+          response.data || {};
         if (!gatewayUrl || !accessCode || !encRequest) {
-          setError("CC Avenue did not return a valid payment request. Please try again.");
+          setError(
+            "CC Avenue did not return a valid payment request. Please try again.",
+          );
           return;
+        }
+        if (payableAmount != null) {
+          setServerAmountLabel(
+            `${currency || "AED"} ${Number(payableAmount).toFixed(2)}`,
+          );
         }
         setFormFields({ gatewayUrl, accessCode, encRequest });
       } catch (err) {
         if (cancelled) return;
         const beMsg =
-          err?.response?.data?.message || "Could not start the CC Avenue payment. Please try again.";
+          err?.response?.data?.message ||
+          "Could not start the CC Avenue payment. Please try again.";
         setError(beMsg);
       }
     })();
@@ -74,6 +96,8 @@ export default function CCAvenueCheckoutPage() {
 
   const goBack = () => navigate(returnTo);
 
+  const displayAmountLabel = serverAmountLabel || stateAmountLabel;
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <TopBar />
@@ -81,7 +105,11 @@ export default function CCAvenueCheckoutPage() {
         <Sidebar />
         <main className="flex-grow-1 p-4">
           <Container style={{ maxWidth: 560 }}>
-            <Button variant="link" className="text-decoration-none mb-3 px-0" onClick={goBack}>
+            <Button
+              variant="link"
+              className="text-decoration-none mb-3 px-0"
+              onClick={goBack}
+            >
               <FaArrowLeft className="me-2" />
               Back
             </Button>
@@ -90,9 +118,12 @@ export default function CCAvenueCheckoutPage() {
               <Card.Body className="px-4 py-5 text-center">
                 <FaShieldAlt size={36} className="text-success mb-3" />
                 <h5 className="fw-bold mb-2">CC Avenue Secure Payment</h5>
-                {amountLabel && (
+                {displayAmountLabel && (
                   <div className="text-muted mb-4">
-                    Amount payable: <span className="fw-bold text-dark">{amountLabel}</span>
+                    Amount payable:{" "}
+                    <span className="fw-bold text-dark">
+                      {displayAmountLabel}
+                    </span>
                   </div>
                 )}
 
@@ -107,11 +138,16 @@ export default function CCAvenueCheckoutPage() {
                   </>
                 ) : (
                   <>
-                    <Spinner animation="border" variant="success" role="status" className="mb-3" />
+                    <Spinner
+                      animation="border"
+                      variant="success"
+                      role="status"
+                      className="mb-3"
+                    />
                     <div className="text-muted small">
                       <FaLock className="me-1" />
-                      Redirecting you to CC Avenue's secure payment page — do not close this
-                      window.
+                      Redirecting you to CC Avenue's secure payment page — do
+                      not close this window.
                     </div>
                   </>
                 )}
@@ -121,9 +157,22 @@ export default function CCAvenueCheckoutPage() {
             {/* Hidden auto-submit form — CC Avenue's Non-Seamless integration expects a
                 real browser POST (encRequest + access_code), not an AJAX call. */}
             {formFields && (
-              <form ref={formRef} method="POST" action={formFields.gatewayUrl} style={{ display: "none" }}>
-                <input type="hidden" name="encRequest" value={formFields.encRequest} />
-                <input type="hidden" name="access_code" value={formFields.accessCode} />
+              <form
+                ref={formRef}
+                method="POST"
+                action={formFields.gatewayUrl}
+                style={{ display: "none" }}
+              >
+                <input
+                  type="hidden"
+                  name="encRequest"
+                  value={formFields.encRequest}
+                />
+                <input
+                  type="hidden"
+                  name="access_code"
+                  value={formFields.accessCode}
+                />
               </form>
             )}
           </Container>
