@@ -2749,18 +2749,29 @@ export default function HotelSearch({
                                     >
                                       <FaStar className="text-warning" />
                                       {hotel.rating}
-                                      <span
-                                        style={{
-                                          marginLeft: "5px",
-                                          backgroundColor: "#6c757d",
-                                          padding: "2px 6px",
-                                          borderRadius: "10px",
-                                        }}
-                                      >
-                                        {(
-                                          hotel.channelType || ""
-                                        ).toUpperCase()}
-                                      </span>
+                                      {/* Supplier / channel-type pill
+                                          (INHOUSE / IWTX / DARINA …). Only
+                                          admin-side roles need to see which
+                                          supplier a hotel came from —
+                                          agents book against a single
+                                          curated inventory and the label
+                                          just adds noise. Guarded on
+                                          isAgentRole so admin / super
+                                          admin / all other roles keep it. */}
+                                      {!isAgentRole && (
+                                        <span
+                                          style={{
+                                            marginLeft: "5px",
+                                            backgroundColor: "#6c757d",
+                                            padding: "2px 6px",
+                                            borderRadius: "10px",
+                                          }}
+                                        >
+                                          {(
+                                            hotel.channelType || ""
+                                          ).toUpperCase()}
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 </Col>

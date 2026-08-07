@@ -272,14 +272,19 @@ export const CabSearch = () => {
   const [viewModal, setViewModal] = useState(null);
 
   // ── Booking type toggle for search results ───────────────────────────
+  // "All"     → show BOTH SIC and Private rows (default).
   // "Shared"  → show SIC rates priced by passenger count
   //             (paying pax = adults + children whose age > 3).
   // "Private" → show private rates as returned by the backend
   //             (privateTotal flat, falling back to privatePerPax × pax).
-  // Affects ONLY how rows are filtered & priced in the results table —
-  // does not change the search request payload, so backend behaviour
-  // and other flows are untouched.
-  const [transferType, setTransferType] = useState("Shared");
+  // Default flipped from "Shared" → "All" because external suppliers
+  // (IWay Transfers, guide §11.6) are Private-only — a Shared default
+  // silently drops every IWay card the moment it lands. "All" surfaces
+  // both supplier flavours on first view; the operator can still narrow
+  // to Shared/Private via the sidebar radios. Affects ONLY how rows are
+  // filtered & priced in the results table — the search request payload
+  // is unchanged, so backend behaviour and other flows are untouched.
+  const [transferType, setTransferType] = useState("All");
 
   // ── Result-page filter / sort / pagination state ─────────────────────
   // Mirrors the Juniper-style result page in the reference screenshot:
@@ -443,6 +448,30 @@ export const CabSearch = () => {
   const [isDropHotelLoading, setIsDropHotelLoading] = useState(false);
   const [isDropPlaceLoading, setIsDropPlaceLoading] = useState(false);
 
+  // ─── IWay Transfers (external supplier) ─────────────────────────────
+  // Optional second search leg that hits the i'way BS integration
+  // (backend: /api/iway/*). Follows the HotelSearch multi-supplier
+  // pattern (IWTX / RateHawk / Atharva merge into one result list) — an
+  // IWay offer becomes another row in `transferResults` with
+  // channelType/source = "IWAY".
+  //
+  // IWay requires lat/lng for both pickup + drop (guide §11.6), which the
+  // existing city+facility selectors don't carry. We collect them via two
+  // extra autocomplete inputs backed by IWay's /places/find + /places/{id}
+  // passthroughs so the operator can type a real location string and pick
+  // a suggestion. Both selections must resolve into { placeId, lat, lng,
+  // label } before we send the /transfer-search request; otherwise the
+  // IWay leg is silently skipped and the in-house cabProvider results
+  // still render on their own.
+  const [iwayEnabled, setIwayEnabled] = useState(false);
+  const [iwayPickupOptions, setIwayPickupOptions] = useState([]);
+  const [iwayPickupSelected, setIwayPickupSelected] = useState(null);
+  const [isIwayPickupLoading, setIsIwayPickupLoading] = useState(false);
+  const [iwayDropOptions, setIwayDropOptions] = useState([]);
+  const [iwayDropSelected, setIwayDropSelected] = useState(null);
+  const [isIwayDropLoading, setIsIwayDropLoading] = useState(false);
+  const [iwayLoading, setIwayLoading] = useState(false);
+
   // Shared helper: hit /api/province?search= and return city options shaped
   // for react-select. Used by both the pickup City and the optional Drop
   // City selectors so they show identical results for the same query.
@@ -493,6 +522,97 @@ export const CabSearch = () => {
       }
     }, 300),
   ).current;
+
+  // ── IWay places autocomplete ───────────────────────────────────────
+  // Backed by /api/iway/places/find (server-side passthrough to i'way's
+  // /places/find, which itself wraps Google Places Autocomplete). We
+  // normalise each prediction into { value, label, placeId } and defer
+  // lat/lng resolution to onChange (fetchIwayPlaceDetails below) so we
+  // only spend a Place-Details call on the option the user actually
+  // picks rather than every autocomplete suggestion.
+  const fetchIwayPlaceOptions = async (term) => {
+    if (!term || term.trim().length < 2) return [];
+    try {
+      const res = await axiosInstance.get(
+        `/api/iway/places/find?term=${encodeURIComponent(term)}`,
+      );
+      // The backend returns whatever IWay's /places/find returns — that
+      // shape can arrive as either an array of predictions or an object
+      // wrapping a `predictions` array (Google's own shape). Normalise
+      // both so downstream code has one contract.
+      const raw = res.data;
+      const predictions = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw?.predictions)
+          ? raw.predictions
+          : [];
+      return predictions
+        .map((p) => {
+          const placeId = p.place_id || p.placeId;
+          if (!placeId) return null;
+          const label =
+            p.description ||
+            p.formatted_address ||
+            p.structured_formatting?.main_text ||
+            placeId;
+          return { value: placeId, label, placeId };
+        })
+        .filter(Boolean);
+    } catch (err) {
+      console.warn("IWay places lookup failed:", err?.message || err);
+      return [];
+    }
+  };
+
+  const debouncedIwayPickupSearch = useRef(
+    debounce(async (q = "") => {
+      setIsIwayPickupLoading(true);
+      try {
+        setIwayPickupOptions(await fetchIwayPlaceOptions(q));
+      } finally {
+        setIsIwayPickupLoading(false);
+      }
+    }, 350),
+  ).current;
+
+  const debouncedIwayDropSearch = useRef(
+    debounce(async (q = "") => {
+      setIsIwayDropLoading(true);
+      try {
+        setIwayDropOptions(await fetchIwayPlaceOptions(q));
+      } finally {
+        setIsIwayDropLoading(false);
+      }
+    }, 350),
+  ).current;
+
+  // Resolve a picked prediction → { lat, lng } via /api/iway/places/{id}
+  // (server passthrough to IWay's Place-Details). Called on onChange of
+  // the IWay pickup/drop autocomplete so the selected option carries the
+  // coordinates GET /prices needs.
+  const fetchIwayPlaceDetails = async (placeId) => {
+    if (!placeId) return { lat: null, lng: null };
+    try {
+      const res = await axiosInstance.get(
+        `/api/iway/places/${encodeURIComponent(placeId)}`,
+      );
+      const details = res.data;
+      // Google Place Details puts lat/lng at result.geometry.location —
+      // handle the object-wrapped and raw-object shapes.
+      const geo =
+        details?.result?.geometry?.location ||
+        details?.geometry?.location ||
+        details?.location;
+      if (!geo) return { lat: null, lng: null };
+      return {
+        lat: typeof geo.lat === "function" ? geo.lat() : Number(geo.lat),
+        lng: typeof geo.lng === "function" ? geo.lng() : Number(geo.lng),
+      };
+    } catch (err) {
+      console.warn("IWay place details failed:", err?.message || err);
+      return { lat: null, lng: null };
+    }
+  };
 
   // Fetch airports filtered by the chosen city. AirportController now accepts
   // an optional cityId query param so the dropdown only surfaces airports in
@@ -995,6 +1115,98 @@ export const CabSearch = () => {
     }
   };
 
+  // ── Common row mapper ────────────────────────────────────────────────
+  // Backend now returns the unified CabSearchResult DTO from every
+  // supplier, so the mapping is identical whether the row came from the
+  // in-house cabProvider tables (apiType="INHOUSE"/channelType="inhouse")
+  // or from IWay (apiType="IWAY"/channelType="iway"). Kept outside the
+  // handler so the poll callback can call it on every tick without
+  // rebuilding closures.
+  const ensureHttpImage = (imageUrl) => {
+    if (!imageUrl) {
+      return "https://via.placeholder.com/400x225?text=Transfer";
+    }
+    if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
+    if (typeof imageUrl === "string") {
+      const fileName = imageUrl.split(/[/\\]/).pop();
+      if (fileName) {
+        return `https://b2b.choosenfly.com/assets/details/profilepic/hotel/${fileName}`;
+      }
+    }
+    return "https://via.placeholder.com/400x225?text=Transfer";
+  };
+
+  const mapUnifiedRow = (cab, index) => ({
+    cabid: cab.cabid || cab.cabId || `cab-${index}`,
+    cabname: cab.cabname || cab.cabName || "Transfer Vehicle",
+    cabdetails: cab.cabdetails || "",
+    cabpic: ensureHttpImage(cab.cabpic || cab.cabPic),
+    noOfCabs: cab.noOfCabs || 1,
+    cabProviderId: cab.cabProviderId || null,
+    cabProviderName: cab.cabProviderName || "",
+    originLocationName: cab.originLocationName || "",
+    destinationLocationName: cab.destinationLocationName || "",
+    capacityMin: cab.capacityMin ?? null,
+    capacityMax: cab.capacityMax ?? null,
+    apiType: cab.apiType || null,
+    channelType: cab.channelType || null,
+    source: cab.apiType || cab.source || null,
+    iwayPriceId: cab.iwayPriceId || null,
+    iwayPriceUid: cab.iwayPriceUid || null,
+    searchCabDetailsDTO: Array.isArray(cab.searchCabDetailsDTO)
+      ? cab.searchCabDetailsDTO.map((d) => ({
+          ...d,
+          totalRate:
+            d?.totalRate != null
+              ? Number(d.totalRate)
+              : d?.totalRateWithMrk != null
+                ? Number(d.totalRateWithMrk)
+                : null,
+          totalRateWithoutMarkup:
+            d?.totalRateWithoutMarkup != null
+              ? Number(d.totalRateWithoutMarkup)
+              : d?.totalRateWithoutMrk != null
+                ? Number(d.totalRateWithoutMrk)
+                : null,
+        }))
+      : [],
+  });
+
+  // ── POST → poll helper (parity with HotelSearch.jsx's flow) ─────────
+  // POST /api/cab-search/search returns a UUID; then poll
+  // GET /api/cab-search/results/{searchId} every intervalMs until the
+  // response's finalStatus === "COMPLETED" (all suppliers finished/errored).
+  // Progressive results land in state on every tick via onUpdate.
+  const pollUntilCabSearchComplete = async (
+    searchId,
+    onUpdate,
+    { intervalMs = 2000, timeoutMs = 30000, initialDelay = 500 } = {},
+  ) => {
+    return new Promise((resolve, reject) => {
+      const startTime = Date.now();
+      let pollCount = 0;
+
+      const tick = async () => {
+        try {
+          pollCount++;
+          const res = await axiosInstance.get(
+            `/api/cab-search/results/${encodeURIComponent(searchId)}`,
+            { params: { page: 0, size: 100 } },
+          );
+          if (onUpdate) onUpdate(res.data, pollCount);
+          if (res.data?.finalStatus === "COMPLETED") return resolve(res.data);
+          if (Date.now() - startTime >= timeoutMs) {
+            return reject(new Error("Polling timed out"));
+          }
+          setTimeout(tick, intervalMs);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      setTimeout(tick, initialDelay);
+    });
+  };
+
   const handleTransferSearchSubmit = async (e) => {
     e.preventDefault();
 
@@ -1003,7 +1215,6 @@ export const CabSearch = () => {
     const errs = buildValidationErrors();
     setValidationErrors(errs);
     if (Object.keys(errs).length > 0) {
-      // toast.error("Please fix the highlighted fields and try again.");
       return;
     }
 
@@ -1019,10 +1230,13 @@ export const CabSearch = () => {
         localStorage.getItem("makeYourOwnPackageAgentId") ||
         "1";
 
-      // New zone-based search payload — built from the simplified Transfer
-      // criteria (Agent / City / Date / Pickup / Arrival time / Drop / Pax).
-      // The backend CabSearchRequestDTO uses originSource+id / destinationSource+id
-      // which we derive from the chosen pickup + drop facility.
+      const iwayReady =
+        iwayEnabled &&
+        iwayPickupSelected?.lat != null &&
+        iwayPickupSelected?.lng != null &&
+        iwayDropSelected?.lat != null &&
+        iwayDropSelected?.lng != null;
+
       const transferPayload = {
         originSource: pickupItem?.source || "AIRPORT",
         originLocationId: pickupItem?.locationId || null,
@@ -1033,11 +1247,7 @@ export const CabSearch = () => {
         tripType: "ONE_WAY",
         timeType: "FLIGHT_TIME",
         departureDate: transferPickupDate || null,
-        // arrivalTime drives the search's time field — the backend uses it
-        // alongside timeType to match rate-validity windows when configured.
         departureTime: arrivalTime || null,
-        // Optional drop-side departure time, carried through to the booking
-        // page so the operator can show it on the order summary / PDF.
         dropoffTime: dropDepartureTime || null,
         returnDate: null,
         returnTime: null,
@@ -1050,113 +1260,92 @@ export const CabSearch = () => {
               ? Array(transferChildren).fill(0)
               : [],
         agentId: agentId ? Number(agentId) : null,
+        // IWay leg piggybacked on the same request — backend skips the
+        // IWay fan-out when iwayEnabled=false or coords are missing.
+        iwayEnabled: iwayReady,
+        iwayStartPlaceId: iwayReady ? iwayPickupSelected.placeId : null,
+        iwayStartLat: iwayReady ? iwayPickupSelected.lat : null,
+        iwayStartLng: iwayReady ? iwayPickupSelected.lng : null,
+        iwayStartLabel: iwayReady ? iwayPickupSelected.label : null,
+        iwayFinishPlaceId: iwayReady ? iwayDropSelected.placeId : null,
+        iwayFinishLat: iwayReady ? iwayDropSelected.lat : null,
+        iwayFinishLng: iwayReady ? iwayDropSelected.lng : null,
+        iwayFinishLabel: iwayReady ? iwayDropSelected.label : null,
+        iwayCurrency: iwayReady ? currency?.value || null : null,
       };
 
-      const response = await axiosInstance.post(
+      // ── 1) Kick off the async fan-out ─────────────────────────────
+      // POST /search publishes one Rabbit message per supplier and
+      // returns immediately with { searchId, status, suppliers } — no
+      // supplier is queried on this thread. Same pattern the hotel
+      // search uses (/api/hotel-search/search returns a searchId that
+      // /api/hotel-search/results/{searchId} then polls).
+      const initRes = await axiosInstance.post(
         "/api/cab-search/search",
         transferPayload,
       );
+      const searchId = initRes?.data?.searchId;
+      if (!searchId) throw new Error("No searchId returned");
+      if (iwayReady) setIwayLoading(true);
 
-      const ensureHttpImage = (imageUrl) => {
-        if (!imageUrl) {
-          return "https://via.placeholder.com/400x225?text=Transfer";
-        }
-        if (/^https?:\/\//i.test(imageUrl)) {
-          return imageUrl;
-        }
-        if (typeof imageUrl === "string") {
-          const fileName = imageUrl.split(/[/\\]/).pop();
-          if (fileName) {
-            return `https://b2b.choosenfly.com/assets/details/profilepic/hotel/${fileName}`;
-          }
-        }
-        return "https://via.placeholder.com/400x225?text=Transfer";
-      };
-
-      const mappedResults = Array.isArray(response.data)
-        ? response.data.map((cab, index) => ({
-            cabid: cab.cabid || cab.cabId || `cab-${index}`,
-            cabname: cab.cabname || cab.cabName || "Transfer Vehicle",
-            cabdetails: cab.cabdetails || "",
-            cabpic: ensureHttpImage(cab.cabpic || cab.cabPic),
-            noOfCabs: cab.noOfCabs || 1,
-            // Additions surfaced by the new /api/cab-search/search endpoint.
-            cabProviderId: cab.cabProviderId || null,
-            cabProviderName: cab.cabProviderName || "",
-            originLocationName: cab.originLocationName || "",
-            destinationLocationName: cab.destinationLocationName || "",
-            capacityMin: cab.capacityMin ?? null,
-            capacityMax: cab.capacityMax ?? null,
-            // Normalise per-row rate fields so the UI can rely on a single
-            // shape regardless of what the backend names them:
-            //   totalRate              → final price WITH agent markup
-            //   totalRateWithoutMarkup → base price WITHOUT agent markup
-            // Older payloads used `totalRateWithoutMrk` for the base — we
-            // map that into `totalRateWithoutMarkup` so legacy responses
-            // still render. Any pre-existing per-row fields (sicRate,
-            // privateRate, privateTotalRate, privatePerPaxRate, types,
-            // location, dropOff, etc.) are preserved as-is.
-            searchCabDetailsDTO: Array.isArray(cab.searchCabDetailsDTO)
-              ? cab.searchCabDetailsDTO.map((d) => ({
-                  ...d,
-                  totalRate:
-                    d?.totalRate != null
-                      ? Number(d.totalRate)
-                      : d?.totalRateWithMrk != null
-                        ? Number(d.totalRateWithMrk)
-                        : null,
-                  totalRateWithoutMarkup:
-                    d?.totalRateWithoutMarkup != null
-                      ? Number(d.totalRateWithoutMarkup)
-                      : d?.totalRateWithoutMrk != null
-                        ? Number(d.totalRateWithoutMrk)
-                        : null,
-                }))
-              : [],
-          }))
-        : [];
-
-      // ── Demo route injection ──────────────────────────────────────────
-      // When searching the sample route "Dubai International Airport →
-      // Test Hotel", surface the dummy cab inventory so the flow can be
-      // demonstrated even when no live rates are configured. Matching is
-      // lenient (case-insensitive substring) on the picked origin/dest
-      // labels. Any real results still show alongside the demo cabs.
-      const originLabel = (
-        origin?.label ||
-        origin?.locationName ||
-        ""
-      ).toLowerCase();
-      const destLabel = (
-        destination?.label ||
-        destination?.locationName ||
-        ""
-      ).toLowerCase();
+      // Precompute demo-route flag / real-cab list so the poll can fold
+      // the dummy cards in alongside without re-fetching every tick.
+      const originLabel = (origin?.label || origin?.locationName || "").toLowerCase();
+      const destLabel = (destination?.label || destination?.locationName || "").toLowerCase();
       const isDemoRoute =
         originLabel.includes("dubai") &&
         originLabel.includes("airport") &&
         destLabel.includes("test hotel");
-
+      let demoResults = [];
       if (isDemoRoute) {
-        // Attach REAL cab ids to the demo cards so they can be booked. We keep
-        // the demo names / images / rates but point each card at an existing
-        // Cab row (cycling through whatever's registered).
         const realCabs = await fetchRealCabsForDemo();
         if (realCabs.length === 0) {
           toast.error(
             "No registered cabs found — demo cards will show but can't be booked. Register a cab first.",
           );
         }
-        const demoResults = DUMMY_CAB_RESULTS.map((tpl, i) => {
+        demoResults = DUMMY_CAB_RESULTS.map((tpl, i) => {
           const real = realCabs.length ? realCabs[i % realCabs.length] : null;
-          return {
-            ...tpl,
-            cabid: real ? real.cabId : tpl.cabid,
-          };
+          return { ...tpl, cabid: real ? real.cabId : tpl.cabid };
         });
-        setTransferResults([...mappedResults, ...demoResults]);
-      } else {
-        setTransferResults(mappedResults);
+      }
+
+      // ── 2) Poll for progressive results ───────────────────────────
+      // Each tick reads whatever suppliers have written into Redis so
+      // far. We overwrite transferResults on every tick with the freshly
+      // deduped list (the poll response IS the current state), so as
+      // suppliers finish new cards fade into view without re-rendering
+      // the whole table twice. Demo cards are appended locally.
+      let finalData = null;
+      try {
+        finalData = await pollUntilCabSearchComplete(
+          searchId,
+          (data /* pollCount */) => {
+            const merged = Array.isArray(data?.result)
+              ? data.result.map(mapUnifiedRow)
+              : [];
+            setTransferResults(
+              demoResults.length ? [...merged, ...demoResults] : merged,
+            );
+          },
+        );
+      } catch (pollErr) {
+        // Polling errored or timed out — keep whatever landed so far.
+        console.warn("Cab-search poll ended early:", pollErr?.message || pollErr);
+      }
+
+      // Post-completion: if IWay was requested but no IWay row landed,
+      // hint the operator. Uses the LAST poll response so we don't lie
+      // about a mid-flight tick.
+      if (iwayReady && finalData) {
+        const iwayRows = (finalData.result || []).some(
+          (r) =>
+            (r.channelType && r.channelType.toLowerCase() === "iway") ||
+            (r.apiType && r.apiType.toUpperCase() === "IWAY"),
+        );
+        if (!iwayRows) {
+          toast("IWay Transfers returned no offers for this route.", { icon: "ℹ️" });
+        }
       }
     } catch (err) {
       console.error("Transfer search failed:", err);
@@ -1164,6 +1353,7 @@ export const CabSearch = () => {
       setTransferResults([]);
     } finally {
       setTransferLoading(false);
+      setIwayLoading(false);
     }
   };
 
@@ -1271,6 +1461,19 @@ export const CabSearch = () => {
   };
 
   const handleBookNow = (cab, cabDetail) => {
+    // IWay rows are external-supplier offers — the /cab-booking-page
+    // flow only knows how to POST /api/cab/book (in-house cab tables).
+    // Until CabBookingPage learns the IWay POST /orders flow we stop
+    // the navigation with an informative toast so the operator isn't
+    // dropped into a broken checkout. Everything else below still runs
+    // for in-house rows.
+    if (cab?.channelType === "iway" || cab?.source === "IWAY") {
+      toast(
+        "IWay booking checkout will be wired up next — the search + rates are live now.",
+        { icon: "ℹ️", duration: 5000 },
+      );
+      return;
+    }
     // Recompute the row's price the same way the table shows it so the
     // booking page receives a consistent total. We carry BOTH the
     // markup-applied price (`totalRate`, what the user pays) and the
@@ -2065,6 +2268,144 @@ export const CabSearch = () => {
                         />
                       </Col>
                     </Row>
+
+                    {/* ── IWay Transfers (external) ────────────────────────
+                        Optional second-supplier leg. Toggling the checkbox
+                        reveals two typeahead inputs backed by IWay's
+                        /places/find + /places/{id} passthroughs on the
+                        backend. IWay requires lat/lng for the /prices call
+                        (guide §11.6) which the in-house city/facility
+                        selectors don't carry — so the operator picks the
+                        IWay pickup + drop from their own autocomplete and
+                        we resolve lat/lng on selection.
+                        When both selections resolve to coordinates, the
+                        search submit sends the IWay coords piggybacked on
+                        the same POST /api/cab-search/search request — the
+                        backend fans out to IWay's /prices in the same
+                        round-trip and returns the merged in-house + IWay
+                        offer list. One call, both suppliers. Leaving this
+                        off keeps the flow exactly as it was. */}
+                    <Row className="g-3 mb-2 align-items-end">
+                      <Col md={12}>
+                        <Form.Check
+                          type="checkbox"
+                          id="cab-iway-enable"
+                          className="fw-semibold"
+                          label="Also search IWay Transfers (external supplier)"
+                          checked={iwayEnabled}
+                          onChange={(e) => {
+                            const on = e.target.checked;
+                            setIwayEnabled(on);
+                            if (!on) {
+                              // Clearing on turn-off keeps the payload
+                              // consistent — no stale IWay selections
+                              // sneak into a later search.
+                              setIwayPickupSelected(null);
+                              setIwayDropSelected(null);
+                              setIwayPickupOptions([]);
+                              setIwayDropOptions([]);
+                            }
+                          }}
+                        />
+                        <div className="text-muted small mt-1">
+                          Adds IWay (i'way) offers alongside your in-house cab
+                          results. Requires exact pickup + drop locations from
+                          the IWay lookup below.
+                        </div>
+                      </Col>
+                    </Row>
+                    {iwayEnabled && (
+                      <Row className="g-3 mb-3 align-items-end">
+                        <Col md={6}>
+                          <Form.Label className="fw-semibold">
+                            IWay Pickup Location{" "}
+                            <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Select
+                            options={iwayPickupOptions}
+                            value={iwayPickupSelected}
+                            isLoading={isIwayPickupLoading}
+                            onInputChange={(input, { action }) => {
+                              if (action !== "input-change") return;
+                              debouncedIwayPickupSearch(input || "");
+                            }}
+                            onChange={async (opt) => {
+                              if (!opt) {
+                                setIwayPickupSelected(null);
+                                return;
+                              }
+                              // Fetch lat/lng immediately so the payload
+                              // is ready when the user hits Search.
+                              const { lat, lng } = await fetchIwayPlaceDetails(
+                                opt.placeId,
+                              );
+                              if (lat == null || lng == null) {
+                                toast.error(
+                                  "IWay couldn't resolve coordinates for that pickup location.",
+                                );
+                                return;
+                              }
+                              setIwayPickupSelected({ ...opt, lat, lng });
+                            }}
+                            filterOption={() => true}
+                            placeholder="Type a pickup address, airport…"
+                            isSearchable
+                            isClearable
+                            menuPortalTarget={document.body}
+                            styles={{
+                              ...customSelectStyles,
+                              menuPortal: (base) => ({
+                                ...base,
+                                zIndex: 9999,
+                              }),
+                            }}
+                          />
+                        </Col>
+                        <Col md={6}>
+                          <Form.Label className="fw-semibold">
+                            IWay Drop Location{" "}
+                            <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Select
+                            options={iwayDropOptions}
+                            value={iwayDropSelected}
+                            isLoading={isIwayDropLoading}
+                            onInputChange={(input, { action }) => {
+                              if (action !== "input-change") return;
+                              debouncedIwayDropSearch(input || "");
+                            }}
+                            onChange={async (opt) => {
+                              if (!opt) {
+                                setIwayDropSelected(null);
+                                return;
+                              }
+                              const { lat, lng } = await fetchIwayPlaceDetails(
+                                opt.placeId,
+                              );
+                              if (lat == null || lng == null) {
+                                toast.error(
+                                  "IWay couldn't resolve coordinates for that drop location.",
+                                );
+                                return;
+                              }
+                              setIwayDropSelected({ ...opt, lat, lng });
+                            }}
+                            filterOption={() => true}
+                            placeholder="Type a drop address, hotel, airport…"
+                            isSearchable
+                            isClearable
+                            menuPortalTarget={document.body}
+                            styles={{
+                              ...customSelectStyles,
+                              menuPortal: (base) => ({
+                                ...base,
+                                zIndex: 9999,
+                              }),
+                            }}
+                          />
+                        </Col>
+                      </Row>
+                    )}
 
                     {/* Legacy/hidden fields kept in state but invisible.
                         The original Trip Type radios + Origin/Destination/
@@ -3265,8 +3606,32 @@ export const CabSearch = () => {
                                 return (
                                   <Col xs={12} key={`${cab.cabid}-${idx}`}>
                                     <Card className="border-0 shadow-sm rounded-3 overflow-hidden">
-                                      <Card.Header className="bg-light py-2 px-3 fw-semibold text-dark">
-                                        {cab.cabname || "Transfer Vehicle"}
+                                      <Card.Header className="bg-light py-2 px-3 fw-semibold text-dark d-flex justify-content-between align-items-center">
+                                        <span>
+                                          {cab.cabname || "Transfer Vehicle"}
+                                        </span>
+                                        {/* IWay-source badge — makes the
+                                            external supplier obvious at a
+                                            glance without disturbing rows
+                                            that come from the in-house
+                                            cabProvider search. */}
+                                        {(cab.channelType === "iway" ||
+                                          cab.source === "IWAY") && (
+                                          <span
+                                            className="badge"
+                                            style={{
+                                              backgroundColor: "#e8f4ff",
+                                              color: "#0b6bcb",
+                                              border: "1px solid #cfe4fb",
+                                              fontWeight: 600,
+                                              fontSize: "0.7rem",
+                                              padding: "3px 8px",
+                                            }}
+                                            title="Offer from the IWay (i'way) external supplier"
+                                          >
+                                            IWay
+                                          </span>
+                                        )}
                                       </Card.Header>
                                       <Card.Body className="p-3">
                                         <Row className="align-items-center g-3">

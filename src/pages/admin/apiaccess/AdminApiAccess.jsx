@@ -86,20 +86,39 @@ const CREDENTIAL_SCHEMAS = {
     { key: "baseUrl", label: "Base URL (grn.api.base-url)", type: "text" },
     { key: "apiKey", label: "API Key (grn.api.key)", type: "password" },
   ],
+
   // Keys map to GoGlobalCredentials.fromMap() on the backend, which also
   // accepts base-url/base_url/url, agencyId/agency-id, userName/username
   // and passwd/pwd. GoGlobal issues a DEDICATED endpoint per client, so
   // baseUrl is the origin only and servicePath is appended to it — leave
   // servicePath blank to fall back to goglobal.api.service-path.
-  GOGLOBAL: [
-    { key: "baseUrl", label: "Base URL (goglobal.api.base-url)", type: "text" },
-    { key: "servicePath", label: "Service Path — optional (goglobal.api.service-path)", type: "text" },
-    { key: "agency", label: "Agency ID (goglobal.api.agency)", type: "text" },
-    { key: "user", label: "User (goglobal.api.user)", type: "text" },
-    { key: "password", label: "Password (goglobal.api.password)", type: "password" },
-  ],
-  // INHOUSE reads from the app's own DB — no external credentials to set.
-  INHOUSE: [],
+GOGLOBAL: [
+  { key: "baseUrl", label: "Base URL (goglobal.api.base-url)", type: "text" },
+  { key: "servicePath", label: "Service Path — optional (goglobal.api.service-path)", type: "text" },
+  { key: "agency", label: "Agency ID (goglobal.api.agency)", type: "text" },
+  { key: "user", label: "User (goglobal.api.user)", type: "text" },
+  { key: "password", label: "Password (goglobal.api.password)", type: "password" },
+],
+
+// IWay (i'way BS Transfers). Keys map to IwayAuthService.pick* on the
+// backend — same DB-first-with-properties-fallback pattern as ATHARVA
+// / IWTX. Base URL is the "/transnextgen" prefix only; the /v4 (or
+// whatever version the API is on) is set separately so ops can move
+// to a new major without editing the base URL.
+IWAY: [
+  { key: "baseUrl", label: "Base URL (iway.api.baseUrl)", type: "text" },
+  { key: "version", label: "API Version (v4)", type: "text" },
+  { key: "userId", label: "User ID (iway.api.userId)", type: "text" },
+  { key: "login", label: "Login (iway.api.login)", type: "text" },
+  { key: "password", label: "Password (iway.api.password)", type: "password" },
+  { key: "currency", label: "Default Currency (e.g. AED)", type: "text" },
+  { key: "lang", label: "Response Language (e.g. en)", type: "text" },
+  { key: "imagesUrl", label: "Images URL (car photos base)", type: "text" },
+  { key: "platform", label: "Platform ID (guide §11.6 — 7 for API)", type: "text" },
+],
+
+// INHOUSE reads from the app's own DB — no external credentials to set.
+INHOUSE: [],
 };
 
 const MASK = "••••••••";
