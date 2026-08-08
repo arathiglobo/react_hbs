@@ -1211,6 +1211,23 @@
   line-height: 1;
 }
 
+/* Solid red variant — HotelSearch.jsx's "Add Room" button only (compound
+   selector so it doesn't need source-order luck). Other pages sharing
+   .btn-add-room-premium (StudentSearch, GovEmployeeSearch, etc.) don't
+   carry this extra class, so they keep the red→violet gradient unchanged. */
+.btn-add-room-premium.hs-add-room-btn-red {
+  background: #EC0B43;
+}
+
+.btn-add-room-premium.hs-add-room-btn-red:hover,
+.btn-add-room-premium.hs-add-room-btn-red:focus {
+  background: #C90939;
+}
+
+.btn-add-room-premium.hs-add-room-btn-red:active {
+  background: #C90939;
+}
+
 /* ════════════════════════════════════════════════════════════════════════════
    B2C TRAVEL FEEL — Hotel Search (Booking.com / MakeMyTrip vibe)
    Soft red hero band + elevated "search widget" + friendly fields + bold CTA.

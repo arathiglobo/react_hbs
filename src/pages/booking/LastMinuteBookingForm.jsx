@@ -64,14 +64,13 @@ const formatPrice = (price) =>
     price || 0
   );
 
-// Dummy online-payment gateways — mirrors HotelBookingPage /
-// DayStayBookingPage so the operator gets the same payment picker when
-// the agent's credit is short.
+// Online-payment gateways — mirrors HotelBookingPage so the operator gets
+// the same payment picker when the agent's credit is short. CC Avenue is
+// real (see the "Proceed to Pay" handler below); the rest are still the
+// dummy placeholder flow.
 const PAYMENT_GATEWAYS = [
-  { id: "razorpay", name: "Razorpay", desc: "Cards, UPI, Net Banking" },
-  { id: "stripe", name: "Stripe", desc: "International cards" },
-  { id: "payu", name: "PayU", desc: "Cards & wallets" },
-];
+  { id: "ccavenue", name: "CC Avenue", desc: "Cards, UPI, Net Banking" },
+  ];
 
 // Rates saved in the DB already include the admin markup (it is pre-applied
 // on the contract rate form). Return the base rate as-is to avoid double-applying.
@@ -530,6 +529,67 @@ export default function LastMinuteBookingForm() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state?.resumeCreate]);
+
+  // CC Avenue post-payment resume — mirrors HotelBookingPage.jsx. CC
+  // Avenue's redirect is a real cross-domain browser navigation, so React
+  // Router `state` (resumeCreate above) never survives it; the backend
+  // instead appends ?ccavenueOrderId=&ccavenueStatus= to the URL when it
+  // redirects back here. Unlike the dummy-gateway path, no sessionStorage
+  // payload is needed — the backend already persisted it at /initiate.
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const ccavenueOrderId = searchParams.get("ccavenueOrderId");
+    const ccavenueStatus = searchParams.get("ccavenueStatus");
+    if (!ccavenueOrderId) return;
+
+    // Strip the query string so a reload doesn't re-trigger this. ctx is
+    // lost either way (it never survives the real redirect), so the page
+    // will briefly show the "No room selected" fallback while this runs.
+    navigate(location.pathname, { replace: true, state: {} });
+
+    (async () => {
+      if (ccavenueStatus !== "success") {
+        toast.error("Payment was not completed. Please try again.");
+        return;
+      }
+      try {
+        setSubmitting(true);
+        const statusResponse = await axiosInstance.get(
+          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+        );
+        if (statusResponse.data?.status !== "SUCCESS") {
+          toast.error(
+            statusResponse.data?.statusMessage ||
+              "Payment was not successful. Please try again.",
+          );
+          return;
+        }
+        const res = await axiosInstance.post(
+          `/api/payment/ccavenue/finalize-lastminute/${ccavenueOrderId}`,
+        );
+        if (res.data?.success) {
+          toast.success(
+            res.data.message ||
+              `Booking ${res.data.bookingCode || ""} created after payment.`,
+          );
+          setShowSummaryModal(false);
+          navigate("/booking-details/last-minute-booking-list");
+        } else {
+          toast.error(
+            res.data?.message || "Booking submission failed. Please try again.",
+          );
+        }
+      } catch (err) {
+        const beMsg =
+          err?.response?.data?.message || err?.response?.data?.error || null;
+        console.error("Post-payment last-minute finalize failed:", err);
+        toast.error(beMsg || "Booking submission failed. Please try again.");
+      } finally {
+        setSubmitting(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   // Resync rooms[].guests array when adults/children counts change.
   useEffect(() => {
@@ -2021,7 +2081,7 @@ export default function LastMinuteBookingForm() {
           </Modal.Footer>
         </Modal>
 
-        {/* ─── Payment Gateway (dummy) ─── */}
+        {/* ─── Select Payment Gateway ─── */}
         <Modal
           show={showGatewayModal}
           onHide={() => setShowGatewayModal(false)}
@@ -2034,23 +2094,41 @@ export default function LastMinuteBookingForm() {
             <p className="text-muted small mb-3">
               Choose a gateway to enter your card details.
             </p>
-            {PAYMENT_GATEWAYS.map((g) => (
-              <Form.Check
-                key={g.id}
-                type="radio"
-                name="lm-payment-gateway"
-                id={`lm-gw-${g.id}`}
-                className="mb-2"
-                checked={selectedGateway === g.id}
-                onChange={() => setSelectedGateway(g.id)}
-                label={
-                  <span>
-                    <span className="fw-semibold">{g.name}</span>
-                    <span className="text-muted small ms-2">{g.desc}</span>
-                  </span>
-                }
-              />
-            ))}
+            <div className="pg-option-list">
+              {PAYMENT_GATEWAYS.map((g) => {
+                const isSelected = selectedGateway === g.id;
+                return (
+                  <label
+                    key={g.id}
+                    htmlFor={`lm-gw-${g.id}`}
+                    className={`pg-option${
+                      isSelected ? " pg-option-selected" : ""
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="lm-payment-gateway"
+                      id={`lm-gw-${g.id}`}
+                      className="pg-option-input"
+                      checked={isSelected}
+                      onChange={() => setSelectedGateway(g.id)}
+                    />
+                    <span className="pg-option-radio" aria-hidden="true" />
+                    {g.id === "ccavenue" && (
+                      <img
+                        src={`${process.env.PUBLIC_URL}/ccavanue.png`}
+                        alt="CC Avenue"
+                        className="pg-option-logo"
+                      />
+                    )}
+                    <span className="pg-option-text">
+                      <span className="pg-option-name">{g.name}</span>
+                      <span className="pg-option-desc">{g.desc}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
           </Modal.Body>
           <Modal.Footer className="border-0">
             <Button
@@ -2067,12 +2145,46 @@ export default function LastMinuteBookingForm() {
                   (x) => x.id === selectedGateway,
                 );
                 setShowGatewayModal(false);
-                // Persist the payload the resume flow will replay.
-                // React state (rooms / pendingPayload / ...) is lost when
-                // the user navigates away to /payment and back, so the
-                // resume effect below rebuilds the create call purely
-                // from sessionStorage. paymentMode is flipped to "ONLINE"
-                // so the Booking List labels the row correctly and the
+
+                // ── CC Avenue: real billing-page redirect ──
+                // Distinct from the dummy /payment/:gateway path below —
+                // the browser fully navigates away to CC Avenue's hosted
+                // page and back, so the resume signal has to travel as a
+                // URL query param (React Router state doesn't survive a
+                // real cross-origin redirect). See the ccavenueOrderId
+                // resume effect above. flowType tells the backend to
+                // create a LAST MINUTE booking rather than a regular hotel
+                // one when it finalizes.
+                if (selectedGateway === "ccavenue") {
+                  const billingName = [
+                    primaryGuest.salutation,
+                    primaryGuest.firstName,
+                    primaryGuest.lastName,
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
+                  navigate("/payment/ccavenue-redirect", {
+                    state: {
+                      flowType: "LASTMINUTE_CREATE",
+                      bookingPayload: {
+                        ...pendingPayload,
+                        paymentMode: "ONLINE",
+                      },
+                      billingName,
+                      amountLabel: formatPrice(insufficientAmount),
+                      returnTo: location.pathname,
+                    },
+                  });
+                  return;
+                }
+
+                // Dummy /payment/:gateway flow (test/local only). Persist
+                // the payload the resume flow will replay. React state
+                // (rooms / pendingPayload / ...) is lost when the user
+                // navigates away to /payment and back, so the resume
+                // effect above rebuilds the create call purely from
+                // sessionStorage. paymentMode is flipped to "ONLINE" so
+                // the Booking List labels the row correctly and the
                 // backend skips its credit check + debit.
                 try {
                   sessionStorage.setItem(
@@ -2093,7 +2205,7 @@ export default function LastMinuteBookingForm() {
                     amountLabel: formatPrice(insufficientAmount),
                     gatewayName: gw ? gw.name : selectedGateway,
                     // After payment, land back on this same booking form
-                    // with resumeCreate=true — the effect below fires the
+                    // with resumeCreate=true — the effect above fires the
                     // create call using the persisted payload, then
                     // navigates to the last-minute booking list on success.
                     returnTo: location.pathname,
