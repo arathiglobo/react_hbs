@@ -625,34 +625,13 @@ const CabBookingPage = () => {
   });
   const [tourismDirham, setTourismDirham] = useState("");
 
-  // If no state, show prompt
-  if (!hasValidState) {
-    return (
-      <div className="min-vh-100 bg-light d-flex flex-column">
-        <TopBar />
-        <div className="d-flex flex-grow-1">
-          <Sidebar />
-          <main className="flex-grow-1 p-4 d-flex justify-content-center align-items-center">
-            <Card className="text-center p-5 shadow-sm border-0 rounded-4">
-              <Card.Body>
-                <FaCar className="display-4 text-warning mb-3" />
-                <h4 className="fw-bold mb-3">No Transfer Selected</h4>
-                <p className="text-muted mb-4">Please select a transfer from the search page first.</p>
-                <Button variant="primary" onClick={() => navigate("/new-booking/cab")}>
-                  Go to Cab Search
-                </Button>
-              </Card.Body>
-            </Card>
-          </main>
-        </div>
-      </div>
-    );
-  }
-
   const totalRate = parseFloat(prices.totalPrice) || initialTotalRate;
 
   // Payable used for the sufficiency check — matches the amount that
   // will actually be charged on Confirm (base + tourism dirham + HQ).
+  // Declared unconditionally (before the !hasValidState early return below)
+  // — React Hooks must run in the same order on every render, so useMemo /
+  // useEffect can never sit after a conditional return.
   const bookingPayable = useMemo(() => {
     const tdNum =
       tourismDirham !== "" && !isNaN(Number(tourismDirham))
@@ -688,9 +667,6 @@ const CabBookingPage = () => {
     return [{ value: "CREDIT", label: "Credit Limit" }];
   }, [hasSufficientCredit, agentCardPaymentEnabled]);
 
-  const noPaymentPathAvailable =
-    hasSufficientCredit === false && !agentCardPaymentEnabled;
-
   // Keep paymentMode valid for whatever option set is currently active —
   // when the sufficiency flips (e.g. HQ amount pushes the total past the
   // available credit) auto-select the first remaining option, which also
@@ -701,6 +677,33 @@ const CabBookingPage = () => {
       setPaymentMode(paymentModeOptions[0].value);
     }
   }, [paymentModeOptions, paymentMode]);
+
+  // If no state, show prompt
+  if (!hasValidState) {
+    return (
+      <div className="min-vh-100 bg-light d-flex flex-column">
+        <TopBar />
+        <div className="d-flex flex-grow-1">
+          <Sidebar />
+          <main className="flex-grow-1 p-4 d-flex justify-content-center align-items-center">
+            <Card className="text-center p-5 shadow-sm border-0 rounded-4">
+              <Card.Body>
+                <FaCar className="display-4 text-warning mb-3" />
+                <h4 className="fw-bold mb-3">No Transfer Selected</h4>
+                <p className="text-muted mb-4">Please select a transfer from the search page first.</p>
+                <Button variant="primary" onClick={() => navigate("/new-booking/cab")}>
+                  Go to Cab Search
+                </Button>
+              </Card.Body>
+            </Card>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  const noPaymentPathAvailable =
+    hasSufficientCredit === false && !agentCardPaymentEnabled;
 
   const handlePriceChange = (field, value) => {
     setPrices((prev) => ({ ...prev, [field]: value }));

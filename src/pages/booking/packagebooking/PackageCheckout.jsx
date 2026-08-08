@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { Row, Col, Card, Modal, Button, Form } from "react-bootstrap";
 import Sidebar from "../../../components/Sidebar";
@@ -73,6 +73,14 @@ const PackageCheckout = () => {
   const editingBookingId = checkoutState?.editingBookingId || null;
   const parentBookingCode = checkoutState?.parentBookingCode || null;
   const searchRate = checkoutState?.searchRate ?? null;
+
+  // Ref into PaxInformation so the sidebar Confirm booking button (rendered
+  // directly below the "Are you sure you want to continue with the booking?"
+  // card) can invoke the same triggerConfirmClick() flow the old sticky-nav
+  // Confirm used to run — validate pax → require modeOfPayment → require
+  // bookingConfirmation → open the Terms & Conditions modal that ultimately
+  // fires handleSubmitBooking.
+  const paxInfoRef = useRef(null);
 
   // Keep localStorage in sync with bookingData mutations so a refresh
   // preserves whatever the operator has typed / selected on this page.
@@ -277,6 +285,7 @@ const PackageCheckout = () => {
                 <div className="main-booking-card">
                   <div className="tab-content-area">
                     <PaxInformation
+                      ref={paxInfoRef}
                       searchParams={bookingData.searchParams}
                       bookingData={bookingData}
                       updateData={setBookingData}
@@ -386,66 +395,12 @@ const PackageCheckout = () => {
                       })}
                     </div>
                     <div className="price-sidebar-sub">AED · Selling price</div>
-
-                    <hr className="price-divider" />
-
-                    <div className="price-breakdown-row">
-                      <span className="price-breakdown-label">
-                        Package rate
-                      </span>
-                      <span className="price-breakdown-value">
-                        {(Number(searchRate) > 0
-                          ? Number(searchRate)
-                          : Number(packageData?.rate) || 0
-                        ).toLocaleString("en-US", {
-                          minimumFractionDigits: 2,
-                        })}
-                      </span>
-                    </div>
-
-                    {bookingData.selections?.hotelPrice > 0 && (
-                      <div className="price-breakdown-row">
-                        <span className="price-breakdown-label">Hotels</span>
-                        <span className="price-breakdown-value">
-                          {bookingData.selections.hotelPrice.toLocaleString(
-                            "en-US",
-                            { minimumFractionDigits: 2 },
-                          )}
-                        </span>
-                      </div>
-                    )}
-
-                    {bookingData.selections?.cabPrice > 0 && (
-                      <div className="price-breakdown-row">
-                        <span className="price-breakdown-label">Cabs</span>
-                        <span className="price-breakdown-value">
-                          {bookingData.selections.cabPrice.toLocaleString(
-                            "en-US",
-                            { minimumFractionDigits: 2 },
-                          )}
-                        </span>
-                      </div>
-                    )}
-
-                    {bookingData.selections?.activityPrice > 0 && (
-                      <div className="price-breakdown-row">
-                        <span className="price-breakdown-label">
-                          Activities
-                        </span>
-                        <span className="price-breakdown-value">
-                          {bookingData.selections.activityPrice.toLocaleString(
-                            "en-US",
-                            { minimumFractionDigits: 2 },
-                          )}
-                        </span>
-                      </div>
-                    )}
                   </div>
 
                   {/* Cancellation Policies link — same button + class as the
                       Package Details page's sidebar so the popup styling is
                       inherited. */}
-                  <div className="sidebar-policy-card">
+                  {/* <div className="sidebar-policy-card">
                     <button
                       type="button"
                       className="price-policy-link"
@@ -456,7 +411,7 @@ const PackageCheckout = () => {
                         Cancellation Policies &amp; Terms &amp; Conditions
                       </span>
                     </button>
-                  </div>
+                  </div> */}
 
                   {/* Booking Confirmation radios — required before Confirm
                       Booking (gated inside PaxInformation). */}
@@ -509,6 +464,20 @@ const PackageCheckout = () => {
                       />
                     </div>
                   </div>
+
+                  {/* Confirm booking — moved out of the sticky-nav row inside
+                      PaxInformation so it sits directly below the "Are you
+                      sure…" card. Triggers PaxInformation.triggerConfirmClick()
+                      through the ref, which runs the same validate → mode of
+                      payment → bookingConfirmation → Terms modal gate the
+                      old button did. */}
+                  <button
+                    type="button"
+                    className="btn-nav-next sidebar-confirm-btn"
+                    onClick={() => paxInfoRef.current?.triggerConfirmClick()}
+                  >
+                    {editingBookingId ? "Save amendment →" : "Confirm booking →"}
+                  </button>
                 </div>
 
                 <style>{`
@@ -538,6 +507,15 @@ const PackageCheckout = () => {
                     padding: 2px 8px;
                     border-radius: 999px;
                     font-weight: 700;
+                  }
+                  /* Sidebar Confirm booking button — sits directly below the
+                     "Are you sure…" card. Reuses .btn-nav-next's styling from
+                     PackageBooking_Stepper.css but forces full width + adds
+                     the same margin-top spacing the sidebar cards use. */
+                  .sidebar-confirm-btn {
+                    display: block;
+                    width: 100%;
+                    margin-top: 16px;
                   }
                   .sidebar-policy-card {
                     border: 1px solid var(--rl-border, #e2e8f0);

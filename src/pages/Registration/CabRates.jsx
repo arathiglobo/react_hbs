@@ -17,6 +17,15 @@ import axios from "axios";
 import Select from "react-select";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
+import {
+  FaEdit,
+  FaTrash,
+  FaEye,
+  FaPlus,
+  FaDollarSign,
+  FaLock,
+  FaBackward,
+} from "react-icons/fa";
 
 // Fixed catalog of special requirements a cab provider can advertise.
 // react-select `{value,label}[]` shape; the value doubles as the string
@@ -32,15 +41,6 @@ const SPECIAL_REQUIREMENTS_OPTIONS = [
   { value: "Pet Friendly", label: "Pet Friendly" },
   { value: "English Speaking Driver", label: "English Speaking Driver" },
 ];
-import {
-  FaEdit,
-  FaTrash,
-  FaEye,
-  FaPlus,
-  FaDollarSign,
-  FaLock,
-  FaBackward,
-} from "react-icons/fa";
 
 const CabRates = () => {
   const navigate = useNavigate();

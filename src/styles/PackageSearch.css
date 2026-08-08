@@ -858,7 +858,7 @@
 
 .btn-add-room-premium:hover,
 .btn-add-room-premium:focus {
-  background: linear-gradient(135deg, #EC0B43 0%, #7c3aed 100%);
+  background: linear-gradient(135deg, #EC0B43 0%, #ed3a43 100%);
   color: #fff;
   transform: translateY(-1px);
   box-shadow:

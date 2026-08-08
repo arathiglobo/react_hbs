@@ -1,6 +1,11 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import { Row, Col, Form, Modal, Button, Table } from "react-bootstrap";
-import AsyncSelect from "react-select/async";
 import axiosInstance from "../../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import { useNavigate } from "react-router-dom";
@@ -21,10 +26,8 @@ import {
 // (kept in sync so the Mode of Payment picker rendered here writes the same
 // stored values the /book payload and detail-view expect).
 const PAYMENT_MODES = [
-  { value: "CREDIT", label: "Agent credit limit" },
-  { value: "CARD", label: "Card payment" },
-  { value: "BANK_TRANSFER", label: "Bank transfer" },
-  { value: "CASH", label: "Cash" },
+  { value: "CREDIT", label: "Credit Limit" },
+  { value: "CARD", label: "Card" },
 ];
 
 // Reverse-geocode browser coordinates to a readable address for the Booking
@@ -75,7 +78,7 @@ async function reverseGeocode(lat, lon) {
   return null;
 }
 
-const PaxInformation = ({
+const PaxInformation = forwardRef(({
   searchParams,
   bookingData,
   updateData,
@@ -90,7 +93,7 @@ const PaxInformation = ({
   // forwarded to /book so the backend stamps "{parent}/{n}" — e.g.
   // amending GPKG-4 yields GPKG-4/1. Mirrors Hotel ADD NEW ITEM.
   parentBookingCode,
-}) => {
+}, ref) => {
   const navigate = useNavigate();
   const [showSummary, setShowSummary] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -343,33 +346,6 @@ const PaxInformation = ({
 
   const primary = localData.travellers && localData.travellers[0];
 
-  // Pax passport — moved here from the removed Basic Details step. Updates the
-  // shared searchParams so the submit payload's nativeCountry is populated.
-  const loadPassportOptions = async (inputValue) => {
-    try {
-      const response = await axiosInstance.get(
-        `/api/country?page=0&limit=20&search=${encodeURIComponent(inputValue)}`,
-      );
-      return (response.data || []).map((country) => ({
-        value: country.id,
-        label: country.name,
-      }));
-    } catch {
-      return [];
-    }
-  };
-
-  const setPaxPassport = (option) => {
-    updateData((prev) => ({
-      ...prev,
-      searchParams: {
-        ...prev.searchParams,
-        paxPassport: option,
-        nativeCountry: option ? option.value : "",
-      },
-    }));
-  };
-
   const validatePaxData = () => {
     if (!primary) {
       toast.error("No travellers configured.");
@@ -388,6 +364,10 @@ const PaxInformation = ({
     );
     if (incompleteTraveller) {
       toast.error("Please fill in first and last names for all travellers.");
+      return false;
+    }
+    if (!bookingData?.programme?.flightDetails?.trim()) {
+      toast.error("Please fill in Flight details.");
       return false;
     }
     return true;
@@ -554,6 +534,28 @@ const PaxInformation = ({
 
   const isViewMode = false; // Add check if needed
 
+  // Same logic the sticky-nav Confirm button used to run. Exposed via ref so
+  // the sidebar Confirm button PackageCheckout renders directly below the
+  // "Are you sure you want to continue with the booking?" card can invoke
+  // it — the two must gate identically (validate pax → require modeOfPayment
+  // → require bookingConfirmation → open the Terms & Conditions modal that
+  // ultimately fires handleSubmitBooking).
+  const triggerConfirmClick = () => {
+    if (!validatePaxData()) return;
+    if (!bookingData?.programme?.modeOfPayment) {
+      toast.error("Please select a mode of payment.");
+      return;
+    }
+    if (!bookingData?.programme?.bookingConfirmation) {
+      toast.error("Please select a booking option to continue.");
+      return;
+    }
+    setTermsCheck(!!bookingData?.programme?.termsAccepted);
+    setShowTermsModal(true);
+  };
+
+  useImperativeHandle(ref, () => ({ triggerConfirmClick }));
+
   return (
     <div className="tab-pane-active">
       {/* Travellers — the first (lead) traveller doubles as the booking's
@@ -663,47 +665,20 @@ const PaxInformation = ({
         );
       })}
 
-      {/* Travel details — Pax passport + optional Flight details sit after the
-          travellers, just before the add-extra controls. Passport feeds
-          searchParams.nativeCountry for submit; Flight details is written to
+      {/* Travel details — Flight details sits after the travellers, just
+          before the add-extra controls. Written to
           bookingData.programme.flightDetails and forwarded as `flightDetails`
-          on the /book payload (see the payload block above at ~L451). */}
+          on the /book payload (see the payload block above at ~L451).
+          Required — validatePaxData() blocks submit when it's blank. */}
       <p className="tab-section-title mt-3">Travel details</p>
       <Row className="g-3 mb-2">
-        <Col md={4}>
+        {/* Free-text alphanumeric field — accepts flight number, airport
+            codes and times, e.g. "EK 503  STN-DXB  21:45 / 06:50". Persisted
+            on the booking so the supplier can plan pickups / arrivals. */}
+        <Col md={12}>
           <Form.Group>
             <Form.Label className="booking-field-label">
-              Pax passport <span className="required-dot">*</span>
-            </Form.Label>
-            <AsyncSelect
-              cacheOptions
-              defaultOptions
-              loadOptions={loadPassportOptions}
-              value={searchParams.paxPassport || null}
-              onChange={setPaxPassport}
-              placeholder="Select country"
-              className="modern-select"
-              classNamePrefix="react-select"
-              isDisabled={isViewMode}
-              // Render the menu in a body-level portal so it isn't clipped or
-              // covered by the sticky Previous/Confirm nav row directly below.
-              menuPortalTarget={
-                typeof document !== "undefined" ? document.body : null
-              }
-              menuPosition="fixed"
-              styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
-            />
-          </Form.Group>
-        </Col>
-        {/* Optional free-text alphanumeric field — accepts flight number,
-            airport codes and times, e.g. "EK 503  STN-DXB  21:45 / 06:50".
-            Not validated; not required. Persisted on the booking so the
-            supplier can plan pickups / arrivals. */}
-        <Col md={8}>
-          <Form.Group>
-            <Form.Label className="booking-field-label">
-              Flight details{" "}
-              <span className="text-muted small">(optional)</span>
+              Flight details <span className="required-dot">*</span>
             </Form.Label>
             <Form.Control
               type="text"
@@ -846,30 +821,10 @@ const PaxInformation = ({
         <button className="btn-nav-prev" onClick={onPrev}>
           ← Previous
         </button>
-        <button
-          className="btn-nav-next"
-          onClick={() => {
-            if (!validatePaxData()) return;
-            // Mode of payment moved to this step's right sidebar; gate the
-            // confirm-booking flow on it being selected.
-            if (!bookingData?.programme?.modeOfPayment) {
-              toast.error("Please select a mode of payment.");
-              return;
-            }
-            // Mandatory "continue with the booking?" choice (Book and Pay Now /
-            // Hold Room and Pay Later) — mirrors the hotel booking page.
-            if (!bookingData?.programme?.bookingConfirmation) {
-              toast.error("Please select a booking option to continue.");
-              return;
-            }
-            // Prime the popup with whatever was previously accepted so a
-            // user who reopens it doesn't have to re-tick the box.
-            setTermsCheck(!!bookingData?.programme?.termsAccepted);
-            setShowTermsModal(true);
-          }}
-        >
-          {editingBookingId ? "Save amendment →" : "Confirm booking →"}
-        </button>
+        {/* Confirm booking → button removed from here; PackageCheckout now
+            renders it in the right sidebar directly below the "Are you sure
+            you want to continue with the booking?" card. It triggers the
+            same triggerConfirmClick() flow via the ref exposed below. */}
       </div>
 
       {/* Terms & Conditions popup — gates the order-summary modal. */}
@@ -981,399 +936,320 @@ const PaxInformation = ({
         </Modal.Footer>
       </Modal>
 
-      {/* Order Summary Modal */}
+      {/* Order Summary Modal — laid out to match HotelBookingPage.jsx's
+          "Confirm Your Booking" popup (red primary header, compact single
+          bordered card body with dates / lead / cancellation / payment /
+          payable / rate-split / policies-accepted / review note, split
+          Cancel + Confirm footer). Field mapping is package-appropriate:
+          hotel name → package name, address → destination country,
+          check-in / check-out → travel date + duration, rooms/nights →
+          adults/children, etc. */}
       <Modal
         show={showSummary}
         onHide={() => setShowSummary(false)}
-        size="lg"
         centered
-        className="order-summary-modal"
+        backdrop="static"
+        dialogClassName="confirm-booking-modal"
       >
-        <Modal.Header closeButton style={{ background: "#f8fafc" }}>
-          <Modal.Title className="d-flex align-items-center">
-            <FaClipboardList className="me-2 text-primary" />
-            Order Summary
+        <Modal.Header
+          closeButton
+          className="bg-primary text-white py-2"
+          style={{ borderBottom: "none" }}
+        >
+          <Modal.Title className="fw-semibold d-flex align-items-center">
+            <FaPlaneDeparture className="me-2" /> Confirm Your Booking
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body className="p-4" style={{ background: "#f8fafc" }}>
-          <div className="summary-section mb-4">
-            <h6 className="section-header d-flex align-items-center mb-3">
-              <FaCalendarAlt className="me-2 text-muted" size={14} />
-              Package & Schedule
-            </h6>
-            <div className="summary-card p-3 bg-white rounded shadow-sm border">
-              <Row>
-                <Col sm={6}>
-                  <p className="mb-1 text-muted small">Package</p>
-                  <p className="fw-semibold mb-0">
-                    {packageData?.packageName || "Standard Package"}
+        <Modal.Body className="px-3 py-2 bg-light">
+          {(() => {
+            // Local helpers — kept inline so this modal has no external
+            // dependency other than the props/state PaxInformation already
+            // computes above.
+            const activeUserRole = localStorage.getItem("currentActiveRole");
+            const formatPrice = (v) =>
+              `AED ${Number(v || 0).toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}`;
+            const tdNum =
+              tourismDirham !== "" && !isNaN(Number(tourismDirham))
+                ? Number(tourismDirham)
+                : 0;
+            const payableTotal = Number(totalPrice || 0) + tdNum;
+            const paymentModeLabel = (() => {
+              const m = bookingData?.programme?.modeOfPayment;
+              if (m === "CREDIT") return "Credit Limit";
+              if (m === "CARD") return "Card";
+              return m || "—";
+            })();
+            const leadName = primary
+              ? [primary.title, primary.firstName, primary.middleName, primary.lastName]
+                  .filter(Boolean)
+                  .join(" ")
+                  .trim()
+              : "";
+            const travelDateStr = searchParams?.travelDate
+              ? new Date(searchParams.travelDate).toLocaleDateString("en-GB", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })
+              : "—";
+            // Non-refundable equivalent for packages — a cancellation
+            // policy whose "with charge" band charges 100% (or has no free
+            // days). Falls back to the styled deadline card below when
+            // partially refundable.
+            const isNonRefundable = (() => {
+              const free = packageView?.cancellationDaysFree;
+              const value = packageView?.cancellationChargeValue;
+              const type = packageView?.cancellationChargeType;
+              return (
+                (free == null || Number(free) === 0) &&
+                type &&
+                type.toLowerCase() === "percent" &&
+                Number(value) >= 100
+              );
+            })();
+            return (
+              <div className="border rounded-3 bg-white shadow-sm p-2">
+                <div className="mb-2">
+                  <p className="mb-0 d-flex align-items-center flex-wrap">
+                    <span className="fw-bold text-primary fs-5">
+                      {packageData?.packageName ||
+                        packageView?.packageName ||
+                        "Package"}
+                    </span>
+                    {packageView?.arriveCountryName && (
+                      <span className="text-muted small ms-1">
+                        , {packageView.arriveCountryName}
+                      </span>
+                    )}
                   </p>
-                </Col>
-                <Col sm={3}>
-                  <p className="mb-1 text-muted small">Date</p>
-                  <p className="fw-semibold mb-0">{searchParams.travelDate}</p>
-                </Col>
-                <Col sm={3}>
-                  <p className="mb-1 text-muted small">Passengers</p>
-                  <p className="fw-semibold mb-0">
-                    {currentAdults} Adult, {currentChildren} Child
-                  </p>
-                </Col>
-              </Row>
-            </div>
-          </div>
+                </div>
 
-          {/* ── Programme strip — nights/days + flight ──
-              Check-in date was intentionally removed from this popup. The
-              underlying `programme.checkInDate` field is still on state and
-              still forwarded on the submit payload so any code path that
-              consumes it (e.g. amend hydration, backend voucher metadata)
-              keeps working; only the visible row is gone. */}
-          {(nights || bookingData.programme?.flightDetails) && (
-            <div className="summary-section mb-4">
-              <h6 className="section-header d-flex align-items-center mb-3">
-                <FaPlaneDeparture className="me-2 text-muted" size={14} />
-                Programme
-              </h6>
-              <div className="summary-card p-3 bg-white rounded shadow-sm border">
-                <Row className="g-3 align-items-center">
-                  <Col md={6}>
-                    <p className="mb-1 text-muted small">Duration</p>
-                    <p className="fw-semibold mb-0">
-                      {nights
-                        ? `${String(nights).padStart(2, "0")} Nights / ${String(
-                            daysInt ?? "",
-                          ).padStart(2, "0")} Days`
-                        : "—"}
+                <hr className="my-2" />
+
+                <Row className="gy-1">
+                  <Col xs={6}>
+                    <p className="mb-1">
+                      <strong>Travel Date:</strong>
+                      <br />
+                      <span className="text-dark">{travelDateStr}</span>
                     </p>
                   </Col>
-                  <Col md={6}>
-                    <p className="mb-1 text-muted small">Flight details</p>
-                    <p className="fw-semibold mb-0">
-                      {bookingData.programme?.flightDetails || "—"}
+                  <Col xs={6}>
+                    <p className="mb-1">
+                      <strong>Duration:</strong>
+                      <br />
+                      <span className="text-dark">
+                        {nights
+                          ? `${String(nights).padStart(2, "0")} Nights / ${String(
+                              daysInt ?? "",
+                            ).padStart(2, "0")} Days`
+                          : "—"}
+                      </span>
                     </p>
                   </Col>
-                </Row>
-              </div>
-            </div>
-          )}
+                  <Col xs={6}>
+                    <p className="mb-1">
+                      <strong>Adults:</strong> {currentAdults}
+                    </p>
+                  </Col>
+                  <Col xs={6}>
+                    <p className="mb-1">
+                      <strong>Children:</strong> {currentChildren}
+                    </p>
+                  </Col>
 
-          {/* ── Day-wise Itinerary ── */}
-          {itineraries.length > 0 && (
-            <div className="summary-section mb-4">
-              <h6 className="section-header d-flex align-items-center mb-3">
-                <FaMapMarkerAlt className="me-2 text-muted" size={14} />
-                Day-wise Itinerary
-                <span
-                  className="ms-2 badge bg-light text-muted fw-normal"
-                  style={{ fontSize: "0.7rem" }}
-                >
-                  {itineraries.length}{" "}
-                  {itineraries.length === 1 ? "day" : "days"}
-                </span>
-              </h6>
-              <div className="summary-card p-3 bg-white rounded shadow-sm border">
-                {[...itineraries]
-                  .sort((a, b) => a.day - b.day)
-                  .map((it, idx, arr) => (
-                    <div
-                      key={`pax-day-${it.day}-${idx}`}
-                      className={`pb-3 ${
-                        idx !== arr.length - 1 ? "mb-3 border-bottom" : ""
-                      }`}
-                    >
-                      <div className="d-flex align-items-start">
-                        {/* White chip with black digits — matches the day
-                            chips on the Package Details step (see
-                            .prg-day-num in HotelsTab.jsx). */}
-                        <div
-                          className="me-3 d-flex align-items-center justify-content-center fw-bold"
-                          style={{
-                            width: 36,
-                            height: 36,
-                            borderRadius: 8,
-                            background: "#ffffff",
-                            color: "#000000",
-                            border: "1px solid #e5e7eb",
-                            boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)",
-                            flexShrink: 0,
-                            fontSize: "0.8rem",
-                          }}
+                  {bookingData?.programme?.flightDetails && (
+                    <Col xs={12}>
+                      <p className="mb-1">
+                        <strong>Flight details:</strong>
+                        <br />
+                        <span className="text-dark">
+                          {bookingData.programme.flightDetails}
+                        </span>
+                      </p>
+                    </Col>
+                  )}
+
+                  {leadName && (
+                    <Col xs={12}>
+                      <p className="mb-1">
+                        <strong>Lead Passenger:</strong>
+                        <br />
+                        <span className="text-dark">{leadName}</span>
+                      </p>
+                    </Col>
+                  )}
+
+                  {/* Cancellation block — Non-Refundable rates get a red
+                      warning card (mirrors HotelBookingPage); anything else
+                      lists the cancellation policy timeline inline. Payment
+                      Mode badge sits in a paired md=6 column so the two read
+                      as one row on tablet+ and stack cleanly on mobile. */}
+                  {isNonRefundable ? (
+                    <Col xs={12} md={6}>
+                      <div
+                        className="p-2 rounded border"
+                        style={{
+                          borderColor: "#dc2626",
+                          background: "#fef2f2",
+                        }}
+                      >
+                        <p
+                          className="mb-1 fw-bold"
+                          style={{ color: "#dc2626" }}
                         >
-                          {String(it.day).padStart(2, "0")}
-                        </div>
-                        <div className="flex-grow-1">
-                          <div className="fw-semibold">
-                            Day {String(it.day).padStart(2, "0")}
-                            {it.heading ? ` – ${it.heading}` : ""}
-                          </div>
-                          {it.placeName && (
-                            <div
-                              className="text-muted small mb-1"
-                              style={{ fontSize: "0.78rem" }}
-                            >
-                              <FaMapMarkerAlt
-                                size={10}
-                                className="me-1"
-                              />
-                              {it.placeName}
-                            </div>
-                          )}
-                          {it.dayActivities && (
-                            <p
-                              className="text-muted small mb-0"
-                              style={{
-                                whiteSpace: "pre-line",
-                                fontSize: "0.8rem",
-                                lineHeight: 1.5,
-                              }}
-                            >
-                              {it.dayActivities}
-                            </p>
-                          )}
+                          Non-refundable
+                        </p>
+                        <p className="mb-0 text-dark small">
+                          100% cancellation charges apply.
+                        </p>
+                      </div>
+                    </Col>
+                  ) : (
+                    cancellationParts.length > 0 && (
+                      <Col xs={12} md={6}>
+                        <p className="mb-1">
+                          <strong>Cancellation Policy:</strong>
+                        </p>
+                        {cancellationParts.map((p, i) => (
+                          <p
+                            key={`sum-cancel-${i}`}
+                            className="mb-1 small text-dark"
+                            style={{ lineHeight: 1.35 }}
+                          >
+                            {p.text}
+                          </p>
+                        ))}
+                      </Col>
+                    )
+                  )}
+
+                  <Col
+                    xs={12}
+                    md={6}
+                    className="d-flex align-items-start justify-content-md-end"
+                  >
+                    <p className="mb-1">
+                      <strong>Payment Mode:</strong>
+                      <br />
+                      <span
+                        className="badge bg-success"
+                        style={{ fontSize: "0.75rem" }}
+                      >
+                        {paymentModeLabel}
+                      </span>
+                    </p>
+                  </Col>
+
+                  <Col xs={12}>
+                    {activeUserRole === "ADMIN" && (
+                      <div className="p-2 rounded bg-white border mt-2">
+                        <div className="d-flex justify-content-between align-items-center">
+                          <h6 className="mb-0 text-muted">Selling Price</h6>
+                          <h5 className="mb-0 text-success fw-bold">
+                            {formatPrice(payableTotal)}
+                          </h5>
                         </div>
                       </div>
+                    )}
+                    <div className="p-2 rounded bg-white border mt-2 d-flex justify-content-between align-items-center">
+                      <h6 className="mb-0 fw-bold">Payable</h6>
+                      <h5 className="mb-0 fw-bold">
+                        {formatPrice(payableTotal)}
+                      </h5>
                     </div>
-                  ))}
-              </div>
-            </div>
-          )}
+                  </Col>
+                </Row>
 
-          {/* ── Includes / Excludes / Cancellation ── */}
-          <div className="summary-section mb-4">
-            <Row className="g-3">
-              <Col md={6}>
-                <h6 className="section-header d-flex align-items-center mb-3">
-                  <FaCheckCircle className="me-2 text-success" size={14} />
-                  Includes
-                </h6>
-                <div className="summary-card p-3 bg-white rounded shadow-sm border h-100">
-                  {inclusions.length > 0 ? (
-                    <ul
-                      className="list-unstyled mb-0 small"
-                      style={{ fontSize: "0.8rem", lineHeight: 1.6 }}
-                    >
-                      {inclusions.map((i) => (
-                        <li
-                          key={`inc-${i.otherId}`}
-                          className="d-flex align-items-start mb-2"
-                        >
-                          <FaCheckCircle
-                            className="text-success me-2 mt-1 flex-shrink-0"
-                            size={10}
-                          />
-                          <span>{i.description}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-muted small fst-italic mb-0">
-                      No inclusions listed.
-                    </p>
+                <div className="mt-1 p-2 bg-white border rounded">
+                  <h6 className="fw-bold mb-1">Rate Split</h6>
+                  <div className="d-flex justify-content-between">
+                    <span>Selling Price</span>
+                    <span>{formatPrice(totalPrice)}</span>
+                  </div>
+                  {tdNum > 0 && (
+                    <div className="d-flex justify-content-between">
+                      <span>Tourism Dirhams</span>
+                      <span>{formatPrice(tdNum)}</span>
+                    </div>
                   )}
+                  <hr className="my-1" />
+                  <div className="d-flex justify-content-between fw-bold">
+                    <span>Total (Selling)</span>
+                    <span>{formatPrice(payableTotal)}</span>
+                  </div>
                 </div>
-              </Col>
-              <Col md={6}>
-                <h6 className="section-header d-flex align-items-center mb-3">
-                  <FaTimesCircle className="me-2 text-danger" size={14} />
-                  Excludes
-                </h6>
-                <div className="summary-card p-3 bg-white rounded shadow-sm border h-100">
-                  {exclusions.length > 0 ? (
-                    <ul
-                      className="list-unstyled mb-0 small"
-                      style={{ fontSize: "0.8rem", lineHeight: 1.6 }}
-                    >
-                      {exclusions.map((i) => (
-                        <li
-                          key={`exc-${i.otherId}`}
-                          className="d-flex align-items-start mb-2"
-                        >
-                          <FaTimesCircle
-                            className="text-danger me-2 mt-1 flex-shrink-0"
-                            size={10}
-                          />
-                          <span>{i.description}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-muted small fst-italic mb-0">
-                      No exclusions listed.
-                    </p>
-                  )}
-                </div>
-              </Col>
-            </Row>
-          </div>
 
-          <div className="summary-section mb-4">
-            <h6 className="section-header d-flex align-items-center mb-3">
-              <FaInfoCircle className="me-2 text-warning" size={14} />
-              Cancellation Policy
-            </h6>
-            <div
-              className="summary-card p-3 rounded shadow-sm border"
-              style={{ background: "#FFF8E6", borderColor: "#FCE6A6" }}
-            >
-              {cancellationParts.map((p, i) => (
-                <div
-                  key={`cancel-${i}`}
-                  className={`small ${i !== 0 ? "mt-2 pt-2 border-top" : ""}`}
-                  style={{
-                    color:
-                      p.tone === "ok"
-                        ? "#0f5132"
-                        : p.tone === "warn"
-                          ? "#8a4b00"
-                          : "#6c757d",
-                    fontSize: "0.82rem",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  {p.text}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="summary-section mb-4">
-            <h6 className="section-header d-flex align-items-center mb-3">
-              <FaMapMarkerAlt className="me-2 text-muted" size={14} />
-              Selections
-            </h6>
-            <Table
-              borderless
-              className="bg-white rounded shadow-sm border mb-0"
-            >
-              <thead className="table-light">
-                <tr>
-                  <th>Service</th>
-                  <th>Selection</th>
-                  <th className="text-end">Price</th>
-                </tr>
-              </thead>
-              <tbody>
-                {/*
-                  Hotel selection uses REPLACEMENT semantics — the hotel's
-                  totalRateWithMarkup (already sized to the searched category +
-                  pax count on the backend) becomes the package total, it is
-                  NOT added on top of packageData.rate. So the "Package Base"
-                  row is shown only when no hotel has been picked. Without this
-                  guard the summary showed "Base + Hotel = 2500" but the Grand
-                  Total (which comes from the sidebar total = hotel only) said
-                  1500 — rows didn't sum to the total.
-                */}
-                {(!bookingData.selections.selectedHotels ||
-                  bookingData.selections.selectedHotels.length === 0) && (
-                  <tr>
-                    <td className="text-muted">Package Base</td>
-                    <td>Included Services</td>
-                    <td className="text-end">
-                      AED {Number(packageData?.rate || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                )}
-                {bookingData.selections.selectedHotels && bookingData.selections.selectedHotels.map((hotel, idx) => (
-                  <tr key={hotel.hotelId || idx}>
-                    <td className="text-muted">Hotel {bookingData.selections.selectedHotels.length > 1 ? idx + 1 : ""}</td>
-                    <td>{hotel.hotelName}</td>
-                    <td className="text-end">
-                      AED {Number(hotel.totalRateWithMarkup || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="table-light">
-                <tr className="fw-bold fw-large">
-                  <td colSpan={2}>Grand Total</td>
-                  <td
-                    className="text-end text-primary"
-                    style={{ fontSize: "1.1rem" }}
+                <div className="mt-1 p-2 bg-white border rounded d-flex align-items-center">
+                  <span
+                    className="me-2 d-inline-flex align-items-center justify-content-center"
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: "50%",
+                      background: "#16a34a",
+                      color: "#fff",
+                      fontSize: "0.7rem",
+                      fontWeight: 700,
+                      lineHeight: 1,
+                    }}
+                    aria-hidden="true"
                   >
-                    AED {Number(totalPrice || 0).toFixed(2)}
-                  </td>
-                </tr>
-              </tfoot>
-            </Table>
-            {/* Tourism Dirham input was intentionally removed from this popup.
-                The `tourismDirham` state slot is still hydrated from saved
-                bookings in amend mode (see the useEffect near the top of this
-                component) and still forwarded on the submit payload, so
-                bookings that were saved with a Tourism Dirham amount before
-                this change round-trip cleanly. New bookings simply save with
-                TD = 0. */}
-          </div>
+                    ✓
+                  </span>
+                  <span className="small text-dark">
+                    Package policies and terms &amp; conditions accepted
+                  </span>
+                </div>
 
-          <div className="summary-section">
-            <h6 className="section-header d-flex align-items-center mb-3">
-              <FaUsers className="me-2 text-muted" size={14} />
-              Contact & Travellers
-            </h6>
-            <div className="summary-card p-3 bg-white rounded shadow-sm border">
-              <p className="mb-2">
-                <strong>Contact:</strong>{" "}
-                {primary
-                  ? `${[primary.firstName, primary.lastName].filter(Boolean).join(" ")} (${primary.email || "-"})`
-                  : "-"}
-              </p>
-              <p className="mb-0 text-muted small">
-                <strong>Travellers:</strong>{" "}
-                {localData.travellers
-                  .map((t) => `${t.firstName} ${t.lastName}`)
-                  .join(", ")}
-              </p>
-            </div>
-          </div>
+                <div className="mt-1 text-center">
+                  <p className="text-muted small mb-0">
+                    Please review the booking details carefully before
+                    confirming.
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
         </Modal.Body>
-        <Modal.Footer
-          className="border-top-0 p-3"
-          style={{ background: "#f1f5f9" }}
-        >
+
+        <Modal.Footer className="bg-light border-0 d-flex justify-content-between">
           <Button
             variant="outline-secondary"
             onClick={() => setShowSummary(false)}
             disabled={isSubmitting}
           >
-            Modify selections
+            <i className="bi bi-x-circle me-1"></i> Cancel
           </Button>
           <Button
-            className="btn-nav-next"
+            variant="primary"
             onClick={handleSubmitBooking}
             disabled={isSubmitting}
-            style={{ minWidth: "160px" }}
+            className="px-4 fw-semibold"
           >
             {isSubmitting ? (
-              "Processing..."
+              <>
+                <span
+                  className="spinner-border spinner-border-sm me-2"
+                  role="status"
+                ></span>
+                Processing...
+              </>
             ) : (
               <>
-                <FaCheckCircle className="me-2" />{" "}
-                {editingBookingId ? "Save Amendment" : "Submit Booking"}
+                <i className="bi bi-check-circle me-1"></i>{" "}
+                {editingBookingId ? "Save Amendment" : "Confirm"}
               </>
             )}
           </Button>
         </Modal.Footer>
       </Modal>
 
-      <style>{`
-        .order-summary-modal .modal-content {
-          border: none;
-          box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-          border-radius: 12px;
-          overflow: hidden;
-        }
-        .section-header {
-          font-size: 0.8rem;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          color: #64748b;
-        }
-        .fw-large {
-          font-size: 1.1rem;
-        }
-      `}</style>
     </div>
   );
-};
+});
 
 export default PaxInformation;

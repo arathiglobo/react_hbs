@@ -42,10 +42,8 @@ const STEPS = ["Package Details", "Pax Info"];
 // Mode of payment options — rendered in the right sidebar on the Pax Info
 // step (moved from the Hotels step). Stored on bookingData.programme.modeOfPayment.
 const PAYMENT_MODES = [
-  { value: "CREDIT", label: "Agent credit limit" },
-  { value: "CARD", label: "Card payment" },
-  { value: "BANK_TRANSFER", label: "Bank transfer" },
-  { value: "CASH", label: "Cash" },
+  { value: "CREDIT", label: "Credit Limit" },
+  { value: "CARD", label: "Card" },
 ];
 
 const PackageBooking = () => {
