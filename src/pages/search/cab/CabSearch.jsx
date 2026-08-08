@@ -523,7 +523,7 @@ export const CabSearch = () => {
     }, 300),
   ).current;
 
-<<<<<<< HEAD
+
   // ── Supplier location autocomplete ─────────────────────────────────
   // One endpoint, one contract: /api/cab-search/lookup returns the
   // in-house groups plus an `external` array of supplier-native locations.
@@ -561,7 +561,46 @@ export const CabSearch = () => {
   // without the user having to pick a category first.
   const fetchAllLocationOptions = async (term) => {
     if (!term || term.trim().length < 2) return [];
-=======
+    try {
+      const params = new URLSearchParams({ search: term, limit: "20" });
+      const resolvedAgentId =
+        (agent && String(agent)) ||
+        sessionStorage.getItem("makeYourOwnPackageAgentId") ||
+        localStorage.getItem("makeYourOwnPackageAgentId") ||
+        "";
+      if (resolvedAgentId) params.set("agentId", resolvedAgentId);
+      // Opt in to the Transfer Location Mapping substitution — a mapped
+      // in-house record disappears from its own group and shows up as the
+      // i'way entry in `external`, so the Pickup / Drop dropdown never
+      // offers the same real-world place twice. The /registration/cabProvider
+      // zone modal deliberately leaves this off so every in-house record
+      // stays available for zone building.
+      params.set("applyIwayMapping", "true");
+
+      const res = await axiosInstance.get(
+        `/api/cab-search/lookup?${params.toString()}`,
+      );
+      const d = res?.data || {};
+      const groups = [];
+      const push = (label, rows, filterFn) => {
+        const list = (Array.isArray(rows) ? rows : [])
+          .filter(filterFn)
+          .map(buildLocationOption);
+        if (list.length > 0) groups.push({ label, options: list });
+      };
+      // In-house first — those are the contracted rates operators reach for
+      // most — then the supplier feed.
+      push("ZONES", d.zones, (r) => r?.id != null);
+      push("HOTELS", d.hotels, (r) => r?.id != null);
+      push("AIRPORTS", d.airports, (r) => r?.id != null);
+      push("IWAY LOCATIONS", d.external, (r) => !!r?.externalId);
+      return groups;
+    } catch (err) {
+      console.warn("Location lookup failed:", err?.message || err);
+      return [];
+    }
+  };
+
   // ── IWay places autocomplete ───────────────────────────────────────
   // Backed by /api/iway/places/find (server-side passthrough to i'way's
   // /places/find, which itself wraps Google Places Autocomplete). We
@@ -650,56 +689,6 @@ export const CabSearch = () => {
     } catch (err) {
       console.warn("IWay place details failed:", err?.message || err);
       return { lat: null, lng: null };
-    }
-  };
-
-  // Fetch airports filtered by the chosen city. AirportController now accepts
-  // an optional cityId query param so the dropdown only surfaces airports in
-  // the selected state. Setters are injected so the same helper can populate
-  // either the pickup-side or the drop-side option list.
-  const fetchAirportsForCity = async (cityId, setOpts, setLoading) => {
-    if (!cityId) {
-      setOpts([]);
-      return;
-    }
->>>>>>> react-ibyta-latest-arathi-21-07-26
-    try {
-      const params = new URLSearchParams({ search: term, limit: "20" });
-      const resolvedAgentId =
-        (agent && String(agent)) ||
-        sessionStorage.getItem("makeYourOwnPackageAgentId") ||
-        localStorage.getItem("makeYourOwnPackageAgentId") ||
-        "";
-      if (resolvedAgentId) params.set("agentId", resolvedAgentId);
-      // Opt in to the Transfer Location Mapping substitution — a mapped
-      // in-house record disappears from its own group and shows up as the
-      // i'way entry in `external`, so the Pickup / Drop dropdown never
-      // offers the same real-world place twice. The /registration/cabProvider
-      // zone modal deliberately leaves this off so every in-house record
-      // stays available for zone building.
-      params.set("applyIwayMapping", "true");
-
-      const res = await axiosInstance.get(
-        `/api/cab-search/lookup?${params.toString()}`,
-      );
-      const d = res?.data || {};
-      const groups = [];
-      const push = (label, rows, filterFn) => {
-        const list = (Array.isArray(rows) ? rows : [])
-          .filter(filterFn)
-          .map(buildLocationOption);
-        if (list.length > 0) groups.push({ label, options: list });
-      };
-      // In-house first — those are the contracted rates operators reach for
-      // most — then the supplier feed.
-      push("ZONES", d.zones, (r) => r?.id != null);
-      push("HOTELS", d.hotels, (r) => r?.id != null);
-      push("AIRPORTS", d.airports, (r) => r?.id != null);
-      push("IWAY LOCATIONS", d.external, (r) => !!r?.externalId);
-      return groups;
-    } catch (err) {
-      console.warn("Location lookup failed:", err?.message || err);
-      return [];
     }
   };
 
@@ -1177,7 +1166,7 @@ export const CabSearch = () => {
     });
   };
 
-<<<<<<< HEAD
+
   // One location shape for every supplier. `source` + `id` drive the
   // in-house zone matcher; `externalId` + coords drive coordinate-based
   // suppliers. Whichever the operator picked, both legs receive the same
@@ -1203,8 +1192,7 @@ export const CabSearch = () => {
     };
   };
 
-=======
->>>>>>> react-ibyta-latest-arathi-21-07-26
+
   const handleTransferSearchSubmit = async (e) => {
     e.preventDefault();
 
@@ -1228,17 +1216,17 @@ export const CabSearch = () => {
         localStorage.getItem("makeYourOwnPackageAgentId") ||
         "1";
 
-<<<<<<< HEAD
+
       const originLocation = toTransferLocation(pickupItem, "AIRPORT");
       const destinationLocation = toTransferLocation(dropoffItem, "HOTEL");
-=======
+
       const iwayReady =
         iwayEnabled &&
         iwayPickupSelected?.lat != null &&
         iwayPickupSelected?.lng != null &&
         iwayDropSelected?.lat != null &&
         iwayDropSelected?.lng != null;
->>>>>>> react-ibyta-latest-arathi-21-07-26
+
 
       const transferPayload = {
         origin: originLocation,
@@ -1295,16 +1283,16 @@ export const CabSearch = () => {
       );
       const searchId = initRes?.data?.searchId;
       if (!searchId) throw new Error("No searchId returned");
-<<<<<<< HEAD
+
       // Which suppliers the backend actually dispatched to, after agent
       // exclusion + company allow-list. Used below to decide whether a
       // missing supplier row is worth reporting.
       const dispatchedSuppliers = Array.isArray(initRes?.data?.suppliers)
         ? initRes.data.suppliers.map((s) => String(s).toLowerCase())
         : [];
-=======
+
       if (iwayReady) setIwayLoading(true);
->>>>>>> react-ibyta-latest-arathi-21-07-26
+
 
       // Precompute demo-route flag / real-cab list so the poll can fold
       // the dummy cards in alongside without re-fetching every tick.
@@ -1352,18 +1340,11 @@ export const CabSearch = () => {
         console.warn("Cab-search poll ended early:", pollErr?.message || pollErr);
       }
 
-<<<<<<< HEAD
-      // Post-completion: if IWay was dispatched but no IWay row landed,
-      // hint the operator. Uses the LAST poll response so we don't lie
-      // about a mid-flight tick. Silent when IWay wasn't dispatched at all
-      // (not enabled for this agent/company) — that's not a route problem.
-      if (dispatchedSuppliers.includes("iway") && finalData) {
-=======
+
       // Post-completion: if IWay was requested but no IWay row landed,
       // hint the operator. Uses the LAST poll response so we don't lie
       // about a mid-flight tick.
       if (iwayReady && finalData) {
->>>>>>> react-ibyta-latest-arathi-21-07-26
         const iwayRows = (finalData.result || []).some(
           (r) =>
             (r.channelType && r.channelType.toLowerCase() === "iway") ||
@@ -1487,9 +1468,9 @@ export const CabSearch = () => {
   };
 
   const handleBookNow = (cab, cabDetail) => {
-<<<<<<< HEAD
+
     const isIway = cab?.channelType === "iway" || cab?.source === "IWAY";
-=======
+
     // IWay rows are external-supplier offers — the /cab-booking-page
     // flow only knows how to POST /api/cab/book (in-house cab tables).
     // Until CabBookingPage learns the IWay POST /orders flow we stop
@@ -1503,7 +1484,7 @@ export const CabSearch = () => {
       );
       return;
     }
->>>>>>> react-ibyta-latest-arathi-21-07-26
+
     // Recompute the row's price the same way the table shows it so the
     // booking page receives a consistent total. We carry BOTH the
     // markup-applied price (`totalRate`, what the user pays) and the
@@ -2233,7 +2214,7 @@ export const CabSearch = () => {
                       </Col>
                     </Row>
 
-<<<<<<< HEAD
+
                     {/* The separate "Also search IWay Transfers" checkbox and
                         its two dedicated location inputs are gone. i'way's
                         locations now appear as an extra option group inside
@@ -2242,7 +2223,7 @@ export const CabSearch = () => {
                         agent exclusion + company allow-list — the same gating
                         the hotel suppliers use — rather than a per-search
                         checkbox. */}
-=======
+
                     {/* ── IWay Transfers (external) ────────────────────────
                         Optional second-supplier leg. Toggling the checkbox
                         reveals two typeahead inputs backed by IWay's
@@ -2380,7 +2361,7 @@ export const CabSearch = () => {
                         </Col>
                       </Row>
                     )}
->>>>>>> react-ibyta-latest-arathi-21-07-26
+
 
                     {/* Legacy/hidden fields kept in state but invisible.
                         The original Trip Type radios + Origin/Destination/
