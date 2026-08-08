@@ -7,14 +7,31 @@ import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 
 // Real CC Avenue redirect step (Non-Seamless billing page integration).
-// Reached from HotelBookingPage's "Select Payment Gateway" modal only when
-// CC Avenue is chosen. Sends the FULL booking payload to the backend so it
-// can compute the payable amount server-side (client can't understate it)
-// and persist the payload for after-payment recovery, then auto-submits
-// the hidden form POST to CC Avenue's hosted payment page — the browser
-// navigates away entirely, completes payment on CC Avenue's domain, and
-// CC Avenue posts the result straight back to the backend, which then
-// 302-redirects here/back to the booking page with the outcome.
+// Reached from HotelBookingPage's, BookingDetailedView's,
+// LastMinuteBookingForm's, or LongStayBookingPage's "Select Payment
+// Gateway" modal when CC Avenue is chosen. Modes, driven by what the caller
+// put in location.state:
+//   - CREATE  (bookingPayload set, no flowType) — HotelBookingPage.jsx,
+//     insufficient credit at booking time. Sends the FULL booking payload
+//     so the backend can compute the payable amount server-side and persist
+//     it for after-payment recovery. This is the legacy/default shape —
+//     kept flowType-less for backward compatibility.
+//   - RECONFIRM (reconfirmBookingId set) — BookingDetailedView.jsx, paying
+//     off an ALREADY-CREATED booking that's pending reconfirmation. Only the
+//     existing bookingId travels — the backend already has everything else
+//     it needs (the booking's own stored total, agent, etc).
+//   - Any other CREATE-shaped flow (flowType + bookingPayload set) — e.g.
+//     LASTMINUTE_CREATE (LastMinuteBookingForm.jsx) or LONGSTAY_CREATE
+//     (LongStayBookingPage.jsx). Same idea as CREATE, but the backend
+//     derives the payable amount from that flow's own pricing rather than
+//     summing a per-room `rate` field — flowType is passed straight through
+//     so /initiate knows which one. Adding a new create-flow page needs no
+//     changes here — just set flowType + bookingPayload in location.state.
+// Either way this page then auto-submits a hidden form POST to CC Avenue's
+// hosted payment page — the browser navigates away entirely, completes
+// payment on CC Avenue's domain, and CC Avenue posts the result straight
+// back to the backend, which then redirects back to `returnTo` with the
+// outcome.
 export default function CCAvenueCheckoutPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -24,6 +41,8 @@ export default function CCAvenueCheckoutPage() {
   const billingName = location.state?.billingName || "";
   const returnTo = location.state?.returnTo || "/hotel-booking-page";
   const bookingPayload = location.state?.bookingPayload || null;
+  const reconfirmBookingId = location.state?.reconfirmBookingId || null;
+  const flowType = location.state?.flowType || null;
 
   const [error, setError] = useState(null);
   // { gatewayUrl, accessCode, encRequest }
@@ -34,9 +53,9 @@ export default function CCAvenueCheckoutPage() {
   const [serverAmountLabel, setServerAmountLabel] = useState("");
 
   useEffect(() => {
-    if (!bookingPayload) {
+    if (!bookingPayload && !reconfirmBookingId) {
       setError(
-        "Missing booking details — please go back to the booking page and try again.",
+        "Missing booking details — please go back and try again.",
       );
       return;
     }
@@ -50,10 +69,19 @@ export default function CCAvenueCheckoutPage() {
           {
             billingName,
             returnPath: returnTo,
-            // The backend re-derives the payable amount from this payload
-            // and IGNORES any client-supplied amount — kept off the wire
-            // deliberately so a tampered client can't influence the charge.
-            bookingPayload,
+            // The backend re-derives the payable amount server-side either
+            // way (from the payload's room rates, the existing booking's
+            // stored total, or that create-flow's own pricing) and IGNORES
+            // any client-supplied amount — kept off the wire deliberately so
+            // a tampered client can't influence the charge.
+            ...(reconfirmBookingId
+              ? {
+                  flowType: "RECONFIRM",
+                  existingBookingId: Number(reconfirmBookingId),
+                }
+              : flowType
+                ? { flowType, bookingPayload }
+                : { bookingPayload }),
           },
         );
         if (cancelled) return;

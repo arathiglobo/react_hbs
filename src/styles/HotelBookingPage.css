@@ -509,3 +509,92 @@
     margin: 0 0 12px;
   }
 }
+
+/* ── Select Payment Gateway modal — card-style radio options ──────────────
+   Each gateway (e.g. CC Avenue) renders as a clickable bordered card with
+   its logo, name and description, instead of a bare Bootstrap radio list. */
+.pg-option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pg-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease;
+}
+.pg-option:hover {
+  border-color: #f3b4c4;
+  background: #fff7f8;
+}
+.pg-option-selected,
+.pg-option-selected:hover {
+  border-color: #EC0B43;
+  background: #FDE7ED;
+  box-shadow: 0 0 0 3px rgba(236, 11, 67, 0.10);
+}
+.pg-option-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.pg-option-radio {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color .16s ease;
+}
+.pg-option-radio::after {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #EC0B43;
+  transform: scale(0);
+  transition: transform .16s ease;
+}
+.pg-option-input:checked ~ .pg-option-radio {
+  border-color: #EC0B43;
+}
+.pg-option-input:checked ~ .pg-option-radio::after {
+  transform: scale(1);
+}
+.pg-option-input:focus-visible ~ .pg-option-radio {
+  outline: 2px solid #EC0B43;
+  outline-offset: 2px;
+}
+.pg-option-logo {
+  flex-shrink: 0;
+  height: 55px;
+  width: auto;
+  max-width: 84px;
+  object-fit: contain;
+}
+.pg-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.pg-option-name {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: #111827;
+}
+.pg-option-desc {
+  font-size: 0.78rem;
+  color: #6b7280;
+}

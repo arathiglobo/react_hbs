@@ -2973,25 +2973,41 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
                   <p className="text-muted small mb-3">
                     Choose a gateway to enter your card details.
                   </p>
-                  {PAYMENT_GATEWAYS.map((g) => (
-                    <Form.Check
-                      key={g.id}
-                      type="radio"
-                      name="payment-gateway"
-                      id={`gw-${g.id}`}
-                      className="mb-2"
-                      checked={selectedGateway === g.id}
-                      onChange={() => setSelectedGateway(g.id)}
-                      label={
-                        <span>
-                          <span className="fw-semibold">{g.name}</span>
-                          <span className="text-muted small ms-2">
-                            {g.desc}
-                          </span>
-                        </span>
-                      }
-                    />
-                  ))}
+                  <div className="pg-option-list">
+                    {PAYMENT_GATEWAYS.map((g) => {
+                      const isSelected = selectedGateway === g.id;
+                      return (
+                        <label
+                          key={g.id}
+                          htmlFor={`gw-${g.id}`}
+                          className={`pg-option${
+                            isSelected ? " pg-option-selected" : ""
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="payment-gateway"
+                            id={`gw-${g.id}`}
+                            className="pg-option-input"
+                            checked={isSelected}
+                            onChange={() => setSelectedGateway(g.id)}
+                          />
+                          <span className="pg-option-radio" aria-hidden="true" />
+                          {g.id === "ccavenue" && (
+                            <img
+                              src={`${process.env.PUBLIC_URL}/ccavanue.png`}
+                              alt="CC Avenue"
+                              className="pg-option-logo"
+                            />
+                          )}
+                          {/* <span className="pg-option-text">
+                            <span className="pg-option-name">{g.name}</span>
+                            <span className="pg-option-desc">{g.desc}</span>
+                          </span> */}
+                        </label>
+                      );
+                    })}
+                  </div>
                 </Modal.Body>
                 <Modal.Footer className="border-0">
                   <Button
