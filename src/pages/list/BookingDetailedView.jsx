@@ -19,6 +19,10 @@ import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
+// Reuses the "Select Payment Gateway" card-style radio styles (.pg-option*)
+// defined for HotelBookingPage.jsx's CC Avenue picker, so this page's
+// reconfirm-flow picker matches it exactly.
+import "../../styles/HotelBookingPage.css";
 
 // Reverse-geocode browser coordinates to a readable address for the
 // Booking History audit trail. Tries OpenStreetMap Nominatim first
@@ -162,14 +166,13 @@ const getPaymentModeLabel = (booking) => {
   return "-";
 };
 
-// Dummy online-payment gateways — mirrors HotelBookingPage so an operator
-// gets the same payment picker whether the deduction is settled at create
-// or at reconfirm time.
+// Online-payment gateways — mirrors HotelBookingPage so an operator gets the
+// same payment picker whether the deduction is settled at create or at
+// reconfirm time. CC Avenue is real (see the "Proceed to Pay" handler below);
+// the rest are still the dummy placeholder flow.
 const PAYMENT_GATEWAYS = [
-  { id: "razorpay", name: "Razorpay", desc: "Cards, UPI, Net Banking" },
-  { id: "stripe", name: "Stripe", desc: "International cards" },
-  { id: "payu", name: "PayU", desc: "Cards & wallets" },
-];
+  { id: "ccavenue", name: "CC Avenue", desc: "Cards, UPI, Net Banking" },
+ ];
 
 const ADD_NEW_ITEM_TYPES = [
   { key: "HOTEL", label: "Hotel Booking", route: "/new-booking/hotel" },
@@ -698,6 +701,21 @@ export default function BookingDetailedView() {
     booking?.voucherGenerated,
   );
 
+  // Shared by runReconfirm() (below) and the CC Avenue post-payment resume
+  // effect (further down) — both PATCH /confirmation-status and POST
+  // /finalize-reconfirm return the same { message, success,
+  // confirmationStatus } shape, so the success/failure handling only needs
+  // to live once.
+  const handleReconfirmResponse = async (data) => {
+    if (data && data.success === true) {
+      setShowConfirmModal(false);
+      toast.success(data.message || "Booking reconfirmed successfully!");
+      await fetchBooking();
+    } else {
+      toast.error(data?.message || "Failed to reconfirm booking.");
+    }
+  };
+
   // Actual reconfirm API call. Split out so the same call can be made
   // from (a) the Reconfirm modal's Confirm button when credit is fine,
   // and (b) the post-payment resume effect (after the operator pays
@@ -725,15 +743,7 @@ export default function BookingDetailedView() {
           bookingLocation: operatorLocation,
         },
       );
-      if (response.data && response.data.success === true) {
-        setShowConfirmModal(false);
-        toast.success(
-          response.data.message || "Booking reconfirmed successfully!",
-        );
-        await fetchBooking();
-      } else {
-        toast.error(response.data?.message || "Failed to reconfirm booking.");
-      }
+      await handleReconfirmResponse(response.data);
     } catch (error) {
       console.error("Error reconfirming booking:", error);
       toast.error(
@@ -857,6 +867,57 @@ export default function BookingDetailedView() {
     runReconfirm();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state?.resumeReconfirm, booking]);
+
+  // CC Avenue post-payment resume — mirrors HotelBookingPage.jsx. CC
+  // Avenue's redirect is a real cross-domain browser navigation, so React
+  // Router `state` (resumeReconfirm above) never survives it; the backend
+  // instead appends ?ccavenueOrderId=&ccavenueStatus= to the URL when it
+  // redirects back here (see CCAvenuePaymentServiceImpl.buildRedirect).
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const ccavenueOrderId = searchParams.get("ccavenueOrderId");
+    const ccavenueStatus = searchParams.get("ccavenueStatus");
+    if (!ccavenueOrderId) return;
+    if (!booking) return;
+
+    // Strip the query string so a reload doesn't re-trigger this.
+    navigate(location.pathname, { replace: true, state: {} });
+
+    (async () => {
+      if (ccavenueStatus !== "success") {
+        toast.error("Payment was not completed. Please try again.");
+        return;
+      }
+      try {
+        setConfirmingBooking(true);
+        // Re-verify server-side before finalizing — never trust the
+        // redirect's own query string alone.
+        const statusResponse = await axiosInstance.get(
+          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+        );
+        if (statusResponse.data?.status !== "SUCCESS") {
+          toast.error(
+            statusResponse.data?.statusMessage ||
+              "Payment was not successful. Please try again.",
+          );
+          return;
+        }
+        const response = await axiosInstance.post(
+          `/api/payment/ccavenue/finalize-reconfirm/${ccavenueOrderId}`,
+        );
+        await handleReconfirmResponse(response.data);
+      } catch (err) {
+        console.error("Post-payment reconfirm finalize failed:", err);
+        toast.error(
+          err?.response?.data?.message ||
+            "Payment succeeded but the booking could not be reconfirmed. Please contact support with your payment reference.",
+        );
+      } finally {
+        setConfirmingBooking(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, booking]);
 
   // Reject flow: Reconfirm popup → "Reject" → opens this modal
   const openRejectModal = () => {
@@ -3775,23 +3836,41 @@ export default function BookingDetailedView() {
           <p className="text-muted small mb-3">
             Choose a gateway to enter your card details.
           </p>
-          {PAYMENT_GATEWAYS.map((g) => (
-            <Form.Check
-              key={g.id}
-              type="radio"
-              name="reconfirm-payment-gateway"
-              id={`reconfirm-gw-${g.id}`}
-              className="mb-2"
-              checked={selectedGateway === g.id}
-              onChange={() => setSelectedGateway(g.id)}
-              label={
-                <span>
-                  <span className="fw-semibold">{g.name}</span>
-                  <span className="text-muted small ms-2">{g.desc}</span>
-                </span>
-              }
-            />
-          ))}
+          <div className="pg-option-list">
+            {PAYMENT_GATEWAYS.map((g) => {
+              const isSelected = selectedGateway === g.id;
+              return (
+                <label
+                  key={g.id}
+                  htmlFor={`reconfirm-gw-${g.id}`}
+                  className={`pg-option${
+                    isSelected ? " pg-option-selected" : ""
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="reconfirm-payment-gateway"
+                    id={`reconfirm-gw-${g.id}`}
+                    className="pg-option-input"
+                    checked={isSelected}
+                    onChange={() => setSelectedGateway(g.id)}
+                  />
+                  <span className="pg-option-radio" aria-hidden="true" />
+                  {g.id === "ccavenue" && (
+                    <img
+                      src={`${process.env.PUBLIC_URL}/ccavanue.png`}
+                      alt="CC Avenue"
+                      className="pg-option-logo"
+                    />
+                  )}
+                  <span className="pg-option-text">
+                    <span className="pg-option-name">{g.name}</span>
+                    <span className="pg-option-desc">{g.desc}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
         </Modal.Body>
         <Modal.Footer className="border-0">
           <Button
@@ -3808,7 +3887,35 @@ export default function BookingDetailedView() {
                 (x) => x.id === selectedGateway,
               );
               setShowGatewayModal(false);
-              // Send the operator to the dummy gateway page. We pass
+
+              // ── CC Avenue: real billing-page redirect ──
+              // Distinct from the dummy /payment/:gateway path below — the
+              // browser fully navigates away to CC Avenue's hosted page and
+              // back, so the resume signal has to travel as a URL query
+              // param (React Router state doesn't survive a real
+              // cross-origin redirect). See the ccavenueOrderId resume
+              // effect above. reconfirmBookingId tells CCAvenueCheckoutPage
+              // to pay off THIS existing booking rather than create a new
+              // one — the backend already has everything else it needs.
+              if (selectedGateway === "ccavenue") {
+                const cust = booking?.customer;
+                const billingName = cust
+                  ? [cust.salutation, cust.firstName, cust.lastName]
+                      .filter(Boolean)
+                      .join(" ")
+                  : "";
+                navigate("/payment/ccavenue-redirect", {
+                  state: {
+                    amountLabel: `AED ${Number(insufficientAmount).toFixed(2)}`,
+                    billingName,
+                    returnTo: location.pathname,
+                    reconfirmBookingId: id,
+                  },
+                });
+                return;
+              }
+
+              // Dummy /payment/:gateway flow (test/local only). We pass
               // returnTo so the gateway can navigate back to THIS detail
               // page on completion, and resumeReconfirm so the resume
               // effect at the top of this component fires runReconfirm.
