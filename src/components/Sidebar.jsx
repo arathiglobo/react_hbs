@@ -335,6 +335,7 @@ export default function Sidebar() {
             { label: "City", to: "/masters/city-mapping" },
             { label: "Hotel", to: "/masters/hotel-mapping" },
             { label: "Fetch Hotels", to: "/masters/fetch-new-hotels" },
+
             // Nested subgroup — a child carrying its own `children` renders as
             // a collapsible accordion inside the group (see the group renderer
             // below). Translates our location masters to i'way's own locations
@@ -347,6 +348,9 @@ export default function Sidebar() {
                 { label: "Place Mapping", to: "/masters/transfer-place-mapping" },
               ],
             },
+
+            { label: "Mapped List", to: "/masters/mapped-list" },
+
           ],
         },
         {

@@ -91,6 +91,12 @@ const ApiBookingPageForHotels = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
+  // Duplicate-booking modal — shown when the backend surfaces
+  // status="DUPLICATE" (GRN's error code 6000). GRN detects the duplicate
+  // on its side; we just render a clean modal so the operator knows the
+  // booking already exists and doesn't retry blindly.
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateMessage, setDuplicateMessage] = useState("");
   // Policy consent modal — shown first when the operator clicks Confirm
   // Booking. Cancellation policies come from the search-time rate object
   // (API-side hotels don't expose a /policies endpoint). Only after
@@ -129,12 +135,55 @@ const ApiBookingPageForHotels = () => {
   // per the vendor's PANCardType enum. Corporate/Trust/etc. can be picked in
   // the dropdown if the booking is on behalf of an entity.
   const [panCardType, setPanCardType] = useState("2");
+  // GRN-optional PAN Company Name — forwarded to holder.pan_company_name
+  // for corporate PANs. Only rendered when the selected rate is GRN AND
+  // panRequired=true. Left empty for personal PANs (no impact on GRN).
+  const [panCompanyName, setPanCompanyName] = useState("");
 
   // ─────────────────────────── effects ────────────────────────────────
   useEffect(() => {
     const storedData = sessionStorage.getItem("bookingData");
     if (storedData) {
       const parsedData = JSON.parse(storedData);
+
+      // Diagnostic: dump the exact bookingData handed off from
+      // /api-room-list so we can see whether Darina-specific fields
+      // (deadlineDate, cancellationPolicies, apiId) survive the transfer.
+      // Grouped for readability — collapse "BookingPage: incoming data"
+      // in DevTools console.
+      // eslint-disable-next-line no-console
+      console.groupCollapsed(
+        "%cBookingPage: incoming data from /api-room-list",
+        "color:#0d6efd;font-weight:bold",
+      );
+      // eslint-disable-next-line no-console
+      console.log("bookingData (full):", parsedData);
+      // eslint-disable-next-line no-console
+      console.log("bookingData.payload.apiId:", parsedData?.payload?.apiId,
+        "typeof:", typeof parsedData?.payload?.apiId);
+      // eslint-disable-next-line no-console
+      console.log(
+        "bookingData.selectedRate (per slot deadline + cancellation):",
+        (parsedData?.selectedRate || []).map((slot, i) => ({
+          index: i,
+          roomCategory: slot?.roomCategory,
+          mealPlan: slot?.mealPlan,
+          deadlineDate: slot?.deadlineDate,
+          nonRefundable: slot?.nonRefundable,
+          cancellationPolicy_count:
+            Array.isArray(slot?.cancellationPolicy)
+              ? slot.cancellationPolicy.length
+              : slot?.cancellationPolicy
+                ? 1
+                : 0,
+          cancellationPolicy_first: Array.isArray(slot?.cancellationPolicy)
+            ? slot.cancellationPolicy[0]
+            : slot?.cancellationPolicy,
+        })),
+      );
+      // eslint-disable-next-line no-console
+      console.groupEnd();
+
       setBookingData(parsedData);
 
       const initialRooms = parsedData.payload.rooms.map((room) => ({
@@ -248,6 +297,25 @@ const ApiBookingPageForHotels = () => {
     return n === "IN" || n === "IND" || n === "INDIA";
   };
 
+  // GRN-only PAN requirement: rate's pan_required=true (set from the recheck
+  // response and carried through on each selectedRate). Independent of the
+  // guest's nationality — GRN flags per-rate, not per-nationality. When true,
+  // the same PAN input card renders (shared with Atharva) and the payload
+  // sends holder.pan_number / pan_company_name. Any selectedRate having the
+  // flag is sufficient — a mixed multi-room booking with even one
+  // pan_required rate needs PAN.
+  const requiresGrnPan = () => {
+    if (!bookingData) return false;
+    if (Number(bookingData?.payload?.apiId) !== 20) return false;
+    const rates = bookingData?.selectedRate || [];
+    return rates.some((r) => r?.panRequired === true);
+  };
+
+  // Unified PAN-required check that either supplier can trigger. Kept as a
+  // helper so the PAN input card, validation, and payload builder all share
+  // one truth source and can't drift.
+  const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
+
   const validateForm = () => {
     const errors = {};
     let hasErrors = false;
@@ -279,21 +347,26 @@ const ApiBookingPageForHotels = () => {
       });
     });
 
-    // ATHARVA (apiId=3) + Indian primary guest: PAN is mandatory. The vendor
-    // rejects HCreateBooking with error 3006 otherwise, and the operator sees
-    // a swallowed "no status returned" failure. Length-only check (10 chars);
-    // the strict ABCDE1234F format is not enforced here per product decision.
-    if (requiresAtharvaPan()) {
+    // PAN mandatory when either supplier requires it:
+    //   • ATHARVA (apiId=3) + Indian primary guest — vendor rejects
+    //     HCreateBooking with error 3006 otherwise.
+    //   • GRN (apiId=20) + rate.pan_required=true — GRN rejects the
+    //     create-booking call and returns an error envelope.
+    // Length-only check (10 chars) — strict ABCDE1234F format is not
+    // enforced here per product decision. PAN Card Type is Atharva-only
+    // so it's still gated on requiresAtharvaPan().
+    if (requiresPan()) {
       const trimmed = (panCardNo || "").trim().toUpperCase();
       if (!trimmed) {
-        errors.panCardNo =
-          "PAN Card No is required (Indian primary guest booking with Atharva).";
+        errors.panCardNo = requiresAtharvaPan()
+          ? "PAN Card No is required (Indian primary guest booking with Atharva)."
+          : "PAN Card No is required (this GRN rate mandates PAN on the holder).";
         hasErrors = true;
       } else if (trimmed.length !== 10) {
         errors.panCardNo = "PAN must be 10 characters.";
         hasErrors = true;
       }
-      if (!panCardType) {
+      if (requiresAtharvaPan() && !panCardType) {
         errors.panCardType = "PAN Card Type is required.";
         hasErrors = true;
       }
@@ -565,12 +638,41 @@ const ApiBookingPageForHotels = () => {
                 rate.nonRefundable === "true" ||
                 rate.nonRefundable === "Y";
 
+              // Darina (apiId=16): rate.deadlineDate is the LIVE
+              // free-cancellation cut-off carried from
+              // CheckAvailabilityWithCancellation_NoCache_LiveCalculation
+              // (BE parses the "Free Cancellation" band's toDate). It is
+              // the deadline the operator sees in the room accordion.
+              // Use it verbatim — the generic "earliest cancellationPolicy
+              // fromDate minus 2 days" fallback below picks up the Free
+              // Cancellation band's FromDate instead of the cut-off, which
+              // reports a wildly earlier date (September vs December).
+              if (
+                bookingData?.payload?.apiId === 16 &&
+                !nonRefundable &&
+                rate.deadlineDate
+              ) {
+                const iso = String(rate.deadlineDate).slice(0, 10);
+                const parts = iso.split("-");
+                if (parts.length === 3) {
+                  const d = new Date(
+                    Number(parts[0]),
+                    Number(parts[1]) - 1,
+                    Number(parts[2]),
+                  );
+                  if (!isNaN(d.getTime())) {
+                    d.setHours(0, 0, 0, 0);
+                    return d;
+                  }
+                }
+              }
+
               if (nonRefundable === true) {
-                const today = new Date();
-                const deadline = new Date(today);
-                deadline.setDate(today.getDate() - 2);
-                deadline.setHours(0, 0, 0, 0);
-                return deadline;
+                // Non-refundable rates have no free-cancellation window, so
+                // no deadline applies — send nothing rather than a fabricated
+                // "today - 2 days" date (which always lands in the past and
+                // confuses anything that reads deadlineDate literally).
+                return null;
               } else {
                 const policies = rate.cancellationPolicy || [];
                 if (policies.length === 0) return null;
@@ -609,13 +711,20 @@ const ApiBookingPageForHotels = () => {
           passportNo: "",
           agentLpo: "",
           nativeCountry: bookingData.payload.nationality,
-          // ATHARVA-only carriers (apiId=3, Indian primary guest). Emit them
-          // only when the PAN gate applies so non-Atharva payloads stay byte-
-          // for-byte identical to before this change.
-          panCardNo: requiresAtharvaPan()
+          // PAN carriers — populated when either Atharva (Indian primary
+          // guest) or GRN (rate.pan_required=true) requires them. panCardNo
+          // is the shared PAN number field forwarded to Atharva's PANCardNo
+          // and GRN's holder.pan_number. panCardType is Atharva-only.
+          // panCompanyName is GRN-only (optional, for corporate PANs).
+          // When neither supplier requires PAN, the fields stay null so
+          // non-PAN payloads are byte-for-byte identical to before.
+          panCardNo: requiresPan()
             ? (panCardNo || "").trim().toUpperCase()
             : null,
           panCardType: requiresAtharvaPan() ? panCardType || "2" : null,
+          panCompanyName: requiresGrnPan()
+            ? (panCompanyName || "").trim() || null
+            : null,
         },
         rooms: rooms.map((room, roomIndex) => {
           const rate = bookingData.selectedRate[roomIndex] || {};
@@ -644,6 +753,12 @@ const ApiBookingPageForHotels = () => {
             // prebook was skipped still round-trips. Ignored by other
             // suppliers (RoomBookingRequest.rateKey is @Nullable).
             rateKey: rate.atharvaRateKey || null,
+            // Darina free-cancellation deadline shown to the customer at
+            // rate-selection time (ISO yyyy-MM-dd). BE audits this in
+            // DarinaHotelBookingService so we know exactly which cut-off
+            // was in effect when the booking was confirmed. Null / ignored
+            // by other suppliers.
+            cancellationDeadline: rate.deadlineDate || null,
             guests: room.guests.map((guest) => ({
               salutation: guest.salutation,
               firstName: guest.firstName,
@@ -744,7 +859,21 @@ const ApiBookingPageForHotels = () => {
 
       if (bookingResponse && isSuccess) {
         toast.success(bookingResponse.message);
+        // All suppliers land on the booking list after a successful confirm
+        // (matches IWTX / X3 / ATHARVA / DARINA / JUMEIRAH / JUNIPER). GRN
+        // used to route straight to its detail page instead but the client
+        // asked for uniform post-confirm UX — the detail page is still one
+        // click away from the list row.
         navigate("/booking-details/hotel-booking-list");
+      } else if (statusUpper === "DUPLICATE") {
+        // GRN error code 6000 — the exact booking already exists at the
+        // supplier. Show a dedicated modal (not a toast) so the operator
+        // has to acknowledge before continuing, and doesn't retry blindly.
+        setDuplicateMessage(
+          bookingResponse?.message ||
+            "Duplicate booking detected. This exact booking was already made. Please check your recent bookings before retrying.",
+        );
+        setShowDuplicateModal(true);
       } else {
         // Surface backend / IWTX validation message when present (e.g.
         // "invalid_passengers[0].gender") instead of the generic
@@ -985,6 +1114,52 @@ const ApiBookingPageForHotels = () => {
                                         </span>
                                       );
                                     })()}
+                                  {/* Darina (apiId 16) free-cancellation deadline
+                                      — slot.deadlineDate is ISO yyyy-MM-dd from
+                                      the search-time cancellation ladder (the
+                                      "Free cancellation until X" band's toDate). */}
+                                  {bookingData?.payload?.apiId === 16 &&
+                                    slot.deadlineDate &&
+                                    (() => {
+                                      const parts =
+                                        slot.deadlineDate.split("-");
+                                      if (parts.length !== 3) return null;
+                                      const [y, m, d] = parts;
+                                      const monthNames = [
+                                        "Jan",
+                                        "Feb",
+                                        "Mar",
+                                        "Apr",
+                                        "May",
+                                        "Jun",
+                                        "Jul",
+                                        "Aug",
+                                        "Sep",
+                                        "Oct",
+                                        "Nov",
+                                        "Dec",
+                                      ];
+                                      const idx = parseInt(m, 10) - 1;
+                                      if (
+                                        !y ||
+                                        !d ||
+                                        Number.isNaN(idx) ||
+                                        idx < 0 ||
+                                        idx > 11
+                                      )
+                                        return null;
+                                      return (
+                                        <span
+                                          className="ms-2 small fw-normal"
+                                          style={{ opacity: 0.95 }}
+                                          title="Free cancellation until this date/time"
+                                        >
+                                          | Free cancellation until{" "}
+                                          {parseInt(d, 10)} {monthNames[idx]}{" "}
+                                          {y}, 11:59 PM (UAE)
+                                        </span>
+                                      );
+                                    })()}
                                   {/* {slot.rate != null && (
                                     <span
                                       className="ms-auto small fw-normal"
@@ -1209,23 +1384,28 @@ const ApiBookingPageForHotels = () => {
                     </Card.Body>
                   </Card>
 
-                  {/* ATHARVA (apiId=3) + Indian primary guest ONLY:
-                      PAN Card capture. Atharva §6.1 documents PAN as
-                      MANDATORY for Indian nationals booking a hotel
-                      outside India; omitting it makes HCreateBooking
-                      reject with error 3006 ("Invalid PAN details") and
-                      the operator sees an opaque "no status returned"
-                      failure. Card is gated so every other supplier on
-                      this page (and Indian-domestic Atharva bookings)
-                      keeps its existing 4-card layout unchanged. */}
-                  {requiresAtharvaPan() && (
+                  {/* PAN Card capture — rendered when EITHER supplier
+                      requires PAN on the primary guest:
+                        • Atharva (apiId=3) + Indian primary guest —
+                          §6.1 mandates PAN or HCreateBooking rejects with
+                          error 3006 ("Invalid PAN details").
+                        • GRN (apiId=20) + rate.pan_required=true — GRN
+                          returns an error envelope when holder.pan_number
+                          is missing on a pan_required rate.
+                      The card is fully hidden when neither applies, so
+                      every other supplier / non-PAN rate keeps its
+                      existing 4-card layout unchanged. The PAN Card Type
+                      dropdown is Atharva-only; the PAN Company Name
+                      input is GRN-only (optional, for corporate PANs). */}
+                  {requiresPan() && (
                     <Card className="p-4 mb-2 shadow-sm border-0">
                       <h5 className="mb-1 fw-bold">
                         Primary Guest PAN Details
                       </h5>
                       <div className="text-muted small mb-3">
-                        PAN is required for Indian nationals booking with
-                        Atharva. Enter the primary guest's PAN card details.
+                        {requiresAtharvaPan()
+                          ? "PAN is required for Indian nationals booking with Atharva. Enter the primary guest's PAN card details."
+                          : "This GRN rate mandates PAN on the holder. Enter the primary guest's PAN details."}
                       </div>
                       <Row className="g-3">
                         <Col md={6}>
@@ -1260,44 +1440,66 @@ const ApiBookingPageForHotels = () => {
                             )}
                           </Form.Group>
                         </Col>
-                        <Col md={6}>
-                          <Form.Group>
-                            <Form.Label className="fw-semibold">
-                              PAN Card Type{" "}
-                              <span className="text-danger">*</span>
-                            </Form.Label>
-                            <Form.Select
-                              value={panCardType}
-                              isInvalid={!!validationErrors.panCardType}
-                              onChange={(e) => {
-                                setPanCardType(e.target.value);
-                                if (validationErrors.panCardType) {
-                                  setValidationErrors((prev) => {
-                                    const next = { ...prev };
-                                    delete next.panCardType;
-                                    return next;
-                                  });
+                        {requiresAtharvaPan() && (
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="fw-semibold">
+                                PAN Card Type{" "}
+                                <span className="text-danger">*</span>
+                              </Form.Label>
+                              <Form.Select
+                                value={panCardType}
+                                isInvalid={!!validationErrors.panCardType}
+                                onChange={(e) => {
+                                  setPanCardType(e.target.value);
+                                  if (validationErrors.panCardType) {
+                                    setValidationErrors((prev) => {
+                                      const next = { ...prev };
+                                      delete next.panCardType;
+                                      return next;
+                                    });
+                                  }
+                                }}
+                              >
+                                {/* Values are the Atharva PANCardType enum
+                                    per §6.1 — sent verbatim on the wire. */}
+                                <option value="2">Personal</option>
+                                <option value="1">Corporate</option>
+                                <option value="3">Government</option>
+                                <option value="4">Proprietor</option>
+                                <option value="5">Firm</option>
+                                <option value="6">HUF</option>
+                                <option value="7">Trust</option>
+                                <option value="8">Education Society</option>
+                              </Form.Select>
+                              {validationErrors.panCardType && (
+                                <Form.Control.Feedback type="invalid">
+                                  {validationErrors.panCardType}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                        )}
+                        {requiresGrnPan() && (
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="fw-semibold">
+                                PAN Company Name{" "}
+                                <span className="text-muted small">
+                                  (optional)
+                                </span>
+                              </Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={panCompanyName}
+                                placeholder="Only for corporate PANs"
+                                onChange={(e) =>
+                                  setPanCompanyName(e.target.value)
                                 }
-                              }}
-                            >
-                              {/* Values are the Atharva PANCardType enum
-                                  per §6.1 — sent verbatim on the wire. */}
-                              <option value="2">Personal</option>
-                              <option value="1">Corporate</option>
-                              <option value="3">Government</option>
-                              <option value="4">Proprietor</option>
-                              <option value="5">Firm</option>
-                              <option value="6">HUF</option>
-                              <option value="7">Trust</option>
-                              <option value="8">Education Society</option>
-                            </Form.Select>
-                            {validationErrors.panCardType && (
-                              <Form.Control.Feedback type="invalid">
-                                {validationErrors.panCardType}
-                              </Form.Control.Feedback>
-                            )}
-                          </Form.Group>
-                        </Col>
+                              />
+                            </Form.Group>
+                          </Col>
+                        )}
                       </Row>
                     </Card>
                   )}
@@ -2108,6 +2310,48 @@ const ApiBookingPageForHotels = () => {
                         <i className="bi bi-check-circle me-1"></i> Confirm
                       </>
                     )}
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* Duplicate-booking modal — opened when the backend replies
+                  status="DUPLICATE" (GRN error code 6000). Read-only
+                  acknowledgement; the operator dismisses and goes to check
+                  the existing booking. No retry action here on purpose. */}
+              <Modal
+                show={showDuplicateModal}
+                onHide={() => setShowDuplicateModal(false)}
+                centered
+                backdrop="static"
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>
+                    <i className="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+                    Duplicate Booking
+                  </Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                  <p className="mb-2">{duplicateMessage}</p>
+                  <p className="text-muted small mb-0">
+                    Please check the Hotel Bookings list for the existing
+                    reservation before retrying.
+                  </p>
+                </Modal.Body>
+                <Modal.Footer>
+                  <Button
+                    variant="outline-secondary"
+                    onClick={() => setShowDuplicateModal(false)}
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      setShowDuplicateModal(false);
+                      navigate("/booking-details/hotel-booking-list");
+                    }}
+                  >
+                    View Bookings
                   </Button>
                 </Modal.Footer>
               </Modal>

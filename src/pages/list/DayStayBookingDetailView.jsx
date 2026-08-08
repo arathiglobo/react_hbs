@@ -63,6 +63,50 @@ const PAYMENT_GATEWAYS = [
   { id: "payu", name: "PayU", desc: "Cards & wallets" },
 ];
 
+// Reverse-geocode browser coordinates to a readable address for the
+// Booking History audit trail. Tries OpenStreetMap Nominatim first
+// (street-level detail), then BigDataCloud (locality-level, keyless) —
+// both free, CORS-enabled endpoints. Returns null when neither responds
+// so the caller keeps its IP-derived fallback. Mirrors the hotel
+// BookingDetailedView + the day-stay booking page.
+async function reverseGeocode(lat, lon) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=16&addressdetails=1`,
+      { headers: { Accept: "application/json" } }
+    );
+    if (res.ok) {
+      const a = (await res.json())?.address || {};
+      const parts = [
+        a.road,
+        a.neighbourhood || a.suburb,
+        a.village || a.town || a.city || a.municipality,
+        a.state,
+        a.postcode,
+        a.country,
+      ].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255); // DB column is VARCHAR(255)
+    }
+  } catch {
+    // fall through to BigDataCloud
+  }
+  try {
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`
+    );
+    if (res.ok) {
+      const d = await res.json();
+      const parts = [d.locality, d.city, d.principalSubdivision, d.countryName].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255);
+    }
+  } catch {
+    // give up — caller keeps the IP-based fallback
+  }
+  return null;
+}
+
 // ── Visual tokens (copied from the Hotel Booking detail view) ──────────
 const BUTTON_STYLE = {
   backgroundColor: "#c0392b",
@@ -238,6 +282,43 @@ export default function DayStayBookingDetailView() {
   const [selected, setSelected] = useState(rowStub);
   const [detailsLoading, setDetailsLoading] = useState(true);
 
+  // Operator location snapshot for the Booking History audit trail. Resolved
+  // once on mount and sent on the confirmation-status PATCH / cancel POST so
+  // the BE can stamp confirmed_location / reconfirmed_location /
+  // cancelled_location the same way the Create flow stamps booking_location.
+  // The IP is NOT resolved here — browsers only see the shared public/NAT IP;
+  // DayStayBookingController fills it in from the HTTP request itself. Same
+  // two-step resolution as DayStayBookingPage.jsx: coarse IP-derived city
+  // first, precise geolocation second (only if it lands and permission is
+  // granted).
+  const [operatorLocation, setOperatorLocation] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("https://ipapi.co/json/")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((info) => {
+        if (cancelled || !info) return;
+        setOperatorLocation((prev) =>
+          // Never clobber a precise geolocation result that already landed.
+          prev ||
+          [info.city, info.region, info.country_name].filter(Boolean).join(", ") ||
+          null
+        );
+      })
+      .catch(() => {});
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async ({ coords }) => {
+          const precise = await reverseGeocode(coords.latitude, coords.longitude);
+          if (!cancelled && precise) setOperatorLocation(precise);
+        },
+        () => {}, // denied / unavailable — keep the IP-derived fallback
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+      );
+    }
+    return () => { cancelled = true; };
+  }, []);
+
   // Cancel modal
   const [showCancel, setShowCancel] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
@@ -404,7 +485,14 @@ export default function DayStayBookingDetailView() {
       // @RequestBody Map<String,Object> handler rejects with 415.
       await axiosInstance.post(
         `/api/day-stay-booking/${bookingId}/cancel`,
-        { reason: trimmed || null },
+        {
+          reason: trimmed || null,
+          // Booking History audit — BE stamps this onto cancelled_location.
+          // May be null if the operator denied geolocation and the IP-derived
+          // fallback also failed; the BE treats null as "no capture" and the
+          // "Booking Cancelled" history row renders "-".
+          bookingLocation: operatorLocation,
+        },
       );
       toast.success("Booking cancelled");
       setShowCancel(false);
@@ -541,7 +629,14 @@ export default function DayStayBookingDetailView() {
       setConfirmingBooking(true);
       await axiosInstance.patch(
         `/api/day-stay-booking/${bookingId}/confirmation-status`,
-        { confirmStatus: true }
+        {
+          confirmStatus: true,
+          // Booking History audit — BE stamps this onto confirmed_location /
+          // reconfirmed_location depending on which step this call lands.
+          // May be null if the operator denied geolocation and the IP-derived
+          // fallback also failed; the history row then shows "-".
+          bookingLocation: operatorLocation,
+        }
       );
       setShowConfirmModal(false);
       // Step-aware message: the same PATCH drives BOTH On-Request steps —
@@ -957,18 +1052,30 @@ export default function DayStayBookingDetailView() {
         ip: selected.ipAddress,
       });
     }
-    if (selected.confirmedDate) {
+    // The day-stay DTO names these confirmedAt / reconfirmedAt (the hotel and
+    // long-stay DTOs use *Date). Read the day-stay names first and keep the
+    // *Date fallback so this stays correct if the payload is ever aligned.
+    const confirmedTs = selected.confirmedAt || selected.confirmedDate;
+    if (confirmedTs) {
       events.push({
         action: "Booking Confirmed",
-        at: selected.confirmedDate,
+        at: confirmedTs,
         by: selected.confirmedBy || "-",
+        // Per-action audit. Bookings confirmed at create time copy the create
+        // pair; a later Confirm stamps the operator's own location/IP. Legacy
+        // rows have both null and render "-".
+        location: selected.confirmedLocation,
+        ip: selected.confirmedIp,
       });
     }
-    if (selected.reconfirmedDate) {
+    const reconfirmedTs = selected.reconfirmedAt || selected.reconfirmedDate;
+    if (reconfirmedTs) {
       events.push({
         action: "Booking Reconfirmed",
-        at: selected.reconfirmedDate,
+        at: reconfirmedTs,
         by: selected.reconfirmedBy || "-",
+        location: selected.reconfirmedLocation,
+        ip: selected.reconfirmedIp,
       });
     }
     const cancelTs = selected.cancelledAt || selected.cancelledDate;
@@ -977,6 +1084,8 @@ export default function DayStayBookingDetailView() {
         action: "Booking Cancelled",
         at: cancelTs,
         by: selected.cancelledBy || "-",
+        location: selected.cancelledLocation,
+        ip: selected.cancelledIp,
       });
     }
     return events.sort((a, b) => {

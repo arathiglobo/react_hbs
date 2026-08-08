@@ -448,6 +448,30 @@ export const CabSearch = () => {
   const [dropLocationOptions, setDropLocationOptions] = useState([]);
   const [isDropLocationsLoading, setIsDropLocationsLoading] = useState(false);
 
+  // ─── IWay Transfers (external supplier) ─────────────────────────────
+  // Optional second search leg that hits the i'way BS integration
+  // (backend: /api/iway/*). Follows the HotelSearch multi-supplier
+  // pattern (IWTX / RateHawk / Atharva merge into one result list) — an
+  // IWay offer becomes another row in `transferResults` with
+  // channelType/source = "IWAY".
+  //
+  // IWay requires lat/lng for both pickup + drop (guide §11.6), which the
+  // existing city+facility selectors don't carry. We collect them via two
+  // extra autocomplete inputs backed by IWay's /places/find + /places/{id}
+  // passthroughs so the operator can type a real location string and pick
+  // a suggestion. Both selections must resolve into { placeId, lat, lng,
+  // label } before we send the /transfer-search request; otherwise the
+  // IWay leg is silently skipped and the in-house cabProvider results
+  // still render on their own.
+  const [iwayEnabled, setIwayEnabled] = useState(false);
+  const [iwayPickupOptions, setIwayPickupOptions] = useState([]);
+  const [iwayPickupSelected, setIwayPickupSelected] = useState(null);
+  const [isIwayPickupLoading, setIsIwayPickupLoading] = useState(false);
+  const [iwayDropOptions, setIwayDropOptions] = useState([]);
+  const [iwayDropSelected, setIwayDropSelected] = useState(null);
+  const [isIwayDropLoading, setIsIwayDropLoading] = useState(false);
+  const [iwayLoading, setIwayLoading] = useState(false);
+
   // Shared helper: hit /api/province?search= and return city options shaped
   // for react-select. Used by both the pickup City and the optional Drop
   // City selectors so they show identical results for the same query.
@@ -499,6 +523,7 @@ export const CabSearch = () => {
     }, 300),
   ).current;
 
+<<<<<<< HEAD
   // ── Supplier location autocomplete ─────────────────────────────────
   // One endpoint, one contract: /api/cab-search/lookup returns the
   // in-house groups plus an `external` array of supplier-native locations.
@@ -536,6 +561,108 @@ export const CabSearch = () => {
   // without the user having to pick a category first.
   const fetchAllLocationOptions = async (term) => {
     if (!term || term.trim().length < 2) return [];
+=======
+  // ── IWay places autocomplete ───────────────────────────────────────
+  // Backed by /api/iway/places/find (server-side passthrough to i'way's
+  // /places/find, which itself wraps Google Places Autocomplete). We
+  // normalise each prediction into { value, label, placeId } and defer
+  // lat/lng resolution to onChange (fetchIwayPlaceDetails below) so we
+  // only spend a Place-Details call on the option the user actually
+  // picks rather than every autocomplete suggestion.
+  const fetchIwayPlaceOptions = async (term) => {
+    if (!term || term.trim().length < 2) return [];
+    try {
+      const res = await axiosInstance.get(
+        `/api/iway/places/find?term=${encodeURIComponent(term)}`,
+      );
+      // The backend returns whatever IWay's /places/find returns — that
+      // shape can arrive as either an array of predictions or an object
+      // wrapping a `predictions` array (Google's own shape). Normalise
+      // both so downstream code has one contract.
+      const raw = res.data;
+      const predictions = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw?.predictions)
+          ? raw.predictions
+          : [];
+      return predictions
+        .map((p) => {
+          const placeId = p.place_id || p.placeId;
+          if (!placeId) return null;
+          const label =
+            p.description ||
+            p.formatted_address ||
+            p.structured_formatting?.main_text ||
+            placeId;
+          return { value: placeId, label, placeId };
+        })
+        .filter(Boolean);
+    } catch (err) {
+      console.warn("IWay places lookup failed:", err?.message || err);
+      return [];
+    }
+  };
+
+  const debouncedIwayPickupSearch = useRef(
+    debounce(async (q = "") => {
+      setIsIwayPickupLoading(true);
+      try {
+        setIwayPickupOptions(await fetchIwayPlaceOptions(q));
+      } finally {
+        setIsIwayPickupLoading(false);
+      }
+    }, 350),
+  ).current;
+
+  const debouncedIwayDropSearch = useRef(
+    debounce(async (q = "") => {
+      setIsIwayDropLoading(true);
+      try {
+        setIwayDropOptions(await fetchIwayPlaceOptions(q));
+      } finally {
+        setIsIwayDropLoading(false);
+      }
+    }, 350),
+  ).current;
+
+  // Resolve a picked prediction → { lat, lng } via /api/iway/places/{id}
+  // (server passthrough to IWay's Place-Details). Called on onChange of
+  // the IWay pickup/drop autocomplete so the selected option carries the
+  // coordinates GET /prices needs.
+  const fetchIwayPlaceDetails = async (placeId) => {
+    if (!placeId) return { lat: null, lng: null };
+    try {
+      const res = await axiosInstance.get(
+        `/api/iway/places/${encodeURIComponent(placeId)}`,
+      );
+      const details = res.data;
+      // Google Place Details puts lat/lng at result.geometry.location —
+      // handle the object-wrapped and raw-object shapes.
+      const geo =
+        details?.result?.geometry?.location ||
+        details?.geometry?.location ||
+        details?.location;
+      if (!geo) return { lat: null, lng: null };
+      return {
+        lat: typeof geo.lat === "function" ? geo.lat() : Number(geo.lat),
+        lng: typeof geo.lng === "function" ? geo.lng() : Number(geo.lng),
+      };
+    } catch (err) {
+      console.warn("IWay place details failed:", err?.message || err);
+      return { lat: null, lng: null };
+    }
+  };
+
+  // Fetch airports filtered by the chosen city. AirportController now accepts
+  // an optional cityId query param so the dropdown only surfaces airports in
+  // the selected state. Setters are injected so the same helper can populate
+  // either the pickup-side or the drop-side option list.
+  const fetchAirportsForCity = async (cityId, setOpts, setLoading) => {
+    if (!cityId) {
+      setOpts([]);
+      return;
+    }
+>>>>>>> react-ibyta-latest-arathi-21-07-26
     try {
       const params = new URLSearchParams({ search: term, limit: "20" });
       const resolvedAgentId =
@@ -1050,6 +1177,7 @@ export const CabSearch = () => {
     });
   };
 
+<<<<<<< HEAD
   // One location shape for every supplier. `source` + `id` drive the
   // in-house zone matcher; `externalId` + coords drive coordinate-based
   // suppliers. Whichever the operator picked, both legs receive the same
@@ -1075,6 +1203,8 @@ export const CabSearch = () => {
     };
   };
 
+=======
+>>>>>>> react-ibyta-latest-arathi-21-07-26
   const handleTransferSearchSubmit = async (e) => {
     e.preventDefault();
 
@@ -1098,8 +1228,17 @@ export const CabSearch = () => {
         localStorage.getItem("makeYourOwnPackageAgentId") ||
         "1";
 
+<<<<<<< HEAD
       const originLocation = toTransferLocation(pickupItem, "AIRPORT");
       const destinationLocation = toTransferLocation(dropoffItem, "HOTEL");
+=======
+      const iwayReady =
+        iwayEnabled &&
+        iwayPickupSelected?.lat != null &&
+        iwayPickupSelected?.lng != null &&
+        iwayDropSelected?.lat != null &&
+        iwayDropSelected?.lng != null;
+>>>>>>> react-ibyta-latest-arathi-21-07-26
 
       const transferPayload = {
         origin: originLocation,
@@ -1130,6 +1269,18 @@ export const CabSearch = () => {
               ? Array(transferChildren).fill(0)
               : [],
         agentId: agentId ? Number(agentId) : null,
+        // IWay leg piggybacked on the same request — backend skips the
+        // IWay fan-out when iwayEnabled=false or coords are missing.
+        iwayEnabled: iwayReady,
+        iwayStartPlaceId: iwayReady ? iwayPickupSelected.placeId : null,
+        iwayStartLat: iwayReady ? iwayPickupSelected.lat : null,
+        iwayStartLng: iwayReady ? iwayPickupSelected.lng : null,
+        iwayStartLabel: iwayReady ? iwayPickupSelected.label : null,
+        iwayFinishPlaceId: iwayReady ? iwayDropSelected.placeId : null,
+        iwayFinishLat: iwayReady ? iwayDropSelected.lat : null,
+        iwayFinishLng: iwayReady ? iwayDropSelected.lng : null,
+        iwayFinishLabel: iwayReady ? iwayDropSelected.label : null,
+        iwayCurrency: iwayReady ? currency?.value || null : null,
       };
 
       // ── 1) Kick off the async fan-out ─────────────────────────────
@@ -1144,12 +1295,16 @@ export const CabSearch = () => {
       );
       const searchId = initRes?.data?.searchId;
       if (!searchId) throw new Error("No searchId returned");
+<<<<<<< HEAD
       // Which suppliers the backend actually dispatched to, after agent
       // exclusion + company allow-list. Used below to decide whether a
       // missing supplier row is worth reporting.
       const dispatchedSuppliers = Array.isArray(initRes?.data?.suppliers)
         ? initRes.data.suppliers.map((s) => String(s).toLowerCase())
         : [];
+=======
+      if (iwayReady) setIwayLoading(true);
+>>>>>>> react-ibyta-latest-arathi-21-07-26
 
       // Precompute demo-route flag / real-cab list so the poll can fold
       // the dummy cards in alongside without re-fetching every tick.
@@ -1197,11 +1352,18 @@ export const CabSearch = () => {
         console.warn("Cab-search poll ended early:", pollErr?.message || pollErr);
       }
 
+<<<<<<< HEAD
       // Post-completion: if IWay was dispatched but no IWay row landed,
       // hint the operator. Uses the LAST poll response so we don't lie
       // about a mid-flight tick. Silent when IWay wasn't dispatched at all
       // (not enabled for this agent/company) — that's not a route problem.
       if (dispatchedSuppliers.includes("iway") && finalData) {
+=======
+      // Post-completion: if IWay was requested but no IWay row landed,
+      // hint the operator. Uses the LAST poll response so we don't lie
+      // about a mid-flight tick.
+      if (iwayReady && finalData) {
+>>>>>>> react-ibyta-latest-arathi-21-07-26
         const iwayRows = (finalData.result || []).some(
           (r) =>
             (r.channelType && r.channelType.toLowerCase() === "iway") ||
@@ -1217,6 +1379,7 @@ export const CabSearch = () => {
       setTransferResults([]);
     } finally {
       setTransferLoading(false);
+      setIwayLoading(false);
     }
   };
 
@@ -1324,7 +1487,23 @@ export const CabSearch = () => {
   };
 
   const handleBookNow = (cab, cabDetail) => {
+<<<<<<< HEAD
     const isIway = cab?.channelType === "iway" || cab?.source === "IWAY";
+=======
+    // IWay rows are external-supplier offers — the /cab-booking-page
+    // flow only knows how to POST /api/cab/book (in-house cab tables).
+    // Until CabBookingPage learns the IWay POST /orders flow we stop
+    // the navigation with an informative toast so the operator isn't
+    // dropped into a broken checkout. Everything else below still runs
+    // for in-house rows.
+    if (cab?.channelType === "iway" || cab?.source === "IWAY") {
+      toast(
+        "IWay booking checkout will be wired up next — the search + rates are live now.",
+        { icon: "ℹ️", duration: 5000 },
+      );
+      return;
+    }
+>>>>>>> react-ibyta-latest-arathi-21-07-26
     // Recompute the row's price the same way the table shows it so the
     // booking page receives a consistent total. We carry BOTH the
     // markup-applied price (`totalRate`, what the user pays) and the
@@ -2054,6 +2233,7 @@ export const CabSearch = () => {
                       </Col>
                     </Row>
 
+<<<<<<< HEAD
                     {/* The separate "Also search IWay Transfers" checkbox and
                         its two dedicated location inputs are gone. i'way's
                         locations now appear as an extra option group inside
@@ -2062,6 +2242,145 @@ export const CabSearch = () => {
                         agent exclusion + company allow-list — the same gating
                         the hotel suppliers use — rather than a per-search
                         checkbox. */}
+=======
+                    {/* ── IWay Transfers (external) ────────────────────────
+                        Optional second-supplier leg. Toggling the checkbox
+                        reveals two typeahead inputs backed by IWay's
+                        /places/find + /places/{id} passthroughs on the
+                        backend. IWay requires lat/lng for the /prices call
+                        (guide §11.6) which the in-house city/facility
+                        selectors don't carry — so the operator picks the
+                        IWay pickup + drop from their own autocomplete and
+                        we resolve lat/lng on selection.
+                        When both selections resolve to coordinates, the
+                        search submit sends the IWay coords piggybacked on
+                        the same POST /api/cab-search/search request — the
+                        backend fans out to IWay's /prices in the same
+                        round-trip and returns the merged in-house + IWay
+                        offer list. One call, both suppliers. Leaving this
+                        off keeps the flow exactly as it was. */}
+                    <Row className="g-3 mb-2 align-items-end">
+                      <Col md={12}>
+                        <Form.Check
+                          type="checkbox"
+                          id="cab-iway-enable"
+                          className="fw-semibold"
+                          label="Also search IWay Transfers (external supplier)"
+                          checked={iwayEnabled}
+                          onChange={(e) => {
+                            const on = e.target.checked;
+                            setIwayEnabled(on);
+                            if (!on) {
+                              // Clearing on turn-off keeps the payload
+                              // consistent — no stale IWay selections
+                              // sneak into a later search.
+                              setIwayPickupSelected(null);
+                              setIwayDropSelected(null);
+                              setIwayPickupOptions([]);
+                              setIwayDropOptions([]);
+                            }
+                          }}
+                        />
+                        <div className="text-muted small mt-1">
+                          Adds IWay (i'way) offers alongside your in-house cab
+                          results. Requires exact pickup + drop locations from
+                          the IWay lookup below.
+                        </div>
+                      </Col>
+                    </Row>
+                    {iwayEnabled && (
+                      <Row className="g-3 mb-3 align-items-end">
+                        <Col md={6}>
+                          <Form.Label className="fw-semibold">
+                            IWay Pickup Location{" "}
+                            <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Select
+                            options={iwayPickupOptions}
+                            value={iwayPickupSelected}
+                            isLoading={isIwayPickupLoading}
+                            onInputChange={(input, { action }) => {
+                              if (action !== "input-change") return;
+                              debouncedIwayPickupSearch(input || "");
+                            }}
+                            onChange={async (opt) => {
+                              if (!opt) {
+                                setIwayPickupSelected(null);
+                                return;
+                              }
+                              // Fetch lat/lng immediately so the payload
+                              // is ready when the user hits Search.
+                              const { lat, lng } = await fetchIwayPlaceDetails(
+                                opt.placeId,
+                              );
+                              if (lat == null || lng == null) {
+                                toast.error(
+                                  "IWay couldn't resolve coordinates for that pickup location.",
+                                );
+                                return;
+                              }
+                              setIwayPickupSelected({ ...opt, lat, lng });
+                            }}
+                            filterOption={() => true}
+                            placeholder="Type a pickup address, airport…"
+                            isSearchable
+                            isClearable
+                            menuPortalTarget={document.body}
+                            styles={{
+                              ...customSelectStyles,
+                              menuPortal: (base) => ({
+                                ...base,
+                                zIndex: 9999,
+                              }),
+                            }}
+                          />
+                        </Col>
+                        <Col md={6}>
+                          <Form.Label className="fw-semibold">
+                            IWay Drop Location{" "}
+                            <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Select
+                            options={iwayDropOptions}
+                            value={iwayDropSelected}
+                            isLoading={isIwayDropLoading}
+                            onInputChange={(input, { action }) => {
+                              if (action !== "input-change") return;
+                              debouncedIwayDropSearch(input || "");
+                            }}
+                            onChange={async (opt) => {
+                              if (!opt) {
+                                setIwayDropSelected(null);
+                                return;
+                              }
+                              const { lat, lng } = await fetchIwayPlaceDetails(
+                                opt.placeId,
+                              );
+                              if (lat == null || lng == null) {
+                                toast.error(
+                                  "IWay couldn't resolve coordinates for that drop location.",
+                                );
+                                return;
+                              }
+                              setIwayDropSelected({ ...opt, lat, lng });
+                            }}
+                            filterOption={() => true}
+                            placeholder="Type a drop address, hotel, airport…"
+                            isSearchable
+                            isClearable
+                            menuPortalTarget={document.body}
+                            styles={{
+                              ...customSelectStyles,
+                              menuPortal: (base) => ({
+                                ...base,
+                                zIndex: 9999,
+                              }),
+                            }}
+                          />
+                        </Col>
+                      </Row>
+                    )}
+>>>>>>> react-ibyta-latest-arathi-21-07-26
 
                     {/* Legacy/hidden fields kept in state but invisible.
                         The original Trip Type radios + Origin/Destination/

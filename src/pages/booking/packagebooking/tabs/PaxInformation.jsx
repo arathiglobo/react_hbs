@@ -368,8 +368,8 @@ const PaxInformation = ({
       toast.error("Please fill the lead traveller's first and last name.");
       return false;
     }
-    if (!primary.email || !primary.mobile) {
-      toast.error("Please fill the lead traveller's email and mobile (contact info).");
+    if (!primary.mobile) {
+      toast.error("Please fill the lead traveller's mobile (contact info).");
       return false;
     }
     const incompleteTraveller = localData.travellers.find(
@@ -390,6 +390,9 @@ const PaxInformation = ({
       const payload = {
         packageId: searchParams.packageId,
         agentId: searchParams.agentId,
+        // "Booking Done By Employee" carried over from the Package Search
+        // page. Optional — blank for agent logins and when none was picked.
+        employeeId: searchParams.employeeId || "",
         countryId: searchParams.destinationCountryId,
         cityId: searchParams.destinationCityId || "", // City ID from search or basic details
         travelDate: searchParams.travelDate,
@@ -446,6 +449,13 @@ const PaxInformation = ({
         // Programme fields captured on the Hotels tab.
         checkInDate: bookingData.programme?.checkInDate || null,
         flightDetails: bookingData.programme?.flightDetails || null,
+        // Optional "Others → Notes" free-text field. Backend saves it as a
+        // package_booking_related_notes row on create so it appears in the
+        // detail view's Notes panel. Only sent on create (PUT/amend ignores
+        // it — additional notes go through POST /booking/{id}/notes).
+        initialNote: editingBookingId
+          ? null
+          : bookingData.programme?.notes || null,
         modeOfPayment: bookingData.programme?.modeOfPayment || null,
         bookingConfirmation: bookingData.programme?.bookingConfirmation || null,
         termsAccepted: !!bookingData.programme?.termsAccepted,
@@ -578,7 +588,7 @@ const PaxInformation = ({
                 )}
               </Form.Group>
             </Col>
-            <Col md={3}>
+            <Col md={5}>
               <Form.Group>
                 <Form.Label className="booking-field-label">
                   First name <span className="text-danger">*</span>
@@ -591,20 +601,13 @@ const PaxInformation = ({
                 />
               </Form.Group>
             </Col>
-            <Col md={3}>
-              <Form.Group>
-                <Form.Label className="booking-field-label">
-                  Middle name
-                </Form.Label>
-                <Form.Control
-                  value={pax.middleName}
-                  onChange={(e) =>
-                    handleTravellerChange(index, "middleName", e.target.value)
-                  }
-                />
-              </Form.Group>
-            </Col>
-            <Col md={4}>
+            {/* Middle name input intentionally removed from the form. The
+                `middleName` field is still carried on traveller state (seeded
+                at makeTraveller, hydrated from saved bookings in amend mode,
+                folded into the composite contactInfo.name, and rendered in
+                the PackageBookingDetailView) so existing bookings that
+                already have a middle name saved don't lose it on amend. */}
+            <Col md={5}>
               <Form.Group>
                 <Form.Label className="booking-field-label">
                   Last name <span className="text-danger">*</span>
@@ -618,28 +621,21 @@ const PaxInformation = ({
               </Form.Group>
             </Col>
           </Row>
-          {/* Only show email + mobile for the lead traveller (acts as contact). */}
+          {/* Only show mobile for the lead traveller (acts as contact). The
+              Email input was intentionally removed from this form. The `email`
+              field is still carried on traveller state (seeded at
+              makeTraveller, hydrated from saved bookings in amend mode,
+              propagated to contactInfo.email on submit, rendered on the PDF
+              voucher and in the amend confirmation dialog) so bookings that
+              were saved with an email before this change don't silently lose
+              it on amend, and existing detail views keep displaying it. */}
           {index === 0 && (
             <Row className="g-3 mt-1">
-              <Col md={6}>
+              <Col md={12}>
                 <Form.Group>
                   <Form.Label className="booking-field-label">
-                    Email <span className="text-danger">*</span>
-                  </Form.Label>
-                  <Form.Control
-                    type="email"
-                    placeholder="email@example.com"
-                    value={pax.email || ""}
-                    onChange={(e) =>
-                      handleTravellerChange(index, "email", e.target.value)
-                    }
-                  />
-                </Form.Group>
-              </Col>
-              <Col md={6}>
-                <Form.Group>
-                  <Form.Label className="booking-field-label">
-                    Mobile <span className="text-danger">*</span>
+                    Passenger Mobile Number{" "}
+                    <span className="text-danger">*</span>
                   </Form.Label>
                   <Form.Control
                     placeholder="+971 ..."
@@ -656,8 +652,11 @@ const PaxInformation = ({
         );
       })}
 
-      {/* Travel details — Pax passport sits after the travellers, just before
-          the add-extra controls. Feeds searchParams.nativeCountry for submit. */}
+      {/* Travel details — Pax passport + optional Flight details sit after the
+          travellers, just before the add-extra controls. Passport feeds
+          searchParams.nativeCountry for submit; Flight details is written to
+          bookingData.programme.flightDetails and forwarded as `flightDetails`
+          on the /book payload (see the payload block above at ~L451). */}
       <p className="tab-section-title mt-3">Travel details</p>
       <Row className="g-3 mb-2">
         <Col md={4}>
@@ -683,6 +682,72 @@ const PaxInformation = ({
               menuPosition="fixed"
               styles={{ menuPortal: (base) => ({ ...base, zIndex: 9999 }) }}
             />
+          </Form.Group>
+        </Col>
+        {/* Optional free-text alphanumeric field — accepts flight number,
+            airport codes and times, e.g. "EK 503  STN-DXB  21:45 / 06:50".
+            Not validated; not required. Persisted on the booking so the
+            supplier can plan pickups / arrivals. */}
+        <Col md={8}>
+          <Form.Group>
+            <Form.Label className="booking-field-label">
+              Flight details{" "}
+              <span className="text-muted small">(optional)</span>
+            </Form.Label>
+            <Form.Control
+              type="text"
+              value={bookingData?.programme?.flightDetails || ""}
+              disabled={isViewMode}
+              onChange={(e) => {
+                const val = e.target.value;
+                updateData((prev) => ({
+                  ...prev,
+                  programme: {
+                    ...prev.programme,
+                    flightDetails: val,
+                  },
+                }));
+              }}
+            />
+          </Form.Group>
+        </Col>
+      </Row>
+
+      {/* Others — free-form fields that don't belong under Traveller or Travel
+          headings. Notes is optional; when the user types anything here it is
+          sent as `initialNote` on the /book POST, and the backend appends it
+          to package_booking_related_notes so it appears in the "Notes" panel
+          on the detail view alongside any notes added later via the NOTES
+          button. Not consumed on amend (PUT). */}
+      <p className="tab-section-title mt-3">Others</p>
+      <Row className="g-3 mb-2">
+        <Col md={12}>
+          <Form.Group>
+            <Form.Label className="booking-field-label">
+              Notes <span className="text-muted small">(optional)</span>
+            </Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={3}
+              value={bookingData?.programme?.notes || ""}
+              disabled={isViewMode || !!editingBookingId}
+              onChange={(e) => {
+                const val = e.target.value;
+                updateData((prev) => ({
+                  ...prev,
+                  programme: {
+                    ...prev.programme,
+                    notes: val,
+                  },
+                }));
+              }}
+            />
+            {editingBookingId && (
+              <div className="text-muted small mt-1">
+                To add more notes to an existing booking, use the
+                &quot;Notes&quot; button on the booking detail page.
+              </div>
+            )}
           </Form.Group>
         </Col>
       </Row>
@@ -909,10 +974,13 @@ const PaxInformation = ({
             </div>
           </div>
 
-          {/* ── Programme strip — nights/days + check-in + flight ── */}
-          {(nights ||
-            bookingData.programme?.checkInDate ||
-            bookingData.programme?.flightDetails) && (
+          {/* ── Programme strip — nights/days + flight ──
+              Check-in date was intentionally removed from this popup. The
+              underlying `programme.checkInDate` field is still on state and
+              still forwarded on the submit payload so any code path that
+              consumes it (e.g. amend hydration, backend voucher metadata)
+              keeps working; only the visible row is gone. */}
+          {(nights || bookingData.programme?.flightDetails) && (
             <div className="summary-section mb-4">
               <h6 className="section-header d-flex align-items-center mb-3">
                 <FaPlaneDeparture className="me-2 text-muted" size={14} />
@@ -920,7 +988,7 @@ const PaxInformation = ({
               </h6>
               <div className="summary-card p-3 bg-white rounded shadow-sm border">
                 <Row className="g-3 align-items-center">
-                  <Col md={4}>
+                  <Col md={6}>
                     <p className="mb-1 text-muted small">Duration</p>
                     <p className="fw-semibold mb-0">
                       {nights
@@ -930,13 +998,7 @@ const PaxInformation = ({
                         : "—"}
                     </p>
                   </Col>
-                  <Col md={4}>
-                    <p className="mb-1 text-muted small">Check-in date</p>
-                    <p className="fw-semibold mb-0">
-                      {bookingData.programme?.checkInDate || "—"}
-                    </p>
-                  </Col>
-                  <Col md={4}>
+                  <Col md={6}>
                     <p className="mb-1 text-muted small">Flight details</p>
                     <p className="fw-semibold mb-0">
                       {bookingData.programme?.flightDetails || "—"}
@@ -972,14 +1034,19 @@ const PaxInformation = ({
                       }`}
                     >
                       <div className="d-flex align-items-start">
+                        {/* White chip with black digits — matches the day
+                            chips on the Package Details step (see
+                            .prg-day-num in HotelsTab.jsx). */}
                         <div
-                          className="me-3 d-flex align-items-center justify-content-center fw-bold text-white"
+                          className="me-3 d-flex align-items-center justify-content-center fw-bold"
                           style={{
                             width: 36,
                             height: 36,
                             borderRadius: 8,
-                            background:
-                              "linear-gradient(135deg, #EC0B43, #8b5cf6)",
+                            background: "#ffffff",
+                            color: "#000000",
+                            border: "1px solid #e5e7eb",
+                            boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)",
                             flexShrink: 0,
                             fontSize: "0.8rem",
                           }}
@@ -1175,31 +1242,18 @@ const PaxInformation = ({
                     className="text-end text-primary"
                     style={{ fontSize: "1.1rem" }}
                   >
-                    AED {(
-                      Number(totalPrice || 0) +
-                      (tourismDirham !== "" && !isNaN(Number(tourismDirham))
-                        ? Number(tourismDirham)
-                        : 0)
-                    ).toFixed(2)}
+                    AED {Number(totalPrice || 0).toFixed(2)}
                   </td>
                 </tr>
               </tfoot>
             </Table>
-            <div className="mt-3">
-              <label className="form-label fw-semibold">Tourism Dirham</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                className="form-control"
-                placeholder="0.00"
-                value={tourismDirham}
-                onChange={(e) => setTourismDirham(e.target.value)}
-              />
-              <small className="text-muted">
-                Optional — added to the Grand Total above.
-              </small>
-            </div>
+            {/* Tourism Dirham input was intentionally removed from this popup.
+                The `tourismDirham` state slot is still hydrated from saved
+                bookings in amend mode (see the useEffect near the top of this
+                component) and still forwarded on the submit payload, so
+                bookings that were saved with a Tourism Dirham amount before
+                this change round-trip cleanly. New bookings simply save with
+                TD = 0. */}
           </div>
 
           <div className="summary-section">

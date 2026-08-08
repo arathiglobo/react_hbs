@@ -49,12 +49,16 @@ import MarketType from "./pages/master/MarketType";
 import Region from "./pages/master/Region";
 import Province from "./pages/master/Province";
 import CityMapping from "./pages/master/CityMapping";
+
 // Transfer Location Mapping — master → i'way location translation screens.
 // The hotel one is aliased because ./pages/master/HotelMapping (supplier
 // hotel-inventory mapping) already owns the HotelMapping name below.
 import TransferAirportMapping from "./pages/master/transferMapping/AirportMapping";
 import TransferPlaceMapping from "./pages/master/transferMapping/PlaceMapping";
 import TransferHotelMapping from "./pages/master/transferMapping/HotelMapping";
+
+import MappedList from "./pages/master/MappedList";
+
 
 import AgentReg from "./pages/Registration/AgentReg";
 import HotelReg from "./pages/Registration/HotelReg";
@@ -139,6 +143,7 @@ import PolicyCreate from "./pages/HotelActions/Policy/PolicyCreate";
 import CompanyProfile from "./pages/CompanyProfile";
 import Profile from "./pages/Profile/Profile";
 import ChangePassword from "./pages/Profile/ChangePassword";
+import TwoFactorAuth from "./pages/Profile/TwoFactorAuth";
 import Logout from "./pages/Profile/Logout";
 import MakePkgCombineSearch from "./pages/search/MakePkgCombineSearch";
 import AccomodationRoomList from "./pages/roomlist/makeyourownpkg/AccomodationRoomList";
@@ -180,6 +185,7 @@ import TimeLimitOnlineDailySalesReport from "./pages/report/TimeLimitOnlineDaily
 import ExternalApiRoomList from "./pages/ExternalApiRoomList";
 import HotelBookingPage from "./pages/booking/HotelBookingPage";
 import DummyPaymentPage from "./pages/booking/DummyPaymentPage";
+import CCAvenueCheckoutPage from "./pages/booking/CCAvenueCheckoutPage";
 import ApiBookingPageForHotels from "./pages/booking/ApiBookingPageForHotels";
 import LongStaySearch from "./pages/search/LongStaySearch";
 import LongStayBookingPage from "./pages/booking/LongStayBookingPage";
@@ -328,6 +334,8 @@ import AdminApiAccess from "./pages/admin/apiaccess/AdminApiAccess";
 // Super Admin — per-role sidebar visibility (Assign Menu)
 import AssignMenu from "./pages/master/AssignMenu";
 import UserRoles from "./pages/master/UserRoles";
+import LoginLogs from "./pages/user-management/LoginLogs";
+import RoleAssign from "./pages/user-management/RoleAssign";
 
 import FlightSearch from "./pages/search/flight/FlightSearch";
 import FlightBestPriceCheck from "./pages/search/flight/FlightBestPriceCheck";
@@ -413,6 +421,10 @@ export default function App() {
         {/* Topbar profile  */}
         <Route path="/view-profile" element={<PrivateRoute><Profile /> </PrivateRoute> }/>
         <Route path="/change-password" element={<PrivateRoute><ChangePassword /> </PrivateRoute> }/>
+        {/* Two-factor authentication is an agent-only feature — only agent
+            logins are challenged for a second factor, so the enrolment page is
+            scoped to them. The backend refuses non-agent callers as well. */}
+        <Route path="/two-factor-authentication" element={<PrivateRoute roles={["agent"]}><TwoFactorAuth /> </PrivateRoute> }/>
         <Route path="/log-out" element={<PrivateRoute><Logout /> </PrivateRoute> }/>
 
         {/* Masters */}
@@ -454,6 +466,7 @@ export default function App() {
         <Route path="/masters/transfer-hotel-mapping" element={<PrivateRoute><TransferHotelMapping /></PrivateRoute>} />
         <Route path="/masters/hotel-upcooming-mapped-list" element={<PrivateRoute><HotelMappingBulkList /></PrivateRoute>} />
         <Route path="/masters/fetch-new-hotels" element={<FetchNewHotels />} />
+        <Route path="/masters/mapped-list" element={<PrivateRoute><MappedList /></PrivateRoute>} />
      
         {/* :bar_chart: Reports */}
         <Route path="/report/booking" element={<ReportBooking />} />
@@ -570,6 +583,7 @@ export default function App() {
         <Route path="/last-minute-room-list" element={<PrivateRoute><LastMinuteRoomList /></PrivateRoute>} />
         <Route path="/hotel-booking-page" element={<PrivateRoute><HotelBookingPage /></PrivateRoute>} />
         <Route path="/payment/:gateway" element={<PrivateRoute><DummyPaymentPage /></PrivateRoute>} />
+        <Route path="/payment/ccavenue-redirect" element={<PrivateRoute><CCAvenueCheckoutPage /></PrivateRoute>} />
         <Route path="/new-booking/long-stay" element={<PrivateRoute><LongStaySearch /></PrivateRoute>} />
         <Route path="/long-stay-booking-page" element={<PrivateRoute><LongStayBookingPage /></PrivateRoute>} />
         <Route path="/booking-details/long-stay-booking-list" element={<PrivateRoute><LongStayBookingList /></PrivateRoute>} />
