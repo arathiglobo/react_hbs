@@ -230,6 +230,7 @@ import EditStayPayPromotionExtranet from "./pages/extranet/Extranet-Promotion/Ed
 import EditSpecialRateExtranet from "./pages/extranet/Extranet-Promotion/EditSpecialRateExtranet";
 import PackageSearch from "./pages/search/package/PackageSearch";
 import PackageBooking from "./pages/booking/packagebooking/PackageBooking";
+import PackageCheckout from "./pages/booking/packagebooking/PackageCheckout";
 import FetchNewHotels from "./pages/master/FetchNewHotels";
 import PackageBookingList from "./pages/list/PackageBookingList";
 import PackageBookingDetailView from "./pages/list/PackageBookingDetailView";
@@ -654,6 +655,7 @@ export default function App() {
 
         <Route path="/new-booking/package-search" element={<PrivateRoute><PackageSearch /> </PrivateRoute>}/>
         <Route path="/new-booking/package-booking/:id" element={<PrivateRoute><PackageBooking /> </PrivateRoute>}/>
+        <Route path="/new-booking/package-checkout/:id" element={<PrivateRoute><PackageCheckout /> </PrivateRoute>}/>
         
         <Route path="/new-booking/offline-search" element={<PrivateRoute><OfflineSearch /> </PrivateRoute>}/>
         

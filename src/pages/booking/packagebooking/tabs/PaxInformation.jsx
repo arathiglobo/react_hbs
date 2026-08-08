@@ -14,7 +14,18 @@ import {
   FaPlaneDeparture,
   FaTimesCircle,
   FaInfoCircle,
+  FaCreditCard,
 } from "react-icons/fa";
+
+// Payment mode options — mirrors the PAYMENT_MODES list in PackageBooking.jsx
+// (kept in sync so the Mode of Payment picker rendered here writes the same
+// stored values the /book payload and detail-view expect).
+const PAYMENT_MODES = [
+  { value: "CREDIT", label: "Agent credit limit" },
+  { value: "CARD", label: "Card payment" },
+  { value: "BANK_TRANSFER", label: "Bank transfer" },
+  { value: "CASH", label: "Cash" },
+];
 
 // Reverse-geocode browser coordinates to a readable address for the Booking
 // History audit trail. Tries OpenStreetMap Nominatim first (street-level),
@@ -748,6 +759,44 @@ const PaxInformation = ({
                 &quot;Notes&quot; button on the booking detail page.
               </div>
             )}
+          </Form.Group>
+        </Col>
+      </Row>
+
+      {/* Mode of payment — relocated here from the right sidebar per product
+          spec. Reads / writes bookingData.programme.modeOfPayment through
+          the same updateData(prev => …) channel the Notes field uses, so
+          the /book payload and the existing "no payment mode" gate at the
+          Confirm-booking step (see line ~806 below) keep working unchanged. */}
+      <Row className="g-3 mb-2">
+        <Col md={6}>
+          <Form.Group>
+            <Form.Label className="booking-field-label">
+              <FaCreditCard className="me-2 text-primary" />
+              Mode of payment <span className="text-danger">*</span>
+            </Form.Label>
+            <Form.Select
+              aria-label="Mode of payment"
+              value={bookingData?.programme?.modeOfPayment || ""}
+              disabled={isViewMode}
+              onChange={(e) => {
+                const val = e.target.value;
+                updateData((prev) => ({
+                  ...prev,
+                  programme: {
+                    ...prev.programme,
+                    modeOfPayment: val,
+                  },
+                }));
+              }}
+            >
+              <option value="">Select payment mode</option>
+              {PAYMENT_MODES.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </Form.Select>
           </Form.Group>
         </Col>
       </Row>

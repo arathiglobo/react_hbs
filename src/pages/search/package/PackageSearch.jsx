@@ -681,63 +681,69 @@ const PackageSearch = () => {
       if (!proceed) return;
     }
 
-    // Open the booking page in a new browser tab. location.state isn't
-    // preserved across windows, so we pipe the context through query
-    // params and let PackageBooking read it back from either source.
-    const params = new URLSearchParams();
-    if (effectiveAgentId) params.set("agentId", effectiveAgentId);
-    if (selectedDestination?.countryId)
-      params.set("destinationCountryId", String(selectedDestination.countryId));
-    if (pkg.rate != null) params.set("searchRate", String(pkg.rate));
-    if (pkg.rateType) params.set("searchRateType", pkg.rateType);
-    params.set("searchCurrency", pkg.currencyCode || "AED");
-
-    // Nationality picked on the search page → seeds the booking's native
-    // country (the "Pax passport" field on Pax Information), which the
-    // Hotels / Cabs / Activities steps use for their rate lookups.
-    if (selectedNationality?.value != null) {
-      params.set("nationalityId", String(selectedNationality.value));
-      params.set("nationalityName", selectedNationality.label || "");
-    }
-
-    // "Booking Done By" — for agent logins the booking is done by the agent
-    // themselves; admin/staff may pick an employee. Persisted on the booking.
-    if (!isAgentRole && selectedEmployee?.value != null) {
-      params.set("employeeId", String(selectedEmployee.value));
-      params.set("employeeName", selectedEmployee.label || "");
-    }
-
-    // Carry the Rooms & Guests selection into the booking page so its Pax
-    // counts default to what was chosen on the search screen. A package
-    // booking uses a single pax set, so forward the aggregate totals across
-    // all rooms. PackageBooking seeds its initial searchParams from these.
+    // Open the booking page in a new browser tab with a CLEAN URL:
+    //   /new-booking/package-booking/{packageId}
+    // No query parameters — per spec. Search-page context (agent, pax,
+    // nationality, rate…) is handed off via a one-shot localStorage draft
+    // keyed by packageId; PackageBooking reads it via useParams() and
+    // clears it on mount. Same pattern CabSearch already uses for
+    // cabBookingDraft. localStorage (not sessionStorage) because window.open
+    // with noopener spawns a tab that does NOT inherit the opener's
+    // sessionStorage but DOES share localStorage on the same origin.
     const totalAdults = rooms.reduce((a, r) => a + (r.adults || 0), 0);
     const totalChildren = rooms.reduce((a, r) => a + (r.children || 0), 0);
     const allChildAges = rooms.flatMap((r) => r.childAges || []);
-    params.set("adultCount", String(totalAdults || 1));
-    params.set("childCount", String(totalChildren));
-    if (allChildAges.length) params.set("childAges", allChildAges.join(","));
-    params.set("noOfRooms", String(rooms.length));
 
-    // Carry the category the search resolved for this occupancy so the booking
-    // (Hotels step + submit) uses it directly — the Basic Details step and its
-    // category picker have been removed.
-    if (pkg.matchedCategoryId != null)
-      params.set("packageCategory", String(pkg.matchedCategoryId));
-    if (pkg.matchedCategoryName)
-      params.set("packageCategoryName", pkg.matchedCategoryName);
-
-    // ADD NEW ITEM flow: PackageBookingDetailView navigates here with
-    // ?parentBookingCode=GPKG-... so the booking that gets created
-    // becomes a child of an existing primary booking. Forward it through
-    // verbatim so PackageBooking → PaxInformation can stamp the POST /book
+    // ADD NEW ITEM flow: PackageBookingDetailView navigates to the search
+    // page with ?parentBookingCode=GPKG-... so a booking created downstream
+    // becomes a child of an existing primary booking. Forwarded via the
+    // draft so PackageBooking → PaxInformation can stamp the POST /book
     // payload, and the backend writes "{parent}/{n}" for bookingCode.
     const incomingParent = new URLSearchParams(window.location.search).get(
       "parentBookingCode",
     );
-    if (incomingParent) params.set("parentBookingCode", incomingParent);
 
-    const url = `/new-booking/package-booking/${pkg.packageId}?${params.toString()}`;
+    const bookingContext = {
+      agentId: effectiveAgentId || null,
+      destinationCountryId:
+        selectedDestination?.countryId != null
+          ? String(selectedDestination.countryId)
+          : null,
+      searchRate: pkg.rate != null ? String(pkg.rate) : null,
+      searchRateType: pkg.rateType || null,
+      searchCurrency: pkg.currencyCode || "AED",
+      nationalityId:
+        selectedNationality?.value != null
+          ? String(selectedNationality.value)
+          : null,
+      nationalityName: selectedNationality?.label || null,
+      employeeId:
+        !isAgentRole && selectedEmployee?.value != null
+          ? String(selectedEmployee.value)
+          : null,
+      employeeName:
+        !isAgentRole && selectedEmployee?.label ? selectedEmployee.label : null,
+      adultCount: String(totalAdults || 1),
+      childCount: String(totalChildren),
+      childAges: allChildAges.length ? allChildAges.join(",") : "",
+      noOfRooms: String(rooms.length),
+      packageCategory:
+        pkg.matchedCategoryId != null ? String(pkg.matchedCategoryId) : null,
+      packageCategoryName: pkg.matchedCategoryName || null,
+      parentBookingCode: incomingParent || null,
+    };
+
+    try {
+      localStorage.setItem(
+        `packageBookingContext:${pkg.packageId}`,
+        JSON.stringify(bookingContext),
+      );
+    } catch {
+      // localStorage unavailable / quota exceeded — the booking page falls
+      // back to defaults; the operator can re-enter agent/pax there.
+    }
+
+    const url = `/new-booking/package-booking/${pkg.packageId}`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
@@ -1294,13 +1300,17 @@ const PackageSearch = () => {
                     </Form.Group>
                   </Col>
 
-                  {/* 8. Rooms & Guests — mirrors /new-booking/hotel's selector.
+                  {/* 8. Guests — mirrors /new-booking/hotel's selector.
                       A package booking resolves ONE package category for the
                       whole party, so the room count is fixed at 1 and the
-                      hotel page's "Add Room" button is deliberately absent. */}
+                      hotel page's "Add Room" button is deliberately absent.
+                      The button label shows guests only (no room count) per
+                      product spec; the underlying rooms[] shape is unchanged
+                      so the selector, payload and downstream flows behave
+                      exactly as before. */}
                   <Col lg={4} md={6}>
                     <Form.Label className="fw-semibold text-dark">
-                      Rooms &amp; Guests
+                      Guests
                     </Form.Label>
                     <div className="d-flex flex-wrap gap-2">
                       <Button
@@ -1312,8 +1322,7 @@ const PackageSearch = () => {
                         {rooms.reduce((a, r) => a + r.adults, 0)} adults
                         {rooms.reduce((a, r) => a + r.children, 0)
                           ? `, ${rooms.reduce((a, r) => a + r.children, 0)} child`
-                          : ""}{" "}
-                        · {rooms.length} room{rooms.length > 1 ? "s" : ""}
+                          : ""}
                         <span className="float-end">
                           {roomsOpen ? "▴" : "▾"}
                         </span>
