@@ -625,30 +625,14 @@ const CabBookingPage = () => {
   });
   const [tourismDirham, setTourismDirham] = useState("");
 
-  // If no state, show prompt
-  if (!hasValidState) {
-    return (
-      <div className="min-vh-100 bg-light d-flex flex-column">
-        <TopBar />
-        <div className="d-flex flex-grow-1">
-          <Sidebar />
-          <main className="flex-grow-1 p-4 d-flex justify-content-center align-items-center">
-            <Card className="text-center p-5 shadow-sm border-0 rounded-4">
-              <Card.Body>
-                <FaCar className="display-4 text-warning mb-3" />
-                <h4 className="fw-bold mb-3">No Transfer Selected</h4>
-                <p className="text-muted mb-4">Please select a transfer from the search page first.</p>
-                <Button variant="primary" onClick={() => navigate("/new-booking/cab")}>
-                  Go to Cab Search
-                </Button>
-              </Card.Body>
-            </Card>
-          </main>
-        </div>
-      </div>
-    );
-  }
-
+  // ── ALL HOOKS BELOW MUST RUN BEFORE THE EARLY RETURN ────────────────
+  // Rules of Hooks: every hook must be called in the same order on every
+  // render, so any useMemo / useEffect that used to sit after the
+  // `if (!hasValidState) return …` block has been hoisted here. The
+  // derived value `totalRate` moved up with them because bookingPayable
+  // depends on it. All computations tolerate `hasValidState === false`
+  // (initialTotalRate is 0 in that case, so the numbers just cascade
+  // as 0 without crashing).
   const totalRate = parseFloat(prices.totalPrice) || initialTotalRate;
 
   // Payable used for the sufficiency check — matches the amount that
@@ -701,6 +685,31 @@ const CabBookingPage = () => {
       setPaymentMode(paymentModeOptions[0].value);
     }
   }, [paymentModeOptions, paymentMode]);
+
+  // If no state, show prompt. All hooks above run first so the render
+  // order stays consistent whether we return early here or continue.
+  if (!hasValidState) {
+    return (
+      <div className="min-vh-100 bg-light d-flex flex-column">
+        <TopBar />
+        <div className="d-flex flex-grow-1">
+          <Sidebar />
+          <main className="flex-grow-1 p-4 d-flex justify-content-center align-items-center">
+            <Card className="text-center p-5 shadow-sm border-0 rounded-4">
+              <Card.Body>
+                <FaCar className="display-4 text-warning mb-3" />
+                <h4 className="fw-bold mb-3">No Transfer Selected</h4>
+                <p className="text-muted mb-4">Please select a transfer from the search page first.</p>
+                <Button variant="primary" onClick={() => navigate("/new-booking/cab")}>
+                  Go to Cab Search
+                </Button>
+              </Card.Body>
+            </Card>
+          </main>
+        </div>
+      </div>
+    );
+  }
 
   const handlePriceChange = (field, value) => {
     setPrices((prev) => ({ ...prev, [field]: value }));
