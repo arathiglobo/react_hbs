@@ -284,6 +284,15 @@ export default function BookingDetailedView() {
   // PDF preview modal). Matches the convention used on HotelBookingPage.
   const activeUserRole = localStorage.getItem("currentActiveRole");
   const isAdmin = String(activeUserRole || "").toUpperCase() === "ADMIN";
+  const isSuperAdmin =
+    String(activeUserRole || "").toUpperCase() === "SUPER_ADMIN";
+  // Confirming an On-Request booking (step 1 of the two-step On Request
+  // flow — moves the row from tentative to "On Request/Confirmed") is a
+  // supplier-facing action agents must not perform on their own. Admin /
+  // super-admin retain full control. Reconfirming a NON-On-Request booking
+  // (or step 2 of the On Request flow after admin already confirmed step 1)
+  // is unaffected — those keep the existing agent-visible RECONFIRM button.
+  const canConfirmOnRequest = isAdmin || isSuperAdmin;
 
   // Agent-role gate (UI visibility only). Some actions — Booking Remark,
   // Notes, Confirmation No. — are internal/admin-facing and are hidden from
@@ -689,8 +698,20 @@ export default function BookingDetailedView() {
     }
   };
 
-  // Reconfirm
-  const openConfirmModal = () => setShowConfirmModal(true);
+  // Reconfirm — also the entry point for the On Request first-step
+  // "Confirm Booking". The button that calls this is already role-gated
+  // (see canConfirmOnRequest); this second check is defence-in-depth so a
+  // future caller / devtools-forged click can't sneak past the same rule.
+  // Backend authorisation still owns the real enforcement.
+  const openConfirmModal = () => {
+    if (isOnRequestPending && !canConfirmOnRequest) {
+      toast.error(
+        "Only admin or super-admin can confirm an On Request booking.",
+      );
+      return;
+    }
+    setShowConfirmModal(true);
+  };
 
   // Does the booking carry a "deferred credit" marker on voucherGenerated
   // (Cases 3, 5, or 6 — see DEFERRED_CREDIT_VOUCHER_TOKENS above)? Only
@@ -1366,9 +1387,17 @@ export default function BookingDetailedView() {
   const bookingHistory = (() => {
     if (!booking) return [];
     const events = [];
+    // Each event carries the resulting booking status right after that
+    // action ran — surfaced in the new "Status" column so the History
+    // modal reads as a lifecycle timeline (Confirmed → ReConfirmed →
+    // Cancelled) instead of a bare action log. "On Request" bookings keep
+    // their prefix so the created row shows "On Request" (not the generic
+    // engine "Confirmed" the backend actually stamps in that case).
+    const createdRowStatus = isOnRequestRoom ? "On Request" : "Confirmed";
     if (booking.bookingDate) {
       events.push({
         action: "Booking Created",
+        status: createdRowStatus,
         at: booking.bookingDate,
         by: creatorLabel,
         // Captured at create time only — later lifecycle rows show "-".
@@ -1379,6 +1408,10 @@ export default function BookingDetailedView() {
     if (booking.confirmedDate) {
       events.push({
         action: "Booking Confirmed",
+        // For an On Request row the "Confirmed" action is the step-1
+        // supplier acknowledgement, so the status label reads
+        // "On Request/Confirmed" to preserve the on-request origin.
+        status: isOnRequestRoom ? "On Request/Confirmed" : "Confirmed",
         at: booking.confirmedDate,
         by: booking.confirmedBy || "-",
         // Per-action audit captured on the CONFIRM PATCH. Legacy rows
@@ -1390,6 +1423,9 @@ export default function BookingDetailedView() {
     if (booking.reconfirmedDate) {
       events.push({
         action: "Booking Reconfirmed",
+        status: isOnRequestRoom
+          ? "On Request/Confirmed/Reconfirmed"
+          : "ReConfirmed",
         at: booking.reconfirmedDate,
         by: booking.reconfirmedBy || "-",
         location: booking.reconfirmedLocation,
@@ -1399,6 +1435,7 @@ export default function BookingDetailedView() {
     if (booking.cancelledAt) {
       events.push({
         action: "Booking Cancelled",
+        status: "Cancelled",
         at: booking.cancelledAt,
         by: booking.cancelledBy || "-",
         // Per-action audit captured on the DELETE. Legacy rows cancelled
@@ -2550,17 +2587,23 @@ export default function BookingDetailedView() {
                       </button>
                     )}
 
-                    {!showsFinalDocs && !isCancelled && (
-                      <button
-                        style={isOnRequestPending ? BTN_SUCCESS : BTN_TEAL}
-                        onClick={openConfirmModal}
-                      >
-                        {/* An "On Request" booking hasn't been confirmed yet,
-                            so the first action is CONFIRM (not RECONFIRM). It
-                            reuses the exact same confirmation flow/modal. */}
-                        {isOnRequestPending ? "CONFIRM" : "RECONFIRM"}
-                      </button>
-                    )}
+                    {!showsFinalDocs &&
+                      !isCancelled &&
+                      !(isOnRequestPending && !canConfirmOnRequest) && (
+                        <button
+                          style={isOnRequestPending ? BTN_SUCCESS : BTN_TEAL}
+                          onClick={openConfirmModal}
+                        >
+                          {/* An "On Request" booking hasn't been confirmed
+                              yet, so the first action is CONFIRM (not
+                              RECONFIRM). It reuses the exact same
+                              confirmation flow/modal. Agents don't get to
+                              see this action for On Request bookings —
+                              only admin / super-admin do; see
+                              canConfirmOnRequest above. */}
+                          {isOnRequestPending ? "CONFIRM" : "RECONFIRM"}
+                        </button>
+                      )}
 
                     {/* Proforma Voucher / Invoice are not available while the
                         booking is still "On Request" (not yet confirmed). They
@@ -2839,12 +2882,13 @@ export default function BookingDetailedView() {
                             <tr style={{ backgroundColor: "#f1f5f9" }}>
                               {[
                                 { label: "S/N", width: "5%" },
-                                { label: "Action", width: "17%" },
-                                { label: "Performed By", icon: FaUserAlt, width: "13%" },
-                                { label: "Location", icon: FaMapMarkerAlt, width: "30%" },
-                                { label: "IP Address", icon: FaNetworkWired, width: "14%" },
+                                { label: "Action", width: "15%" },
+                                { label: "Status", width: "12%" },
+                                { label: "Performed By", icon: FaUserAlt, width: "11%" },
+                                { label: "Location", icon: FaMapMarkerAlt, width: "24%" },
+                                { label: "IP Address", icon: FaNetworkWired, width: "13%" },
                                 { label: "Date", icon: FaCalendarAlt, width: "11%" },
-                                { label: "Time", icon: FaClock, width: "10%" },
+                                { label: "Time", icon: FaClock, width: "9%" },
                               ].map((col) => (
                                 <th
                                   key={col.label}
@@ -2910,6 +2954,44 @@ export default function BookingDetailedView() {
                                       <ActionIcon size={10} style={{ flexShrink: 0 }} />
                                       {ev.action}
                                     </span>
+                                  </td>
+                                  {/* Status column — the resulting booking
+                                      state right after this action. Colour-
+                                      coded so a timeline glance conveys the
+                                      progression: green for confirmed /
+                                      reconfirmed / on-request-confirmed,
+                                      orange for the original on-request
+                                      state, red for cancelled, slate for
+                                      anything unrecognised. */}
+                                  <td
+                                    style={{
+                                      padding: "10px 14px",
+                                      borderBottom: "1px solid #eef2f6",
+                                    }}
+                                  >
+                                    {(() => {
+                                      const raw = String(ev.status || "").trim();
+                                      if (!raw) return <span style={{ color: "#94a3b8" }}>-</span>;
+                                      const lower = raw.toLowerCase();
+                                      const color = lower.includes("cancel")
+                                        ? "#dc2626"
+                                        : lower === "on request"
+                                          ? "#d97706"
+                                          : "#16a34a";
+                                      return (
+                                        <span
+                                          style={{
+                                            color,
+                                            fontWeight: 600,
+                                            fontSize: "0.78rem",
+                                            whiteSpace: "normal",
+                                            wordBreak: "break-word",
+                                          }}
+                                        >
+                                          {raw}
+                                        </span>
+                                      );
+                                    })()}
                                   </td>
                                   <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>
                                     {ev.by || "-"}

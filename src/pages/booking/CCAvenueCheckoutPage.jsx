@@ -8,25 +8,33 @@ import axiosInstance from "../../components/AxiosInstance";
 
 // Real CC Avenue redirect step (Non-Seamless billing page integration).
 // Reached from HotelBookingPage's, BookingDetailedView's,
-// LastMinuteBookingForm's, or LongStayBookingPage's "Select Payment
-// Gateway" modal when CC Avenue is chosen. Modes, driven by what the caller
-// put in location.state:
+// LastMinuteBookingForm's, LongStayBookingPage's, PaxInformation's, or
+// PackageBookingDetailView's "Select Payment Gateway" modal when CC Avenue
+// is chosen. Modes, driven by what the caller put in location.state:
 //   - CREATE  (bookingPayload set, no flowType) — HotelBookingPage.jsx,
 //     insufficient credit at booking time. Sends the FULL booking payload
 //     so the backend can compute the payable amount server-side and persist
 //     it for after-payment recovery. This is the legacy/default shape —
 //     kept flowType-less for backward compatibility.
-//   - RECONFIRM (reconfirmBookingId set) — BookingDetailedView.jsx, paying
-//     off an ALREADY-CREATED booking that's pending reconfirmation. Only the
-//     existing bookingId travels — the backend already has everything else
-//     it needs (the booking's own stored total, agent, etc).
+//   - RECONFIRM (reconfirmBookingId set, no explicit flowType) —
+//     BookingDetailedView.jsx (hotel), paying off an ALREADY-CREATED hotel
+//     booking pending reconfirmation. Only the existing bookingId travels —
+//     the backend already has everything else it needs (the booking's own
+//     stored total, agent, etc). Legacy shape: reconfirmBookingId alone
+//     implies flowType="RECONFIRM" so no existing hotel caller has to change.
+//   - PACKAGE_RECONFIRM (reconfirmBookingId + flowType="PACKAGE_RECONFIRM")
+//     — PackageBookingDetailView.jsx, the package equivalent of the hotel
+//     reconfirm above. Same wire shape, different backend service
+//     (initiatePackageReconfirm reads booking.totalPrice from
+//     PackageBooking, not HotelBooking).
 //   - Any other CREATE-shaped flow (flowType + bookingPayload set) — e.g.
-//     LASTMINUTE_CREATE (LastMinuteBookingForm.jsx) or LONGSTAY_CREATE
-//     (LongStayBookingPage.jsx). Same idea as CREATE, but the backend
-//     derives the payable amount from that flow's own pricing rather than
-//     summing a per-room `rate` field — flowType is passed straight through
-//     so /initiate knows which one. Adding a new create-flow page needs no
-//     changes here — just set flowType + bookingPayload in location.state.
+//     LASTMINUTE_CREATE (LastMinuteBookingForm.jsx), LONGSTAY_CREATE
+//     (LongStayBookingPage.jsx), or PACKAGE_CREATE (PaxInformation.jsx).
+//     Same idea as CREATE, but the backend derives the payable amount from
+//     that flow's own pricing rather than summing a per-room `rate` field
+//     — flowType is passed straight through so /initiate knows which one.
+//     Adding a new create-flow page needs no changes here — just set
+//     flowType + bookingPayload in location.state.
 // Either way this page then auto-submits a hidden form POST to CC Avenue's
 // hosted payment page — the browser navigates away entirely, completes
 // payment on CC Avenue's domain, and CC Avenue posts the result straight
@@ -74,13 +82,25 @@ export default function CCAvenueCheckoutPage() {
             // stored total, or that create-flow's own pricing) and IGNORES
             // any client-supplied amount — kept off the wire deliberately so
             // a tampered client can't influence the charge.
-            ...(reconfirmBookingId
-              ? {
-                  flowType: "RECONFIRM",
-                  existingBookingId: Number(reconfirmBookingId),
-                }
-              : flowType
-                ? { flowType, bookingPayload }
+            //
+            // Precedence: an explicit flowType always wins over the legacy
+            // "reconfirmBookingId → RECONFIRM" shortcut, so a caller that
+            // passes BOTH (e.g. PACKAGE_RECONFIRM with the existing package
+            // bookingId) reaches the right backend arm. When flowType is
+            // absent, reconfirmBookingId still defaults to RECONFIRM (hotel)
+            // — every legacy hotel-detail caller keeps working unchanged.
+            ...(flowType
+              ? reconfirmBookingId
+                ? {
+                    flowType,
+                    existingBookingId: Number(reconfirmBookingId),
+                  }
+                : { flowType, bookingPayload }
+              : reconfirmBookingId
+                ? {
+                    flowType: "RECONFIRM",
+                    existingBookingId: Number(reconfirmBookingId),
+                  }
                 : { bookingPayload }),
           },
         );

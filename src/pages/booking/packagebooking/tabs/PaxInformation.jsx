@@ -8,7 +8,12 @@ import React, {
 import { Row, Col, Form, Modal, Button, Table } from "react-bootstrap";
 import axiosInstance from "../../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+// HotelBookingPage's stylesheet is the source of truth for the .pg-option /
+// .pg-option-selected / .pg-option-radio / .pg-option-logo classes used by
+// the "Select Payment Gateway" modal below — importing here keeps the modal
+// visually identical to Hotel/LastMinute/LongStay flows without a copy.
+import "../../../../styles/HotelBookingPage.css";
 import {
   FaCheckCircle,
   FaClipboardList,
@@ -20,6 +25,8 @@ import {
   FaTimesCircle,
   FaInfoCircle,
   FaCreditCard,
+  FaHotel,
+  FaMoon,
 } from "react-icons/fa";
 
 // Payment mode options — mirrors the PAYMENT_MODES list in PackageBooking.jsx
@@ -28,6 +35,15 @@ import {
 const PAYMENT_MODES = [
   { value: "CREDIT", label: "Credit Limit" },
   { value: "CARD", label: "Card" },
+];
+
+// Gateway options for the insufficient-credit → online-payment picker.
+// Mirrors the PAYMENT_GATEWAYS list on HotelBookingPage / LastMinute /
+// LongStay — CC Avenue is the only real gateway wired to the backend today
+// (see project_ccavenue_payment_integration memory); the array is kept as a
+// list so adding more later needs no modal wiring changes.
+const PAYMENT_GATEWAYS = [
+  { id: "ccavenue", name: "CC Avenue", desc: "Cards, UPI, Net Banking" },
 ];
 
 // Reverse-geocode browser coordinates to a readable address for the Booking
@@ -95,9 +111,74 @@ const PaxInformation = forwardRef(({
   parentBookingCode,
 }, ref) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [showSummary, setShowSummary] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [tourismDirham, setTourismDirham] = useState("");
+
+  // ── Online-payment / CC Avenue gateway state ─────────────────────────
+  // pendingPayload survives across the two-step "Order Summary → gateway
+  // picker" flow so the Pay button has the finalised booking payload without
+  // rebuilding it. showInsufficientModal / showNoPaymentPathModal /
+  // showGatewayModal and the associated fields mirror HotelBookingPage /
+  // LastMinuteBookingForm / LongStayBookingPage — same UX, same wording, so
+  // operators see the same "Online Payment Required" popup no matter which
+  // flow they're in. agentCardPaymentEnabled gates whether the CC Avenue
+  // (Card) option is even offered — a Cash-only agent gets the "Booking
+  // Cannot Be Completed" popup instead. insufficientAmount is the payable
+  // total (base + Tourism Dirham) — same number the backend charges CC
+  // Avenue and the same shown in Order Summary as "Payable".
+  const [pendingPayload, setPendingPayload] = useState(null);
+  const [showInsufficientModal, setShowInsufficientModal] = useState(false);
+  const [showNoPaymentPathModal, setShowNoPaymentPathModal] = useState(false);
+  const [showGatewayModal, setShowGatewayModal] = useState(false);
+  const [selectedGateway, setSelectedGateway] = useState("");
+  const [insufficientAmount, setInsufficientAmount] = useState(0);
+  const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
+  // Live snapshot of the agent's available credit — powers the Order
+  // Summary modal's derived Payment Mode label so it can honestly show
+  // "Online Payment (CC Avenue)" the moment credit is short, instead of
+  // echoing the selected CREDIT / CARD picker and only correcting itself
+  // after Confirm. Fetched from /api/agent-credit-limit/agent/{id} (same
+  // endpoint AgentBalanceDisplay uses), taking the same effective figure
+  // — regular available + any active Temporary Credit Limit — so the
+  // number the modal reasons about matches every other credit-gate spot.
+  const [agentAvailableBalance, setAgentAvailableBalance] = useState(null);
+  useEffect(() => {
+    const aId = searchParams?.agentId;
+    if (!aId) {
+      setAgentAvailableBalance(null);
+      setAgentCardPaymentEnabled(false);
+      return;
+    }
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/agent-credit-limit/agent/${aId}`)
+      .then((res) => {
+        if (cancelled) return;
+        setAgentAvailableBalance(
+          res?.data?.effectiveAvailableCreditLimit ??
+            res?.data?.availableCreditLimit ??
+            null,
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setAgentAvailableBalance(null);
+      });
+    axiosInstance
+      .get(`/api/agent/${aId}`)
+      .then((res) => {
+        if (!cancelled) {
+          setAgentCardPaymentEnabled(!!res?.data?.cardPaymentEnabled);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAgentCardPaymentEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams?.agentId]);
 
   // Edit mode: the parent loads the saved booking asynchronously, so
   // bookingData.tourismDirham may arrive after this component mounts. Sync it
@@ -453,6 +534,65 @@ const PaxInformation = forwardRef(({
       };
 
       console.log("Final Booking Payload:", payload);
+
+      // ── Payment-gate pre-check (mirrors HotelBookingPage.confirmBooking) ──
+      // Only runs on CREATE; amendments (PUT) keep the existing behaviour
+      // — no re-charge, no gateway modal. If the agent's available credit is
+      // short of `payableTotal` (base + Tourism Dirham — same number Order
+      // Summary shows as "Payable" and the backend stores as booking.
+      // total_price), we route through the online-payment picker instead of
+      // letting the /book call throw "Agent credit limit is insufficient…".
+      // Fails OPEN: any credit-check request error just proceeds to /book,
+      // which still has its own IllegalArgumentException backstop, so the
+      // operator is never trapped.
+      if (!editingBookingId && payload.agentId) {
+        const payableTotal =
+          Number(payload.totalPrice || 0) + Number(payload.tourismDirham || 0);
+        if (payableTotal > 0) {
+          try {
+            const [credit, agentResp] = await Promise.all([
+              axiosInstance.get(
+                `/api/agent-credit-limit/check-sufficient-credit?agentId=${payload.agentId}&requiredAmount=${payableTotal}`,
+              ),
+              axiosInstance
+                .get(`/api/agent/${payload.agentId}`)
+                .catch(() => ({ data: { cardPaymentEnabled: false } })),
+            ]);
+            if (credit.data === false) {
+              // Hold Package and Pay Later intentionally bypasses the gateway
+              // — the package flow's backend deduction is gated on
+              // "RECONFIRMED" ("Book Package and Pay Now") only (see
+              // PackageBookingServiceImpl line 1370), so this branch will
+              // still succeed under the /book call regardless of credit.
+              const isVoucherLater =
+                bookingData?.programme?.bookingConfirmation ===
+                "Book Now & Voucher later";
+              if (!isVoucherLater) {
+                setPendingPayload(payload);
+                setInsufficientAmount(payableTotal);
+                setAgentCardPaymentEnabled(
+                  !!agentResp?.data?.cardPaymentEnabled,
+                );
+                setShowSummary(false);
+                setIsSubmitting(false);
+                if (!agentResp?.data?.cardPaymentEnabled) {
+                  setShowNoPaymentPathModal(true);
+                  return;
+                }
+                setShowInsufficientModal(true);
+                return;
+              }
+            }
+          } catch (creditErr) {
+            // Fail open — /book still has its server-side backstop. Only log
+            // so the operator isn't blocked by a transient network hiccup.
+            console.warn(
+              "Agent credit pre-check failed — proceeding to /book anyway:",
+              creditErr,
+            );
+          }
+        }
+      }
 
       // Amendment path uses PUT against /booking/{id}; create path stays
       // on POST /book. Both return { status: "success", ... } on OK.
@@ -976,12 +1116,56 @@ const PaxInformation = forwardRef(({
                 ? Number(tourismDirham)
                 : 0;
             const payableTotal = Number(totalPrice || 0) + tdNum;
-            const paymentModeLabel = (() => {
+            // Derived Payment Mode label + badge colour for the Order
+            // Summary — mirrors what the row will ACTUALLY be paid as, not
+            // the raw picker value. Matches the detail view's
+            // paymentStatus derivation so the operator sees the same
+            // wording across the whole flow.
+            //
+            //   • "Hold Package and Pay Later"    → "Not Paid — Pending
+            //     Reconfirm" (amber)  — nothing is being charged now; the
+            //     Reconfirm step on the detail page will handle payment.
+            //   • Insufficient credit + card gate → "Online Payment (CC
+            //     Avenue)" (blue) — after Confirm the operator lands on
+            //     the /payment/ccavenue-redirect flow, so previewing that
+            //     here removes the surprise.
+            //   • Insufficient credit + no card   → "Not Payable" (red) —
+            //     the Confirm click will open "Booking Cannot Be Completed"
+            //     rather than proceed to /book.
+            //   • Sufficient credit               → the picked mode (green).
+            const isVoucherLater =
+              bookingData?.programme?.bookingConfirmation ===
+              "Book Now & Voucher later";
+            const availableForCheck = Number(agentAvailableBalance || 0);
+            const insufficient =
+              agentAvailableBalance !== null &&
+              availableForCheck < payableTotal;
+            const paymentModeInfo = (() => {
               const m = bookingData?.programme?.modeOfPayment;
-              if (m === "CREDIT") return "Credit Limit";
-              if (m === "CARD") return "Card";
-              return m || "—";
+              const pickedLabel =
+                m === "CREDIT" ? "Credit Limit" : m === "CARD" ? "Card" : m || "—";
+              if (isVoucherLater) {
+                return {
+                  label: "Not Paid — Pending Reconfirm",
+                  badgeClass: "bg-warning text-dark",
+                };
+              }
+              if (insufficient) {
+                if (agentCardPaymentEnabled) {
+                  return {
+                    label: "Online Payment (CC Avenue)",
+                    badgeClass: "bg-info text-dark",
+                  };
+                }
+                return {
+                  label: "Not Payable — Card disabled",
+                  badgeClass: "bg-danger",
+                };
+              }
+              return { label: pickedLabel, badgeClass: "bg-success" };
             })();
+            const paymentModeLabel = paymentModeInfo.label;
+            const paymentModeBadgeClass = paymentModeInfo.badgeClass;
             const leadName = primary
               ? [primary.title, primary.firstName, primary.middleName, primary.lastName]
                   .filter(Boolean)
@@ -1010,6 +1194,23 @@ const PaxInformation = forwardRef(({
                 Number(value) >= 100
               );
             })();
+            const selectedHotel =
+              Array.isArray(bookingData?.selections?.selectedHotels) &&
+              bookingData.selections.selectedHotels.length > 0
+                ? bookingData.selections.selectedHotels[0]
+                : null;
+            const selectedHotelImage = (() => {
+              if (!selectedHotel?.image) return "";
+              if (selectedHotel.image.startsWith("http"))
+                return selectedHotel.image;
+              const base = process.env.REACT_APP_API_BASE_URL || "";
+              const filename = selectedHotel.image.includes("\\")
+                ? selectedHotel.image.split("\\").pop()
+                : selectedHotel.image.split("/").pop();
+              return filename
+                ? `${base}/api/files/${filename}`
+                : `${base}/api/files/${selectedHotel.image}`;
+            })();
             return (
               <div className="border rounded-3 bg-white shadow-sm p-2">
                 <div className="mb-2">
@@ -1026,6 +1227,109 @@ const PaxInformation = forwardRef(({
                     )}
                   </p>
                 </div>
+
+                {/* Selected Hotel — mirrors the sidebar Booking Summary block
+                    on PackageCheckout so the operator sees the same hotel
+                    snapshot before hitting Confirm. Falls back to a muted
+                    "no hotel selected" note when the user proceeded without
+                    one (allowed via the HotelsTab acknowledgement flow). */}
+                {selectedHotel ? (
+                  <div
+                    className="mb-2 p-2 rounded border d-flex align-items-start"
+                    style={{
+                      background: "#f8fafc",
+                      borderColor: "#dbeafe",
+                      gap: "10px",
+                    }}
+                  >
+                    {selectedHotelImage && (
+                      <img
+                        src={selectedHotelImage}
+                        alt={selectedHotel.hotelName}
+                        onError={(e) => {
+                          e.target.style.display = "none";
+                        }}
+                        style={{
+                          width: 56,
+                          height: 56,
+                          objectFit: "cover",
+                          borderRadius: 8,
+                          border: "1px solid #e2e8f0",
+                          flexShrink: 0,
+                        }}
+                      />
+                    )}
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div
+                        className="fw-bold d-flex align-items-center"
+                        style={{ color: "#1d4ed8", fontSize: "0.72rem" }}
+                      >
+                        <FaHotel className="me-1" />
+                        SELECTED HOTEL
+                      </div>
+                      <div
+                        className="fw-bold text-dark"
+                        style={{ fontSize: "0.9rem", lineHeight: 1.25 }}
+                      >
+                        {selectedHotel.hotelName || "Selected hotel"}
+                      </div>
+                      <div
+                        className="text-muted d-flex flex-wrap"
+                        style={{ fontSize: "0.78rem", gap: "10px" }}
+                      >
+                        {selectedHotel.stateName && (
+                          <span className="d-inline-flex align-items-center">
+                            <FaMapMarkerAlt className="me-1" />
+                            {selectedHotel.stateName}
+                          </span>
+                        )}
+                        {selectedHotel.noOfnight != null && (
+                          <span className="d-inline-flex align-items-center">
+                            <FaMoon className="me-1" />
+                            {selectedHotel.noOfnight} Night
+                            {selectedHotel.noOfnight === 1 ? "" : "s"}
+                          </span>
+                        )}
+                        {/* {Number(selectedHotel.totalRateWithMarkup) > 0 && (
+                          <span
+                            className="fw-bold"
+                            style={{ color: "#16a34a" }}
+                          >
+                            AED{" "}
+                            {Number(
+                              selectedHotel.totalRateWithMarkup,
+                            ).toLocaleString("en-US", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </span>
+                        )} */}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className="mb-2 p-2 rounded border"
+                    style={{
+                      background: "#fff7ed",
+                      borderColor: "#fed7aa",
+                    }}
+                  >
+                    <div
+                      className="fw-bold d-flex align-items-center mb-1"
+                      style={{ color: "#b45309", fontSize: "0.72rem" }}
+                    >
+                      <FaHotel className="me-1" />
+                      SELECTED HOTEL
+                    </div>
+                    <div
+                      className="small"
+                      style={{ color: "#7c2d12" }}
+                    >
+                      No hotel selected for this package.
+                    </div>
+                  </div>
+                )}
 
                 <hr className="my-2" />
 
@@ -1136,7 +1440,7 @@ const PaxInformation = forwardRef(({
                       <strong>Payment Mode:</strong>
                       <br />
                       <span
-                        className="badge bg-success"
+                        className={`badge ${paymentModeBadgeClass}`}
                         style={{ fontSize: "0.75rem" }}
                       >
                         {paymentModeLabel}
@@ -1244,6 +1548,210 @@ const PaxInformation = forwardRef(({
                 {editingBookingId ? "Save Amendment" : "Confirm"}
               </>
             )}
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ─── Booking Cannot Be Completed (no viable payment path) ───
+          Shown when the agent has no available credit AND Card payment is
+          disabled on their profile. Mirrors the same-titled popup on
+          HotelBookingPage / LongStayBookingPage / LastMinuteBookingForm so
+          the wording stays consistent across flows. */}
+      <Modal
+        show={showNoPaymentPathModal}
+        onHide={() => setShowNoPaymentPathModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Booking Cannot Be Completed</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="text-center py-4">
+          <p className="mb-2 text-dark">
+            Sorry — this booking can't be completed because the agent has no
+            available credit and{" "}
+            <strong>Card payment is not enabled</strong> for this account.
+          </p>
+          <p className="mb-0 text-muted small">
+            Please top up the agent's credit limit, or ask an administrator
+            to enable Card payment on the agent's profile, then try again.
+          </p>
+          <div className="mt-3">
+            <div className="text-muted small">Payable amount</div>
+            <div className="fs-4 fw-bold text-dark">
+              AED{" "}
+              {Number(insufficientAmount || 0).toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </div>
+          </div>
+        </Modal.Body>
+        <Modal.Footer className="justify-content-center border-0">
+          <Button
+            variant="secondary"
+            onClick={() => setShowNoPaymentPathModal(false)}
+          >
+            OK
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ─── Insufficient Credit → online payment required ───
+          Bridge between the credit-check failure and the gateway picker.
+          Same UX as the other create flows: red Cancel bails out, green Pay
+          opens the "Select Payment Gateway" modal below. */}
+      <Modal
+        show={showInsufficientModal}
+        onHide={() => setShowInsufficientModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Online Payment Required</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="text-center py-4">
+          <p className="mb-2 text-muted">
+            The agent's available credit is insufficient for this booking.
+            You need to proceed with <strong>online payment</strong>.
+          </p>
+          <div className="mt-3">
+            <div className="text-muted small">Payable amount</div>
+            <div className="fs-4 fw-bold text-dark">
+              AED{" "}
+              {Number(insufficientAmount || 0).toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
+            </div>
+          </div>
+        </Modal.Body>
+        <Modal.Footer className="justify-content-center border-0">
+          <Button
+            variant="danger"
+            onClick={() => setShowInsufficientModal(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="success"
+            onClick={() => {
+              setShowInsufficientModal(false);
+              setSelectedGateway("");
+              setShowGatewayModal(true);
+            }}
+          >
+            Pay
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ─── Select Payment Gateway ───
+          Same pg-option card-style radios as HotelBookingPage /
+          LongStayBookingPage / LastMinuteBookingForm (styles come from the
+          top-of-file HotelBookingPage.css import). On Proceed, CC Avenue
+          navigates to /payment/ccavenue-redirect with flowType=PACKAGE_CREATE
+          — CCAvenueCheckoutPage forwards that straight through to
+          /initiate, so the backend dispatcher lands in
+          initiatePackageCreate(). The browser then leaves for CC Avenue's
+          hosted billing page and returns to /new-booking/package-checkout/
+          {searchParams?.packageId} with ?ccavenueOrderId=&ccavenueStatus=,
+          where PackageCheckout's resume useEffect calls
+          /finalize-package/{orderId}. */}
+      <Modal
+        show={showGatewayModal}
+        onHide={() => setShowGatewayModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Select Payment Gateway</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted small mb-3">
+            Choose a gateway to enter your card details.
+          </p>
+          <div className="pg-option-list">
+            {PAYMENT_GATEWAYS.map((g) => {
+              const isSelected = selectedGateway === g.id;
+              return (
+                <label
+                  key={g.id}
+                  htmlFor={`pkg-gw-${g.id}`}
+                  className={`pg-option${
+                    isSelected ? " pg-option-selected" : ""
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="pkg-payment-gateway"
+                    id={`pkg-gw-${g.id}`}
+                    className="pg-option-input"
+                    checked={isSelected}
+                    onChange={() => setSelectedGateway(g.id)}
+                  />
+                  <span className="pg-option-radio" aria-hidden="true" />
+                  {g.id === "ccavenue" && (
+                    <img
+                      src={`${process.env.PUBLIC_URL}/ccavanue.png`}
+                      alt="CC Avenue"
+                      className="pg-option-logo"
+                    />
+                  )}
+                  <span className="pg-option-text">
+                    <span className="pg-option-name">{g.name}</span>
+                    <span className="pg-option-desc">{g.desc}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </Modal.Body>
+        <Modal.Footer className="border-0">
+          <Button
+            variant="secondary"
+            onClick={() => setShowGatewayModal(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="success"
+            disabled={!selectedGateway || !pendingPayload}
+            onClick={() => {
+              setShowGatewayModal(false);
+              if (!pendingPayload) return;
+              // paymentMode maps to PackageBookingRequestDTO.modeOfPayment
+              // on this flow (there's no separate paymentMode field). Server
+              // pins this back to "ONLINE" in finalizePackageCreate anyway,
+              // so this is belt-and-braces for the stored payload.
+              const onlinePayload = {
+                ...pendingPayload,
+                modeOfPayment: "ONLINE",
+              };
+              if (selectedGateway === "ccavenue") {
+                const leadName = [
+                  onlinePayload?.contactInfo?.name,
+                ]
+                  .filter(Boolean)
+                  .join(" ")
+                  .trim();
+                const returnTo =
+                  `/new-booking/package-checkout/${searchParams?.packageId || ""}`;
+                navigate("/payment/ccavenue-redirect", {
+                  state: {
+                    flowType: "PACKAGE_CREATE",
+                    bookingPayload: onlinePayload,
+                    billingName: leadName,
+                    amountLabel: `AED ${Number(
+                      insufficientAmount || 0,
+                    ).toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}`,
+                    returnTo,
+                  },
+                });
+              }
+            }}
+          >
+            Proceed to Pay
           </Button>
         </Modal.Footer>
       </Modal>

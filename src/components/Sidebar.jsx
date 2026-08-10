@@ -538,10 +538,10 @@ export default function Sidebar() {
         },
 
          // Flight flow 
-        {
-          label: "Flight",
-          to: "/new-booking/flight",
-        },
+        // {
+        //   label: "Flight",
+        //   to: "/new-booking/flight",
+        // },
       ],
     },
     {
@@ -570,7 +570,7 @@ export default function Sidebar() {
         // Dedicated Religious booking list — same page wrapped with
         // religiousOnly so only isReligiousBooking=true rows are shown.
         { code: "bl_religious",   label: "Religious",     to: "/booking-details/religious-booking-list" },
-        { code: "bl_flight",   label: "Flight",     to: "/booking-details/flight-booking-list" },
+        // { code: "bl_flight",   label: "Flight",     to: "/booking-details/flight-booking-list" },
 
         { code: "bl_last_minute", label: "Last Minute",   to: "/booking-details/last-minute-booking-list" },
         { code: "bl_long_stay",   label: "Long Stay",     to: "/booking-details/long-stay-booking-list" },

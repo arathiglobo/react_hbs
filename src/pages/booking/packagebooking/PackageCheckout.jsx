@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { Row, Col, Card, Modal, Button, Form } from "react-bootstrap";
+import { Row, Col, Card, Modal, Button, Form, Spinner } from "react-bootstrap";
+import axiosInstance from "../../../components/AxiosInstance";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
+import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import { toast } from "react-hot-toast";
 import {
   FaCalendarAlt,
@@ -13,6 +15,8 @@ import {
   FaFileContract,
   FaCheckCircle,
   FaHotel,
+  FaMapMarkerAlt,
+  FaMoon,
 } from "react-icons/fa";
 import PaxInformation from "./tabs/PaxInformation";
 import "../../../styles/PackageBooking_Stepper.css";
@@ -26,6 +30,73 @@ import "../../../styles/HotelBookingPage.css";
 // writes it just before navigating here (see setCurrentStep-turned-navigate
 // handler), and this page reads it if location.state was dropped by a refresh.
 const SESSION_KEY = (id) => `packageCheckoutDraft:${id}`;
+
+// Full-viewport blocking overlay shown while the backend is creating the
+// paid-for booking after a successful CC Avenue redirect. Structurally
+// mirrors the HotelBookingPage / LongStayBookingPage post-payment overlays
+// so the "please don't close this tab" wording stays consistent. Combined
+// with the beforeunload listener above, this makes it hard for the operator
+// to nuke the finalize call mid-flight.
+const CCAvenueFinalizingOverlay = () => (
+  <div
+    role="alertdialog"
+    aria-modal="true"
+    aria-live="assertive"
+    style={{
+      position: "fixed",
+      inset: 0,
+      zIndex: 20000,
+      background: "rgba(15, 23, 42, 0.75)",
+      backdropFilter: "blur(2px)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "1rem",
+    }}
+  >
+    <div
+      style={{
+        background: "#fff",
+        borderRadius: 12,
+        padding: "2rem 1.75rem",
+        maxWidth: 440,
+        width: "100%",
+        textAlign: "center",
+        boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+      }}
+    >
+      <Spinner
+        animation="border"
+        variant="success"
+        role="status"
+        style={{ width: 48, height: 48, marginBottom: 16 }}
+      />
+      <h5 className="fw-bold mb-2" style={{ color: "#0f172a" }}>
+        Payment successful — creating your booking
+      </h5>
+      <p className="text-muted mb-3" style={{ fontSize: 14 }}>
+        Please{" "}
+        <strong>
+          do not close this window, refresh the page, or press the back
+          button
+        </strong>{" "}
+        until you see the confirmation.
+      </p>
+      <div
+        className="small"
+        style={{
+          color: "#b45309",
+          background: "#fef3c7",
+          border: "1px solid #fde68a",
+          borderRadius: 8,
+          padding: "8px 12px",
+        }}
+      >
+        This usually takes just a few seconds.
+      </div>
+    </div>
+  </div>
+);
 
 const PackageCheckout = () => {
   const { id } = useParams();
@@ -58,12 +129,111 @@ const PackageCheckout = () => {
     return null;
   });
 
+  // Whether the browser landed here from a real CC Avenue redirect. The
+  // resume useEffect below picks up ?ccavenueOrderId=&ccavenueStatus= and
+  // finalises the booking server-side; while that's in flight the "please
+  // complete Package Details first" guard MUST NOT redirect the operator
+  // away — the draft may have been lost across the cross-domain hop but the
+  // backend still owns the payload (it was persisted at /initiate).
+  const hasCCAvenueResume = (() => {
+    try {
+      return !!new URLSearchParams(location.search).get("ccavenueOrderId");
+    } catch {
+      return false;
+    }
+  })();
+
   useEffect(() => {
-    if (!checkoutState && id) {
+    if (!checkoutState && id && !hasCCAvenueResume) {
       toast.error("Please complete Package Details first.");
       navigate(`/new-booking/package-booking/${id}`, { replace: true });
     }
-  }, [checkoutState, id, navigate]);
+  }, [checkoutState, id, navigate, hasCCAvenueResume]);
+
+  // ── CC Avenue post-payment resume ──
+  // CC Avenue's redirect is a real cross-domain browser navigation, so
+  // React Router `state` doesn't survive it. The backend appends
+  // ?ccavenueOrderId=&ccavenueStatus= to this page's URL when it 302s the
+  // browser back — we verify the payment status server-side (so a tampered
+  // URL can't force a booking through), then call finalize-package which
+  // replays the payload persisted at /initiate through the same
+  // PackageBookingService.bookPackage the plain /book endpoint uses. On
+  // success we land on the package booking list, matching every other
+  // successful package-create outcome.
+  const [isFinalizingPayment, setIsFinalizingPayment] = useState(false);
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const ccavenueOrderId = searchParams.get("ccavenueOrderId");
+    const ccavenueStatus = searchParams.get("ccavenueStatus");
+    if (!ccavenueOrderId) return;
+
+    // Strip the resume query from history right away so a remount / reload
+    // can't re-trigger this effect (and re-POST /finalize-package).
+    navigate(location.pathname, { replace: true, state: {} });
+
+    (async () => {
+      if (ccavenueStatus !== "success") {
+        toast.error("Payment was not completed. Please try again.");
+        return;
+      }
+      try {
+        setIsFinalizingPayment(true);
+        const statusResponse = await axiosInstance.get(
+          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+        );
+        if (statusResponse.data?.status !== "SUCCESS") {
+          toast.error(
+            statusResponse.data?.statusMessage ||
+              "Payment was not successful. Please try again.",
+          );
+          return;
+        }
+        const res = await axiosInstance.post(
+          `/api/payment/ccavenue/finalize-package/${ccavenueOrderId}`,
+        );
+        const body = res?.data || {};
+        if (body.bookingId) {
+          toast.success(body.message || "Booking confirmed successfully!");
+          try {
+            localStorage.removeItem(SESSION_KEY(id));
+          } catch {
+            /* ignore */
+          }
+          navigate("/booking-details/package-booking-list");
+        } else {
+          toast.error(
+            body.message ||
+              "Payment succeeded but booking could not be created. Please contact support with your payment reference.",
+          );
+        }
+      } catch (err) {
+        const beMsg =
+          err?.response?.data?.message || err?.message || null;
+        console.error("Post-payment package finalize failed:", err);
+        toast.error(
+          beMsg ||
+            "Payment succeeded but booking could not be created. Please contact support with your payment reference.",
+        );
+      } finally {
+        setIsFinalizingPayment(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
+
+  // Warn on close / navigate-away while the paid-for booking is still being
+  // created server-side. Only attached during that window so it never fires
+  // on the normal flow. Mirrors HotelBookingPage's beforeunload guard.
+  useEffect(() => {
+    if (!isFinalizingPayment) return;
+    const beforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [isFinalizingPayment]);
 
   const [bookingData, setBookingData] = useState(
     checkoutState?.bookingData || null,
@@ -112,10 +282,14 @@ const PackageCheckout = () => {
   ]);
 
   // ── Total price ─────────────────────────────────────────────────────
-  // Same REPLACE logic as PackageBooking (hotel.totalRateWithMarkup already
-  // contains the pax-sized + marked-up package cost — adding baseRate on
-  // top would double-charge the agent's credit). Kept in state so the
-  // /book payload sent from PaxInformation matches what the sidebar shows.
+  // ADD-view: baseRate + hotel + cab + activity — the exact same formula
+  // the "Total Price" sidebar card renders below, so the number the
+  // operator agreed to on the sidebar, the number shown in Order Summary
+  // ("Payable"), and the totalPrice sent on the /book payload all match
+  // to the cent. (Older comments in this repo warned about the older
+  // REPLACE logic double-charging because hotel.totalRateWithMarkup was
+  // thought to already include the package base — that turned out not to
+  // be true; hotel is priced independently of the package base.)
   const [totalPrice, setTotalPrice] = useState(0);
   useEffect(() => {
     if (!bookingData) return;
@@ -125,8 +299,12 @@ const PackageCheckout = () => {
         : Number(packageData?.rate) || 0;
     const { hotelPrice = 0, cabPrice = 0, activityPrice = 0 } =
       bookingData.selections || {};
-    const packageTotal = hotelPrice > 0 ? hotelPrice : baseRate;
-    setTotalPrice(packageTotal + cabPrice + activityPrice);
+    setTotalPrice(
+      Number(baseRate) +
+        Number(hotelPrice) +
+        Number(cabPrice) +
+        Number(activityPrice),
+    );
   }, [bookingData, packageData, searchRate]);
 
   const [showPolicyModal, setShowPolicyModal] = useState(false);
@@ -181,7 +359,36 @@ const PackageCheckout = () => {
     }
   };
 
-  if (!bookingData) return null;
+  // While a CC Avenue payment is being finalised, or while we're about to
+  // start (URL still carries ?ccavenueOrderId=), show a blocking overlay
+  // instead of the "no data" bail — the draft is legitimately empty here
+  // (cross-domain redirect ate it) but the backend still owns the payload.
+  if (!bookingData) {
+    if (isFinalizingPayment || hasCCAvenueResume) {
+      return <CCAvenueFinalizingOverlay />;
+    }
+    return null;
+  }
+
+  // Selected hotel (packages allow a single hotel pick — HotelsTab enforces
+  // it). Pulled out here so the Booking Summary sidebar can render the same
+  // hotel snapshot the Order Summary modal shows.
+  const selectedHotel =
+    Array.isArray(bookingData.selections?.selectedHotels) &&
+    bookingData.selections.selectedHotels.length > 0
+      ? bookingData.selections.selectedHotels[0]
+      : null;
+  const selectedHotelImage = (() => {
+    if (!selectedHotel?.image) return "";
+    if (selectedHotel.image.startsWith("http")) return selectedHotel.image;
+    const base = process.env.REACT_APP_API_BASE_URL || "";
+    const filename = selectedHotel.image.includes("\\")
+      ? selectedHotel.image.split("\\").pop()
+      : selectedHotel.image.split("/").pop();
+    return filename
+      ? `${base}/api/files/${filename}`
+      : `${base}/api/files/${selectedHotel.image}`;
+  })();
 
   const packageNights = (() => {
     const raw =
@@ -276,8 +483,15 @@ const PackageCheckout = () => {
           style={{ minWidth: 0, overflowX: "clip" }}
         >
           <div className="container-fluid" style={{ paddingTop: "10px" }}>
-            <div className="hs-page-heading">
-              <h3 className="hs-page-heading-title">Package Checkout</h3>
+            <div className="hs-page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
+              <h3 className="hs-page-heading-title mb-0">Package Checkout</h3>
+              {bookingData.searchParams?.agentId && (
+                <div className="pkg-checkout-heading-balance">
+                  <AgentBalanceDisplay
+                    agentId={bookingData.searchParams.agentId}
+                  />
+                </div>
+              )}
             </div>
 
             <Row className="g-3">
@@ -326,13 +540,72 @@ const PackageCheckout = () => {
                               {packageView.arriveCountryName}
                             </div>
                           )}
-                          {bookingData.selections?.selectedHotels?.[0]?.hotelName && (
-                            <div className="d-flex flex-wrap align-items-center gap-2">
-                              <span className="badge bg-warning text-dark">
-                                {bookingData.selections.selectedHotels[0].hotelName}
-                              </span>
+                        </div>
+                      )}
+
+                      {/* Selected Hotel block — surfaces the hotel picked on
+                          the Hotels step so the operator can confirm it while
+                          filling in pax details. Falls back to a muted
+                          "no hotel selected" note when the user proceeded
+                          without one (allowed by the HotelsTab no-hotel
+                          acknowledgement flow). */}
+                      {selectedHotel ? (
+                        <div className="pkg-checkout-selected-hotel mb-3">
+                          <div className="pkg-checkout-selected-hotel-label">
+                            <FaHotel className="me-2" />
+                            Selected Hotel
+                          </div>
+                          <div className="pkg-checkout-selected-hotel-body">
+                            {selectedHotelImage && (
+                              <img
+                                src={selectedHotelImage}
+                                alt={selectedHotel.hotelName}
+                                className="pkg-checkout-selected-hotel-thumb"
+                                onError={(e) => {
+                                  e.target.style.display = "none";
+                                }}
+                              />
+                            )}
+                            <div className="pkg-checkout-selected-hotel-info">
+                              <div className="pkg-checkout-selected-hotel-name">
+                                {selectedHotel.hotelName || "Selected hotel"}
+                              </div>
+                              {selectedHotel.stateName && (
+                                <div className="pkg-checkout-selected-hotel-meta">
+                                  <FaMapMarkerAlt className="me-1" />
+                                  {selectedHotel.stateName}
+                                </div>
+                              )}
+                              {selectedHotel.noOfnight != null && (
+                                <div className="pkg-checkout-selected-hotel-meta">
+                                  <FaMoon className="me-1" />
+                                  {selectedHotel.noOfnight} Night
+                                  {selectedHotel.noOfnight === 1 ? "" : "s"}
+                                </div>
+                              )}
+                              {/* {Number(selectedHotel.totalRateWithMarkup) > 0 && (
+                                <div className="pkg-checkout-selected-hotel-price">
+                                  AED{" "}
+                                  {Number(
+                                    selectedHotel.totalRateWithMarkup,
+                                  ).toLocaleString("en-US", {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                </div>
+                              )} */}
                             </div>
-                          )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="pkg-checkout-selected-hotel pkg-checkout-selected-hotel--empty mb-3">
+                          <div className="pkg-checkout-selected-hotel-label">
+                            <FaHotel className="me-2" />
+                            Selected Hotel
+                          </div>
+                          <div className="pkg-checkout-selected-hotel-empty-note">
+                            No hotel selected for this package.
+                          </div>
                         </div>
                       )}
 
@@ -552,6 +825,88 @@ const PackageCheckout = () => {
                     text-underline-offset: 2px;
                     text-align: center;
                   }
+                  /* Selected-hotel mini card inside the Booking Summary. Uses
+                     the same soft-blue border / muted background palette as
+                     the existing summary rows so it reads as part of the card
+                     rather than a callout. */
+                  .pkg-checkout-selected-hotel {
+                    border: 1px solid #dbeafe;
+                    border-radius: 10px;
+                    padding: 10px 12px;
+                    background: #f8fafc;
+                  }
+                  .pkg-checkout-selected-hotel-label {
+                    display: flex;
+                    align-items: center;
+                    font-size: 0.72rem;
+                    letter-spacing: 0.06em;
+                    text-transform: uppercase;
+                    font-weight: 700;
+                    color: #1d4ed8;
+                    margin-bottom: 8px;
+                  }
+                  .pkg-checkout-selected-hotel-body {
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 10px;
+                  }
+                  .pkg-checkout-selected-hotel-thumb {
+                    width: 60px;
+                    height: 60px;
+                    object-fit: cover;
+                    border-radius: 8px;
+                    flex-shrink: 0;
+                    border: 1px solid #e2e8f0;
+                  }
+                  .pkg-checkout-selected-hotel-info {
+                    min-width: 0;
+                    flex: 1;
+                  }
+                  .pkg-checkout-selected-hotel-name {
+                    font-weight: 700;
+                    color: #0f172a;
+                    font-size: 0.9rem;
+                    line-height: 1.25;
+                    margin-bottom: 4px;
+                  }
+                  .pkg-checkout-selected-hotel-meta {
+                    display: flex;
+                    align-items: center;
+                    font-size: 0.78rem;
+                    color: #475569;
+                    margin-top: 2px;
+                  }
+                  .pkg-checkout-selected-hotel-price {
+                    margin-top: 6px;
+                    font-weight: 700;
+                    color: #16a34a;
+                    font-size: 0.85rem;
+                  }
+                  .pkg-checkout-selected-hotel--empty {
+                    background: #fff7ed;
+                    border-color: #fed7aa;
+                  }
+                  .pkg-checkout-selected-hotel--empty
+                    .pkg-checkout-selected-hotel-label {
+                    color: #b45309;
+                  }
+                  .pkg-checkout-selected-hotel-empty-note {
+                    font-size: 0.8rem;
+                    color: #7c2d12;
+                  }
+                  /* Agent Available Balance inline with the "Package Checkout"
+                     page heading — sits at the right end of the heading row,
+                     wraps under the title on narrow viewports (flex-wrap on
+                     .hs-page-heading). Strips AgentBalanceDisplay's default
+                     .mt-1 and bumps the font up so the balance reads as a
+                     header stat rather than a small helper line. */
+                  .pkg-checkout-heading-balance > div {
+                    margin-top: 0 !important;
+                    font-size: 1rem;
+                  }
+                  .pkg-checkout-heading-balance .fw-semibold {
+                    font-size: 1rem;
+                  }
                 `}</style>
               </Col>
             </Row>
@@ -661,6 +1016,12 @@ const PackageCheckout = () => {
           </Button>
         </Modal.Footer>
       </Modal>
+
+      {/* Post-payment finalize overlay — shown while
+          /api/payment/ccavenue/finalize-package/{orderId} is running. Same
+          look as HotelBookingPage's overlay so operators see a consistent
+          "do not close this window" popup across booking flows. */}
+      {isFinalizingPayment && <CCAvenueFinalizingOverlay />}
     </div>
   );
 };

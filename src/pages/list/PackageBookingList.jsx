@@ -53,6 +53,7 @@ const PAYMENT_MODE_LABELS = {
   CARD: "Card payment",
   BANK_TRANSFER: "Bank transfer",
   CASH: "Cash",
+  ONLINE: "Online Payment",
 };
 const formatPaymentMode = (mode) => {
   if (mode === null || mode === undefined) return "-";
@@ -63,6 +64,48 @@ const formatPaymentMode = (mode) => {
     .replace(/_/g, " ")
     .toLowerCase()
     .replace(/(^|\s)\S/g, (c) => c.toUpperCase());
+};
+
+// Derived "Payment Status" label — the column WAS titled "Payment Mode" and
+// just echoed the stored mode, but that's misleading for CONFIRMED (Hold
+// Package and Pay Later) rows where nothing has actually been debited yet.
+// This derivation mirrors PackageBookingDetailView's paymentStatus block:
+//
+//   • Cancelled + previously RECONFIRMED via credit → "Refunded"
+//   • Cancelled + previously RECONFIRMED via ONLINE → "Cancelled (Paid)"
+//   • Cancelled otherwise                           → "Cancelled — Not Paid"
+//   • RECONFIRMED + modeOfPayment=ONLINE            → "Paid Online"
+//   • RECONFIRMED otherwise                         → "Paid via {mode}"
+//   • CONFIRMED (Hold Package and Pay Later)        → "Not Paid"
+//   • Anything else                                 → the stored mode label
+//
+// Returns { label, color } — colour drives inline styling on the cell so
+// green/amber/red states are visible at a glance.
+const derivePaymentStatus = (b) => {
+  const status = String(b?.bookingStatus || "").trim().toUpperCase();
+  const mode = String(b?.modeOfPayment || "").trim().toUpperCase();
+  const isOnline = mode === "ONLINE";
+  if (b?.isCancelled === true || status === "CANCELLED") {
+    if (status === "RECONFIRMED" || status === "CANCELLED") {
+      if (isOnline) return { label: "Cancelled (Paid Online)", color: "#dc2626" };
+    }
+    // A cancelled row whose pre-cancel state was RECONFIRMED via credit gets
+    // its debit restored server-side; treat that as refunded.
+    if (mode && !isOnline) return { label: "Refunded", color: "#0d9488" };
+    return { label: "Cancelled — Not Paid", color: "#dc2626" };
+  }
+  if (status === "RECONFIRMED") {
+    if (isOnline) return { label: "Paid Online", color: "#16a34a" };
+    const humanMode = formatPaymentMode(mode);
+    return {
+      label: `Paid via ${humanMode !== "-" ? humanMode : "Credit"}`,
+      color: "#16a34a",
+    };
+  }
+  if (status === "CONFIRMED") {
+    return { label: "Not Paid", color: "#b45309" };
+  }
+  return { label: formatPaymentMode(mode), color: "#0f172a" };
 };
 
 // "dd/mm/yyyy" — matches the last-minute list's date shape so the two tables
@@ -684,7 +727,7 @@ const PackageBookingList = () => {
                               Deadline Date
                             </th>
                             <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentMode }}>
-                              Payment Mode
+                              Payment Status
                             </th>
                             <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
                               Notification
@@ -778,9 +821,17 @@ const PackageBookingList = () => {
                                     whiteSpace: "nowrap",
                                   }}
                                 >
-                                  <span className="fw-semibold text-dark">
-                                    {formatPaymentMode(b.modeOfPayment)}
-                                  </span>
+                                  {(() => {
+                                    const ps = derivePaymentStatus(b);
+                                    return (
+                                      <span
+                                        className="fw-semibold"
+                                        style={{ color: ps.color }}
+                                      >
+                                        {ps.label}
+                                      </span>
+                                    );
+                                  })()}
                                 </td>
                                 <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
                                   <StatusPill meta={sMeta} raw={statusText} />

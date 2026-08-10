@@ -381,7 +381,11 @@
 }
 
 .book-now-btn {
-  background: linear-gradient(135deg, var(--rl-primary), var(--rl-accent));
+  /* Red-to-darker-red gradient — previously landed on --rl-accent (blue)
+     which read as a two-tone button. Both stops now use brand red variants
+     so the button stays fully red end-to-end while keeping a subtle depth
+     that hints at the gradient origin. */
+  background: linear-gradient(135deg, var(--rl-primary), var(--rl-primary-strong));
   border: none;
   border-radius: 10px;
   padding: 0.65rem 1.25rem;
