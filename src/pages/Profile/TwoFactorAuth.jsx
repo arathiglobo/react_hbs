@@ -345,6 +345,17 @@ const TwoFactorAuth = () => {
                   Add a second step to your sign-in using a code from{" "}
                   <strong>Ente Auth</strong>.
                 </p>
+                <p className="text-muted mb-0 mt-1" style={{ fontSize: 13 }}>
+                  Get the app at{" "}
+                  <a
+                    href="https://ente.io/auth"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "#EC0B43", textDecoration: "none", fontWeight: 600 }}
+                  >
+                    https://ente.io/auth
+                  </a>
+                </p>
               </div>
 
               {loading && (
