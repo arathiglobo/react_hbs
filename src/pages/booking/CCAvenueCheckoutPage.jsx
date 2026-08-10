@@ -37,11 +37,32 @@ export default function CCAvenueCheckoutPage() {
 
     (async () => {
       try {
+        // The backend's initiate endpoint requires bookingPayload for the
+        // default CREATE flow (see CCAvenuePaymentServiceImpl.initiateCreate)
+        // — without it the call fails with
+        //   "Booking payload is required to start a CC Avenue payment."
+        // The booking page persists the payload to sessionStorage under
+        // "hbpPendingCreatePayload" just before navigating here (both
+        // Inhouse HotelBookingPage and ApiBookingPageForHotels use the
+        // same key), so read it back and pass it through. The RESUME
+        // effect on the booking page (after CC Avenue returns) also reads
+        // and clears this same key, so it survives our read here.
+        let bookingPayload = null;
+        try {
+          const stored = sessionStorage.getItem("hbpPendingCreatePayload");
+          if (stored) bookingPayload = JSON.parse(stored);
+        } catch (e) {
+          console.error(
+            "Could not read persisted booking payload for CC Avenue",
+            e,
+          );
+        }
         const response = await axiosInstance.post("/api/payment/ccavenue/initiate", {
           amount,
           agentId,
           billingName,
           returnPath: returnTo,
+          bookingPayload,
         });
         if (cancelled) return;
         const { gatewayUrl, accessCode, encRequest } = response.data || {};

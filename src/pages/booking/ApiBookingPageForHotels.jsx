@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   FaHotel,
   FaCalendarAlt,
@@ -25,6 +25,15 @@ import {
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
+
+// Online-payment gateways offered when the agent's credit is short.
+// Mirrors the same list Inhouse HotelBookingPage.jsx uses (line 25) so
+// both booking pages present the same choices. Currently CC Avenue only —
+// selecting it navigates to /payment/ccavenue-redirect for the real
+// hosted-page flow.
+const PAYMENT_GATEWAYS = [
+  { id: "ccavenue", name: "CC Avenue", desc: "Cards, UPI, Net Banking" },
+];
 
 // Same 11-chip list Inhouse HotelBookingPage uses so the two pages read
 // identically. Kept as a top-level constant so it stays out of render
@@ -77,6 +86,11 @@ const stripPolicyHtml = (raw) => {
  */
 const ApiBookingPageForHotels = () => {
   const navigate = useNavigate();
+  // useLocation drives the CC Avenue resume effect (reads back the
+  // ?ccavenueOrderId= query param the backend appends when it 302s the
+  // browser to us after CC Avenue completes). Also used to strip the
+  // resume signal from history so reloads don't re-trigger the create.
+  const location = useLocation();
 
   const activeUserRole = localStorage.getItem("currentActiveRole");
 
@@ -110,6 +124,20 @@ const ApiBookingPageForHotels = () => {
   const [paymentMode, setPaymentMode] = useState("CREDITLIMIT");
   const [agentAvailableBalance, setAgentAvailableBalance] = useState(null);
   const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
+
+  // Insufficient-credit → online-payment flow (RATEHAWK only).
+  // showInsufficientModal: "Online Payment Required" popup shown after the
+  //   credit check fails. Pay opens the gateway picker; Cancel dismisses.
+  // showGatewayModal: "Select Payment Gateway" picker (radio list from
+  //   PAYMENT_GATEWAYS). Proceed navigates to /payment/ccavenue-redirect.
+  // insufficientAmount: the payable total for the modals to display.
+  // selectedGateway: the picked gateway id (currently "ccavenue" only).
+  // Non-RateHawk suppliers still go through the existing toast-and-abort
+  // branch — no behaviour change for IWTX/X3/Inhouse/Atharva/Jumeirah/etc.
+  const [showInsufficientModal, setShowInsufficientModal] = useState(false);
+  const [showGatewayModal, setShowGatewayModal] = useState(false);
+  const [insufficientAmount, setInsufficientAmount] = useState(0);
+  const [selectedGateway, setSelectedGateway] = useState("");
   // ATHARVA-only booking-mode picker. Starts unset so neither radio
   // is pre-selected on page load — the operator must explicitly
   // choose "Book and Pay Now" or "Hold Room and Pay Later" before
@@ -129,6 +157,15 @@ const ApiBookingPageForHotels = () => {
   // per the vendor's PANCardType enum. Corporate/Trust/etc. can be picked in
   // the dropdown if the booking is on behalf of an entity.
   const [panCardType, setPanCardType] = useState("2");
+
+  // RATEHAWK (apiId=14): primary-guest email + phone are required by the
+  // /hotel/order/booking/finish/ call — RateHawk rejects with a generic
+  // "invalid_params" otherwise. The FE otherwise never collects them (line
+  // 675/676 hardcode ""), so capture them here on a gated card. Same shape
+  // as the ATHARVA PAN gate above so all supplier-specific inputs follow
+  // one pattern.
+  const [ratehawkEmail, setRatehawkEmail] = useState("");
+  const [ratehawkPhone, setRatehawkPhone] = useState("");
 
   // ─────────────────────────── effects ────────────────────────────────
   useEffect(() => {
@@ -238,6 +275,106 @@ const ApiBookingPageForHotels = () => {
     };
   }, [bookingData]);
 
+  // ── CC Avenue return handling (RATEHAWK insufficient-credit flow) ──
+  //   Mirrors Inhouse HotelBookingPage.jsx's resume effect. CC Avenue's
+  //   redirect is a real browser navigation to their domain and back —
+  //   React Router state doesn't survive the round trip, so the backend
+  //   appends the outcome as ?ccavenueOrderId=&ccavenueStatus= query
+  //   params when it 302s the browser back here. We then:
+  //     1. Strip the resume signal from history so a reload doesn't retry
+  //     2. Re-verify the payment status server-side (a tampered URL is
+  //        rejected)
+  //     3. Read back the pending payload from sessionStorage (persisted
+  //        just before we navigated away) and fire the create call
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const ccavenueOrderId = searchParams.get("ccavenueOrderId");
+    const ccavenueStatus = searchParams.get("ccavenueStatus");
+    if (!ccavenueOrderId) return;
+
+    // Strip immediately so a remount / reload doesn't re-fire the create.
+    navigate(location.pathname, { replace: true, state: {} });
+
+    const readPendingPayload = () => {
+      const stored = sessionStorage.getItem("hbpPendingCreatePayload");
+      sessionStorage.removeItem("hbpPendingCreatePayload");
+      if (!stored) return null;
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        console.error("Malformed persisted create payload", e);
+        return null;
+      }
+    };
+
+    const finalizeCreate = async (payload) => {
+      try {
+        setIsSubmitting(true);
+        // RateHawk booking flow needs the extended 120s timeout (see
+        // confirmBooking above for the reasoning). The resume path hits
+        // the same endpoint so it needs the same override.
+        const response = await axiosInstance.post(
+          "/api/hotel-booking/create",
+          payload,
+          { timeout: 120000 },
+        );
+        const bookingResponse = response.data;
+        const statusUpper = String(bookingResponse?.status || "").toUpperCase();
+        const ok =
+          (statusUpper === "CONFIRMED" || statusUpper === "RECONFIRMED") &&
+          bookingResponse?.bookingId != 0;
+        if (ok) {
+          toast.success(
+            bookingResponse?.message || "Booking created after payment.",
+          );
+          navigate("/booking-details/hotel-booking-list");
+        } else {
+          toast.error(
+            bookingResponse?.message || "Booking submission failed. Please try again.",
+          );
+        }
+      } catch (err) {
+        const beMsg =
+          err?.response?.data?.message || err?.response?.data?.error || null;
+        console.error("Error finalising booking after payment:", err);
+        toast.error(beMsg || "Booking submission failed. Please try again.");
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+
+    (async () => {
+      if (ccavenueStatus !== "success") {
+        toast.error("Payment was not completed. Please try again.");
+        sessionStorage.removeItem("hbpPendingCreatePayload");
+        return;
+      }
+      try {
+        const statusResponse = await axiosInstance.get(
+          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+        );
+        if (statusResponse.data?.status !== "SUCCESS") {
+          toast.error(
+            statusResponse.data?.statusMessage ||
+              "Payment was not successful. Please try again.",
+          );
+          sessionStorage.removeItem("hbpPendingCreatePayload");
+          return;
+        }
+      } catch (err) {
+        console.error("Could not verify CC Avenue payment status:", err);
+        toast.error(
+          "Could not verify payment status. Please contact support if you were charged.",
+        );
+        return;
+      }
+      const payload = readPendingPayload();
+      if (!payload) return;
+      finalizeCreate(payload);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
+
   // ─────────────────────────── handlers ───────────────────────────────
   const handleSpecialRequestToggle = (request) => {
     setSpecialRequests((prev) =>
@@ -287,6 +424,15 @@ const ApiBookingPageForHotels = () => {
     return n === "IN" || n === "IND" || n === "INDIA";
   };
 
+  // RATEHAWK-only helper: does this booking need the primary-guest email +
+  // phone card? RateHawk's booking/finish/ call requires user.email and
+  // user.phone (rejects with "invalid_params" otherwise), and no other
+  // supplier on this page asks for them via the FE.
+  const requiresRatehawkContact = () => {
+    if (!bookingData) return false;
+    return Number(bookingData?.payload?.apiId) === 14;
+  };
+
   const validateForm = () => {
     const errors = {};
     let hasErrors = false;
@@ -334,6 +480,29 @@ const ApiBookingPageForHotels = () => {
       }
       if (!panCardType) {
         errors.panCardType = "PAN Card Type is required.";
+        hasErrors = true;
+      }
+    }
+
+    // RATEHAWK (apiId=14): primary-guest email + phone are mandatory. The
+    // vendor rejects /hotel/order/booking/finish/ with a generic
+    // "invalid_params" when they're missing. Format checks are lenient —
+    // enough to catch typos, not RFC-strict.
+    if (requiresRatehawkContact()) {
+      const emailTrim = (ratehawkEmail || "").trim();
+      if (!emailTrim) {
+        errors.ratehawkEmail = "Email is required for RateHawk bookings.";
+        hasErrors = true;
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+        errors.ratehawkEmail = "Enter a valid email address.";
+        hasErrors = true;
+      }
+      const phoneTrim = (ratehawkPhone || "").trim();
+      if (!phoneTrim) {
+        errors.ratehawkPhone = "Phone is required for RateHawk bookings.";
+        hasErrors = true;
+      } else if (phoneTrim.replace(/\D/g, "").length < 7) {
+        errors.ratehawkPhone = "Enter a valid phone number.";
         hasErrors = true;
       }
     }
@@ -494,12 +663,14 @@ const ApiBookingPageForHotels = () => {
 
     if (hasErrors || errors.bookingMode) {
       setValidationErrors(errors);
-      // Priority order for the shared toast: PAN gate first (Atharva-only,
-      // most likely to bite operators mid-booking with a cryptic upstream
-      // failure otherwise), then booking-mode gate, then the generic message.
+      // Priority order for the shared toast: supplier-specific gates first
+      // (Atharva PAN, RateHawk contact) since they'd otherwise surface as
+      // cryptic upstream failures, then booking-mode gate, then generic.
       toast.error(
         errors.panCardNo ||
           errors.panCardType ||
+          errors.ratehawkEmail ||
+          errors.ratehawkPhone ||
           errors.bookingMode ||
           "Please fill in all required fields correctly.",
       );
@@ -672,8 +843,12 @@ const ApiBookingPageForHotels = () => {
           firstName: leadGuest.firstName || "",
           middleName: "",
           lastName: leadGuest.lastName || "",
-          email: "",
-          phone: "",
+          // RateHawk (apiId=14) requires user.email / user.phone on
+          // booking/finish/. Every other supplier ignores these fields, so
+          // gate the values on the same helper that drives the UI card —
+          // non-RateHawk payloads stay byte-for-byte identical to before.
+          email: requiresRatehawkContact() ? (ratehawkEmail || "").trim() : "",
+          phone: requiresRatehawkContact() ? (ratehawkPhone || "").trim() : "",
           passportNo: "",
           agentLpo: "",
           nativeCountry: bookingData.payload.nationality,
@@ -793,6 +968,19 @@ const ApiBookingPageForHotels = () => {
         );
 
         if (creditResponse.data === false) {
+          // RateHawk (apiId=14) has a proper online-payment redirect flow
+          // wired to CC Avenue (mirrors Inhouse HotelBookingPage). Open the
+          // "Online Payment Required" modal instead of dead-ending on a
+          // toast. Non-RateHawk suppliers keep the existing toast-and-abort
+          // behaviour — their gateway flow isn't wired here.
+          const isRatehawkFlow =
+            Number(bookingData?.payload?.apiId) === 14;
+          if (isRatehawkFlow) {
+            setInsufficientAmount(Number(requiredAmount) || 0);
+            setShowConfirmModal(false);
+            setShowInsufficientModal(true);
+            return;
+          }
           toast.error(
             "Insufficient credit. Please proceed with online payment.",
           );
@@ -800,9 +988,20 @@ const ApiBookingPageForHotels = () => {
         }
       }
 
+      // RateHawk (apiId=14) can legitimately take 60-120s end-to-end:
+      // prebook (docs recommend 60s timeout) + booking/form/ + booking/finish/
+      // + status polling (up to 90s per RateHawk contract). The shared
+      // AxiosInstance's 30s default is too short for that flow and would
+      // surface as a client-side "timeout of 30000ms exceeded" even when
+      // the booking is still legitimately in progress on the backend.
+      // Override the per-call timeout ONLY for RateHawk so no other
+      // supplier's flow is slowed down. 120s = generous headroom that
+      // still fits within the backend's worst-case budget.
+      const isRatehawk = Number(bookingData?.payload?.apiId) === 14;
       const response = await axiosInstance.post(
         "/api/hotel-booking/create",
         effectivePayload,
+        isRatehawk ? { timeout: 120000 } : undefined,
       );
       const bookingResponse = response.data;
 
@@ -1414,6 +1613,84 @@ const ApiBookingPageForHotels = () => {
                             {validationErrors.panCardType && (
                               <Form.Control.Feedback type="invalid">
                                 {validationErrors.panCardType}
+                              </Form.Control.Feedback>
+                            )}
+                          </Form.Group>
+                        </Col>
+                      </Row>
+                    </Card>
+                  )}
+
+                  {/* RATEHAWK (apiId=14) ONLY: primary-guest email + phone
+                      capture. RateHawk's /hotel/order/booking/finish/ call
+                      requires user.email and user.phone; without them the
+                      vendor rejects with "invalid_params" and the operator
+                      sees an opaque failure. Gated so every other supplier
+                      on this page keeps its existing layout unchanged, and
+                      the payload only emits these fields on RateHawk
+                      bookings (line 675/676 above). */}
+                  {requiresRatehawkContact() && (
+                    <Card className="p-4 mb-2 shadow-sm border-0">
+                      <h5 className="mb-1 fw-bold">
+                        Primary Guest Contact Details
+                      </h5>
+                      <div className="text-muted small mb-3">
+                        Email and phone are required for RateHawk bookings and
+                        are used to send the booking confirmation.
+                      </div>
+                      <Row className="g-3">
+                        <Col md={6}>
+                          <Form.Group>
+                            <Form.Label className="fw-semibold">
+                              Email <span className="text-danger">*</span>
+                            </Form.Label>
+                            <Form.Control
+                              type="email"
+                              value={ratehawkEmail}
+                              placeholder="guest@example.com"
+                              isInvalid={!!validationErrors.ratehawkEmail}
+                              onChange={(e) => {
+                                setRatehawkEmail(e.target.value);
+                                if (validationErrors.ratehawkEmail) {
+                                  setValidationErrors((prev) => {
+                                    const next = { ...prev };
+                                    delete next.ratehawkEmail;
+                                    return next;
+                                  });
+                                }
+                              }}
+                            />
+                            {validationErrors.ratehawkEmail && (
+                              <Form.Control.Feedback type="invalid">
+                                {validationErrors.ratehawkEmail}
+                              </Form.Control.Feedback>
+                            )}
+                          </Form.Group>
+                        </Col>
+                        <Col md={6}>
+                          <Form.Group>
+                            <Form.Label className="fw-semibold">
+                              Phone <span className="text-danger">*</span>
+                            </Form.Label>
+                            <Form.Control
+                              type="tel"
+                              value={ratehawkPhone}
+                              placeholder="e.g. 12124567899"
+                              isInvalid={!!validationErrors.ratehawkPhone}
+                              onChange={(e) => {
+                                setRatehawkPhone(e.target.value);
+                                if (validationErrors.ratehawkPhone) {
+                                  setValidationErrors((prev) => {
+                                    const next = { ...prev };
+                                    delete next.ratehawkPhone;
+                                    return next;
+                                  });
+                                }
+                              }}
+                            />
+                            {validationErrors.ratehawkPhone && (
+                              <Form.Control.Feedback type="invalid">
+                                {validationErrors.ratehawkPhone}
                               </Form.Control.Feedback>
                             )}
                           </Form.Group>
@@ -2228,6 +2505,147 @@ const ApiBookingPageForHotels = () => {
                         <i className="bi bi-check-circle me-1"></i> Confirm
                       </>
                     )}
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* ── Insufficient credit → online payment required ──
+                  RATEHAWK-only. Non-RateHawk flows never open this modal
+                  (they still hit the toast in confirmBooking). Pay opens
+                  the gateway picker; Cancel dismisses. */}
+              <Modal
+                show={showInsufficientModal}
+                onHide={() => setShowInsufficientModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Online Payment Required</Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="text-center py-4">
+                  <p className="mb-2 text-muted">
+                    The agent's available credit is insufficient for this
+                    booking. You need to proceed with{" "}
+                    <strong>online payment</strong>.
+                  </p>
+                  <div className="mt-3">
+                    <div className="text-muted small">Payable amount</div>
+                    <div className="fs-4 fw-bold text-dark">
+                      {formatPrice(insufficientAmount)}
+                    </div>
+                  </div>
+                </Modal.Body>
+                <Modal.Footer className="justify-content-center border-0">
+                  <Button
+                    variant="danger"
+                    onClick={() => setShowInsufficientModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="success"
+                    onClick={() => {
+                      setShowInsufficientModal(false);
+                      setSelectedGateway("");
+                      setShowGatewayModal(true);
+                    }}
+                  >
+                    Pay
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* ── Select payment gateway ──
+                  Radios from PAYMENT_GATEWAYS. Proceed persists the
+                  pending payload to sessionStorage under
+                  "hbpPendingCreatePayload" (same key Inhouse uses so the
+                  same CCAvenueCheckoutPage picks it up unchanged) and
+                  navigates to /payment/ccavenue-redirect. */}
+              <Modal
+                show={showGatewayModal}
+                onHide={() => setShowGatewayModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Select Payment Gateway</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                  <p className="text-muted small mb-3">
+                    Choose a gateway to enter your card details.
+                  </p>
+                  {PAYMENT_GATEWAYS.map((g) => (
+                    <Form.Check
+                      key={g.id}
+                      type="radio"
+                      name="payment-gateway"
+                      id={`gw-${g.id}`}
+                      className="mb-2"
+                      checked={selectedGateway === g.id}
+                      onChange={() => setSelectedGateway(g.id)}
+                      label={
+                        <span>
+                          <span className="fw-semibold">{g.name}</span>
+                          <span className="text-muted small ms-2">
+                            {g.desc}
+                          </span>
+                        </span>
+                      }
+                    />
+                  ))}
+                </Modal.Body>
+                <Modal.Footer className="border-0">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowGatewayModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="success"
+                    disabled={!selectedGateway}
+                    onClick={() => {
+                      setShowGatewayModal(false);
+                      // Persist the payload for the resume flow to replay
+                      // after the user returns from CC Avenue. React state
+                      // is lost across the redirect so the resume effect
+                      // above rebuilds the create call purely from this.
+                      // paymentMode is flipped to "ONLINE" so the Booking
+                      // List labels the row correctly (same convention as
+                      // Inhouse — see HotelBookingPage.jsx line 2942).
+                      try {
+                        sessionStorage.setItem(
+                          "hbpPendingCreatePayload",
+                          JSON.stringify({
+                            ...pendingPayload,
+                            paymentMode: "ONLINE",
+                          }),
+                        );
+                      } catch (e) {
+                        console.error(
+                          "Could not persist pending create payload",
+                          e,
+                        );
+                      }
+
+                      if (selectedGateway === "ccavenue") {
+                        const guest = pendingPayload?.primaryGuest;
+                        const billingName = guest
+                          ? [guest.firstName, guest.lastName]
+                              .filter(Boolean)
+                              .join(" ")
+                          : "";
+                        navigate("/payment/ccavenue-redirect", {
+                          state: {
+                            amount: insufficientAmount,
+                            amountLabel: formatPrice(insufficientAmount),
+                            agentId: pendingPayload?.agentId || null,
+                            billingName,
+                            returnTo: location.pathname,
+                          },
+                        });
+                      }
+                    }}
+                  >
+                    Proceed to Pay
                   </Button>
                 </Modal.Footer>
               </Modal>
