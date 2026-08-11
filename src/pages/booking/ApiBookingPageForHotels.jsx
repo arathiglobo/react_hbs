@@ -480,6 +480,16 @@ const ApiBookingPageForHotels = () => {
           cancellationPolicy:
             (data.cancellationPolicies?.length && data.cancellationPolicies) ||
             r.cancellationPolicy,
+          // Capture the HPreBooking-response echoes so /api/hotel-booking/create
+          // can forward them as atharvaExpectedAmount / atharvaWithinTimeLimit /
+          // atharvaPackageRate. The BE uses these for ExpectedAmount cost
+          // verification (docs 6.1) — a mismatch triggers error 3002.
+          atharvaExpectedAmount:
+            data.amountWithoutMarkup ?? data.amount ?? r.atharvaExpectedAmount ?? null,
+          atharvaWithinTimeLimit:
+            data.withinTimeLimit ?? r.atharvaWithinTimeLimit ?? null,
+          atharvaPackageRate:
+            data.packageRate ?? r.atharvaPackageRate ?? null,
         };
       });
       setBookingData({ ...bookingData, selectedRate: patched });
@@ -611,6 +621,16 @@ const ApiBookingPageForHotels = () => {
         // ATHARVA carriers (harmless nulls for other suppliers).
         tokenId: firstRate.atharvaTokenId || null,
         hKey: firstRate.atharvaHKey || null,
+        // ATHARVA HPreBooking-response echoes. The BE uses these on
+        // HCreateBooking so ExpectedAmount matches the vendor's total on the
+        // first try (no error 3002 / no double call), WithinTimeLimit drives
+        // the RR vs KK gate correctly, and PackageRate triggers
+        // AirlineName/AirlinePNR when the vendor tagged the rate as a package
+        // (docs §5.3, §6.1). Null when no prebook has run yet — BE falls back
+        // to legacy behaviour.
+        atharvaExpectedAmount: firstRate.atharvaExpectedAmount ?? null,
+        atharvaWithinTimeLimit: firstRate.atharvaWithinTimeLimit ?? null,
+        atharvaPackageRate: firstRate.atharvaPackageRate ?? null,
         cityId: bookingData.payload?.cityId || null,
         nationalityId: bookingData.payload?.nationalityId || null,
         hotelName: bookingData.hotelStaticData.hotelName,
