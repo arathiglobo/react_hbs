@@ -954,6 +954,22 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         bookingDoneFor: bookingDoneFor.trim() || null,
         paymentMode,
         bookingConfirmation: bookingConfirmation || "Book & Voucher",
+        // Display-currency preference carried through from the search /
+        // room-list flow. Persisted on HotelBooking.displayCurrencyCode
+        // and HotelBooking.displayAmount so the Booking Detail page and
+        // Invoice PDF can render the SAME converted value the operator
+        // saw at booking time (matches Inhouse's behavior at
+        // InhouseHotelBookingService.java:964-971). Null when the
+        // operator kept the default AED display.
+        displayCurrencyCode:
+          displayCurrency?.code && displayCurrency.code !== "AED"
+            ? displayCurrency.code
+            : null,
+        displayCurrencyRate:
+          displayCurrency?.code && displayCurrency.code !== "AED"
+            && Number(displayCurrency.factor) > 0
+            ? Number(displayCurrency.factor)
+            : null,
       };
 
       setPendingPayload(payload);
@@ -1096,11 +1112,26 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
     }
   };
 
-  const formatPrice = (price) =>
-    new Intl.NumberFormat("en-AE", {
-      style: "currency",
-      currency: "AED",
-    }).format(price);
+  // Honor the operator's display-currency preference carried through from
+  // the search/room-list flow via bookingData.displayCurrency ({ code,
+  // factor }). Rates in bookingData.selectedRate[i].rate are AED-native
+  // (per the FE contract — see the comment on formatPrice in
+  // ExternalApiRoomList.jsx); we multiply by the display factor and label
+  // with the display code so the "Selling Price / Total / Payable" values
+  // here match what the Room Details modal showed. Falls back to raw AED
+  // when no displayCurrency was passed (older sessionStorage payloads).
+  const displayCurrency = bookingData?.displayCurrency || { code: "AED", factor: 1 };
+  const formatPrice = (price) => {
+    const factor = Number(displayCurrency.factor) > 0
+      ? Number(displayCurrency.factor)
+      : 1;
+    const code = displayCurrency.code || "AED";
+    const converted = (Number(price) || 0) * factor;
+    return `${code} ${converted.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
 
   // Derived pricing — computed BEFORE the early return so the useMemo /
   // useEffect calls below stay in the same call order every render

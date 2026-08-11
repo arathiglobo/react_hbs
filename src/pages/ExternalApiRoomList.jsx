@@ -437,6 +437,45 @@ const ExternalApiRoomList = () => {
     }
   };
 
+  /**
+   * RATEHAWK prebook — mirrors fetchDarinaPrebook. Called from the
+   * RoomList "View Details / Select" click for RateHawk rates (apiId=14)
+   * so the same "Fetching accurate rate…" modal IWTX/X3/Darina use.
+   *
+   * <p>RateHawk's prebook needs only the search-time book_hash (stored on
+   * rate.roomTypeCode by RatehawkHotelRoomSearchService.mapToHotelResponses).
+   * The backend applies the caller's agent markup so the returned rate
+   * matches the room-list card exactly.
+   *
+   * <p>Returns a resolved object (never throws) so the caller can branch
+   * on its .success field. Response shape:
+   *   { success, message, bookHash, priceChanged, rate, rateWithoutMarkup,
+   *     currency, roomCategory, mealPlan, cancellationPolicies,
+   *     nonRefundable, deadlineDate }
+   */
+  const fetchRatehawkPrebook = async (rate) => {
+    const payload = roomData?.payload || {};
+    const req = {
+      agentId: payload?.agentId ? String(payload.agentId) : null,
+      // RateHawk's book_hash lands on rate.roomTypeCode at search time.
+      hash: rate?.roomTypeCode,
+    };
+    try {
+      const resp = await axiosInstance.post(
+        "/api/hotel-booking/ratehawk/prebook",
+        req,
+      );
+      return resp?.data || { success: false, message: "Empty response" };
+    } catch (err) {
+      const backendMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Prebook request failed";
+      return { success: false, message: backendMsg };
+    }
+  };
+
   const openPoliciesModal = async (rate, hotelDetail) => {
     const label = [rate?.roomCategory, rate?.mealPlan]
       .filter(Boolean)
@@ -1101,6 +1140,81 @@ const ExternalApiRoomList = () => {
       return;
     }
 
+    // ─── RATEHAWK (apiId=14) prebook per RateHawk API contract. ────────
+    // Fresh book_hash (p-…), live price + cancellation ladder before
+    // navigating to the booking page. Reuses the same "Fetching accurate
+    // rate…" spinner + "Room Details" confirm modal as IWTX/X3/Darina.
+    if (currentApiId === apiIdMapping.RATEHAWK) {
+      setLoadingRate(true);
+      (async () => {
+        try {
+          const live = await fetchRatehawkPrebook(rate);
+          if (!live?.success) {
+            setLoadingRate(false);
+            alert(
+              live?.message ||
+                "RateHawk prebook failed. Please retry or reselect the rate.",
+            );
+            return;
+          }
+          const accurateRates = [
+            {
+              roomNo: 1,
+              hotelId: hotel.hotelId,
+              hotelName: hotel.hotelName,
+              hotelCode: payload.hotelCode || hotel.hotelId,
+              roomCategory: live.roomCategory || rate.roomCategory,
+              mealPlan: live.mealPlan || rate.mealPlan,
+              contractLabel: rate.contractLabel || "Live rate (RateHawk)",
+              nonRefundable:
+                live.nonRefundable != null
+                  ? live.nonRefundable
+                  : rate.nonRefundable,
+              rate: live.rate ?? rate.totalRate,
+              rateWithoutMarkup:
+                live.rateWithoutMarkup ?? rate.totalRateWithoutMarkup,
+              currency: live.currency || rate.currency,
+              // Keep the ORIGINAL search-time h-… hash on roomTypeCode.
+              // RateHawk prebook hashes (p-…) expire quickly and, more
+              // importantly, RateHawk's /hotel/prebook/ endpoint only
+              // accepts h-… hashes — RatehawkHotelBookingService.createBooking
+              // ALWAYS runs its own prebook step 1 to obtain a fresh p-…
+              // hash right before booking/form/, per RateHawk's Recommended
+              // Flow. This FE prebook call is for display only (accurate
+              // rate + cancellation policies for the modal); reusing its
+              // p-… hash at booking time causes "hotel_not_found" once
+              // it expires (typically well within the time the operator
+              // takes to fill in guest details).
+              roomTypeCode: rate.roomTypeCode,
+              mealPlanCode: rate.mealPlanCode,
+              // Live cancellation ladder + free-cancellation cut-off.
+              cancellationPolicy:
+                (live.cancellationPolicies?.length &&
+                  live.cancellationPolicies) ||
+                rate.cancellationPolicies,
+              deadlineDate: live.deadlineDate ?? rate.deadlineDate,
+            },
+          ];
+          setSelectedRate(accurateRates);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+        } catch (err) {
+          console.error("RateHawk live-rate fetch failed:", err);
+          setLoadingRate(false);
+          const backendMsg =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message;
+          alert(
+            backendMsg
+              ? `Unable to fetch accurate rate: ${backendMsg}`
+              : "Unable to fetch accurate rate. Please try again.",
+          );
+        }
+      })();
+      return;
+    }
+
     if (currentApiId === 12 || currentApiId === 15) {
       // Accurate-rate re-fetch for IWTX / X3 — same request the current
       // code builds, just for a single room in this branch.
@@ -1222,6 +1336,8 @@ const ExternalApiRoomList = () => {
           selectedRate: [mapRateForPayload(rate, hotel, 1)],
           hotelStaticData: roomData.meta,
           payload: { ...payload, apiId: currentApiId },
+          // See modal Continue handler for rationale.
+          displayCurrency,
         };
         sessionStorage.setItem("bookingData", JSON.stringify(bookingData));
         window.open("/api-booking-page-hotels", "_blank");
@@ -1358,6 +1474,74 @@ const ExternalApiRoomList = () => {
             backendMsg
               ? `Unable to fetch live rate: ${backendMsg}`
               : "Unable to fetch live rate. Please try again.",
+          );
+        }
+      })();
+      return;
+    }
+
+    // ─── RATEHAWK multi-room prebook. One prebook per selected rate
+    //    (RateHawk's /hotel/prebook/ takes a single book_hash per call).
+    //    Fire in parallel, stitch the responses into the same "Room
+    //    Details" modal IWTX/X3/Darina use.
+    if (currentApiId === apiIdMapping.RATEHAWK) {
+      const rates = selectedRooms.map((r) => r.selectedRate);
+      setLoadingRate(true);
+      (async () => {
+        try {
+          const results = await Promise.all(rates.map((r) => fetchRatehawkPrebook(r)));
+          const firstFail = results.find((r) => !r?.success);
+          if (firstFail) {
+            setLoadingRate(false);
+            alert(
+              firstFail.message ||
+                "One of the selected rates is no longer available. Please reselect.",
+            );
+            return;
+          }
+          const accurateRates = rates.map((r, i) => {
+            const live = results[i] || {};
+            return {
+              roomNo: i + 1,
+              hotelId: hotel.hotelId,
+              hotelName: hotel.hotelName,
+              hotelCode: payload.hotelCode || hotel.hotelId,
+              roomCategory: live.roomCategory || r.roomCategory,
+              mealPlan: live.mealPlan || r.mealPlan,
+              contractLabel: r.contractLabel || "Live rate (RateHawk)",
+              nonRefundable:
+                live.nonRefundable != null
+                  ? live.nonRefundable
+                  : r.nonRefundable,
+              rate: live.rate ?? r.totalRate,
+              rateWithoutMarkup:
+                live.rateWithoutMarkup ?? r.totalRateWithoutMarkup,
+              currency: live.currency || r.currency,
+              // ORIGINAL search-time h-… hash — see single-room branch
+              // above for rationale (BE re-prebooks at booking time).
+              roomTypeCode: r.roomTypeCode,
+              mealPlanCode: r.mealPlanCode,
+              cancellationPolicy:
+                (live.cancellationPolicies?.length &&
+                  live.cancellationPolicies) ||
+                r.cancellationPolicies,
+              deadlineDate: live.deadlineDate ?? r.deadlineDate,
+            };
+          });
+          setSelectedRate(accurateRates);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+        } catch (err) {
+          console.error("RateHawk multi-room live-rate fetch failed:", err);
+          setLoadingRate(false);
+          const backendMsg =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message;
+          alert(
+            backendMsg
+              ? `Unable to fetch accurate rate: ${backendMsg}`
+              : "Unable to fetch accurate rate. Please try again.",
           );
         }
       })();
@@ -1576,6 +1760,8 @@ const ExternalApiRoomList = () => {
           ),
           hotelStaticData: roomData.meta,
           payload: { ...payload, apiId: currentApiId },
+          // See modal Continue handler for rationale.
+          displayCurrency,
         };
         sessionStorage.setItem("bookingData", JSON.stringify(bookingData));
         window.open("/api-booking-page-hotels", "_blank");
@@ -2865,77 +3051,132 @@ const ExternalApiRoomList = () => {
           <Modal.Title id="room-detail-modal">Room Details</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {selectedRate?.map((rate, index) => (
-            <Row key={index} className="g-4 mb-4">
-              <Col md={6}>
-                <h5>Room {index + 1}</h5>
-                <div
-                  id={`roomGallery-${index}`}
-                  className="carousel slide acuurate-rate-details-modal"
-                  data-bs-ride="carousel"
-                >
-                  <div className="carousel-inner rounded">
-                    {sampleGallery
-                      .slice(index * 3, index * 3 + 3)
-                      .map((img, idx) => (
+          {(() => {
+            // Nightcount for this stay, derived from the search-time payload
+            // so the modal can split per-room-per-stay (what every supplier
+            // populates onto rate.rate) into a per-night and a total-for-stay
+            // display. Defaults to 1 so 1-night stays continue to render the
+            // same value in both cells and nothing divides by zero.
+            let stayNights = 1;
+            try {
+              const ci = payload?.checkInDate ? new Date(payload.checkInDate) : null;
+              const co = payload?.checkOutDate ? new Date(payload.checkOutDate) : null;
+              if (ci && co && !isNaN(ci) && !isNaN(co)) {
+                const diff = Math.round((co - ci) / (1000 * 60 * 60 * 24));
+                if (diff > 0) stayNights = diff;
+              }
+            } catch (e) {
+              /* fall through with stayNights = 1 */
+            }
+            const grandTotal = (selectedRate || []).reduce(
+              (sum, r) => sum + (Number(r?.rate) || 0),
+              0,
+            );
+            return (
+              <>
+                {selectedRate?.map((rate, index) => {
+                  // Per-room stay total: rate.rate is the marked-up total for
+                  // this room for the entire stay (see RatehawkHotelRoomSearchService,
+                  // IwtxResponseMapper, DarinaHotelRoomSearchService — same
+                  // convention across suppliers). Fall back to rate.totalRate
+                  // for safety if a supplier ever populates only that.
+                  const perRoomStayTotal =
+                    Number(rate?.rate) || Number(rate?.totalRate) || 0;
+                  const perNight = perRoomStayTotal / stayNights;
+                  return (
+                    <Row key={index} className="g-4 mb-4">
+                      <Col md={6}>
+                        <h5>Room {index + 1}</h5>
                         <div
-                          key={idx}
-                          className={`carousel-item ${idx === 0 ? "active" : ""}`}
+                          id={`roomGallery-${index}`}
+                          className="carousel slide acuurate-rate-details-modal"
+                          data-bs-ride="carousel"
                         >
-                          <img src={img} className="d-block w-100" alt="Room" />
+                          <div className="carousel-inner rounded">
+                            {sampleGallery
+                              .slice(index * 3, index * 3 + 3)
+                              .map((img, idx) => (
+                                <div
+                                  key={idx}
+                                  className={`carousel-item ${idx === 0 ? "active" : ""}`}
+                                >
+                                  <img src={img} className="d-block w-100" alt="Room" />
+                                </div>
+                              ))}
+                          </div>
                         </div>
-                      ))}
-                  </div>
-                </div>
-              </Col>
-              <Col md={6}>
-                <h5 className="mb-2">{rate.roomCategory}</h5>
-                <p className="text-muted">{rate.roomTypeDescription}</p>
-                <div className="d-flex flex-wrap gap-2 mb-3">
-                  <Badge bg="secondary">High speed internet</Badge>
-                  <Badge bg="secondary">Private bathroom</Badge>
-                  <Badge bg="secondary">Kitchen</Badge>
-                  <Badge bg="secondary">TV</Badge>
-                </div>
-                <div className="booking-details-modal">
-                  <div className="d-flex justify-content-between mb-2">
-                    <span>Meal Plan:</span>
-                    <span className="fw-semibold">{rate.mealPlan}</span>
-                  </div>
-                  {activeUserRole === "ADMIN" && (
-                    <div className="d-flex justify-content-between mb-2">
-                      <span>Selling Price:</span>
-                      <span className="fw-semibold text-primary">
-                        {formatPrice(rate.rate)}
-                      </span>
-                    </div>
-                  )}
-                  <div className="d-flex justify-content-between mb-2">
-                    <span>Total Rate:</span>
-                    <span className="fw-semibold text-primary">
-                      {formatPrice(rate.rate)}
+                      </Col>
+                      <Col md={6}>
+                        <h5 className="mb-2">{rate.roomCategory}</h5>
+                        <p className="text-muted">{rate.roomTypeDescription}</p>
+                        <div className="d-flex flex-wrap gap-2 mb-3">
+                          <Badge bg="secondary">High speed internet</Badge>
+                          <Badge bg="secondary">Private bathroom</Badge>
+                          <Badge bg="secondary">Kitchen</Badge>
+                          <Badge bg="secondary">TV</Badge>
+                        </div>
+                        <div className="booking-details-modal">
+                          <div className="d-flex justify-content-between mb-2">
+                            <span>Meal Plan:</span>
+                            <span className="fw-semibold">{rate.mealPlan}</span>
+                          </div>
+                          {activeUserRole === "ADMIN" && (
+                            <div className="d-flex justify-content-between mb-2">
+                              <span>
+                                Selling Price{stayNights > 1 ? " (per night)" : ""}:
+                              </span>
+                              <span className="fw-semibold text-primary">
+                                {formatPrice(perNight)}
+                              </span>
+                            </div>
+                          )}
+                          <div className="d-flex justify-content-between mb-2">
+                            <span>
+                              Total Rate{stayNights > 1 ? ` (${stayNights} nights)` : ""}:
+                            </span>
+                            <span className="fw-semibold text-primary">
+                              {formatPrice(perRoomStayTotal)}
+                            </span>
+                          </div>
+                          <div className="d-flex justify-content-between mb-2">
+                            <span>Refund Status:</span>
+                            <span>
+                              {getRefundStatusBadge(
+                                rate.nonRefundable === "Y"
+                                  ? "NON REFUNDABLE"
+                                  : "FLEXIBLE",
+                              )}
+                            </span>
+                          </div>
+                          <div className="d-flex justify-content-between">
+                            <span>Contract:</span>
+                            <span className="small text-muted">
+                              {rate.contractLabel}
+                            </span>
+                          </div>
+                        </div>
+                      </Col>
+                    </Row>
+                  );
+                })}
+                {/* Grand total footer — only when the booking spans more than
+                    one room. For a single room the per-room "Total Rate" row
+                    above already IS the grand total, so an extra row would be
+                    noise. */}
+                {selectedRate && selectedRate.length > 1 && (
+                  <div className="d-flex justify-content-between align-items-center pt-3 mt-2 border-top">
+                    <span className="fw-semibold">
+                      Grand Total ({selectedRate.length} rooms
+                      {stayNights > 1 ? ` × ${stayNights} nights` : ""}):
+                    </span>
+                    <span className="fs-5 fw-bold text-primary">
+                      {formatPrice(grandTotal)}
                     </span>
                   </div>
-                  <div className="d-flex justify-content-between mb-2">
-                    <span>Refund Status:</span>
-                    <span>
-                      {getRefundStatusBadge(
-                        rate.nonRefundable === "Y"
-                          ? "NON REFUNDABLE"
-                          : "FLEXIBLE",
-                      )}
-                    </span>
-                  </div>
-                  <div className="d-flex justify-content-between">
-                    <span>Contract:</span>
-                    <span className="small text-muted">
-                      {rate.contractLabel}
-                    </span>
-                  </div>
-                </div>
-              </Col>
-            </Row>
-          ))}
+                )}
+              </>
+            );
+          })()}
         </Modal.Body>
         <Modal.Footer>
           <Button
@@ -2957,6 +3198,13 @@ const ExternalApiRoomList = () => {
                     selectedRate,
                     hotelStaticData: roomData.meta,
                     payload: { ...payload, apiId: currentApiId },
+                    // Carry the operator's display-currency preference (code
+                    // + factor) picked at search time so the booking page
+                    // renders prices the same way this modal does. Without
+                    // this the booking page falls back to raw AED and the
+                    // "Selling Price / Total" figures on the two pages
+                    // disagree for any non-AED display currency.
+                    displayCurrency,
                   }),
                 );
               } catch (e) {
