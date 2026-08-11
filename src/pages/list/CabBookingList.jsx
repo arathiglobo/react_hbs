@@ -247,14 +247,37 @@ const CabBookingList = () => {
 
   // Tag each booking with the bucket it came from so filters can rely on
   // that even when the backend lacks an explicit `bookingStatus` field.
+  //
+  // Dedupe by packageBookCode, preferring the "cancelled" bucket.
+  //
+  // Why: the backend's three grouped queries use MISMATCHED filters —
+  // findUpcomingCabBookings gates on `pkg.isDeleted=false` while
+  // findCancelledCabBookings gates on `cab.isDeleted=true`. A package
+  // whose cab was cancelled but whose sibling items are still active
+  // satisfies BOTH, so the same packageBookCode arrives in two buckets
+  // and paints two rows for one booking (a Reconfirmed row AND a
+  // Cancelled row). Operators only care about the FINAL state on the
+  // list — the detail page renders the ReConfirmed → Cancelled history
+  // separately — so we collapse duplicates here with cancelled winning.
   const allBookings = useMemo(() => {
     const tag = (list, bucket) =>
       (list || []).map((b) => ({ ...b, __bucket: bucket }));
-    return [
+    const combined = [
       ...tag(apiData.upcomingBookings.content, "upcoming"),
       ...tag(apiData.completedBookings.content, "completed"),
       ...tag(apiData.cancelledBookings.content, "cancelled"),
     ];
+    const seen = new Map();
+    for (const b of combined) {
+      // Fall back to a synthetic key when packageBookCode is missing so
+      // ID-less rows are never merged with each other.
+      const key = b.packageBookCode || `__row_${seen.size}`;
+      const prior = seen.get(key);
+      if (!prior || (b.__bucket === "cancelled" && prior.__bucket !== "cancelled")) {
+        seen.set(key, b);
+      }
+    }
+    return Array.from(seen.values());
   }, [apiData]);
 
   const filteredBookings = useMemo(() => {
@@ -386,17 +409,22 @@ const CabBookingList = () => {
     lineHeight: 1.2,
   };
 
-  // Mirror the cab detail view's `displayStatus` (Cancelled → red, else
-  // `confirmationStatus` falling back to Confirmed) so the list's
-  // Notification column and the detail page's Status field stay in sync.
+  // Mirror the cab detail view's `displayStatus` exactly (Cancelled → red,
+  // everything else → "Reconfirmed" green) so the list's Notification
+  // column and the detail page's Status field stay in sync. Rationale
+  // (per the detail view): any booking that survived create-order +
+  // approve + wallet deduction is fully committed on both sides, and
+  // the operator no longer has to press RECONFIRM manually — so legacy
+  // raw values ("OK", "CONFIRMED", "PENDING_IWAY_PAYMENT", null, etc.)
+  // all fold into the same Reconfirmed label. The DB's underlying
+  // confirmationStatus is unchanged.
   const bucketMeta = (b) => {
     const isCancelled =
       b.__bucket === "cancelled" ||
       normStatus(b.bookingStatus) === "cancelled" ||
       b.cancelStatus === true;
     if (isCancelled) return STATUS_META.CANCELLED;
-    const cs = normStatus(b.confirmationStatus).toUpperCase();
-    return STATUS_META[cs] || STATUS_META.CONFIRMED;
+    return STATUS_META.RECONFIRMED;
   };
 
   return (

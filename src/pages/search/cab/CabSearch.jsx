@@ -1112,6 +1112,13 @@ export const CabSearch = () => {
     source: cab.apiType || cab.source || null,
     iwayPriceId: cab.iwayPriceId || null,
     iwayPriceUid: cab.iwayPriceUid || null,
+    // flexible_tariff flag from the i'way price offer (guide §11.6.2).
+    // Carried through so CabBookingPage can forward it to /api/cab/book,
+    // where the backend uses it to decide whether to send text_tablet
+    // (Meet & Greet sign) on the create-order payload. Null on in-house
+    // rows — the backend treats null as "M&G included" (safe default).
+    iwayFlexibleTariff:
+      cab.flexibleTariff != null ? Boolean(cab.flexibleTariff) : null,
     searchCabDetailsDTO: Array.isArray(cab.searchCabDetailsDTO)
       ? cab.searchCabDetailsDTO.map((d) => ({
           ...d,
@@ -1471,20 +1478,6 @@ export const CabSearch = () => {
 
     const isIway = cab?.channelType === "iway" || cab?.source === "IWAY";
 
-    // IWay rows are external-supplier offers — the /cab-booking-page
-    // flow only knows how to POST /api/cab/book (in-house cab tables).
-    // Until CabBookingPage learns the IWay POST /orders flow we stop
-    // the navigation with an informative toast so the operator isn't
-    // dropped into a broken checkout. Everything else below still runs
-    // for in-house rows.
-    if (cab?.channelType === "iway" || cab?.source === "IWAY") {
-      toast(
-        "IWay booking checkout will be wired up next — the search + rates are live now.",
-        { icon: "ℹ️", duration: 5000 },
-      );
-      return;
-    }
-
     // Recompute the row's price the same way the table shows it so the
     // booking page receives a consistent total. We carry BOTH the
     // markup-applied price (`totalRate`, what the user pays) and the
@@ -1524,10 +1517,15 @@ export const CabSearch = () => {
         // stamp it on the /api/cab/book payload. Falls back to the
         // same session/local keys the search request already reads
         // so behaviour matches whichever value the user searched with.
+        // For agent-role logins the Agent picker is hidden and nobody
+        // sets makeYourOwnPackageAgentId, so drop to the logged-in
+        // user's own userId — that IS their agent id (the backend
+        // forces the booking to the logged-in agent anyway).
         agentId:
           (agent && String(agent)) ||
           sessionStorage.getItem("makeYourOwnPackageAgentId") ||
           localStorage.getItem("makeYourOwnPackageAgentId") ||
+          (isAgentRole ? localStorage.getItem("userId") : "") ||
           "",
         nationality,
         destination,
@@ -1571,10 +1569,14 @@ export const CabSearch = () => {
       },
     };
 
-    // Open the checkout in a NEW TAB. Router state can't cross a browser
-    // tab, so hand the payload off through localStorage under a one-time
-    // ?draft=<id> key that CabBookingPage reads (and clears) on load. If the
-    // hand-off or the popup is blocked, fall back to same-tab navigation.
+    // Open the checkout in a NEW TAB with a CLEAN URL: /cab-booking-page
+    // (no query params). Router state can't cross a browser tab, so the
+    // payload is stashed in localStorage under a one-time
+    // `cabBookingDraft:<id>` key and the id is handed to the new tab via
+    // `window.open(url, targetName)` — the second arg becomes the new tab's
+    // `window.name`, which CabBookingPage reads (and clears) on mount.
+    // If the hand-off or the popup is blocked, fall back to same-tab
+    // navigation via router state.
     const draftId = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     let handedOff = false;
     try {
@@ -1589,8 +1591,8 @@ export const CabSearch = () => {
 
     const newTab = handedOff
       ? window.open(
-          `${window.location.origin}/cab-booking-page?draft=${draftId}`,
-          "_blank",
+          `${window.location.origin}/cab-booking-page`,
+          `cabBookingDraft:${draftId}`,
         )
       : null;
 
@@ -2215,153 +2217,15 @@ export const CabSearch = () => {
                     </Row>
 
 
-                    {/* The separate "Also search IWay Transfers" checkbox and
-                        its two dedicated location inputs are gone. i'way's
-                        locations now appear as an extra option group inside
-                        the Pickup / Drop controls above, and whether i'way
-                        runs at all is decided by CabApiCallerContext from the
-                        agent exclusion + company allow-list — the same gating
-                        the hotel suppliers use — rather than a per-search
-                        checkbox. */}
-
-                    {/* ── IWay Transfers (external) ────────────────────────
-                        Optional second-supplier leg. Toggling the checkbox
-                        reveals two typeahead inputs backed by IWay's
-                        /places/find + /places/{id} passthroughs on the
-                        backend. IWay requires lat/lng for the /prices call
-                        (guide §11.6) which the in-house city/facility
-                        selectors don't carry — so the operator picks the
-                        IWay pickup + drop from their own autocomplete and
-                        we resolve lat/lng on selection.
-                        When both selections resolve to coordinates, the
-                        search submit sends the IWay coords piggybacked on
-                        the same POST /api/cab-search/search request — the
-                        backend fans out to IWay's /prices in the same
-                        round-trip and returns the merged in-house + IWay
-                        offer list. One call, both suppliers. Leaving this
-                        off keeps the flow exactly as it was. */}
-                    <Row className="g-3 mb-2 align-items-end">
-                      <Col md={12}>
-                        <Form.Check
-                          type="checkbox"
-                          id="cab-iway-enable"
-                          className="fw-semibold"
-                          label="Also search IWay Transfers (external supplier)"
-                          checked={iwayEnabled}
-                          onChange={(e) => {
-                            const on = e.target.checked;
-                            setIwayEnabled(on);
-                            if (!on) {
-                              // Clearing on turn-off keeps the payload
-                              // consistent — no stale IWay selections
-                              // sneak into a later search.
-                              setIwayPickupSelected(null);
-                              setIwayDropSelected(null);
-                              setIwayPickupOptions([]);
-                              setIwayDropOptions([]);
-                            }
-                          }}
-                        />
-                        <div className="text-muted small mt-1">
-                          Adds IWay (i'way) offers alongside your in-house cab
-                          results. Requires exact pickup + drop locations from
-                          the IWay lookup below.
-                        </div>
-                      </Col>
-                    </Row>
-                    {iwayEnabled && (
-                      <Row className="g-3 mb-3 align-items-end">
-                        <Col md={6}>
-                          <Form.Label className="fw-semibold">
-                            IWay Pickup Location{" "}
-                            <span className="text-danger">*</span>
-                          </Form.Label>
-                          <Select
-                            options={iwayPickupOptions}
-                            value={iwayPickupSelected}
-                            isLoading={isIwayPickupLoading}
-                            onInputChange={(input, { action }) => {
-                              if (action !== "input-change") return;
-                              debouncedIwayPickupSearch(input || "");
-                            }}
-                            onChange={async (opt) => {
-                              if (!opt) {
-                                setIwayPickupSelected(null);
-                                return;
-                              }
-                              // Fetch lat/lng immediately so the payload
-                              // is ready when the user hits Search.
-                              const { lat, lng } = await fetchIwayPlaceDetails(
-                                opt.placeId,
-                              );
-                              if (lat == null || lng == null) {
-                                toast.error(
-                                  "IWay couldn't resolve coordinates for that pickup location.",
-                                );
-                                return;
-                              }
-                              setIwayPickupSelected({ ...opt, lat, lng });
-                            }}
-                            filterOption={() => true}
-                            placeholder="Type a pickup address, airport…"
-                            isSearchable
-                            isClearable
-                            menuPortalTarget={document.body}
-                            styles={{
-                              ...customSelectStyles,
-                              menuPortal: (base) => ({
-                                ...base,
-                                zIndex: 9999,
-                              }),
-                            }}
-                          />
-                        </Col>
-                        <Col md={6}>
-                          <Form.Label className="fw-semibold">
-                            IWay Drop Location{" "}
-                            <span className="text-danger">*</span>
-                          </Form.Label>
-                          <Select
-                            options={iwayDropOptions}
-                            value={iwayDropSelected}
-                            isLoading={isIwayDropLoading}
-                            onInputChange={(input, { action }) => {
-                              if (action !== "input-change") return;
-                              debouncedIwayDropSearch(input || "");
-                            }}
-                            onChange={async (opt) => {
-                              if (!opt) {
-                                setIwayDropSelected(null);
-                                return;
-                              }
-                              const { lat, lng } = await fetchIwayPlaceDetails(
-                                opt.placeId,
-                              );
-                              if (lat == null || lng == null) {
-                                toast.error(
-                                  "IWay couldn't resolve coordinates for that drop location.",
-                                );
-                                return;
-                              }
-                              setIwayDropSelected({ ...opt, lat, lng });
-                            }}
-                            filterOption={() => true}
-                            placeholder="Type a drop address, hotel, airport…"
-                            isSearchable
-                            isClearable
-                            menuPortalTarget={document.body}
-                            styles={{
-                              ...customSelectStyles,
-                              menuPortal: (base) => ({
-                                ...base,
-                                zIndex: 9999,
-                              }),
-                            }}
-                          />
-                        </Col>
-                      </Row>
-                    )}
-
+                    {/* IWay Transfers UI removed. i'way locations now appear
+                        as an extra option group inside the Pickup / Drop
+                        controls above, and whether i'way runs is decided by
+                        CabApiCallerContext (agent exclusion + company
+                        allow-list). The iwayEnabled/pickup/drop state,
+                        debounced lookups, place-details fetch and the
+                        piggybacked iway* fields in the search payload are
+                        intentionally kept so the integration keeps working
+                        for that path. */}
 
                     {/* Legacy/hidden fields kept in state but invisible.
                         The original Trip Type radios + Origin/Destination/
