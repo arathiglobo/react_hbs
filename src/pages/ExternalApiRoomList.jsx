@@ -226,16 +226,6 @@ const ExternalApiRoomList = () => {
     useState(false);
   const [pendingBookingFn, setPendingBookingFn] = useState(null);
 
-  // GRN per-room "pick-count mismatch" modal. Multi-room GRN rates (a rate
-  // whose recheck-guaranteed rooms[] covers >1 slot) must be picked for the
-  // exact number of rooms they cover, otherwise GRN's booking API rejects
-  // with error 5126 "Rate key and rooms specified do not match". Instead of
-  // letting the user walk into that failure at the booking page, we check
-  // on the "Continue with Booking" click and pop this modal early.
-  const [showGrnPickMismatchModal, setShowGrnPickMismatchModal] =
-    useState(false);
-  const [grnPickMismatchMessages, setGrnPickMismatchMessages] = useState([]);
-
   // Cancellation Policies & Terms modal — sourced from the search
   // response; no extra API call for external suppliers.
   //
@@ -993,6 +983,100 @@ const ExternalApiRoomList = () => {
       return;
     }
 
+    // GRN non-bundled AUTO-LINK: a rate with numberOfRooms > 1 (partial-
+    // bundled) MUST be picked for exactly that many matching rooms — GRN
+    // rejects the booking with error 5126 otherwise. Instead of blocking
+    // the user with a mismatch modal at Continue Booking, we auto-fill
+    // the clicked slot + the next (N-1) unpicked slots whose pax matches
+    // the rate's occupancy. The rate card render adds "Linked to Room X"
+    // badges so the auto-fill is visible. Toggle-off / re-pick clears the
+    // whole linked group atomically. Scoped strictly to GRN + non-bundled
+    // multi-room + numberOfRooms > 1 so every other flow falls through
+    // to the generic per-slot setter below.
+    const expectedRooms = Number(rate?.numberOfRooms) || 1;
+    if (
+      currentApiId === "20" &&
+      bundleMode === "non-bundled" &&
+      selectedRooms.length > 1 &&
+      expectedRooms > 1
+    ) {
+      // Toggle-off: clicking the same rate in an already-linked slot
+      // clears the whole group.
+      const alreadyLinkedInClicked =
+        selectedRooms[roomIndex]?.selectedRate?.rateKey === rate?.rateKey;
+      if (alreadyLinkedInClicked) {
+        setSelectedRooms((prev) =>
+          prev.map((r) =>
+            r?.selectedRate?.rateKey === rate?.rateKey
+              ? { ...r, selectedRate: null, hotelId: null, hotelName: null }
+              : r,
+          ),
+        );
+        return;
+      }
+
+      // Re-pick in a slot that's currently part of a DIFFERENT linked
+      // group: clear that whole group first, then fall through to the
+      // fresh link below. Keeps groups atomic.
+      const currentGroupKey = selectedRooms[roomIndex]?.selectedRate?.rateKey;
+      const searchRooms = roomData?.payload?.rooms || [];
+      const rateAdults = Number(rate?.paxAdults);
+      const rateChildren = Number(rate?.paxChildren);
+      const hasPaxOnRate = !Number.isNaN(rateAdults) && rate?.paxAdults != null;
+
+      // Find (expectedRooms - 1) additional slots that:
+      //   (a) aren't the clicked slot,
+      //   (b) aren't part of some OTHER group (empty, or part of the
+      //       group we're about to clear above), and
+      //   (c) have matching pax (skip pax check if the rate doesn't
+      //       expose paxAdults/paxChildren — filter chain already gates
+      //       by occupancy so any visible rate is pax-safe for its slot).
+      const linkTargets = [roomIndex];
+      for (
+        let i = 0;
+        i < selectedRooms.length && linkTargets.length < expectedRooms;
+        i++
+      ) {
+        if (i === roomIndex) continue;
+        const otherKey = selectedRooms[i]?.selectedRate?.rateKey;
+        const isFree =
+          !otherKey || (currentGroupKey && otherKey === currentGroupKey);
+        if (!isFree) continue;
+        if (hasPaxOnRate) {
+          const s = searchRooms[i];
+          const roomAdults = Number(s?.adults) || 0;
+          const roomChildren = Number(s?.children) || 0;
+          if (roomAdults !== rateAdults || roomChildren !== rateChildren) {
+            continue;
+          }
+        }
+        linkTargets.push(i);
+      }
+
+      if (linkTargets.length < expectedRooms) {
+        const label =
+          rate?.roomTypeDescription || rate?.roomCategory || "This rate";
+        toast.error(
+          `"${label}" covers ${expectedRooms} rooms — only ${linkTargets.length} matching unpicked slot(s) available. Unpick another room first, or use "Book as one package".`,
+        );
+        return;
+      }
+
+      setSelectedRooms((prev) =>
+        prev.map((r, i) => {
+          // Clear any slot that was part of the group we're replacing.
+          if (currentGroupKey && r?.selectedRate?.rateKey === currentGroupKey) {
+            r = { ...r, selectedRate: null, hotelId: null, hotelName: null };
+          }
+          if (linkTargets.includes(i)) {
+            return { ...r, selectedRate: rate, hotelId, hotelName };
+          }
+          return r;
+        }),
+      );
+      return;
+    }
+
     setSelectedRooms((prev) =>
       prev.map((r, i) => {
         if (i !== roomIndex) return r;
@@ -1247,41 +1331,11 @@ const ExternalApiRoomList = () => {
       return;
     }
 
-    // GRN per-room "pick-count" pre-check. A GRN non-bundled / partial-bundled
-    // rate whose numberOfRooms > 1 covers that many rooms — it MUST be picked
-    // for exactly that many matching slots, otherwise GRN's booking API
-    // rejects the payload with error 5126 "Rate key and rooms specified do
-    // not match". We catch the mismatch here (before navigating to the
-    // booking page) and show a modal with a clear message. Scoped strictly
-    // to GRN + non-bundled multi-room mode so bundled bookings, other
-    // suppliers, and single-room flows are untouched.
-    if (isNonBundledMode) {
-      const countsByRateKey = new Map();
-      const rateInfoByKey = new Map();
-      selectedRooms.forEach((r) => {
-        const rk = r?.selectedRate?.rateKey;
-        if (!rk) return;
-        countsByRateKey.set(rk, (countsByRateKey.get(rk) || 0) + 1);
-        if (!rateInfoByKey.has(rk)) rateInfoByKey.set(rk, r.selectedRate);
-      });
-      const mismatches = [];
-      countsByRateKey.forEach((assignedCount, rk) => {
-        const rate = rateInfoByKey.get(rk);
-        const expected = Number(rate?.numberOfRooms);
-        if (!expected || expected <= 1) return; // single-room rates: nothing to check
-        if (expected !== assignedCount) {
-          const label = rate?.roomTypeDescription || rate?.roomCategory || rk.slice(0, 12) + "…";
-          mismatches.push(
-            `"${label}" covers ${expected} room(s) but was picked for ${assignedCount} room(s). Please either pick this rate for exactly ${expected} matching room(s), or use "Book as one package" mode.`
-          );
-        }
-      });
-      if (mismatches.length > 0) {
-        setGrnPickMismatchMessages(mismatches);
-        setShowGrnPickMismatchModal(true);
-        return;
-      }
-    }
+    // NOTE: GRN partial-bundled pick-count guard used to live here as a
+    // blocking modal. handleRateSelect now auto-links partial-bundled
+    // rates across the exact number of slots they cover, so a mismatch
+    // is unreachable through the UI. Backend still enforces the same
+    // invariant as a safety net.
 
     const sum = (key) =>
       selectedRooms.reduce(
@@ -1813,33 +1867,6 @@ const ExternalApiRoomList = () => {
               </Modal.Footer>
             </Modal>
 
-            {/* GRN per-room "pick-count mismatch" modal — see the pre-check
-                in handleProceedBooking for the invariant this enforces. */}
-            <Modal
-              show={showGrnPickMismatchModal}
-              onHide={() => setShowGrnPickMismatchModal(false)}
-              centered
-            >
-              <Modal.Header closeButton>
-                <Modal.Title>Selection Doesn't Match Rate</Modal.Title>
-              </Modal.Header>
-              <Modal.Body>
-                {grnPickMismatchMessages.map((msg, i) => (
-                  <p key={i} className={i === grnPickMismatchMessages.length - 1 ? "mb-0" : ""}>
-                    {msg}
-                  </p>
-                ))}
-              </Modal.Body>
-              <Modal.Footer>
-                <Button
-                  variant="primary"
-                  onClick={() => setShowGrnPickMismatchModal(false)}
-                >
-                  OK
-                </Button>
-              </Modal.Footer>
-            </Modal>
-
             {/* Hotel header — visually identical to Inhouse. */}
             <Card className="hotel-header-card mb-4">
               <Card.Body className="p-4">
@@ -2311,6 +2338,24 @@ const ExternalApiRoomList = () => {
                                         isMultiRoom &&
                                         selectedRooms[roomSlotIndex]
                                           ?.selectedRate === rate;
+                                      // Auto-link visibility: does this rate
+                                      // cover >1 slot (partial-bundled), and
+                                      // if it's picked here, which OTHER
+                                      // slots is it currently linked to?
+                                      const rateCovers =
+                                        Number(rate?.numberOfRooms) || 1;
+                                      const linkedSlotNumbers =
+                                        isNonBundledMode && rateCovers > 1
+                                          ? selectedRooms
+                                              .map((r, i) =>
+                                                r?.selectedRate?.rateKey ===
+                                                  rate?.rateKey &&
+                                                i !== roomSlotIndex
+                                                  ? i + 1
+                                                  : null,
+                                              )
+                                              .filter(Boolean)
+                                          : [];
                                       return (
                                         <Col
                                           key={rateIndex}
@@ -2353,6 +2398,14 @@ const ExternalApiRoomList = () => {
                                                 ✓ Selected
                                               </span>
                                             )}
+                                            {/* GRN partial-bundled indicator
+                                                moved INLINE (below the rate
+                                                features) — the earlier
+                                                absolute-positioned corner
+                                                badge collided with the
+                                                refund-status pill. Rendered
+                                                inside the card body a bit
+                                                further down instead. */}
                                             {viewMode === "grid" ? (
                                               <Card.Body className="p-2 pb-0 d-flex flex-column gap-2">
                                                 <div className="rate-header d-flex justify-content-between align-items-start">
@@ -2415,6 +2468,34 @@ const ExternalApiRoomList = () => {
                                                 </div>
 
                                                 <div className="rate-features small">
+                                                  {/* GRN partial-bundled inline badge — placed
+                                                      here (below pricing, above other feature
+                                                      lines) so it's clearly visible inside the
+                                                      card body without collide with the refund-
+                                                      status pill in the top-right corner. Hidden
+                                                      once the rate is picked because the radio
+                                                      label below then says "Selected for Room X
+                                                      + Y" which conveys the same info. */}
+                                                  {isNonBundledMode &&
+                                                    rateCovers > 1 &&
+                                                    !isSelectedForThisSlot && (
+                                                      <div className="feature-item">
+                                                        <span
+                                                          style={{
+                                                            backgroundColor:
+                                                              "#0d6efd",
+                                                            color: "#fff",
+                                                            fontSize: "0.7rem",
+                                                            fontWeight: 700,
+                                                            padding: "2px 6px",
+                                                            borderRadius: "4px",
+                                                          }}
+                                                        >
+                                                          Covers {rateCovers}{" "}
+                                                          rooms
+                                                        </span>
+                                                      </div>
+                                                    )}
                                                   <div className="feature-item">
                                                     <FaInfoCircle className="me-2 text-muted" />
                                                     {rate.contractLabel}
@@ -2474,32 +2555,54 @@ const ExternalApiRoomList = () => {
                                                 </div>
 
                                                 {isMultiRoom ? (
-                                                  <Form.Check
-                                                    type="radio"
-                                                    id={`rate-radio-grid-${roomSlotIndex}-${index}-${rateIndex}`}
-                                                    name={`rate-radio-grid-room-${roomSlotIndex}`}
-                                                    className="w-100 mt-1 mb-1"
-                                                    label={
-                                                      selectedRooms[
-                                                        roomSlotIndex
-                                                      ]?.selectedRate === rate
-                                                        ? `Selected for Room ${roomSlotIndex + 1}`
-                                                        : `Select for Room ${roomSlotIndex + 1}`
-                                                    }
-                                                    checked={
-                                                      selectedRooms[
-                                                        roomSlotIndex
-                                                      ]?.selectedRate === rate
-                                                    }
-                                                    onChange={() =>
-                                                      handleRateSelect(
-                                                        roomSlotIndex,
-                                                        rate,
-                                                        hotel.hotelId,
-                                                        hotel.hotelName,
-                                                      )
-                                                    }
-                                                  />
+                                                  <>
+                                                    <Form.Check
+                                                      type="radio"
+                                                      id={`rate-radio-grid-${roomSlotIndex}-${index}-${rateIndex}`}
+                                                      name={`rate-radio-grid-room-${roomSlotIndex}`}
+                                                      className="w-100 mt-1 mb-1"
+                                                      label={
+                                                        isSelectedForThisSlot
+                                                          ? linkedSlotNumbers.length > 0
+                                                            ? `Selected for Room ${roomSlotIndex + 1} + ${linkedSlotNumbers.join(", ")}`
+                                                            : `Selected for Room ${roomSlotIndex + 1}`
+                                                          : isNonBundledMode && rateCovers > 1
+                                                            ? `Select — this rate books ${rateCovers} rooms together`
+                                                            : `Select for Room ${roomSlotIndex + 1}`
+                                                      }
+                                                      checked={
+                                                        selectedRooms[
+                                                          roomSlotIndex
+                                                        ]?.selectedRate === rate
+                                                      }
+                                                      onChange={() =>
+                                                        handleRateSelect(
+                                                          roomSlotIndex,
+                                                          rate,
+                                                          hotel.hotelId,
+                                                          hotel.hotelName,
+                                                        )
+                                                      }
+                                                    />
+                                                    {isSelectedForThisSlot &&
+                                                      linkedSlotNumbers.length >
+                                                        0 && (
+                                                        <div
+                                                          className="small text-muted"
+                                                          style={{
+                                                            marginTop: "-4px",
+                                                            paddingLeft: "1.5rem",
+                                                          }}
+                                                        >
+                                                          Also applied to Room{" "}
+                                                          {linkedSlotNumbers.join(
+                                                            ", ",
+                                                          )}{" "}
+                                                          — click again to
+                                                          unlink all.
+                                                        </div>
+                                                      )}
+                                                  </>
                                                 ) : (
                                                   <Button
                                                     variant="primary"
@@ -2641,34 +2744,74 @@ const ExternalApiRoomList = () => {
 
                                                 <div className="flex-shrink-0">
                                                   {isMultiRoom ? (
-                                                    <Form.Check
-                                                      type="radio"
-                                                      id={`rate-radio-list-${roomSlotIndex}-${index}-${rateIndex}`}
-                                                      name={`rate-radio-list-room-${roomSlotIndex}`}
-                                                      label={
-                                                        selectedRooms[
-                                                          roomSlotIndex
-                                                        ]?.selectedRate === rate
-                                                          ? `Selected for Room ${roomSlotIndex + 1}`
-                                                          : `Select for Room ${roomSlotIndex + 1}`
-                                                      }
-                                                      checked={
-                                                        selectedRooms[
-                                                          roomSlotIndex
-                                                        ]?.selectedRate === rate
-                                                      }
-                                                      onChange={() =>
-                                                        handleRateSelect(
-                                                          roomSlotIndex,
-                                                          rate,
-                                                          hotel.hotelId,
-                                                          hotel.hotelName,
-                                                        )
-                                                      }
-                                                      style={{
-                                                        whiteSpace: "nowrap",
-                                                      }}
-                                                    />
+                                                    <div>
+                                                      {isNonBundledMode &&
+                                                        rateCovers > 1 &&
+                                                        !isSelectedForThisSlot && (
+                                                          <div
+                                                            style={{
+                                                              backgroundColor:
+                                                                "#0d6efd",
+                                                              color: "#fff",
+                                                              fontSize: "0.7rem",
+                                                              fontWeight: 700,
+                                                              padding: "2px 6px",
+                                                              borderRadius: "4px",
+                                                              display: "inline-block",
+                                                              marginBottom: "4px",
+                                                            }}
+                                                          >
+                                                            Covers {rateCovers}{" "}
+                                                            rooms
+                                                          </div>
+                                                        )}
+                                                      <Form.Check
+                                                        type="radio"
+                                                        id={`rate-radio-list-${roomSlotIndex}-${index}-${rateIndex}`}
+                                                        name={`rate-radio-list-room-${roomSlotIndex}`}
+                                                        label={
+                                                          isSelectedForThisSlot
+                                                            ? linkedSlotNumbers.length > 0
+                                                              ? `Selected for Room ${roomSlotIndex + 1} + ${linkedSlotNumbers.join(", ")}`
+                                                              : `Selected for Room ${roomSlotIndex + 1}`
+                                                            : isNonBundledMode && rateCovers > 1
+                                                              ? `Select — this rate books ${rateCovers} rooms together`
+                                                              : `Select for Room ${roomSlotIndex + 1}`
+                                                        }
+                                                        checked={
+                                                          selectedRooms[
+                                                            roomSlotIndex
+                                                          ]?.selectedRate === rate
+                                                        }
+                                                        onChange={() =>
+                                                          handleRateSelect(
+                                                            roomSlotIndex,
+                                                            rate,
+                                                            hotel.hotelId,
+                                                            hotel.hotelName,
+                                                          )
+                                                        }
+                                                        style={{
+                                                          whiteSpace: "nowrap",
+                                                        }}
+                                                      />
+                                                      {isSelectedForThisSlot &&
+                                                        linkedSlotNumbers.length >
+                                                          0 && (
+                                                          <div
+                                                            className="small text-muted"
+                                                            style={{
+                                                              marginTop: "2px",
+                                                              paddingLeft: "1.5rem",
+                                                            }}
+                                                          >
+                                                            Also applied to Room{" "}
+                                                            {linkedSlotNumbers.join(
+                                                              ", ",
+                                                            )}
+                                                          </div>
+                                                        )}
+                                                    </div>
                                                   ) : (
                                                     <Button
                                                       variant="primary"
@@ -2717,6 +2860,22 @@ const ExternalApiRoomList = () => {
                       }
 
                       const slotSelection = selectedRooms[roomSlotIndex];
+                      // GRN partial-bundled: figure out if this slot is
+                      // filled by a rate that primarily belongs to an
+                      // earlier slot (auto-linked), so the header can
+                      // show "Linked to Room X" instead of the plain
+                      // "picked" badge — makes the atomic group visible.
+                      const linkedPrimaryIndex =
+                        isNonBundledMode && slotSelection?.selectedRate?.rateKey
+                          ? selectedRooms.findIndex(
+                              (r) =>
+                                r?.selectedRate?.rateKey ===
+                                slotSelection.selectedRate.rateKey,
+                            )
+                          : -1;
+                      const isLinkedChildSlot =
+                        linkedPrimaryIndex !== -1 &&
+                        linkedPrimaryIndex !== roomSlotIndex;
                       return (
                         <Accordion
                           key={`room-slot-${roomSlotIndex}`}
@@ -2730,14 +2889,25 @@ const ExternalApiRoomList = () => {
                                   Room {roomSlotIndex + 1}
                                 </span>
                                 {slotSelection?.selectedRate ? (
-                                  <Badge bg="success" className="ms-2">
-                                    {slotSelection.selectedRate.roomCategory}
-                                    {" — "}
-                                    {formatPrice(
-                                      slotSelection.selectedRate.totalRate ||
-                                        0,
-                                    )}
-                                  </Badge>
+                                  isLinkedChildSlot ? (
+                                    <Badge bg="info" className="ms-2">
+                                      Linked to Room{" "}
+                                      {linkedPrimaryIndex + 1} —{" "}
+                                      {
+                                        slotSelection.selectedRate
+                                          .roomCategory
+                                      }
+                                    </Badge>
+                                  ) : (
+                                    <Badge bg="success" className="ms-2">
+                                      {slotSelection.selectedRate.roomCategory}
+                                      {" — "}
+                                      {formatPrice(
+                                        slotSelection.selectedRate.totalRate ||
+                                          0,
+                                      )}
+                                    </Badge>
+                                  )
                                 ) : (
                                   <Badge
                                     bg="warning"
