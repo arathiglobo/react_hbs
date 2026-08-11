@@ -1351,6 +1351,102 @@ const ExternalApiRoomList = () => {
 
     const currentApiId = resolveApiId(hotel);
 
+    // ─── GRN "Continue with Booking" recheck. Mirrors what IWTX / X3 /
+    //    DARINA do on this same click: fire the supplier-mandated
+    //    availability/rate-verify call, then open the same "Room Details"
+    //    modal with the fresh values so the operator can review before
+    //    the actual booking. Previously this recheck happened on the
+    //    booking-page Confirm (inside GrnHotelBookingService.createBooking);
+    //    moved here per client requirement so a stale rate never survives
+    //    into the booking-page render. Backend recheck call is removed too.
+    //
+    //    Recheck fanout — one call per UNIQUE rate_key:
+    //     • Bundled multi-room → all slots share one rate_key → 1 call.
+    //     • Partial-bundled + auto-linked → linked slots share the rate_key
+    //       so still 1 call per group.
+    //     • Fully-independent non-bundled → N calls (one per rate).
+    //    fetchGrnRecheck caches by rate_key, so any rate whose Cancellation
+    //    Policies modal was already opened is a cache hit here — zero
+    //    duplicate calls.
+    if (currentApiId === apiIdMapping.GRN) {
+      setLoadingRate(true);
+      (async () => {
+        try {
+          const uniqueRates = [];
+          const seenKeys = new Set();
+          selectedRooms.forEach((r) => {
+            const rk = r?.selectedRate?.rateKey;
+            if (!rk || seenKeys.has(rk)) return;
+            seenKeys.add(rk);
+            uniqueRates.push(r.selectedRate);
+          });
+          if (uniqueRates.length === 0) {
+            setLoadingRate(false);
+            alert("No rate selected. Please pick a rate and try again.");
+            return;
+          }
+
+          const results = await Promise.all(
+            uniqueRates.map((r) => fetchGrnRecheck(r)),
+          );
+          const failed = results.find((r) => !r?.success);
+          if (failed) {
+            setLoadingRate(false);
+            alert(
+              failed.message ||
+                "This rate is no longer available. Please reselect and try again.",
+            );
+            return;
+          }
+
+          // Map to the same shape ApiBookingPageForHotels reads. Overwrite
+          // rate / nonRefundable / cancellationPolicy with the rechecked
+          // values so the modal + downstream booking use guaranteed data,
+          // not the (potentially stale) search-time snapshot.
+          const rechkByKey = new Map();
+          uniqueRates.forEach((r, i) => rechkByKey.set(r.rateKey, results[i]));
+          const accurateRates = selectedRooms.map((slot, i) => {
+            const mapped = mapRateForPayload(slot.selectedRate, hotel, i + 1);
+            const recheck = rechkByKey.get(slot.selectedRate?.rateKey);
+            if (recheck?.success) {
+              if (recheck.totalPriceWithMarkup != null) {
+                mapped.rate = recheck.totalPriceWithMarkup;
+              } else if (recheck.totalPrice != null) {
+                mapped.rate = recheck.totalPrice;
+              }
+              if (recheck.currency) {
+                mapped.currency = recheck.currency;
+              }
+              if (recheck.nonRefundable != null) {
+                mapped.nonRefundable = recheck.nonRefundable;
+              }
+              if (recheck.cancellationPolicies?.length) {
+                mapped.cancellationPolicy = recheck.cancellationPolicies;
+              }
+              // panRequired already flows via mapRateForPayload → grnRecheckCache.
+            }
+            return mapped;
+          });
+          setSelectedRate(accurateRates);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+        } catch (err) {
+          console.error("GRN recheck fetch failed:", err);
+          setLoadingRate(false);
+          const backendMsg =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message;
+          alert(
+            backendMsg
+              ? `Unable to verify rate: ${backendMsg}`
+              : "Unable to verify rate. Please try again.",
+          );
+        }
+      })();
+      return;
+    }
+
     // ─── DARINA multi-room live-rate re-check. One prebook per selected
     //    rate (Darina's live-calc op takes a single hotel + room type +
     //    meal plan per call). Fire in parallel, stitch the responses
