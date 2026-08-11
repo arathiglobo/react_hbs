@@ -11,6 +11,7 @@ import {
   Spinner,
   Modal,
   Table,
+  Alert,
 } from "react-bootstrap";
 import {
   FaCar,
@@ -19,12 +20,11 @@ import {
   FaArrowLeft,
   FaUsers,
   FaCreditCard,
-  FaHeadset,
   FaInfoCircle,
-  FaEdit,
   FaClock,
 } from "react-icons/fa";
 import axiosInstance from "../../components/AxiosInstance";
+import Select from "react-select";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -34,6 +34,7 @@ import "../../styles/HotelBookingPage.css";
 const emptyCabPolicies = {
   terms: [],
   cancellations: [],
+  specialRequirements: [],
 };
 
 const MONTHS = [
@@ -41,19 +42,18 @@ const MONTHS = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-// Payment Method options — mirrors the package booking's "Mode of payment"
-// dropdown (PackageBooking.jsx PAYMENT_MODES). "CREDIT" (Agent credit limit)
-// settles against the agent wallet; CARD / BANK_TRANSFER / CASH are settled
-// out-of-band and skip the wallet deduction server-side.
-const PAYMENT_MODES = [
-  { value: "CREDIT", label: "Agent credit limit" },
-  { value: "CARD", label: "Card payment" },
-  { value: "BANK_TRANSFER", label: "Bank transfer" },
-  { value: "CASH", label: "Cash" },
-];
+// Payment Method label lookup — mirrors hotel-booking-page's Payment Mode
+// vocabulary. Only "CREDIT" (agent wallet) and "CARD" (online) are exposed
+// on the UI now; older backend rows using BANK_TRANSFER / CASH still fall
+// through the lookup as their raw value so the Order Summary label stays
+// readable rather than empty.
+const PAYMENT_MODE_LABELS = {
+  CREDIT: "Credit Limit",
+  CARD: "Card",
+};
 
 const paymentModeLabel = (value) =>
-  PAYMENT_MODES.find((m) => m.value === value)?.label || value || "—";
+  PAYMENT_MODE_LABELS[value] || value || "—";
 
 const formatDateToDDMMYYYY = (dateString) => {
   if (!dateString) return "";
@@ -173,6 +173,22 @@ const CabBookingPage = () => {
 
   // If accessed directly without state, we should probably redirect or show an error
   const hasValidState = !!cab && !!selectedOption && !!searchCriteria;
+
+  // i'way rows carry no in-house cabId (cab.cabid is a synthetic string like
+  // "iway-12345"), so every branch below that assumes a real Cab row needs
+  // to check this first.
+  const isIway = cab?.channelType === "iway" || cab?.source === "IWAY";
+
+  // Airport detection needs both signals because i'way-native airports come
+  // back tagged source="IWAY" (not "AIRPORT") from /transport-nodes — only
+  // the IATA code on the location object identifies them as airports. Used
+  // by the flight-number input render / validation / payload branches below.
+  const pickupIsAirport =
+    searchCriteria?.pickupType === "AIRPORT" ||
+    !!searchCriteria?.originLocation?.code;
+  const dropoffIsAirport =
+    searchCriteria?.dropoffType === "AIRPORT" ||
+    !!searchCriteria?.destinationLocation?.code;
 
   // Client location snapshot for the booking-history audit trail, resolved
   // once on page load and sent on the create payload. Location — browser
@@ -339,6 +355,7 @@ const CabBookingPage = () => {
 
   const [validationErrors, setValidationErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [showPolicyModal, setShowPolicyModal] = useState(false);
   const [policyLoading, setPolicyLoading] = useState(false);
   const [acceptedPolicies, setAcceptedPolicies] = useState(false);
@@ -351,67 +368,96 @@ const CabBookingPage = () => {
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
 
-  // Resolved agent display name for the Booking Summary strip. We only
-  // carry the agentId through the search → booking hand-off, so the
-  // human-readable label is fetched here. Falls back to "Agent #id".
-  const [agentName, setAgentName] = useState("");
+  // Settlement mode — same value set the cab backend already accepts:
+  // "CREDIT" (agent wallet) or "CARD" (online). Kept blank until the
+  // three-scenario picker below seeds it.
+  const [paymentMode, setPaymentMode] = useState("");
+
+  // Agent's available credit balance + per-agent Card payment permission.
+  // Mirrors HotelBookingPage's Payment Mode wiring so the two flows show
+  // the same "Credit Limit vs Card" rules against the same rate.
+  const [agentAvailableBalance, setAgentAvailableBalance] = useState(null);
+  const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
+
   useEffect(() => {
     if (!selectedAgentId) {
-      setAgentName("");
+      setAgentAvailableBalance(null);
       return;
     }
     let cancelled = false;
     axiosInstance
-      .get(`/api/agent/${selectedAgentId}`)
+      .get(`/api/agent-credit-limit/agent/${selectedAgentId}`)
       .then((res) => {
         if (cancelled) return;
-        const a = res?.data || {};
-        const full = [a.firstName, a.lastName].filter(Boolean).join(" ").trim();
-        setAgentName(a.companyName || a.name || full || `Agent #${selectedAgentId}`);
+        const avail =
+          res?.data?.effectiveAvailableCreditLimit ??
+          res?.data?.availableCreditLimit ??
+          null;
+        setAgentAvailableBalance(avail != null ? Number(avail) : null);
       })
       .catch(() => {
-        if (!cancelled) setAgentName(`Agent #${selectedAgentId}`);
+        if (!cancelled) setAgentAvailableBalance(null);
       });
     return () => {
       cancelled = true;
     };
   }, [selectedAgentId]);
 
-  // Settlement mode picked on the Payment Method dropdown. Mirrors the
-  // package booking's "Mode of payment": "CREDIT" (Agent credit limit) is
-  // the only mode that deducts the agent wallet; CARD / BANK_TRANSFER /
-  // CASH are settled out-of-band and skip the deduction (honoured
-  // server-side). Empty until the credit-based default below seeds it.
-  const [paymentMode, setPaymentMode] = useState("");
-
-  // Default the payment mode from the agent's available credit, exactly
-  // like the package "Mode of payment" dropdown: credit available →
-  // "CREDIT"; none / unavailable → "CARD". Only seeds when nothing is
-  // chosen yet, so a manual pick is never clobbered.
   useEffect(() => {
-    if (!selectedAgentId) return;
+    if (!selectedAgentId) {
+      setAgentCardPaymentEnabled(false);
+      return;
+    }
     let cancelled = false;
-    const applyDefault = (mode) => {
-      if (!cancelled) setPaymentMode((prev) => prev || mode);
-    };
     axiosInstance
-      .get(`/api/agent-credit-limit/agent/${selectedAgentId}`)
+      .get(`/api/agent/${selectedAgentId}`)
       .then((res) => {
-        const avail =
-          res?.data?.effectiveAvailableCreditLimit ??
-          res?.data?.availableCreditLimit ??
-          null;
-        applyDefault(avail != null && Number(avail) > 0 ? "CREDIT" : "CARD");
+        if (!cancelled) {
+          setAgentCardPaymentEnabled(!!res?.data?.cardPaymentEnabled);
+        }
       })
-      .catch(() => applyDefault("CARD"));
+      .catch(() => {
+        if (!cancelled) setAgentCardPaymentEnabled(false);
+      });
     return () => {
       cancelled = true;
     };
   }, [selectedAgentId]);
 
-  // Free-text special requirements (baby seat, wheelchair, extra luggage …).
-  // Persisted on the cab booking via the new specialRequirements field.
+  // Free-text additional notes (baby seat, wheelchair, extra luggage …).
+  // Persisted on the cab booking via the specialRequirements field —
+  // preserved for anything the provider hasn't advertised in their
+  // configured catalog.
   const [specialRequirements, setSpecialRequirements] = useState("");
+
+  // Multi-select the customer picks from the provider's configured catalog
+  // (cabPolicies.specialRequirements). Held as react-select `{value,label}[]`;
+  // flattened to string[] on the booking payload as selectedSpecialRequirements.
+  // Auto-resets when the source list changes (e.g. a different cab picked).
+  const [selectedSpecialRequirements, setSelectedSpecialRequirements] = useState(
+    [],
+  );
+
+  // Options built from the fetched catalog. Kept as {value,label} so the
+  // rendered picker doesn't need to reshape on every render.
+  const specialRequirementOptions = useMemo(
+    () =>
+      (cabPolicies.specialRequirements || [])
+        .filter(Boolean)
+        .map((v) => ({ value: v, label: v })),
+    [cabPolicies.specialRequirements],
+  );
+
+  // If the provider's catalog changes (different cab picked) drop any
+  // previous customer picks that are no longer on offer — otherwise we'd
+  // send stale strings the operator hasn't advertised.
+  useEffect(() => {
+    setSelectedSpecialRequirements((prev) =>
+      prev.filter((opt) =>
+        specialRequirementOptions.some((o) => o.value === opt?.value),
+      ),
+    );
+  }, [specialRequirementOptions]);
 
   // ── Per-leg pickup / dropoff details ────────────────────────────────
   // Only the fields relevant to the chosen leg type are surfaced on the
@@ -522,7 +568,9 @@ const CabBookingPage = () => {
 
   useEffect(() => {
     const cabId = cab?.cabid || cab?.cabId;
-    if (!cabId) {
+    // i'way rows have no in-house Cab row to fetch policies for — cabId is a
+    // synthetic "iway-<priceId>" string, not a real PK.
+    if (!cabId || isIway) {
       setCabPolicies(emptyCabPolicies);
       return;
     }
@@ -538,6 +586,11 @@ const CabBookingPage = () => {
             : [],
           cancellations: Array.isArray(res.data?.cancellationPolicies)
             ? res.data.cancellationPolicies.filter(Boolean)
+            : [],
+          // Provider's configured special-requirements catalog for this
+          // cab — the customer picker below only shows these values.
+          specialRequirements: Array.isArray(res.data?.specialRequirements)
+            ? res.data.specialRequirements.filter(Boolean)
             : [],
         });
       })
@@ -572,6 +625,59 @@ const CabBookingPage = () => {
   });
   const [tourismDirham, setTourismDirham] = useState("");
 
+  const totalRate = parseFloat(prices.totalPrice) || initialTotalRate;
+
+  // Payable used for the sufficiency check — matches the amount that
+  // will actually be charged on Confirm (base + tourism dirham + HQ).
+  // Declared unconditionally (before the !hasValidState early return below)
+  // — React Hooks must run in the same order on every render, so useMemo /
+  // useEffect can never sit after a conditional return.
+  const bookingPayable = useMemo(() => {
+    const tdNum =
+      tourismDirham !== "" && !isNaN(Number(tourismDirham))
+        ? Number(tourismDirham)
+        : 0;
+    const hqNum =
+      hqAmount !== "" && !isNaN(Number(hqAmount))
+        ? Number(hqAmount)
+        : 0;
+    return Number(totalRate || 0) + tdNum + hqNum;
+  }, [totalRate, tourismDirham, hqAmount]);
+
+  // Three scenarios (same rule the hotel checkout uses):
+  //   1. Sufficient credit                    → Credit Limit only
+  //   2. Insufficient credit + Card enabled   → Card only (+ note below)
+  //   3. Insufficient credit + Card disabled  → no options; booking blocked
+  // Null while the balance is still loading so nothing flashes empty.
+  const hasSufficientCredit = useMemo(() => {
+    if (agentAvailableBalance == null) return null;
+    return agentAvailableBalance >= bookingPayable;
+  }, [agentAvailableBalance, bookingPayable]);
+
+  const paymentModeOptions = useMemo(() => {
+    if (hasSufficientCredit === true) {
+      return [{ value: "CREDIT", label: "Credit Limit" }];
+    }
+    if (hasSufficientCredit === false && agentCardPaymentEnabled) {
+      return [{ value: "CARD", label: "Card" }];
+    }
+    if (hasSufficientCredit === false && !agentCardPaymentEnabled) {
+      return [];
+    }
+    return [{ value: "CREDIT", label: "Credit Limit" }];
+  }, [hasSufficientCredit, agentCardPaymentEnabled]);
+
+  // Keep paymentMode valid for whatever option set is currently active —
+  // when the sufficiency flips (e.g. HQ amount pushes the total past the
+  // available credit) auto-select the first remaining option, which also
+  // satisfies the "single option → pre-selected" rule.
+  useEffect(() => {
+    if (paymentModeOptions.length === 0) return;
+    if (!paymentModeOptions.some((o) => o.value === paymentMode)) {
+      setPaymentMode(paymentModeOptions[0].value);
+    }
+  }, [paymentModeOptions, paymentMode]);
+
   // If no state, show prompt
   if (!hasValidState) {
     return (
@@ -596,7 +702,8 @@ const CabBookingPage = () => {
     );
   }
 
-  const totalRate = parseFloat(prices.totalPrice) || initialTotalRate;
+  const noPaymentPathAvailable =
+    hasSufficientCredit === false && !agentCardPaymentEnabled;
 
   const handlePriceChange = (field, value) => {
     setPrices((prev) => ({ ...prev, [field]: value }));
@@ -632,21 +739,33 @@ const CabBookingPage = () => {
       }
     });
 
-    // Contact Details — the lead passenger's email + phone are mandatory
-    // (captured on the Contact Details card; the phone doubles as the lead
-    // row's Contact No. in the passenger table, so the error keys match).
+    // Contact Details — only phone is mandatory now (email field removed).
+    // The phone doubles as the lead row's Contact No. in the passenger
+    // table, so the error key matches.
     if (lead) {
-      if (!lead.emailId || !lead.emailId.trim()) {
-        errors[`guest_${leadIndex}_emailId`] = "Email is required";
-        hasErrors = true;
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lead.emailId.trim())) {
-        errors[`guest_${leadIndex}_emailId`] = "Enter a valid email address";
-        hasErrors = true;
-      }
       if (!lead.contactNumber || !lead.contactNumber.trim()) {
         errors[`guest_${leadIndex}_contactNumber`] = "Phone is required";
         hasErrors = true;
       }
+      // i'way's passengers[] entries require an email; the in-house flow
+      // never collected one, so this only applies to i'way bookings.
+      if (isIway && (!lead.emailId || !lead.emailId.trim())) {
+        errors[`guest_${leadIndex}_emailId`] = "Email is required for i'way bookings";
+        hasErrors = true;
+      }
+    }
+
+    // i'way's start_location.flight_number is mandatory when the pickup
+    // point is an airport (guide §12.4.5). pickupIsAirport also covers
+    // i'way-native airports whose pickupType arrived as "IWAY" but whose
+    // originLocation.code carries the IATA.
+    if (
+      isIway &&
+      pickupIsAirport &&
+      (!pickupDetails.flightNo || !pickupDetails.flightNo.trim())
+    ) {
+      errors.pickupFlightNo = "Flight number is required for an airport pickup";
+      hasErrors = true;
     }
 
     return { errors, hasErrors };
@@ -676,16 +795,6 @@ const CabBookingPage = () => {
       return;
     }
 
-    // Terms & Conditions + Cancellation Policy acceptance is captured in a
-    // dedicated pop-up shown as the FIRST step of the confirm flow (it
-    // replaced the old inline checkbox). If the user hasn't accepted yet,
-    // open that pop-up and stop here — its "Agree & Continue" button resumes
-    // the flow by calling proceedToOrderSummary().
-    if (!acceptedPolicies) {
-      setShowPolicyModal(true);
-      return;
-    }
-
     proceedToOrderSummary();
   };
 
@@ -710,7 +819,25 @@ const CabBookingPage = () => {
       (parseFloat(prices.totalPrice) || totalRate) + tdNumber + hqNumber;
 
     const payload = {
-      cabId: cab.cabid,
+      // i'way offers have no in-house Cab row — cab.cabid is a synthetic
+      // "iway-<priceId>" string that would fail Jackson's Long binding on
+      // the backend, so send null and rely on apiType/iwayPriceId instead.
+      cabId: isIway ? null : cab.cabid,
+      // i'way booking fields — all null for in-house rows, so that payload
+      // is byte-for-byte unchanged from before this change.
+      apiType: isIway ? "IWAY" : null,
+      iwayPriceId: isIway ? (searchCriteria.iwayPriceId ?? null) : null,
+      iwayPriceUid: isIway ? (searchCriteria.iwayPriceUid ?? null) : null,
+      originLocation: isIway ? (searchCriteria.originLocation ?? null) : null,
+      destinationLocation: isIway ? (searchCriteria.destinationLocation ?? null) : null,
+      // Vehicle snapshot — captured now so the local voucher (which reads
+      // Vehicle / Vehicle Image / Transporter from the in-house Cab FK for
+      // in-house rows) can render the same slots for i'way rows without
+      // hitting i'way at voucher-generation time. In-house payloads leave
+      // these null and continue to render from the Cab entity as before.
+      iwayVehicleName: isIway ? (cab?.cabname ?? null) : null,
+      iwayVehicleImage: isIway ? (cab?.cabpic ?? null) : null,
+      iwayProviderName: isIway ? (cab?.cabProviderName ?? null) : null,
       noOfCabs: cab.noOfCabs || 1,
       pickupDate: formatDateToDDMMYYYY(searchCriteria.pickupDate),
       dropOffDate: formatDateToDDMMYYYY(searchCriteria.dropoffDate || searchCriteria.pickupDate),
@@ -768,8 +895,15 @@ const CabBookingPage = () => {
       // clean NULL instead of an empty-string artefact.
       pickupType: searchCriteria.pickupType || null,
       pickupName: searchCriteria.pickupName || null,
-      pickupTime:
-        searchCriteria.pickupType === "AIRPORT"
+      // i'way's start_location.time is required for EVERY route (not just
+      // airport pickups — e.g. a Hotel → Airport transfer still needs a car
+      // pickup time), unlike the in-house pickupTime column which the
+      // booking-detail view only ever renders for airport pickups. Source
+      // the always-collected search-time value for i'way instead of the
+      // in-house AIRPORT-only conditional below.
+      pickupTime: isIway
+        ? searchCriteria.arrivalTime || searchCriteria.pickupTime || null
+        : searchCriteria.pickupType === "AIRPORT"
           ? searchCriteria.pickupEstimatedArrivalTime ||
             searchCriteria.pickupTime ||
             null
@@ -779,7 +913,10 @@ const CabBookingPage = () => {
           ? pickupDetails.arrivingFrom || null
           : null,
       pickupFlightNo:
-        searchCriteria.pickupType === "AIRPORT"
+        // i'way-native airports arrive as pickupType="IWAY" + originLocation.code=IATA,
+        // so gate on pickupIsAirport (broader) for i'way and keep the existing
+        // strict AIRPORT check for the in-house flow.
+        (isIway ? pickupIsAirport : searchCriteria.pickupType === "AIRPORT")
           ? pickupDetails.flightNo || null
           : null,
       pickupGreetingSign:
@@ -803,7 +940,9 @@ const CabBookingPage = () => {
           ? dropoffDetails.departingTo || null
           : null,
       dropoffFlightNo:
-        searchCriteria.dropoffType === "AIRPORT"
+        // Same widened check as pickup — i'way-native airport drops arrive
+        // as dropoffType="IWAY" + destinationLocation.code=IATA.
+        (isIway ? dropoffIsAirport : searchCriteria.dropoffType === "AIRPORT")
           ? dropoffDetails.flightNo || null
           : null,
       dropoffTerminal:
@@ -825,8 +964,14 @@ const CabBookingPage = () => {
       // (Agent credit limit) deducts the agent wallet; CARD / BANK_TRANSFER
       // / CASH are settled out-of-band and skip the deduction server-side.
       paymentMode,
-      // Free-text special requirements captured on the checkout page.
+      // Free-text additional notes captured on the checkout page.
       specialRequirements: specialRequirements.trim() || null,
+      // Multi-select picks from the provider's configured catalog. Kept
+      // separate from the free-text field above so the two roles are
+      // preserved end-to-end (structured picks + free-form notes).
+      selectedSpecialRequirements: (selectedSpecialRequirements || [])
+        .map((opt) => (opt?.value || "").trim())
+        .filter((v) => v.length > 0),
       // Lead passenger email — the voucher/updates recipient.
       sendEmailTo: primaryGuest.emailId || null,
       policyAccepted: true,
@@ -853,7 +998,17 @@ const CabBookingPage = () => {
       const response = await axiosInstance.post("/api/cab/book", pendingPayload);
 
       if (response && (response.data?.success !== false && response.status === 200)) {
-        toast.success("Cab booked successfully!");
+        if (isIway) {
+          // No orders/approve call is wired up yet — the order exists on
+          // i'way's side but isn't paid/confirmed there, so say so rather
+          // than implying it's fully done.
+          toast.success(
+            "Booking received — pending confirmation with i'way.",
+            { duration: 6000 },
+          );
+        } else {
+          toast.success("Cab booked successfully!");
+        }
         setShowSummaryModal(false);
         navigate("/booking-details/cab-booking-list");
       } else {
@@ -861,7 +1016,13 @@ const CabBookingPage = () => {
       }
     } catch (error) {
       console.error("Booking error:", error);
-      toast.error("An error occurred during booking. Please try again.");
+      // Surface the backend's actual message when available (e.g. an i'way
+      // order-creation failure via IwayOrderCreationException) instead of a
+      // generic message.
+      toast.error(
+        error?.response?.data?.message ||
+          "An error occurred during booking. Please try again.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -885,120 +1046,20 @@ const CabBookingPage = () => {
         <Sidebar />
         <main className="flex-grow-1 p-4">
           <Container fluid className="px-0">
-            {/* ── Page header — Back + title on the left, agent balance
-                 on the right (mirrors the other checkout pages). */}
-            <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-              <div className="d-flex align-items-center gap-2">
-                <Button
-                  variant="outline-secondary"
-                  size="sm"
-                  className="d-flex align-items-center gap-1"
-                  onClick={() => navigate("/new-booking/cab")}
-                >
-                  <FaArrowLeft /> Back
-                </Button>
-                <h5 className="mb-0 fw-bold text-dark">Cab Booking Checkout</h5>
-              </div>
+            {/* ── Page heading (mirrors hotel-booking-page .hs-page-heading)
+                 with the agent balance chip right-aligned above the form.
+                 The Back button lives inside the Passenger Details card
+                 header, matching HotelBookingPage's Guest Details card. */}
+            <div className="hs-page-heading">
+              <h3 className="hs-page-heading-title mb-0">Transfer Booking</h3>
+            </div>
+            <div className="d-flex justify-content-end mb-2">
               <AgentBalanceDisplay agentId={selectedAgentId} />
             </div>
 
             <Row className="g-4">
               {/* ── Left column — trip + traveller data ─────────────── */}
               <Col lg={8}>
-                {/* Booking Summary */}
-                <Card className="border rounded-3 mb-4 overflow-hidden shadow-sm">
-                  <Card.Header
-                    className="py-3 px-4 d-flex justify-content-between align-items-center border-bottom"
-                    style={cardHeaderStyle}
-                  >
-                    <span className="fw-bold text-dark">Booking Summary</span>
-                    {/* Edit Search button hidden per request
-                    <Button
-                      variant="outline-secondary"
-                      size="sm"
-                      className="d-flex align-items-center gap-1"
-                      onClick={() => navigate("/new-booking/cab")}
-                    >
-                      <FaEdit /> Edit Search
-                    </Button>
-                    */}
-                  </Card.Header>
-                  <Card.Body className="p-4">
-                    <Row className="g-3">
-                      <Col xs={6} md>
-                        <div className="text-muted small mb-1">Agent</div>
-                        <div className="fw-semibold text-dark">
-                          {agentName || "—"}
-                        </div>
-                      </Col>
-                      <Col xs={6} md>
-                        <div className="text-muted small mb-1">Transfer Date</div>
-                        <div className="fw-semibold text-dark">
-                          {formatTransferDate(searchCriteria.pickupDate)}
-                        </div>
-                      </Col>
-                      <Col xs={6} md>
-                        <div className="text-muted small mb-1">City</div>
-                        <div className="fw-semibold text-dark">
-                          {searchCriteria.city?.label ||
-                            searchCriteria.destination?.label ||
-                            "—"}
-                        </div>
-                      </Col>
-                      <Col xs={6} md>
-                        <div className="text-muted small mb-1">Nationality</div>
-                        <div className="fw-semibold text-dark">
-                          {searchCriteria.nationality?.label || "—"}
-                        </div>
-                      </Col>
-                      <Col xs={6} md>
-                        <div className="text-muted small mb-1">Adults</div>
-                        <div className="fw-semibold text-dark">
-                          {searchCriteria.adults || 0}
-                        </div>
-                      </Col>
-                      <Col xs={6} md>
-                        <div className="text-muted small mb-1">Children</div>
-                        <div className="fw-semibold text-dark">
-                          {searchCriteria.children || 0}
-                        </div>
-                      </Col>
-                    </Row>
-                    <hr className="my-3" />
-                    <Row className="g-3">
-                      <Col md={6}>
-                        <div className="text-muted small mb-1">Route</div>
-                        <div className="fw-semibold text-dark d-flex align-items-center gap-1">
-                          <FaMapMarkerAlt style={{ color: "#EC0B43" }} />
-                          <span>
-                            {selectedOption.location || "N/A"}
-                            {routeArrow}
-                            {selectedOption.dropOff || "N/A"}
-                          </span>
-                        </div>
-                      </Col>
-                      <Col xs={6} md={3}>
-                        <div className="text-muted small mb-1">Pickup Time</div>
-                        <div className="fw-semibold text-dark d-flex align-items-center gap-1">
-                          <FaClock className="text-muted" />
-                          {searchCriteria.pickupTime ||
-                            searchCriteria.arrivalTime ||
-                            "—"}
-                        </div>
-                      </Col>
-                      <Col xs={6} md={3}>
-                        <div className="text-muted small mb-1">Drop Time</div>
-                        <div className="fw-semibold text-dark d-flex align-items-center gap-1">
-                          <FaClock className="text-muted" />
-                          {searchCriteria.dropoffTime
-                            ? `${searchCriteria.dropoffTime} (Est.)`
-                            : "—"}
-                        </div>
-                      </Col>
-                    </Row>
-                  </Card.Body>
-                </Card>
-
                 {/* ── Passenger Details — single source of truth for
                      traveller data. The row marked "Lead" is also
                      persisted as the customer/lead-passenger record;
@@ -1009,9 +1070,17 @@ const CabBookingPage = () => {
                       className="py-3 px-4 text-dark border-bottom"
                       style={cardHeaderStyle}
                     >
-                      <span className="d-flex align-items-center">
+                      <div className="d-flex align-items-center">
+                        <Button
+                          variant="outline-secondary"
+                          size="sm"
+                          onClick={() => navigate("/new-booking/cab")}
+                          className="me-3 d-flex align-items-center gap-1"
+                        >
+                          <FaArrowLeft /> Back
+                        </Button>
                         <FaUsers className="me-2" style={{ color: "#EC0B43" }} />
-                        <span className="fw-bold">Passenger Details</span>
+                        <span className="fw-bold text-dark">Passenger Details</span>
                         <span className="text-muted small ms-2">
                           ({totalAdults} Adult{totalAdults !== 1 ? "s" : ""}
                           {totalChildren > 0
@@ -1021,7 +1090,7 @@ const CabBookingPage = () => {
                             : ""}
                           )
                         </span>
-                      </span>
+                      </div>
                       {validationErrors.lead && (
                         <small className="text-danger d-block mt-1">
                           {validationErrors.lead}
@@ -1154,339 +1223,19 @@ const CabBookingPage = () => {
                   </Card>
                 )}
 
-                {/* ── Pick Up Details ────────────────────────────────
-                     Type-aware leg card. For AIRPORT pickups we collect
-                     Arriving From / Flight No / Estimated Arrival Time
-                     / Greeting Sign (the "Flight / Arrival Details" of
-                     the mockup); for HOTEL pickups we display the hotel
-                     name + address auto-fetched from /api/hotels/lookup;
-                     for PLACE we show the place name. Hidden when no
-                     pickup was selected on the search page. */}
-                {searchCriteria.pickupType && (
-                  <Card className="border rounded-3 mb-4 overflow-hidden shadow-sm">
-                    <Card.Header
-                      className="py-3 px-4 text-dark border-bottom"
-                      style={cardHeaderStyle}
-                    >
-                      <span className="fw-bold">
-                        {searchCriteria.pickupType === "AIRPORT"
-                          ? "Flight / Arrival Details"
-                          : "Pick Up Details"}
-                        <span className="text-muted small ms-2">
-                          —{" "}
-                          {searchCriteria.pickupType === "AIRPORT"
-                            ? "Airport"
-                            : searchCriteria.pickupType === "HOTEL"
-                              ? "Accommodation"
-                              : "Place"}
-                        </span>
-                      </span>
-                    </Card.Header>
-                    <Card.Body className="px-4 pt-3 pb-3">
-                      {searchCriteria.pickupType === "AIRPORT" && (
-                        <>
-                          <div className="mb-3">
-                            <strong>Airport Name : </strong>
-                            {searchCriteria.pickupName || "—"}
-                          </div>
-                          <Row className="g-3">
-                            <Col md={6}>
-                              <Form.Label className="small text-muted fw-semibold mb-1">
-                                Arriving From
-                              </Form.Label>
-                              <Form.Control
-                                size="sm"
-                                type="text"
-                                placeholder="Arriving From*"
-                                value={pickupDetails.arrivingFrom}
-                                onChange={(e) =>
-                                  setPickupDetails((p) => ({
-                                    ...p,
-                                    arrivingFrom: e.target.value,
-                                  }))
-                                }
-                              />
-                            </Col>
-                            <Col md={6}>
-                              <Form.Label className="small text-muted fw-semibold mb-1">
-                                Flight No.
-                              </Form.Label>
-                              <Form.Control
-                                size="sm"
-                                type="text"
-                                placeholder="Flight No.*"
-                                value={pickupDetails.flightNo}
-                                onChange={(e) =>
-                                  setPickupDetails((p) => ({
-                                    ...p,
-                                    flightNo: e.target.value,
-                                  }))
-                                }
-                              />
-                            </Col>
-                            {/* Read-only — sourced from the airport master
-                                (set on /master/Airport per airport) and
-                                forwarded through CabSearch.jsx. Empty
-                                means the master row has no value yet, so
-                                we show a hint pointing the operator at
-                                the right setup page. */}
-                            <Col md={6}>
-                              <Form.Label className="small text-muted fw-semibold mb-1">
-                                Estimated Arrival Time
-                              </Form.Label>
-                              <Form.Control
-                                size="sm"
-                                type="text"
-                                value={
-                                  searchCriteria.pickupEstimatedArrivalTime || ""
-                                }
-                                placeholder="Configure on the airport master"
-                                readOnly
-                                disabled
-                              />
-                            </Col>
-                            <Col md={6}>
-                              <Form.Label className="small text-muted fw-semibold mb-1">
-                                Greeting Sign
-                              </Form.Label>
-                              <Form.Control
-                                size="sm"
-                                type="text"
-                                placeholder="Name on the greeting sign"
-                                value={pickupDetails.greetingSign}
-                                onChange={(e) =>
-                                  setPickupDetails((p) => ({
-                                    ...p,
-                                    greetingSign: e.target.value,
-                                  }))
-                                }
-                              />
-                            </Col>
-                          </Row>
-                          <div className="small text-muted mt-3">
-                            <strong>Note:</strong> Driver will call you before
-                            the ride. The driver will contact you in advance and
-                            we will send you their contact number via SMS. We
-                            will put the sign in the front of the bus, so you
-                            could easily identify it. Please note that on group
-                            trips, drivers do not meet you in the arrivals hall,
-                            but wait for a signal from the group leader that
-                            they are ready to board.
-                          </div>
-                        </>
-                      )}
-                      {searchCriteria.pickupType === "HOTEL" && (
-                        <>
-                          <div className="mb-2">
-                            <strong>Hotel Name : </strong>
-                            {searchCriteria.pickupName || "—"}
-                          </div>
-                          <div>
-                            <div className="small text-muted fw-semibold">
-                              Hotel Address
-                            </div>
-                            <div>{pickupHotelAddress || "—"}</div>
-                          </div>
-                        </>
-                      )}
-                      {searchCriteria.pickupType === "PLACE" && (
-                        <div>
-                          <strong>Place : </strong>
-                          {searchCriteria.pickupName || "—"}
-                        </div>
-                      )}
-                    </Card.Body>
-                  </Card>
-                )}
-
-                {/* ── Drop Off Details ───────────────────────────────
-                     Same pattern as Pick Up but for the drop leg. For
-                     AIRPORT drops we collect Departing To / Flight No /
-                     Terminal / Departure Time; for HOTEL drops we
-                     display the hotel name + auto-fetched address. */}
-                {searchCriteria.dropoffType && (
-                  <Card className="border rounded-3 mb-4 overflow-hidden shadow-sm">
-                    <Card.Header
-                      className="py-3 px-4 text-dark border-bottom"
-                      style={cardHeaderStyle}
-                    >
-                      <span className="fw-bold">
-                        Drop Off Details
-                        <span className="text-muted small ms-2">
-                          —{" "}
-                          {searchCriteria.dropoffType === "AIRPORT"
-                            ? "Airport"
-                            : searchCriteria.dropoffType === "HOTEL"
-                              ? "Accommodation"
-                              : "Place"}
-                        </span>
-                      </span>
-                    </Card.Header>
-                    <Card.Body className="px-4 pt-3 pb-3">
-                      {searchCriteria.dropoffType === "AIRPORT" && (
-                        <>
-                          <div className="mb-3">
-                            <strong>Airport Name : </strong>
-                            {searchCriteria.dropoffName || "—"}
-                          </div>
-                          <Row className="g-3">
-                            <Col md={6}>
-                              <Form.Label className="small text-muted fw-semibold mb-1">
-                                Departing To
-                              </Form.Label>
-                              <Form.Control
-                                size="sm"
-                                type="text"
-                                placeholder="Departing To"
-                                value={dropoffDetails.departingTo}
-                                onChange={(e) =>
-                                  setDropoffDetails((p) => ({
-                                    ...p,
-                                    departingTo: e.target.value,
-                                  }))
-                                }
-                              />
-                            </Col>
-                            <Col md={6}>
-                              <Form.Label className="small text-muted fw-semibold mb-1">
-                                Flight No.
-                              </Form.Label>
-                              <Form.Control
-                                size="sm"
-                                type="text"
-                                placeholder="Flight No."
-                                value={dropoffDetails.flightNo}
-                                onChange={(e) =>
-                                  setDropoffDetails((p) => ({
-                                    ...p,
-                                    flightNo: e.target.value,
-                                  }))
-                                }
-                              />
-                            </Col>
-                            <Col md={6}>
-                              <Form.Label className="small text-muted fw-semibold mb-1">
-                                Select Terminal
-                              </Form.Label>
-                              <Form.Control
-                                size="sm"
-                                type="text"
-                                placeholder="e.g. Terminal 3"
-                                value={dropoffDetails.terminal}
-                                onChange={(e) =>
-                                  setDropoffDetails((p) => ({
-                                    ...p,
-                                    terminal: e.target.value,
-                                  }))
-                                }
-                              />
-                            </Col>
-                            <Col md={6}>
-                              <Form.Label className="small text-muted fw-semibold mb-1">
-                                Departure Time
-                              </Form.Label>
-                              <Form.Control
-                                size="sm"
-                                type="text"
-                                placeholder="e.g. 07 Hrs 00 Min"
-                                value={dropoffDetails.departureTime}
-                                onChange={(e) =>
-                                  setDropoffDetails((p) => ({
-                                    ...p,
-                                    departureTime: e.target.value,
-                                  }))
-                                }
-                              />
-                            </Col>
-                          </Row>
-                        </>
-                      )}
-                      {searchCriteria.dropoffType === "HOTEL" && (
-                        <>
-                          <div className="mb-2">
-                            <strong>Hotel Name : </strong>
-                            {searchCriteria.dropoffName || "—"}
-                          </div>
-                          <div>
-                            <div className="small text-muted fw-semibold">
-                              Hotel Address
-                            </div>
-                            <div>{dropoffHotelAddress || "—"}</div>
-                          </div>
-                        </>
-                      )}
-                      {searchCriteria.dropoffType === "PLACE" && (
-                        <div>
-                          <strong>Place : </strong>
-                          {searchCriteria.dropoffName || "—"}
-                        </div>
-                      )}
-                    </Card.Body>
-                  </Card>
-                )}
-
-                {/* ── Special Requirements — free text persisted to the
-                     cab booking's specialRequirements field. */}
+                {/* ── Contact Details — lead passenger's phone.
+                     Same value as the Lead row's Contact No.
+                     Placed above Special Requirements so operators fill
+                     the required contact fields before the optional notes. */}
                 <Card className="border rounded-3 mb-4 overflow-hidden shadow-sm">
                   <Card.Header
                     className="py-3 px-4 text-dark border-bottom"
                     style={cardHeaderStyle}
                   >
-                    <span className="fw-bold">Special Requirements</span>
-                    <span className="text-muted small ms-2">(Optional)</span>
-                  </Card.Header>
-                  <Card.Body className="px-4 pt-3 pb-3">
-                    <div className="position-relative">
-                      <Form.Control
-                        as="textarea"
-                        rows={2}
-                        maxLength={200}
-                        placeholder="e.g. Baby seat, Wheelchair, Extra luggage…"
-                        value={specialRequirements}
-                        onChange={(e) => setSpecialRequirements(e.target.value)}
-                      />
-                      <span
-                        className="text-muted small position-absolute"
-                        style={{ right: 10, bottom: 6 }}
-                      >
-                        {specialRequirements.length}/200
-                      </span>
-                    </div>
-                  </Card.Body>
-                </Card>
-
-                {/* ── Contact Details — lead passenger's email + phone.
-                     Email flows to sendEmailTo (voucher recipient); phone
-                     is the same value as the Lead row's Contact No. */}
-                <Card className="border rounded-3 mb-4 overflow-hidden shadow-sm">
-                  <Card.Header
-                    className="py-3 px-4 text-dark border-bottom"
-                    style={cardHeaderStyle}
-                  >
-                    <span className="fw-bold">Contact Details</span>
+                    <span className="fw-bold text-dark">Contact Details</span>
                   </Card.Header>
                   <Card.Body className="px-4 pt-3 pb-3">
                     <Row className="g-3">
-                      <Col md={6}>
-                        <Form.Label className="small text-muted fw-semibold mb-1">
-                          Email <span className="text-danger">*</span>
-                        </Form.Label>
-                        <Form.Control
-                          size="sm"
-                          type="email"
-                          placeholder="name@example.com"
-                          value={leadGuest.emailId || ""}
-                          onChange={(e) =>
-                            handleGuestChange(leadIndex, "emailId", e.target.value)
-                          }
-                          isInvalid={
-                            !!validationErrors[`guest_${leadIndex}_emailId`]
-                          }
-                        />
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors[`guest_${leadIndex}_emailId`]}
-                        </Form.Control.Feedback>
-                      </Col>
                       <Col md={6}>
                         <Form.Label className="small text-muted fw-semibold mb-1">
                           Phone <span className="text-danger">*</span>
@@ -1494,7 +1243,7 @@ const CabBookingPage = () => {
                         <Form.Control
                           size="sm"
                           type="text"
-                          placeholder="+971 50 123 4567"
+                          placeholder="Please enter phone number"
                           value={leadGuest.contactNumber || ""}
                           onChange={(e) =>
                             handleGuestChange(
@@ -1511,10 +1260,150 @@ const CabBookingPage = () => {
                           {validationErrors[`guest_${leadIndex}_contactNumber`]}
                         </Form.Control.Feedback>
                       </Col>
+                      {/* i'way's POST /orders needs a passenger email — the
+                          in-house flow never collected one, so this field is
+                          only shown (and required) for i'way bookings. */}
+                      {isIway && (
+                        <Col md={6}>
+                          <Form.Label className="small text-muted fw-semibold mb-1">
+                            Email <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Control
+                            size="sm"
+                            type="email"
+                            placeholder="Please enter email address"
+                            value={leadGuest.emailId || ""}
+                            onChange={(e) =>
+                              handleGuestChange(leadIndex, "emailId", e.target.value)
+                            }
+                            isInvalid={!!validationErrors[`guest_${leadIndex}_emailId`]}
+                          />
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors[`guest_${leadIndex}_emailId`]}
+                          </Form.Control.Feedback>
+                        </Col>
+                      )}
+                      {/* i'way requires start_location.flight_number whenever
+                          the pickup point is an airport (guide §12.4.5) —
+                          there was no input for this anywhere on the page
+                          before, so pickupDetails.flightNo always stayed
+                          empty. Shown for i'way bookings only; drop-off side
+                          is optional so it's collected but not required.
+                          pickupIsAirport also catches i'way-native airports
+                          whose pickupType is "IWAY" but whose originLocation
+                          carries an IATA code. */}
+                      {isIway && pickupIsAirport && (
+                        <Col md={6}>
+                          <Form.Label className="small text-muted fw-semibold mb-1">
+                            Pickup Flight Number{" "}
+                            <span className="text-danger">*</span>
+                          </Form.Label>
+                          <Form.Control
+                            size="sm"
+                            type="text"
+                            placeholder="Please enter pickup flight number"
+                            value={pickupDetails.flightNo || ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setPickupDetails((prev) => ({ ...prev, flightNo: v }));
+                              if (validationErrors.pickupFlightNo) {
+                                setValidationErrors((prev) => {
+                                  const next = { ...prev };
+                                  delete next.pickupFlightNo;
+                                  return next;
+                                });
+                              }
+                            }}
+                            isInvalid={!!validationErrors.pickupFlightNo}
+                          />
+                          <Form.Control.Feedback type="invalid">
+                            {validationErrors.pickupFlightNo}
+                          </Form.Control.Feedback>
+                        </Col>
+                      )}
+                      {isIway && dropoffIsAirport && (
+                        <Col md={6}>
+                          <Form.Label className="small text-muted fw-semibold mb-1">
+                            Drop-off Flight Number
+                          </Form.Label>
+                          <Form.Control
+                            size="sm"
+                            type="text"
+                            placeholder="e.g. EK456 (optional)"
+                            value={dropoffDetails.flightNo || ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setDropoffDetails((prev) => ({ ...prev, flightNo: v }));
+                            }}
+                          />
+                        </Col>
+                      )}
                     </Row>
-                    <div className="text-muted small mt-2">
-                      The voucher and booking updates are sent to the lead
-                      passenger&apos;s email.
+                  </Card.Body>
+                </Card>
+
+                {/* ── Special Requirements ──────────────────────────────
+                     Provider-configured multi-select up top (only what the
+                     operator advertised for this rate) + a free-text
+                     Additional Notes field below for anything outside that
+                     catalog. Both are persisted separately on the booking. */}
+                <Card className="border rounded-3 mb-4 overflow-hidden shadow-sm">
+                  <Card.Header
+                    className="py-3 px-4 text-dark border-bottom"
+                    style={cardHeaderStyle}
+                  >
+                    <span className="fw-bold text-dark">Special Requirements</span>
+                    <span className="text-muted small ms-2">(Optional)</span>
+                  </Card.Header>
+                  <Card.Body className="px-4 pt-3 pb-3">
+                    {specialRequirementOptions.length > 0 ? (
+                      <div className="mb-3">
+                        <Form.Label className="fw-semibold mb-1 text-dark">
+                          Available Services
+                        </Form.Label>
+                        <Select
+                          isMulti
+                          isClearable
+                          closeMenuOnSelect={false}
+                          placeholder="Pick any services you'd like…"
+                          options={specialRequirementOptions}
+                          value={selectedSpecialRequirements}
+                          onChange={(vals) =>
+                            setSelectedSpecialRequirements(vals || [])
+                          }
+                          classNamePrefix="cab-special-req"
+                        />
+                        <Form.Text className="text-muted">
+                          Only services the provider offers for this cab are
+                          shown here.
+                        </Form.Text>
+                      </div>
+                    ) : (
+                      <div className="text-muted small mb-3">
+                        This provider has not advertised any add-on services
+                        for this cab. Use the notes field below for any
+                        requests.
+                      </div>
+                    )}
+
+                    <Form.Label className="fw-semibold mb-1 text-dark">
+                      Additional Notes
+                    </Form.Label>
+                    <div className="position-relative">
+                      <Form.Control
+                        as="textarea"
+                        rows={2}
+                        maxLength={200}
+                        placeholder="Anything not in the list above…"
+                        value={specialRequirements}
+                        onChange={(e) => setSpecialRequirements(e.target.value)}
+                      />
+                      <span
+                        className="text-muted small position-absolute"
+                        style={{ right: 10, bottom: 6 }}
+                      >
+                        {specialRequirements.length}/200
+                      </span>
                     </div>
                   </Card.Body>
                 </Card>
@@ -1528,7 +1417,7 @@ const CabBookingPage = () => {
                     className="py-3 px-4 text-dark border-bottom"
                     style={cardHeaderStyle}
                   >
-                    <span className="fw-bold">HQ Amount</span>
+                    <span className="fw-bold text-dark">HQ Amount</span>
                   </Card.Header>
                   <Card.Body className="px-4 pt-3 pb-3">
                     <Row className="g-3 align-items-center">
@@ -1561,58 +1450,225 @@ const CabBookingPage = () => {
                   </div>
                 </div>
 
-                {/* ── Footer — Cancellation Policy + Need Help */}
-                <Row className="g-4">
-                  <Col md={7}>
-                    <Card className="border rounded-3 h-100 shadow-sm">
-                      <Card.Body className="p-4">
-                        <h6 className="fw-bold mb-3">Cancellation Policy</h6>
-                        {cabPolicies.cancellations.length > 0 ? (
-                          <ul className="mb-0 ps-3 small text-dark">
-                            {cabPolicies.cancellations.map((c, i) => (
-                              <li key={`cxl-${i}`} className="mb-1">
-                                {c}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="text-muted small">
-                            The cancellation policy for this transfer will be
-                            confirmed with your booking.
-                          </div>
-                        )}
-                      </Card.Body>
-                    </Card>
-                  </Col>
-                  <Col md={5}>
-                    <Card className="border rounded-3 h-100 shadow-sm">
-                      <Card.Body className="p-4">
-                        <h6 className="fw-bold mb-3">Need Help?</h6>
-                        <div className="d-flex align-items-start gap-2">
-                          <FaHeadset
-                            className="mt-1"
-                            style={{ color: "#EC0B43" }}
-                          />
-                          <div className="small">
-                            <div className="fw-semibold text-dark">
-                              24/7 Customer Support
+                {/* ── Payment Mode — mirrors HotelBookingPage.jsx.
+                     Three scenarios:
+                       1. Sufficient credit           → Credit Limit only
+                       2. No credit + Card enabled    → Card only + note
+                       3. No credit + Card disabled   → hard-block Alert
+                     driven by hasSufficientCredit + agentCardPaymentEnabled. */}
+                <Card className="border rounded-3 mb-4 shadow-sm">
+                  <Card.Header
+                    className="py-3 px-4 border-bottom d-flex align-items-center"
+                    style={cardHeaderStyle}
+                  >
+                    <FaCreditCard className="me-2" style={{ color: "#EC0B43" }} />
+                    <span className="fw-bold text-dark">Payment Mode</span>
+                    <span className="text-danger ms-2">*</span>
+                  </Card.Header>
+                  <Card.Body className="p-4">
+                    {paymentModeOptions.length > 0 ? (
+                      <>
+                        <Row className="g-3">
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="fw-semibold mb-1 text-dark">
+                                Mode
+                              </Form.Label>
+                              <Form.Select
+                                value={paymentMode}
+                                onChange={(e) => setPaymentMode(e.target.value)}
+                              >
+                                {paymentModeOptions.map((opt) => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </Form.Select>
+                            </Form.Group>
+                          </Col>
+                        </Row>
+                        {hasSufficientCredit === false &&
+                          agentCardPaymentEnabled && (
+                            <div className="text-danger small mt-2 fw-semibold">
+                              Insufficient credit. Pay with credit card before
+                              time limit and reconfirm.
                             </div>
-                            <div className="text-muted">
-                              Contact your account manager for help with this
-                              booking.
-                            </div>
-                          </div>
-                        </div>
-                      </Card.Body>
-                    </Card>
-                  </Col>
-                </Row>
+                          )}
+                      </>
+                    ) : (
+                      <Alert variant="danger" className="mb-0">
+                        You do not have sufficient credit limit, and online
+                        card payment is not enabled for your account.
+                        Therefore, this booking cannot be completed. Please
+                        contact your account manager or administrator to
+                        enable a payment method.
+                      </Alert>
+                    )}
+                  </Card.Body>
+                </Card>
+
               </Col>
 
-              {/* ── Right sticky column — Price / Vehicle / Payment /
-                   Terms + Confirm action. */}
+              {/* ── Right sticky column — mirrors HotelBookingPage layout.
+                   Booking Summary carries the vehicle info + trip context,
+                   Price Details underneath, sticky action bar at bottom. */}
               <Col lg={4} className="hbp-right-col">
                 <div className="hbp-sticky-summary">
+                  {/* Booking Summary — vehicle image/name at top,
+                       trip context (route, date, times, pax) as
+                       hbp-summary-row label/value pairs. */}
+                  <Card className="shadow-sm rounded-3 mb-3 booking-summary-card border-0 overflow-hidden">
+                    <Card.Header className="bg-primary text-white py-2 rounded-top">
+                      <h6 className="mb-0 fw-bold text-white d-flex align-items-center">
+                        <FaCar className="me-2" />
+                        Booking Summary
+                      </h6>
+                    </Card.Header>
+                    <Card.Body className="p-3">
+                      {/* Vehicle info — image + name + seats + type + provider */}
+                      <div className="d-flex gap-3 mb-3">
+                        {cab.cabpic ? (
+                          <img
+                            src={cab.cabpic}
+                            alt={cab.cabname}
+                            style={{
+                              width: 96,
+                              height: 68,
+                              objectFit: "cover",
+                              borderRadius: 8,
+                              flexShrink: 0,
+                            }}
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: 96,
+                              height: 68,
+                              borderRadius: 8,
+                              background: "#f1f3f5",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flexShrink: 0,
+                            }}
+                          >
+                            <FaCar style={{ color: "#adb5bd", fontSize: 24 }} />
+                          </div>
+                        )}
+                        <div className="flex-grow-1">
+                          <div className="fw-bold text-dark">{cab.cabname}</div>
+                          <div className="d-flex flex-wrap gap-3 mt-1 text-muted small">
+                            {cab.capacityMax != null && (
+                              <span className="d-flex align-items-center gap-1">
+                                <FaUsers /> {cab.capacityMax} Seats
+                              </span>
+                            )}
+                            <span className="d-flex align-items-center gap-1">
+                              <FaCar /> {selectedOption.types}
+                            </span>
+                          </div>
+                          {cab.cabProviderName && (
+                            <div className="text-muted small mt-1">
+                              {cab.cabProviderName}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {cab.cabdetails && (
+                        <div className="text-muted small mb-3">
+                          {cab.cabdetails}
+                        </div>
+                      )}
+
+                      {/* Trip info — hbp-summary-row pattern from hotel page.
+                           Pickup / dropoff names come from what the user
+                           actually picked on the search screen, not from the
+                           selected offer's zone label (which is already a
+                           pre-joined route string and would render doubled). */}
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaMapMarkerAlt className="me-2 text-primary" />
+                          Pickup
+                        </div>
+                        <div className="hbp-summary-value text-end">
+                          {searchCriteria.pickupName || "—"}
+                        </div>
+                      </div>
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaMapMarkerAlt className="me-2 text-primary" />
+                          Drop Off
+                        </div>
+                        <div className="hbp-summary-value text-end">
+                          {searchCriteria.dropoffName || "—"}
+                        </div>
+                      </div>
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaClock className="me-2 text-primary" />
+                          Transfer Date
+                        </div>
+                        <div className="hbp-summary-value">
+                          {formatTransferDate(searchCriteria.pickupDate)}
+                        </div>
+                      </div>
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaClock className="me-2 text-primary" />
+                          Pickup Time
+                        </div>
+                        <div className="hbp-summary-value">
+                          {searchCriteria.pickupTime ||
+                            searchCriteria.arrivalTime ||
+                            "—"}
+                        </div>
+                      </div>
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaClock className="me-2 text-primary" />
+                          Drop Time
+                        </div>
+                        <div className="hbp-summary-value">
+                          {searchCriteria.dropoffTime
+                            ? `${searchCriteria.dropoffTime} (Est.)`
+                            : "—"}
+                        </div>
+                      </div>
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaUsers className="me-2 text-primary" />
+                          Adults
+                        </div>
+                        <div className="hbp-summary-value">
+                          {searchCriteria.adults || 0}
+                        </div>
+                      </div>
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaUsers className="me-2 text-primary" />
+                          Children
+                        </div>
+                        <div className="hbp-summary-value">
+                          {searchCriteria.children || 0}
+                        </div>
+                      </div>
+                      {searchCriteria.nationality?.label && (
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">
+                            <FaInfoCircle className="me-2 text-primary" />
+                            Nationality
+                          </div>
+                          <div className="hbp-summary-value">
+                            {searchCriteria.nationality.label}
+                          </div>
+                        </div>
+                      )}
+                    </Card.Body>
+                  </Card>
+
                   {/* Price Details */}
                   <Card className="rounded-3 border hbp-price-card shadow-sm">
                     <Card.Header
@@ -1679,125 +1735,6 @@ const CabBookingPage = () => {
                     </Card.Body>
                   </Card>
 
-                  {/* Vehicle Details */}
-                  <Card className="rounded-3 border shadow-sm mt-3">
-                    <Card.Header
-                      className="py-3 d-flex justify-content-between align-items-center text-dark border-bottom"
-                      style={cardHeaderStyle}
-                    >
-                      <span className="fw-bold">Vehicle Details</span>
-                      {/* Change button hidden per request
-                      <Button
-                        variant="outline-secondary"
-                        size="sm"
-                        className="d-flex align-items-center gap-1"
-                        onClick={() => navigate("/new-booking/cab")}
-                      >
-                        <FaEdit /> Change
-                      </Button>
-                      */}
-                    </Card.Header>
-                    <Card.Body className="p-3">
-                      <div className="d-flex gap-3">
-                        {cab.cabpic ? (
-                          <img
-                            src={cab.cabpic}
-                            alt={cab.cabname}
-                            style={{
-                              width: 96,
-                              height: 68,
-                              objectFit: "cover",
-                              borderRadius: 8,
-                              flexShrink: 0,
-                            }}
-                            onError={(e) => {
-                              e.currentTarget.style.display = "none";
-                            }}
-                          />
-                        ) : (
-                          <div
-                            style={{
-                              width: 96,
-                              height: 68,
-                              borderRadius: 8,
-                              background: "#f1f3f5",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              flexShrink: 0,
-                            }}
-                          >
-                            <FaCar style={{ color: "#adb5bd", fontSize: 24 }} />
-                          </div>
-                        )}
-                        <div className="flex-grow-1">
-                          <div className="fw-bold text-dark">{cab.cabname}</div>
-                          <div className="d-flex flex-wrap gap-3 mt-1 text-muted small">
-                            {cab.capacityMax != null && (
-                              <span className="d-flex align-items-center gap-1">
-                                <FaUsers /> {cab.capacityMax} Seats
-                              </span>
-                            )}
-                            <span className="d-flex align-items-center gap-1">
-                              <FaCar /> {selectedOption.types}
-                            </span>
-                          </div>
-                          {cab.cabProviderName && (
-                            <div className="text-muted small mt-1">
-                              {cab.cabProviderName}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      {cab.cabdetails && (
-                        <div className="text-muted small mt-2">
-                          {cab.cabdetails}
-                        </div>
-                      )}
-                    </Card.Body>
-                  </Card>
-
-                  {/* Payment Method — dropdown mirroring the package
-                       booking's "Mode of payment" (same options + the
-                       credit-based default seeded above). Only "Agent
-                       credit limit" deducts the wallet; the rest settle
-                       out-of-band. */}
-                  <Card className="rounded-3 border shadow-sm mt-3">
-                    <Card.Header
-                      className="py-3 text-dark border-bottom fw-bold d-flex align-items-center"
-                      style={cardHeaderStyle}
-                    >
-                      <FaCreditCard className="me-2" style={{ color: "#EC0B43" }} />
-                      Payment Method
-                      <span className="text-danger ms-2">*</span>
-                    </Card.Header>
-                    <Card.Body className="p-3">
-                      <Form.Select
-                        aria-label="Payment Method"
-                        value={paymentMode}
-                        onChange={(e) => setPaymentMode(e.target.value)}
-                      >
-                        <option value="">Select payment mode</option>
-                        {PAYMENT_MODES.map((m) => (
-                          <option key={m.value} value={m.value}>
-                            {m.label}
-                          </option>
-                        ))}
-                      </Form.Select>
-                      {paymentMode && paymentMode !== "CREDIT" && (
-                        <div className="small text-muted mt-2">
-                          Settled via {paymentModeLabel(paymentMode)} — the agent
-                          wallet will not be charged for this booking.
-                        </div>
-                      )}
-                    </Card.Body>
-                  </Card>
-
-                  {/* Terms & Conditions + Cancellation Policy acceptance moved
-                       into a dedicated pop-up that appears as the first step
-                       when the user clicks "Confirm Booking" — see the Terms
-                       modal near the end of this file + handleConfirmClick. */}
-
                   <div className="hbp-action-bar mt-3 d-flex gap-2">
                     <Button
                       variant="outline-secondary"
@@ -1811,7 +1748,7 @@ const CabBookingPage = () => {
                       variant="primary"
                       type="button"
                       onClick={handleConfirmClick}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || noPaymentPathAvailable}
                       className="flex-grow-1"
                     >
                       {isSubmitting ? (
@@ -1826,7 +1763,7 @@ const CabBookingPage = () => {
                       ) : (
                         <>
                           <FaCheckCircle className="me-1" />
-                          Booking
+                          Confirm
                         </>
                       )}
                     </Button>
@@ -2170,9 +2107,17 @@ const CabBookingPage = () => {
                 {paymentModeLabel(pendingPayload?.paymentMode || paymentMode)}
               </span>
             </Col>
-            {specialRequirements.trim() && (
+            {selectedSpecialRequirements.length > 0 && (
               <Col md={6}>
                 <small className="text-muted d-block">Special Requirements</small>
+                <span>
+                  {selectedSpecialRequirements.map((o) => o.label).join(", ")}
+                </span>
+              </Col>
+            )}
+            {specialRequirements.trim() && (
+              <Col md={6}>
+                <small className="text-muted d-block">Additional Notes</small>
                 <span>{specialRequirements.trim()}</span>
               </Col>
             )}

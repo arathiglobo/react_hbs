@@ -105,6 +105,12 @@ const ApiBookingPageForHotels = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
+  // Duplicate-booking modal — shown when the backend surfaces
+  // status="DUPLICATE" (GRN's error code 6000). GRN detects the duplicate
+  // on its side; we just render a clean modal so the operator knows the
+  // booking already exists and doesn't retry blindly.
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateMessage, setDuplicateMessage] = useState("");
   // Policy consent modal — shown first when the operator clicks Confirm
   // Booking. Cancellation policies come from the search-time rate object
   // (API-side hotels don't expose a /policies endpoint). Only after
@@ -157,6 +163,10 @@ const ApiBookingPageForHotels = () => {
   // per the vendor's PANCardType enum. Corporate/Trust/etc. can be picked in
   // the dropdown if the booking is on behalf of an entity.
   const [panCardType, setPanCardType] = useState("2");
+  // GRN-optional PAN Company Name — forwarded to holder.pan_company_name
+  // for corporate PANs. Only rendered when the selected rate is GRN AND
+  // panRequired=true. Left empty for personal PANs (no impact on GRN).
+  const [panCompanyName, setPanCompanyName] = useState("");
 
   // RATEHAWK (apiId=14): primary-guest email + phone are required by the
   // /hotel/order/booking/finish/ call — RateHawk rejects with a generic
@@ -424,15 +434,33 @@ const ApiBookingPageForHotels = () => {
     return n === "IN" || n === "IND" || n === "INDIA";
   };
 
-  // RATEHAWK-only helper: does this booking need the primary-guest email +
-  // phone card? RateHawk's booking/finish/ call requires user.email and
-  // user.phone (rejects with "invalid_params" otherwise), and no other
-  // supplier on this page asks for them via the FE.
-  const requiresRatehawkContact = () => {
-    if (!bookingData) return false;
-    return Number(bookingData?.payload?.apiId) === 14;
-  };
+// RATEHAWK-only helper: does this booking need the primary-guest email +
+// phone card? RateHawk's booking/finish/ call requires user.email and
+// user.phone (rejects with "invalid_params" otherwise), and no other
+// supplier on this page asks for them via the FE.
+const requiresRatehawkContact = () => {
+  if (!bookingData) return false;
+  return Number(bookingData?.payload?.apiId) === 14;
+};
 
+// GRN-only PAN requirement: rate's pan_required=true (set from the recheck
+// response and carried through on each selectedRate). Independent of the
+// guest's nationality — GRN flags per-rate, not per-nationality. When true,
+// the same PAN input card renders (shared with Atharva) and the payload
+// sends holder.pan_number / pan_company_name. Any selectedRate having the
+// flag is sufficient — a mixed multi-room booking with even one
+// pan_required rate needs PAN.
+const requiresGrnPan = () => {
+  if (!bookingData) return false;
+  if (Number(bookingData?.payload?.apiId) !== 20) return false;
+  const rates = bookingData?.selectedRate || [];
+  return rates.some((r) => r?.panRequired === true);
+};
+
+// Unified PAN-required check that either supplier can trigger. Kept as a
+// helper so the PAN input card, validation, and payload builder all share
+// one truth source and can't drift.
+const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
   const validateForm = () => {
     const errors = {};
     let hasErrors = false;
@@ -464,21 +492,26 @@ const ApiBookingPageForHotels = () => {
       });
     });
 
-    // ATHARVA (apiId=3) + Indian primary guest: PAN is mandatory. The vendor
-    // rejects HCreateBooking with error 3006 otherwise, and the operator sees
-    // a swallowed "no status returned" failure. Length-only check (10 chars);
-    // the strict ABCDE1234F format is not enforced here per product decision.
-    if (requiresAtharvaPan()) {
+    // PAN mandatory when either supplier requires it:
+    //   • ATHARVA (apiId=3) + Indian primary guest — vendor rejects
+    //     HCreateBooking with error 3006 otherwise.
+    //   • GRN (apiId=20) + rate.pan_required=true — GRN rejects the
+    //     create-booking call and returns an error envelope.
+    // Length-only check (10 chars) — strict ABCDE1234F format is not
+    // enforced here per product decision. PAN Card Type is Atharva-only
+    // so it's still gated on requiresAtharvaPan().
+    if (requiresPan()) {
       const trimmed = (panCardNo || "").trim().toUpperCase();
       if (!trimmed) {
-        errors.panCardNo =
-          "PAN Card No is required (Indian primary guest booking with Atharva).";
+        errors.panCardNo = requiresAtharvaPan()
+          ? "PAN Card No is required (Indian primary guest booking with Atharva)."
+          : "PAN Card No is required (this GRN rate mandates PAN on the holder).";
         hasErrors = true;
       } else if (trimmed.length !== 10) {
         errors.panCardNo = "PAN must be 10 characters.";
         hasErrors = true;
       }
-      if (!panCardType) {
+      if (requiresAtharvaPan() && !panCardType) {
         errors.panCardType = "PAN Card Type is required.";
         hasErrors = true;
       }
@@ -852,13 +885,20 @@ const ApiBookingPageForHotels = () => {
           passportNo: "",
           agentLpo: "",
           nativeCountry: bookingData.payload.nationality,
-          // ATHARVA-only carriers (apiId=3, Indian primary guest). Emit them
-          // only when the PAN gate applies so non-Atharva payloads stay byte-
-          // for-byte identical to before this change.
-          panCardNo: requiresAtharvaPan()
+          // PAN carriers — populated when either Atharva (Indian primary
+          // guest) or GRN (rate.pan_required=true) requires them. panCardNo
+          // is the shared PAN number field forwarded to Atharva's PANCardNo
+          // and GRN's holder.pan_number. panCardType is Atharva-only.
+          // panCompanyName is GRN-only (optional, for corporate PANs).
+          // When neither supplier requires PAN, the fields stay null so
+          // non-PAN payloads are byte-for-byte identical to before.
+          panCardNo: requiresPan()
             ? (panCardNo || "").trim().toUpperCase()
             : null,
           panCardType: requiresAtharvaPan() ? panCardType || "2" : null,
+          panCompanyName: requiresGrnPan()
+            ? (panCompanyName || "").trim() || null
+            : null,
         },
         rooms: rooms.map((room, roomIndex) => {
           const rate = bookingData.selectedRate[roomIndex] || {};
@@ -1017,7 +1057,21 @@ const ApiBookingPageForHotels = () => {
 
       if (bookingResponse && isSuccess) {
         toast.success(bookingResponse.message);
+        // All suppliers land on the booking list after a successful confirm
+        // (matches IWTX / X3 / ATHARVA / DARINA / JUMEIRAH / JUNIPER). GRN
+        // used to route straight to its detail page instead but the client
+        // asked for uniform post-confirm UX — the detail page is still one
+        // click away from the list row.
         navigate("/booking-details/hotel-booking-list");
+      } else if (statusUpper === "DUPLICATE") {
+        // GRN error code 6000 — the exact booking already exists at the
+        // supplier. Show a dedicated modal (not a toast) so the operator
+        // has to acknowledge before continuing, and doesn't retry blindly.
+        setDuplicateMessage(
+          bookingResponse?.message ||
+            "Duplicate booking detected. This exact booking was already made. Please check your recent bookings before retrying.",
+        );
+        setShowDuplicateModal(true);
       } else {
         // Surface backend / IWTX validation message when present (e.g.
         // "invalid_passengers[0].gender") instead of the generic
@@ -1528,23 +1582,28 @@ const ApiBookingPageForHotels = () => {
                     </Card.Body>
                   </Card>
 
-                  {/* ATHARVA (apiId=3) + Indian primary guest ONLY:
-                      PAN Card capture. Atharva §6.1 documents PAN as
-                      MANDATORY for Indian nationals booking a hotel
-                      outside India; omitting it makes HCreateBooking
-                      reject with error 3006 ("Invalid PAN details") and
-                      the operator sees an opaque "no status returned"
-                      failure. Card is gated so every other supplier on
-                      this page (and Indian-domestic Atharva bookings)
-                      keeps its existing 4-card layout unchanged. */}
-                  {requiresAtharvaPan() && (
+                  {/* PAN Card capture — rendered when EITHER supplier
+                      requires PAN on the primary guest:
+                        • Atharva (apiId=3) + Indian primary guest —
+                          §6.1 mandates PAN or HCreateBooking rejects with
+                          error 3006 ("Invalid PAN details").
+                        • GRN (apiId=20) + rate.pan_required=true — GRN
+                          returns an error envelope when holder.pan_number
+                          is missing on a pan_required rate.
+                      The card is fully hidden when neither applies, so
+                      every other supplier / non-PAN rate keeps its
+                      existing 4-card layout unchanged. The PAN Card Type
+                      dropdown is Atharva-only; the PAN Company Name
+                      input is GRN-only (optional, for corporate PANs). */}
+                  {requiresPan() && (
                     <Card className="p-4 mb-2 shadow-sm border-0">
                       <h5 className="mb-1 fw-bold">
                         Primary Guest PAN Details
                       </h5>
                       <div className="text-muted small mb-3">
-                        PAN is required for Indian nationals booking with
-                        Atharva. Enter the primary guest's PAN card details.
+                        {requiresAtharvaPan()
+                          ? "PAN is required for Indian nationals booking with Atharva. Enter the primary guest's PAN card details."
+                          : "This GRN rate mandates PAN on the holder. Enter the primary guest's PAN details."}
                       </div>
                       <Row className="g-3">
                         <Col md={6}>
@@ -1579,44 +1638,66 @@ const ApiBookingPageForHotels = () => {
                             )}
                           </Form.Group>
                         </Col>
-                        <Col md={6}>
-                          <Form.Group>
-                            <Form.Label className="fw-semibold">
-                              PAN Card Type{" "}
-                              <span className="text-danger">*</span>
-                            </Form.Label>
-                            <Form.Select
-                              value={panCardType}
-                              isInvalid={!!validationErrors.panCardType}
-                              onChange={(e) => {
-                                setPanCardType(e.target.value);
-                                if (validationErrors.panCardType) {
-                                  setValidationErrors((prev) => {
-                                    const next = { ...prev };
-                                    delete next.panCardType;
-                                    return next;
-                                  });
+                        {requiresAtharvaPan() && (
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="fw-semibold">
+                                PAN Card Type{" "}
+                                <span className="text-danger">*</span>
+                              </Form.Label>
+                              <Form.Select
+                                value={panCardType}
+                                isInvalid={!!validationErrors.panCardType}
+                                onChange={(e) => {
+                                  setPanCardType(e.target.value);
+                                  if (validationErrors.panCardType) {
+                                    setValidationErrors((prev) => {
+                                      const next = { ...prev };
+                                      delete next.panCardType;
+                                      return next;
+                                    });
+                                  }
+                                }}
+                              >
+                                {/* Values are the Atharva PANCardType enum
+                                    per §6.1 — sent verbatim on the wire. */}
+                                <option value="2">Personal</option>
+                                <option value="1">Corporate</option>
+                                <option value="3">Government</option>
+                                <option value="4">Proprietor</option>
+                                <option value="5">Firm</option>
+                                <option value="6">HUF</option>
+                                <option value="7">Trust</option>
+                                <option value="8">Education Society</option>
+                              </Form.Select>
+                              {validationErrors.panCardType && (
+                                <Form.Control.Feedback type="invalid">
+                                  {validationErrors.panCardType}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                        )}
+                        {requiresGrnPan() && (
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="fw-semibold">
+                                PAN Company Name{" "}
+                                <span className="text-muted small">
+                                  (optional)
+                                </span>
+                              </Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={panCompanyName}
+                                placeholder="Only for corporate PANs"
+                                onChange={(e) =>
+                                  setPanCompanyName(e.target.value)
                                 }
-                              }}
-                            >
-                              {/* Values are the Atharva PANCardType enum
-                                  per §6.1 — sent verbatim on the wire. */}
-                              <option value="2">Personal</option>
-                              <option value="1">Corporate</option>
-                              <option value="3">Government</option>
-                              <option value="4">Proprietor</option>
-                              <option value="5">Firm</option>
-                              <option value="6">HUF</option>
-                              <option value="7">Trust</option>
-                              <option value="8">Education Society</option>
-                            </Form.Select>
-                            {validationErrors.panCardType && (
-                              <Form.Control.Feedback type="invalid">
-                                {validationErrors.panCardType}
-                              </Form.Control.Feedback>
-                            )}
-                          </Form.Group>
-                        </Col>
+                              />
+                            </Form.Group>
+                          </Col>
+                        )}
                       </Row>
                     </Card>
                   )}
@@ -2509,146 +2590,199 @@ const ApiBookingPageForHotels = () => {
                 </Modal.Footer>
               </Modal>
 
-              {/* ── Insufficient credit → online payment required ──
-                  RATEHAWK-only. Non-RateHawk flows never open this modal
-                  (they still hit the toast in confirmBooking). Pay opens
-                  the gateway picker; Cancel dismisses. */}
-              <Modal
-                show={showInsufficientModal}
-                onHide={() => setShowInsufficientModal(false)}
-                centered
-              >
-                <Modal.Header closeButton>
-                  <Modal.Title>Online Payment Required</Modal.Title>
-                </Modal.Header>
-                <Modal.Body className="text-center py-4">
-                  <p className="mb-2 text-muted">
-                    The agent's available credit is insufficient for this
-                    booking. You need to proceed with{" "}
-                    <strong>online payment</strong>.
-                  </p>
-                  <div className="mt-3">
-                    <div className="text-muted small">Payable amount</div>
-                    <div className="fs-4 fw-bold text-dark">
-                      {formatPrice(insufficientAmount)}
-                    </div>
-                  </div>
-                </Modal.Body>
-                <Modal.Footer className="justify-content-center border-0">
-                  <Button
-                    variant="danger"
-                    onClick={() => setShowInsufficientModal(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="success"
-                    onClick={() => {
-                      setShowInsufficientModal(false);
-                      setSelectedGateway("");
-                      setShowGatewayModal(true);
-                    }}
-                  >
-                    Pay
-                  </Button>
-                </Modal.Footer>
-              </Modal>
+{/* ── Insufficient credit → online payment required ──
+    RATEHAWK-only. Non-RateHawk flows never open this modal
+    (they still hit the toast in confirmBooking). Pay opens
+    the gateway picker; Cancel dismisses. */}
+<Modal
+  show={showInsufficientModal}
+  onHide={() => setShowInsufficientModal(false)}
+  centered
+>
+  <Modal.Header closeButton>
+    <Modal.Title>Online Payment Required</Modal.Title>
+  </Modal.Header>
+  <Modal.Body className="text-center py-4">
+    <p className="mb-2 text-muted">
+      The agent's available credit is insufficient for this
+      booking. You need to proceed with{" "}
+      <strong>online payment</strong>.
+    </p>
+    <div className="mt-3">
+      <div className="text-muted small">Payable amount</div>
+      <div className="fs-4 fw-bold text-dark">
+        {formatPrice(insufficientAmount)}
+      </div>
+    </div>
+  </Modal.Body>
+  <Modal.Footer className="justify-content-center border-0">
+    <Button
+      variant="danger"
+      onClick={() => setShowInsufficientModal(false)}
+    >
+      Cancel
+    </Button>
+    <Button
+      variant="success"
+      onClick={() => {
+        setShowInsufficientModal(false);
+        setSelectedGateway("");
+        setShowGatewayModal(true);
+      }}
+    >
+      Pay
+    </Button>
+  </Modal.Footer>
+</Modal>
 
-              {/* ── Select payment gateway ──
-                  Radios from PAYMENT_GATEWAYS. Proceed persists the
-                  pending payload to sessionStorage under
-                  "hbpPendingCreatePayload" (same key Inhouse uses so the
-                  same CCAvenueCheckoutPage picks it up unchanged) and
-                  navigates to /payment/ccavenue-redirect. */}
-              <Modal
-                show={showGatewayModal}
-                onHide={() => setShowGatewayModal(false)}
-                centered
-              >
-                <Modal.Header closeButton>
-                  <Modal.Title>Select Payment Gateway</Modal.Title>
-                </Modal.Header>
-                <Modal.Body>
-                  <p className="text-muted small mb-3">
-                    Choose a gateway to enter your card details.
-                  </p>
-                  {PAYMENT_GATEWAYS.map((g) => (
-                    <Form.Check
-                      key={g.id}
-                      type="radio"
-                      name="payment-gateway"
-                      id={`gw-${g.id}`}
-                      className="mb-2"
-                      checked={selectedGateway === g.id}
-                      onChange={() => setSelectedGateway(g.id)}
-                      label={
-                        <span>
-                          <span className="fw-semibold">{g.name}</span>
-                          <span className="text-muted small ms-2">
-                            {g.desc}
-                          </span>
-                        </span>
-                      }
-                    />
-                  ))}
-                </Modal.Body>
-                <Modal.Footer className="border-0">
-                  <Button
-                    variant="secondary"
-                    onClick={() => setShowGatewayModal(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="success"
-                    disabled={!selectedGateway}
-                    onClick={() => {
-                      setShowGatewayModal(false);
-                      // Persist the payload for the resume flow to replay
-                      // after the user returns from CC Avenue. React state
-                      // is lost across the redirect so the resume effect
-                      // above rebuilds the create call purely from this.
-                      // paymentMode is flipped to "ONLINE" so the Booking
-                      // List labels the row correctly (same convention as
-                      // Inhouse — see HotelBookingPage.jsx line 2942).
-                      try {
-                        sessionStorage.setItem(
-                          "hbpPendingCreatePayload",
-                          JSON.stringify({
-                            ...pendingPayload,
-                            paymentMode: "ONLINE",
-                          }),
-                        );
-                      } catch (e) {
-                        console.error(
-                          "Could not persist pending create payload",
-                          e,
-                        );
-                      }
+{/* ── Select payment gateway ──
+    Radios from PAYMENT_GATEWAYS. Proceed persists the
+    pending payload to sessionStorage under
+    "hbpPendingCreatePayload" (same key Inhouse uses so the
+    same CCAvenueCheckoutPage picks it up unchanged) and
+    navigates to /payment/ccavenue-redirect. */}
+<Modal
+  show={showGatewayModal}
+  onHide={() => setShowGatewayModal(false)}
+  centered
+>
+  <Modal.Header closeButton>
+    <Modal.Title>Select Payment Gateway</Modal.Title>
+  </Modal.Header>
+  <Modal.Body>
+    <p className="text-muted small mb-3">
+      Choose a gateway to enter your card details.
+    </p>
 
-                      if (selectedGateway === "ccavenue") {
-                        const guest = pendingPayload?.primaryGuest;
-                        const billingName = guest
-                          ? [guest.firstName, guest.lastName]
-                              .filter(Boolean)
-                              .join(" ")
-                          : "";
-                        navigate("/payment/ccavenue-redirect", {
-                          state: {
-                            amount: insufficientAmount,
-                            amountLabel: formatPrice(insufficientAmount),
-                            agentId: pendingPayload?.agentId || null,
-                            billingName,
-                            returnTo: location.pathname,
-                          },
-                        });
-                      }
-                    }}
-                  >
-                    Proceed to Pay
-                  </Button>
-                </Modal.Footer>
-              </Modal>
+    {PAYMENT_GATEWAYS.map((g) => (
+      <Form.Check
+        key={g.id}
+        type="radio"
+        name="payment-gateway"
+        id={`gw-${g.id}`}
+        className="mb-2"
+        checked={selectedGateway === g.id}
+        onChange={() => setSelectedGateway(g.id)}
+        label={
+          <span>
+            <span className="fw-semibold">{g.name}</span>
+            <span className="text-muted small ms-2">
+              {g.desc}
+            </span>
+          </span>
+        }
+      />
+    ))}
+  </Modal.Body>
+
+  <Modal.Footer className="border-0">
+    <Button
+      variant="secondary"
+      onClick={() => setShowGatewayModal(false)}
+    >
+      Cancel
+    </Button>
+
+    <Button
+      variant="success"
+      disabled={!selectedGateway}
+      onClick={() => {
+        setShowGatewayModal(false);
+
+        // Persist the payload for the resume flow to replay
+        // after the user returns from CC Avenue. React state
+        // is lost across the redirect so the resume effect
+        // above rebuilds the create call purely from this.
+        // paymentMode is flipped to "ONLINE" so the Booking
+        // List labels the row correctly (same convention as
+        // Inhouse — see HotelBookingPage.jsx line 2942).
+        try {
+          sessionStorage.setItem(
+            "hbpPendingCreatePayload",
+            JSON.stringify({
+              ...pendingPayload,
+              paymentMode: "ONLINE",
+            }),
+          );
+        } catch (e) {
+          console.error(
+            "Could not persist pending create payload",
+            e,
+          );
+        }
+
+        if (selectedGateway === "ccavenue") {
+          const guest = pendingPayload?.primaryGuest;
+
+          const billingName = guest
+            ? [guest.firstName, guest.lastName]
+                .filter(Boolean)
+                .join(" ")
+            : "";
+
+          navigate("/payment/ccavenue-redirect", {
+            state: {
+              amount: insufficientAmount,
+              amountLabel: formatPrice(insufficientAmount),
+              agentId: pendingPayload?.agentId || null,
+              billingName,
+              returnTo: location.pathname,
+            },
+          });
+        }
+      }}
+    >
+      Proceed to Pay
+    </Button>
+  </Modal.Footer>
+</Modal>
+
+{/* ── Duplicate-booking modal ──
+    Opened when the backend replies status="DUPLICATE"
+    (GRN error code 6000). Read-only acknowledgement; the
+    operator dismisses and goes to check the existing booking.
+    No retry action here on purpose. */}
+<Modal
+  show={showDuplicateModal}
+  onHide={() => setShowDuplicateModal(false)}
+  centered
+  backdrop="static"
+>
+  <Modal.Header closeButton>
+    <Modal.Title>
+      <i className="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+      Duplicate Booking
+    </Modal.Title>
+  </Modal.Header>
+
+  <Modal.Body>
+    <p className="mb-2">{duplicateMessage}</p>
+
+    <p className="text-muted small mb-0">
+      Please check the Hotel Bookings list for the existing
+      reservation before retrying.
+    </p>
+  </Modal.Body>
+
+  <Modal.Footer>
+    <Button
+      variant="outline-secondary"
+      onClick={() => setShowDuplicateModal(false)}
+    >
+      Close
+    </Button>
+
+    <Button
+      variant="primary"
+      onClick={() => {
+        setShowDuplicateModal(false);
+        navigate("/booking-details/hotel-booking-list");
+      }}
+    >
+      View Bookings
+    </Button>
+  </Modal.Footer>
+</Modal>
             </Form>
           </Container>
         </main>

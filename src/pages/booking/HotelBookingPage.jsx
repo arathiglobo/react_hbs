@@ -15,6 +15,7 @@ import {
   Badge,
   Alert,
   Modal,
+  Spinner,
 } from "react-bootstrap";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
@@ -179,6 +180,11 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
   // pushed into the online-payment flow they can't use.
   const [showNoPaymentPathModal, setShowNoPaymentPathModal] = useState(false);
   const [selectedGateway, setSelectedGateway] = useState("");
+  // True only while the post-CC-Avenue /finalize call is in flight. Drives
+  // the full-screen "Booking in progress — do not close" overlay and the
+  // beforeunload guard so the operator can't navigate away while the
+  // backend is still creating the paid-for booking.
+  const [isFinalizingPayment, setIsFinalizingPayment] = useState(false);
   const [tourismDirhams, setTourismDirhams] = useState("0");
   const [remarks, setRemarks] = useState("");
   const [specialRequests, setSpecialRequests] = useState([]);
@@ -706,7 +712,7 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
   //   ?ccavenueOrderId=&ccavenueStatus= query string when it 302s the
   //   browser back to this page. The status query param is only a hint —
   //   before finalising anything we re-verify it against
-  //   GET /api/payment/ccavenue/status/{orderId}, which reflects what the
+  //   GET /api/payment/ccavenue/status/{orderId}, which reflects wha
   //   backend actually decrypted from CC Avenue, so a tampered/stale URL
   //   can't force a booking through.
   useEffect(() => {
@@ -735,7 +741,11 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
       }
     };
 
-    const finalizeCreate = async (payload) => {
+    // Dummy-gateway (local /payment/:gateway) path only. Real CC Avenue
+    // uses finalizeAfterCCAvenue below, which asks the backend to create
+    // the booking from the payload it persisted at /initiate time —
+    // sessionStorage isn't the source of truth there.
+    const finalizeDummyCreate = async (payload) => {
       try {
         setIsSubmitting(true);
         const response = await axiosInstance.post(
@@ -772,16 +782,69 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
       }
     };
 
+    // Real CC Avenue path — the backend owns the payload and the create
+    // call. We just ask it to finalize. Idempotent: a second call for the
+    // same orderId returns the already-created booking, so a StrictMode
+    // double-fire or an operator refresh cannot double-book.
+    const finalizeAfterCCAvenue = async () => {
+      try {
+        setIsFinalizingPayment(true);
+        setIsSubmitting(true);
+        const response = await axiosInstance.post(
+          `/api/payment/ccavenue/finalize/${ccavenueOrderId}`,
+        );
+        const bookingResponse = response.data;
+        if (
+          bookingResponse &&
+          bookingResponse.status &&
+          (bookingResponse.status.toUpperCase() === "CONFIRMED" ||
+            bookingResponse.status.toUpperCase() === "RECONFIRMED" ||
+            bookingResponse.status.toUpperCase() === "NOT CONFIRMED" ||
+            bookingResponse.status.toUpperCase() === "ON REQUEST") &&
+          bookingResponse.bookingId &&
+          bookingResponse.bookingId != 0
+        ) {
+          toast.success(
+            bookingResponse.message || "Booking created after payment.",
+          );
+          markSearchHistoryConfirmed();
+          setShowConfirmModal(false);
+          // Payload is no longer needed — the backend has it and has now
+          // used it. Clear stale state so a later reload can't confuse
+          // this flow with a fresh booking.
+          sessionStorage.removeItem("hbpPendingCreatePayload");
+          navigate(postBookingListRoute);
+        } else {
+          const beMsg = (bookingResponse && bookingResponse.message) || null;
+          toast.error(
+            beMsg ||
+              "Payment succeeded but booking could not be created. Please contact support with your payment reference.",
+          );
+        }
+      } catch (err) {
+        const beMsg =
+          err?.response?.data?.message || err?.response?.data?.error || null;
+        console.error("Post-payment finalize failed:", err);
+        toast.error(
+          beMsg ||
+            "Payment succeeded but booking could not be created. Please contact support with your payment reference.",
+        );
+      } finally {
+        setIsSubmitting(false);
+        setIsFinalizingPayment(false);
+      }
+    };
+
     if (resumeFromState) {
       // Dummy-gateway path (unchanged) — payment "succeeded" locally, go
       // straight to create.
       const payload = readPendingPayload();
       if (!payload) return;
-      finalizeCreate(payload);
+      finalizeDummyCreate(payload);
       return;
     }
 
-    // CC Avenue path — verify server-side before creating the booking.
+    // CC Avenue path — verify server-side, then let the backend finalize.
     (async () => {
       if (ccavenueStatus !== "success") {
         toast.error("Payment was not completed. Please try again.");
@@ -807,12 +870,31 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
         );
         return;
       }
-      const payload = readPendingPayload();
-      if (!payload) return;
-      finalizeCreate(payload);
+      // Payment is confirmed — ask the backend to create the booking from
+      // the payload it stored at /initiate. Safe to retry (idempotent), so
+      // sessionStorage is intentionally NOT cleared until success below.
+      finalizeAfterCCAvenue();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state?.resumeCreate, location.search]);
+
+  // Warn on close / navigate-away while the paid-for booking is still
+  // being created server-side. Only attached during that window so it
+  // never fires on the normal flow. The browser only respects this if
+  // the user has interacted with the page in this session (which they
+  // certainly have — they just came back from paying).
+  useEffect(() => {
+    if (!isFinalizingPayment) return;
+    const beforeUnload = (e) => {
+      e.preventDefault();
+      // Legacy browsers require the returnValue; modern ones just need
+      // preventDefault. The actual message shown is browser-defined.
+      e.returnValue = "";
+      return "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [isFinalizingPayment]);
 
   const handleGuestChange = (roomIndex, guestIndex, field, value) => {
     setRooms((prevRooms) => {
@@ -2891,25 +2973,41 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
                   <p className="text-muted small mb-3">
                     Choose a gateway to enter your card details.
                   </p>
-                  {PAYMENT_GATEWAYS.map((g) => (
-                    <Form.Check
-                      key={g.id}
-                      type="radio"
-                      name="payment-gateway"
-                      id={`gw-${g.id}`}
-                      className="mb-2"
-                      checked={selectedGateway === g.id}
-                      onChange={() => setSelectedGateway(g.id)}
-                      label={
-                        <span>
-                          <span className="fw-semibold">{g.name}</span>
-                          <span className="text-muted small ms-2">
-                            {g.desc}
-                          </span>
-                        </span>
-                      }
-                    />
-                  ))}
+                  <div className="pg-option-list">
+                    {PAYMENT_GATEWAYS.map((g) => {
+                      const isSelected = selectedGateway === g.id;
+                      return (
+                        <label
+                          key={g.id}
+                          htmlFor={`gw-${g.id}`}
+                          className={`pg-option${
+                            isSelected ? " pg-option-selected" : ""
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="payment-gateway"
+                            id={`gw-${g.id}`}
+                            className="pg-option-input"
+                            checked={isSelected}
+                            onChange={() => setSelectedGateway(g.id)}
+                          />
+                          <span className="pg-option-radio" aria-hidden="true" />
+                          {g.id === "ccavenue" && (
+                            <img
+                              src={`${process.env.PUBLIC_URL}/ccavanue.png`}
+                              alt="CC Avenue"
+                              className="pg-option-logo"
+                            />
+                          )}
+                          {/* <span className="pg-option-text">
+                            <span className="pg-option-name">{g.name}</span>
+                            <span className="pg-option-desc">{g.desc}</span>
+                          </span> */}
+                        </label>
+                      );
+                    })}
+                  </div>
                 </Modal.Body>
                 <Modal.Footer className="border-0">
                   <Button
@@ -2926,28 +3024,15 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
                         (x) => x.id === selectedGateway,
                       );
                       setShowGatewayModal(false);
-                      // Persist the payload the resume flow will replay.
-                      // React state (rooms, pendingPayload, ...) is lost when
-                      // the user navigates away to /payment and back, so the
-                      // resume effect below rebuilds the create call purely
-                      // from sessionStorage. paymentMode is flipped to
-                      // "ONLINE" so the Booking List can label the row
-                      // correctly (mirrors the comment further up in this
-                      // file — the online-payment branch sends "ONLINE").
-                      try {
-                        sessionStorage.setItem(
-                          "hbpPendingCreatePayload",
-                          JSON.stringify({
-                            ...pendingPayload,
-                            paymentMode: "ONLINE",
-                          }),
-                        );
-                      } catch (e) {
-                        console.error(
-                          "Could not persist pending create payload",
-                          e,
-                        );
-                      }
+                      // Payload the resume flow / gateway needs.
+                      // paymentMode is flipped to "ONLINE" so the Booking
+                      // List can label the row correctly (mirrors the
+                      // comment further up in this file — the online-
+                      // payment branch sends "ONLINE").
+                      const onlinePayload = {
+                        ...pendingPayload,
+                        paymentMode: "ONLINE",
+                      };
 
                       // ── CC Avenue: real billing-page redirect ──
                       // Distinct from the dummy /payment/:gateway flow below
@@ -2957,8 +3042,16 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
                       // doesn't survive a real cross-origin redirect). See
                       // the ccavenueOrderId branch in the resume effect
                       // above.
+                      //
+                      // For CC Avenue we DON'T rely on sessionStorage to
+                      // reach the create call — the backend's /initiate
+                      // stores the payload alongside the transaction row
+                      // and /finalize replays it after payment. That way,
+                      // if the browser tab dies between "money moved" and
+                      // "back on our site", the booking can still be
+                      // recovered from the transaction record.
                       if (selectedGateway === "ccavenue") {
-                        const guest = pendingPayload?.primaryGuest;
+                        const guest = onlinePayload?.primaryGuest;
                         const billingName = guest
                           ? [guest.firstName, guest.lastName]
                               .filter(Boolean)
@@ -2966,14 +3059,28 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
                           : "";
                         navigate("/payment/ccavenue-redirect", {
                           state: {
-                            amount: insufficientAmount,
                             amountLabel: formatPrice(insufficientAmount),
-                            agentId: pendingPayload?.agentId || null,
                             billingName,
                             returnTo: location.pathname,
+                            bookingPayload: onlinePayload,
                           },
                         });
                         return;
+                      }
+
+                      // Dummy /payment/:gateway flow (test/local only) —
+                      // it doesn't hit a real backend, so the resume
+                      // needs the payload in sessionStorage.
+                      try {
+                        sessionStorage.setItem(
+                          "hbpPendingCreatePayload",
+                          JSON.stringify(onlinePayload),
+                        );
+                      } catch (e) {
+                        console.error(
+                          "Could not persist pending create payload",
+                          e,
+                        );
                       }
 
                       navigate(`/payment/${selectedGateway}`, {
@@ -2999,6 +3106,71 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
           </Container>
         </main>
       </div>
+
+      {/* ── Post-payment finalize overlay ──
+          Visible only while the backend is creating the paid-for booking
+          after a successful CC Avenue return. Backdrop is fully opaque
+          and non-dismissable so the operator physically cannot click on
+          anything else, and the beforeunload effect above adds the
+          browser's own confirm dialog if they try to close the tab or
+          refresh. Cleared automatically in the finally block of
+          finalizeAfterCCAvenue, whether the create succeeded or errored. */}
+      {isFinalizingPayment && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-live="assertive"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 20000,
+            background: "rgba(15, 23, 42, 0.75)",
+            backdropFilter: "blur(2px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "1rem",
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: "2rem 1.75rem",
+              maxWidth: 440,
+              width: "100%",
+              textAlign: "center",
+              boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+            }}
+          >
+            <Spinner
+              animation="border"
+              variant="success"
+              role="status"
+              style={{ width: 48, height: 48, marginBottom: 16 }}
+            />
+            <h5 className="fw-bold mb-2" style={{ color: "#0f172a" }}>
+              Payment successful — creating your booking
+            </h5>
+            <p className="text-muted mb-3" style={{ fontSize: 14 }}>
+              Please <strong>do not close this window, refresh the page, or
+              press the back button</strong> until you see the confirmation.
+            </p>
+            <div
+              className="small"
+              style={{
+                color: "#b45309",
+                background: "#fef3c7",
+                border: "1px solid #fde68a",
+                borderRadius: 8,
+                padding: "8px 12px",
+              }}
+            >
+              This usually takes just a few seconds.
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

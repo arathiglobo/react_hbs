@@ -15,15 +15,16 @@ import {
   FaSuitcase,
 } from "react-icons/fa";
 
-const HotelsTab = ({ searchParams, bookingData, programme, updateData, updateProgramme, onPrev, onNext }) => {
+const HotelsTab = ({ searchParams, bookingData, programme, updateData, updateProgramme, packageRate, onPrev, onNext }) => {
   const [hotels, setHotels] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [packageView, setPackageView] = useState(null);
   const [isPackageLoading, setIsPackageLoading] = useState(false);
-  // Every day starts collapsed — the operator picks which day to expand by
-  // clicking its header. Previously index 0 was seeded open, which visually
-  // singled out Day 01 on load; that guidance is no longer wanted.
+  // Per-day expand/collapse state for the Day-wise Itinerary accordion.
+  // Every day starts collapsed; the operator clicks a day head to reveal
+  // its details, and can keep multiple days open at once (independent
+  // toggles keyed by index).
   const [openDays, setOpenDays] = useState({});
   // Hotel selection. The user is encouraged to pick a hotel — it is NOT
   // auto-selected. If they press Next without one, a warning popup asks them
@@ -43,6 +44,12 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
   // "Clear filters" restores that state.
   const [selectedLocations, setSelectedLocations] = useState([]);
   const [selectedNights, setSelectedNights] = useState([]);
+  // Price-range filter (AED). Bounds are strings so an empty input just
+  // means "no lower / upper bound" — filteredHotels below reads them as
+  // numbers only when non-empty. Wired against hotel.totalRateWithMarkup,
+  // which is the same number driving the Total Price sidebar.
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
   const toggleLocation = (name) =>
     setSelectedLocations((prev) =>
       prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name],
@@ -54,6 +61,23 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
   const clearHotelFilters = () => {
     setSelectedLocations([]);
     setSelectedNights([]);
+    setPriceMin("");
+    setPriceMax("");
+  };
+
+  // Resolves relative / windows-path image paths from packageView into
+  // absolute /api/files/{filename} URLs (same pattern PackageSearch uses).
+  // Used by the Day-wise Itinerary accordion to render each day's photo.
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return "";
+    if (imagePath.startsWith("http")) return imagePath;
+    const base = process.env.REACT_APP_API_BASE_URL || "";
+    const filename = imagePath.includes("\\")
+      ? imagePath.split("\\").pop()
+      : imagePath.split("/").pop();
+    return filename
+      ? `${base}/api/files/${filename}`
+      : `${base}/api/files/${imagePath}`;
   };
 
   const formatDateForApi = (dateStr) => {
@@ -137,9 +161,21 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
 
   const setField = (field, value) => updateProgramme({ [field]: value });
 
-  // Select a single hotel and push it (with its rate) into the shared booking
-  // state so the Total Price sidebar and submit payload reflect the choice.
+  // Toggle a hotel selection. Clicking an unselected row picks it (only one
+  // hotel per package, so the previous pick is replaced). Clicking the
+  // already-selected row clears the pick — the operator can back out of a
+  // choice without having to navigate away. Both branches push through
+  // updateData so the Total Price sidebar and the /book payload stay in
+  // sync with what's visible on the row.
   const selectHotel = (hotel) => {
+    if (selectedHotelId === hotel.hotelId) {
+      setSelectedHotelId(null);
+      updateData({
+        selectedHotels: [],
+        hotelPrice: 0,
+      });
+      return;
+    }
     setSelectedHotelId(hotel.hotelId);
     updateData({
       selectedHotels: [hotel],
@@ -147,14 +183,13 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
     });
   };
 
-  // On Next: if no hotel is chosen — whether because none was selected or none
-  // is available for this package — open the warning popup instead of
-  // advancing. The user must tick the acknowledgement box to proceed. A
-  // selected hotel skips the popup entirely.
+  // On Next: a hotel MUST be selected before proceeding to checkout — no
+  // "proceed anyway" escape hatch per product spec. Toast the operator and
+  // stop; onNext (which navigates to the checkout tab) only fires when
+  // selectedHotelId is set.
   const handleNext = () => {
     if (!selectedHotelId) {
-      setAckNoHotel(false);
-      setShowNoHotelModal(true);
+      toast.error("Please select a hotel to continue.");
       return;
     }
     onNext();
@@ -180,8 +215,9 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
   const daysInt = Number.isFinite(nightsInt) ? nightsInt + 1 : null;
 
   const itineraries = Array.isArray(packageView?.itineraries) ? packageView.itineraries : [];
-  const inclusions = Array.isArray(packageView?.inclusions) ? packageView.inclusions : [];
-  const exclusions = Array.isArray(packageView?.exclusions) ? packageView.exclusions : [];
+  // inclusions / exclusions were previously derived here for the removed
+  // Package Information card. Now consumed inside the Cancellation Policies
+  // popup in PackageBooking.jsx, which reads them directly from packageView.
 
   // ── Filter options derived from the loaded hotel list ──
   // Same shape /room-list uses for its Room Type list: only surface values
@@ -194,9 +230,23 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
     new Set(hotels.map((h) => h.noOfnight).filter((n) => n != null)),
   ).sort((a, b) => a - b);
 
-  // Apply the two filters — location OR-matches the picked stateName; nights
-  // OR-matches the picked stay length. Empty pick = no restriction.
+  // Price-range gate — evaluated ONCE against the PACKAGE rate (the
+  // single value that drives the Total Price sidebar / search-result
+  // card), not each hotel's own totalRateWithMarkup. When the package
+  // rate falls outside the picked [Min, Max] window, the whole hotel
+  // list is hidden; when it falls inside, only Location + Nights
+  // continue to filter individual rows. Bounds default to no-op when
+  // priceMin / priceMax are empty strings.
+  const pkgRate = Number(packageRate);
+  const withinPriceRange =
+    (!Number.isFinite(pkgRate)) ||
+    ((priceMin === "" || pkgRate >= Number(priceMin)) &&
+      (priceMax === "" || pkgRate <= Number(priceMax)));
+
+  // Apply the row-level filters. If the package rate is outside the
+  // chosen band, `withinPriceRange` short-circuits every hotel out.
   const filteredHotels = hotels.filter((h) => {
+    if (!withinPriceRange) return false;
     if (
       selectedLocations.length > 0 &&
       !selectedLocations.includes(h.stateName)
@@ -212,33 +262,10 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
     return true;
   });
 
-  const cancellationParts = (() => {
-    const free = packageView?.cancellationDaysFree;
-    const withCharge = packageView?.cancellationDaysWithCharge;
-    const type = packageView?.cancellationChargeType;
-    const value = packageView?.cancellationChargeValue;
-    if (free == null && withCharge == null && !value) {
-      return [{ tone: "muted", text: "Cancellation policy will be confirmed by the supplier." }];
-    }
-    const parts = [];
-    if (free != null) {
-      parts.push({
-        tone: "ok",
-        text: `Free cancellation up to ${free} day${free === 1 ? "" : "s"} before travel.`,
-      });
-    }
-    if (withCharge != null) {
-      let chargeText = "";
-      if (value) {
-        chargeText = type && type.toLowerCase() === "percent" ? `${value}%` : value;
-      }
-      parts.push({
-        tone: "warn",
-        text: `Within ${withCharge} day${withCharge === 1 ? "" : "s"} of travel${chargeText ? `, ${chargeText} cancellation charge applies` : ", cancellation charge applies"}.`,
-      });
-    }
-    return parts;
-  })();
+  // cancellationParts derivation was removed with the Cancellation Policy
+  // card. The same fields on packageView still drive the identical block
+  // inside the Cancellation Policies popup (PackageBooking.jsx), which
+  // maintains its own cancellationParts derivation.
 
   return (
     <div className="tab-pane-active">
@@ -262,12 +289,124 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         </div>
       </div>
 
-      {/* ────── Day-wise itinerary — now full width so its two-column day
-          grid spreads across the page. Includes / Excludes / After booking
-          sit in their own row below. ────── */}
+      {/* Day-wise Itinerary was moved INSIDE the Filters + Hotels row
+          below (top of the right-hand Col lg=9) so the sticky Filters
+          column on the left runs beside it AND continues beside the
+          hotel list as the operator scrolls. Same accordion behaviour
+          and content — only the wrapping location changed. */}
+
+      {/* Package Information card (Includes / Excludes / After booking) was
+          removed per product spec:
+          • Includes + Excludes now live in the Cancellation Policies popup
+            (see PackageBooking.jsx, opened from the Total Price card).
+          • "After booking" (confirmation-email note + Need help contact) was
+            dropped from the page altogether.
+          The underlying data — packageView.inclusions / packageView.exclusions —
+          is untouched and still fetched by PackageBooking; only its display
+          location moved. */}
+
+      {/* ────── Hotels in the package + Filters sidebar ──────
+          Same two-column pattern as /room-list's "Available Room Categories"
+          (Filters at Col lg={3}, results at Col lg={9}) so the two flows read
+          the same way. On smaller viewports the filters card sits above the
+          hotel grid — same fallback /room-list uses. */}
       <Row className="g-3 mb-3">
-        <Col lg={12}>
-          <div className="prg-section">
+        <Col lg={3} md={4}>
+          {/* .room-filters-card owns its own position: sticky (see
+              RoomList.css) so the panel follows scroll on long hotel lists —
+              same behaviour as /room-list's filters. `h-100` was previously
+              stretching the card to match the hotel column, which killed the
+              sticky (a sticky element can't scroll-follow inside a container
+              it fully fills). Dropped to restore the intended behaviour. */}
+          <Card className="room-filters-card">
+            <Card.Body className="p-3">
+              <h6 className="filter-title mb-3">Filters</h6>
+
+              <div className="filter-group mb-3">
+                <div className="filter-group-label">Location</div>
+                {locationOptions.length === 0 ? (
+                  <div className="text-muted small">No options</div>
+                ) : (
+                  locationOptions.map((loc) => (
+                    <Form.Check
+                      key={`floc-${loc}`}
+                      type="checkbox"
+                      id={`filter-loc-${loc}`}
+                      label={loc}
+                      checked={selectedLocations.includes(loc)}
+                      onChange={() => toggleLocation(loc)}
+                    />
+                  ))
+                )}
+              </div>
+
+              <div className="filter-group mb-3">
+                <div className="filter-group-label">Nights</div>
+                {nightsOptions.length === 0 ? (
+                  <div className="text-muted small">No options</div>
+                ) : (
+                  nightsOptions.map((n) => (
+                    <Form.Check
+                      key={`fn-${n}`}
+                      type="checkbox"
+                      id={`filter-nights-${n}`}
+                      label={`${n} Night${n === 1 ? "" : "s"}`}
+                      checked={selectedNights.includes(n)}
+                      onChange={() => toggleNights(n)}
+                    />
+                  ))
+                )}
+              </div>
+
+              {/* Price Range (AED) — two number inputs; empty = no bound.
+                  Wired against hotel.totalRateWithMarkup. */}
+              <div className="filter-group">
+                <div className="filter-group-label">Price Range (AED)</div>
+                <div className="d-flex align-items-center gap-2">
+                  <Form.Control
+                    type="number"
+                    size="sm"
+                    min="0"
+                    placeholder="Min"
+                    value={priceMin}
+                    onChange={(e) => setPriceMin(e.target.value)}
+                  />
+                  <span className="text-muted small">–</span>
+                  <Form.Control
+                    type="number"
+                    size="sm"
+                    min="0"
+                    placeholder="Max"
+                    value={priceMax}
+                    onChange={(e) => setPriceMax(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {(selectedLocations.length > 0 ||
+                selectedNights.length > 0 ||
+                priceMin !== "" ||
+                priceMax !== "") && (
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="p-0 mt-2"
+                  onClick={clearHotelFilters}
+                >
+                  Clear filters
+                </Button>
+              )}
+            </Card.Body>
+          </Card>
+        </Col>
+
+        <Col lg={9} md={8}>
+          {/* ────── Day-wise Itinerary — moved here from its own standalone
+              Row so the sticky Filters column on the left runs beside it
+              (and continues beside the Hotels list below). Same accordion
+              behaviour and content as before; only the wrapping location
+              changed. ────── */}
+          <div className="prg-section mb-3">
             <div className="prg-section-head">
               <FaMapMarkerAlt className="me-2" />
               <span>Day-wise Itinerary</span>
@@ -307,11 +446,38 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
                           </span>
                           <FaChevronDown className="prg-day-chev" />
                         </button>
-                        {open && it.dayActivities && (
+                        {open && (
                           <div className="prg-day-body">
-                            <p style={{ whiteSpace: "pre-line", margin: 0 }}>
-                              {it.dayActivities}
-                            </p>
+                            {it.packageItinearyImage && (
+                              <img
+                                src={getImageUrl(it.packageItinearyImage)}
+                                alt={`Day ${it.day}`}
+                                className="prg-day-image"
+                                onError={(e) => { e.target.style.display = "none"; }}
+                              />
+                            )}
+                            {it.heading && (
+                              <div className="prg-day-body-heading">
+                                {it.heading}
+                              </div>
+                            )}
+                            {it.placeName && (
+                              <div className="prg-day-body-place">
+                                <FaMapMarkerAlt size={10} className="me-1" />
+                                {it.placeName}
+                              </div>
+                            )}
+                            {it.dayActivities ? (
+                              <p style={{ whiteSpace: "pre-line", margin: 0 }}>
+                                {it.dayActivities}
+                              </p>
+                            ) : (
+                              !it.packageItinearyImage && !it.heading && !it.placeName && (
+                                <p className="text-muted small fst-italic mb-0">
+                                  No additional details for this day.
+                                </p>
+                              )
+                            )}
                           </div>
                         )}
                       </div>
@@ -321,212 +487,21 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
               )}
             </div>
           </div>
-        </Col>
-      </Row>
 
-      {/* ────── Package Information ──────
-          Wraps the three-column Includes / Excludes / After booking row in a
-          titled outer card modelled on the "Hotel Information" card on
-          /room-list — same round icon + title + subtitle header treatment —
-          so the two booking flows keep the same content-grouping pattern.
-          h-100 on each inner column keeps the three cards equal height. */}
-      <Card
-        className="mb-3 shadow-sm"
-        style={{ overflow: "hidden", border: "1px solid #e5e9f0" }}
-      >
-        <Card.Header
-          className="d-flex align-items-center gap-3 py-3"
-          style={{
-            background: "#f4f7fc",
-            color: "#2b3648",
-            border: "none",
-            borderBottom: "1px solid #e5e9f0",
-          }}
-        >
-          <div
-            className="d-flex align-items-center justify-content-center rounded-circle flex-shrink-0"
-            style={{
-              width: 40,
-              height: 40,
-              backgroundColor: "#fde7ed",
-              color: "#EC0B43",
-              fontSize: "1.15rem",
-            }}
-          >
-            <FaSuitcase />
-          </div>
-          <div>
-            <div
-              className="fw-bold"
-              style={{ fontSize: "1.1rem", lineHeight: 1.2 }}
-            >
-              Package Information
-            </div>
-            <div className="small text-muted">
-              What's included, what's not, and what happens after booking
-            </div>
-          </div>
-        </Card.Header>
-        <Card.Body className="p-3">
-          {/* Three sections stack vertically (one full-width block per row)
-              mirroring how the "Hotel Information" card on /room-list stacks
-              its Cancellation / Amendment / Child policy blocks. Each block
-              spans the whole width so its bullets can flow horizontally in a
-              wrapping grid — see .prg-bullets-grid below — instead of running
-              down the page as a tall single column. */}
-          <div className="d-flex flex-column gap-3">
-            <div className="prg-section prg-section-ok">
-              <div className="prg-section-head">
-                <FaCheckCircle className="me-2" />
-                <span>Includes</span>
-              </div>
-              <div className="prg-section-body">
-                {inclusions.length === 0 ? (
-                  <div className="prg-empty">Includes will be uploaded by supplier.</div>
-                ) : (
-                  <ul className="prg-bullets prg-bullets-ok prg-bullets-grid">
-                    {inclusions.map((x) => (
-                      <li key={`inc-${x.otherId}`}>{x.description}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-
-            <div className="prg-section prg-section-warn">
-              <div className="prg-section-head">
-                <FaTimesCircle className="me-2" />
-                <span>Excludes</span>
-              </div>
-              <div className="prg-section-body">
-                {exclusions.length === 0 ? (
-                  <div className="prg-empty">Excludes will be uploaded by supplier.</div>
-                ) : (
-                  <ul className="prg-bullets prg-bullets-warn prg-bullets-grid">
-                    {exclusions.map((x) => (
-                      <li key={`exc-${x.otherId}`}>{x.description}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-
-            {/* After booking gets the same section shell as its two siblings
-                so the vertical rhythm holds — the info-card look was only
-                needed when it sat as the third column. Its body arranges the
-                two "columns" (Confirmation email + Need help?) side-by-side
-                so this row also reads horizontally. */}
-            <div className="prg-section prg-section-info">
-              <div className="prg-section-head">
-                <FaEnvelope className="me-2" />
-                <span>After booking</span>
-              </div>
-              <div className="prg-section-body">
-                <div className="prg-after-grid">
-                  <div>
-                    <p className="prg-info-text mb-1">
-                      A confirmation will be sent to your email within{" "}
-                      <strong>12 hours</strong> with the package subject code.
-                    </p>
-                    <p className="prg-info-hint mb-0">
-                      Don't forget to check your junk folder.
-                    </p>
-                  </div>
-                  <div>
-                    <div className="prg-info-title small mb-1">
-                      <FaPhoneAlt className="me-2" />Need help?
-                    </div>
-                    <div className="d-flex flex-wrap gap-3">
-                      <a
-                        href="tel:+971561752667"
-                        className="prg-info-link"
-                      >
-                        +971 56 175 2667
-                      </a>
-                      <a
-                        href="mailto:support@ibyta.com"
-                        className="prg-info-link"
-                      >
-                        support@ibyta.com
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Card.Body>
-      </Card>
-
-      {/* ────── Hotels in the package + Filters sidebar ──────
-          Same two-column pattern as /room-list's "Available Room Categories"
-          (Filters at Col lg={3}, results at Col lg={9}) so the two flows read
-          the same way. On smaller viewports the filters card sits above the
-          hotel grid — same fallback /room-list uses. */}
-      <Row className="g-3 mb-3">
-        <Col lg={3} md={4}>
-          {/* h-100 makes the filters card stretch to match the height of the
-              adjacent "Hotels included in this package" section, keeping the
-              two columns visually aligned. */}
-          <Card className="room-filters-card h-100">
-            <Card.Body className="p-3">
-              <h6 className="filter-title mb-3">Filters</h6>
-
-              <div className="filter-group mb-3">
-                <div className="filter-group-label">Location</div>
-                {locationOptions.length === 0 ? (
-                  <div className="text-muted small">No options</div>
-                ) : (
-                  locationOptions.map((loc) => (
-                    <Form.Check
-                      key={`floc-${loc}`}
-                      type="checkbox"
-                      id={`filter-loc-${loc}`}
-                      label={loc}
-                      checked={selectedLocations.includes(loc)}
-                      onChange={() => toggleLocation(loc)}
-                    />
-                  ))
-                )}
-              </div>
-
-              <div className="filter-group">
-                <div className="filter-group-label">Nights</div>
-                {nightsOptions.length === 0 ? (
-                  <div className="text-muted small">No options</div>
-                ) : (
-                  nightsOptions.map((n) => (
-                    <Form.Check
-                      key={`fn-${n}`}
-                      type="checkbox"
-                      id={`filter-nights-${n}`}
-                      label={`${n} Night${n === 1 ? "" : "s"}`}
-                      checked={selectedNights.includes(n)}
-                      onChange={() => toggleNights(n)}
-                    />
-                  ))
-                )}
-              </div>
-
-              {(selectedLocations.length > 0 || selectedNights.length > 0) && (
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="p-0 mt-2"
-                  onClick={clearHotelFilters}
-                >
-                  Clear filters
-                </Button>
-              )}
-            </Card.Body>
-          </Card>
-        </Col>
-
-        <Col lg={9} md={8}>
-          <div className="prg-section">
-            <div className="prg-section-head">
-              <FaHotel className="me-2" />
-              <span>Hotels included in this package</span>
+          {/* "Hotels included in this package" list — restructured to mirror
+              /room-list's "Available Room Categories" section: same
+              .room-categories-section wrapper, same h4 title with the red
+              gradient underline (from RoomList.css), same .room-category-item
+              + .room-category-header row shape (name + subtitle on the left,
+              price + primary button on the right, red left-edge accent from
+              .room-category-header). Selection functionality is UNCHANGED —
+              click anywhere on the row selects the hotel, same handler as
+              before; the button just visually surfaces the current state. */}
+          <div className="room-categories-section">
+            <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+              <h4 className="mb-0">
+                Hotels included in this package
+              </h4>
               {hotels.length > 0 && (
                 <span className="prg-section-pill">
                   {filteredHotels.length === hotels.length
@@ -535,139 +510,148 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
                 </span>
               )}
             </div>
-            <div className="prg-section-body">
-              {/* Neutral guidance only. The "no hotel selected" warning is shown
-                  as a popup when the user presses Next (see the Modal below). */}
-              {hotels.length > 0 && (
-                <div className="prg-hotel-select-hint">
-                  Select a hotel to continue.
-                </div>
-              )}
-              {isLoading ? (
-                <div className="prg-loading">
-                  <Spinner animation="border" size="sm" /> <span>Searching for hotels…</span>
-                </div>
-              ) : hasSearched && filteredHotels.length > 0 ? (
-                <Row className="g-3">
-                  {filteredHotels.map((hotel) => {
-                const isSelected = selectedHotelId === hotel.hotelId;
-                return (
-                <Col key={hotel.hotelId} md={6}>
-                  <div
-                    className={`prg-hotel-card ${isSelected ? "selected" : ""}`}
-                    role="button"
-                    tabIndex={0}
-                    aria-pressed={isSelected}
-                    onClick={() => selectHotel(hotel)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        selectHotel(hotel);
-                      }
-                    }}
-                  >
-                    <div className="prg-hotel-thumb">
-                      <img
-                        src={hotel.image || "https://via.placeholder.com/150?text=Hotel"}
-                        alt={hotel.hotelName}
-                      />
+
+            {/* Neutral guidance only. The "no hotel selected" warning is shown
+                as a popup when the user presses Next (see the Modal below). */}
+            {hotels.length > 0 && (
+              <div className="prg-hotel-select-hint mb-3">
+                Select a hotel to continue.
+              </div>
+            )}
+
+            {isLoading ? (
+              <div className="prg-loading">
+                <Spinner animation="border" size="sm" /> <span>Searching for hotels…</span>
+              </div>
+            ) : hasSearched && filteredHotels.length > 0 ? (
+              <div className="d-flex flex-column gap-3">
+                {filteredHotels.map((hotel) => {
+                  const isSelected = selectedHotelId === hotel.hotelId;
+                  return (
+                    <div
+                      key={hotel.hotelId}
+                      className={`room-category-item ${isSelected ? "pkg-hotel-selected" : ""}`}
+                    >
+                      <div
+                        className="room-category-header"
+                        role="button"
+                        tabIndex={0}
+                        aria-pressed={isSelected}
+                        onClick={() => selectHotel(hotel)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            selectHotel(hotel);
+                          }
+                        }}
+                        style={{ cursor: "pointer" }}
+                      >
+                        <div className="d-flex justify-content-between align-items-center w-100 flex-wrap gap-3">
+                          {/* Left cluster — hotel thumbnail + name / location.
+                              Thumbnail uses hotel.image (from the /hotel-details
+                              response). Broken URLs auto-hide via onError so a
+                              missing image never leaves an ugly frame. */}
+                          <div className="d-flex align-items-center gap-3 flex-grow-1" style={{ minWidth: 0 }}>
+                            <div className="pkg-hotel-thumb">
+                              {hotel.image ? (
+                                <img
+                                  src={getImageUrl(hotel.image)}
+                                  alt={hotel.hotelName}
+                                  onError={(e) => { e.target.style.display = "none"; }}
+                                />
+                              ) : (
+                                <div className="pkg-hotel-thumb-fallback">
+                                  <FaHotel />
+                                </div>
+                              )}
+                            </div>
+                            <div className="room-category-info" style={{ minWidth: 0 }}>
+                              <h5 className="mb-1 d-flex align-items-center flex-wrap gap-2">
+                                <span>{hotel.hotelName}</span>
+                                {isSelected && (
+                                  <span className="pkg-selected-badge">
+                                    <FaCheckCircle size={10} />
+                                    <span>SELECTED IN PACKAGE</span>
+                                  </span>
+                                )}
+                              </h5>
+                              <p className="mb-0 text-muted small">
+                                <FaMapMarkerAlt size={10} className="me-1" />
+                                {hotel.stateName}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="d-flex align-items-center gap-3">
+                            <div className="room-category-price text-end">
+                              <div className="price-range">
+                                {hotel.noOfnight} Night{hotel.noOfnight === 1 ? "" : "s"}
+                              </div>
+                              <div className="rates-count small text-muted">
+                                Included in package
+                              </div>
+                            </div>
+                            <Button
+                              variant={isSelected ? "primary" : "outline-primary"}
+                              size="sm"
+                              className="d-flex align-items-center gap-1"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                selectHotel(hotel);
+                              }}
+                            >
+                              {isSelected ? (
+                                <>
+                                  <FaCheckCircle size={12} />
+                                  Selected
+                                </>
+                              ) : (
+                                "Select Hotel"
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="prg-hotel-body">
-                      <div className="d-flex justify-content-between align-items-start">
-                        <h6 className="prg-hotel-name mb-1">{hotel.hotelName}</h6>
-                        <span
-                          className={`prg-pill ${
-                            isSelected ? "prg-pill-selected" : "prg-pill-ok"
-                          }`}
-                        >
-                          {isSelected ? (
-                            <>
-                              <FaCheckCircle size={10} className="me-1" />
-                              Selected
-                            </>
-                          ) : (
-                            "Included"
-                          )}
-                        </span>
-                      </div>
-                      <div className="prg-hotel-loc">
-                        <FaMapMarkerAlt size={10} /> {hotel.stateName}
-                      </div>
-                      <div className="d-flex gap-2 align-items-center mt-2">
-                        <span className="prg-pill prg-pill-soft">{hotel.noOfnight} Night{hotel.noOfnight === 1 ? "" : "s"}</span>
-                        <span className="prg-pill prg-pill-pref">Preferred</span>
-                        <span
-                          className={`prg-hotel-radio ms-auto ${
-                            isSelected ? "on" : ""
-                          }`}
-                          aria-hidden="true"
-                        >
-                          {isSelected && <FaCheckCircle />}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </Col>
-                );
-              })}
-            </Row>
-          ) : hasSearched && hotels.length > 0 ? (
-            // Search ran, hotels were returned, but the filter picks match
-            // nothing. Suggest the user loosen filters rather than the query.
-            <div className="prg-empty-state">
-              <FaHotel size={28} />
-              <p className="mb-0 mt-2 fw-semibold">No hotels match the filters</p>
-              <p className="small text-muted">Try removing a location or nights checkbox.</p>
-              <Button
-                variant="link"
-                size="sm"
-                className="p-0"
-                onClick={clearHotelFilters}
-              >
-                Clear filters
-              </Button>
-            </div>
-          ) : hasSearched ? (
-            <div className="prg-empty-state">
-              <FaHotel size={28} />
-              <p className="mb-0 mt-2 fw-semibold">No hotels found</p>
-              <p className="small text-muted">Try adjusting your search criteria.</p>
-            </div>
-          ) : (
-            <div className="prg-empty-state">
-              <FaHotel size={28} />
-              <p className="mb-0 mt-2 fw-semibold">Loading hotels…</p>
-            </div>
-          )}
-            </div>
+                  );
+                })}
+              </div>
+            ) : hasSearched && hotels.length > 0 ? (
+              // Search ran, hotels were returned, but the filter picks match
+              // nothing. Suggest the user loosen filters rather than the query.
+              <div className="prg-empty-state">
+                <FaHotel size={28} />
+                <p className="mb-0 mt-2 fw-semibold">No hotels match the filters</p>
+                <p className="small text-muted">Try removing a location or nights checkbox.</p>
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="p-0"
+                  onClick={clearHotelFilters}
+                >
+                  Clear filters
+                </Button>
+              </div>
+            ) : hasSearched ? (
+              <div className="prg-empty-state">
+                <FaHotel size={28} />
+                <p className="mb-0 mt-2 fw-semibold">No hotels found</p>
+                <p className="small text-muted">Try adjusting your search criteria.</p>
+              </div>
+            ) : (
+              <div className="prg-empty-state">
+                <FaHotel size={28} />
+                <p className="mb-0 mt-2 fw-semibold">Loading hotels…</p>
+              </div>
+            )}
           </div>
         </Col>
       </Row>
 
-      {/* ────── Cancellation policy — rebuilt to match the room-list
-          "Cancellation Policy" box (see RoomList.jsx:2020-2047): plain white
-          card, red danger-toned h6 heading with the solid X-circle icon, and
-          a bulleted <ul> list. The NON-REFUNDABLE note is folded in as the
-          final list item, kept red so the emphasis carries over. ────── */}
-      <Card className="mb-3">
-        <Card.Body className="p-4">
-          <h6 className="text-danger mb-3">
-            <FaTimesCircle className="me-2" />
-            Cancellation Policy
-          </h6>
-          <ul className="mb-0 ps-3">
-            {cancellationParts.map((p, i) => (
-              <li key={i} className="mb-2">
-                <div style={{ whiteSpace: "pre-line" }}>{p.text}</div>
-              </li>
-            ))}
-            <li className="mb-0 text-danger">
-              <FaShieldAlt className="me-2" />
-              This is a <strong>NON-REFUNDABLE</strong> package within the charge window.
-            </li>
-          </ul>
-        </Card.Body>
-      </Card>
+      {/* Cancellation Policy card removed per product spec — the same
+          cancellation-window details are still accessible from the
+          "Cancellation Policies & Terms & Conditions" popup opened via the
+          red link under the Total Price sidebar (see PackageBooking.jsx).
+          The underlying cancellation fields on packageView are untouched. */}
 
       {/* Mode of payment moved to the Pax Info step's right sidebar (below
           the Total Price card). T&C acceptance lives in the Confirm-booking
@@ -876,16 +860,14 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         }
 
         /* === TIMELINE / DAYS === */
-        /* Two-column day grid: Day 02 sits next to Day 01. align-items:start
-           so a collapsed day never stretches to a taller expanded neighbour. */
+        /* Full-width single-column accordion: each day card takes the whole
+           row so clicking Day 01 doesn't leave an odd tall/short pair with
+           Day 02 in the same row. Matches the traditional accordion pattern
+           the operator expects when clicking a day head. */
         .prg-timeline {
-          display: grid;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
+          display: flex;
+          flex-direction: column;
           gap: 8px;
-          align-items: start;
-        }
-        @media (max-width: 767.98px) {
-          .prg-timeline { grid-template-columns: 1fr; }
         }
         .prg-day {
           border: 1px solid #e5e7eb;
@@ -952,6 +934,94 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           font-size: 0.83rem;
           color: #475569;
           line-height: 1.55;
+        }
+        /* Day photo — shown above the heading / place / activities in the
+           expanded body. Rounded + subtle shadow so it echoes the hotel
+           card thumbnails on /room-list. */
+        .prg-day-image {
+          display: block;
+          width: 100%;
+          max-height: 220px;
+          object-fit: cover;
+          border-radius: 10px;
+          margin-bottom: 12px;
+          box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+        }
+        .prg-day-body-heading {
+          font-weight: 700;
+          font-size: 0.95rem;
+          color: #1e293b;
+          margin-bottom: 4px;
+        }
+        .prg-day-body-place {
+          display: inline-flex;
+          align-items: center;
+          font-size: 0.78rem;
+          color: #64748b;
+          margin-bottom: 10px;
+        }
+
+        /* ── Hotel row: thumbnail + selected state ──
+           Thumbnail sits at the left of each .room-category-header row,
+           before the hotel name. Fixed size so long hotel names don't
+           squeeze the image and every row lines up. */
+        .pkg-hotel-thumb {
+          width: 96px;
+          height: 72px;
+          border-radius: 10px;
+          overflow: hidden;
+          flex-shrink: 0;
+          background: #f1f5f9;
+          box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+        }
+        .pkg-hotel-thumb img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          display: block;
+        }
+        .pkg-hotel-thumb-fallback {
+          width: 100%;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: #94a3b8;
+          font-size: 1.6rem;
+          background: #f1f5f9;
+        }
+        @media (max-width: 575.98px) {
+          .pkg-hotel-thumb { width: 72px; height: 56px; }
+        }
+
+        /* "SELECTED IN PACKAGE" chip — sits inline next to the hotel
+           name so operators can spot the current pick at a glance
+           without reading the button on the far right. */
+        .pkg-selected-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 2px 8px;
+          border-radius: 999px;
+          background: #dcfce7;
+          color: #15803d;
+          font-size: 0.65rem;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          line-height: 1;
+          white-space: nowrap;
+        }
+
+        /* Whole-row highlight for the selected hotel — subtle green tint
+           + accent border so the row stands out from unselected ones
+           even when the operator has scrolled past the button. */
+        .pkg-hotel-selected .room-category-header {
+          background: linear-gradient(to right, rgba(34, 197, 94, 0.05), transparent 60%);
+          border-color: #22c55e !important;
+        }
+        .pkg-hotel-selected {
+          box-shadow: 0 0 0 1px #22c55e, 0 6px 18px rgba(34, 197, 94, 0.10);
         }
 
         /* === BULLETS === */

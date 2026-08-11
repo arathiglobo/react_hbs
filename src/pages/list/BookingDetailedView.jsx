@@ -19,6 +19,10 @@ import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
+// Reuses the "Select Payment Gateway" card-style radio styles (.pg-option*)
+// defined for HotelBookingPage.jsx's CC Avenue picker, so this page's
+// reconfirm-flow picker matches it exactly.
+import "../../styles/HotelBookingPage.css";
 
 // Reverse-geocode browser coordinates to a readable address for the
 // Booking History audit trail. Tries OpenStreetMap Nominatim first
@@ -162,14 +166,13 @@ const getPaymentModeLabel = (booking) => {
   return "-";
 };
 
-// Dummy online-payment gateways — mirrors HotelBookingPage so an operator
-// gets the same payment picker whether the deduction is settled at create
-// or at reconfirm time.
+// Online-payment gateways — mirrors HotelBookingPage so an operator gets the
+// same payment picker whether the deduction is settled at create or at
+// reconfirm time. CC Avenue is real (see the "Proceed to Pay" handler below);
+// the rest are still the dummy placeholder flow.
 const PAYMENT_GATEWAYS = [
-  { id: "razorpay", name: "Razorpay", desc: "Cards, UPI, Net Banking" },
-  { id: "stripe", name: "Stripe", desc: "International cards" },
-  { id: "payu", name: "PayU", desc: "Cards & wallets" },
-];
+  { id: "ccavenue", name: "CC Avenue", desc: "Cards, UPI, Net Banking" },
+ ];
 
 const ADD_NEW_ITEM_TYPES = [
   { key: "HOTEL", label: "Hotel Booking", route: "/new-booking/hotel" },
@@ -281,6 +284,15 @@ export default function BookingDetailedView() {
   // PDF preview modal). Matches the convention used on HotelBookingPage.
   const activeUserRole = localStorage.getItem("currentActiveRole");
   const isAdmin = String(activeUserRole || "").toUpperCase() === "ADMIN";
+  const isSuperAdmin =
+    String(activeUserRole || "").toUpperCase() === "SUPER_ADMIN";
+  // Confirming an On-Request booking (step 1 of the two-step On Request
+  // flow — moves the row from tentative to "On Request/Confirmed") is a
+  // supplier-facing action agents must not perform on their own. Admin /
+  // super-admin retain full control. Reconfirming a NON-On-Request booking
+  // (or step 2 of the On Request flow after admin already confirmed step 1)
+  // is unaffected — those keep the existing agent-visible RECONFIRM button.
+  const canConfirmOnRequest = isAdmin || isSuperAdmin;
 
   // Agent-role gate (UI visibility only). Some actions — Booking Remark,
   // Notes, Confirmation No. — are internal/admin-facing and are hidden from
@@ -686,8 +698,20 @@ export default function BookingDetailedView() {
     }
   };
 
-  // Reconfirm
-  const openConfirmModal = () => setShowConfirmModal(true);
+  // Reconfirm — also the entry point for the On Request first-step
+  // "Confirm Booking". The button that calls this is already role-gated
+  // (see canConfirmOnRequest); this second check is defence-in-depth so a
+  // future caller / devtools-forged click can't sneak past the same rule.
+  // Backend authorisation still owns the real enforcement.
+  const openConfirmModal = () => {
+    if (isOnRequestPending && !canConfirmOnRequest) {
+      toast.error(
+        "Only admin or super-admin can confirm an On Request booking.",
+      );
+      return;
+    }
+    setShowConfirmModal(true);
+  };
 
   // Does the booking carry a "deferred credit" marker on voucherGenerated
   // (Cases 3, 5, or 6 — see DEFERRED_CREDIT_VOUCHER_TOKENS above)? Only
@@ -697,6 +721,21 @@ export default function BookingDetailedView() {
   const isDeferredCreditBooking = voucherIndicatesDeferredCredit(
     booking?.voucherGenerated,
   );
+
+  // Shared by runReconfirm() (below) and the CC Avenue post-payment resume
+  // effect (further down) — both PATCH /confirmation-status and POST
+  // /finalize-reconfirm return the same { message, success,
+  // confirmationStatus } shape, so the success/failure handling only needs
+  // to live once.
+  const handleReconfirmResponse = async (data) => {
+    if (data && data.success === true) {
+      setShowConfirmModal(false);
+      toast.success(data.message || "Booking reconfirmed successfully!");
+      await fetchBooking();
+    } else {
+      toast.error(data?.message || "Failed to reconfirm booking.");
+    }
+  };
 
   // Actual reconfirm API call. Split out so the same call can be made
   // from (a) the Reconfirm modal's Confirm button when credit is fine,
@@ -725,15 +764,7 @@ export default function BookingDetailedView() {
           bookingLocation: operatorLocation,
         },
       );
-      if (response.data && response.data.success === true) {
-        setShowConfirmModal(false);
-        toast.success(
-          response.data.message || "Booking reconfirmed successfully!",
-        );
-        await fetchBooking();
-      } else {
-        toast.error(response.data?.message || "Failed to reconfirm booking.");
-      }
+      await handleReconfirmResponse(response.data);
     } catch (error) {
       console.error("Error reconfirming booking:", error);
       toast.error(
@@ -857,6 +888,57 @@ export default function BookingDetailedView() {
     runReconfirm();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state?.resumeReconfirm, booking]);
+
+  // CC Avenue post-payment resume — mirrors HotelBookingPage.jsx. CC
+  // Avenue's redirect is a real cross-domain browser navigation, so React
+  // Router `state` (resumeReconfirm above) never survives it; the backend
+  // instead appends ?ccavenueOrderId=&ccavenueStatus= to the URL when it
+  // redirects back here (see CCAvenuePaymentServiceImpl.buildRedirect).
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const ccavenueOrderId = searchParams.get("ccavenueOrderId");
+    const ccavenueStatus = searchParams.get("ccavenueStatus");
+    if (!ccavenueOrderId) return;
+    if (!booking) return;
+
+    // Strip the query string so a reload doesn't re-trigger this.
+    navigate(location.pathname, { replace: true, state: {} });
+
+    (async () => {
+      if (ccavenueStatus !== "success") {
+        toast.error("Payment was not completed. Please try again.");
+        return;
+      }
+      try {
+        setConfirmingBooking(true);
+        // Re-verify server-side before finalizing — never trust the
+        // redirect's own query string alone.
+        const statusResponse = await axiosInstance.get(
+          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+        );
+        if (statusResponse.data?.status !== "SUCCESS") {
+          toast.error(
+            statusResponse.data?.statusMessage ||
+              "Payment was not successful. Please try again.",
+          );
+          return;
+        }
+        const response = await axiosInstance.post(
+          `/api/payment/ccavenue/finalize-reconfirm/${ccavenueOrderId}`,
+        );
+        await handleReconfirmResponse(response.data);
+      } catch (err) {
+        console.error("Post-payment reconfirm finalize failed:", err);
+        toast.error(
+          err?.response?.data?.message ||
+            "Payment succeeded but the booking could not be reconfirmed. Please contact support with your payment reference.",
+        );
+      } finally {
+        setConfirmingBooking(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search, booking]);
 
   // Reject flow: Reconfirm popup → "Reject" → opens this modal
   const openRejectModal = () => {
@@ -1305,9 +1387,17 @@ export default function BookingDetailedView() {
   const bookingHistory = (() => {
     if (!booking) return [];
     const events = [];
+    // Each event carries the resulting booking status right after that
+    // action ran — surfaced in the new "Status" column so the History
+    // modal reads as a lifecycle timeline (Confirmed → ReConfirmed →
+    // Cancelled) instead of a bare action log. "On Request" bookings keep
+    // their prefix so the created row shows "On Request" (not the generic
+    // engine "Confirmed" the backend actually stamps in that case).
+    const createdRowStatus = isOnRequestRoom ? "On Request" : "Confirmed";
     if (booking.bookingDate) {
       events.push({
         action: "Booking Created",
+        status: createdRowStatus,
         at: booking.bookingDate,
         by: creatorLabel,
         // Captured at create time only — later lifecycle rows show "-".
@@ -1318,6 +1408,10 @@ export default function BookingDetailedView() {
     if (booking.confirmedDate) {
       events.push({
         action: "Booking Confirmed",
+        // For an On Request row the "Confirmed" action is the step-1
+        // supplier acknowledgement, so the status label reads
+        // "On Request/Confirmed" to preserve the on-request origin.
+        status: isOnRequestRoom ? "On Request/Confirmed" : "Confirmed",
         at: booking.confirmedDate,
         by: booking.confirmedBy || "-",
         // Per-action audit captured on the CONFIRM PATCH. Legacy rows
@@ -1329,6 +1423,9 @@ export default function BookingDetailedView() {
     if (booking.reconfirmedDate) {
       events.push({
         action: "Booking Reconfirmed",
+        status: isOnRequestRoom
+          ? "On Request/Confirmed/Reconfirmed"
+          : "ReConfirmed",
         at: booking.reconfirmedDate,
         by: booking.reconfirmedBy || "-",
         location: booking.reconfirmedLocation,
@@ -1338,6 +1435,7 @@ export default function BookingDetailedView() {
     if (booking.cancelledAt) {
       events.push({
         action: "Booking Cancelled",
+        status: "Cancelled",
         at: booking.cancelledAt,
         by: booking.cancelledBy || "-",
         // Per-action audit captured on the DELETE. Legacy rows cancelled
@@ -2489,17 +2587,23 @@ export default function BookingDetailedView() {
                       </button>
                     )}
 
-                    {!showsFinalDocs && !isCancelled && (
-                      <button
-                        style={isOnRequestPending ? BTN_SUCCESS : BTN_TEAL}
-                        onClick={openConfirmModal}
-                      >
-                        {/* An "On Request" booking hasn't been confirmed yet,
-                            so the first action is CONFIRM (not RECONFIRM). It
-                            reuses the exact same confirmation flow/modal. */}
-                        {isOnRequestPending ? "CONFIRM" : "RECONFIRM"}
-                      </button>
-                    )}
+                    {!showsFinalDocs &&
+                      !isCancelled &&
+                      !(isOnRequestPending && !canConfirmOnRequest) && (
+                        <button
+                          style={isOnRequestPending ? BTN_SUCCESS : BTN_TEAL}
+                          onClick={openConfirmModal}
+                        >
+                          {/* An "On Request" booking hasn't been confirmed
+                              yet, so the first action is CONFIRM (not
+                              RECONFIRM). It reuses the exact same
+                              confirmation flow/modal. Agents don't get to
+                              see this action for On Request bookings —
+                              only admin / super-admin do; see
+                              canConfirmOnRequest above. */}
+                          {isOnRequestPending ? "CONFIRM" : "RECONFIRM"}
+                        </button>
+                      )}
 
                     {/* Proforma Voucher / Invoice are not available while the
                         booking is still "On Request" (not yet confirmed). They
@@ -2778,12 +2882,13 @@ export default function BookingDetailedView() {
                             <tr style={{ backgroundColor: "#f1f5f9" }}>
                               {[
                                 { label: "S/N", width: "5%" },
-                                { label: "Action", width: "17%" },
-                                { label: "Performed By", icon: FaUserAlt, width: "13%" },
-                                { label: "Location", icon: FaMapMarkerAlt, width: "30%" },
-                                { label: "IP Address", icon: FaNetworkWired, width: "14%" },
+                                { label: "Action", width: "15%" },
+                                { label: "Status", width: "12%" },
+                                { label: "Performed By", icon: FaUserAlt, width: "11%" },
+                                { label: "Location", icon: FaMapMarkerAlt, width: "24%" },
+                                { label: "IP Address", icon: FaNetworkWired, width: "13%" },
                                 { label: "Date", icon: FaCalendarAlt, width: "11%" },
-                                { label: "Time", icon: FaClock, width: "10%" },
+                                { label: "Time", icon: FaClock, width: "9%" },
                               ].map((col) => (
                                 <th
                                   key={col.label}
@@ -2849,6 +2954,44 @@ export default function BookingDetailedView() {
                                       <ActionIcon size={10} style={{ flexShrink: 0 }} />
                                       {ev.action}
                                     </span>
+                                  </td>
+                                  {/* Status column — the resulting booking
+                                      state right after this action. Colour-
+                                      coded so a timeline glance conveys the
+                                      progression: green for confirmed /
+                                      reconfirmed / on-request-confirmed,
+                                      orange for the original on-request
+                                      state, red for cancelled, slate for
+                                      anything unrecognised. */}
+                                  <td
+                                    style={{
+                                      padding: "10px 14px",
+                                      borderBottom: "1px solid #eef2f6",
+                                    }}
+                                  >
+                                    {(() => {
+                                      const raw = String(ev.status || "").trim();
+                                      if (!raw) return <span style={{ color: "#94a3b8" }}>-</span>;
+                                      const lower = raw.toLowerCase();
+                                      const color = lower.includes("cancel")
+                                        ? "#dc2626"
+                                        : lower === "on request"
+                                          ? "#d97706"
+                                          : "#16a34a";
+                                      return (
+                                        <span
+                                          style={{
+                                            color,
+                                            fontWeight: 600,
+                                            fontSize: "0.78rem",
+                                            whiteSpace: "normal",
+                                            wordBreak: "break-word",
+                                          }}
+                                        >
+                                          {raw}
+                                        </span>
+                                      );
+                                    })()}
                                   </td>
                                   <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>
                                     {ev.by || "-"}
@@ -3775,23 +3918,41 @@ export default function BookingDetailedView() {
           <p className="text-muted small mb-3">
             Choose a gateway to enter your card details.
           </p>
-          {PAYMENT_GATEWAYS.map((g) => (
-            <Form.Check
-              key={g.id}
-              type="radio"
-              name="reconfirm-payment-gateway"
-              id={`reconfirm-gw-${g.id}`}
-              className="mb-2"
-              checked={selectedGateway === g.id}
-              onChange={() => setSelectedGateway(g.id)}
-              label={
-                <span>
-                  <span className="fw-semibold">{g.name}</span>
-                  <span className="text-muted small ms-2">{g.desc}</span>
-                </span>
-              }
-            />
-          ))}
+          <div className="pg-option-list">
+            {PAYMENT_GATEWAYS.map((g) => {
+              const isSelected = selectedGateway === g.id;
+              return (
+                <label
+                  key={g.id}
+                  htmlFor={`reconfirm-gw-${g.id}`}
+                  className={`pg-option${
+                    isSelected ? " pg-option-selected" : ""
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="reconfirm-payment-gateway"
+                    id={`reconfirm-gw-${g.id}`}
+                    className="pg-option-input"
+                    checked={isSelected}
+                    onChange={() => setSelectedGateway(g.id)}
+                  />
+                  <span className="pg-option-radio" aria-hidden="true" />
+                  {g.id === "ccavenue" && (
+                    <img
+                      src={`${process.env.PUBLIC_URL}/ccavanue.png`}
+                      alt="CC Avenue"
+                      className="pg-option-logo"
+                    />
+                  )}
+                  <span className="pg-option-text">
+                    <span className="pg-option-name">{g.name}</span>
+                    <span className="pg-option-desc">{g.desc}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
         </Modal.Body>
         <Modal.Footer className="border-0">
           <Button
@@ -3808,7 +3969,35 @@ export default function BookingDetailedView() {
                 (x) => x.id === selectedGateway,
               );
               setShowGatewayModal(false);
-              // Send the operator to the dummy gateway page. We pass
+
+              // ── CC Avenue: real billing-page redirect ──
+              // Distinct from the dummy /payment/:gateway path below — the
+              // browser fully navigates away to CC Avenue's hosted page and
+              // back, so the resume signal has to travel as a URL query
+              // param (React Router state doesn't survive a real
+              // cross-origin redirect). See the ccavenueOrderId resume
+              // effect above. reconfirmBookingId tells CCAvenueCheckoutPage
+              // to pay off THIS existing booking rather than create a new
+              // one — the backend already has everything else it needs.
+              if (selectedGateway === "ccavenue") {
+                const cust = booking?.customer;
+                const billingName = cust
+                  ? [cust.salutation, cust.firstName, cust.lastName]
+                      .filter(Boolean)
+                      .join(" ")
+                  : "";
+                navigate("/payment/ccavenue-redirect", {
+                  state: {
+                    amountLabel: `AED ${Number(insufficientAmount).toFixed(2)}`,
+                    billingName,
+                    returnTo: location.pathname,
+                    reconfirmBookingId: id,
+                  },
+                });
+                return;
+              }
+
+              // Dummy /payment/:gateway flow (test/local only). We pass
               // returnTo so the gateway can navigate back to THIS detail
               // page on completion, and resumeReconfirm so the resume
               // effect at the top of this component fires runReconfirm.

@@ -1,8 +1,11 @@
 /* PackageBooking_Stepper.css */
 
 .booking-stepper-container {
-     padding: 1.25rem;
-    background-color: #f0f4f8;
+    padding: 1.25rem;
+    /* Background intentionally transparent so the parent .room-list-container
+       (from RoomList.css) supplies the --rl-bg light-slate tone — keeps
+       PackageBooking visually aligned with /room-list. */
+    background-color: transparent;
     min-height: 100vh;
 }
 
@@ -81,7 +84,11 @@
     top: 0;
     left: 0;
     height: 100%;
-    background: linear-gradient(90deg, #EC0B43, #8b5cf6);
+    /* Gradient stops mirror /room-list's .book-now-btn (--rl-primary →
+       --rl-accent) so the stepper progress and the primary CTA share the
+       same brand palette. Falls back to concrete hex if the vars aren't
+       defined on this subtree. */
+    background: linear-gradient(90deg, var(--rl-primary, #EC0B43), var(--rl-accent, #0ea5e9));
     border-radius: 2px;
     transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -144,8 +151,10 @@
 }
 
 /* ── Tab content area ── */
+/* padding tuned to 1.5rem (Bootstrap p-4) so the inner content sits at the
+   same visual rhythm as /room-list's Card.Body blocks. */
 .tab-content-area {
-    padding: 1.25rem 1.75rem;
+    padding: 1.5rem;
 }
 
 /* ── Tab pane animation ── */

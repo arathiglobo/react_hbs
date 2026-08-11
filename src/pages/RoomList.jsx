@@ -57,7 +57,7 @@ function AccordionToggleButton({ eventKey, isActive }) {
 
   return (
     <Button
-      variant="outline-primary"
+      variant="outline-danger"
       size="sm"
       onClick={decoratedOnClick}
       className="d-flex align-items-center gap-1"

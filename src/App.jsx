@@ -49,7 +49,16 @@ import MarketType from "./pages/master/MarketType";
 import Region from "./pages/master/Region";
 import Province from "./pages/master/Province";
 import CityMapping from "./pages/master/CityMapping";
+
+// Transfer Location Mapping — master → i'way location translation screens.
+// The hotel one is aliased because ./pages/master/HotelMapping (supplier
+// hotel-inventory mapping) already owns the HotelMapping name below.
+import TransferAirportMapping from "./pages/master/transferMapping/AirportMapping";
+import TransferPlaceMapping from "./pages/master/transferMapping/PlaceMapping";
+import TransferHotelMapping from "./pages/master/transferMapping/HotelMapping";
+
 import MappedList from "./pages/master/MappedList";
+
 
 import AgentReg from "./pages/Registration/AgentReg";
 import HotelReg from "./pages/Registration/HotelReg";
@@ -221,6 +230,7 @@ import EditStayPayPromotionExtranet from "./pages/extranet/Extranet-Promotion/Ed
 import EditSpecialRateExtranet from "./pages/extranet/Extranet-Promotion/EditSpecialRateExtranet";
 import PackageSearch from "./pages/search/package/PackageSearch";
 import PackageBooking from "./pages/booking/packagebooking/PackageBooking";
+import PackageCheckout from "./pages/booking/packagebooking/PackageCheckout";
 import FetchNewHotels from "./pages/master/FetchNewHotels";
 import PackageBookingList from "./pages/list/PackageBookingList";
 import PackageBookingDetailView from "./pages/list/PackageBookingDetailView";
@@ -327,6 +337,16 @@ import AssignMenu from "./pages/master/AssignMenu";
 import UserRoles from "./pages/master/UserRoles";
 import LoginLogs from "./pages/user-management/LoginLogs";
 import RoleAssign from "./pages/user-management/RoleAssign";
+
+import FlightSearch from "./pages/search/flight/FlightSearch";
+import FlightBestPriceCheck from "./pages/search/flight/FlightBestPriceCheck";
+import FlightBookPlaceholder from "./pages/search/flight/FlightBookPlaceholder";
+import FlightBookPage from "./pages/search/flight/FlightBookPage";
+import FlightBookingList from "./pages/list/FlightBookingList";
+
+
+
+
 
 
 export default function App() {
@@ -441,6 +461,9 @@ export default function App() {
         <Route path="/masters/visa-information" element={<PrivateRoute><VisaDetails /></PrivateRoute>} />
         <Route path="/masters/terms-and-conditions" element={<PrivateRoute><TermsAndConditions /></PrivateRoute>} />
         <Route path="/masters/hotel-mapping" element={<PrivateRoute><HotelMapping /></PrivateRoute>} />
+        <Route path="/masters/transfer-airport-mapping" element={<PrivateRoute><TransferAirportMapping /></PrivateRoute>} />
+        <Route path="/masters/transfer-place-mapping" element={<PrivateRoute><TransferPlaceMapping /></PrivateRoute>} />
+        <Route path="/masters/transfer-hotel-mapping" element={<PrivateRoute><TransferHotelMapping /></PrivateRoute>} />
         <Route path="/masters/hotel-upcooming-mapped-list" element={<PrivateRoute><HotelMappingBulkList /></PrivateRoute>} />
         <Route path="/masters/fetch-new-hotels" element={<FetchNewHotels />} />
         <Route path="/masters/mapped-list" element={<PrivateRoute><MappedList /></PrivateRoute>} />
@@ -520,6 +543,26 @@ export default function App() {
             to Mecca + Medina and downstream routes stay religious-only.
             Normal /new-booking/hotel is untouched. */}
         <Route path="/new-booking/religious" element={<PrivateRoute><HotelSearchReligious /></PrivateRoute>} />
+
+
+         <Route path="/new-booking/flight" element={<PrivateRoute><FlightSearch/></PrivateRoute>} />
+         {/* Fare Details / Best Price Check — reached from the "View Fares"
+             button on each flight search-result card. Selected recommendation
+             is passed via React Router state so the URL stays clean. */}
+         <Route path="/new-booking/flightBestPriceCheck" element={<PrivateRoute><FlightBestPriceCheck/></PrivateRoute>} />
+         {/* Flight booking form — placeholder for the upcoming flow.
+             Both routes point at the same placeholder for now:
+             - /new-booking/flightBook was the initial placeholder path
+             - /new-booking/flightBookPage is what Book Now on
+               /new-booking/flightBestPriceCheck currently navigates to,
+               and is the eventual home of the real passenger-form page.
+             Keeping both wired ensures neither link 404s while the real
+             page is under construction. */}
+         {/* /new-booking/flightBook stays on the placeholder for backwards
+             compat; the real booking form lives at /flightBookPage — that's
+             where "Book Now" on the Fare Details page navigates. */}
+         <Route path="/new-booking/flightBook" element={<PrivateRoute><FlightBookPlaceholder/></PrivateRoute>} />
+         <Route path="/new-booking/flightBookPage" element={<PrivateRoute><FlightBookPage/></PrivateRoute>} />
         {/* Dedicated 24-Hour Check-In room list + booking page — same
             components as /room-list and /hotel-booking-page but with
             `force24Hour` so the post-rate-pick navigation and the
@@ -586,6 +629,8 @@ export default function App() {
             with `religiousOnly` so only isReligiousBooking=true rows
             surface here (and are excluded from the standard list). */}
         <Route path="/booking-details/religious-booking-list" element={<PrivateRoute><ReligiousBookingList /> </PrivateRoute>}/>
+
+        <Route path="/booking-details/flight-booking-list" element={<PrivateRoute><FlightBookingList/> </PrivateRoute>}/>
         {/* Last Minute Bookings list — view + cancel from this page */}
         <Route path="/booking-details/last-minute-booking-list" element={<PrivateRoute><LastMinuteBookingList /></PrivateRoute>}/>
         {/* Last-minute bookings are the same HotelBooking entity, so their
@@ -610,6 +655,7 @@ export default function App() {
 
         <Route path="/new-booking/package-search" element={<PrivateRoute><PackageSearch /> </PrivateRoute>}/>
         <Route path="/new-booking/package-booking/:id" element={<PrivateRoute><PackageBooking /> </PrivateRoute>}/>
+        <Route path="/new-booking/package-checkout/:id" element={<PrivateRoute><PackageCheckout /> </PrivateRoute>}/>
         
         <Route path="/new-booking/offline-search" element={<PrivateRoute><OfflineSearch /> </PrivateRoute>}/>
         

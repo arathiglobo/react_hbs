@@ -53,6 +53,13 @@ const CREDENTIAL_SCHEMAS = {
   IWTX: [
     { key: "url", label: "Search URL", type: "text" },
     { key: "availabilityUrl", label: "Availability URL", type: "text" },
+    // Booking + cancellation both derive their endpoint from this field
+    // (IwtxHotelBookingService.pickBookUrl reads "bookUrl", then falls
+    // back to "book_url", then to iwtx.api.book.url in
+    // application.properties). Without it, IWTX book/cancel throws
+    // "IWTX book URL is not configured" even though search works fine
+    // off the two URLs above.
+    { key: "bookUrl", label: "Book URL (iwtx.api.book.url)", type: "text" },
     { key: "password", label: "Password", type: "password" },
     { key: "code", label: "Code", type: "text" },
     { key: "token", label: "Token", type: "password" },
@@ -60,6 +67,12 @@ const CREDENTIAL_SCHEMAS = {
   X3: [
     { key: "url", label: "Search URL (x3.api.url)", type: "text" },
     { key: "availabilityUrl", label: "Availability URL (x3.api.availability.url)", type: "text" },
+    // Booking + cancellation both derive their endpoint from this field
+    // (X3HotelBookingService.pickBookUrl reads "bookUrl", then falls back
+    // to "book_url", then to x3.api.book.url in application.properties).
+    // Without it, X3 book/cancel throws "X3 book URL is not configured"
+    // even though search works fine off the two URLs above.
+    { key: "bookUrl", label: "Book URL (x3.api.book.url)", type: "text" },
     { key: "code", label: "Client Code (x3.api.code)", type: "text" },
     { key: "password", label: "Password (x3.api.password)", type: "password" },
     { key: "token", label: "Token (x3.api.token)", type: "password" },
@@ -86,6 +99,26 @@ const CREDENTIAL_SCHEMAS = {
     { key: "baseUrl", label: "Base URL (grn.api.base-url)", type: "text" },
     { key: "apiKey", label: "API Key (grn.api.key)", type: "password" },
   ],
+
+  // IWay (i'way BS Transfers). Keys map to IwayAuthService.pick* on the
+  // backend — same DB-first-with-properties-fallback pattern as ATHARVA
+  // / IWTX. Base URL is the "/transnextgen" prefix only; the /v4 (or
+  // whatever version the API is on) is set separately so ops can move
+  // to a new major without editing the base URL.
+  IWAY: [
+    { key: "baseUrl", label: "Base URL (iway.api.baseUrl)", type: "text" },
+    { key: "version", label: "API Version (v4)", type: "text" },
+    { key: "userId", label: "User ID (iway.api.userId)", type: "text" },
+    { key: "login", label: "Login (iway.api.login)", type: "text" },
+    { key: "password", label: "Password (iway.api.password)", type: "password" },
+    { key: "currency", label: "Default Currency (e.g. AED)", type: "text" },
+    { key: "lang", label: "Response Language (e.g. en)", type: "text" },
+    { key: "imagesUrl", label: "Images URL (car photos base)", type: "text" },
+    { key: "platform", label: "Platform ID (guide §11.6 — 7 for API)", type: "text" },
+  ],
+  // INHOUSE reads from the app's own DB — no external credentials to set.
+  INHOUSE: [],
+
 
   // Keys map to GoGlobalCredentials.fromMap() on the backend, which also
   // accepts base-url/base_url/url, agencyId/agency-id, userName/username
@@ -119,6 +152,7 @@ IWAY: [
 
 // INHOUSE reads from the app's own DB — no external credentials to set.
 INHOUSE: [],
+
 };
 
 const MASK = "••••••••";
