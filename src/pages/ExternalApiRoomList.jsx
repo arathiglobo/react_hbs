@@ -1185,6 +1185,70 @@ const ExternalApiRoomList = () => {
       return;
     }
 
+    // ─── GRN (apiId=20) single-room recheck. Mirrors the multi-room GRN
+    //    branch in handleProceedBooking so the single-room "View Details /
+    //    Select" path also runs GRN's mandatory /hotel-recheck before the
+    //    booking page opens. Without this, single-room GRN bookings skip
+    //    the recheck entirely — the room list shows search-time cached data
+    //    and any stale rate / policy would only surface after Book Now,
+    //    which the certification requires us to catch earlier.
+    //
+    //    Flow: fetchGrnRecheck (cached per rateKey, so if the operator
+    //    already opened the Cancellation Policies modal this is a cache
+    //    hit → zero round-trip) → on success, patch mapRateForPayload with
+    //    the rechecked price / currency / non-refundable / policies (same
+    //    fields the multi-room branch overwrites) → open the Room Details
+    //    confirm modal. On failure, alert with the recheck message and
+    //    keep the operator on the room list so they can reselect.
+    if (currentApiId === apiIdMapping.GRN) {
+      setLoadingRate(true);
+      (async () => {
+        try {
+          const recheck = await fetchGrnRecheck(rate);
+          if (!recheck?.success) {
+            setLoadingRate(false);
+            alert(
+              recheck?.message ||
+                "This rate is no longer available. Please reselect and try again.",
+            );
+            return;
+          }
+          const mapped = mapRateForPayload(rate, hotel, 1);
+          if (recheck.totalPriceWithMarkup != null) {
+            mapped.rate = recheck.totalPriceWithMarkup;
+          } else if (recheck.totalPrice != null) {
+            mapped.rate = recheck.totalPrice;
+          }
+          if (recheck.currency) {
+            mapped.currency = recheck.currency;
+          }
+          if (recheck.nonRefundable != null) {
+            mapped.nonRefundable = recheck.nonRefundable;
+          }
+          if (recheck.cancellationPolicies?.length) {
+            mapped.cancellationPolicy = recheck.cancellationPolicies;
+          }
+          // panRequired already flows via mapRateForPayload → grnRecheckCache.
+          setSelectedRate([mapped]);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+        } catch (err) {
+          console.error("GRN recheck fetch failed:", err);
+          setLoadingRate(false);
+          const backendMsg =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message;
+          alert(
+            backendMsg
+              ? `Unable to verify rate: ${backendMsg}`
+              : "Unable to verify rate. Please try again.",
+          );
+        }
+      })();
+      return;
+    }
+
     if (currentApiId === 12 || currentApiId === 15) {
       // Accurate-rate re-fetch for IWTX / X3 — same request the current
       // code builds, just for a single room in this branch.
