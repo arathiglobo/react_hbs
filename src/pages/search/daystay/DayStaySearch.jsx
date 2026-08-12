@@ -17,6 +17,7 @@ import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
+import RateCalendar from "../../../components/RateCalendar";
 import "../../../styles/HotelSearch.css";
 
 // ─────────────────────────────────────────────
@@ -937,21 +938,27 @@ export default function DayStaySearch() {
                     </Col>
                   )}
 
-                  {/* 4. Check-In Date */}
+                  {/* 4. Check-In Date — RateCalendar fetches per-day DS
+                       rate hints for the selected city from
+                       /api/day-stay-search/rate-calendar. Day-stay is a
+                       single-date booking (no check-out), so this is the
+                       only date field on the page. */}
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         Check-in Date
                       </Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        type="date"
+                      <RateCalendar
                         value={checkInDate}
-                        min={today}
-                        onChange={(e) => {
-                          setCheckInDate(e.target.value);
-                          if (e.target.value) clearError("checkInDate");
+                        onChange={(v) => {
+                          setCheckInDate(v);
+                          if (v) clearError("checkInDate");
                         }}
+                        min={today}
+                        stateId={selectedDestination?.value}
+                        endpoint="/api/day-stay-search/rate-calendar"
+                        ariaLabel="Day-stay check-in date"
+                        isInvalid={!!errors.checkInDate}
                       />
                       {errors.checkInDate && (
                         <div className="text-danger small mt-1">

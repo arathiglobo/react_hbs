@@ -16,6 +16,7 @@ import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import AgentSelect from "../../components/AgentSelect";
 import AdvertisementCarousel from "../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../components/AgentCreditBalance";
+import RateCalendar from "../../components/RateCalendar";
 import { FaSearch, FaStar } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import "../../styles/HotelSearch.css";
@@ -1240,15 +1241,14 @@ export default function LongStaySearch() {
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Check-in</Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        type="date"
+                      <RateCalendar
                         value={checkIn}
                         min={today}
-                        onClick={(e) => e.target.showPicker && e.target.showPicker()}
-                        onChange={(e) => {
-                          const newCheckIn = e.target.value;
+                        stateId={selectedDestination?.value}
+                        endpoint="/api/long-stay-search/rate-calendar"
+                        ariaLabel="Long-stay check-in date"
+                        isInvalid={!!errors.checkIn}
+                        onChange={(newCheckIn) => {
                           setCheckIn(newCheckIn);
                           if (!newCheckIn) return;
                           clearError("checkIn");
@@ -1342,25 +1342,23 @@ export default function LongStaySearch() {
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Check-out</Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        type="date"
+                      <RateCalendar
                         value={checkOut}
                         min={minCheckOutDate}
-                        onClick={(e) => e.target.showPicker && e.target.showPicker()}
-                        onChange={(e) => {
-                          const newCheckOut = e.target.value;
+                        stateId={selectedDestination?.value}
+                        endpoint="/api/long-stay-search/rate-calendar"
+                        ariaLabel="Long-stay check-out date"
+                        isInvalid={!!errors.checkOut}
+                        onChange={(newCheckOut) => {
                           setCheckOut(newCheckOut);
                           if (newCheckOut) clearError("checkOut");
                           // CheckOut → Nights sync. If CheckIn is set and
                           // the new CheckOut is on/after it, mirror the
                           // diff into the Nights field so the operator
-                          // sees a coherent triple. The browser's `min`
-                          // attribute already blocks pre-CheckIn values
-                          // from the picker; the helper additionally
-                          // clamps to 0 for safety when the user types
-                          // an earlier date by hand.
+                          // sees a coherent triple. RateCalendar's own
+                          // `min` prop already blocks pre-CheckIn values;
+                          // the helper additionally clamps to 0 for
+                          // safety when an earlier date somehow lands.
                           if (newCheckOut && checkIn) {
                             const n = nightsBetween(checkIn, newCheckOut);
                             if (n !== null) {

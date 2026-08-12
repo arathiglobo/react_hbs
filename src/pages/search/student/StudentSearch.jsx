@@ -27,6 +27,7 @@ import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
+import RateCalendar from "../../../components/RateCalendar";
 import "../../../styles/HotelSearch.css";
 
 // ─────────────────────────────────────────────
@@ -972,22 +973,24 @@ export default function StudentSearch() {
                   </Col>
                 )}
 
-                {/* 4. Check-In */}
+                {/* 4. Check-In — RateCalendar fetches per-day
+                     student-discounted rate hints for the selected city
+                     from /api/student-hotel-search/rate-calendar. Days
+                     on which no hotel has an active student promo
+                     render as "—" (matches the search's hard filter). */}
                 <Col lg={3} md={6}>
                   <Form.Group>
                     <Form.Label className="fw-semibold text-dark">
                       Check-In *
                     </Form.Label>
-                    <Form.Control
-                      style={{ height: "42px" }}
-                      type="date"
+                    <RateCalendar
                       value={checkIn}
                       min={today}
-                      onClick={(e) =>
-                        e.target.showPicker && e.target.showPicker()
-                      }
-                      onChange={(e) => {
-                        const newCheckIn = e.target.value;
+                      stateId={selectedDestination?.value}
+                      endpoint="/api/student-hotel-search/rate-calendar"
+                      ariaLabel="Student check-in date"
+                      isInvalid={!!errors.checkIn}
+                      onChange={(newCheckIn) => {
                         setCheckIn(newCheckIn);
                         if (newCheckIn) {
                           const nextDay = formatDate(
@@ -1025,21 +1028,21 @@ export default function StudentSearch() {
                   </Form.Group>
                 </Col>
 
-                {/* 6. Check-Out */}
+                {/* 6. Check-Out — same student calendar, min day is
+                     check-in + 1. */}
                 <Col lg={3} md={6}>
                   <Form.Group>
                     <Form.Label className="fw-semibold text-dark">
                       Check-Out *
                     </Form.Label>
-                    <Form.Control
-                      style={{ height: "42px" }}
-                      type="date"
+                    <RateCalendar
                       value={checkOut}
                       min={minCheckOutDate}
-                      onClick={(e) =>
-                        e.target.showPicker && e.target.showPicker()
-                      }
-                      onChange={(e) => setCheckOut(e.target.value)}
+                      stateId={selectedDestination?.value}
+                      endpoint="/api/student-hotel-search/rate-calendar"
+                      ariaLabel="Student check-out date"
+                      isInvalid={!!errors.checkOut}
+                      onChange={(v) => setCheckOut(v)}
                     />
                     {errors.checkOut && (
                       <div className="text-danger small mt-1">

@@ -23,6 +23,11 @@ import axiosInstance from "./AxiosInstance";
  *   stateId      the "city" id (matches HotelSearchRepository — schema calls
  *                it state). Fare fetch is skipped when null.
  *   currency     currency code for the rate hint (e.g. "AED")
+ *   endpoint     backend URL to fetch rates from. Defaults to the hotel-search
+ *                calendar endpoint. Pass another URL (e.g. the last-minute
+ *                calendar) to reuse this component for a different rate
+ *                universe — the response shape { days: {"yyyy-MM-dd": {minRate, currency}} }
+ *                must be the same.
  *   placeholder  text shown when value is empty
  *   isInvalid    optional error state to mirror Bootstrap's isInvalid style
  *   ariaLabel    accessible label
@@ -34,6 +39,7 @@ function RateCalendar({
   min,
   stateId,
   currency = "AED",
+  endpoint = "/api/hotel-search/rate-calendar",
   placeholder = "dd-mm-yyyy",
   isInvalid = false,
   ariaLabel,
@@ -131,7 +137,7 @@ function RateCalendar({
     let cancelled = false;
     setLoading(true);
     axiosInstance
-      .get("/api/hotel-search/rate-calendar", { params })
+      .get(endpoint, { params })
       .then((res) => {
         if (cancelled) return;
         const days = res?.data?.days || {};
@@ -152,7 +158,7 @@ function RateCalendar({
     return () => {
       cancelled = true;
     };
-  }, [open, viewMonth, stateId, currency]);
+  }, [open, viewMonth, stateId, currency, endpoint]);
 
   // ── compute the cheapest 3 days across the visible window ──────────
   // Past dates are excluded from the "cheapest days" calculation — a

@@ -33,6 +33,7 @@ import AgentSelect from "../../../components/AgentSelect";
 import axiosInstance from "../../../components/AxiosInstance";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
+import RateCalendar from "../../../components/RateCalendar";
 import { FaSearch, FaStar } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import "../../../styles/HotelSearch.css";
@@ -1139,22 +1140,24 @@ export default function SeniorCitizenSearch() {
                     </Col>
                   )}
 
-                  {/* 4. Check-In */}
+                  {/* 4. Check-In — RateCalendar fetches per-day
+                       SC-discounted rate hints for the selected city
+                       from /api/senior-citizen-hotel-search/rate-calendar.
+                       Days on which no hotel has an active SC promo
+                       render as "—" (matches the search's hard filter). */}
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         Check-in *
                       </Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        type="date"
+                      <RateCalendar
                         value={checkIn}
                         min={today}
-                        onClick={(e) =>
-                          e.target.showPicker && e.target.showPicker()
-                        }
-                        onChange={(e) => {
-                          const newCheckIn = e.target.value;
+                        stateId={selectedDestination?.value}
+                        endpoint="/api/senior-citizen-hotel-search/rate-calendar"
+                        ariaLabel="Senior-citizen check-in date"
+                        isInvalid={!!errors.checkIn}
+                        onChange={(newCheckIn) => {
                           setCheckIn(newCheckIn);
                           if (newCheckIn) {
                             clearError("checkIn");
@@ -1190,23 +1193,23 @@ export default function SeniorCitizenSearch() {
                     </Form.Group>
                   </Col>
 
-                  {/* 6. Check-Out */}
+                  {/* 6. Check-Out — same SC calendar, min day is
+                       check-in + 1. */}
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         Check-out *
                       </Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        type="date"
+                      <RateCalendar
                         value={checkOut}
                         min={minCheckOutDate}
-                        onClick={(e) =>
-                          e.target.showPicker && e.target.showPicker()
-                        }
-                        onChange={(e) => {
-                          setCheckOut(e.target.value);
-                          if (e.target.value) clearError("checkOut");
+                        stateId={selectedDestination?.value}
+                        endpoint="/api/senior-citizen-hotel-search/rate-calendar"
+                        ariaLabel="Senior-citizen check-out date"
+                        isInvalid={!!errors.checkOut}
+                        onChange={(v) => {
+                          setCheckOut(v);
+                          if (v) clearError("checkOut");
                         }}
                       />
                       {errors.checkOut && (
