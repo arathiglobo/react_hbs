@@ -293,29 +293,32 @@ export default function SeniorCitizenBookingList() {
   const statusMetaFor = (b) => {
     const raw = String(b?.confirmationStatus || "").trim();
     const normalized = raw.replace(/\s+/g, "").toLowerCase();
-    // On Request chain — keyed off the ROOM status (mirrors
-    // HotelBookingList / StudentBookingList), because On Request senior
-    // bookings are created with confirmationStatus "Confirmed" and would
-    // otherwise render as a plain green "Confirmed":
-    //   created            → "On Request"
-    //   after step-1 Confirm → "On Request/Confirmed"
-    //   ReConfirmed / Cancelled fall through to the standard branches.
+    // The Status column mirrors the FINAL result shown at the top of
+    // /booking-details/senior-citizen-booking/{id} — never the composite
+    // "On Request/Confirmed" breadcrumb the detail page renders as the
+    // audit chain. So an On Request booking that has had step-1 Confirm
+    // applied (onRequestConfirmed=true) is treated as plain "Confirmed"
+    // here, because that's the finalised step. Only a booking still
+    // waiting for step-1 Confirm reads "On Request".
+    //
+    // On Request senior bookings are created with confirmationStatus
+    // "Confirmed", so the fall-through to the Confirmed branch below
+    // naturally produces the right pill once onRequestConfirmed is set.
     const isOnRequestRoom = /^on\s*request$/i.test(
       String(b?.roomStatus || "").trim(),
     );
-    const onRequestLabel = b?.onRequestConfirmed
-      ? "On Request/Confirmed"
-      : "On Request";
+    const isPreConfirmOnRequest =
+      isOnRequestRoom && !b?.onRequestConfirmed && normalized !== "reconfirmed";
     if (b?.cancelled) {
-      if (isOnRequestRoom && normalized !== "reconfirmed") {
+      if (isPreConfirmOnRequest) {
         return {
           meta: {
-            label: `${onRequestLabel} / Cancelled`,
+            label: "On Request / Cancelled",
             bg: "#fdecec",
             color: "#b42318",
             dot: "#ef4444",
           },
-          raw: `${onRequestLabel} / Cancelled`,
+          raw: "On Request / Cancelled",
         };
       }
       if (normalized === "confirmed" || normalized === "reconfirmed") {
@@ -331,8 +334,8 @@ export default function SeniorCitizenBookingList() {
       }
       return { meta: STATUS_META.CANCELLED, raw: "Cancelled" };
     }
-    if (isOnRequestRoom && normalized !== "reconfirmed") {
-      return { meta: { ...STATUS_META.ONREQUEST, label: onRequestLabel }, raw: onRequestLabel };
+    if (isPreConfirmOnRequest) {
+      return { meta: STATUS_META.ONREQUEST, raw: "On Request" };
     }
     if (normalized === "confirmed") return { meta: STATUS_META.CONFIRMED, raw };
     if (normalized === "reconfirmed") return { meta: STATUS_META.RECONFIRMED, raw };
@@ -361,9 +364,14 @@ export default function SeniorCitizenBookingList() {
           case "onrequest":
             // On Request is a ROOM status for senior bookings (they are
             // created with confirmationStatus "Confirmed"), so filter on
-            // roomStatus — matching the Notification pill.
+            // roomStatus. Once step-1 Confirm has landed
+            // (onRequestConfirmed=true) the finalised status is
+            // "Confirmed", not "On Request", so those bookings drop out of
+            // this filter and only match Reconfirmed — mirrors what the
+            // Status pill and the detail page's final result now show.
             return (
               !b.cancelled &&
+              !b.onRequestConfirmed &&
               /^on\s*request$/i.test(String(b.roomStatus || "").trim())
             );
           case "reconfirmed":
