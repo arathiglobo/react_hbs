@@ -787,7 +787,12 @@ export default function LongStaySearch() {
             address: h.hotelAddress || "",
             city: h.cityName || "",
             price: h.baseRate || null,
-            badge: h.baseRate ? "Long Stay Available" : "Rate Unavailable",
+            // "Long Stay Available" badge dropped — every card on this
+            // page is a long-stay result, so the label was redundant
+            // noise. The "Rate Unavailable" case is still surfaced when
+            // a hotel came back with no baseRate — that's real info the
+            // operator needs before clicking "View Rooms".
+            badge: h.baseRate ? null : "Rate Unavailable",
             image: h.hotelImage || "https://details/assets/details/profilepic/hotel/hoteldefault.jpg",
             rating: h.starRating || 0,
             hotelType: "hotel",
@@ -933,7 +938,12 @@ export default function LongStaySearch() {
                 address: h.hotelAddress || "",
                 city: h.cityName || "",
                 price: h.baseRate || null,
-                badge: h.baseRate ? "Long Stay Available" : "Rate Unavailable",
+                // "Long Stay Available" badge dropped — every card on this
+            // page is a long-stay result, so the label was redundant
+            // noise. The "Rate Unavailable" case is still surfaced when
+            // a hotel came back with no baseRate — that's real info the
+            // operator needs before clicking "View Rooms".
+            badge: h.baseRate ? null : "Rate Unavailable",
                 image:
                   h.hotelImage ||
                   "https://details/assets/details/profilepic/hotel/hoteldefault.jpg",
@@ -1392,7 +1402,15 @@ export default function LongStaySearch() {
                       </Button>
                       <Button
                         type="button"
-                        className="flex-shrink-0 btn-add-room-premium"
+                        // hs-add-room-btn-red is the shared solid-red variant
+                        // already defined in HotelSearch.css alongside the
+                        // base .btn-add-room-premium pill. Matches the red
+                        // used by the SEARCH LONG STAY button below (#EC0B43
+                        // → #C90939). Same convention HotelSearch uses; other
+                        // search pages sharing btn-add-room-premium (Student,
+                        // GovEmployee, etc.) don't carry this modifier and
+                        // keep their pink→violet gradient.
+                        className="flex-shrink-0 btn-add-room-premium hs-add-room-btn-red"
                         disabled={roomsOpen && rooms.length >= MAX_ROOMS}
                         onClick={() => {
                           if (!roomsOpen) {
@@ -1693,15 +1711,23 @@ export default function LongStaySearch() {
                                     >
                                       <FaStar className="text-warning" />
                                       {hotel.rating}
+                                      {/* Channel chip — same gray pill the
+                                          Last Minute results use. Long Stay
+                                          only surfaces in-house contracts
+                                          (see channelTypeOptions above), so
+                                          this is always "INHOUSE". Kept
+                                          static to match LM instead of
+                                          driving from hotel.channelType so
+                                          the two pages read as one system. */}
                                       <span
                                         style={{
                                           marginLeft: "5px",
-                                          backgroundColor: "#17a2b8",
+                                          backgroundColor: "#6c757d",
                                           padding: "2px 6px",
                                           borderRadius: "10px",
                                         }}
                                       >
-                                        LONG STAY
+                                        INHOUSE
                                       </span>
                                     </div>
                                   </div>

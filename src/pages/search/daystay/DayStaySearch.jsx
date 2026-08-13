@@ -999,7 +999,16 @@ export default function DayStaySearch() {
                       </Button>
                       <Button
                         type="button"
-                        className="flex-grow-1 justify-content-center btn-add-room-premium"
+                        // hs-add-room-btn-red is the shared solid-red variant
+                        // already defined in HotelSearch.css alongside the
+                        // base .btn-add-room-premium pill. Matches the red
+                        // used by the SEARCH DAY STAY button below (#EC0B43
+                        // → #C90939). Same convention Hotel + Long Stay
+                        // searches use; other pages sharing btn-add-room-premium
+                        // (Student, GovEmployee, Meet & Space, etc.) don't
+                        // carry this modifier and keep their pink → violet
+                        // gradient unchanged.
+                        className="flex-grow-1 justify-content-center btn-add-room-premium hs-add-room-btn-red"
                         disabled={roomsOpen && rooms.length >= MAX_ROOMS}
                         onClick={() => {
                           if (!roomsOpen) {

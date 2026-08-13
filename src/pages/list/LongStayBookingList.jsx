@@ -36,6 +36,13 @@ const COLUMN_WIDTHS = {
   sn: "40px",
   customerName: "150px",
   bookingCode: "100px",
+  // Supplier-side confirmation number added on the LS booking detail view
+  // via the "CONFIRMATION NO." button. Sits next to Booking Code so the
+  // two identifiers (internal + supplier) read together. Cell renders
+  // blank for rows that don't have one yet. Width tuned so the two-word
+  // header ("CONFIRMATION" / "NO") wraps at its space instead of splitting
+  // the word "CONFIRMATION" mid-letter — mirrors the hotel + LM lists.
+  confirmationNo: "130px",
   bookDate: "95px",
   bookingDetails: "240px",
   nights: "70px",
@@ -50,16 +57,36 @@ const STATUS_META = {
   COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
   PENDING:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+  // On Request — orange pill, same palette the hotel + LM lists use for this
+  // state. Aliased under every spelling the backend has been seen to emit
+  // (uppercase `ONREQUEST`, snake `ON_REQUEST`, spaced `On Request`,
+  // `Requested`/`REQUESTED`) so the Status column never falls through to the
+  // unstyled raw-text branch of StatusPill for an on-request booking.
+  ONREQUEST:    { label: "On Request", bg: "#fff3e0", color: "#e67e22", dot: "#f59e0b" },
+  ON_REQUEST:   { label: "On Request", bg: "#fff3e0", color: "#e67e22", dot: "#f59e0b" },
+  "On Request": { label: "On Request", bg: "#fff3e0", color: "#e67e22", dot: "#f59e0b" },
+  REQUESTED:    { label: "Requested",  bg: "#fff3e0", color: "#e67e22", dot: "#f59e0b" },
+  Requested:    { label: "Requested",  bg: "#fff3e0", color: "#e67e22", dot: "#f59e0b" },
+  // ReConfirmed — green pill, same palette hotel + LM lists use.
+  RECONFIRMED:  { label: "ReConfirmed", bg: "#e7f6ec", color: "#06a301", dot: "#22c55e" },
+  ReConfirmed:  { label: "ReConfirmed", bg: "#e7f6ec", color: "#06a301", dot: "#22c55e" },
+  Reconfirmed:  { label: "ReConfirmed", bg: "#e7f6ec", color: "#06a301", dot: "#22c55e" },
 };
 
 // Resolve the Payment Status label from the booking's DISPLAYED status — same
 // mapping as /booking-details/hotel-booking-list:
 //   Confirmed   → Payment Pending
+//   On Request  → Payment Pending
 //   ReConfirmed → Paid
 //   Cancelled   → Paid when the booking had been reconfirmed before it was
 //                 cancelled, otherwise Un-Paid
-// Anything else — Pending / On Request, Completed, or an unknown/empty status —
-// has no defined mapping and renders "-".
+// Anything else — Pending, Completed, or an unknown/empty status — has no
+// defined mapping and renders "-".
+//
+// On Request bookings haven't collected money yet, so they carry the same
+// "Payment Pending" meaning as a genuinely Confirmed row. The Status column
+// still shows them as "On Request" (orange) — only the Payment Status column
+// collapses the two into the same settled/unsettled label.
 //
 // A cancelled booking reports whether the money had already been collected at
 // the point of cancellation rather than the cancellation itself: a history that
@@ -102,12 +129,17 @@ const getPaymentStatusLabel = (booking) => {
 
   if (effective === "reconfirmed") return "Paid";
   if (effective === "confirmed") {
-    // Display-only override: an On Request room that has not been confirmed yet
-    // shows as On Request, so it is not a Confirmed row.
-    const isOnRequestStillPending =
-      /^on\s*request$/i.test(String(booking?.roomStatus || "").trim()) &&
-      !booking?.onRequestConfirmed;
-    return isOnRequestStillPending ? "-" : "Payment Pending";
+    // Both display states collapse to the same "money not yet collected"
+    // label: a genuine "Confirmed" row AND an on-request-room-still-pending
+    // row (whose Status column shows "On Request" via the display override).
+    // The Status column keeps the two visually distinct on its own.
+    return "Payment Pending";
+  }
+  // bookingStatus stamped directly as ONREQUEST / ON_REQUEST / "On Request"
+  // (Long Stay stamps this at the top level, unlike the hotel list where
+  // it hides under confirmationStatus="Confirmed" + roomStatus="On Request").
+  if (effective === "onrequest" || effective === "on_request") {
+    return "Payment Pending";
   }
 
   return "-";
@@ -589,6 +621,25 @@ export default function LongStayBookingList() {
                           >
                             Booking Code
                           </th>
+                          {/* Confirmation No — supplier's confirmation number,
+                              populated via the "CONFIRMATION NO." button on
+                              the LS booking detail view. LongStayBookingDTO
+                              already exposes `confirmationNumber`, so no
+                              backend change is needed. Cell renders blank on
+                              rows that don't have one. wordBreak / overflowWrap
+                              normal keep the two-word header wrapping only at
+                              its space, mirroring the hotel list. */}
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.confirmationNo,
+                              whiteSpace: "normal",
+                              wordBreak: "normal",
+                              overflowWrap: "normal",
+                            }}
+                          >
+                            Confirmation No
+                          </th>
                           <th
                             style={{
                               ...baseHeaderStyle,
@@ -796,12 +847,35 @@ export default function LongStayBookingList() {
                                     {b.bookingCode || "-"}
                                   </span>
                                 </td>
+                                {/* Confirmation No cell — reads the field
+                                    already exposed by LongStayBookingDTO.
+                                    Renders blank when the supplier hasn't
+                                    stamped a number yet, per the "empty means
+                                    nothing shown" rule. nowrap keeps the
+                                    number atomic. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.confirmationNo,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {b.confirmationNumber ? (
+                                    <span
+                                      className="fw-semibold text-dark"
+                                      style={{ fontSize: "0.85rem" }}
+                                    >
+                                      {b.confirmationNumber}
+                                    </span>
+                                  ) : null}
+                                </td>
                                 <td
                                   className="text-muted"
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     width: COLUMN_WIDTHS.bookDate,
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
                                   {formatShortDate(b.bookingDateTime) ||

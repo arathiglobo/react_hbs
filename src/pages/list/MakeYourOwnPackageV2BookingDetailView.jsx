@@ -62,6 +62,26 @@ const BUTTON_STYLE = {
   whiteSpace: "nowrap",
 };
 
+// Purpose-based colour variants — same palette + assignments as
+// BookingDetailedView.jsx so this MYOP v2 detail page reads as part of the
+// same design system as /booking-details/hotel-booking/{id}. Base BUTTON_STYLE
+// (size / padding / radius / weight / white text) is preserved; only the
+// background colour changes.
+//   success → Confirm / Reconfirm      danger    → Cancel
+//   primary → Add / Edit / Update      info      → Voucher / Invoice docs
+//   neutral → View / Back / Notes      accent    → Notes / Remarks
+const BTN_SUCCESS = { ...BUTTON_STYLE, backgroundColor: "#16a34a" }; // Confirm
+const BTN_TEAL = { ...BUTTON_STYLE, backgroundColor: "#0d9488" }; // Reconfirm
+const BTN_DANGER = { ...BUTTON_STYLE, backgroundColor: "#dc2626" }; // Cancel
+const BTN_PRIMARY = { ...BUTTON_STYLE, backgroundColor: "#2563eb" }; // Add New Item
+const BTN_SKY = { ...BUTTON_STYLE, backgroundColor: "#3ba2e8" }; // Add Agent Reference
+const BTN_INDIGO = { ...BUTTON_STYLE, backgroundColor: "#6366f1" }; // Confirmation No.
+const BTN_INFO = { ...BUTTON_STYLE, backgroundColor: "#0891b2" }; // Voucher / Invoice
+const BTN_ORANGE = { ...BUTTON_STYLE, backgroundColor: "#f0922b" }; // Resend Mail
+const BTN_ACCENT = { ...BUTTON_STYLE, backgroundColor: "#7c3aed" }; // Booking Remark
+const BTN_NEUTRAL = { ...BUTTON_STYLE, backgroundColor: "#64748b" }; // View / Back / Notes
+const BTN_HISTORY = { ...BUTTON_STYLE, backgroundColor: "#334155" }; // Booking History
+
 const SECTION_HEADER = {
   backgroundColor: "#f0f0f0",
   padding: "7px 12px",
@@ -536,7 +556,7 @@ export default function MakeYourOwnPackageV2BookingDetailView() {
             {/* ── Header (Back + title + booking code + StatusBadge) ── */}
             <div className="mb-3 d-flex align-items-center flex-wrap gap-2">
               <button
-                style={{ ...BUTTON_STYLE, backgroundColor: "#555" }}
+                style={BTN_NEUTRAL}
                 onClick={() => navigate(-1)}
               >
                 ← Back
@@ -1011,7 +1031,7 @@ export default function MakeYourOwnPackageV2BookingDetailView() {
                   }}
                 >
                   <button
-                    style={BUTTON_STYLE}
+                    style={BTN_INFO}
                     onClick={onVoucher}
                     title="Voucher"
                   >
@@ -1020,7 +1040,7 @@ export default function MakeYourOwnPackageV2BookingDetailView() {
 
                   {!isCancelled && (
                     <button
-                      style={BUTTON_STYLE}
+                      style={BTN_DANGER}
                       onClick={() => setShowCancel(true)}
                       title="Cancel booking"
                     >
@@ -1029,13 +1049,13 @@ export default function MakeYourOwnPackageV2BookingDetailView() {
                   )}
 
                   {!showsFinalDocs && !isCancelled && (
-                    <button style={BUTTON_STYLE} onClick={openConfirmModal}>
+                    <button style={BTN_TEAL} onClick={openConfirmModal}>
                       RECONFIRM
                     </button>
                   )}
 
                   <button
-                    style={BUTTON_STYLE}
+                    style={BTN_SKY}
                     onClick={() => {
                       if (!isConfirmedOrLater) {
                         toast.error(
@@ -1050,7 +1070,7 @@ export default function MakeYourOwnPackageV2BookingDetailView() {
                   </button>
 
                   <button
-                    style={BUTTON_STYLE}
+                    style={BTN_INDIGO}
                     onClick={() => {
                       if (!isConfirmedOrLater) {
                         toast.error(
@@ -1065,19 +1085,19 @@ export default function MakeYourOwnPackageV2BookingDetailView() {
                   </button>
 
                   <button
-                    style={BUTTON_STYLE}
+                    style={BTN_ORANGE}
                     onClick={resendMailToAgent}
                     disabled={resendingMail}
                   >
                     {resendingMail ? "SENDING..." : "RESEND MAIL TO AGENT"}
                   </button>
 
-                  <button style={BUTTON_STYLE} onClick={openRemarkModal}>
+                  <button style={BTN_ACCENT} onClick={openRemarkModal}>
                     BOOKING REMARK
                   </button>
 
                   <button
-                    style={BUTTON_STYLE}
+                    style={BTN_NEUTRAL}
                     onClick={() =>
                       navigate(
                         `/booking-details/make-your-own-package-v2/${bookingId}/notes`,

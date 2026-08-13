@@ -32,6 +32,13 @@ const COLUMN_WIDTHS = {
   sn: "40px",
   customerName: "150px",
   bookingCode: "130px",
+  // Supplier-side confirmation number from the "CONFIRMATION NO." button
+  // on the cab detail view. Sourced from CustomBookPackageCab.confirmationNumber
+  // and already exposed on CabBookingResponseDTO by the grouped-list mapper
+  // (see TripServiceImpl.mapToGroupedCabBookingResponseDTO). Width tuned so
+  // the two-word header ("CONFIRMATION" / "NO") wraps at its space instead
+  // of splitting "CONFIRMATION" mid-letter — matches the other list pages.
+  confirmationNo: "130px",
   bookDate: "95px",
   bookingDetails: "180px",
   travel: "150px",
@@ -637,6 +644,25 @@ const CabBookingList = () => {
                           <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingCode }}>
                             Booking Code
                           </th>
+                          {/* Confirmation No — supplier's confirmation number
+                              from the "CONFIRMATION NO." button on the cab
+                              detail view. CabBookingResponseDTO already
+                              exposes `confirmationNumber`, so no backend
+                              change is needed. Cell renders "-" on rows
+                              that don't have one. wordBreak / overflowWrap
+                              normal keep the two-word header wrapping only
+                              at its space, mirroring the other list pages. */}
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.confirmationNo,
+                              whiteSpace: "normal",
+                              wordBreak: "normal",
+                              overflowWrap: "normal",
+                            }}
+                          >
+                            Confirmation No
+                          </th>
                           <th style={{ ...baseHeaderStyle, textAlign: "center", whiteSpace: "nowrap", width: COLUMN_WIDTHS.bookDate }}>
                             Book Date
                           </th>
@@ -762,12 +788,37 @@ const CabBookingList = () => {
                                     {b.packageBookCode || "-"}
                                   </span>
                                 </td>
+                                {/* Confirmation No cell — reads the field
+                                    already returned on CabBookingResponseDTO.
+                                    Muted "-" when the operator hasn't saved
+                                    a number yet (consistent with the other
+                                    list pages' placeholder). nowrap keeps a
+                                    present number atomic. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.confirmationNo,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {b.confirmationNumber ? (
+                                    <span
+                                      className="fw-semibold text-dark"
+                                      style={{ fontSize: "0.85rem" }}
+                                    >
+                                      {b.confirmationNumber}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
+                                </td>
                                 <td
                                   className="text-muted"
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     width: COLUMN_WIDTHS.bookDate,
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
                                   {formatShortDate(b.bookingDate) || "-"}

@@ -41,6 +41,13 @@ const COLUMN_WIDTHS = {
   sn: "40px",
   customerName: "150px",
   bookingCode: "100px",
+  // Supplier-side confirmation number added on the LM booking detail view.
+  // Sits next to Booking Code so the two identifiers (internal + supplier)
+  // read together. Cell renders blank for rows that don't have one yet.
+  // Width tuned so the two-word header ("CONFIRMATION" / "NO") wraps at
+  // its space instead of splitting "CONFIRMATION" mid-word — needs enough
+  // room for the longest word on its own line. Mirrors the hotel list.
+  confirmationNo: "130px",
   bookDate: "95px",
   bookingDetails: "240px",
   nights: "70px",
@@ -100,16 +107,22 @@ const deriveDisplayStatus = (b) => {
 // Resolve the Payment Status label from the booking's DISPLAYED status — same
 // mapping as /booking-details/hotel-booking-list:
 //   Confirmed   → Payment Pending
+//   On Request  → Payment Pending
 //   ReConfirmed → Paid
 //   Cancelled   → Paid when the booking had been reconfirmed before it was
 //                 cancelled, otherwise Un-Paid
-// Anything else — an On Request room still awaiting confirmation, Requested,
-// Rejected, or an unknown/empty status — has no defined mapping and renders "-".
+// Anything else — Requested, Rejected, or an unknown/empty status — has no
+// defined mapping and renders "-".
 //
 // A cancelled booking reports whether the money had already been collected at
 // the point of cancellation rather than the cancellation itself: a history that
 // reached ReConfirmed was paid, one that stopped at On Request / Confirmed
 // never was.
+//
+// On Request rooms haven't collected money yet either, so they carry the same
+// "Payment Pending" meaning as a genuinely Confirmed row. The Status column
+// still shows them as "On Request" (orange) — only the Payment Status column
+// collapses the two into the same settled/unsettled label.
 //
 // It is deliberately fed the label already computed by deriveDisplayStatus so
 // this column can never disagree with the adjacent Status column.
@@ -141,6 +154,9 @@ const getPaymentStatusLabel = (booking, displayStatus) => {
 
   if (normalized === "reconfirmed") return "Paid";
   if (normalized === "confirmed") return "Payment Pending";
+  // Match the hotel list: an On Request booking is Confirmed-in-waiting —
+  // no money collected yet, same badge as a Confirmed row.
+  if (normalized === "onrequest") return "Payment Pending";
 
   return "-";
 };
@@ -611,6 +627,24 @@ export default function LastMinuteBookingList() {
                             <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingCode }}>
                               Booking Code
                             </th>
+                            {/* Confirmation No — supplier's confirmation number,
+                                populated via the "CONFIRMATION NO." button on
+                                the booking detail view (booking.confirmationNumber).
+                                Cell renders blank on rows that don't have one.
+                                wordBreak / overflowWrap normal keep the two-word
+                                header wrapping only at its space, mirroring
+                                the hotel list. */}
+                            <th
+                              style={{
+                                ...baseHeaderStyle,
+                                width: COLUMN_WIDTHS.confirmationNo,
+                                whiteSpace: "normal",
+                                wordBreak: "normal",
+                                overflowWrap: "normal",
+                              }}
+                            >
+                              Confirmation No
+                            </th>
                             <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.bookDate }}>
                               Book Date
                             </th>
@@ -705,9 +739,37 @@ export default function LastMinuteBookingList() {
                                     {b.bookingCode || "-"}
                                   </span>
                                 </td>
+                                {/* Confirmation No cell — mirrors the detail
+                                    view's field resolution. Renders blank
+                                    when the supplier hasn't stamped a number
+                                    yet, per the requirement that empty means
+                                    "nothing shown here". nowrap keeps the
+                                    number atomic. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.confirmationNo,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {(() => {
+                                    const confNo =
+                                      b.confirmationNumber ||
+                                      b.customer?.confirmationNumber ||
+                                      "";
+                                    return confNo ? (
+                                      <span
+                                        className="fw-semibold text-dark"
+                                        style={{ fontSize: "0.85rem" }}
+                                      >
+                                        {confNo}
+                                      </span>
+                                    ) : null;
+                                  })()}
+                                </td>
                                 <td
                                   className="text-muted"
-                                  style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.bookDate }}
+                                  style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.bookDate, whiteSpace: "nowrap" }}
                                 >
                                   {formatShortDate(b.bookingDate) ||
                                     formatDateTime(b.bookingDate) ||

@@ -93,6 +93,13 @@ const COLUMN_WIDTHS = {
   agentName: "90px",
   customerName: "120px",
   bookingCode: "95px",
+  // Supplier-side confirmation number saved on the gov-employee detail
+  // view via the "CONFIRMATION NO." button. Sourced from
+  // GovEmployeeHotelBooking.confirmationNumber and now exposed on the
+  // list DTO by GovEmployeeBookingService.toListItem. Width tuned so the
+  // two-word header ("CONFIRMATION" / "NO") wraps at its space instead
+  // of splitting "CONFIRMATION" mid-letter — matches the other list pages.
+  confirmationNo: "130px",
   referenceCode: "160px",
   bookDate: "90px",
   bookingDetails: "230px",
@@ -614,6 +621,21 @@ export default function GovEmployeeBookingList() {
                           )}
                           <th style={thStyle(COLUMN_WIDTHS.customerName)}>Customer Name</th>
                           <th style={thStyle(COLUMN_WIDTHS.bookingCode)}>Booking Code</th>
+                          {/* Confirmation No — supplier's confirmation number
+                              from the CONFIRMATION_NO action on the detail
+                              view. GovEmployeeListItem now exposes
+                              `confirmationNumber` via toListItem. wordBreak /
+                              overflowWrap normal keep the two-word header
+                              wrapping only at its space. */}
+                          <th
+                            style={{
+                              ...thStyle(COLUMN_WIDTHS.confirmationNo),
+                              wordBreak: "normal",
+                              overflowWrap: "normal",
+                            }}
+                          >
+                            Confirmation No
+                          </th>
                           <th style={thStyle(COLUMN_WIDTHS.referenceCode)}>Reference Code</th>
                           <th style={thStyle(COLUMN_WIDTHS.bookDate, true)}>Book Date</th>
                           <th style={thStyle(COLUMN_WIDTHS.bookingDetails)}>Booking Details</th>
@@ -721,6 +743,30 @@ export default function GovEmployeeBookingList() {
                                   <span className="fw-bold text-primary">
                                     {b.bookingCode || "-"}
                                   </span>
+                                </td>
+                                {/* Confirmation No cell — reads the field
+                                    now returned on GovEmployeeListItem.
+                                    Muted "-" when the operator hasn't saved
+                                    a number yet (consistent with the other
+                                    list pages). nowrap keeps a present
+                                    number atomic. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.confirmationNo,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {b.confirmationNumber ? (
+                                    <span
+                                      className="fw-semibold text-dark"
+                                      style={{ fontSize: "0.85rem" }}
+                                    >
+                                      {b.confirmationNumber}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
                                 </td>
                                 <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.referenceCode }}>
                                   <span className="text-muted" style={{ fontSize: "0.78rem" }}>

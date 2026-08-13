@@ -1989,14 +1989,20 @@ const MakePkgBookingPageV2 = () => {
           font-size: 1rem;
         }
         .booking-accordion .accordion-button:not(.collapsed) {
-          background: linear-gradient(135deg, #f5f7ff 0%, #faf5ff 100%) !important;
-          color: #4f46e5 !important;
+          /* Brand red tint — matches the rest of the MYOP v2 flow. The
+             background uses the same soft-red gradient the platform's hero
+             band uses (#FFE3EB → #FDF1F4). Was light-purple #f5f7ff → #faf5ff. */
+          background: linear-gradient(135deg, #FFE3EB 0%, #FDF1F4 100%) !important;
+          color: #EC0B43 !important;
           border-bottom: 1px solid #e5e7eb;
         }
         .booking-accordion .accordion-button:not(.collapsed) h5,
         .booking-accordion .accordion-button:not(.collapsed) h6,
         .booking-accordion .accordion-button:not(.collapsed) svg {
-          color: #4f46e5 !important;
+          /* Same brand red so section titles (Itinerary, Hotels, Tours &
+             Activities, Guest Details, Selected Add-On Services) render
+             red when their accordion is open, matching the header color. */
+          color: #EC0B43 !important;
         }
         .booking-accordion .accordion-button:focus { box-shadow: none !important; }
         .booking-accordion .accordion-button::after {
@@ -4138,13 +4144,18 @@ const MakePkgBookingPageV2 = () => {
                     onClick={handleSubmit}
                     className="btn fw-semibold d-flex align-items-center"
                     style={{
-                      background: "#111827",
+                      // Brand red gradient — matches btn-search-modern and
+                      // every other primary CTA on the MYOP v2 flow (Next
+                      // wizard button, View Rooms, Add to Cart). Was near-
+                      // black #111827.
+                      background: "linear-gradient(135deg, #EC0B43 0%, #C90939 100%)",
                       border: "none",
                       color: "#ffffff",
                       padding: "11px 26px",
                       borderRadius: 10,
                       fontSize: "0.95rem",
-                      boxShadow: "0 2px 6px rgba(17,24,39,0.18)",
+                      // Shadow retinted to the red family for coherence.
+                      boxShadow: "0 2px 6px rgba(236,11,67,0.25)",
                     }}
                   >
                     Confirm Booking
