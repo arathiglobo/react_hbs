@@ -21,6 +21,7 @@ import {
   Alert,
   Badge,
   Modal,
+  Spinner,
 } from "react-bootstrap";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
@@ -28,9 +29,10 @@ import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
 
 // Online-payment gateways offered when the agent's credit is short.
 // Mirrors the same list Inhouse HotelBookingPage.jsx uses (line 25) so
-// both booking pages present the same choices. Currently CC Avenue only —
-// selecting it navigates to /payment/ccavenue-redirect for the real
-// hosted-page flow.
+// both booking pages present the same choices. Kept as a single-item list
+// today because CC Avenue is the only wired gateway; selecting it navigates
+// to /payment/ccavenue-redirect for the real hosted-page flow. A second
+// gateway can be added later without further changes here.
 const PAYMENT_GATEWAYS = [
   { id: "ccavenue", name: "CC Avenue", desc: "Cards, UPI, Net Banking" },
 ];
@@ -86,10 +88,13 @@ const stripPolicyHtml = (raw) => {
  */
 const ApiBookingPageForHotels = () => {
   const navigate = useNavigate();
-  // useLocation drives the CC Avenue resume effect (reads back the
-  // ?ccavenueOrderId= query param the backend appends when it 302s the
-  // browser to us after CC Avenue completes). Also used to strip the
-  // resume signal from history so reloads don't re-trigger the create.
+  // useLocation drives the CC Avenue resume effect. CC Avenue's redirect
+  // back from its hosted page carries the outcome in the URL query string
+  // (React Router `state` never survives the cross-origin round trip) —
+  // the backend appends ?ccavenueOrderId= when it 302s the browser back to
+  // us. location.search is watched by the return-handling effect below to
+  // finalize the paid-for booking; the effect also strips the resume signal
+  // from history so reloads don't re-trigger the create.
   const location = useLocation();
 
   const activeUserRole = localStorage.getItem("currentActiveRole");
@@ -131,19 +136,15 @@ const ApiBookingPageForHotels = () => {
   const [agentAvailableBalance, setAgentAvailableBalance] = useState(null);
   const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
 
-  // Insufficient-credit → online-payment flow (RATEHAWK only).
-  // showInsufficientModal: "Online Payment Required" popup shown after the
-  //   credit check fails. Pay opens the gateway picker; Cancel dismisses.
-  // showGatewayModal: "Select Payment Gateway" picker (radio list from
-  //   PAYMENT_GATEWAYS). Proceed navigates to /payment/ccavenue-redirect.
-  // insufficientAmount: the payable total for the modals to display.
-  // selectedGateway: the picked gateway id (currently "ccavenue" only).
-  // Non-RateHawk suppliers still go through the existing toast-and-abort
-  // branch — no behaviour change for IWTX/X3/Inhouse/Atharva/Jumeirah/etc.
-  const [showInsufficientModal, setShowInsufficientModal] = useState(false);
-  const [showGatewayModal, setShowGatewayModal] = useState(false);
-  const [insufficientAmount, setInsufficientAmount] = useState(0);
-  const [selectedGateway, setSelectedGateway] = useState("");
+  // Insufficient-credit → online-payment flow (RATEHAWK only, per the
+  // original design). The declarations for showInsufficientModal,
+  // showGatewayModal, insufficientAmount and selectedGateway now live in
+  // the merged block below (see "Online-payment flow" a few lines down),
+  // which also adds showNoPaymentPathModal and isFinalizingPayment for the
+  // Inhouse three-modal chain. Non-RateHawk suppliers still go through the
+  // existing toast-and-abort branch — no behaviour change for
+  // IWTX/X3/Inhouse/Atharva/Jumeirah/etc.
+
   // ATHARVA-only booking-mode picker. Starts unset so neither radio
   // is pre-selected on page load — the operator must explicitly
   // choose "Book and Pay Now" or "Hold Room and Pay Later" before
@@ -176,6 +177,27 @@ const ApiBookingPageForHotels = () => {
   // one pattern.
   const [ratehawkEmail, setRatehawkEmail] = useState("");
   const [ratehawkPhone, setRatehawkPhone] = useState("");
+
+  // ── Online-payment flow (fires when the agent's credit is short) ──
+  // Same three-modal chain Inhouse HotelBookingPage exposes:
+  //   1. showNoPaymentPathModal — no credit AND Card mode disabled for the
+  //      agent → booking is blocked, informational modal only.
+  //   2. showInsufficientModal  — no credit but Card mode enabled → "Online
+  //      Payment Required" with Pay/Cancel; Pay opens the gateway picker.
+  //   3. showGatewayModal       — pick a gateway (currently only CC Avenue)
+  //      → navigate to /payment/ccavenue-redirect which posts to
+  //      /api/payment/ccavenue/initiate and hands off to CC Avenue's
+  //      hosted billing page.
+  const [showInsufficientModal, setShowInsufficientModal] = useState(false);
+  const [showGatewayModal, setShowGatewayModal] = useState(false);
+  const [insufficientAmount, setInsufficientAmount] = useState(0);
+  const [showNoPaymentPathModal, setShowNoPaymentPathModal] = useState(false);
+  const [selectedGateway, setSelectedGateway] = useState("");
+  // True only while the post-CC-Avenue /finalize call is in flight. Drives
+  // the full-screen "Booking in progress — do not close" overlay and the
+  // beforeunload guard so the operator can't navigate away while the
+  // backend is still creating the paid-for booking.
+  const [isFinalizingPayment, setIsFinalizingPayment] = useState(false);
 
   // ─────────────────────────── effects ────────────────────────────────
   useEffect(() => {
@@ -287,24 +309,39 @@ const ApiBookingPageForHotels = () => {
 
   // ── CC Avenue return handling (RATEHAWK insufficient-credit flow) ──
   //   Mirrors Inhouse HotelBookingPage.jsx's resume effect. CC Avenue's
-  //   redirect is a real browser navigation to their domain and back —
-  //   React Router state doesn't survive the round trip, so the backend
-  //   appends the outcome as ?ccavenueOrderId=&ccavenueStatus= query
-  //   params when it 302s the browser back here. We then:
+  //   redirect is a real browser navigation away to their domain and back
+  //   (via the backend's /api/payment/ccavenue/response redirect) — React
+  //   Router state doesn't survive the round trip, so the backend appends
+  //   the outcome as a ?ccavenueOrderId=&ccavenueStatus= query string when
+  //   it 302s the browser back here. The status query param is only a hint;
+  //   before finalising anything we re-verify it against
+  //   GET /api/payment/ccavenue/status/{orderId}, which reflects what the
+  //   backend actually decrypted from CC Avenue, so a tampered/stale URL
+  //   can't force a booking through. We then:
   //     1. Strip the resume signal from history so a reload doesn't retry
   //     2. Re-verify the payment status server-side (a tampered URL is
   //        rejected)
   //     3. Read back the pending payload from sessionStorage (persisted
-  //        just before we navigated away) and fire the create call
+  //        just before we navigated away) and fire the create call, or
+  //        fall back to the backend-owned /api/payment/ccavenue/finalize
+  //        flow when nothing was persisted.
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const ccavenueOrderId = searchParams.get("ccavenueOrderId");
     const ccavenueStatus = searchParams.get("ccavenueStatus");
     if (!ccavenueOrderId) return;
 
-    // Strip immediately so a remount / reload doesn't re-fire the create.
+    // Strip the resume signal from history right away so remounts /
+    // reloads don't re-trigger. Do it before the async work so a fast
+    // re-render can't race the effect.
     navigate(location.pathname, { replace: true, state: {} });
 
+    // ── Legacy resume path (HEAD) ──
+    // Reads the payload the older gateway modal persisted to
+    // sessionStorage under "hbpPendingCreatePayload" just before
+    // navigating to CC Avenue, and fires /api/hotel-booking/create with
+    // it. Kept for browser tabs that were opened against the older UI
+    // and still have a persisted payload waiting.
     const readPendingPayload = () => {
       const stored = sessionStorage.getItem("hbpPendingCreatePayload");
       sessionStorage.removeItem("hbpPendingCreatePayload");
@@ -353,6 +390,54 @@ const ApiBookingPageForHotels = () => {
       }
     };
 
+    // ── Backend-owned finalize (newer flow) ──
+    // Real CC Avenue path — the backend owns the payload and the create
+    // call. We just ask it to finalize. Idempotent: a second call for
+    // the same orderId returns the already-created booking, so a
+    // StrictMode double-fire or an operator refresh cannot double-book.
+    const finalizeAfterCCAvenue = async () => {
+      try {
+        setIsFinalizingPayment(true);
+        setIsSubmitting(true);
+        const response = await axiosInstance.post(
+          `/api/payment/ccavenue/finalize/${ccavenueOrderId}`,
+        );
+        const bookingResponse = response.data;
+        const statusUpper = String(bookingResponse?.status || "").toUpperCase();
+        const isSuccess =
+          (statusUpper === "CONFIRMED" ||
+            statusUpper === "RECONFIRMED" ||
+            statusUpper === "NOT CONFIRMED" ||
+            statusUpper === "ON REQUEST") &&
+          bookingResponse?.bookingId &&
+          bookingResponse.bookingId != 0;
+        if (isSuccess) {
+          toast.success(
+            bookingResponse.message || "Booking created after payment.",
+          );
+          setShowConfirmModal(false);
+          navigate("/booking-details/hotel-booking-list");
+        } else {
+          const beMsg = (bookingResponse && bookingResponse.message) || null;
+          toast.error(
+            beMsg ||
+              "Payment succeeded but booking could not be created. Please contact support with your payment reference.",
+          );
+        }
+      } catch (err) {
+        const beMsg =
+          err?.response?.data?.message || err?.response?.data?.error || null;
+        console.error("Post-payment finalize failed:", err);
+        toast.error(
+          beMsg ||
+            "Payment succeeded but booking could not be created. Please contact support with your payment reference.",
+        );
+      } finally {
+        setIsSubmitting(false);
+        setIsFinalizingPayment(false);
+      }
+    };
+
     (async () => {
       if (ccavenueStatus !== "success") {
         toast.error("Payment was not completed. Please try again.");
@@ -378,12 +463,34 @@ const ApiBookingPageForHotels = () => {
         );
         return;
       }
+      // Prefer the legacy sessionStorage payload if one exists (browser
+      // tab opened against the older UI). Otherwise fall through to the
+      // backend-owned finalize flow.
       const payload = readPendingPayload();
-      if (!payload) return;
-      finalizeCreate(payload);
+      if (payload) {
+        finalizeCreate(payload);
+      } else {
+        finalizeAfterCCAvenue();
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
+
+  // Warn on close / navigate-away while the paid-for booking is still
+  // being created server-side. Only attached during that window so it
+  // never fires on the normal flow. The browser only respects this if
+  // the user has interacted with the page in this session (which they
+  // certainly have — they just came back from paying).
+  useEffect(() => {
+    if (!isFinalizingPayment) return;
+    const beforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [isFinalizingPayment]);
 
   // ─────────────────────────── handlers ───────────────────────────────
   const handleSpecialRequestToggle = (request) => {
@@ -648,6 +755,16 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
           cancellationPolicy:
             (data.cancellationPolicies?.length && data.cancellationPolicies) ||
             r.cancellationPolicy,
+          // Capture the HPreBooking-response echoes so /api/hotel-booking/create
+          // can forward them as atharvaExpectedAmount / atharvaWithinTimeLimit /
+          // atharvaPackageRate. The BE uses these for ExpectedAmount cost
+          // verification (docs 6.1) — a mismatch triggers error 3002.
+          atharvaExpectedAmount:
+            data.amountWithoutMarkup ?? data.amount ?? r.atharvaExpectedAmount ?? null,
+          atharvaWithinTimeLimit:
+            data.withinTimeLimit ?? r.atharvaWithinTimeLimit ?? null,
+          atharvaPackageRate:
+            data.packageRate ?? r.atharvaPackageRate ?? null,
         };
       });
       setBookingData({ ...bookingData, selectedRate: patched });
@@ -781,6 +898,16 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         // ATHARVA carriers (harmless nulls for other suppliers).
         tokenId: firstRate.atharvaTokenId || null,
         hKey: firstRate.atharvaHKey || null,
+        // ATHARVA HPreBooking-response echoes. The BE uses these on
+        // HCreateBooking so ExpectedAmount matches the vendor's total on the
+        // first try (no error 3002 / no double call), WithinTimeLimit drives
+        // the RR vs KK gate correctly, and PackageRate triggers
+        // AirlineName/AirlinePNR when the vendor tagged the rate as a package
+        // (docs §5.3, §6.1). Null when no prebook has run yet — BE falls back
+        // to legacy behaviour.
+        atharvaExpectedAmount: firstRate.atharvaExpectedAmount ?? null,
+        atharvaWithinTimeLimit: firstRate.atharvaWithinTimeLimit ?? null,
+        atharvaPackageRate: firstRate.atharvaPackageRate ?? null,
         cityId: bookingData.payload?.cityId || null,
         nationalityId: bookingData.payload?.nationalityId || null,
         hotelName: bookingData.hotelStaticData.hotelName,
@@ -1024,23 +1151,34 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         );
 
         if (creditResponse.data === false) {
-          // RateHawk (apiId=14) has a proper online-payment redirect flow
-          // wired to CC Avenue (mirrors Inhouse HotelBookingPage). Open the
-          // "Online Payment Required" modal instead of dead-ending on a
-          // toast. Non-RateHawk suppliers keep the existing toast-and-abort
-          // behaviour — their gateway flow isn't wired here.
+          // ❌ Not enough credit — hand off to the online-payment chain
+          // instead of a dead-end toast. Mirrors HotelBookingPage.jsx:
+          //   • RateHawk (apiId=14) has a proper online-payment redirect
+          //     flow wired to CC Avenue, so we always open a payment
+          //     modal for it (never dead-end on a toast).
+          //   • Card mode disabled for the agent → block with the
+          //     "Booking Cannot Be Completed" modal.
+          //   • Card mode enabled                → open "Online Payment
+          //     Required" (Pay/Cancel); Pay opens the gateway picker,
+          //     which redirects to CC Avenue.
+          //   • Non-RateHawk suppliers with no card path fall back to the
+          //     existing toast-and-abort behaviour.
           const isRatehawkFlow =
             Number(bookingData?.payload?.apiId) === 14;
-          if (isRatehawkFlow) {
-            setInsufficientAmount(Number(requiredAmount) || 0);
-            setShowConfirmModal(false);
-            setShowInsufficientModal(true);
+          setInsufficientAmount(Number(requiredAmount) || 0);
+          setShowConfirmModal(false);
+          if (!agentCardPaymentEnabled) {
+            if (isRatehawkFlow) {
+              setShowNoPaymentPathModal(true);
+              return;
+            }
+            toast.error(
+              "Insufficient credit. Please proceed with online payment.",
+            );
             return;
           }
-          toast.error(
-            "Insufficient credit. Please proceed with online payment.",
-          );
-          return;
+          setShowInsufficientModal(true);
+          return; // handled by the payment popup
         }
       }
 
@@ -2814,10 +2952,306 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
     </Button>
   </Modal.Footer>
 </Modal>
+              {/* ── Insufficient credit + card disabled → block booking ──
+                  Shown when the agent has no available credit AND the
+                  AgentView "Allow Card payment mode" toggle is off. There
+                  is no payment path open, so the booking is turned away. */}
+              <Modal
+                show={showNoPaymentPathModal}
+                onHide={() => setShowNoPaymentPathModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Booking Cannot Be Completed</Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="text-center py-4">
+                  <p className="mb-2 text-dark">
+                    Sorry — this booking can't be completed because the agent
+                    has no available credit and{" "}
+                    <strong>Card payment is not enabled</strong> for this
+                    account.
+                  </p>
+                  <p className="mb-0 text-muted small">
+                    Please top up the agent's credit limit, or ask an
+                    administrator to enable Card payment on the agent's
+                    profile, then try again.
+                  </p>
+                  <div className="mt-3">
+                    <div className="text-muted small">Payable amount</div>
+                    <div className="fs-4 fw-bold text-dark">
+                      {formatPrice(insufficientAmount)}
+                    </div>
+                  </div>
+                </Modal.Body>
+                <Modal.Footer className="justify-content-center border-0">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowNoPaymentPathModal(false)}
+                  >
+                    OK
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* ── Insufficient credit → online payment required ──
+                  Shows payable amount with Pay (green) / Cancel (red).
+                  Pay opens the gateway picker below. */}
+              <Modal
+                show={showInsufficientModal}
+                onHide={() => setShowInsufficientModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Online Payment Required</Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="text-center py-4">
+                  <p className="mb-2 text-muted">
+                    The agent's available credit is insufficient for this
+                    booking. You need to proceed with{" "}
+                    <strong>online payment</strong>.
+                  </p>
+                  <div className="mt-3">
+                    <div className="text-muted small">Payable amount</div>
+                    <div className="fs-4 fw-bold text-dark">
+                      {formatPrice(insufficientAmount)}
+                    </div>
+                  </div>
+                </Modal.Body>
+                <Modal.Footer className="justify-content-center border-0">
+                  <Button
+                    variant="danger"
+                    onClick={() => setShowInsufficientModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="success"
+                    onClick={() => {
+                      setShowInsufficientModal(false);
+                      setSelectedGateway("");
+                      setShowGatewayModal(true);
+                    }}
+                  >
+                    Pay
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* ── Select payment gateway ──
+                  Currently CC Avenue only; the list is a top-level
+                  constant so adding another wired gateway later is a
+                  one-line change. Proceed navigates to
+                  /payment/ccavenue-redirect, which posts the booking
+                  payload to /api/payment/ccavenue/initiate and hands off
+                  to CC Avenue's hosted billing page. */}
+              <Modal
+                show={showGatewayModal}
+                onHide={() => setShowGatewayModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Select Payment Gateway</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                  <p className="text-muted small mb-3">
+                    Choose a gateway to enter your card details.
+                  </p>
+                  <div className="pg-option-list">
+                    {PAYMENT_GATEWAYS.map((g) => {
+                      const isSelected = selectedGateway === g.id;
+                      return (
+                        <label
+                          key={g.id}
+                          htmlFor={`gw-${g.id}`}
+                          className={`pg-option${
+                            isSelected ? " pg-option-selected" : ""
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="payment-gateway"
+                            id={`gw-${g.id}`}
+                            className="pg-option-input"
+                            checked={isSelected}
+                            onChange={() => setSelectedGateway(g.id)}
+                          />
+                          <span
+                            className="pg-option-radio"
+                            aria-hidden="true"
+                          />
+                          {g.id === "ccavenue" && (
+                            <img
+                              src={`${process.env.PUBLIC_URL}/ccavanue.png`}
+                              alt="CC Avenue"
+                              className="pg-option-logo"
+                            />
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </Modal.Body>
+                <Modal.Footer className="border-0">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowGatewayModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="success"
+                    disabled={!selectedGateway}
+                    onClick={() => {
+                      setShowGatewayModal(false);
+                      // Payload the resume flow / gateway needs.
+                      // paymentMode is flipped to "ONLINE" so the Booking
+                      // List can label the row correctly (mirrors the
+                      // Inhouse HotelBookingPage — the online-payment
+                      // branch sends "ONLINE").
+                      const onlinePayload = {
+                        ...pendingPayload,
+                        paymentMode: "ONLINE",
+                      };
+
+                      // CC Avenue: real billing-page redirect. The
+                      // backend's /initiate stores the payload alongside
+                      // the transaction row and /finalize replays it
+                      // after payment, so no sessionStorage is needed —
+                      // if the browser tab dies mid-payment the booking
+                      // can still be recovered from the transaction row.
+                      if (selectedGateway === "ccavenue") {
+                        const guest = onlinePayload?.primaryGuest;
+                        const billingName = guest
+                          ? [guest.firstName, guest.lastName]
+                              .filter(Boolean)
+                              .join(" ")
+                          : "";
+                        navigate("/payment/ccavenue-redirect", {
+                          state: {
+                            amountLabel: formatPrice(insufficientAmount),
+                            billingName,
+                            returnTo: location.pathname,
+                            bookingPayload: onlinePayload,
+                          },
+                        });
+                      }
+                    }}
+                  >
+                    Proceed to Pay
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* Duplicate-booking modal — opened when the backend replies
+                  status="DUPLICATE" (GRN error code 6000). Read-only
+                  acknowledgement; the operator dismisses and goes to check
+                  the existing booking. No retry action here on purpose. */}
+              <Modal
+                show={showDuplicateModal}
+                onHide={() => setShowDuplicateModal(false)}
+                centered
+                backdrop="static"
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>
+                    <i className="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+                    Duplicate Booking
+                  </Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                  <p className="mb-2">{duplicateMessage}</p>
+                  <p className="text-muted small mb-0">
+                    Please check the Hotel Bookings list for the existing
+                    reservation before retrying.
+                  </p>
+                </Modal.Body>
+                <Modal.Footer>
+                  <Button
+                    variant="outline-secondary"
+                    onClick={() => setShowDuplicateModal(false)}
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      setShowDuplicateModal(false);
+                      navigate("/booking-details/hotel-booking-list");
+                    }}
+                  >
+                    View Bookings
+                  </Button>
+                </Modal.Footer>
+              </Modal>
             </Form>
           </Container>
         </main>
       </div>
+
+      {/* ── Post-payment finalize overlay ──
+          Visible only while the backend is creating the paid-for booking
+          after a successful CC Avenue return. Backdrop is fully opaque
+          and non-dismissable so the operator physically cannot click on
+          anything else, and the beforeunload effect above adds the
+          browser's own confirm dialog if they try to close the tab or
+          refresh. Cleared automatically in the finally block of
+          finalizeAfterCCAvenue, whether the create succeeded or errored. */}
+      {isFinalizingPayment && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-live="assertive"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 20000,
+            background: "rgba(15, 23, 42, 0.75)",
+            backdropFilter: "blur(2px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "1rem",
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: "2rem 1.75rem",
+              maxWidth: 440,
+              width: "100%",
+              textAlign: "center",
+              boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+            }}
+          >
+            <Spinner
+              animation="border"
+              variant="success"
+              role="status"
+              style={{ width: 48, height: 48, marginBottom: 16 }}
+            />
+            <h5 className="fw-bold mb-2" style={{ color: "#0f172a" }}>
+              Payment successful — creating your booking
+            </h5>
+            <p className="text-muted mb-3" style={{ fontSize: 14 }}>
+              Please <strong>do not close this window, refresh the page, or
+              press the back button</strong> until you see the confirmation.
+            </p>
+            <div
+              className="small"
+              style={{
+                color: "#b45309",
+                background: "#fef3c7",
+                border: "1px solid #fde68a",
+                borderRadius: 8,
+                padding: "8px 12px",
+              }}
+            >
+              This usually takes just a few seconds.
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
