@@ -2478,51 +2478,50 @@ const PackageReg = () => {
                     </span>
                   }
                 >
-                  <div className="d-flex justify-content-between align-items-center mb-3">
-                    <h6>Itinerary Details</h6>
-                    <Button
-                      variant="outline-primary"
-                      size="sm"
-                      onClick={addItineraryDay}
-                    >
-                      <FaPlus className="me-2" />
-                      Add Day
-                    </Button>
+                  {/* Sticky header — keeps the Add Day button visible
+                      while the user scrolls through many day cards, so
+                      they never have to scroll back to the top of the
+                      tab to add another day. */}
+                  <div
+                    className="d-flex justify-content-between align-items-center mb-3 py-2 bg-white"
+                    style={{
+                      position: "sticky",
+                      top: 0,
+                      zIndex: 5,
+                      borderBottom: "1px solid #e0e0e0",
+                    }}
+                  >
+                    <h6 className="mb-0">Itinerary Details</h6>
+                    {!isViewMode && (
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        onClick={addItineraryDay}
+                      >
+                        <FaPlus className="me-2" />
+                        Add Day
+                      </Button>
+                    )}
                   </div>
                   {console.log("packageItinearyDTOList::" , packageItinearyDTOList)}
                   {packageItinearyDTOList.map((day, index) => (
                     <Card key={index} className="mb-3">
                       <Card.Header className="d-flex justify-content-between align-items-center">
                         <h6 className="mb-0">Day {day.day}</h6>
-                        {/* Card-level actions: Add Day is duplicated on
-                            every card so a user filling in a large Day
-                            (e.g. Day 3 with a 20-line activities block)
-                            can add Day 4 without scrolling back to the
-                            top-of-tab button. Same handler as the top one.
-                            Only shown when not in view-mode. */}
-                        <div className="d-flex gap-2">
-                          {!isViewMode && (
-                            <Button
-                              variant="outline-primary"
-                              size="sm"
-                              onClick={addItineraryDay}
-                              title="Add another day"
-                            >
-                              <FaPlus className="me-1" />
-                              Add Day
-                            </Button>
-                          )}
-                          {packageItinearyDTOList.length > 1 && (
-                            <Button
-                              variant="outline-danger"
-                              size="sm"
-                              onClick={() => removeItineraryDay(index)}
-                            >
-                              <FaTrash className="me-1" />
-                              Remove
-                            </Button>
-                          )}
-                        </div>
+                        {/* Card only carries Remove — Add Day lives in
+                            the sticky header at the top of the tab so a
+                            single, always-visible button covers every
+                            card without duplication. */}
+                        {packageItinearyDTOList.length > 1 && (
+                          <Button
+                            variant="outline-danger"
+                            size="sm"
+                            onClick={() => removeItineraryDay(index)}
+                          >
+                            <FaTrash className="me-1" />
+                            Remove
+                          </Button>
+                        )}
                       </Card.Header>
                       <Card.Body>
                         <Row>
