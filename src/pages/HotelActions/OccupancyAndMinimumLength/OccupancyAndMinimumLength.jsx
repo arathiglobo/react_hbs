@@ -2859,6 +2859,8 @@ const OccupancyAndMinimumLength = () => {
                 size="lg"
                 backdrop="static"
                 keyboard={false}
+                enforceFocus={false}
+                restoreFocus={false}
               >
                 <Modal.Header closeButton>
                   <Modal.Title>
@@ -2913,15 +2915,15 @@ const OccupancyAndMinimumLength = () => {
                                   Validity From{" "}
                                   <span className="text-danger">*</span>
                                 </Form.Label>
-                                <Form.Control
-                                  type="datetime-local"
+                                <DateTimeApplyPicker
                                   value={period.validityFrom || ""}
-                                  onChange={(e) => {
+                                  disabled={isViewModeMin}
+                                  isInvalid={!!validationErrorsMin.validityFrom}
+                                  onApply={(val) => {
                                     const newValidityPeriods = [
                                       ...formDataMin.validityPeriods,
                                     ];
-                                    newValidityPeriods[index].validityFrom =
-                                      e.target.value;
+                                    newValidityPeriods[index].validityFrom = val;
 
                                     // Clear Validity To if it becomes invalid (before or equal to From date)
                                     const currentToDate =
@@ -2929,9 +2931,8 @@ const OccupancyAndMinimumLength = () => {
                                         .validityTo;
                                     if (
                                       currentToDate &&
-                                      e.target.value &&
-                                      new Date(currentToDate) <=
-                                        new Date(e.target.value)
+                                      val &&
+                                      new Date(currentToDate) <= new Date(val)
                                     ) {
                                       newValidityPeriods[index].validityTo = "";
                                     }
@@ -2941,8 +2942,6 @@ const OccupancyAndMinimumLength = () => {
                                       validityPeriods: newValidityPeriods,
                                     });
                                   }}
-                                  disabled={isViewModeMin}
-                                  isInvalid={!!validationErrorsMin.validityFrom}
                                 />
                                 {validationErrorsMin.validityFrom && (
                                   <Form.Control.Feedback type="invalid">
@@ -2957,25 +2956,25 @@ const OccupancyAndMinimumLength = () => {
                                   Validity To{" "}
                                   <span className="text-danger">*</span>
                                 </Form.Label>
-                                <Form.Control
-                                  type="datetime-local"
+                                <DateTimeApplyPicker
                                   value={period.validityTo || ""}
-                                  min={getMinValidityToDate(
-                                    period.validityFrom,
-                                  )}
-                                  onChange={(e) => {
+                                  disabled={isViewModeMin}
+                                  isInvalid={!!validationErrorsMin.validityTo}
+                                  minDate={
+                                    period.validityFrom
+                                      ? parseLocalDateTime(period.validityFrom)
+                                      : undefined
+                                  }
+                                  onApply={(val) => {
                                     const newValidityPeriods = [
                                       ...formDataMin.validityPeriods,
                                     ];
-                                    newValidityPeriods[index].validityTo =
-                                      e.target.value;
+                                    newValidityPeriods[index].validityTo = val;
                                     setFormDataMin({
                                       ...formDataMin,
                                       validityPeriods: newValidityPeriods,
                                     });
                                   }}
-                                  disabled={isViewModeMin}
-                                  isInvalid={!!validationErrorsMin.validityTo}
                                 />
                                 {validationErrorsMin.validityTo && (
                                   <Form.Control.Feedback type="invalid">
