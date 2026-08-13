@@ -29,7 +29,13 @@ import {
   FaDollarSign,
   FaCopy,
   FaChevronDown,
+  FaArrowLeft,
+  FaArrowRight,
+  FaCheck,
 } from "react-icons/fa";
+import DateTimeApplyPicker, {
+  parseLocalDateTime,
+} from "../../components/DateTimeApplyPicker";
 
 // Enhanced SearchableSelect Component with loading support
 const SearchableSelect = ({
@@ -263,6 +269,27 @@ const PackageReg = () => {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState(null);
 
+  // Controlled active tab so Next/Previous buttons and direct tab clicks
+  // move through the wizard in a single, known order. The order is
+  // basic → itinerary → inclusions → exclusions → policyDetails.
+  // The Confirm button only shows on the final tab (policyDetails).
+  const TAB_ORDER = ["basic", "itinerary", "inclusions", "exclusions", "policyDetails"];
+  const [activeTab, setActiveTab] = useState("basic");
+
+  // Free-text custom entries per bucket. The master-picked entries live
+  // in packageOthersDTOList (unchanged). These three arrays collect the
+  // user-typed rows they add alongside the master checklist. Each item
+  // is { customText, descriptionType, isDeleted:false } — the payload
+  // shape the backend now accepts on `packageOthersDTOList[i]`.
+  const [customInclusions, setCustomInclusions] = useState([]);
+  const [customExclusions, setCustomExclusions] = useState([]);
+  const [customTerms, setCustomTerms] = useState([]);
+  // Draft text bound to the "Add" textarea in each tab, before the user
+  // clicks + Add. Kept per bucket so switching tabs doesn't lose the draft.
+  const [inclusionDraft, setInclusionDraft] = useState("");
+  const [exclusionDraft, setExclusionDraft] = useState("");
+  const [termsDraft, setTermsDraft] = useState("");
+
 
   // Helper function to get image URL from path
   const getImageUrl = (imagePath) => {
@@ -335,15 +362,13 @@ const PackageReg = () => {
   const validateForm = (data) => {
     const errors = {};
 
-    // Basic field validations
+    // Basic field validations. Currency + Package Basic Rate were removed
+    // from the modal per client request — they are no longer required
+    // fields, so nothing validates against them here.
     if (!data.packageName?.trim())
       errors.packageName = "Package Name is required";
     if (!data.packageCode?.trim())
       errors.packageCode = "Package Code is required";
-    if (!data.packageBasicRate?.trim())
-      errors.packageBasicRate = "Package Basic Rate is required";
-    if (!data.currencyId || (typeof data.currencyId === 'string' && !data.currencyId.trim()))
-      errors.currencyId = "Currency is required";
     if (!data.packageType?.trim())
       errors.packageType = "Package Type is required";
     if (!data.packageCategory?.length)
@@ -367,13 +392,17 @@ const PackageReg = () => {
         "Please enter at least one itinerary day with heading, place, or activities";
     }
 
-    // Others validation - at least one item must be selected (not deleted)
-    const hasOthersData = packageOthersDTOList.some(
-      (other) => !other.isDeleted
-    );
-    if (!hasOthersData) {
+    // Others validation — a package must have at least one non-deleted
+    // entry across the three buckets (master OR custom). The user's
+    // typed-in inclusions/exclusions/terms count.
+    const hasMasterOthers = packageOthersDTOList.some((other) => !other.isDeleted);
+    const hasCustomOthers =
+      customInclusions.some((c) => !c.isDeleted && c.customText?.trim()) ||
+      customExclusions.some((c) => !c.isDeleted && c.customText?.trim()) ||
+      customTerms.some((c) => !c.isDeleted && c.customText?.trim());
+    if (!hasMasterOthers && !hasCustomOthers) {
       errors.others =
-        "Please select at least one item in Inclusion, Exclusion, or Terms & Conditions";
+        "Please select or enter at least one item in Inclusion, Exclusion, or Terms & Conditions";
     }
 
     return errors;
@@ -428,6 +457,13 @@ const PackageReg = () => {
     setCountries([]); // Clear previous country options
     setSelectedCountryOption(null); // Reset selection
     fetchCountries(""); // Load initial countries
+    setCustomInclusions([]);
+    setCustomExclusions([]);
+    setCustomTerms([]);
+    setInclusionDraft("");
+    setExclusionDraft("");
+    setTermsDraft("");
+    setActiveTab("basic");
     setValidationErrors({});
     setShowModal(true);
   };
@@ -489,8 +525,15 @@ const PackageReg = () => {
     formDataPayload.append("packageCode", formData.packageCode);
     formDataPayload.append("noOfNights", formData.noOfNights);
     formDataPayload.append("overview", formData.overview || "");
-    formDataPayload.append("packageBasicRate", formData.packageBasicRate);
-    formDataPayload.append("currencyId", formData.currencyId);
+    // Currency + Basic Rate are hidden fields now — the backend columns
+    // still exist so we send whatever value is on the form (blank on
+    // create, unchanged on edit). Nothing new to validate for.
+    if (formData.packageBasicRate) {
+      formDataPayload.append("packageBasicRate", formData.packageBasicRate);
+    }
+    if (formData.currencyId) {
+      formDataPayload.append("currencyId", formData.currencyId);
+    }
     formDataPayload.append("arriveCountry", formData.countryId);
 
     if (formData.placeId) {
@@ -529,11 +572,37 @@ const PackageReg = () => {
       }
     });
 
-    packageOthersDTOList.forEach((other, index) => {
-      formDataPayload.append(`packageOthersDTOList[${index}].otherId`, other.otherId);
-      formDataPayload.append(`packageOthersDTOList[${index}].type`, other.type || "");
-      formDataPayload.append(`packageOthersDTOList[${index}].isDeleted`, other.isDeleted ? "true" : "false");
+    // Master-picked others (checkbox rows). Send otherId + descriptionType
+    // + isDeleted so the backend can (a) validate the master FK and
+    // (b) know which bucket the row belongs to when it survives the
+    // isDeleted filter.
+    let othersIdx = 0;
+    packageOthersDTOList.forEach((other) => {
+      formDataPayload.append(`packageOthersDTOList[${othersIdx}].otherId`, other.otherId);
+      formDataPayload.append(`packageOthersDTOList[${othersIdx}].type`, other.type || "");
+      if (other.descriptionType != null) {
+        formDataPayload.append(`packageOthersDTOList[${othersIdx}].descriptionType`, other.descriptionType);
+      }
+      formDataPayload.append(`packageOthersDTOList[${othersIdx}].isDeleted`, other.isDeleted ? "true" : "false");
+      othersIdx += 1;
     });
+
+    // Custom free-text rows — no otherId; the backend keys them by
+    // (customText, descriptionType) alone. Skip blanks so an empty draft
+    // never posts as a real row.
+    const appendCustom = (list) => {
+      list.forEach((row) => {
+        const text = (row.customText || "").trim();
+        if (!text) return;
+        formDataPayload.append(`packageOthersDTOList[${othersIdx}].customText`, text);
+        formDataPayload.append(`packageOthersDTOList[${othersIdx}].descriptionType`, row.descriptionType);
+        formDataPayload.append(`packageOthersDTOList[${othersIdx}].isDeleted`, row.isDeleted ? "true" : "false");
+        othersIdx += 1;
+      });
+    };
+    appendCustom(customInclusions);
+    appendCustom(customExclusions);
+    appendCustom(customTerms);
 
     packageValidityDTOList.forEach((validity, index) => {
       if (!validity.validityFrom && !validity.validityTo) return;
@@ -585,11 +654,41 @@ const PackageReg = () => {
     return formDataPayload;
   };
 
+  // Pull the most descriptive line out of an Axios error so the toast
+  // shows exactly what the backend said instead of the generic "Network
+  // Error" / "Request failed" default. Handles: Spring's validation map
+  // ({field: message}), MessageResponse ({message}), plain-text bodies,
+  // and payload-too-large (413).
+  const extractApiError = (error) => {
+    if (!error) return "Unknown error";
+    // Payload-too-large — Spring / Tomcat / nginx all return 413 with an
+    // empty body, so error.response.data is often "".
+    if (error.response?.status === 413) {
+      return "The file(s) you uploaded are too large. Please choose a smaller image or reduce the number of items.";
+    }
+    const data = error.response?.data;
+    if (typeof data === "string" && data.trim()) return data;
+    if (data && typeof data === "object") {
+      if (data.message) return data.message;
+      if (data.error) return data.error;
+      // Spring @Valid failures: {field1: "must not be blank", ...}
+      const fieldErrs = Object.entries(data)
+        .filter(([, v]) => typeof v === "string")
+        .map(([k, v]) => `${k}: ${v}`)
+        .join("; ");
+      if (fieldErrs) return fieldErrs;
+    }
+    return error.message || "Something went wrong";
+  };
+
   const handleSave = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     const errors = validateForm(formData);
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors);
+      // Jump the user to the tab that owns the first error so they can
+      // see and fix it immediately.
+      jumpToFirstErrorTab(errors);
       return;
     }
 
@@ -610,7 +709,8 @@ const PackageReg = () => {
         toast.error("Failed to save data!!");
       }
     } catch (error) {
-      toast.error(`Error!! Something went wrong: ${error.response?.data?.message || error.message}`);
+      console.error("Package save error:", error);
+      toast.error(`Save failed: ${extractApiError(error)}`);
     } finally {
       setIsLoading(false);
     }
@@ -621,6 +721,7 @@ const PackageReg = () => {
     const errors = validateForm(formData);
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors);
+      jumpToFirstErrorTab(errors);
       return;
     }
 
@@ -642,10 +743,24 @@ const PackageReg = () => {
         toast.error("Failed to update data!!");
       }
     } catch (error) {
-      toast.error(`Error!! Something went wrong: ${error.response?.data?.message || error.message}`);
+      console.error("Package update error:", error);
+      toast.error(`Update failed: ${extractApiError(error)}`);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Map a validation-error key to the tab that owns the field, so on
+  // submit failure we can auto-switch the user to the tab where their
+  // fix has to happen.
+  const jumpToFirstErrorTab = (errors) => {
+    const basicKeys = [
+      "packageName", "packageCode", "packageType", "packageCategory",
+      "countryId", "placeId", "noOfNights",
+    ];
+    if (basicKeys.some((k) => errors[k])) { setActiveTab("basic"); return; }
+    if (errors.itinerary) { setActiveTab("itinerary"); return; }
+    if (errors.others) { setActiveTab("inclusions"); return; }
   };
 
   const fetchCountries = async (searchTerm = "", limit = 20) => {
@@ -866,6 +981,13 @@ const PackageReg = () => {
     setPackageCancellationPolicyDTOList([
       { cancellationFee: "", cancellationFeeType: "PERCENT", noOfNights: "" },
     ]);
+    setCustomInclusions([]);
+    setCustomExclusions([]);
+    setCustomTerms([]);
+    setInclusionDraft("");
+    setExclusionDraft("");
+    setTermsDraft("");
+    setActiveTab("basic");
   };
 
   // CRUD Operations
@@ -956,20 +1078,49 @@ const PackageReg = () => {
         ]);
       }
 
-      // Load others data
-      if (data.packageOthersDTOList && Array.isArray(data.packageOthersDTOList) && termsAndConditions.length > 0) {
-        const mergedOthersList = termsAndConditions.map((term) => {
-          const backendItem = data.packageOthersDTOList.find((backend) => backend.otherId === term.termsAndConditionsId);
-          return {
-            otherId: term.termsAndConditionsId,
-            type: term.description,
-            descriptionType: term.descriptionType,
-            termsCode: term.termsCode,
-            isDeleted: backendItem ? (backendItem.isDeleted === true || backendItem.isDeleted === "true") : true,
-          };
-        });
-        setPackageOthersDTOList(mergedOthersList);
+      // Load others data — master picks come as rows with `otherId`
+      // matching a master row; custom rows come as `otherId == null` with
+      // `customText` + `descriptionType`. Split them into the master
+      // checklist and the three custom buckets.
+      if (data.packageOthersDTOList && Array.isArray(data.packageOthersDTOList)) {
+        const backendRows = data.packageOthersDTOList;
+
+        if (termsAndConditions.length > 0) {
+          const mergedOthersList = termsAndConditions.map((term) => {
+            const backendItem = backendRows.find(
+              (backend) => backend.otherId === term.termsAndConditionsId
+            );
+            return {
+              otherId: term.termsAndConditionsId,
+              type: term.description,
+              descriptionType: term.descriptionType,
+              termsCode: term.termsCode,
+              isDeleted: backendItem ? (backendItem.isDeleted === true || backendItem.isDeleted === "true") : true,
+            };
+          });
+          setPackageOthersDTOList(mergedOthersList);
+        }
+
+        // Custom rows — bucketed by descriptionType (1/2/3).
+        const customs = backendRows.filter((r) => !r.otherId && r.customText);
+        setCustomInclusions(customs.filter((r) => r.descriptionType === 1).map((r) => ({
+          customText: r.customText, descriptionType: 1, isDeleted: false,
+        })));
+        setCustomExclusions(customs.filter((r) => r.descriptionType === 2).map((r) => ({
+          customText: r.customText, descriptionType: 2, isDeleted: false,
+        })));
+        setCustomTerms(customs.filter((r) => r.descriptionType === 3).map((r) => ({
+          customText: r.customText, descriptionType: 3, isDeleted: false,
+        })));
+      } else {
+        setCustomInclusions([]);
+        setCustomExclusions([]);
+        setCustomTerms([]);
       }
+      setInclusionDraft("");
+      setExclusionDraft("");
+      setTermsDraft("");
+      setActiveTab("basic");
 
       setValidationErrors({});
       setShowModal(true);
@@ -1005,10 +1156,8 @@ const PackageReg = () => {
           await fetchPackageList(page, search);
         }
       } catch (error) {
-        toast.error(
-          `Failed to delete package: ${error.response?.data?.message || error.message
-          }`
-        );
+        console.error("Package delete error:", error);
+        toast.error(`Failed to delete package: ${extractApiError(error)}`);
       } finally {
         setIsLoading(false);
       }
@@ -1149,10 +1298,8 @@ const PackageReg = () => {
         toast.error("Failed to copy package!!");
       }
     } catch (error) {
-      toast.error(
-        `Error!! Something went wrong: ${error.response?.data?.message || error.message
-        }`
-      );
+      console.error("Package copy error:", error);
+      toast.error(`Copy failed: ${extractApiError(error)}`);
     } finally {
       setIsLoading(false);
     }
@@ -1289,6 +1436,197 @@ const PackageReg = () => {
     }
   };
 
+  // Shared renderer for the Inclusions / Exclusions / Terms sections.
+  // Each section is: master checklist (fetched from termsAndCondition
+  // API + bucketed by descriptionType) + Add-a-custom-entry textarea +
+  // list of the user's already-added custom rows with Remove buttons.
+  // Kept as one helper so all three sections stay visually consistent.
+  const renderOthersBucket = ({
+    bucketType,        // 1 = Inclusion, 2 = Exclusion, 3 = Terms
+    heading,
+    emptyText,
+    customList,
+    setCustomList,
+    draft,
+    setDraft,
+    addPlaceholder,
+  }) => {
+    const masterRows = packageOthersDTOList.filter(
+      (other) => other.descriptionType === bucketType
+    );
+
+    const clearOthersError = () => {
+      if (validationErrors.others) {
+        setValidationErrors((prev) => ({ ...prev, others: undefined }));
+      }
+    };
+
+    const addCustom = () => {
+      const text = (draft || "").trim();
+      if (!text) {
+        toast.error("Please type something before adding");
+        return;
+      }
+      setCustomList([
+        ...customList,
+        { customText: text, descriptionType: bucketType, isDeleted: false },
+      ]);
+      setDraft("");
+      clearOthersError();
+    };
+
+    const removeCustom = (idx) => {
+      setCustomList(customList.filter((_, i) => i !== idx));
+    };
+
+    const updateCustom = (idx, text) => {
+      setCustomList(
+        customList.map((row, i) =>
+          i === idx ? { ...row, customText: text } : row
+        )
+      );
+    };
+
+    return (
+      <>
+        {validationErrors.others && (
+          <div className="alert alert-danger mb-3">
+            <i className="fas fa-exclamation-triangle me-2"></i>
+            {validationErrors.others}
+          </div>
+        )}
+        <h6 className="fw-bold mb-3">{heading}</h6>
+
+        {/* Master checklist — same behaviour as before: tick a row to
+            keep it on the package, untick to soft-delete. */}
+        <div className="mb-3" style={{ maxHeight: "260px", overflowY: "auto" }}>
+          {isLoadingTerms ? (
+            <div className="text-center text-muted">Loading...</div>
+          ) : masterRows.length === 0 ? (
+            <div className="text-muted small">{emptyText}</div>
+          ) : (
+            masterRows.map((other, index) => (
+              <FormCheck
+                key={other.otherId}
+                type="checkbox"
+                label={other.type || `${heading} ${index + 1}`}
+                checked={!other.isDeleted}
+                onChange={(e) => {
+                  const updated = packageOthersDTOList.map((item) =>
+                    item.otherId === other.otherId
+                      ? { ...item, isDeleted: !e.target.checked }
+                      : item
+                  );
+                  setPackageOthersDTOList(updated);
+                  clearOthersError();
+                }}
+                disabled={isViewMode}
+              />
+            ))
+          )}
+        </div>
+
+        {/* Custom entries — visible in view mode too so users can see
+            what a package contains, but only editable when not viewing. */}
+        <div className="border-top pt-3 mt-3">
+          <div className="fw-semibold small mb-2">
+            Custom {heading} ({customList.length})
+          </div>
+          {customList.length === 0 && (
+            <div className="text-muted small mb-2">
+              No custom entries added yet.
+            </div>
+          )}
+          {customList.map((row, idx) => (
+            <div key={idx} className="mb-2 d-flex gap-2">
+              <Form.Control
+                as="textarea"
+                rows={4}
+                style={{ resize: "vertical", minHeight: "90px" }}
+                value={row.customText}
+                onChange={(e) => updateCustom(idx, e.target.value)}
+                disabled={isViewMode}
+                placeholder={`Custom ${heading.toLowerCase()} #${idx + 1}`}
+              />
+              {!isViewMode && (
+                <Button
+                  variant="outline-danger"
+                  size="sm"
+                  onClick={() => removeCustom(idx)}
+                  title="Remove"
+                  style={{ height: "38px", alignSelf: "flex-start" }}
+                >
+                  <FaTrash />
+                </Button>
+              )}
+            </div>
+          ))}
+
+          {/* Add-new textarea — 6 rows by default and resizable, so a
+              user can comfortably paste in a 15-20 line clause before
+              clicking Add. */}
+          {!isViewMode && (
+            <div className="mt-2">
+              <Form.Control
+                as="textarea"
+                rows={6}
+                style={{ resize: "vertical", minHeight: "140px" }}
+                placeholder={addPlaceholder}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+              />
+              <div className="d-flex justify-content-between align-items-center mt-2">
+                <small className="text-muted">
+                  {(draft || "").length} characters
+                </small>
+                <Button
+                  size="sm"
+                  variant="outline-primary"
+                  onClick={addCustom}
+                  disabled={!draft || !draft.trim()}
+                >
+                  <FaPlus className="me-1" /> Add {heading.replace(/s$/, "")}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </>
+    );
+  };
+
+  // Wizard navigation — Next/Previous move through TAB_ORDER; Confirm
+  // (Create / Update) is only enabled on the final tab. Also validates
+  // Basic Details before allowing Next off the first tab, so users can't
+  // silently paper over required fields.
+  const currentTabIdx = TAB_ORDER.indexOf(activeTab);
+  const isFirstTab = currentTabIdx <= 0;
+  const isLastTab = currentTabIdx === TAB_ORDER.length - 1;
+  const goPrevTab = () => {
+    if (!isFirstTab) setActiveTab(TAB_ORDER[currentTabIdx - 1]);
+  };
+  const goNextTab = () => {
+    // Light per-tab guardrails: on Basic Details, warn if the required
+    // fields aren't filled but still let the user proceed (final submit
+    // enforces). On other tabs just advance.
+    if (activeTab === "basic") {
+      const errs = validateForm(formData);
+      const basicKeys = [
+        "packageName", "packageCode", "packageType", "packageCategory",
+        "countryId", "placeId", "noOfNights",
+      ];
+      const basicErrs = Object.fromEntries(
+        Object.entries(errs).filter(([k]) => basicKeys.includes(k))
+      );
+      if (Object.keys(basicErrs).length > 0) {
+        setValidationErrors((prev) => ({ ...prev, ...basicErrs }));
+        toast.error("Please fill required fields in Basic Details before continuing.");
+        return;
+      }
+    }
+    if (!isLastTab) setActiveTab(TAB_ORDER[currentTabIdx + 1]);
+  };
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
       <Topbar />
@@ -1326,7 +1664,7 @@ const PackageReg = () => {
                     <th>Basic Rate</th>
                     <th>No of Nights</th>
                     <th>Status</th>
-                    <th style={{ width: 200 }}>Actions</th>
+                    <th style={{ width: 380 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1352,39 +1690,62 @@ const PackageReg = () => {
                         </span>
                       </td>
                       <td>
-                        <div className="d-flex gap-2">
-                          <FaEdit
-                            className="text-primary edit"
-                            style={{ cursor: "pointer", fontSize: "18px" }}
-                            onClick={() => fetchAndShowDetail(item, false)}
-                            title="Edit"
-                          />
-                          <FaEye
-                            className="text-info view"
-                            style={{ cursor: "pointer", fontSize: "18px" }}
+                        {/* Action row: icon-only clicks were hard to
+                            read at a glance. Each control is now a
+                            labelled outline button (icon + text) so the
+                            user can identify View / Edit / Copy / Rates /
+                            Delete without hovering for the tooltip.
+                            Same onClick handlers as before. Wrapped so
+                            the buttons wrap onto the next line on narrow
+                            columns instead of overflowing. */}
+                        <div className="d-flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline-info"
+                            className="d-flex align-items-center gap-1 view"
                             onClick={() =>
                               navigate(`/registration/package/view/${item.packageId}`)
                             }
                             title="View"
-                          />
-                          <FaCopy
-                            className="text-warning copy"
-                            style={{ cursor: "pointer", fontSize: "18px" }}
+                          >
+                            <FaEye /> View
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline-primary"
+                            className="d-flex align-items-center gap-1 edit"
+                            onClick={() => fetchAndShowDetail(item, false)}
+                            title="Edit"
+                          >
+                            <FaEdit /> Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline-warning"
+                            className="d-flex align-items-center gap-1 copy"
                             onClick={() => handleCopy(item)}
                             title="Copy"
-                          />
-                          <FaDollarSign
-                            className="text-success"
-                            style={{ cursor: "pointer", fontSize: "18px" }}
+                          >
+                            <FaCopy /> Copy
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline-success"
+                            className="d-flex align-items-center gap-1"
                             onClick={() => handlePackageRates(item)}
                             title="Package Rates"
-                          />
-                          <FaTrash
-                            className="text-danger delete"
-                            style={{ cursor: "pointer", fontSize: "18px" }}
+                          >
+                            <FaDollarSign /> Rates
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline-danger"
+                            className="d-flex align-items-center gap-1 delete"
                             onClick={() => handleDelete(item)}
                             title="Delete"
-                          />
+                          >
+                            <FaTrash /> Delete
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -1415,7 +1776,7 @@ const PackageReg = () => {
                 <div className="d-flex justify-content-between align-items-center p-3 border-top">
                   <div>
                     <small className="text-muted">
-                      Showing {items.length} of {totalPages * 10} cab providers
+                      Showing {items.length} of {totalPages * 10} Transfer providers
                     </small>
                   </div>
                   <div>
@@ -1470,7 +1831,7 @@ const PackageReg = () => {
                 tab saw nothing and thought the form was silently broken.
                 This block surfaces *all* validation errors at the top.
               */}
-              {Object.keys(validationErrors).some((k) => validationErrors[k]) && (
+              {/* {Object.keys(validationErrors).some((k) => validationErrors[k]) && (
                 <div className="alert alert-danger mb-3" role="alert">
                   <div className="fw-semibold mb-1">
                     <i className="fas fa-exclamation-triangle me-2"></i>
@@ -1482,12 +1843,6 @@ const PackageReg = () => {
                     )}
                     {validationErrors.packageCode && (
                       <li><strong>Basic Details:</strong> {validationErrors.packageCode}</li>
-                    )}
-                    {validationErrors.packageBasicRate && (
-                      <li><strong>Basic Details:</strong> {validationErrors.packageBasicRate}</li>
-                    )}
-                    {validationErrors.currencyId && (
-                      <li><strong>Basic Details:</strong> {validationErrors.currencyId}</li>
                     )}
                     {validationErrors.packageType && (
                       <li><strong>Basic Details:</strong> {validationErrors.packageType}</li>
@@ -1512,8 +1867,13 @@ const PackageReg = () => {
                     )}
                   </ul>
                 </div>
-              )}
-              <Tabs defaultActiveKey="basic" id="package-tabs" className="mb-3">
+              )} */}
+              <Tabs
+                activeKey={activeTab}
+                onSelect={(k) => k && setActiveTab(k)}
+                id="package-tabs"
+                className="mb-3"
+              >
                 <Tab
                   eventKey="basic"
                   title={
@@ -1521,8 +1881,6 @@ const PackageReg = () => {
                       Basic Details
                       {(validationErrors.packageName ||
                         validationErrors.packageCode ||
-                        validationErrors.packageBasicRate ||
-                        validationErrors.currencyId ||
                         validationErrors.packageType ||
                         validationErrors.packageCategory ||
                         validationErrors.countryId ||
@@ -1602,71 +1960,11 @@ const PackageReg = () => {
                             </Form.Control.Feedback>
                           )}
                         </Form.Group>
-                        <Form.Group className="mb-3">
-                          <Form.Label>
-                            Package Basic Rate{" "}
-                            <span className="text-danger">*</span>
-                          </Form.Label>
-                          <Form.Control
-                            type="number"
-                            placeholder="Enter basic rate"
-                            value={formData.packageBasicRate}
-                            onChange={(e) => {
-                              setFormData((prev) => ({
-                                ...prev,
-                                packageBasicRate: e.target.value,
-                              }));
-                              if (validationErrors.packageBasicRate) {
-                                setValidationErrors((prev) => ({
-                                  ...prev,
-                                  packageBasicRate: undefined,
-                                }));
-                              }
-                            }}
-                            isInvalid={!!validationErrors.packageBasicRate}
-                          />
-                          {validationErrors.packageBasicRate && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.packageBasicRate}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
-                        <Form.Group className="mb-3">
-                          <Form.Label>
-                            Currency <span className="text-danger">*</span>
-                          </Form.Label>
-                          <Form.Select
-                            value={formData.currencyId}
-                            onChange={(e) => {
-                              setFormData((prev) => ({
-                                ...prev,
-                                currencyId: e.target.value,
-                              }));
-                              if (validationErrors.currencyId) {
-                                setValidationErrors((prev) => ({
-                                  ...prev,
-                                  currencyId: undefined,
-                                }));
-                              }
-                            }}
-                            isInvalid={!!validationErrors.currencyId}
-                          >
-                            <option value="">Select Currency</option>
-                            {currencies.map((currency) => (
-                              <option
-                                key={currency.currencyId}
-                                value={currency.currencyId}
-                              >
-                                {currency.name}
-                              </option>
-                            ))}
-                          </Form.Select>
-                          {validationErrors.currencyId && (
-                            <Form.Control.Feedback type="invalid">
-                              {validationErrors.currencyId}
-                            </Form.Control.Feedback>
-                          )}
-                        </Form.Group>
+                        {/* Currency + Package Basic Rate fields were hidden
+                            per client request — the backend columns are
+                            preserved (see prepareFormDataPayload) but the
+                            user no longer picks either here; rates live on
+                            the Package Rates screen. */}
                         <Form.Group className="mb-3">
                           <Form.Label>
                             Package Type <span className="text-danger">*</span>
@@ -1709,7 +2007,7 @@ const PackageReg = () => {
                         </Form.Group>
                         <Form.Group className="mb-3">
                           <Form.Label>
-                            Package Category{" "}
+                            Occupancy Type{" "}
                             <span className="text-danger">*</span>
                           </Form.Label>
                           <div className="position-relative">
@@ -1889,12 +2187,30 @@ const PackageReg = () => {
                           <Form.Control
                             type="file"
                             accept="image/*"
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              // Guardrails matching the itinerary image
+                              // uploader so the backend never sees a file
+                              // bigger than what our multipart config
+                              // accepts (5MB is a safe common ceiling).
+                              if (file.size > 5 * 1024 * 1024) {
+                                toast.error(
+                                  `"${file.name}" is ${(file.size / (1024 * 1024)).toFixed(1)}MB — max is 5MB.`
+                                );
+                                e.target.value = "";
+                                return;
+                              }
+                              if (!file.type.startsWith("image/")) {
+                                toast.error("Please select a valid image file");
+                                e.target.value = "";
+                                return;
+                              }
                               setFormData((prev) => ({
                                 ...prev,
-                                packageImage: e.target.files[0],
-                              }))
-                            }
+                                packageImage: file,
+                              }));
+                            }}
                             disabled={isViewMode}
                           />
                           {/* Show existing image preview when editing */}
@@ -1967,7 +2283,7 @@ const PackageReg = () => {
                           />
                           <FormCheck
                             type="checkbox"
-                            label="Cab"
+                            label="Transfer"
                             checked={formData.containCab}
                             onChange={(e) =>
                               setFormData((prev) => ({
@@ -1978,7 +2294,7 @@ const PackageReg = () => {
                           />
                           <FormCheck
                             type="checkbox"
-                            label="Activity"
+                            label="Tours"
                             checked={formData.containActivity}
                             onChange={(e) =>
                               setFormData((prev) => ({
@@ -1988,24 +2304,11 @@ const PackageReg = () => {
                             }
                           />
                         </Form.Group>
-                        <Form.Group className="mb-3">
-                          <Form.Label>Status</Form.Label>
-                          <Form.Select
-                            value={formData.status}
-                            onChange={(e) =>
-                              setFormData((prev) => ({
-                                ...prev,
-                                status: e.target.value,
-                              }))
-                            }
-                          >
-                            <option value="false">Disable</option>
-                            <option value="true">Enable</option>
-                          </Form.Select>
-                        </Form.Group>
+                        {/* Status dropdown removed — package status is
+                            toggled from the list row's Status badge. */}
                         <Form.Group className="mb-3">
                           <Form.Label>
-                            Arrive Country{" "}
+                            Arriving Destination{" "}
                             <span className="text-danger">*</span>
                           </Form.Label>
                           <Select
@@ -2036,7 +2339,7 @@ const PackageReg = () => {
                         </Form.Group>
                         <Form.Group className="mb-3">
                           <Form.Label>
-                            Arrive Place <span className="text-danger">*</span>
+                            Arrive City <span className="text-danger">*</span>
                           </Form.Label>
                           <Form.Group className="mb-3">
                             <SearchableSelect
@@ -2084,18 +2387,48 @@ const PackageReg = () => {
 
                         <Form.Group className="mb-3">
                           <Form.Label>Overview</Form.Label>
-                          <Form.Control
-                            as="textarea"
-                            rows={4}
-                            placeholder="Enter package overview"
-                            value={formData.overview}
-                            onChange={(e) =>
-                              setFormData((prev) => ({
-                                ...prev,
-                                overview: e.target.value,
-                              }))
-                            }
-                          />
+                          {/* Made rows 10 and vertically resizable so a
+                              long overview (10-20 lines) is visible in the
+                              field itself instead of being clipped to 4
+                              rows. Users can drag the resize handle to
+                              expand further if needed. Max cap is 10,000
+                              characters (matches the TEXT column on the
+                              backend and stops runaway paste). */}
+                          {(() => {
+                            const OVERVIEW_MAX = 10000;
+                            const overviewLen = (formData.overview || "").length;
+                            const overviewWords = (formData.overview || "")
+                              .trim()
+                              .split(/\s+/)
+                              .filter(Boolean).length;
+                            const nearCap = overviewLen > OVERVIEW_MAX * 0.9;
+                            return (
+                              <>
+                                <Form.Control
+                                  as="textarea"
+                                  rows={10}
+                                  style={{ resize: "vertical", minHeight: "200px" }}
+                                  placeholder="Enter package overview"
+                                  value={formData.overview}
+                                  maxLength={OVERVIEW_MAX}
+                                  onChange={(e) =>
+                                    setFormData((prev) => ({
+                                      ...prev,
+                                      overview: e.target.value.slice(0, OVERVIEW_MAX),
+                                    }))
+                                  }
+                                />
+                                <div className="d-flex justify-content-between mt-1">
+                                  <small className="text-muted">
+                                    {overviewWords} words • drag corner to enlarge
+                                  </small>
+                                  <small className={nearCap ? "text-danger fw-semibold" : "text-muted"}>
+                                    {overviewLen} / {OVERVIEW_MAX} characters
+                                  </small>
+                                </div>
+                              </>
+                            );
+                          })()}
                         </Form.Group>
                         <Form.Group className="mb-3">
                           <Form.Label>
@@ -2161,16 +2494,35 @@ const PackageReg = () => {
                     <Card key={index} className="mb-3">
                       <Card.Header className="d-flex justify-content-between align-items-center">
                         <h6 className="mb-0">Day {day.day}</h6>
-                        {packageItinearyDTOList.length > 1 && (
-                          <Button
-                            variant="outline-danger"
-                            size="sm"
-                            onClick={() => removeItineraryDay(index)}
-                          >
-                            <FaTrash className="me-1" />
-                            Remove
-                          </Button>
-                        )}
+                        {/* Card-level actions: Add Day is duplicated on
+                            every card so a user filling in a large Day
+                            (e.g. Day 3 with a 20-line activities block)
+                            can add Day 4 without scrolling back to the
+                            top-of-tab button. Same handler as the top one.
+                            Only shown when not in view-mode. */}
+                        <div className="d-flex gap-2">
+                          {!isViewMode && (
+                            <Button
+                              variant="outline-primary"
+                              size="sm"
+                              onClick={addItineraryDay}
+                              title="Add another day"
+                            >
+                              <FaPlus className="me-1" />
+                              Add Day
+                            </Button>
+                          )}
+                          {packageItinearyDTOList.length > 1 && (
+                            <Button
+                              variant="outline-danger"
+                              size="sm"
+                              onClick={() => removeItineraryDay(index)}
+                            >
+                              <FaTrash className="me-1" />
+                              Remove
+                            </Button>
+                          )}
+                        </div>
                       </Card.Header>
                       <Card.Body>
                         <Row>
@@ -2217,10 +2569,17 @@ const PackageReg = () => {
                           </Col>
                           <Col md={6}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Heading</Form.Label>
+                              {/* Dynamic label: "Heading of Day 01",
+                                  "Heading of Day 02" — matches the day
+                                  number shown in the card header so users
+                                  always know which day this heading is
+                                  for. Day is zero-padded to 2 digits. */}
+                              <Form.Label>
+                                Heading of Day {String(day.day).padStart(2, "0")}
+                              </Form.Label>
                               <Form.Control
                                 type="text"
-                                placeholder="Enter heading"
+                                placeholder={`Enter heading for Day ${String(day.day).padStart(2, "0")}`}
                                 value={day.heading}
                                 onChange={(e) =>
                                   updateItineraryDay(
@@ -2234,13 +2593,18 @@ const PackageReg = () => {
                           </Col>
                         </Row>
                         <Row>
-                          <Col md={6}>
+                          {/* Day Activities takes the full row now (md=12)
+                              so 15-20 lines of activity text is readable
+                              inside the field. Rows raised to 8 and the
+                              user can drag-resize vertically. */}
+                          <Col md={12}>
                             <Form.Group className="mb-3">
                               <Form.Label>Day Activities</Form.Label>
                               <Form.Control
                                 as="textarea"
-                                rows={3}
-                                placeholder="Enter day activities"
+                                rows={8}
+                                style={{ resize: "vertical", minHeight: "180px" }}
+                                placeholder="Enter day activities (use multiple lines for a detailed itinerary)"
                                 value={day.dayActivities}
                                 onChange={(e) =>
                                   updateItineraryDay(
@@ -2250,9 +2614,14 @@ const PackageReg = () => {
                                   )
                                 }
                               />
+                              <small className="text-muted">
+                                {(day.dayActivities || "").length} characters
+                              </small>
                             </Form.Group>
                           </Col>
-                          <Col md={6}>
+                        </Row>
+                        <Row>
+                          <Col md={12}>
                             <Form.Group className="mb-3">
                               <Form.Label>Day Image</Form.Label>
                               <Form.Control
@@ -2321,55 +2690,17 @@ const PackageReg = () => {
                     </span>
                   }
                 >
-                  {validationErrors.others && (
-                    <div className="alert alert-danger mb-3">
-                      <i className="fas fa-exclamation-triangle me-2"></i>
-                      {validationErrors.others}
-                    </div>
-                  )}
-                  <h6>Inclusion</h6>
-                  <div style={{ maxHeight: "400px", overflowY: "auto" }}>
-                    {isLoadingTerms ? (
-                      <div className="text-center text-muted">
-                        Loading inclusions...
-                      </div>
-                    ) : (
-                      (() => {
-                        const inclusions = packageOthersDTOList.filter(
-                          (other) => other.descriptionType === 1
-                        );
-                        if (inclusions.length === 0) {
-                          return (
-                            <div className="text-muted">No inclusions available</div>
-                          );
-                        }
-                        return inclusions.map((other, index) => (
-                          <FormCheck
-                            key={other.otherId}
-                            type="checkbox"
-                            label={other.type || `Inclusion ${index + 1}`}
-                            checked={!other.isDeleted}
-                            onChange={(e) => {
-                              const updatedOthers = packageOthersDTOList.map(
-                                (item) =>
-                                  item.otherId === other.otherId
-                                    ? { ...item, isDeleted: !e.target.checked }
-                                    : item
-                              );
-                              setPackageOthersDTOList(updatedOthers);
-                              if (validationErrors.others) {
-                                setValidationErrors((prev) => ({
-                                  ...prev,
-                                  others: undefined,
-                                }));
-                              }
-                            }}
-                            disabled={isViewMode}
-                          />
-                        ));
-                      })()
-                    )}
-                  </div>
+                  {renderOthersBucket({
+                    bucketType: 1,
+                    heading: "Inclusions",
+                    emptyText: "No master inclusions available",
+                    customList: customInclusions,
+                    setCustomList: setCustomInclusions,
+                    draft: inclusionDraft,
+                    setDraft: setInclusionDraft,
+                    addPlaceholder:
+                      "Type a custom inclusion (up to 20+ lines) and click Add",
+                  })}
                 </Tab>
 
                 <Tab
@@ -2383,55 +2714,17 @@ const PackageReg = () => {
                     </span>
                   }
                 >
-                  {validationErrors.others && (
-                    <div className="alert alert-danger mb-3">
-                      <i className="fas fa-exclamation-triangle me-2"></i>
-                      {validationErrors.others}
-                    </div>
-                  )}
-                  <h6>Exclusion</h6>
-                  <div style={{ maxHeight: "400px", overflowY: "auto" }}>
-                    {isLoadingTerms ? (
-                      <div className="text-center text-muted">
-                        Loading exclusions...
-                      </div>
-                    ) : (
-                      (() => {
-                        const exclusions = packageOthersDTOList.filter(
-                          (other) => other.descriptionType === 2
-                        );
-                        if (exclusions.length === 0) {
-                          return (
-                            <div className="text-muted">No exclusions available</div>
-                          );
-                        }
-                        return exclusions.map((other, index) => (
-                          <FormCheck
-                            key={other.otherId}
-                            type="checkbox"
-                            label={other.type || `Exclusion ${index + 1}`}
-                            checked={!other.isDeleted}
-                            onChange={(e) => {
-                              const updatedOthers = packageOthersDTOList.map(
-                                (item) =>
-                                  item.otherId === other.otherId
-                                    ? { ...item, isDeleted: !e.target.checked }
-                                    : item
-                              );
-                              setPackageOthersDTOList(updatedOthers);
-                              if (validationErrors.others) {
-                                setValidationErrors((prev) => ({
-                                  ...prev,
-                                  others: undefined,
-                                }));
-                              }
-                            }}
-                            disabled={isViewMode}
-                          />
-                        ));
-                      })()
-                    )}
-                  </div>
+                  {renderOthersBucket({
+                    bucketType: 2,
+                    heading: "Exclusions",
+                    emptyText: "No master exclusions available",
+                    customList: customExclusions,
+                    setCustomList: setCustomExclusions,
+                    draft: exclusionDraft,
+                    setDraft: setExclusionDraft,
+                    addPlaceholder:
+                      "Type a custom exclusion (up to 20+ lines) and click Add",
+                  })}
                 </Tab>
 
                 <Tab
@@ -2439,11 +2732,18 @@ const PackageReg = () => {
                   title={
                     <span>
                       Policy Details
+                      {validationErrors.others && (
+                        <span className="text-danger ms-1" title="Has errors">!</span>
+                      )}
                     </span>
                   }
                 >
-                  <div style={{ maxHeight: "400px", overflowY: "auto" }}>
-                    {/* Validity List */}
+                  <div style={{ maxHeight: "500px", overflowY: "auto" }}>
+                    {/* Validity List — uses the shared DateTimeApplyPicker
+                        (same OK-gated calendar as the Occupancy & Minimum
+                        Length page). normalisePolicyDateTime maps the
+                        backend-shaped string into the "YYYY-MM-DDTHH:mm"
+                        the picker consumes. */}
                     <div className="mb-4">
                       <h6 className="fw-bold text-dark mb-3">Validity List</h6>
                       {packageValidityDTOList.map((v, index) => (
@@ -2452,29 +2752,32 @@ const PackageReg = () => {
                             <Form.Label className="small text-secondary">
                               Validity From
                             </Form.Label>
-                            <Form.Control
-                              type="datetime-local"
-                              className="rounded-3"
+                            <DateTimeApplyPicker
                               value={normalisePolicyDateTime(v.validityFrom)}
-                              onChange={(e) =>
-                                updateValidity(index, "validityFrom", e.target.value)
-                              }
                               disabled={isViewMode}
+                              onApply={(val) => {
+                                updateValidity(index, "validityFrom", val);
+                                // Clear Validity To if it is now on/before the new From
+                                const to = packageValidityDTOList[index]?.validityTo;
+                                if (to && val && new Date(normalisePolicyDateTime(to)) <= new Date(val)) {
+                                  updateValidity(index, "validityTo", "");
+                                }
+                              }}
                             />
                           </Col>
                           <Col md={5}>
                             <Form.Label className="small text-secondary">
-                              Validity To
+                              Validity Date Include
                             </Form.Label>
-                            <Form.Control
-                              type="datetime-local"
-                              className="rounded-3"
+                            <DateTimeApplyPicker
                               value={normalisePolicyDateTime(v.validityTo)}
-                              min={getMinValidityToDate(v.validityFrom)}
-                              onChange={(e) =>
-                                updateValidity(index, "validityTo", e.target.value)
-                              }
                               disabled={isViewMode}
+                              minDate={
+                                v.validityFrom
+                                  ? parseLocalDateTime(normalisePolicyDateTime(v.validityFrom))
+                                  : undefined
+                              }
+                              onApply={(val) => updateValidity(index, "validityTo", val)}
                             />
                           </Col>
                           <Col md={2} className="text-end">
@@ -2585,85 +2888,78 @@ const PackageReg = () => {
                         </Row>
                       ))}
                     </div>
-                  </div>
-                </Tab>
 
-                <Tab
-                  eventKey="terms"
-                  title={
-                    <span>
-                      Terms and Conditions
-                      {validationErrors.others && (
-                        <span className="text-danger ms-1" title="Has errors">!</span>
-                      )}
-                    </span>
-                  }
-                >
-                  {validationErrors.others && (
-                    <div className="alert alert-danger mb-3">
-                      <i className="fas fa-exclamation-triangle me-2"></i>
-                      {validationErrors.others}
+                    {/* Terms & Conditions — moved here from its own tab
+                        per client request. Same master-checklist + custom
+                        entry pattern used by Inclusions/Exclusions, just
+                        rendered inline under Policy Details. */}
+                    <div className="border-top pt-4 mt-4">
+                      {renderOthersBucket({
+                        bucketType: 3,
+                        heading: "Terms & Conditions",
+                        emptyText: "No master terms & conditions available",
+                        customList: customTerms,
+                        setCustomList: setCustomTerms,
+                        draft: termsDraft,
+                        setDraft: setTermsDraft,
+                        addPlaceholder:
+                          "Type a custom term or condition (up to 20+ lines) and click Add",
+                      })}
                     </div>
-                  )}
-                  <h6>Terms and Conditions</h6>
-                  <div style={{ maxHeight: "400px", overflowY: "auto" }}>
-                    {isLoadingTerms ? (
-                      <div className="text-center text-muted">
-                        Loading terms & conditions...
-                      </div>
-                    ) : (
-                      (() => {
-                        const terms = packageOthersDTOList.filter(
-                          (other) => other.descriptionType === 3
-                        );
-                        if (terms.length === 0) {
-                          return (
-                            <div className="text-muted">
-                              No terms and conditions available
-                            </div>
-                          );
-                        }
-                        return terms.map((other, index) => (
-                          <FormCheck
-                            key={other.otherId}
-                            type="checkbox"
-                            label={other.type || `Terms ${index + 1}`}
-                            checked={!other.isDeleted}
-                            onChange={(e) => {
-                              const updatedOthers = packageOthersDTOList.map(
-                                (item) =>
-                                  item.otherId === other.otherId
-                                    ? { ...item, isDeleted: !e.target.checked }
-                                    : item
-                              );
-                              setPackageOthersDTOList(updatedOthers);
-                              if (validationErrors.others) {
-                                setValidationErrors((prev) => ({
-                                  ...prev,
-                                  others: undefined,
-                                }));
-                              }
-                            }}
-                            disabled={isViewMode}
-                          />
-                        ));
-                      })()
-                    )}
                   </div>
                 </Tab>
               </Tabs>
             </Modal.Body>
-            <Modal.Footer>
+            <Modal.Footer className="d-flex justify-content-between">
               <Button variant="danger" onClick={closeModal}>
                 <i className="fas fa-times me-2"></i>
                 {isViewMode ? "Close" : "Cancel"}
               </Button>
-              {!isViewMode && (
-                <Button variant="success" onClick={editing ? handleUpdatePackage : handleSave}>
-                  <i className="fas fa-arrow-right me-2"></i>
-                  {editing ? "Update" : "Create"}
+
+              {/* Wizard nav: Previous is always visible when not on the
+                  first tab; Next on any tab that isn't the last; the
+                  final submit (Create / Update) only appears on the last
+                  tab. In view mode we skip the submit but still expose
+                  Previous/Next so users can navigate through the tabs. */}
+              <div className="d-flex gap-2">
+                <Button
+                  variant="outline-secondary"
+                  onClick={goPrevTab}
+                  disabled={isFirstTab}
+                >
+                  <FaArrowLeft className="me-2" /> Previous
                 </Button>
-              )}
+
+                {!isLastTab && (
+                  <Button variant="primary" onClick={goNextTab}>
+                    Next <FaArrowRight className="ms-2" />
+                  </Button>
+                )}
+
+                {isLastTab && !isViewMode && (
+                  <Button
+                    variant="success"
+                    onClick={editing ? handleUpdatePackage : handleSave}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? (
+                      <>
+                        <span
+                          className="spinner-border spinner-border-sm me-2"
+                          role="status"
+                          aria-hidden="true"
+                        ></span>
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <FaCheck className="me-2" />
+                        {editing ? "Update Package" : "Confirm & Create"}
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             </Modal.Footer>
           </Modal>
 
