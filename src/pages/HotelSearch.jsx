@@ -7,6 +7,7 @@ import {
   Form,
   Pagination,
   Spinner,
+  FormControl,
 } from "react-bootstrap";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
@@ -16,7 +17,7 @@ import AgentCreditBalance from "../components/AgentCreditBalance";
 import axiosInstance from "../components/AxiosInstance";
 import AdvertisementCarousel from "../components/AdvertisementCarousel";
 import TimeApplyPicker from "../components/TimeApplyPicker";
-import RateCalendar from "../components/RateCalendar";
+import DateInput from "../components/DateInput";
 import MapModal from "../components/map/MapModal";
 import { ENABLE_MAP_PREVIEW } from "../config/featureFlags";
 import { FaSearch, FaStar, FaInfoCircle } from "react-icons/fa";
@@ -2133,7 +2134,7 @@ export default function HotelSearch({
                       <Form.Label className="fw-semibold text-dark">
                         Check-In
                       </Form.Label>
-                      <RateCalendar
+                      <DateInput
                         value={checkIn}
                         min={today}
                         stateId={selectedDestination?.value}
@@ -2191,7 +2192,8 @@ export default function HotelSearch({
                       <Form.Label className="fw-semibold text-dark">
                         Check-Out
                       </Form.Label>
-                      <RateCalendar
+                      <DateInput
+                    
                         value={checkOut}
                         min={minCheckOutDate}
                         stateId={selectedDestination?.value}

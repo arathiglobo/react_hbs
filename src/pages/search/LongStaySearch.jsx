@@ -16,7 +16,7 @@ import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import AgentSelect from "../../components/AgentSelect";
 import AdvertisementCarousel from "../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../components/AgentCreditBalance";
-import RateCalendar from "../../components/RateCalendar";
+import DateInput from "../../components/DateInput";
 import { FaSearch, FaStar } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import "../../styles/HotelSearch.css";
@@ -1241,7 +1241,7 @@ export default function LongStaySearch() {
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Check-in</Form.Label>
-                      <RateCalendar
+                      <DateInput
                         value={checkIn}
                         min={today}
                         stateId={selectedDestination?.value}
@@ -1342,7 +1342,7 @@ export default function LongStaySearch() {
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Check-out</Form.Label>
-                      <RateCalendar
+                      <DateInput
                         value={checkOut}
                         min={minCheckOutDate}
                         stateId={selectedDestination?.value}

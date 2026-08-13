@@ -40,7 +40,7 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
-import RateCalendar from "../../../components/RateCalendar";
+import DateInput from "../../../components/DateInput";
 
 const SPACE_TYPES = [
   "",
@@ -578,7 +578,7 @@ export default function MeetAndSpaceSearch() {
                       <Form.Label className="fw-semibold text-dark">
                         Booking Date
                       </Form.Label>
-                      <RateCalendar
+                      <DateInput
                         value={bookingDate}
                         onChange={(v) => {
                           setBookingDate(v);

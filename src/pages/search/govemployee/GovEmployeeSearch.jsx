@@ -31,7 +31,7 @@ import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
-import RateCalendar from "../../../components/RateCalendar";
+import DateInput from "../../../components/DateInput";
 import "../../../styles/HotelSearch.css";
 
 // ─────────────────────────────────────────────
@@ -1068,7 +1068,7 @@ export default function GovEmployeeSearch() {
                       <Form.Label className="fw-semibold text-dark">
                         Check-In
                       </Form.Label>
-                      <RateCalendar
+                      <DateInput
                         value={checkIn}
                         min={today}
                         stateId={selectedDestination?.value}
@@ -1122,7 +1122,7 @@ export default function GovEmployeeSearch() {
                       <Form.Label className="fw-semibold text-dark">
                         Check-Out
                       </Form.Label>
-                      <RateCalendar
+                      <DateInput
                         value={checkOut}
                         min={minCheckOutDate}
                         stateId={selectedDestination?.value}

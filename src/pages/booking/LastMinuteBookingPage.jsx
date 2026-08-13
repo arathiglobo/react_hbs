@@ -17,7 +17,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import AdvertisementCarousel from "../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../components/AgentCreditBalance";
-import RateCalendar from "../../components/RateCalendar";
+import DateInput from "../../components/DateInput";
 import { FaSearch, FaStar, FaMapMarkerAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
@@ -782,7 +782,7 @@ export default function LastMinuteBookingPage() {
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Check-in</Form.Label>
-                      <RateCalendar
+                      <DateInput
                         value={checkIn}
                         onChange={(v) => {
                           setCheckIn(v);
@@ -821,7 +821,7 @@ export default function LastMinuteBookingPage() {
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Check-out</Form.Label>
-                      <RateCalendar
+                      <DateInput
                         value={checkOut}
                         onChange={(v) => {
                           setCheckOut(v);

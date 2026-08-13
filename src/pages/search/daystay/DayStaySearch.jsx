@@ -17,7 +17,7 @@ import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
-import RateCalendar from "../../../components/RateCalendar";
+import DateInput from "../../../components/DateInput";
 import "../../../styles/HotelSearch.css";
 
 // ─────────────────────────────────────────────
@@ -948,7 +948,7 @@ export default function DayStaySearch() {
                       <Form.Label className="fw-semibold text-dark">
                         Check-in Date
                       </Form.Label>
-                      <RateCalendar
+                      <DateInput
                         value={checkInDate}
                         onChange={(v) => {
                           setCheckInDate(v);
