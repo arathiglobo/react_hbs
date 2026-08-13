@@ -259,6 +259,16 @@ export default function DayStayBookingDetailView() {
   // convention.
   const activeUserRole = localStorage.getItem("currentActiveRole");
   const isAdmin = String(activeUserRole || "").toUpperCase() === "ADMIN";
+  const isSuperAdmin =
+    String(activeUserRole || "").toUpperCase() === "SUPER_ADMIN";
+  // Confirming an On-Request booking (step 1 of the two-step flow — moves
+  // the row from tentative to "On Request/Confirmed") is a supplier-facing
+  // action agents must not perform on their own. Admin / super-admin keep
+  // full control. Reconfirming a NON-On-Request booking (or step 2 of the
+  // On Request flow after admin already confirmed step 1) is unaffected
+  // — agents still see the RECONFIRM button. Mirrors the identical gate
+  // on BookingDetailedView / LongStayBookingDetailView.
+  const canConfirmOnRequest = isAdmin || isSuperAdmin;
   // Agent-role gate (UI visibility only) — hides internal/admin-facing actions
   // (Booking Remark, Notes, Confirmation No.) for Agent logins.
   // currentActiveRole isn't set for single-role logins, so fall back to
@@ -617,7 +627,19 @@ export default function DayStayBookingDetailView() {
   })();
 
   // ── Reconfirm ──────────────────────────────────────────────────────
-  const openConfirmModal = () => setShowConfirmModal(true);
+  // The button that calls this is already role-gated (see
+  // canConfirmOnRequest); this second check is defence-in-depth so a
+  // future caller / devtools-forged click can't sneak past the same rule.
+  // Backend authorisation still owns the real enforcement.
+  const openConfirmModal = () => {
+    if (isOnRequestPending && !canConfirmOnRequest) {
+      toast.error(
+        "Only admin or super-admin can confirm an On Request booking.",
+      );
+      return;
+    }
+    setShowConfirmModal(true);
+  };
 
   // Actual reconfirm API call. Split out (mirrors BookingDetailedView)
   // so the same call can be made from (a) the Reconfirm modal's Confirm
@@ -1041,10 +1063,17 @@ export default function DayStayBookingDetailView() {
   const bookingHistory = (() => {
     if (!selected) return [];
     const events = [];
+    // Each event carries the resulting booking status right after that
+    // action ran — surfaced in the new "Status" column so the History
+    // modal reads as a lifecycle timeline (Confirmed → ReConfirmed →
+    // Cancelled) instead of a bare action log. Mirrors the identical
+    // treatment on BookingDetailedView / LongStayBookingDetailView.
+    const createdRowStatus = isOnRequestRoom ? "On Request" : "Confirmed";
     const createdTs = selected.createdAt || selected.bookingDate;
     if (createdTs) {
       events.push({
         action: "Booking Created",
+        status: createdRowStatus,
         at: createdTs,
         by: creatorLabel,
         // Captured at create time only — later lifecycle rows show "-".
@@ -1059,6 +1088,10 @@ export default function DayStayBookingDetailView() {
     if (confirmedTs) {
       events.push({
         action: "Booking Confirmed",
+        // For an On Request row the "Confirmed" action is the step-1
+        // supplier acknowledgement, so the status label reads
+        // "On Request/Confirmed" to preserve the on-request origin.
+        status: isOnRequestRoom ? "On Request/Confirmed" : "Confirmed",
         at: confirmedTs,
         by: selected.confirmedBy || "-",
         // Per-action audit. Bookings confirmed at create time copy the create
@@ -1072,6 +1105,9 @@ export default function DayStayBookingDetailView() {
     if (reconfirmedTs) {
       events.push({
         action: "Booking Reconfirmed",
+        status: isOnRequestRoom
+          ? "On Request/Confirmed/Reconfirmed"
+          : "ReConfirmed",
         at: reconfirmedTs,
         by: selected.reconfirmedBy || "-",
         location: selected.reconfirmedLocation,
@@ -1082,6 +1118,7 @@ export default function DayStayBookingDetailView() {
     if (cancelTs) {
       events.push({
         action: "Booking Cancelled",
+        status: "Cancelled",
         at: cancelTs,
         by: selected.cancelledBy || "-",
         location: selected.cancelledLocation,
@@ -1845,30 +1882,34 @@ export default function DayStayBookingDetailView() {
                     </button>
                   )}
 
-                  {!showsFinalDocs && !isCancelledStatus && (
-                    <button
-                      style={{
-                        ...(isOnRequestPending ? BTN_SUCCESS : BTN_TEAL),
-                        opacity: isPastCheckIn ? 0.55 : 1,
-                        cursor: isPastCheckIn ? "not-allowed" : "pointer",
-                      }}
-                      onClick={openConfirmModal}
-                      disabled={isPastCheckIn}
-                      title={
-                        isPastCheckIn
-                          ? (isOnRequestPending
-                              ? "Confirmation is not allowed after the check-in date."
-                              : "Reconfirmation is not allowed after the check-in date.")
-                          : undefined
-                      }
-                    >
-                      {/* An On-Request booking hasn't been confirmed yet, so
-                          the first action is CONFIRM. Once confirmed it
-                          behaves like a normal Confirmed booking →
-                          RECONFIRM. */}
-                      {isOnRequestPending ? "CONFIRM" : "RECONFIRM"}
-                    </button>
-                  )}
+                  {!showsFinalDocs &&
+                    !isCancelledStatus &&
+                    !(isOnRequestPending && !canConfirmOnRequest) && (
+                      <button
+                        style={{
+                          ...(isOnRequestPending ? BTN_SUCCESS : BTN_TEAL),
+                          opacity: isPastCheckIn ? 0.55 : 1,
+                          cursor: isPastCheckIn ? "not-allowed" : "pointer",
+                        }}
+                        onClick={openConfirmModal}
+                        disabled={isPastCheckIn}
+                        title={
+                          isPastCheckIn
+                            ? (isOnRequestPending
+                                ? "Confirmation is not allowed after the check-in date."
+                                : "Reconfirmation is not allowed after the check-in date.")
+                            : undefined
+                        }
+                      >
+                        {/* An On-Request booking hasn't been confirmed yet,
+                            so the first action is CONFIRM. Once confirmed
+                            it behaves like a normal Confirmed booking →
+                            RECONFIRM. Agents don't get to see this action
+                            for On Request bookings — only admin / super-
+                            admin do; see canConfirmOnRequest above. */}
+                        {isOnRequestPending ? "CONFIRM" : "RECONFIRM"}
+                      </button>
+                    )}
 
                   {/* Proforma Voucher / Invoice — pre-finalised state, and
                       not available while On-Request is still pending. */}
@@ -3012,12 +3053,13 @@ export default function DayStayBookingDetailView() {
                   <tr style={{ backgroundColor: "#f1f5f9" }}>
                     {[
                       { label: "S/N", width: "5%" },
-                      { label: "Action", width: "17%" },
-                      { label: "Performed By", icon: FaUserAlt, width: "13%" },
-                      { label: "Location", icon: FaMapMarkerAlt, width: "30%" },
-                      { label: "IP Address", icon: FaNetworkWired, width: "14%" },
+                      { label: "Action", width: "15%" },
+                      { label: "Status", width: "12%" },
+                      { label: "Performed By", icon: FaUserAlt, width: "11%" },
+                      { label: "Location", icon: FaMapMarkerAlt, width: "24%" },
+                      { label: "IP Address", icon: FaNetworkWired, width: "13%" },
                       { label: "Date", icon: FaCalendarAlt, width: "11%" },
-                      { label: "Time", icon: FaClock, width: "10%" },
+                      { label: "Time", icon: FaClock, width: "9%" },
                     ].map((col) => (
                       <th
                         key={col.label}
@@ -3074,6 +3116,39 @@ export default function DayStayBookingDetailView() {
                             <ActionIcon size={10} style={{ flexShrink: 0 }} />
                             {evt.action}
                           </span>
+                        </td>
+                        {/* Status column — the resulting booking state right
+                            after this action. Colour-coded so a timeline
+                            glance conveys the progression: green for
+                            confirmed / reconfirmed / on-request-confirmed,
+                            amber for the original on-request state, red for
+                            cancelled, slate for anything unrecognised.
+                            Mirrors the identical treatment on
+                            BookingDetailedView / LongStayBookingDetailView. */}
+                        <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>
+                          {(() => {
+                            const raw = String(evt.status || "").trim();
+                            if (!raw) return <span style={{ color: "#94a3b8" }}>-</span>;
+                            const lower = raw.toLowerCase();
+                            const color = lower.includes("cancel")
+                              ? "#dc2626"
+                              : lower === "on request"
+                                ? "#d97706"
+                                : "#16a34a";
+                            return (
+                              <span
+                                style={{
+                                  color,
+                                  fontWeight: 600,
+                                  fontSize: "0.78rem",
+                                  whiteSpace: "normal",
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                {raw}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>{evt.by || "-"}</td>
                         <td

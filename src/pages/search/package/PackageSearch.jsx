@@ -1728,7 +1728,7 @@ const PackageSearch = () => {
                                           {pkg.rate}
                                         </span>
                                         <span className="price-unit">
-                                          /{pkg.rateType}
+                                          Package Base Rate / {pkg.rateType}
                                         </span>
                                       </div>
                                       <div className="package-actions d-flex align-items-center gap-2">
@@ -1740,7 +1740,7 @@ const PackageSearch = () => {
                                           aria-label="View package details"
                                           onClick={() => handleView(pkg.packageId)}
                                         >
-                                          <FaEye size={14} />
+                                         View
                                         </Button>
                                         <Button
                                           variant="primary"
@@ -1748,7 +1748,7 @@ const PackageSearch = () => {
                                           className="pkg-book-btn rounded-pill fw-bold"
                                           onClick={() => handleBookNow(pkg)}
                                         >
-                                          View Package
+                                         Book
                                         </Button>
                                       </div>
                                     </div>

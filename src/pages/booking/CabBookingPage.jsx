@@ -662,6 +662,9 @@ const CabBookingPage = () => {
 
   // Payable used for the sufficiency check — matches the amount that
   // will actually be charged on Confirm (base + tourism dirham + HQ).
+  // Declared unconditionally (before the !hasValidState early return below)
+  // — React Hooks must run in the same order on every render, so useMemo /
+  // useEffect can never sit after a conditional return.
   const bookingPayable = useMemo(() => {
     const tdNum =
       tourismDirham !== "" && !isNaN(Number(tourismDirham))
@@ -696,9 +699,6 @@ const CabBookingPage = () => {
     }
     return [{ value: "CREDIT", label: "Credit Limit" }];
   }, [hasSufficientCredit, agentCardPaymentEnabled]);
-
-  const noPaymentPathAvailable =
-    hasSufficientCredit === false && !agentCardPaymentEnabled;
 
   // Keep paymentMode valid for whatever option set is currently active —
   // when the sufficiency flips (e.g. HQ amount pushes the total past the
@@ -735,6 +735,9 @@ const CabBookingPage = () => {
       </div>
     );
   }
+
+  const noPaymentPathAvailable =
+    hasSufficientCredit === false && !agentCardPaymentEnabled;
 
   const handlePriceChange = (field, value) => {
     setPrices((prev) => ({ ...prev, [field]: value }));
