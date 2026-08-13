@@ -225,6 +225,9 @@ const PackageReg = () => {
     arrivePlace: [],
     overview: "",
     noOfNights: "1",
+    // Free-text notes captured on the "Information on Package" tab.
+    // Persisted as packages.package_information (TEXT) on the backend.
+    packageInformation: "",
   });
 
   // Additional state for itinerary and others
@@ -271,9 +274,10 @@ const PackageReg = () => {
 
   // Controlled active tab so Next/Previous buttons and direct tab clicks
   // move through the wizard in a single, known order. The order is
-  // basic → itinerary → inclusions → exclusions → policyDetails.
-  // The Confirm button only shows on the final tab (policyDetails).
-  const TAB_ORDER = ["basic", "itinerary", "inclusions", "exclusions", "policyDetails"];
+  // basic → itinerary → inclusions → exclusions → policyDetails →
+  // packageInformation. Confirm button only shows on the final tab
+  // (packageInformation).
+  const TAB_ORDER = ["basic", "itinerary", "inclusions", "exclusions", "policyDetails", "packageInformation"];
   const [activeTab, setActiveTab] = useState("basic");
 
   // Free-text custom entries per bucket. The master-picked entries live
@@ -426,6 +430,7 @@ const PackageReg = () => {
       placeId: "",
       overview: "",
       noOfNights: "1",
+      packageInformation: "",
     });
     setPackageItinearyDTOList([
       {
@@ -525,6 +530,10 @@ const PackageReg = () => {
     formDataPayload.append("packageCode", formData.packageCode);
     formDataPayload.append("noOfNights", formData.noOfNights);
     formDataPayload.append("overview", formData.overview || "");
+    // Free-text notes from the "Information on Package" tab. Always
+    // sent (empty string when unset) so an edit that cleared the field
+    // is persisted rather than skipped by the backend's null check.
+    formDataPayload.append("packageInformation", formData.packageInformation || "");
     // Currency + Basic Rate are hidden fields now — the backend columns
     // still exist so we send whatever value is on the form (blank on
     // create, unchanged on edit). Nothing new to validate for.
@@ -1017,6 +1026,7 @@ const PackageReg = () => {
         placeId: Array.isArray(data.arrivePlace) && data.arrivePlace.length > 0 ? data.arrivePlace[0] : (data.placeId || ""),
         overview: data.overview || "",
         noOfNights: data.noOfNights || "1",
+        packageInformation: data.packageInformation || "",
       });
 
       // Load places for the selected country
@@ -1498,41 +1508,54 @@ const PackageReg = () => {
         <h6 className="fw-bold mb-3">{heading}</h6>
 
         {/* Master checklist — same behaviour as before: tick a row to
-            keep it on the package, untick to soft-delete. */}
-        <div className="mb-3" style={{ maxHeight: "260px", overflowY: "auto" }}>
-          {isLoadingTerms ? (
-            <div className="text-center text-muted">Loading...</div>
-          ) : masterRows.length === 0 ? (
-            <div className="text-muted small">{emptyText}</div>
-          ) : (
-            masterRows.map((other, index) => (
-              <FormCheck
-                key={other.otherId}
-                type="checkbox"
-                label={other.type || `${heading} ${index + 1}`}
-                checked={!other.isDeleted}
-                onChange={(e) => {
-                  const updated = packageOthersDTOList.map((item) =>
-                    item.otherId === other.otherId
-                      ? { ...item, isDeleted: !e.target.checked }
-                      : item
-                  );
-                  setPackageOthersDTOList(updated);
-                  clearOthersError();
-                }}
-                disabled={isViewMode}
-              />
-            ))
-          )}
-        </div>
+            keep it on the package, untick to soft-delete.
+            Hidden for ALL three sections (Inclusions, Exclusions, and
+            Terms & Conditions) per client request. Kept in code (not
+            deleted) so it can be reinstated later by flipping the
+            condition below back to `true` or `bucketType === 3`. */}
+        {false && (
+          <div className="mb-3" style={{ maxHeight: "260px", overflowY: "auto" }}>
+            {isLoadingTerms ? (
+              <div className="text-center text-muted">Loading...</div>
+            ) : masterRows.length === 0 ? (
+              <div className="text-muted small">{emptyText}</div>
+            ) : (
+              masterRows.map((other, index) => (
+                <FormCheck
+                  key={other.otherId}
+                  type="checkbox"
+                  label={other.type || `${heading} ${index + 1}`}
+                  checked={!other.isDeleted}
+                  onChange={(e) => {
+                    const updated = packageOthersDTOList.map((item) =>
+                      item.otherId === other.otherId
+                        ? { ...item, isDeleted: !e.target.checked }
+                        : item
+                    );
+                    setPackageOthersDTOList(updated);
+                    clearOthersError();
+                  }}
+                  disabled={isViewMode}
+                />
+              ))
+            )}
+          </div>
+        )}
 
         {/* Custom entries — visible in view mode too so users can see
-            what a package contains, but only editable when not viewing. */}
+            what a package contains, but only editable when not viewing.
+            The "Custom {heading} (N)" title and the "No custom entries
+            added yet." empty-state line are hidden for ALL three
+            sections (Inclusions, Exclusions, and Terms & Conditions)
+            per client request. Kept in code (not deleted) so they can
+            be reinstated later by flipping the conditions below. */}
         <div className="border-top pt-3 mt-3">
-          <div className="fw-semibold small mb-2">
-            Custom {heading} ({customList.length})
-          </div>
-          {customList.length === 0 && (
+          {false && (
+            <div className="fw-semibold small mb-2">
+              Custom {heading} ({customList.length})
+            </div>
+          )}
+          {false && customList.length === 0 && (
             <div className="text-muted small mb-2">
               No custom entries added yet.
             </div>
@@ -1661,7 +1684,7 @@ const PackageReg = () => {
                     <th style={{ width: 100 }}>S/N</th>
                     <th>Package Name</th>
                     <th>Package Code</th>
-                    <th>Basic Rate</th>
+                    {/* <th>Basic Rate</th> */}
                     <th>No of Nights</th>
                     <th>Status</th>
                     <th style={{ width: 380 }}>Actions</th>
@@ -1674,7 +1697,7 @@ const PackageReg = () => {
                       <td>{index + 1 + page * 10}</td>
                       <td>{item.packageName || "N/A"}</td>
                       <td>{item.packageCode || "N/A"}</td>
-                      <td>{item.packageBasicRate || "N/A"}</td>
+                      {/* <td>{item.packageBasicRate || "N/A"}</td> */}
                       <td>{item.noOfNights || "N/A"}</td>
                       <td>
                         <span
@@ -1690,61 +1713,58 @@ const PackageReg = () => {
                         </span>
                       </td>
                       <td>
-                        {/* Action row: icon-only clicks were hard to
-                            read at a glance. Each control is now a
-                            labelled outline button (icon + text) so the
-                            user can identify View / Edit / Copy / Rates /
-                            Delete without hovering for the tooltip.
-                            Same onClick handlers as before. Wrapped so
-                            the buttons wrap onto the next line on narrow
-                            columns instead of overflowing. */}
-                        <div className="d-flex flex-wrap gap-2">
+                        {/* Action row: compact icon-only buttons so five
+                            controls fit on a single line at typical table
+                            widths (View / Edit / Copy / Rates / Delete).
+                            Tooltip via `title` keeps the label discoverable
+                            on hover. Same onClick handlers as before. */}
+                        <div className="d-flex flex-nowrap gap-1">
                           <Button
                             size="sm"
                             variant="outline-info"
-                            className="d-flex align-items-center gap-1 view"
+                            className="view p-1 lh-1"
                             onClick={() =>
                               navigate(`/registration/package/view/${item.packageId}`)
                             }
                             title="View"
                           >
-                            <FaEye /> View
+                            <FaEye />
                           </Button>
                           <Button
                             size="sm"
                             variant="outline-primary"
-                            className="d-flex align-items-center gap-1 edit"
+                            className="edit p-1 lh-1"
                             onClick={() => fetchAndShowDetail(item, false)}
                             title="Edit"
                           >
-                            <FaEdit /> Edit
+                            <FaEdit />
                           </Button>
                           <Button
                             size="sm"
                             variant="outline-warning"
-                            className="d-flex align-items-center gap-1 copy"
+                            className="copy p-1 lh-1"
                             onClick={() => handleCopy(item)}
                             title="Copy"
                           >
-                            <FaCopy /> Copy
+                            <FaCopy />
                           </Button>
                           <Button
                             size="sm"
                             variant="outline-success"
-                            className="d-flex align-items-center gap-1"
+                            className="p-1 lh-1"
                             onClick={() => handlePackageRates(item)}
                             title="Package Rates"
                           >
-                            <FaDollarSign /> Rates
+                            <FaDollarSign />
                           </Button>
                           <Button
                             size="sm"
                             variant="outline-danger"
-                            className="d-flex align-items-center gap-1 delete"
+                            className="delete p-1 lh-1"
                             onClick={() => handleDelete(item)}
                             title="Delete"
                           >
-                            <FaTrash /> Delete
+                            <FaTrash />
                           </Button>
                         </div>
                       </td>
@@ -1812,6 +1832,8 @@ const PackageReg = () => {
             size="xl"
             backdrop="static"
             keyboard={false}
+            enforceFocus={false}
+            restoreFocus={false}
           >
             <Modal.Header closeButton>
               <Modal.Title>
@@ -2905,6 +2927,41 @@ const PackageReg = () => {
                           "Type a custom term or condition (up to 20+ lines) and click Add",
                       })}
                     </div>
+                  </div>
+                </Tab>
+
+                {/* Information on Package — final wizard tab. A single
+                    free-text area that saves to packages.package_information
+                    (TEXT) on the backend. Prefills on edit/view and clears
+                    on Create; validation is intentionally left off so an
+                    empty note is accepted. */}
+                <Tab eventKey="packageInformation" title="Information on Package">
+                  <div style={{ maxHeight: "500px", overflowY: "auto" }}>
+                    <h6 className="fw-bold text-dark mb-3">
+                      {/* Information on Package */}
+                    </h6>
+                    <Form.Group>
+                      <Form.Label className="small text-secondary">
+                        Additional information / notes about this package
+                      </Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={12}
+                        style={{ resize: "vertical", minHeight: "220px" }}
+                        placeholder="Type any additional information about this package (booking notes, meal plan clarifications, special conditions, etc.)"
+                        value={formData.packageInformation || ""}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            packageInformation: e.target.value,
+                          }))
+                        }
+                        disabled={isViewMode}
+                      />
+                      <div className="text-muted small mt-1">
+                        {(formData.packageInformation || "").length} characters
+                      </div>
+                    </Form.Group>
                   </div>
                 </Tab>
               </Tabs>
