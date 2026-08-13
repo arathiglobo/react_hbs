@@ -45,13 +45,12 @@ const SPECIAL_REQUEST_OPTIONS = [
   "Room with Bathtub", "Late check-Out", "Smoking Room",
 ];
 
-// Dummy online-payment gateways — mirrors HotelBookingPage /
-// GovEmployeeBookingPage so the operator gets the same payment picker
-// when the agent's credit is short.
+// Online-payment gateways — mirrors HotelBookingPage / DayStayBookingPage /
+// GovEmployeeBookingPage / SeniorCitizenBookingPage. CCAvenue is the only
+// real gateway wired; the dummy /payment/:gateway path is kept as a
+// fallback for any future non-CCAvenue entry.
 const PAYMENT_GATEWAYS = [
-  { id: "razorpay", name: "Razorpay", desc: "Cards, UPI, Net Banking" },
-  { id: "stripe", name: "Stripe", desc: "International cards" },
-  { id: "payu", name: "PayU", desc: "Cards & wallets" },
+  { id: "ccavenue", name: "CC Avenue", desc: "Cards, UPI, Net Banking" },
 ];
 
 // Verification-method enum values (mirror the backend column).
@@ -142,6 +141,11 @@ export default function StudentBookingPage() {
   const [insufficientAmount, setInsufficientAmount] = useState(0);
   const [selectedGateway, setSelectedGateway] = useState("");
   const [showNoPaymentPathModal, setShowNoPaymentPathModal] = useState(false);
+  // Non-dismissable overlay shown between "CC Avenue payment succeeded"
+  // and "booking created server-side" — mirrors HotelBookingPage /
+  // DayStayBookingPage / GovEmployeeBookingPage / SeniorCitizenBookingPage.
+  // Pairs with the beforeunload guard.
+  const [isFinalizingPayment, setIsFinalizingPayment] = useState(false);
   // Per-agent "Card" payment-mode gate, toggled from AgentView. Also
   // filters the Card option out of the Payment Mode dropdown.
   const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
@@ -370,19 +374,31 @@ export default function StudentBookingPage() {
   //   • The credit-check step in confirmBooking() is skipped here — the
   //     operator has already paid via the gateway.
   useEffect(() => {
-    if (!location.state?.resumeCreate) return;
-    const stored = sessionStorage.getItem("studentPendingCreatePayload");
+    const searchParams = new URLSearchParams(location.search);
+    const ccavenueOrderId = searchParams.get("ccavenueOrderId");
+    const ccavenueStatus = searchParams.get("ccavenueStatus");
+
+    const resumeFromState = !!location.state?.resumeCreate;
+    const resumeFromCCAvenue = !!ccavenueOrderId;
+    if (!resumeFromState && !resumeFromCCAvenue) return;
+
     navigate(location.pathname, { replace: true, state: {} });
-    if (!stored) return;
-    sessionStorage.removeItem("studentPendingCreatePayload");
-    let payload;
-    try {
-      payload = JSON.parse(stored);
-    } catch (e) {
-      console.error("Malformed persisted student create payload", e);
-      return;
-    }
-    (async () => {
+
+    const readPendingPayload = () => {
+      const stored = sessionStorage.getItem("studentPendingCreatePayload");
+      sessionStorage.removeItem("studentPendingCreatePayload");
+      if (!stored) return null;
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        console.error("Malformed persisted student create payload", e);
+        return null;
+      }
+    };
+
+    // Dummy-gateway (local /payment/:gateway) path only. Real CC Avenue
+    // uses finalizeAfterCCAvenue below.
+    const finalizeDummyCreate = async (payload) => {
       try {
         setIsSubmitting(true);
         const { data } = await axiosInstance.post(
@@ -407,9 +423,91 @@ export default function StudentBookingPage() {
       } finally {
         setIsSubmitting(false);
       }
+    };
+
+    // Real CC Avenue path — the backend owns the payload and the create
+    // call. Idempotent.
+    const finalizeAfterCCAvenue = async () => {
+      try {
+        setIsFinalizingPayment(true);
+        setIsSubmitting(true);
+        const { data } = await axiosInstance.post(
+          `/api/payment/ccavenue/finalize-student/${ccavenueOrderId}`,
+        );
+        if (data?.success) {
+          toast.success(
+            data.message ||
+              `Booking ${data.bookingCode || ""} created after payment.`,
+          );
+          setShowConfirmModal(false);
+          navigate("/booking-details/student-booking-list");
+        } else {
+          toast.error(
+            data?.message ||
+              "Payment succeeded but booking could not be created. Please contact support with your payment reference.",
+          );
+        }
+      } catch (err) {
+        const beMsg =
+          err?.response?.data?.message || err?.response?.data?.error || null;
+        console.error("Post-payment student finalize failed:", err);
+        toast.error(
+          beMsg ||
+            "Payment succeeded but booking could not be created. Please contact support with your payment reference.",
+        );
+      } finally {
+        setIsSubmitting(false);
+        setIsFinalizingPayment(false);
+      }
+    };
+
+    if (resumeFromState) {
+      const payload = readPendingPayload();
+      if (!payload) return;
+      finalizeDummyCreate(payload);
+      return;
+    }
+
+    (async () => {
+      if (ccavenueStatus !== "success") {
+        toast.error("Payment was not completed. Please try again.");
+        return;
+      }
+      try {
+        const statusResponse = await axiosInstance.get(
+          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+        );
+        if (statusResponse.data?.status !== "SUCCESS") {
+          toast.error(
+            statusResponse.data?.statusMessage ||
+              "Payment was not successful. Please try again.",
+          );
+          return;
+        }
+      } catch (err) {
+        console.error("Could not verify CC Avenue payment status:", err);
+        toast.error(
+          "Could not verify payment status. Please contact support if you were charged.",
+        );
+        return;
+      }
+      finalizeAfterCCAvenue();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state?.resumeCreate]);
+  }, [location.state?.resumeCreate, location.search]);
+
+  // Warn on close / navigate-away while the paid-for booking is still
+  // being created server-side. Only attached during that window.
+  useEffect(() => {
+    if (!isFinalizingPayment) return;
+    const beforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [isFinalizingPayment]);
 
   // Fetch the hotel's max cancellation nights so the deadline is computed
   // the same way HotelBookingPage does (deadline = checkIn − nights). The
@@ -2005,7 +2103,10 @@ export default function StudentBookingPage() {
                 </Modal.Footer>
               </Modal>
 
-              {/* ─── Payment Gateway (dummy) ─── */}
+              {/* ─── Select Payment Gateway ───
+                  CCAvenue is the only real gateway wired up — mirrors
+                  HotelBookingPage / DayStayBookingPage /
+                  GovEmployeeBookingPage / SeniorCitizenBookingPage. */}
               <Modal
                 show={showGatewayModal}
                 onHide={() => setShowGatewayModal(false)}
@@ -2018,25 +2119,37 @@ export default function StudentBookingPage() {
                   <p className="text-muted small mb-3">
                     Choose a gateway to enter your card details.
                   </p>
-                  {PAYMENT_GATEWAYS.map((g) => (
-                    <Form.Check
-                      key={g.id}
-                      type="radio"
-                      name="student-payment-gateway"
-                      id={`student-gw-${g.id}`}
-                      className="mb-2"
-                      checked={selectedGateway === g.id}
-                      onChange={() => setSelectedGateway(g.id)}
-                      label={
-                        <span>
-                          <span className="fw-semibold">{g.name}</span>
-                          <span className="text-muted small ms-2">
-                            {g.desc}
-                          </span>
-                        </span>
-                      }
-                    />
-                  ))}
+                  <div className="pg-option-list">
+                    {PAYMENT_GATEWAYS.map((g) => {
+                      const isSelected = selectedGateway === g.id;
+                      return (
+                        <label
+                          key={g.id}
+                          htmlFor={`student-gw-${g.id}`}
+                          className={`pg-option${
+                            isSelected ? " pg-option-selected" : ""
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="student-payment-gateway"
+                            id={`student-gw-${g.id}`}
+                            className="pg-option-input"
+                            checked={isSelected}
+                            onChange={() => setSelectedGateway(g.id)}
+                          />
+                          <span className="pg-option-radio" aria-hidden="true" />
+                          {g.id === "ccavenue" && (
+                            <img
+                              src={`${process.env.PUBLIC_URL}/ccavanue.png`}
+                              alt="CC Avenue"
+                              className="pg-option-logo"
+                            />
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
                 </Modal.Body>
                 <Modal.Footer className="border-0">
                   <Button
@@ -2053,19 +2166,51 @@ export default function StudentBookingPage() {
                         (x) => x.id === selectedGateway,
                       );
                       setShowGatewayModal(false);
-                      // Persist the payload the resume flow will replay.
-                      // React state (pendingPayload, ...) is lost when the
-                      // user navigates away to /payment and back, so the
-                      // resume effect below rebuilds the create call purely
-                      // from sessionStorage. paymentMode is flipped to
-                      // "ONLINE" so the Booking List labels the row correctly.
+                      // paymentMode is flipped to "ONLINE" so the Booking
+                      // List labels the row correctly.
+                      const onlinePayload = {
+                        ...pendingPayload,
+                        paymentMode: "ONLINE",
+                      };
+
+                      // ── CC Avenue: real billing-page redirect ──
+                      // Distinct from the dummy /payment/:gateway path below
+                      // — the browser fully navigates away to CC Avenue's
+                      // hosted page and back, so the resume signal has to
+                      // travel as a URL query param. See the ccavenueOrderId
+                      // branch in the resume effect above.
+                      //
+                      // For CC Avenue the backend's /initiate stores the
+                      // payload alongside the transaction row and
+                      // /finalize-student replays it after payment.
+                      // flowType tells the shared CCAvenueCheckoutPage to
+                      // ask the backend for the STUDENT_CREATE arm.
+                      if (selectedGateway === "ccavenue") {
+                        const guest = onlinePayload?.primaryGuest;
+                        const billingName = guest
+                          ? [guest.firstName, guest.lastName]
+                              .filter(Boolean)
+                              .join(" ")
+                          : "";
+                        navigate("/payment/ccavenue-redirect", {
+                          state: {
+                            amountLabel: formatPrice(insufficientAmount),
+                            billingName,
+                            returnTo: location.pathname,
+                            flowType: "STUDENT_CREATE",
+                            bookingPayload: onlinePayload,
+                          },
+                        });
+                        return;
+                      }
+
+                      // Dummy /payment/:gateway flow (test/local only) —
+                      // no gateway currently routes through it because
+                      // CCAvenue is the only PAYMENT_GATEWAYS entry.
                       try {
                         sessionStorage.setItem(
                           "studentPendingCreatePayload",
-                          JSON.stringify({
-                            ...pendingPayload,
-                            paymentMode: "ONLINE",
-                          }),
+                          JSON.stringify(onlinePayload),
                         );
                       } catch (e) {
                         console.error(
@@ -2077,11 +2222,6 @@ export default function StudentBookingPage() {
                         state: {
                           amountLabel: formatPrice(insufficientAmount),
                           gatewayName: gw ? gw.name : selectedGateway,
-                          // After payment, land back on this same booking
-                          // page with resumeCreate=true — the effect below
-                          // fires the create call using the persisted
-                          // payload, then navigates to the student booking
-                          // list on success.
                           returnTo: location.pathname,
                           returnState: { resumeCreate: true },
                         },
@@ -2095,6 +2235,71 @@ export default function StudentBookingPage() {
             </Form>
         </main>
       </div>
+
+      {/* ── Post-payment finalize overlay ──
+          Visible only while the backend is creating the paid-for booking
+          after a successful CC Avenue return. Backdrop is fully opaque
+          and non-dismissable so the operator physically cannot click on
+          anything else, and the beforeunload effect above adds the
+          browser's own confirm dialog if they try to close the tab or
+          refresh. Cleared automatically in the finally block of
+          finalizeAfterCCAvenue. */}
+      {isFinalizingPayment && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-live="assertive"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 20000,
+            background: "rgba(15, 23, 42, 0.75)",
+            backdropFilter: "blur(2px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "1rem",
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: "2rem 1.75rem",
+              maxWidth: 440,
+              width: "100%",
+              textAlign: "center",
+              boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+            }}
+          >
+            <Spinner
+              animation="border"
+              variant="success"
+              role="status"
+              style={{ width: 48, height: 48, marginBottom: 16 }}
+            />
+            <h5 className="fw-bold mb-2" style={{ color: "#0f172a" }}>
+              Payment successful — creating your booking
+            </h5>
+            <p className="text-muted mb-3" style={{ fontSize: 14 }}>
+              Please <strong>do not close this window, refresh the page, or
+              press the back button</strong> until you see the confirmation.
+            </p>
+            <div
+              className="small"
+              style={{
+                color: "#b45309",
+                background: "#fef3c7",
+                border: "1px solid #fde68a",
+                borderRadius: 8,
+                padding: "8px 12px",
+              }}
+            >
+              This usually takes just a few seconds.
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
