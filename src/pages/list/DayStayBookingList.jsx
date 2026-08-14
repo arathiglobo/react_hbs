@@ -914,7 +914,9 @@ export default function DayStayBookingList() {
                                     >
                                       {b.confirmationNumber}
                                     </span>
-                                  ) : null}
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
                                 </td>
                                 <td
                                   className="text-muted"

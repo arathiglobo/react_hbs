@@ -74,7 +74,7 @@ const formatShortDate = (dateString) => {
 const STATUS_META = {
   CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
   Confirmed: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  ReConfirmed: { label: "ReConfirmed", bg: "#e6f0ff", color: "#1d4ed8", dot: "#3b82f6" },
+  ReConfirmed: { label: "ReConfirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
   Requested: { label: "Requested", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   PENDING:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
@@ -764,7 +764,9 @@ export default function LastMinuteBookingList() {
                                       >
                                         {confNo}
                                       </span>
-                                    ) : null;
+                                    ) : (
+                                      <span className="text-muted">-</span>
+                                    );
                                   })()}
                                 </td>
                                 <td

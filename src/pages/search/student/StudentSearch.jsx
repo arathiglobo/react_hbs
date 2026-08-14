@@ -1073,7 +1073,7 @@ export default function StudentSearch() {
                     </Button>
                     <Button
                       type="button"
-                      className="flex-shrink-0 btn-add-room-premium"
+                      className="flex-shrink-0 btn-add-room-premium hs-add-room-btn-red"
                       disabled={roomsOpen && rooms.length >= MAX_ROOMS}
                       onClick={() => {
                         if (!roomsOpen) {

@@ -53,6 +53,11 @@ const COLUMN_WIDTHS = {
   agentName: "90px",
   customerName: "120px",
   bookingCode: "95px",
+  // Supplier-side confirmation number saved on the senior-citizen detail
+  // view via the "CONFIRMATION NO." button. Width tuned so the two-word
+  // header wraps at its space instead of splitting "CONFIRMATION"
+  // mid-letter — matches HotelBookingList / StudentBookingList.
+  confirmationNo: "130px",
   referenceCode: "160px",
   bookDate: "90px",
   bookingDetails: "230px",
@@ -467,6 +472,9 @@ export default function SeniorCitizenBookingList() {
     color: "#495057",
     border: "1px solid #dee2e6",
     whiteSpace: "normal",
+    // Break only at spaces — never mid-word (matches HotelBookingList).
+    wordBreak: "normal",
+    overflowWrap: "normal",
     lineHeight: 1.2,
   };
 
@@ -646,6 +654,9 @@ export default function SeniorCitizenBookingList() {
                           <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingCode }}>
                             Booking Code
                           </th>
+                          <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.confirmationNo }}>
+                            Confirmation No
+                          </th>
                           <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.referenceCode }}>
                             Reference Code
                           </th>
@@ -772,6 +783,27 @@ export default function SeniorCitizenBookingList() {
                                   <span className="fw-bold text-primary">
                                     {b.bookingCode || "-"}
                                   </span>
+                                </td>
+                                {/* Confirmation No — supplier's confirmation number,
+                                    populated via the "CONFIRMATION NO." button on
+                                    the booking detail view. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.confirmationNo,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {b.confirmationNumber ? (
+                                    <span
+                                      className="fw-semibold text-dark"
+                                      style={{ fontSize: "0.85rem" }}
+                                    >
+                                      {b.confirmationNumber}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
                                 </td>
                                 <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.referenceCode }}>
                                   <span className="text-muted" style={{ fontSize: "0.78rem" }}>

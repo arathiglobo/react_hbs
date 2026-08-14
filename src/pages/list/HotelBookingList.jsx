@@ -1946,7 +1946,9 @@ const HotelBookingList = ({
                                       >
                                         {confNo}
                                       </span>
-                                    ) : null;
+                                    ) : (
+                                      <span className="text-muted">-</span>
+                                    );
                                   })()}
                                 </td>
                                 {/* Reference Code cell hidden by request. */}

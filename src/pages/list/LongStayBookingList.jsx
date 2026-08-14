@@ -732,7 +732,21 @@ export default function LongStayBookingList() {
                           </tr>
                         ) : (
                           pageBookings.map((b, i) => {
-                            const sMeta = STATUS_META[b.bookingStatus];
+                            // Long-stay bookings can advance to ReConfirmed while
+                            // the roll-up `bookingStatus` column still reads
+                            // "Confirmed" (the reconfirm write only stamps
+                            // `confirmationStatus`). Prefer confirmationStatus
+                            // when it's ahead of bookingStatus so the list pill
+                            // matches what the detail page shows — mirrors the
+                            // same precedence getPaymentStatusLabel already uses.
+                            const confNorm = String(b?.confirmationStatus || "")
+                              .replace(/\s+/g, "")
+                              .toLowerCase();
+                            const effectiveStatus =
+                              !b.cancelStatus && confNorm === "reconfirmed"
+                                ? "Reconfirmed"
+                                : b.bookingStatus;
+                            const sMeta = STATUS_META[effectiveStatus];
                             return (
                               <tr
                                 key={b.longStayBookingId}
@@ -867,7 +881,9 @@ export default function LongStayBookingList() {
                                     >
                                       {b.confirmationNumber}
                                     </span>
-                                  ) : null}
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
                                 </td>
                                 <td
                                   className="text-muted"
@@ -993,7 +1009,7 @@ export default function LongStayBookingList() {
                                 >
                                   <StatusPill
                                     meta={sMeta}
-                                    raw={b.bookingStatus}
+                                    raw={effectiveStatus}
                                   />
                                 </td>
                                 <td

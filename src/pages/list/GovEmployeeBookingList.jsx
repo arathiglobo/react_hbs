@@ -54,6 +54,7 @@ const STATUS_META = {
   COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
   PENDING: { label: "Pending", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   NOTCONFIRMED: { label: "Not Confirmed", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
+  ONREQUEST: { label: "On Request", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
 };
 
@@ -91,8 +92,8 @@ const StatusPill = ({ meta, raw }) => {
 const COLUMN_WIDTHS = {
   sn: "40px",
   agentName: "90px",
-  customerName: "120px",
-  bookingCode: "95px",
+  customerName: "150px",
+  bookingCode: "110px",
   // Supplier-side confirmation number saved on the gov-employee detail
   // view via the "CONFIRMATION NO." button. Sourced from
   // GovEmployeeHotelBooking.confirmationNumber and now exposed on the
@@ -101,12 +102,12 @@ const COLUMN_WIDTHS = {
   // of splitting "CONFIRMATION" mid-letter — matches the other list pages.
   confirmationNo: "130px",
   referenceCode: "160px",
-  bookDate: "90px",
+  bookDate: "100px",
   bookingDetails: "230px",
   deadlineDate: "105px",
   paymentMode: "110px",
   paymentStatus: "110px",
-  notification: "100px",
+  notification: "120px",
   action: "110px",
 };
 
@@ -184,6 +185,12 @@ const getPaymentStatusLabel = (displayStatus) => {
   if (latest === "cancelled" || latest === "canceled") {
     return segments.includes("reconfirmed") ? "Paid" : "Un-Paid";
   }
+
+  // On Request → Payment Pending. Money hasn't been collected until the
+  // booking reconfirms, so a live On Request row (with or without the
+  // step-1 Confirm applied) reads Payment Pending — same rule the senior-
+  // citizen list applies.
+  if (segments.includes("onrequest")) return "Payment Pending";
 
   // Collapse a confirm-history compound ("Confirmed / ReConfirmed") to its
   // LATEST segment, exactly as the hotel list does.
@@ -282,14 +289,33 @@ export default function GovEmployeeBookingList() {
 
   // Composite status — a booking that was Confirmed and is later Cancelled
   // shows "Confirmed / Cancelled".
+  //
+  // On-Request handling mirrors SeniorCitizenBookingList.statusMetaFor:
+  // gov-employee OnRequest bookings are created with confirmationStatus
+  // "Confirmed" but roomStatus "On Request". Until the operator applies the
+  // step-1 Confirm (onRequestConfirmed=true), the finalised status shown on
+  // the list is "On Request" — matching what the detail page renders as the
+  // top status. Once onRequestConfirmed lands, the row falls through to the
+  // plain "Confirmed" pill.
   const compositeStatus = (b) => {
     const raw = String(b?.confirmationStatus || "").trim();
     const normalized = raw.replace(/\s+/g, "").toLowerCase();
+    const isOnRequestRoom = /^on\s*request$/i.test(
+      String(b?.roomStatus || "").trim(),
+    );
+    const isPreConfirmOnRequest =
+      isOnRequestRoom && !b?.onRequestConfirmed && normalized !== "reconfirmed";
     if (b?.cancelled) {
+      if (isPreConfirmOnRequest) {
+        return { label: "On Request / Cancelled", kind: "cancelled" };
+      }
       if (normalized === "confirmed" || normalized === "reconfirmed") {
         return { label: `${raw} / Cancelled`, kind: "cancelled" };
       }
       return { label: "Cancelled", kind: "cancelled" };
+    }
+    if (isPreConfirmOnRequest) {
+      return { label: "On Request", kind: "onrequest" };
     }
     if (normalized === "confirmed") return { label: "Confirmed", kind: "confirmed" };
     if (normalized === "reconfirmed") return { label: "ReConfirmed", kind: "confirmed" };
@@ -315,7 +341,16 @@ export default function GovEmployeeBookingList() {
           case "completed":
             return !b.cancelled && checkout && checkout < now;
           case "onrequest":
-            return !b.cancelled && normalized === "notconfirmed";
+            // Gov-employee On Request bookings are created with
+            // confirmationStatus="Confirmed" but roomStatus="On Request".
+            // Once step-1 Confirm has landed (onRequestConfirmed=true) the
+            // finalised status is "Confirmed" and the row drops out of this
+            // filter — mirrors the pill logic in compositeStatus.
+            return (
+              !b.cancelled &&
+              !b.onRequestConfirmed &&
+              /^on\s*request$/i.test(String(b.roomStatus || "").trim())
+            );
           case "reconfirmed":
             return (
               !b.cancelled &&
@@ -410,6 +445,8 @@ export default function GovEmployeeBookingList() {
         ? "CANCELLED"
         : status.kind === "notconfirmed"
         ? "NOTCONFIRMED"
+        : status.kind === "onrequest"
+        ? "ONREQUEST"
         : null;
     const meta = metaKey
       ? { ...STATUS_META[metaKey], label: status.label }
@@ -439,6 +476,11 @@ export default function GovEmployeeBookingList() {
     textAlign: center ? "center" : undefined,
     border: "1px solid #dee2e6",
     whiteSpace: "normal",
+    // Break only at spaces — never mid-word. Prevents "BOOKING CODE" from
+    // rendering as "BOOKIN"/"G CODE" and "NOTIFICATION" as "NOTIFICATIO"/"N"
+    // when the column is a few pixels narrow.
+    wordBreak: "normal",
+    overflowWrap: "normal",
     lineHeight: 1.2,
     width: w,
   });
@@ -711,7 +753,12 @@ export default function GovEmployeeBookingList() {
                                       <FaUser
                                         style={{ color: "#6c757d", fontSize: "0.78rem", flexShrink: 0 }}
                                       />
-                                      <span className="fw-medium text-dark">{first}</span>
+                                      <span
+                                        className="fw-medium text-dark"
+                                        style={{ whiteSpace: "nowrap" }}
+                                      >
+                                        {first}
+                                      </span>
                                     </span>
                                     {extra > 0 && (
                                       <Badge
@@ -779,6 +826,10 @@ export default function GovEmployeeBookingList() {
                                     textAlign: "center",
                                     color: "#6c757d",
                                     width: COLUMN_WIDTHS.bookDate,
+                                    // Dates are fixed-format — never break
+                                    // "14/08/2026" mid-string like the default
+                                    // wordBreak:break-word would.
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
                                   {formatDate(b.bookingDate) || "-"}
