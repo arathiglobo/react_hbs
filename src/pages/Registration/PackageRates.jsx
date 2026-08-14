@@ -65,6 +65,9 @@ const PackageRates = () => {
   const [isAddingValidity, setIsAddingValidity] = useState(false);
   const [isAddingOccupancy, setIsAddingOccupancy] = useState(false);
   const [showRateDetails, setShowRateDetails] = useState(false);
+  // Small side-modal that lists every validity period attached to one
+  // package rate, opened from the "View" link in the new Validity column.
+  const [validityModalItem, setValidityModalItem] = useState(null);
   const [hotelOptions, setHotelOptions] = useState([]);
   const [hotelCache, setHotelCache] = useState({});
   const [isHotelsLoading, setIsHotelsLoading] = useState(false);
@@ -617,7 +620,9 @@ const PackageRates = () => {
               // the same `hotels[]` list — hotel rows carry hotelId (and
               // mealPlan=null); meal-plan rows carry mealPlan (and
               // hotelId=null). The backend accepts either shape.
-              const hotelRowEntries = rows.map(hotelRowToPayload).filter(Boolean);
+              const hotelRowEntries = rows
+                .map((row) => hotelRowToPayload(row, occRate.hotelCommonRate))
+                .filter(Boolean);
               const mealPlanEntries = mealPlanRatesToPayload(occRate.mealPlanRates);
               const hotelsPayload = [...hotelRowEntries, ...mealPlanEntries];
               // Legacy `hotelId` list — keep it populated for any
@@ -715,7 +720,9 @@ const PackageRates = () => {
               // the same `hotels[]` list — hotel rows carry hotelId (and
               // mealPlan=null); meal-plan rows carry mealPlan (and
               // hotelId=null). The backend accepts either shape.
-              const hotelRowEntries = rows.map(hotelRowToPayload).filter(Boolean);
+              const hotelRowEntries = rows
+                .map((row) => hotelRowToPayload(row, occRate.hotelCommonRate))
+                .filter(Boolean);
               const mealPlanEntries = mealPlanRatesToPayload(occRate.mealPlanRates);
               const hotelsPayload = [...hotelRowEntries, ...mealPlanEntries];
               // Legacy `hotelId` list — keep it populated for any
@@ -1149,6 +1156,39 @@ const PackageRates = () => {
   const toDateTimeLocalValue = (v) =>
     v && v.length === 10 && !v.includes("T") ? `${v}T00:00` : v || "";
 
+  // Human-friendly formatter for the Validity list modal — always shows
+  // date + time (e.g. "13 Aug 2026, 10:30 AM"). Records saved as date-only
+  // ("yyyy-MM-dd") fall back to 00:00.
+  const formatValidityDisplay = (v) => {
+    if (!v) return "—";
+    const s = String(v);
+    const dateOnly = s.length === 10 && !s.includes("T");
+    const d = new Date(dateOnly ? `${s}T00:00` : s);
+    if (Number.isNaN(d.getTime())) return s;
+    return d.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  // Turn a market-type id into its display name using the warmed
+  // marketTypes list. Falls back to the id string if the lookup misses.
+  const getMarketTypeName = (id) => {
+    if (id == null) return "";
+    const m = (marketTypes || []).find(
+      (mt) => String(mt.marketTypeId) === String(id)
+    );
+    return m ? m.name : String(id);
+  };
+
+  const renderMarketNames = (ids) => {
+    if (!Array.isArray(ids) || ids.length === 0) return "N/A";
+    return ids.map(getMarketTypeName).join(", ");
+  };
+
   const addOccupancy = useCallback(
     (e) => {
       if (e) {
@@ -1219,6 +1259,12 @@ const PackageRates = () => {
   const emptyHotelRow = () => ({
     hotelId: null,
     roomTypeId: null,
+  });
+  // One shared rate applies to every hotel/room listed in the Hotel Rates
+  // table for a given category + occupancy — the client asked for a single
+  // Per Adult / Per Child (with bed) / Per Child (without bed) rate instead
+  // of repeating it on every row.
+  const emptyHotelCommonRate = () => ({
     adultRate: "",
     childWithBed: "",
     childWithoutBed: "",
@@ -1231,6 +1277,7 @@ const PackageRates = () => {
   });
   const emptyOccupancyRates = () => ({
     hotelRows: [emptyHotelRow()],
+    hotelCommonRate: emptyHotelCommonRate(),
     mealPlanRates: emptyMealPlanRates(),
   });
 
@@ -1256,6 +1303,7 @@ const PackageRates = () => {
         } else {
           const merged = { ...current };
           if (!Array.isArray(merged.hotelRows)) merged.hotelRows = [emptyHotelRow()];
+          if (!merged.hotelCommonRate) merged.hotelCommonRate = emptyHotelCommonRate();
           if (!merged.mealPlanRates) merged.mealPlanRates = emptyMealPlanRates();
           newRates[categoryId].occupancyRates[occ.id] = merged;
         }
@@ -1277,6 +1325,7 @@ const PackageRates = () => {
       return;
     }
     if (!Array.isArray(current.hotelRows)) current.hotelRows = [emptyHotelRow()];
+    if (!current.hotelCommonRate) current.hotelCommonRate = emptyHotelCommonRate();
     if (!current.mealPlanRates) current.mealPlanRates = emptyMealPlanRates();
   };
 
@@ -1341,15 +1390,16 @@ const PackageRates = () => {
     });
   };
 
-  const updateHotelRowField = (categoryId, occupancyId, rowIndex, field, value) => {
+  const updateHotelCommonRate = (categoryId, occupancyId, field, value) => {
     setFormData((prev) => {
       const next = { ...prev, rates: { ...prev.rates } };
       ensureRatesPath(next, categoryId, occupancyId);
-      const rows = [...next.rates[categoryId].occupancyRates[occupancyId].hotelRows];
-      rows[rowIndex] = { ...rows[rowIndex], [field]: value };
       next.rates[categoryId].occupancyRates[occupancyId] = {
         ...next.rates[categoryId].occupancyRates[occupancyId],
-        hotelRows: rows,
+        hotelCommonRate: {
+          ...next.rates[categoryId].occupancyRates[occupancyId].hotelCommonRate,
+          [field]: value,
+        },
       };
       return next;
     });
@@ -1370,21 +1420,19 @@ const PackageRates = () => {
   };
 
   // Serialise one hotel row into one backend `hotels[]` entry — mealPlan
-  // is null on hotel-base rows. Empty rows (no hotel and no rates) collapse.
-  const hotelRowToPayload = (row) => {
-    if (!row) return null;
-    const anyRate =
-      (row.adultRate !== "" && row.adultRate != null) ||
-      (row.childWithBed !== "" && row.childWithBed != null) ||
-      (row.childWithoutBed !== "" && row.childWithoutBed != null);
-    if (!row.hotelId && !anyRate) return null;
+  // is null on hotel-base rows. Every row shares the same commonRate (one
+  // Adult/Child rate set applies to all hotels/rooms in the section).
+  // Empty rows (no hotel selected) collapse.
+  const hotelRowToPayload = (row, commonRate) => {
+    if (!row || !row.hotelId) return null;
+    const rate = commonRate || {};
     return {
       hotelId: row.hotelId || null,
       roomTypeId: row.roomTypeId || null,
       mealPlan: null,
-      adultRate: row.adultRate === "" ? null : Number(row.adultRate),
-      childRate: row.childWithBed === "" ? null : Number(row.childWithBed),
-      childRateWithoutbed: row.childWithoutBed === "" ? null : Number(row.childWithoutBed),
+      adultRate: rate.adultRate === "" || rate.adultRate == null ? null : Number(rate.adultRate),
+      childRate: rate.childWithBed === "" || rate.childWithBed == null ? null : Number(rate.childWithBed),
+      childRateWithoutbed: rate.childWithoutBed === "" || rate.childWithoutBed == null ? null : Number(rate.childWithoutBed),
     };
   };
 
@@ -1421,6 +1469,7 @@ const PackageRates = () => {
     const state = emptyOccupancyRates();
     if (!Array.isArray(hotels) || hotels.length === 0) return state;
     const hotelRowsMap = new Map();
+    let commonRateSet = false;
     hotels.forEach((h) => {
       if (h.hotelId != null) {
         const key = `${h.hotelId}|${h.roomTypeId || ""}`;
@@ -1428,10 +1477,16 @@ const PackageRates = () => {
           hotelRowsMap.set(key, {
             hotelId: h.hotelId,
             roomTypeId: h.roomTypeId || null,
+          });
+        }
+        // All hotel rows share one rate — take it from the first row seen.
+        if (!commonRateSet) {
+          state.hotelCommonRate = {
             adultRate: h.adultRate ?? "",
             childWithBed: h.childRate ?? "",
             childWithoutBed: h.childRateWithoutbed ?? "",
-          });
+          };
+          commonRateSet = true;
         }
       } else if (h.mealPlan && state.mealPlanRates[h.mealPlan]) {
         state.mealPlanRates[h.mealPlan] = {
@@ -1450,7 +1505,9 @@ const PackageRates = () => {
   };
 
   useEffect(() => {
-    // API calls moved to action buttons (Create/Edit) as per requirement
+    // Market types are needed by the list (Market column shows names, not ids)
+    // as well as by the create/edit modal, so warm them once on mount.
+    marketTypeList();
   }, []);
 
   useEffect(() => {
@@ -1537,6 +1594,7 @@ const PackageRates = () => {
                     <th>Rate Code</th>
                     <th>Market</th>
                     <th>No of Nights</th>
+                    <th>Validity</th>
                     <th style={{ width: 200 }}>Actions</th>
                   </tr>
                 </thead>
@@ -1545,10 +1603,27 @@ const PackageRates = () => {
                     <tr key={item.packageratesId}>
                       <td>{index + 1 + page * 10}</td>
                       <td>{item.packagerateCode || "N/A"}</td>
-                      <td>{item.markettypeId?.join(", ") || "N/A"}</td>
+                      <td>{renderMarketNames(item.markettypeId)}</td>
                       <td>
                         {item.packageAccommodationrateDTO?.[0]?.noofnight ||
                           "N/A"}
+                      </td>
+                      <td>
+                        {Array.isArray(item.packageRateValidityDTO) &&
+                        item.packageRateValidityDTO.length > 0 ? (
+                          <Button
+                            variant="link"
+                            size="sm"
+                            className="p-0"
+                            onClick={() => setValidityModalItem(item)}
+                          >
+                            {/* <FaEye className="me-1" /> */}
+                            {/* View ({item.packageRateValidityDTO.length}) */}
+                            View
+                          </Button>
+                        ) : (
+                          <span className="text-muted">N/A</span>
+                        )}
                       </td>
                       <td>
                         <div className="d-flex gap-2">
@@ -1584,7 +1659,7 @@ const PackageRates = () => {
                   ))}
                   {isLoading && (
                     <tr>
-                      <td colSpan={6} className="text-center text-muted py-4">
+                      <td colSpan={7} className="text-center text-muted py-4">
                         <div
                           className="spinner-border spinner-border-sm me-2"
                           role="status"
@@ -1597,7 +1672,7 @@ const PackageRates = () => {
                   )}
                   {items.length === 0 && !isLoading && (
                     <tr>
-                      <td colSpan={6} className="text-center text-muted py-4">
+                      <td colSpan={7} className="text-center text-muted py-4">
                         No package rates found.
                       </td>
                     </tr>
@@ -2118,6 +2193,7 @@ const PackageRates = () => {
                                 {occupancyList.map((occ) => {
                                   const occRate = formData.rates?.[categoryKey]?.occupancyRates?.[occ.id] || {};
                                   const hotelRows = Array.isArray(occRate.hotelRows) ? occRate.hotelRows : [emptyHotelRow()];
+                                  const commonRate = occRate.hotelCommonRate || emptyHotelCommonRate();
                                   const mpRates = occRate.mealPlanRates || emptyMealPlanRates();
                                   return (
                                     <div key={occ.id} className="mb-3">
@@ -2127,11 +2203,63 @@ const PackageRates = () => {
                                         </div>
                                       )}
 
-                                      {/* Hotel Rates */}
-                                      <div className="mb-3">
+                                      {/* Hotel Rates — one shared rate applies to every hotel/room
+                                          listed below, so the client only enters it once. */}
+                                      <div className="mb-3 border rounded p-3 bg-light bg-opacity-50">
+                                        <div className="fw-semibold text-primary small mb-1">
+                                          Hotel Rates
+                                        </div>
+                                        <div className="text-muted small mb-3">
+                                          Set the rate once below — it applies to every hotel and room you list.
+                                        </div>
+
+                                        <div className="mb-3">
+                                          <div className="small fw-semibold text-muted mb-2">
+                                            1. Rate (applies to all hotels/rooms below)
+                                          </div>
+                                          <Row className="g-2">
+                                            <Col md={4}>
+                                              <Form.Label className="small mb-1">Per Adult Rate</Form.Label>
+                                              <Form.Control
+                                                size="sm"
+                                                type="number"
+                                                value={commonRate.adultRate ?? ""}
+                                                onChange={(e) => updateHotelCommonRate(categoryKey, occ.id, "adultRate", e.target.value)}
+                                                placeholder="0"
+                                                disabled={viewMode}
+                                                readOnly={viewMode}
+                                              />
+                                            </Col>
+                                            <Col md={4}>
+                                              <Form.Label className="small mb-1">Per Child (With Bed)</Form.Label>
+                                              <Form.Control
+                                                size="sm"
+                                                type="number"
+                                                value={commonRate.childWithBed ?? ""}
+                                                onChange={(e) => updateHotelCommonRate(categoryKey, occ.id, "childWithBed", e.target.value)}
+                                                placeholder="0"
+                                                disabled={viewMode}
+                                                readOnly={viewMode}
+                                              />
+                                            </Col>
+                                            <Col md={4}>
+                                              <Form.Label className="small mb-1">Per Child (Without Bed)</Form.Label>
+                                              <Form.Control
+                                                size="sm"
+                                                type="number"
+                                                value={commonRate.childWithoutBed ?? ""}
+                                                onChange={(e) => updateHotelCommonRate(categoryKey, occ.id, "childWithoutBed", e.target.value)}
+                                                placeholder="0"
+                                                disabled={viewMode}
+                                                readOnly={viewMode}
+                                              />
+                                            </Col>
+                                          </Row>
+                                        </div>
+
                                         <div className="d-flex justify-content-between align-items-center mb-2">
-                                          <div className="fw-semibold text-primary small">
-                                            Hotel Rates
+                                          <div className="small fw-semibold text-muted">
+                                            2. Hotels &amp; room types using this rate
                                           </div>
                                           {!viewMode && (
                                             <Button
@@ -2144,14 +2272,11 @@ const PackageRates = () => {
                                           )}
                                         </div>
                                         <div className="table-responsive">
-                                          <Table bordered size="sm" className="mb-0 align-middle">
+                                          <Table bordered size="sm" className="mb-0 align-middle bg-white">
                                             <thead>
                                               <tr className="bg-light">
-                                                <th style={{ minWidth: "180px" }}>Hotel</th>
-                                                <th style={{ minWidth: "160px" }}>Room Type</th>
-                                                <th>Per Adult Rate</th>
-                                                <th>Per Child With Bed</th>
-                                                <th>Per Child Without Bed</th>
+                                                <th style={{ minWidth: "220px" }}>Hotel</th>
+                                                <th style={{ minWidth: "180px" }}>Room Type</th>
                                                 <th style={{ width: "48px" }}></th>
                                               </tr>
                                             </thead>
@@ -2208,39 +2333,6 @@ const PackageRates = () => {
                                                           </option>
                                                         ))}
                                                       </Form.Select>
-                                                    </td>
-                                                    <td>
-                                                      <Form.Control
-                                                        size="sm"
-                                                        type="number"
-                                                        value={row.adultRate ?? ""}
-                                                        onChange={(e) => updateHotelRowField(categoryKey, occ.id, rowIdx, "adultRate", e.target.value)}
-                                                        placeholder="0"
-                                                        disabled={viewMode}
-                                                        readOnly={viewMode}
-                                                      />
-                                                    </td>
-                                                    <td>
-                                                      <Form.Control
-                                                        size="sm"
-                                                        type="number"
-                                                        value={row.childWithBed ?? ""}
-                                                        onChange={(e) => updateHotelRowField(categoryKey, occ.id, rowIdx, "childWithBed", e.target.value)}
-                                                        placeholder="0"
-                                                        disabled={viewMode}
-                                                        readOnly={viewMode}
-                                                      />
-                                                    </td>
-                                                    <td>
-                                                      <Form.Control
-                                                        size="sm"
-                                                        type="number"
-                                                        value={row.childWithoutBed ?? ""}
-                                                        onChange={(e) => updateHotelRowField(categoryKey, occ.id, rowIdx, "childWithoutBed", e.target.value)}
-                                                        placeholder="0"
-                                                        disabled={viewMode}
-                                                        readOnly={viewMode}
-                                                      />
                                                     </td>
                                                     <td className="text-end">
                                                       {!viewMode && hotelRows.length > 1 && (
@@ -2385,6 +2477,59 @@ const PackageRates = () => {
                   </Button>
                 </>
               )}
+            </Modal.Footer>
+          </Modal>
+
+          {/* Validity list — read-only side modal opened from the "View" link
+              in the Validity column. Lists every period attached to one rate. */}
+          <Modal
+            show={!!validityModalItem}
+            onHide={() => setValidityModalItem(null)}
+            centered
+            size="md"
+          >
+            <Modal.Header closeButton>
+              <Modal.Title className="fs-6">
+                Validity Periods
+                {validityModalItem?.packagerateCode
+                  ? ` — ${validityModalItem.packagerateCode}`
+                  : ""}
+              </Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              {Array.isArray(validityModalItem?.packageRateValidityDTO) &&
+              validityModalItem.packageRateValidityDTO.length > 0 ? (
+                <Table bordered size="sm" className="mb-0 align-middle">
+                  <thead>
+                    <tr className="bg-light">
+                      <th style={{ width: 60 }}>#</th>
+                      <th>Validity From</th>
+                      <th>Validity To</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {validityModalItem.packageRateValidityDTO.map((v, i) => (
+                      <tr key={v.packagerateValidityId || i}>
+                        <td>{i + 1}</td>
+                        <td>{formatValidityDisplay(v.validityfrom)}</td>
+                        <td>{formatValidityDisplay(v.validityto)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              ) : (
+                <div className="text-center text-muted py-3">
+                  No validity periods found.
+                </div>
+              )}
+            </Modal.Body>
+            <Modal.Footer>
+              <Button
+                variant="secondary"
+                onClick={() => setValidityModalItem(null)}
+              >
+                Close
+              </Button>
             </Modal.Footer>
           </Modal>
         </main>

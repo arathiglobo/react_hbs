@@ -791,8 +791,8 @@ const PackageSearch = () => {
   // package (returned by the search response).
   const packageIncludesOptions = [
     { value: "hotel", label: "Hotel", flag: "containHotel" },
-    { value: "cab", label: "Cab", flag: "containCab" },
-    { value: "activity", label: "Activity", flag: "containActivity" },
+    { value: "Transfers", label: "Transfers", flag: "containCab" },
+    { value: "Tours", label: "Tours", flag: "containActivity" },
   ];
 
   // Duration buckets — mirrors the "All Stars" top-of-results dropdown. Each
@@ -1675,10 +1675,10 @@ const PackageSearch = () => {
                                           "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=800&q=80";
                                       }}
                                     />
-                                    <div className="duration-badge">
+                                    {/* <div className="duration-badge">
                                       <FaClock className="me-1 mb-1" size={11} />
                                       {pkg.duration} Night(s)
-                                    </div>
+                                    </div> */}
                                   </div>
                                 </Col>
 
@@ -1714,23 +1714,10 @@ const PackageSearch = () => {
                                       </div>
                                     )}
 
-                                    {/* Price + Book — the two action buttons
-                                        live in a right-hand cluster so the eye
-                                        button no longer jams between price and
-                                        Book Now, and the whole row wraps as a
-                                        unit on narrow columns (price above,
-                                        actions below) instead of the buttons
-                                        breaking mid-word. */}
-                                    <div className="price-box d-flex flex-wrap justify-content-between align-items-center gap-2 mt-auto">
-                                      <div className="price-line">
-                                        <span className="price-currency">AED</span>
-                                        <span className="price-value">
-                                          {pkg.rate}
-                                        </span>
-                                        <span className="price-unit">
-                                          Package Base Rate / {pkg.rateType}
-                                        </span>
-                                      </div>
+                                    {/* Actions cluster — the price/base-rate line was
+                                        removed per client ask; the card just shows
+                                        View + Book on the right now. */}
+                                    <div className="price-box d-flex flex-wrap justify-content-end align-items-center gap-2 mt-auto">
                                       <div className="package-actions d-flex align-items-center gap-2">
                                         <Button
                                           variant="outline-success"
@@ -1892,7 +1879,7 @@ const PackageSearch = () => {
               <div className="detail-body-content p-3">
                 {/* ─── Highlight Strip ───────────────────────────── */}
                 <div className="highlight-strip">
-                  <div className="highlight-item">
+                  {/* <div className="highlight-item">
                     <FaMoneyBillWave className="highlight-icon" />
                     <div>
                       <div className="highlight-label">Basic Rate</div>
@@ -1903,7 +1890,7 @@ const PackageSearch = () => {
                         {selectedPackage.packageBasicRate ?? "-"}
                       </div>
                     </div>
-                  </div>
+                  </div> */}
                   <div className="highlight-item">
                     <FaClock className="highlight-icon" />
                     <div>
