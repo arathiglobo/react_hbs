@@ -167,6 +167,7 @@ export default function AdminDashboard() {
     { label: 'Transfer',           icon: 'transfer', to: '/new-booking/cab',                  primary: true },
     { label: 'Tours & Activities', icon: 'tour',     to: '/new-booking/tours-and-activities', primary: true },
     { label: 'Agent Account',      icon: 'account',  to: '/incentive/config',                 primary: true },
+    { label: 'Flight',             icon: 'flight',   to: '/new-booking/flight',               primary: true },
   ];
 
   return (

@@ -912,6 +912,18 @@ const ExternalApiRoomList = () => {
       // 2 days, computed on the backend). Booking page renders this in the
       // cancellation accordion header. Null when prebook wasn't run yet.
       atharvaDisplayDeadlineDate: prebook?.displayDeadlineDate || null,
+      // ATHARVA HPreBooking-response echoes forwarded to /api/hotel-booking/create
+      // so the BE can send the vendor's EXACT ExpectedAmount / WithinTimeLimit
+      // / PackageRate to HCreateBooking (avoids error 3002, correct RR/KK gate,
+      // triggers AirlineName/AirlinePNR for package rates). All three are the
+      // supplier's own numbers — do NOT apply markup here. Null when prebook
+      // wasn't run yet; the BE falls back to legacy behaviour.
+      atharvaExpectedAmount:
+        prebook?.amountWithoutMarkup ?? prebook?.amount ?? null,
+      atharvaWithinTimeLimit:
+        prebook?.withinTimeLimit ?? null,
+      atharvaPackageRate:
+        prebook?.packageRate ?? null,
       // GRN-only carry: whether the rechecked rate requires PAN on the
       // holder. Booking page uses this to render the PAN input card.
       // Defaults to false; other suppliers just ignore this key.
@@ -2799,7 +2811,26 @@ const ExternalApiRoomList = () => {
                                                     </div>
                                                     <div className="d-flex align-items-center gap-2 flex-shrink-0">
                                                       {getRefundStatusBadgeInRoomList(
-                                                        rate.nonRefundable,
+                                                        // Same override the grid
+                                                        // view uses (line 2386-
+                                                        // 2400): prefer the
+                                                        // prebook-time signal
+                                                        // (derived from Atharva's
+                                                        // Policies[].Remark
+                                                        // "Rates are
+                                                        // Non-refundable" match)
+                                                        // when a prebook has been
+                                                        // fetched for this rate,
+                                                        // else fall back to the
+                                                        // search-time flag.
+                                                        // Without this the list
+                                                        // view stayed "Flexible"
+                                                        // forever while grid view
+                                                        // flipped — inconsistent.
+                                                        atharvaPrebookCache?.[
+                                                          rate.rateKey
+                                                        ]?.nonRefundable ??
+                                                          rate.nonRefundable,
                                                       )}
                                                       {rate.roomStatus ===
                                                       "On Request" ? (

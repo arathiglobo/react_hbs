@@ -98,6 +98,7 @@ const COLUMN_WIDTHS = {
   bookingDetails: "230px",
   deadlineDate: "105px",
   paymentMode: "110px",
+  paymentStatus: "110px",
   notification: "100px",
   action: "110px",
 };
@@ -139,6 +140,54 @@ const getPaymentModeLabel = (booking) => {
   if (norm === "BANK_TRANSFER" || norm === "BANK TRANSFER") return "Bank Transfer";
   if (norm === "CHEQUE") return "Cheque";
   if (norm) return raw;
+  return "-";
+};
+
+// Resolve the Payment Status label from the booking's DISPLAYED status — same
+// mapping as /booking-details/hotel-booking-list:
+//   Confirmed             → Payment Pending
+//   ReConfirmed           → Paid
+//   ReConfirmed/Cancelled → Paid
+//   Confirmed/Cancelled   → Un-Paid
+//   Cancelled             → Un-Paid
+// Anything else — Not Confirmed, or an unknown/empty status — has no defined
+// mapping and renders "-".
+//
+// A cancelled booking reports whether the money had already been collected at
+// the point of cancellation rather than the cancellation itself: a history that
+// reached ReConfirmed was paid, one that stopped at Confirmed never was.
+//
+// This takes the composite label built by `compositeStatus` — the same value the
+// Notification cell renders — so the two columns can never disagree. That label
+// is all that is needed here: unlike the hotel booking, the gov-employee list
+// row carries no `reconfirmation` / `cancelledFromStatus` field, but
+// compositeStatus already folds the pre-cancellation state into the label
+// itself ("ReConfirmed / Cancelled"), which is exactly what the segment split
+// below reads.
+const getPaymentStatusLabel = (displayStatus) => {
+  const segments = String(displayStatus || "")
+    .split("/")
+    .map((seg) => seg.replace(/\s+/g, "").toLowerCase())
+    .filter(Boolean);
+  if (segments.length === 0) return "-";
+
+  // Cancelled histories are settled by what the booking reached BEFORE the
+  // cancellation, so check this ahead of the confirm-history collapse.
+  const latest = segments[segments.length - 1];
+  if (latest === "cancelled" || latest === "canceled") {
+    return segments.includes("reconfirmed") ? "Paid" : "Un-Paid";
+  }
+
+  // Collapse a confirm-history compound ("Confirmed / ReConfirmed") to its
+  // LATEST segment, exactly as the hotel list does.
+  const isConfirmHistoryCompound =
+    segments.length > 1 &&
+    segments.every((seg) => ["confirmed", "reconfirmed"].includes(seg));
+  const effective = isConfirmHistoryCompound ? latest : segments.join("/");
+
+  if (effective === "reconfirmed") return "Paid";
+  if (effective === "confirmed") return "Payment Pending";
+
   return "-";
 };
 
@@ -339,7 +388,8 @@ export default function GovEmployeeBookingList() {
     setPage(0);
   };
 
-  const colSpan = role === "admin" ? 11 : 10;
+  // +1 for the Payment Status column.
+  const colSpan = role === "admin" ? 12 : 11;
 
   // Notification cell renderer — maps the composite gov-employee status onto
   // the shared StatusPill badges so it matches the Hotel/LongStay skin. The
@@ -569,6 +619,10 @@ export default function GovEmployeeBookingList() {
                           <th style={thStyle(COLUMN_WIDTHS.bookingDetails)}>Booking Details</th>
                           <th style={thStyle(COLUMN_WIDTHS.deadlineDate, true)}>Deadline Date</th>
                           <th style={thStyle(COLUMN_WIDTHS.paymentMode, true)}>Payment Mode</th>
+                          {/* Payment Status — same mapping as
+                              /booking-details/hotel-booking-list. See
+                              getPaymentStatusLabel. */}
+                          <th style={thStyle(COLUMN_WIDTHS.paymentStatus, true)}>Payment Status</th>
                           <th style={thStyle(COLUMN_WIDTHS.notification, true)}>Notification</th>
                           <th style={thStyle(COLUMN_WIDTHS.action, true)}>Action</th>
                         </tr>
@@ -593,6 +647,11 @@ export default function GovEmployeeBookingList() {
                             const first = names[0] || "-";
                             const extra = Math.max(0, names.length - 1);
                             const payLabel = getPaymentModeLabel(b);
+                            // Fed the same composite label the Notification cell
+                            // renders, so the two columns stay in lockstep.
+                            const payStatusLabel = getPaymentStatusLabel(
+                              compositeStatus(b).label,
+                            );
                             return (
                               <tr
                                 key={b.bookingId}
@@ -715,6 +774,41 @@ export default function GovEmployeeBookingList() {
                                     <span className="text-muted">-</span>
                                   ) : (
                                     <span style={{ color: "#000" }}>{payLabel}</span>
+                                  )}
+                                </td>
+                                {/* Payment Status — derived from the same
+                                    composite label the Notification cell
+                                    renders: Confirmed → Payment Pending,
+                                    ReConfirmed → Paid, a cancellation → Paid or
+                                    Un-Paid depending on whether it had been
+                                    reconfirmed. See getPaymentStatusLabel. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.paymentStatus,
+                                  }}
+                                >
+                                  {payStatusLabel === "-" ? (
+                                    <span className="text-muted">-</span>
+                                  ) : (
+                                    <span
+                                      style={{
+                                        // Same palette as the hotel list — green
+                                        // settled, red never collected, orange
+                                        // still outstanding.
+                                        color:
+                                          payStatusLabel === "Paid"
+                                            ? "#06a301"
+                                            : payStatusLabel === "Un-Paid"
+                                              ? "#dc3545"
+                                              : "#e67e22",
+                                        fontSize: "0.82rem",
+                                        fontWeight: "600",
+                                      }}
+                                    >
+                                      {payStatusLabel}
+                                    </span>
                                   )}
                                 </td>
                                 <td

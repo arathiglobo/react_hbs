@@ -57,6 +57,7 @@ const COLUMN_WIDTHS = {
   bookingDetails: "230px",
   deadlineDate: "105px",
   paymentMode: "110px",
+  paymentStatus: "110px",
   notification: "100px",
   action: "110px",
 };
@@ -100,6 +101,78 @@ const getPaymentModeLabel = (booking) => {
   if (norm) return raw;
   if (booking?.creditLimitPayment === true) return "Credit Limit Payment";
   if (booking?.paidOnline === true || booking?.onlinePayment === true) return "Online Payment";
+  return "-";
+};
+
+// Resolve the Payment Status label from the booking's DISPLAYED status — same
+// mapping as /booking-details/hotel-booking-list:
+//   Confirmed                      → Payment Pending
+//   ReConfirmed                    → Paid
+//   ReConfirmed/Cancelled          → Paid
+//   Confirmed/Cancelled            → Un-Paid
+//   On Request/Confirmed/Cancelled → Un-Paid
+// plus the Day-Stay rule: a live On Request booking — whether or not step-1
+// Confirm has landed — reads "Payment Pending", because the money has not been
+// collected yet.
+// Anything else — Not Confirmed, Requested, Sold Out, or an unknown/empty
+// status — has no defined mapping and renders "-".
+//
+// A cancelled booking reports whether the money had already been collected at
+// the point of cancellation rather than the cancellation itself: a history that
+// reached ReConfirmed was paid, one that stopped at On Request / Confirmed
+// never was.
+//
+// The resolution deliberately mirrors NotificationCell below — same compound
+// collapse, same On-Request override — so the two columns can never disagree.
+//
+// Note on cancellations: this aggregated list flattens a cancelled hotel
+// booking's label to a bare "Cancelled" (UnifiedBookingListServiceImpl.
+// resolveHotelConfirmationStatus → formatFlowStatus), discarding the history.
+// `cancelledFromStatus` is stamped at cancel time (BookingCancellationServiceImpl:207)
+// from the engine bookingStatus label and is therefore the authoritative signal
+// for what the booking had reached before it was cancelled.
+//
+// `booking.reconfirmation` is deliberately NOT consulted here: several inhouse
+// creation paths (see InhouseHotelBookingService setReconfirmation(true) at
+// booking time) set it as a scheduling flag rather than a "was reconfirmed"
+// marker, so a Confirmed-then-Cancelled booking can carry reconfirmation=true
+// and would be wrongly reported as Paid.
+const getPaymentStatusLabel = (booking) => {
+  const rawStatus = String(booking?.confirmationStatus || "");
+  const segments = rawStatus
+    .split("/")
+    .map((seg) => seg.replace(/\s+/g, "").toLowerCase())
+    .filter(Boolean);
+  if (segments.length === 0) return "-";
+
+  // Cancelled histories are settled by what the booking reached BEFORE the
+  // cancellation, so check this ahead of the confirm-history collapse.
+  const latest = segments[segments.length - 1];
+  if (latest === "cancelled" || latest === "canceled") {
+    const cancelledFromNormalized = String(booking?.cancelledFromStatus || "")
+      .replace(/\s+/g, "")
+      .toLowerCase();
+    const wasReconfirmedBeforeCancel =
+      cancelledFromNormalized.includes("reconfirmed") ||
+      segments.includes("reconfirmed");
+    return wasReconfirmedBeforeCancel ? "Paid" : "Un-Paid";
+  }
+
+  // Collapse a confirm-history compound ("Confirmed / ReConfirmed") to its
+  // LATEST segment, exactly as NotificationCell does.
+  const isConfirmHistoryCompound =
+    segments.length > 1 &&
+    segments.every((seg) => ["confirmed", "reconfirmed"].includes(seg));
+  const effective = isConfirmHistoryCompound ? latest : segments.join("/");
+
+  if (effective === "reconfirmed") return "Paid";
+  if (effective === "confirmed") {
+    // An On Request room shows as "On Request" in the Notification column even
+    // though the engine stamps it Confirmed — and an on-request booking is
+    // payment-pending either way, so both states resolve the same here.
+    return "Payment Pending";
+  }
+
   return "-";
 };
 
@@ -296,7 +369,8 @@ const AllBookingsList = () => {
     navigate(`${row.detailRoute}${row.bookingId}`);
   };
 
-  const colSpan = role === "admin" ? 10 : 9;
+  // +1 for the Payment Status column.
+  const colSpan = role === "admin" ? 11 : 10;
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column hbl-modern">
@@ -469,6 +543,10 @@ const AllBookingsList = () => {
                           <th style={thStyle(undefined, COLUMN_WIDTHS.bookingDetails)}>Booking Details</th>
                           <th style={thStyle("center", COLUMN_WIDTHS.deadlineDate)}>Deadline Date</th>
                           <th style={thStyle("center", COLUMN_WIDTHS.paymentMode)}>Payment Mode</th>
+                          {/* Payment Status — same mapping as
+                              /booking-details/hotel-booking-list. See
+                              getPaymentStatusLabel. */}
+                          <th style={thStyle("center", COLUMN_WIDTHS.paymentStatus)}>Payment Status</th>
                           <th style={thStyle("center", COLUMN_WIDTHS.notification)}>Notification</th>
                           <th style={thStyle("center", COLUMN_WIDTHS.action)}>Action</th>
                         </tr>
@@ -551,6 +629,32 @@ const AllBookingsList = () => {
                                     const label = getPaymentModeLabel(b);
                                     if (label === "-") return <span className="text-muted">-</span>;
                                     return <span style={{ color: "#000" }}>{label}</span>;
+                                  })()}
+                                </td>
+                                {/* Payment Status — derived from the same status
+                                    NotificationCell renders: Confirmed / On
+                                    Request → Payment Pending, ReConfirmed →
+                                    Paid, a cancellation → Paid or Un-Paid
+                                    depending on whether it had been
+                                    reconfirmed. See getPaymentStatusLabel. */}
+                                <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentStatus }}>
+                                  {(() => {
+                                    const label = getPaymentStatusLabel(b);
+                                    if (label === "-") return <span className="text-muted">-</span>;
+                                    // Same palette as the hotel list — green
+                                    // settled, red never collected, orange still
+                                    // outstanding.
+                                    const color =
+                                      label === "Paid"
+                                        ? "#06a301"
+                                        : label === "Un-Paid"
+                                          ? "#dc3545"
+                                          : "#e67e22";
+                                    return (
+                                      <span style={{ color, fontSize: "0.82rem", fontWeight: "600" }}>
+                                        {label}
+                                      </span>
+                                    );
                                   })()}
                                 </td>
                                 <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.notification }}>

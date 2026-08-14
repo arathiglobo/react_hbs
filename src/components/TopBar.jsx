@@ -48,6 +48,7 @@ import {
   FaGraduationCap,
   FaUserAlt,
   FaPrayingHands,
+  FaShieldAlt,
 } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
 import { toast } from "react-hot-toast";
@@ -844,6 +845,19 @@ export default function TopBar() {
         <FaKey className="me-2" />
         Change Password
       </Dropdown.Item>
+      {/* Agent-only: only agent logins are challenged for a second factor, so
+          showing this to an admin/staff/extranet user would offer them a
+          setting that never takes effect. The route and the backend endpoints
+          enforce the same restriction. */}
+      {currentRole === "agent" && (
+        <>
+          <Dropdown.Divider />
+          <Dropdown.Item href="two-factor-authentication">
+            <FaShieldAlt className="me-2" />
+            Two-Factor Authentication
+          </Dropdown.Item>
+        </>
+      )}
       <Dropdown.Divider />
       <Dropdown.Item href="view-profile">
         <FaUser className="me-2" />

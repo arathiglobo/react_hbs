@@ -1,8 +1,11 @@
 /* PackageBooking_Stepper.css */
 
 .booking-stepper-container {
-     padding: 1.25rem;
-    background-color: #f0f4f8;
+    padding: 1.25rem;
+    /* Background intentionally transparent so the parent .room-list-container
+       (from RoomList.css) supplies the --rl-bg light-slate tone — keeps
+       PackageBooking visually aligned with /room-list. */
+    background-color: transparent;
     min-height: 100vh;
 }
 
@@ -39,17 +42,21 @@
 /* overflow:hidden removed — it disables position:sticky on the nav
    button row used by each tab. The stepper-wrapper now carries its own
    top-rounded corners so the rounded card silhouette is preserved. */
+/* Uses the --rl-* palette from RoomList.css so the main step container reads
+   as a sibling of the .hotel-header-card hero and the .booking-summary
+   sidebar — same border, same radius, same shadow. */
 .main-booking-card {
-    background: #ffffff;
-    border: none;
-    border-radius: 20px;
-    box-shadow: 0 2px 20px rgba(0,0,0,0.06);
+    background: var(--rl-card, #ffffff);
+    border: 1px solid var(--rl-border, #e2e8f0);
+    border-radius: 16px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+    overflow: hidden;
 }
 
 /* ── Stepper ── */
 .stepper-wrapper {
-    background: #f8fafc;
-    border-bottom: 1px solid #f1f5f9;
+    background: var(--rl-surface, #f1f5f9);
+    border-bottom: 1px solid var(--rl-border, #e2e8f0);
     padding: 1rem 1.5rem;
 }
 
@@ -77,7 +84,11 @@
     top: 0;
     left: 0;
     height: 100%;
-    background: linear-gradient(90deg, #EC0B43, #8b5cf6);
+    /* Gradient stops mirror /room-list's .book-now-btn (--rl-primary →
+       --rl-accent) so the stepper progress and the primary CTA share the
+       same brand palette. Falls back to concrete hex if the vars aren't
+       defined on this subtree. */
+    background: linear-gradient(90deg, var(--rl-primary, #EC0B43), var(--rl-accent, #0ea5e9));
     border-radius: 2px;
     transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -140,8 +151,10 @@
 }
 
 /* ── Tab content area ── */
+/* padding tuned to 1.5rem (Bootstrap p-4) so the inner content sits at the
+   same visual rhythm as /room-list's Card.Body blocks. */
 .tab-content-area {
-    padding: 1.25rem 1.75rem;
+    padding: 1.5rem;
 }
 
 /* ── Tab pane animation ── */
@@ -284,7 +297,7 @@
     font-size: 0.85rem;
     font-weight: 600;
     border: none;
-    background: linear-gradient(135deg, #EC0B43, #8b5cf6);
+    background: #EC0B43;
     color: #fff;
     transition: all 0.2s;
     box-shadow: 0 4px 12px rgba(236, 11, 67,0.3);
@@ -474,34 +487,49 @@ margin: 1.25rem 0 0;
     margin-bottom: 1rem;
 }
 
-/* ── Price sidebar ── */
-/* The parent Row no longer carries `align-items-start`, so this column
-   stretches to match the main card's height. That gives `position:
-   sticky` real room to slide as the user scrolls long tab content. */
+/* ── Price sidebar ──
+   Restyled to match the .booking-summary card the hero uses at the top of
+   the page (see RoomList.css:169-181) — same border, radius, shadow and
+   header-bar rhythm — so both sidebars on the page read as one system.
+   Colors resolve to the --rl-* palette declared in RoomList.css, which is
+   imported by PackageBooking.jsx. */
 .price-sidebar-card {
-    background: #ffffff;
-    border: none;
-    border-radius: 20px;
-    box-shadow: 0 2px 20px rgba(0,0,0,0.06);
+    background: var(--rl-card, #ffffff);
+    border: 1px solid var(--rl-border, #e2e8f0);
+    border-radius: 14px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
     padding: 1.25rem;
 }
 
-/* Sticky wrapper for the sidebar. The Total Price card and the Mode-of-payment
-   card share it so they scroll and pin together as one unit, just below the
-   60px sticky .topbar (+20px gap) — neither overlaps the other nor hides
-   behind the header. */
-.sidebar-sticky {
+/* Sidebar block — Total Price + (on Pax Info step) Mode of payment + Book /
+   Hold cards. Sticky-pinned near the top of the viewport so the operator can
+   always see the Total Price while scrolling through the Day-wise itinerary,
+   Hotels and Includes/Excludes sections. The sticky region is bounded by the
+   parent Col, so it unpins naturally as its column ends and never overlaps
+   content that follows. Card-to-card spacing is owned by
+   `.sidebar-pay-card { margin-top }` (defined in the inline <style> block on
+   PackageBooking.jsx), so this wrapper deliberately sets no gap. */
+.sidebar-stack {
+    display: block;
     position: sticky;
-    top: 80px;
+    /* The global .topbar is sticky at the top of the viewport with a fixed
+       height of 60px (see custom.scss). Pin below it with a small breathing
+       gap so the "Total Price" heading never hides behind the topbar. */
+    top: 76px;
+    align-self: flex-start;
 }
 
+/* Matches the "Booking Summary" header on the hero .booking-summary card:
+   underlined by a dashed border so the eye reads both cards as siblings. */
 .price-sidebar-label {
-    font-size: 0.65rem;
+    font-size: 0.9rem;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: #94a3b8;
-    margin-bottom: 0.5rem;
+    color: var(--rl-text, #0f172a);
+    letter-spacing: 0;
+    text-transform: none;
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.75rem;
+    border-bottom: 1px dashed var(--rl-border, #e2e8f0);
 }
 
 .price-sidebar-amount {
@@ -509,11 +537,12 @@ margin: 1.25rem 0 0;
     font-weight: 800;
     letter-spacing: -1px;
     line-height: 1;
-    /* Brand red→violet gradient text, matching the Confirm booking CTA. */
-    background: linear-gradient(135deg, #EC0B43 0%, #7c3aed 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
+    /* Rendered in the brand red used across the app (matches the "Package
+       Booking" heading and the Next button). */
+    background: none;
+    -webkit-background-clip: initial;
+    background-clip: initial;
+    color: #EC0B43;
 }
 
 .price-sidebar-sub {
