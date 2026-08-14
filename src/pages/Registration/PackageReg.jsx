@@ -1835,7 +1835,7 @@ const PackageReg = () => {
                                 }}
                                 onClick={() => setPackageCategoryDropdownOpen(false)}
                               />
-                            )}
+                            )} 
                           </div>
                           {validationErrors.packageCategory && (
                             <Form.Control.Feedback type="invalid">
