@@ -327,6 +327,11 @@ const PackageSearch = () => {
   const navigate = useNavigate();
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState(null);
+  // Category resolved for the current search's pax count — captured off the
+  // clicked result row so the View modal's "Categories" line shows only the
+  // room that will actually be booked (not every category the package sells).
+  // Falls back to the full list if the backend didn't send matchedCategoryName.
+  const [selectedMatchedCategory, setSelectedMatchedCategory] = useState(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
 
   // ─────────────────────────────────────────────
@@ -759,10 +764,21 @@ const PackageSearch = () => {
     return `${process.env.REACT_APP_API_BASE_URL}/api/files/${imagePath}`;
   };
 
-  const handleView = React.useCallback(async (packageId) => {
+  const handleView = React.useCallback(async (pkgOrId) => {
+    // Accept either the whole result row (preferred — carries the matched
+    // category the search resolved for this pax count) or a bare id for
+    // legacy callers. The matched category, if any, is captured into state
+    // so the modal's Categories line shows only the room to be booked.
+    const packageId = typeof pkgOrId === "object" && pkgOrId !== null
+      ? pkgOrId.packageId
+      : pkgOrId;
+    const matched = typeof pkgOrId === "object" && pkgOrId !== null
+      ? pkgOrId.matchedCategoryName || null
+      : null;
     try {
       setIsDetailLoading(true);
       setSelectedPackage(null);
+      setSelectedMatchedCategory(matched);
       setShowDetailModal(true);
 
       const response = await axiosInstance.get(
@@ -1725,7 +1741,7 @@ const PackageSearch = () => {
                                           className="pkg-view-btn"
                                           title="View package details"
                                           aria-label="View package details"
-                                          onClick={() => handleView(pkg.packageId)}
+                                          onClick={() => handleView(pkg)}
                                         >
                                          View
                                         </Button>
@@ -1931,14 +1947,14 @@ const PackageSearch = () => {
                       selectedPackage.containCab === 1 ? "active" : ""
                     }`}
                   >
-                    <FaCar className="me-1" /> Cab
+                    <FaCar className="me-1" /> Transfers
                   </span>
                   <span
                     className={`include-chip ${
                       selectedPackage.containActivity === 1 ? "active" : ""
                     }`}
                   >
-                    <FaHiking className="me-1" /> Activity
+                    <FaHiking className="me-1" /> Tours
                   </span>
                 </div>
 
@@ -1963,12 +1979,12 @@ const PackageSearch = () => {
                             {selectedPackage.packageTypeName || "-"}
                           </span>
                         </div>
-                        <div className="info-row">
+                        {/* <div className="info-row">
                           <span className="info-label">Currency</span>
                           <span className="info-value">
                             {selectedPackage.currencyName || "-"}
                           </span>
-                        </div>
+                        </div> */}
                       </Col>
                       <Col md={6}>
                         <div className="info-row">
@@ -1992,8 +2008,10 @@ const PackageSearch = () => {
                         <div className="info-row">
                           <span className="info-label">Categories</span>
                           <span className="info-value">
-                            {selectedPackage.packageCategories &&
-                            selectedPackage.packageCategories.length > 0
+                            {selectedMatchedCategory
+                              ? selectedMatchedCategory
+                              : selectedPackage.packageCategories &&
+                                selectedPackage.packageCategories.length > 0
                               ? selectedPackage.packageCategories
                                   .map((c) => c.name)
                                   .filter(Boolean)
@@ -2177,7 +2195,7 @@ const PackageSearch = () => {
           >
             Close
           </Button>
-          {selectedPackage?.packageId && (
+          {/* {selectedPackage?.packageId && (
             <Button
               variant="danger"
               size="sm"
@@ -2199,7 +2217,7 @@ const PackageSearch = () => {
             >
               Book Now
             </Button>
-          )}
+          )} */}
         </Modal.Footer>
       </Modal>
 
