@@ -19,6 +19,13 @@ import {
   FaMoon,
 } from "react-icons/fa";
 import PaxInformation from "./tabs/PaxInformation";
+// Total Price maths — shared with PackageBooking.jsx (step 1) so the number
+// the operator agreed to there is the number shown and billed here.
+import {
+  computePackageTotal,
+  formatPackageAmount,
+  resolvePackageBaseRate,
+} from "./packageTotal";
 import "../../../styles/PackageBooking_Stepper.css";
 import "../../../styles/RoomList.css";
 // HotelBookingPage's Booking-Summary card + Price-Details card classes
@@ -282,30 +289,23 @@ const PackageCheckout = () => {
   ]);
 
   // ── Total price ─────────────────────────────────────────────────────
-  // ADD-view: baseRate + hotel + cab + activity — the exact same formula
-  // the "Total Price" sidebar card renders below, so the number the
-  // operator agreed to on the sidebar, the number shown in Order Summary
-  // ("Payable"), and the totalPrice sent on the /book payload all match
-  // to the cent. (Older comments in this repo warned about the older
-  // REPLACE logic double-charging because hotel.totalRateWithMarkup was
-  // thought to already include the package base — that turned out not to
-  // be true; hotel is priced independently of the package base.)
-  const [totalPrice, setTotalPrice] = useState(0);
-  useEffect(() => {
-    if (!bookingData) return;
-    const baseRate =
-      Number(searchRate) > 0
-        ? Number(searchRate)
-        : Number(packageData?.rate) || 0;
-    const { hotelPrice = 0, cabPrice = 0, activityPrice = 0 } =
-      bookingData.selections || {};
-    setTotalPrice(
-      Number(baseRate) +
-        Number(hotelPrice) +
-        Number(cabPrice) +
-        Number(activityPrice),
-    );
-  }, [bookingData, packageData, searchRate]);
+  // Same helper PackageBooking.jsx (step 1) uses, fed the same selections and
+  // the same searchRate that travelled here in the draft — so the number the
+  // operator agreed to on step 1, the number in the sidebar card below, the
+  // "Payable" line in Order Summary and the totalPrice posted to /book all
+  // match to the cent.
+  //
+  // Two bugs were fixed by routing through it: this page used to ADD the
+  // package base rate on top of the selected hotel (both are the same
+  // PackageRates money — the base is just the lowest per-adult rate, so the
+  // package got charged twice), and it dropped `mealPlanPrice` entirely, so a
+  // meal plan picked on step 1 was shown on step 1 and then silently lost
+  // here. See packageTotal.js for the full reasoning.
+  const priceBreakdown = computePackageTotal(
+    bookingData?.selections,
+    resolvePackageBaseRate(searchRate, packageData),
+  );
+  const totalPrice = priceBreakdown.total;
 
   const [showPolicyModal, setShowPolicyModal] = useState(false);
 
@@ -507,6 +507,7 @@ const PackageCheckout = () => {
                       onFinish={handleFinish}
                       packageData={packageData}
                       totalPrice={totalPrice}
+                      priceBreakdown={priceBreakdown}
                       editingBookingId={editingBookingId}
                       parentBookingCode={parentBookingCode}
                     />
@@ -648,26 +649,23 @@ const PackageCheckout = () => {
                     </Card.Body>
                   </Card>
 
-                  {/* Total Price — add-view (baseRate + hotels + cabs +
-                      activities), same as PackageBooking's sidebar display.
-                      /book payload uses totalPrice state (REPLACE logic),
-                      not this display number. */}
+                  {/* Total Price — renders `totalPrice`, i.e. the identical
+                      figure PackageBooking's sidebar showed on step 1 and the
+                      one posted on /book. Meal plan is called out underneath
+                      exactly as it is there. */}
                   <div className="price-sidebar-card">
                     <div className="price-sidebar-label">Total Price</div>
                     <div className="price-sidebar-amount">
-                      {(
-                        (Number(searchRate) > 0
-                          ? Number(searchRate)
-                          : Number(packageData?.rate) || 0) +
-                        (Number(bookingData.selections?.hotelPrice) || 0) +
-                        (Number(bookingData.selections?.cabPrice) || 0) +
-                        (Number(bookingData.selections?.activityPrice) || 0)
-                      ).toLocaleString("en-US", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      {formatPackageAmount(totalPrice)}
                     </div>
                     <div className="price-sidebar-sub">AED · Selling price</div>
+                    {bookingData.selections?.selectedMealPlan && (
+                      <div className="price-sidebar-mealplan">
+                        +{" "}
+                        {bookingData.selections.selectedMealPlan.label} meal
+                        plan · AED {formatPackageAmount(priceBreakdown.mealPlan)}
+                      </div>
+                    )}
                   </div>
 
                   {/* Cancellation Policies link — same button + class as the

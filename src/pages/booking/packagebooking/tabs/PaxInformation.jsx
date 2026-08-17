@@ -46,6 +46,24 @@ const PAYMENT_GATEWAYS = [
   { id: "ccavenue", name: "CC Avenue", desc: "Cards, UPI, Net Banking" },
 ];
 
+// Flatten the two mandatory flight legs into the legacy single
+// `flightDetails` string. The backend derives the same value server-side
+// (PackageBookingServiceImpl.joinFlightLegs) — we send it too so any consumer
+// reading the request DTO straight through, rather than the saved booking,
+// still sees the journey. Returns null when neither leg is filled so the
+// amend path leaves an existing value untouched.
+const buildCombinedFlightDetails = (programme) => {
+  const arrival = programme?.arrivalFlightDetails?.trim() || "";
+  const departure = programme?.departureFlightDetails?.trim() || "";
+  const parts = [];
+  if (arrival) parts.push(`Arrival: ${arrival}`);
+  if (departure) parts.push(`Departure: ${departure}`);
+  if (parts.length) return parts.join(" | ");
+  // Nothing in the split fields — fall back to whatever a legacy booking
+  // loaded into the old single field (amend of a pre-split booking).
+  return programme?.flightDetails?.trim() || null;
+};
+
 // Reverse-geocode browser coordinates to a readable address for the Booking
 // History audit trail. Tries OpenStreetMap Nominatim first (street-level),
 // then BigDataCloud (locality-level, keyless) — both free, CORS-enabled.
@@ -102,6 +120,13 @@ const PaxInformation = forwardRef(({
   onFinish,
   packageData,
   totalPrice,
+  // Component parts of `totalPrice` from computePackageTotal() (see
+  // packageTotal.js), supplied by the page that owns the maths. Only used to
+  // itemise the Order Summary's "Rate Split" so the operator can see the
+  // meal-plan add-on inside the selling price rather than having to trust a
+  // single lump sum. Optional — the split degrades to the old single row when
+  // it isn't passed.
+  priceBreakdown,
   // When set, the submit button performs an amendment (PUT) on the
   // existing booking instead of creating a new one (POST).
   editingBookingId,
@@ -334,26 +359,30 @@ const PaxInformation = forwardRef(({
     },
   );
 
-  // The package category defines the MAX number of adults and children the
-  // user may enter. They start with only the primary (lead) adult and may
-  // opt in to enter more via the "Add extra adult" / "Add extra child"
-  // buttons — they are not forced to fill every seat the category allows.
-  // Always allow at least one extra adult above whatever was searched
-  // for — the "Add extra adult" button needs a non-zero headroom to be
-  // useful even when the search began with a single adult.
-  const searchedAdults = Number(searchParams.adultCount) || 1;
-  const maxAdults = Math.max(2, searchedAdults);
-  const maxChildren = Number(searchParams.childCount) || 0;
+  // Occupancy searched for on the Package Search page. Every seat gets its
+  // own row up-front — exactly how HotelBookingPage seeds its Guest Details
+  // grid from the room occupancy (adults + children, adults first). There are
+  // no "Add extra adult / child" buttons: the number of passengers is decided
+  // by the search, so the grid is fixed and every row must be filled in.
+  const searchedAdults = Math.max(1, Number(searchParams.adultCount) || 1);
+  const searchedChildren = Math.max(0, Number(searchParams.childCount) || 0);
+  // Per-child ages arrive as the comma-separated string the search page built
+  // ("8,10"). Split once so each Child row can label itself "Child 1 (Age: 8)"
+  // the way the hotel grid does.
+  const searchedChildAges = String(searchParams.childAge || "")
+    .split(",")
+    .map((a) => a.trim())
+    .filter(Boolean);
 
-  const currentAdults = localData.travellers.filter((t) => t.type === "Adult").length;
-  const currentChildren = localData.travellers.filter((t) => t.type === "Child").length;
-  const canAddAdult = currentAdults < maxAdults;
-  const canAddChild = currentChildren < maxChildren;
-
-  const makeTraveller = (type) => ({
+  const makeTraveller = (type, seq = 0) => ({
     type,
-    id: `${type.toLowerCase()}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    title: "Mr",
+    id: `${type.toLowerCase()}-${seq}-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 6)}`,
+    // Empty so the Title column opens on "SELECT" and the operator has to make
+    // a deliberate choice — same as the Guest Details grid on
+    // HotelBookingPage. validatePaxData() blocks submit while it is blank.
+    title: "",
     firstName: "",
     middleName: "",
     lastName: "",
@@ -361,38 +390,113 @@ const PaxInformation = forwardRef(({
     mobile: "",
   });
 
-  // Initialize / reconcile traveller list when the page mounts or the
-  // category caps change.
-  //   • No travellers yet → seed with one primary Adult.
-  //   • Caps reduced (e.g. user went back and picked a smaller category) →
-  //     trim extras but always keep the lead Adult.
+  // One row per searched seat: all adults, then all children (matching the
+  // hotel grid's `isChild: i >= room.adults` ordering).
+  const buildTravellersForOccupancy = () => [
+    ...Array.from({ length: searchedAdults }, (_, i) =>
+      makeTraveller("Adult", i),
+    ),
+    ...Array.from({ length: searchedChildren }, (_, i) => ({
+      ...makeTraveller("Child", i),
+      childAge: searchedChildAges[i] ?? null,
+    })),
+  ];
+
+  // ── Lead traveller marker ────────────────────────────────────────────
+  // Index into localData.travellers of the one row flagged Lead, mirroring
+  // HotelBookingPage's `leadIndex` / Lead radio column. Defaults to the first
+  // row so the column always has a selection on first render. Children can't
+  // be Lead. The Lead-marked traveller is the booking's primary guest: their
+  // name + contact number become `contactInfo` on the /book payload, and the
+  // row carries `isLead` so re-opening the booking to amend restores the same
+  // choice instead of silently snapping back to row 0.
+  const [leadIndex, setLeadIndex] = useState(0);
+
+  // Inline field errors keyed `pax_<index>_<field>`, same shape as
+  // HotelBookingPage's `validationErrors`. Drives isInvalid + the red
+  // feedback text under each control; cleared as soon as the operator edits
+  // the offending field.
+  const [validationErrors, setValidationErrors] = useState({});
+
+  const handleLeadSelect = (index) => {
+    // Children cannot be the lead — they can't be the booking's contact.
+    if (localData.travellers?.[index]?.type === "Child") return;
+    setLeadIndex(index);
+  };
+
+  // Initialize / reconcile the traveller list against the searched occupancy.
+  // The grid always holds exactly one row per searched seat — same contract as
+  // HotelBookingPage, which builds `adults + children` guest rows from the
+  // room and never offers add / remove controls.
+  //   • Nothing yet → seed a full set of rows.
+  //   • Counts changed (operator went back and re-searched) → grow or trim to
+  //     match, preserving whatever has already been typed into the rows that
+  //     survive so a re-search doesn't wipe the operator's work.
   useEffect(() => {
-    if (!localData.travellers || localData.travellers.length === 0) {
-      const seeded = { ...localData, travellers: [makeTraveller("Adult")] };
-      setLocalData(seeded);
-      // Functional setter — spreading the `bookingData` prop directly would
-      // capture a stale snapshot and wipe any concurrent parent updates
-      // (e.g. the async agent-credit-limit hook seeding modeOfPayment).
-      updateData((prev) => ({ ...prev, paxInfo: seeded }));
+    const existing = localData.travellers || [];
+    const adults = existing.filter((t) => t.type === "Adult");
+    const children = existing.filter((t) => t.type === "Child");
+    if (
+      adults.length === searchedAdults &&
+      children.length === searchedChildren
+    ) {
       return;
     }
-    const adults = localData.travellers.filter((t) => t.type === "Adult");
-    const children = localData.travellers.filter((t) => t.type === "Child");
-    if (adults.length > maxAdults || children.length > maxChildren) {
-      const trimmedAdults = adults.slice(0, Math.max(1, maxAdults));
-      const trimmedChildren = children.slice(0, maxChildren);
-      const merged = [...trimmedAdults, ...trimmedChildren];
-      const updated = { ...localData, travellers: merged };
-      setLocalData(updated);
-      updateData((prev) => ({ ...prev, paxInfo: updated }));
+
+    const fresh = buildTravellersForOccupancy();
+    const freshAdults = fresh.filter((t) => t.type === "Adult");
+    const freshChildren = fresh.filter((t) => t.type === "Child");
+    // Keep already-entered rows positionally; top up from the fresh set.
+    const merged = [
+      ...freshAdults.map((row, i) => adults[i] || row),
+      ...freshChildren.map((row, i) =>
+        children[i] ? { ...children[i], childAge: row.childAge } : row,
+      ),
+    ];
+
+    const updated = { ...localData, travellers: merged };
+    setLocalData(updated);
+    // Shrinking can drop the row the Lead radio pointed at (or shift it past
+    // the end). Snap the Lead back to the first adult rather than leave the
+    // index dangling, which would leave the grid with no Lead selected and
+    // the Contact field nowhere to render.
+    setLeadIndex((prev) => (prev < merged.length ? prev : 0));
+    // Functional setter — spreading the `bookingData` prop directly would
+    // capture a stale snapshot and wipe any concurrent parent updates
+    // (e.g. the async agent-credit-limit hook seeding modeOfPayment).
+    updateData((prev) => ({ ...prev, paxInfo: updated }));
+  }, [searchedAdults, searchedChildren]);
+
+  // Restore the Lead selection when an existing booking is loaded for amend —
+  // the saved rows carry `isLead`, so the radio lands back on the traveller
+  // the operator originally chose instead of resetting to row 0 and quietly
+  // changing the booking's contact on re-save. Runs only while the default is
+  // still in place so it never fights a manual pick.
+  const leadHydratedRef = useRef(false);
+  useEffect(() => {
+    if (leadHydratedRef.current) return;
+    const saved = localData.travellers?.findIndex((t) => t.isLead);
+    if (saved != null && saved > -1) {
+      setLeadIndex(saved);
+      leadHydratedRef.current = true;
     }
-  }, [maxAdults, maxChildren]);
+  }, [localData.travellers]);
 
   const handleTravellerChange = (index, field, value) => {
     const updatedTravellers = [...localData.travellers];
     updatedTravellers[index] = { ...updatedTravellers[index], [field]: value };
     const updated = { ...localData, travellers: updatedTravellers };
     setLocalData(updated);
+    // Clear this field's inline error the moment the operator edits it —
+    // mirrors handleGuestChange on HotelBookingPage.
+    const errorKey = `pax_${index}_${field}`;
+    if (validationErrors[errorKey]) {
+      setValidationErrors((prev) => {
+        const next = { ...prev };
+        delete next[errorKey];
+        return next;
+      });
+    }
     // Functional setter avoids stale-closure bugs — see comment in the seed
     // effect above. A raw `{ ...bookingData, paxInfo }` spread here caused
     // every keystroke to revert whatever the parent had just set (payment
@@ -400,55 +504,66 @@ const PaxInformation = forwardRef(({
     updateData((prev) => ({ ...prev, paxInfo: updated }));
   };
 
-  const addExtraTraveller = (type) => {
-    if (type === "Adult" && !canAddAdult) return;
-    if (type === "Child" && !canAddChild) return;
-    // Keep adults before children so the primary stays first and child rows
-    // appear after the adult rows in the UI.
-    const adults = localData.travellers.filter((t) => t.type === "Adult");
-    const children = localData.travellers.filter((t) => t.type === "Child");
-    const newRow = makeTraveller(type);
-    const merged = type === "Adult"
-      ? [...adults, newRow, ...children]
-      : [...adults, ...children, newRow];
-    const updated = { ...localData, travellers: merged };
-    setLocalData(updated);
-    updateData((prev) => ({ ...prev, paxInfo: updated }));
-  };
+  // No addExtraTraveller / removeTraveller: the passenger count comes from the
+  // search, so the grid is fixed at one row per searched seat — the same
+  // contract HotelBookingPage's Guest Details grid has. To book for a
+  // different party size the operator changes the occupancy on the search
+  // page, which re-seeds the rows through the effect above.
 
-  const removeTraveller = (index) => {
-    // Primary (index 0) cannot be removed — always required as the contact.
-    if (index === 0) return;
-    const newList = localData.travellers.filter((_, i) => i !== index);
-    const updated = { ...localData, travellers: newList };
-    setLocalData(updated);
-    updateData((prev) => ({ ...prev, paxInfo: updated }));
-  };
+  // Counts rendered in Order Summary and sent on the payload. Read off the
+  // rows actually on the form (rather than the raw search params) so they stay
+  // truthful during the tick before the seed effect reconciles.
+  const currentAdults = (localData.travellers || []).filter(
+    (t) => t.type === "Adult",
+  ).length;
+  const currentChildren = (localData.travellers || []).filter(
+    (t) => t.type === "Child",
+  ).length;
 
-  const primary = localData.travellers && localData.travellers[0];
+  // The Lead-marked traveller IS the primary guest — their name and contact
+  // number become the booking's `contactInfo`. Falls back to the first row if
+  // the index ever goes stale (e.g. a hydrated booking with fewer rows).
+  const primary =
+    (localData.travellers && localData.travellers[leadIndex]) ||
+    (localData.travellers && localData.travellers[0]);
 
   const validatePaxData = () => {
     if (!primary) {
       toast.error("No travellers configured.");
       return false;
     }
-    if (!primary.firstName || !primary.lastName) {
-      toast.error("Please fill the lead traveller's first and last name.");
+
+    // Collect every offending field in one pass so the operator sees all the
+    // red boxes at once instead of fixing them one toast at a time — same
+    // approach as HotelBookingPage's validateForm().
+    const errors = {};
+    localData.travellers.forEach((t, i) => {
+      if (!t.title?.trim()) errors[`pax_${i}_title`] = "Required";
+      if (!t.firstName?.trim()) errors[`pax_${i}_firstName`] = "Required";
+      if (!t.lastName?.trim()) errors[`pax_${i}_lastName`] = "Required";
+    });
+    // Contact number is only asked of the Lead traveller — they are the
+    // booking's single point of contact.
+    if (!primary.mobile?.trim()) {
+      errors[`pax_${leadIndex}_mobile`] = "Required";
+    }
+
+    setValidationErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      toast.error(
+        "Please complete the highlighted traveller fields (title, first name, surname and the lead's contact).",
+      );
       return false;
     }
-    if (!primary.mobile) {
-      toast.error("Please fill the lead traveller's mobile (contact info).");
+    // Both flight legs are mandatory — the supplier plans the airport pickup
+    // off the arrival leg and the drop-off off the departure leg, so one
+    // without the other leaves a hole in the transfer plan.
+    if (!bookingData?.programme?.arrivalFlightDetails?.trim()) {
+      toast.error("Please fill in Arrival flight details.");
       return false;
     }
-    const incompleteTraveller = localData.travellers.find(
-      (t) => !t.firstName || !t.lastName,
-    );
-    if (incompleteTraveller) {
-      toast.error("Please fill in first and last names for all travellers.");
-      return false;
-    }
-    if (!bookingData?.programme?.flightDetails?.trim()) {
-      toast.error("Please fill in Flight details.");
+    if (!bookingData?.programme?.departureFlightDetails?.trim()) {
+      toast.error("Please fill in Departure flight details.");
       return false;
     }
     return true;
@@ -496,8 +611,10 @@ const PaxInformation = forwardRef(({
           childAge: searchParams.childAge,
           infantAge: searchParams.infantAge,
         },
-        // Contact info is now derived from the first (lead) traveller —
-        // the standalone Contact card was removed from the UI.
+        // Contact info is derived from the Lead-marked traveller — whichever
+        // row the operator flagged with the Lead radio in the Traveller
+        // information grid. The standalone Contact card was removed from the
+        // UI; the lead's own contact number is the booking's contact.
         contactInfo: {
           title: primary?.title || "Mr",
           name: [primary?.firstName, primary?.middleName, primary?.lastName]
@@ -507,7 +624,13 @@ const PaxInformation = forwardRef(({
           email: primary?.email || "",
           mobile: primary?.mobile || "",
         },
-        travellers: localData.travellers,
+        // isLead is persisted per traveller so re-opening the booking to amend
+        // restores the same Lead selection rather than snapping back to row 0
+        // (which would silently swap the booking's contact on re-save).
+        travellers: localData.travellers.map((t, i) => ({
+          ...t,
+          isLead: i === leadIndex,
+        })),
         selections: {
           hotels: (bookingData.selections.selectedHotels || []).map((h) => ({
             hotelId: h.hotelId,
@@ -520,7 +643,16 @@ const PaxInformation = forwardRef(({
         },
         // Programme fields captured on the Hotels tab.
         checkInDate: bookingData.programme?.checkInDate || null,
-        flightDetails: bookingData.programme?.flightDetails || null,
+        // Two mandatory flight legs captured under "Travel details". The
+        // backend also derives the legacy single `flightDetails` column from
+        // them ("Arrival: … | Departure: …") so the voucher PDF and older
+        // consumers keep rendering the journey; we still send flightDetails
+        // for any path that reads the request DTO directly.
+        arrivalFlightDetails:
+          bookingData.programme?.arrivalFlightDetails?.trim() || null,
+        departureFlightDetails:
+          bookingData.programme?.departureFlightDetails?.trim() || null,
+        flightDetails: buildCombinedFlightDetails(bookingData.programme),
         // Optional "Others → Notes" free-text field. Backend saves it as a
         // package_booking_related_notes row on create so it appears in the
         // detail view's Notes panel. Only sent on create (PUT/amend ignores
@@ -657,20 +789,9 @@ const PaxInformation = forwardRef(({
     }
   };
 
-  const titleSelect = (value, onChange) => (
-    <Form.Select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      // minWidth + paddingRight ensure the selected text ("Mr"/"Ms"/"Mrs")
-      // isn't hidden behind Bootstrap's chevron arrow inside a narrow column.
-      style={{ height: "58px", minWidth: "90px", paddingRight: "2rem" }}
-      disabled={isViewMode}
-    >
-      <option value="Mr">Mr</option>
-      <option value="Ms">Ms</option>
-      <option value="Mrs">Mrs</option>
-    </Form.Select>
-  );
+  // The Title picker is now rendered inline in the traveller grid (matching
+  // HotelBookingPage's Guest Details columns), so the old standalone
+  // `titleSelect` helper is gone.
 
   const isViewMode = false; // Add check if needed
 
@@ -703,126 +824,200 @@ const PaxInformation = forwardRef(({
           buttons below this list and are capped at the package category's
           configured adults / children counts. */}
       <p className="tab-section-title">Traveller information</p>
+
+      {/* Column headers — same grid as the Guest Details block on
+          HotelBookingPage so every passenger table in the system reads
+          identically. Hidden below md, where each field carries its own
+          inline label instead (the row stacks there). */}
+      <Row className="fw-semibold small text-muted px-2 mb-1 d-none d-md-flex">
+        <Col md={2}>Passenger</Col>
+        <Col md={2}>Title *</Col>
+        <Col md={3}>First Name *</Col>
+        <Col md={3}>Surname *</Col>
+        <Col md={2} className="text-center">
+          Lead
+        </Col>
+      </Row>
+
       {localData.travellers.map((pax, index) => {
         // Numbering within type so extras read "Adult 2", "Child 2" etc.
         const sameTypeBefore = localData.travellers
           .slice(0, index)
           .filter((t) => t.type === pax.type).length;
+        const isChild = pax.type === "Child";
+        const isLead = index === leadIndex;
         return (
-        <div key={pax.id} className="pax-card">
-          <div className="d-flex justify-content-between align-items-center mb-1">
-            <span className="pax-type-badge">
-              {pax.type} {sameTypeBefore + 1}
-              {index === 0 && (
-                <span
-                  className="ms-2 badge bg-primary"
-                  style={{ fontSize: "0.65rem" }}
-                >
-                  Primary contact
+          <div key={pax.id} className="guest-row mb-2">
+            <Row className="align-items-center g-2">
+              <Col md={2}>
+                {/* "Adult 1" / "Child 1 (Age: 8)" — the age comes from the
+                    occupancy picked on the search page, same labelling the
+                    hotel Guest Details grid uses. */}
+                <span className="fw-semibold text-muted">
+                  {pax.type} {sameTypeBefore + 1}
+                  {isChild && pax.childAge ? ` (Age: ${pax.childAge})` : ""}
                 </span>
-              )}
-            </span>
-            {index > 0 && (
-              <Button
-                variant="outline-danger"
-                size="sm"
-                onClick={() => removeTraveller(index)}
-              >
-                Remove
-              </Button>
-            )}
-          </div>
-          <Row className="g-3">
-            <Col md={2}>
-              <Form.Group>
-                <Form.Label className="booking-field-label">Title</Form.Label>
-                {titleSelect(pax.title, (v) =>
-                  handleTravellerChange(index, "title", v),
+              </Col>
+              <Col md={2}>
+                <Form.Label className="booking-field-label d-md-none">
+                  Title <span className="text-danger">*</span>
+                </Form.Label>
+                <Form.Select
+                  className="form-control-sm"
+                  value={pax.title || ""}
+                  disabled={isViewMode}
+                  onChange={(e) =>
+                    handleTravellerChange(index, "title", e.target.value)
+                  }
+                  isInvalid={!!validationErrors[`pax_${index}_title`]}
+                >
+                  <option value="">SELECT</option>
+                  <option value="Mr">Mr</option>
+                  <option value="Mrs">Mrs</option>
+                  <option value="Miss">Miss</option>
+                  <option value="Ms">Ms</option>
+                  <option value="Master">Master</option>
+                  <option value="Dr">Dr</option>
+                </Form.Select>
+                {validationErrors[`pax_${index}_title`] && (
+                  <Form.Control.Feedback type="invalid">
+                    {validationErrors[`pax_${index}_title`]}
+                  </Form.Control.Feedback>
                 )}
-              </Form.Group>
-            </Col>
-            <Col md={5}>
-              <Form.Group>
-                <Form.Label className="booking-field-label">
+              </Col>
+              <Col md={3}>
+                <Form.Label className="booking-field-label d-md-none">
                   First name <span className="text-danger">*</span>
                 </Form.Label>
                 <Form.Control
+                  type="text"
+                  placeholder="First Name"
+                  className="form-control-sm"
                   value={pax.firstName}
+                  disabled={isViewMode}
                   onChange={(e) =>
                     handleTravellerChange(index, "firstName", e.target.value)
                   }
+                  isInvalid={!!validationErrors[`pax_${index}_firstName`]}
                 />
-              </Form.Group>
-            </Col>
-            {/* Middle name input intentionally removed from the form. The
-                `middleName` field is still carried on traveller state (seeded
-                at makeTraveller, hydrated from saved bookings in amend mode,
-                folded into the composite contactInfo.name, and rendered in
-                the PackageBookingDetailView) so existing bookings that
-                already have a middle name saved don't lose it on amend. */}
-            <Col md={5}>
-              <Form.Group>
-                <Form.Label className="booking-field-label">
-                  Last name <span className="text-danger">*</span>
+                {validationErrors[`pax_${index}_firstName`] && (
+                  <Form.Control.Feedback type="invalid">
+                    {validationErrors[`pax_${index}_firstName`]}
+                  </Form.Control.Feedback>
+                )}
+              </Col>
+              {/* Middle name input intentionally removed from the form. The
+                  `middleName` field is still carried on traveller state (seeded
+                  at makeTraveller, hydrated from saved bookings in amend mode,
+                  folded into the composite contactInfo.name, and rendered in
+                  the PackageBookingDetailView) so existing bookings that
+                  already have a middle name saved don't lose it on amend. */}
+              <Col md={3}>
+                <Form.Label className="booking-field-label d-md-none">
+                  Surname <span className="text-danger">*</span>
                 </Form.Label>
                 <Form.Control
+                  type="text"
+                  placeholder="Surname"
+                  className="form-control-sm"
                   value={pax.lastName}
+                  disabled={isViewMode}
                   onChange={(e) =>
                     handleTravellerChange(index, "lastName", e.target.value)
                   }
+                  isInvalid={!!validationErrors[`pax_${index}_lastName`]}
                 />
-              </Form.Group>
-            </Col>
-          </Row>
-          {/* Only show mobile for the lead traveller (acts as contact). The
-              Email input was intentionally removed from this form. The `email`
-              field is still carried on traveller state (seeded at
-              makeTraveller, hydrated from saved bookings in amend mode,
-              propagated to contactInfo.email on submit, rendered on the PDF
-              voucher and in the amend confirmation dialog) so bookings that
-              were saved with an email before this change don't silently lose
-              it on amend, and existing detail views keep displaying it. */}
-          {index === 0 && (
-            <Row className="g-3 mt-1">
-              <Col md={12}>
-                <Form.Group>
-                  <Form.Label className="booking-field-label">
-                    Passenger Mobile Number{" "}
-                    <span className="text-danger">*</span>
-                  </Form.Label>
-                  <Form.Control
-                    placeholder="+971 ..."
-                    value={pax.mobile || ""}
-                    onChange={(e) =>
-                      handleTravellerChange(index, "mobile", e.target.value)
-                    }
-                  />
-                </Form.Group>
+                {validationErrors[`pax_${index}_lastName`] && (
+                  <Form.Control.Feedback type="invalid">
+                    {validationErrors[`pax_${index}_lastName`]}
+                  </Form.Control.Feedback>
+                )}
+              </Col>
+              <Col xs={12} md={2} className="text-md-center">
+                {/* Lead radio — only adults can be lead. Disabled + greyed
+                    for children so the row still aligns. The Lead-marked
+                    traveller is the booking's primary guest: their name and
+                    contact number become `contactInfo` on the /book payload
+                    (see handleSubmitBooking). */}
+                <Form.Check
+                  type="radio"
+                  name="pkg-lead-traveller"
+                  id={`pkg-lead-${index}`}
+                  label={<span className="d-md-none">Lead</span>}
+                  checked={isLead}
+                  disabled={isChild || isViewMode}
+                  onChange={() => handleLeadSelect(index)}
+                  title={
+                    isChild
+                      ? "Children cannot be the lead"
+                      : "Mark as Lead traveller"
+                  }
+                />
               </Col>
             </Row>
-          )}
-        </div>
+
+            {/* Contact number — asked only of the Lead traveller, who is the
+                booking's single point of contact. It follows the Lead radio,
+                so re-flagging a different traveller moves this field to them.
+                The Email input was intentionally removed from this form; the
+                `email` field is still carried on traveller state (seeded at
+                makeTraveller, hydrated from saved bookings in amend mode,
+                propagated to contactInfo.email on submit, rendered on the PDF
+                voucher and in the amend confirmation dialog) so bookings saved
+                with an email before that change don't silently lose it. */}
+            {isLead && (
+              <Row className="g-2 mt-1">
+                <Col xs={12} md={{ span: 6, offset: 2 }}>
+                  <Form.Group>
+                    <Form.Label className="booking-field-label">
+                      Contact <span className="text-danger">*</span>
+                    </Form.Label>
+                    <Form.Control
+                      className="form-control-sm"
+                      placeholder="+971 ..."
+                      value={pax.mobile || ""}
+                      disabled={isViewMode}
+                      onChange={(e) =>
+                        handleTravellerChange(index, "mobile", e.target.value)
+                      }
+                      isInvalid={!!validationErrors[`pax_${index}_mobile`]}
+                    />
+                    {validationErrors[`pax_${index}_mobile`] && (
+                      <Form.Control.Feedback type="invalid">
+                        {validationErrors[`pax_${index}_mobile`]}
+                      </Form.Control.Feedback>
+                    )}
+                  </Form.Group>
+                </Col>
+              </Row>
+            )}
+          </div>
         );
       })}
 
-      {/* Travel details — Flight details sits after the travellers, just
-          before the add-extra controls. Written to
-          bookingData.programme.flightDetails and forwarded as `flightDetails`
-          on the /book payload (see the payload block above at ~L451).
-          Required — validatePaxData() blocks submit when it's blank. */}
+      {/* Travel details — the inbound and outbound flights sit after the
+          travellers, just before the add-extra controls. Written to
+          bookingData.programme.arrivalFlightDetails /
+          .departureFlightDetails and forwarded under the same names on the
+          /book payload (see the payload block above), which also joins them
+          into the legacy `flightDetails` string for the voucher PDF.
+          BOTH are required — validatePaxData() blocks submit when either is
+          blank. */}
       <p className="tab-section-title mt-3">Travel details</p>
       <Row className="g-3 mb-2">
-        {/* Free-text alphanumeric field — accepts flight number, airport
-            codes and times, e.g. "EK 503  STN-DXB  21:45 / 06:50". Persisted
-            on the booking so the supplier can plan pickups / arrivals. */}
-        <Col md={12}>
+        {/* Free-text alphanumeric fields — each accepts a flight number,
+            airport codes and times, e.g. "EK 503  LHR-DXB  21:45 / 06:50".
+            Kept as two separate legs so the supplier can plan the airport
+            pickup and the drop-off independently. */}
+        <Col md={6}>
           <Form.Group>
             <Form.Label className="booking-field-label">
-              Flight details <span className="required-dot">*</span>
+              Arrival flight details <span className="required-dot">*</span>
             </Form.Label>
             <Form.Control
               type="text"
-              value={bookingData?.programme?.flightDetails || ""}
+              placeholder=""
+              value={bookingData?.programme?.arrivalFlightDetails || ""}
               disabled={isViewMode}
               onChange={(e) => {
                 const val = e.target.value;
@@ -830,7 +1025,30 @@ const PaxInformation = forwardRef(({
                   ...prev,
                   programme: {
                     ...prev.programme,
-                    flightDetails: val,
+                    arrivalFlightDetails: val,
+                  },
+                }));
+              }}
+            />
+          </Form.Group>
+        </Col>
+        <Col md={6}>
+          <Form.Group>
+            <Form.Label className="booking-field-label">
+              Departure flight details <span className="required-dot">*</span>
+            </Form.Label>
+            <Form.Control
+              type="text"
+              placeholder=""
+              value={bookingData?.programme?.departureFlightDetails || ""}
+              disabled={isViewMode}
+              onChange={(e) => {
+                const val = e.target.value;
+                updateData((prev) => ({
+                  ...prev,
+                  programme: {
+                    ...prev.programme,
+                    departureFlightDetails: val,
                   },
                 }));
               }}
@@ -850,7 +1068,7 @@ const PaxInformation = forwardRef(({
         <Col md={12}>
           <Form.Group>
             <Form.Label className="booking-field-label">
-              Notes <span className="text-muted small">(optional)</span>
+              Notes <span className="text-muted small"></span>
             </Form.Label>
             <Form.Control
               as="textarea"
@@ -916,46 +1134,11 @@ const PaxInformation = forwardRef(({
         </Col>
       </Row>
 
-      {/* Add-extra controls — the Adult button is always rendered (cap is
-          guaranteed >= 2 above); the Child button only renders when the
-          package category actually allows children. Both buttons disable
-          themselves when the user has already reached the cap. */}
-      <div className="d-flex flex-wrap gap-2 mt-2">
-        <Button
-          variant="outline-primary"
-          size="sm"
-          onClick={() => addExtraTraveller("Adult")}
-          disabled={!canAddAdult}
-          title={
-            canAddAdult
-              ? `Add another adult (max ${maxAdults})`
-              : `Maximum ${maxAdults} adult${maxAdults === 1 ? "" : "s"} for this package category`
-          }
-        >
-          + Add extra adult{" "}
-          <span className="text-muted">
-            ({currentAdults}/{maxAdults})
-          </span>
-        </Button>
-        {maxChildren > 0 && (
-          <Button
-            variant="outline-primary"
-            size="sm"
-            onClick={() => addExtraTraveller("Child")}
-            disabled={!canAddChild}
-            title={
-              canAddChild
-                ? `Add a child (max ${maxChildren})`
-                : `Maximum ${maxChildren} child${maxChildren === 1 ? "" : "ren"} for this package category`
-            }
-          >
-            + Add extra child{" "}
-            <span className="text-muted">
-              ({currentChildren}/{maxChildren})
-            </span>
-          </Button>
-        )}
-      </div>
+      {/* The "Add extra adult / child" buttons were removed: the traveller
+          grid is seeded straight from the occupancy searched for, one row per
+          seat, so there is nothing to add. Party size is changed on the
+          Package Search page, exactly like HotelBookingPage's Guest Details
+          grid follows the room occupancy. */}
 
       <div className="sticky-nav-row d-flex justify-content-between">
         <button className="btn-nav-prev" onClick={onPrev}>
@@ -1365,17 +1548,47 @@ const PaxInformation = forwardRef(({
                     </p>
                   </Col>
 
-                  {bookingData?.programme?.flightDetails && (
-                    <Col xs={12}>
+                  {/* Flight legs — shown separately so the operator can check
+                      each one before confirming. A pre-split booking being
+                      amended has neither, and falls back to the old combined
+                      field below. */}
+                  {bookingData?.programme?.arrivalFlightDetails && (
+                    <Col xs={6}>
                       <p className="mb-1">
-                        <strong>Flight details:</strong>
+                        <strong>Arrival flight:</strong>
                         <br />
                         <span className="text-dark">
-                          {bookingData.programme.flightDetails}
+                          {bookingData.programme.arrivalFlightDetails}
                         </span>
                       </p>
                     </Col>
                   )}
+
+                  {bookingData?.programme?.departureFlightDetails && (
+                    <Col xs={6}>
+                      <p className="mb-1">
+                        <strong>Departure flight:</strong>
+                        <br />
+                        <span className="text-dark">
+                          {bookingData.programme.departureFlightDetails}
+                        </span>
+                      </p>
+                    </Col>
+                  )}
+
+                  {!bookingData?.programme?.arrivalFlightDetails &&
+                    !bookingData?.programme?.departureFlightDetails &&
+                    bookingData?.programme?.flightDetails && (
+                      <Col xs={12}>
+                        <p className="mb-1">
+                          <strong>Flight details:</strong>
+                          <br />
+                          <span className="text-dark">
+                            {bookingData.programme.flightDetails}
+                          </span>
+                        </p>
+                      </Col>
+                    )}
 
                   {leadName && (
                     <Col xs={12}>
@@ -1470,6 +1683,47 @@ const PaxInformation = forwardRef(({
 
                 <div className="mt-1 p-2 bg-white border rounded">
                   <h6 className="fw-bold mb-1">Rate Split</h6>
+                  {/* Itemised components of the selling price. The
+                      accommodation row is the selected hotel's pax-scaled rate
+                      (or, if no hotel was picked, the package's own rate) —
+                      never both, they are the same PackageRates money. Meal
+                      plan / cab / activity are genuine extras and only appear
+                      when they carry a charge. */}
+                  {priceBreakdown && (
+                    <>
+                      <div className="d-flex justify-content-between text-muted small">
+                        <span>
+                          {priceBreakdown.hotelSelected
+                            ? "Accommodation"
+                            : "Package rate"}
+                        </span>
+                        <span>{formatPrice(priceBreakdown.accommodation)}</span>
+                      </div>
+                      {priceBreakdown.mealPlan > 0 && (
+                        <div className="d-flex justify-content-between text-muted small">
+                          <span>
+                            Meal plan
+                            {bookingData?.selections?.selectedMealPlan?.label
+                              ? ` (${bookingData.selections.selectedMealPlan.label})`
+                              : ""}
+                          </span>
+                          <span>{formatPrice(priceBreakdown.mealPlan)}</span>
+                        </div>
+                      )}
+                      {priceBreakdown.cab > 0 && (
+                        <div className="d-flex justify-content-between text-muted small">
+                          <span>Cab</span>
+                          <span>{formatPrice(priceBreakdown.cab)}</span>
+                        </div>
+                      )}
+                      {priceBreakdown.activity > 0 && (
+                        <div className="d-flex justify-content-between text-muted small">
+                          <span>Activity</span>
+                          <span>{formatPrice(priceBreakdown.activity)}</span>
+                        </div>
+                      )}
+                    </>
+                  )}
                   <div className="d-flex justify-content-between">
                     <span>Selling Price</span>
                     <span>{formatPrice(totalPrice)}</span>

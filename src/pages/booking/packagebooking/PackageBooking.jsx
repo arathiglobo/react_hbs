@@ -22,6 +22,16 @@ import {
   FaMapMarkerAlt,
 } from "react-icons/fa";
 
+// Total Price maths — shared with PackageCheckout.jsx so step 1 and step 2
+// can never disagree on the number again. See the header comment in
+// packageTotal.js for why the hotel rate REPLACES the base package rate
+// instead of stacking on top of it.
+import {
+  computePackageTotal,
+  formatPackageAmount,
+  resolvePackageBaseRate,
+} from "./packageTotal";
+
 import HotelsTab from "./tabs/HotelsTab";
 import CabsTab from "./tabs/CabsTab";
 import ActivitiesTab from "./tabs/ActivitiesTab";
@@ -180,7 +190,14 @@ const PackageBooking = () => {
     // flow into the submit payload via PaxInformation.
     programme: {
       checkInDate: "",
+      // Legacy combined flight text — only ever populated when amending a
+      // booking made before the arrival / departure split. New bookings fill
+      // the two legs below and the backend derives this one.
       flightDetails: "",
+      // Both mandatory on the Package Checkout page's "Travel details"
+      // section (see PaxInformation.validatePaxData).
+      arrivalFlightDetails: "",
+      departureFlightDetails: "",
       // Optional free-text notes captured under the Pax Info step's "Others"
       // heading. Sent on the /book POST as `initialNote`; backend persists it
       // as a package_booking_related_notes row so it lands in the detail
@@ -194,7 +211,20 @@ const PackageBooking = () => {
     },
   });
 
-  const [totalPrice, setTotalPrice] = useState(0);
+  // Total Price — derived, not state, so there is exactly one place the
+  // number comes from. computePackageTotal() owns the maths: the picked
+  // hotel's pax-scaled rate REPLACES the package's "from" rate (both are the
+  // same PackageRates money — see packageTotal.js), then meal plan, cab and
+  // activity stack on top. The same helper runs on PackageCheckout, so the
+  // sidebar here, the sidebar there and the /book payload always agree.
+  const priceBreakdown = computePackageTotal(
+    bookingData.selections,
+    // Prefer the rate that was shown on the search-result card so the sidebar
+    // mirrors what the user clicked Book Now on; falls back to the rates-API
+    // value for direct / refresh visits.
+    resolvePackageBaseRate(searchRate, packageData),
+  );
+  const totalPrice = priceBreakdown.total;
 
   useEffect(() => {
     const fetchPackageDetails = async () => {
@@ -202,14 +232,6 @@ const PackageBooking = () => {
         setIsLoading(true);
         const response = await axiosInstance.get(`/api/packageRates/${id}`);
         setPackageData(response.data);
-        // Prefer the rate that was shown on the search-result card so the
-        // Total Price sidebar mirrors what the user clicked Book Now on.
-        // Falls back to the rates-API value for direct/refresh visits.
-        const baseRate =
-          Number(searchRate) > 0
-            ? Number(searchRate)
-            : Number(response.data?.rate) || 0;
-        setTotalPrice(baseRate);
       } catch (error) {
         console.error("Error fetching package details:", error);
       } finally {
@@ -327,22 +349,38 @@ const PackageBooking = () => {
             activityPrice: Number(b.selections?.activity?.selectedRate || 0),
           },
           paxInfo: {
-            travellers: (b.travellers || []).map((t, i) => ({
-              type: t.type || (i === 0 ? "Adult" : "Adult"),
-              id: `${(t.type || "adult").toLowerCase()}-${i}-${Date.now()}`,
-              title: t.title || "Mr",
-              firstName: t.firstName || "",
-              middleName: t.middleName || "",
-              lastName: t.lastName || "",
-              // Email + mobile aren't on the per-traveller payload — pull
-              // them from the booking-level contactInfo for the first row.
-              email: i === 0 ? b.contactInfo?.email || "" : "",
-              mobile: i === 0 ? b.contactInfo?.mobile || "" : "",
-            })),
+            travellers: (() => {
+              const rows = b.travellers || [];
+              // Which row was flagged Lead when the booking was saved. Rows
+              // from before the Lead radio existed carry no flag — fall back
+              // to the first traveller, which is what that flow always used
+              // as the contact.
+              const savedLead = rows.findIndex((t) => t.isLead);
+              const leadIdx = savedLead > -1 ? savedLead : 0;
+              return rows.map((t, i) => ({
+                type: t.type || (i === 0 ? "Adult" : "Adult"),
+                id: `${(t.type || "adult").toLowerCase()}-${i}-${Date.now()}`,
+                title: t.title || "Mr",
+                firstName: t.firstName || "",
+                middleName: t.middleName || "",
+                lastName: t.lastName || "",
+                isLead: i === leadIdx,
+                // Email + mobile aren't on the per-traveller payload — pull
+                // them from the booking-level contactInfo onto the Lead row,
+                // since that traveller is the booking's contact.
+                email: i === leadIdx ? b.contactInfo?.email || "" : "",
+                mobile: i === leadIdx ? b.contactInfo?.mobile || "" : "",
+              }));
+            })(),
           },
           programme: {
             checkInDate: b.checkInDate || "",
             flightDetails: b.flightDetails || "",
+            // Bookings created before the split return null for both legs;
+            // the operator has to fill them in to save the amendment, which
+            // is the intended migration path for old bookings.
+            arrivalFlightDetails: b.arrivalFlightDetails || "",
+            departureFlightDetails: b.departureFlightDetails || "",
             modeOfPayment: b.modeOfPayment || "",
             bookingConfirmation: b.bookingConfirmation || "",
             termsAccepted: !!b.termsAccepted,
@@ -355,31 +393,6 @@ const PackageBooking = () => {
     };
     loadExistingBooking();
   }, [isEditMode, bookingId]);
-
-  useEffect(() => {
-    // Same precedence as the initial fetch — prefer the searched rate so
-    // the sidebar stays aligned with what the user clicked Book Now on,
-    // even after selections trigger a recompute.
-    const baseRate =
-      Number(searchRate) > 0
-        ? Number(searchRate)
-        : Number(packageData?.rate) || 0;
-    const { hotelPrice, cabPrice, activityPrice, mealPlanPrice } = bookingData.selections;
-
-    // Show the package rate exactly as it appeared on the search card until
-    // the user actually picks a hotel. Applying any category- or pax-based
-    // multiplier here would make the sidebar disagree with the number the
-    // user clicked "Book Now" on for their package. Once a hotel IS
-    // selected, its totalRateWithMarkup is the authoritative charge
-    // (already pax-sized by the backend as
-    // perAdultRate*adultCount + perChildRate*childCount + markup), so it
-    // takes over directly.
-    const packageTotal = hotelPrice > 0 ? hotelPrice : baseRate;
-
-    // Meal plan (if any) is appended on top — its rate is already pax-scaled
-    // + markup-applied by the backend (see mealPlanPrice from HotelsTab).
-    setTotalPrice(packageTotal + cabPrice + activityPrice + (Number(mealPlanPrice) || 0));
-  }, [bookingData.selections, packageData, searchRate]);
 
   const updateSelections = (selections) =>
     setBookingData((prev) => ({ ...prev, selections: { ...prev.selections, ...selections } }));
@@ -574,6 +587,7 @@ const PackageBooking = () => {
                         onFinish={handleFinish}
                         packageData={packageData}
                         totalPrice={totalPrice}
+                        priceBreakdown={priceBreakdown}
                         editingBookingId={editingBookingId}
                         parentBookingCode={parentBookingCode}
                       />;
@@ -777,40 +791,28 @@ const PackageBooking = () => {
                   so the Total Price stays visible while the operator scrolls
                   through the main content. It unpins naturally when its
                   column ends. */}
-              {/* ── Displayed total (add-view) vs submitted total (billing) ──
-                  The number rendered here in the sidebar is INTENTIONALLY the
-                  sum: Package rate + Hotel (when selected) + Cabs + Activities
-                  — so the operator sees the components stacking up as they
-                  make selections. The `totalPrice` state that flows into the
-                  /book POST body is kept on its existing "hotel replaces
-                  package rate" logic (see the useEffect above), because
-                  hotel.totalRateWithMarkup ALREADY includes the package's
-                  pax-sized base + agent markup; adding baseRate on top of
-                  that would double-deduct the agent's credit at line 1374 of
-                  PackageBookingServiceImpl.java. So display ≠ billed on
-                  purpose — this component is presentational only. */}
+              {/* ── Displayed total == submitted total ──
+                  The number rendered here is `totalPrice`, the exact figure
+                  carried into /new-booking/package-checkout/{id} and posted on
+                  the /book payload. It used to be a second, hand-rolled "add
+                  everything up" sum that also added the package's base rate on
+                  top of the selected hotel — but both come from the same
+                  PackageRates rows (base = lowest per-adult rate, hotel = that
+                  same rate pax-scaled), so that double-charged the package.
+                  See packageTotal.js. */}
               <div className="sidebar-stack">
               {/* Booking Summary card was moved INTO the hero card at the top
                   of the page (right-side column, md=4) per operator feedback,
                   so the sidebar no longer duplicates it. The Total Price card
                   below is now the first sidebar item. */}
 
-              {/* Total Price — just the headline number. Per product spec
-                  the rate-splits (Package rate / Hotels / Cabs / Activities
-                  breakdown rows) were removed on this page so the operator
-                  sees the single total they're about to commit to. The
-                  detailed breakdown still appears on /new-booking/
-                  package-checkout/{id} if needed. */}
+              {/* Total Price — the headline number, with the meal-plan add-on
+                  called out underneath once one is picked so the operator can
+                  see what stacked on top of the accommodation rate. */}
               <div className="price-sidebar-card">
                 <div className="price-sidebar-label">Total Price</div>
                 <div className="price-sidebar-amount">
-                  {(
-                    (Number(searchRate) > 0 ? Number(searchRate) : Number(packageData?.rate) || 0) +
-                    (Number(bookingData.selections.hotelPrice) || 0) +
-                    (Number(bookingData.selections.cabPrice) || 0) +
-                    (Number(bookingData.selections.activityPrice) || 0) +
-                    (Number(bookingData.selections.mealPlanPrice) || 0)
-                  ).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {formatPackageAmount(totalPrice)}
                 </div>
                 <div className="price-sidebar-sub">AED · Selling price</div>
                 {/* Meal plan line — only shown once one is picked on the
@@ -819,10 +821,7 @@ const PackageBooking = () => {
                 {bookingData.selections.selectedMealPlan && (
                   <div className="price-sidebar-mealplan">
                     + {bookingData.selections.selectedMealPlan.label} meal plan · AED{" "}
-                    {Number(bookingData.selections.mealPlanPrice || 0).toLocaleString("en-US", {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
+                    {formatPackageAmount(priceBreakdown.mealPlan)}
                   </div>
                 )}
               </div>

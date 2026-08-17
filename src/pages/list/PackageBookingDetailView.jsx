@@ -1537,10 +1537,28 @@ export default function PackageBookingDetailView() {
                             </span>
                           }
                         />
-                        <InfoRow
-                          label="Flight Details"
-                          value={bookingDetails.flightDetails}
-                        />
+                        {/* Flight legs are captured separately from
+                            2026-08-17 onward. Bookings made before that only
+                            carry the combined field, so fall back to it
+                            rather than showing two empty rows. */}
+                        {bookingDetails.arrivalFlightDetails ||
+                        bookingDetails.departureFlightDetails ? (
+                          <>
+                            <InfoRow
+                              label="Arrival Flight"
+                              value={bookingDetails.arrivalFlightDetails}
+                            />
+                            <InfoRow
+                              label="Departure Flight"
+                              value={bookingDetails.departureFlightDetails}
+                            />
+                          </>
+                        ) : (
+                          <InfoRow
+                            label="Flight Details"
+                            value={bookingDetails.flightDetails}
+                          />
+                        )}
                         <InfoRow
                           label="Pax Count"
                           value={`${bookingDetails.counts?.adultCount || 0} Adult${bookingDetails.counts?.childCount ? `, ${bookingDetails.counts.childCount} Child` : ""}${bookingDetails.counts?.infantCount ? `, ${bookingDetails.counts.infantCount} Infant` : ""}`}
