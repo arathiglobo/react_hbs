@@ -106,6 +106,11 @@ const FlightSearch = () => {
   const [error, setError] = useState(null);
   const [results, setResults] = useState([]);
   const [searched, setSearched] = useState(false);
+  // Mirrors HotelSearch's collapse-to-summary-bar pattern: once a search
+  // completes, the full form gives way to a compact strip with a "Modify
+  // Search" button. Set true to re-expand; a fresh search always collapses
+  // it again (see `search()` below).
+  const [isEditingSearch, setIsEditingSearch] = useState(false);
 
   // Round-trip is a 2-leg one-way + return; keep the legs array in sync
   // with the journey type in BOTH directions — expand when switching to a
@@ -182,8 +187,17 @@ const FlightSearch = () => {
     setError(null);
     setResults([]);
     setSearched(true);
+    setIsEditingSearch(false);
     try {
-      const res = await axiosInstance.post("/custom/amadeus/search", payload);
+      // Override AxiosInstance's global 30s timeout — a busy long-haul
+      // route can legitimately take Amadeus 40s+ to price (observed:
+      // 46.7s for a CDG-BOM search with 56 recommendations across 17
+      // airlines), well past the 30s default but still under the
+      // backend's own 60s Amadeus read-timeout. Without this the frontend
+      // gives up on a search that was about to succeed.
+      const res = await axiosInstance.post("/custom/amadeus/search", payload, {
+        timeout: 90000,
+      });
       const data = Array.isArray(res.data) ? res.data : res.data ? [res.data] : [];
       setResults(data);
       if (!data.length) toast("No flights found for the selected criteria.", { icon: "ℹ️" });
@@ -202,6 +216,25 @@ const FlightSearch = () => {
 
   const canRemoveLeg = journeyType === "3" && legs.length > 1;
   const showAddLeg = journeyType === "3";
+  // Collapse the full form into the sticky summary strip once a search has
+  // completed, unless the user explicitly chose to modify it — same rule
+  // HotelSearch uses (see `collapseSearch` there).
+  const collapseSearch = searched && !loading && !isEditingSearch;
+  const journeyTypeLabel =
+    JOURNEY_TYPES.find((o) => o.value === journeyType)?.label || "";
+  // Short "CODE" or "City (CODE)" label for a leg endpoint — mirrors the
+  // compact chip style HotelSearch uses for its destination.
+  const legEndpointLabel = (loc) =>
+    loc ? (loc.referencecity ? `${loc.referencecity} (${loc.airportcode})` : loc.airportcode) : "";
+  const paxSummary = (() => {
+    const a = Number(adult) || 0;
+    const c = Number(children) || 0;
+    const i = Number(infant) || 0;
+    const parts = [`${a} adult${a === 1 ? "" : "s"}`];
+    if (c) parts.push(`${c} child${c === 1 ? "" : "ren"}`);
+    if (i) parts.push(`${i} infant${i === 1 ? "" : "s"}`);
+    return parts.join(", ");
+  })();
 
   return (
     <div>
@@ -216,6 +249,42 @@ const FlightSearch = () => {
             Search live flight availability powered by Amadeus.
           </p>
 
+          {/* ── Collapsed sticky search summary strip ──
+              Shown once a search has completed. "Modify Search" re-expands
+              the full form below by flipping isEditingSearch — same pattern
+              as HotelSearch's hs-summary-bar. */}
+          {collapseSearch && (
+            <div className="hs-summary-bar">
+              <Button
+                type="button"
+                className="hs-summary-modify"
+                onClick={() => {
+                  setIsEditingSearch(true);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+              >
+                <FaSearch className="me-2" />
+                Modify Search
+              </Button>
+              <div className="hs-summary-chips">
+                <span className="hs-summary-chip hs-summary-chip-main">
+                  {legs
+                    .map((l) => `${legEndpointLabel(l.fromLoc)} → ${legEndpointLabel(l.toLoc)}`)
+                    .join("  |  ")}
+                </span>
+                {legs[0]?.departure && (
+                  <span className="hs-summary-chip">
+                    {legs[0].departure}
+                    {journeyType === "2" && legs[1]?.departure ? ` → ${legs[1].departure}` : ""}
+                  </span>
+                )}
+                <span className="hs-summary-chip">{journeyTypeLabel}</span>
+                <span className="hs-summary-chip">{paxSummary}</span>
+              </div>
+            </div>
+          )}
+
+          {!collapseSearch && (
           <Card className="mb-4">
             <Card.Body>
               <Form onSubmit={search}>
@@ -403,6 +472,7 @@ const FlightSearch = () => {
               </Form>
             </Card.Body>
           </Card>
+          )}
 
           <FlightResults
             loading={loading}
@@ -410,25 +480,38 @@ const FlightSearch = () => {
             searched={searched}
             results={results}
             onSelect={(rec) => {
-              // Hand the selected recommendation to the Best Price Check
-              // page via router state so the URL stays clean and we don't
-              // have to reserialize the full itinerary through query params.
-              // The page calls /custom/amadeus/fareInformationPrice on mount
-              // to reprice it against Amadeus TIPNRQ 24.3.
-              navigate(
-                `/new-booking/flightBestPriceCheck${agentId ? `?agentId=${encodeURIComponent(agentId)}` : ""}`,
-                {
-                  state: {
-                    rec,
-                    pax: {
-                      adult: Number(adult) || 1,
-                      children: Number(children) || 0,
-                      infant: Number(infant) || 0,
-                    },
-                    fareCurrency: rec?.pricing?.currency || null,
-                  },
+              // "View Fares" opens in a new tab so the agent can keep
+              // comparing search results without losing their place. A new
+              // tab from window.open has no access to React Router's
+              // in-memory navigation state, so the payload can't travel via
+              // `navigate(path, {state})` like it used to when this stayed
+              // in the same tab — it's stashed in localStorage instead
+              // (shared across all tabs of this origin, unlike
+              // sessionStorage which browsers only copy into a new tab
+              // inconsistently). Keyed uniquely per click so two "View
+              // Fares" clicks in a row never collide; the destination page
+              // reads it once on mount and removes it immediately so
+              // nothing accumulates.
+              const payload = {
+                rec,
+                pax: {
+                  adult: Number(adult) || 1,
+                  children: Number(children) || 0,
+                  infant: Number(infant) || 0,
                 },
-              );
+                fareCurrency: rec?.pricing?.currency || null,
+              };
+              const dataKey = `fbpc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+              try {
+                localStorage.setItem(dataKey, JSON.stringify(payload));
+              } catch (e) {
+                toast.error("Could not open fare details — please try again.");
+                return;
+              }
+              const params = new URLSearchParams();
+              if (agentId) params.set("agentId", agentId);
+              params.set("dataKey", dataKey);
+              window.open(`/new-booking/flightBestPriceCheck?${params.toString()}`, "_blank");
             }}
           />
         </main>

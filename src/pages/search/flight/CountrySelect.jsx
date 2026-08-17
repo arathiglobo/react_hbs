@@ -152,9 +152,9 @@ const CountrySelect = ({
               }}
             >
               {/* Two-line row matches FlightLocationSelect exactly: bigger
-                  blue main line with a location pin + "Name (CODE)", small
+                  main line with a location pin + "Name (CODE)", small
                   gray meta line "Country · CODE" underneath. */}
-              <div style={{ fontSize: 14, color: "#0d6efd", fontWeight: 500 }}>
+              <div style={{ fontSize: 14, color: "#111827", fontWeight: 500 }}>
                 <FaMapMarkerAlt style={{ marginRight: 6, opacity: 0.7 }} />
                 {s.name}{s.code ? ` (${s.code})` : ""}
               </div>

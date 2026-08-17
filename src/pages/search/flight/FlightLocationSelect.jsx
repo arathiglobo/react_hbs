@@ -89,9 +89,14 @@ const FlightLocationSelect = ({
           params: q ? { q } : {},
           signal: controller.signal,
         });
+        // Airport rows only — the backend also returns a "city" row per
+        // match (e.g. "Dubai (DXB)" alongside "Dubai Intl Arpt (DXB)"), but
+        // flight search needs a specific airport, not the city grouping.
         // Hard cap the rendered list at 50 rows so a runaway or misconfigured
         // response can never crash the tab. Real matches stay under this cap.
-        const data = Array.isArray(res.data) ? res.data.slice(0, 50) : [];
+        const data = Array.isArray(res.data)
+          ? res.data.filter((s) => s.type !== "city").slice(0, 50)
+          : [];
         setItems(data);
         setHighlight(0);
       } catch (err) {
@@ -184,7 +189,7 @@ const FlightLocationSelect = ({
                 borderBottom: "1px solid #f1f3f5",
               }}
             >
-              <div style={{ fontSize: 14, color: "#0d6efd", fontWeight: 500 }}>
+              <div style={{ fontSize: 14, color: "#111827", fontWeight: 500 }}>
                 <FaMapMarkerAlt style={{ marginRight: 6, opacity: 0.7 }} />
                 {buildDisplay(s)}
               </div>

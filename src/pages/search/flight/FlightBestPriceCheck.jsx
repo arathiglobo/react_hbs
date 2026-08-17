@@ -8,7 +8,6 @@ import {
   Spinner,
   Alert,
   Modal,
-  Accordion,
 } from "react-bootstrap";
 import {
   FaPlaneDeparture,
@@ -17,8 +16,15 @@ import {
   FaTimes,
   FaChevronLeft,
   FaChevronRight,
+  FaChevronDown,
   FaArrowLeft,
   FaMinus,
+  FaClock,
+  FaTicketAlt,
+  FaUndo,
+  FaChild,
+  FaInfoCircle,
+  FaExclamationTriangle,
 } from "react-icons/fa";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-hot-toast";
@@ -75,6 +81,42 @@ const fmtAmount = (v) => {
   return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
 };
 
+/* ── Fare Rules modal — category grouping ──────────────────────────────
+ * The backend returns a flat list of up to 26 ATPCO categories (see
+ * AmadeusFareRulesResponseMapper.CATEGORY_TITLES for the full code→title
+ * map). Bucketing them into a handful of labelled sections — with the
+ * refund/penalty section surfaced first — makes the list scannable instead
+ * of a wall of 20+ identical accordion rows. "Other Conditions" is the
+ * catch-all for any code not explicitly grouped, so nothing is ever lost.
+ */
+const RULE_GROUPS = [
+  { key: "changes", label: "Changes & Refunds", icon: FaUndo, accent: "#dc2626", codes: ["16", "18", "31", "33"] },
+  { key: "stay", label: "Stay & Travel Dates", icon: FaClock, accent: "#2b5fdd", codes: ["02", "03", "06", "07", "08", "11"] },
+  { key: "booking", label: "Booking & Eligibility", icon: FaTicketAlt, accent: "#7c3aed", codes: ["01", "04", "05", "09", "10", "15"] },
+  { key: "discounts", label: "Discounts", icon: FaChild, accent: "#16a34a", codes: ["19", "20", "21", "22"] },
+  { key: "other", label: "Other Conditions", icon: FaInfoCircle, accent: "#6b7280", codes: null }, // catch-all
+];
+
+const KEY_RULE_CODES = new Set(["16", "31", "33"]); // penalties / refunds / changes — flagged inline
+
+function groupFareCategories(categories) {
+  const groups = RULE_GROUPS.map((g) => ({ ...g, items: [] }));
+  const catchAll = groups[groups.length - 1];
+  (categories || []).forEach((cat) => {
+    const target = groups.find((g) => g.codes && g.codes.includes(cat.code));
+    (target || catchAll).items.push(cat);
+  });
+  return groups.filter((g) => g.items.length > 0);
+}
+
+const categoryMatchesFilter = (cat, needle) => {
+  if (!needle) return true;
+  const n = needle.toLowerCase();
+  if ((cat.title || "").toLowerCase().includes(n)) return true;
+  if ((cat.code || "").toLowerCase().includes(n)) return true;
+  return (cat.lines || []).some((l) => l.toLowerCase().includes(n));
+};
+
 // Build the pricing request payload from the selected search recommendation.
 // The backend needs primitive segment fields plus passenger counts —
 // sending the full FlightRecommendation would just bloat the wire.
@@ -120,6 +162,7 @@ const FareFamilyCard = ({ family, selected, onSelect, onFareRule, onBookNow }) =
   const {
     familyCode,
     price,
+    netFare,
     currency,
     baggage,
     flexibility,
@@ -164,6 +207,13 @@ const FareFamilyCard = ({ family, selected, onSelect, onFareRule, onBookNow }) =
             {currency || "AED"} {fmtAmount(price)}
           </div>
           <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>Total Price</div>
+          {/* Raw Amadeus fare-informative price (pre-markup) — shown as a
+              secondary reference figure alongside the sell price above. */}
+          {netFare != null && netFare !== price && (
+            <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
+              Net Fare: {currency || "AED"} {fmtAmount(netFare)}
+            </div>
+          )}
         </div>
 
         <hr style={{ margin: "14px 0 10px" }} />
@@ -267,10 +317,37 @@ const FlightBestPriceCheck = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const agentId = searchParams.get("agentId") || "";
+  const dataKey = searchParams.get("dataKey") || "";
 
-  const rec = location.state?.rec || null;
-  const pax = location.state?.pax || { adult: 1, children: 0, infant: 0 };
-  const fareCurrency = location.state?.fareCurrency || null;
+  // "View Fares" now opens this page in a new tab (see FlightSearch.jsx),
+  // so the selected recommendation can't travel via React Router's
+  // in-memory navigation state — a fresh tab has no access to it. It's
+  // stashed in localStorage instead, keyed by `dataKey` from the URL.
+  // location.state is still checked first for any caller that stays in
+  // the same tab. Read-only here (no removal) so it survives React 18's
+  // double-invoke in dev; the effect below removes it once after mount.
+  const storedPayload = useMemo(() => {
+    if (!dataKey) return null;
+    try {
+      const raw = localStorage.getItem(dataKey);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }, [dataKey]);
+
+  useEffect(() => {
+    if (!dataKey) return;
+    try {
+      localStorage.removeItem(dataKey);
+    } catch (e) {
+      /* ignore — nothing to clean up if storage is unavailable */
+    }
+  }, [dataKey]);
+
+  const rec = location.state?.rec || storedPayload?.rec || null;
+  const pax = location.state?.pax || storedPayload?.pax || { adult: 1, children: 0, infant: 0 };
+  const fareCurrency = location.state?.fareCurrency || storedPayload?.fareCurrency || null;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -279,8 +356,40 @@ const FlightBestPriceCheck = () => {
   const [rulesLoading, setRulesLoading] = useState(false);
   const [rulesError, setRulesError] = useState(null);
   const [rulesData, setRulesData] = useState(null);
+  // Fare Rules modal — free-text search across category titles/codes/lines,
+  // and which category rows are expanded. Re-seeded whenever fresh rules
+  // data arrives (see effect below).
+  const [ruleFilter, setRuleFilter] = useState("");
+  const [expandedRuleCodes, setExpandedRuleCodes] = useState(() => new Set());
   const [selectedIdx, setSelectedIdx] = useState(0);
   const scrollerRef = useRef(null);
+
+  // Default-open the highest-priority category (penalties/refunds/changes)
+  // so the thing a customer cares about most is visible without a click;
+  // falls back to the first category when none of those are present.
+  useEffect(() => {
+    const cats = rulesData?.categories;
+    if (!cats || cats.length === 0) {
+      setExpandedRuleCodes(new Set());
+      return;
+    }
+    const priority = cats.find((c) => KEY_RULE_CODES.has(c.code)) || cats[0];
+    setExpandedRuleCodes(new Set(priority ? [priority.code] : []));
+  }, [rulesData]);
+
+  const toggleRuleCategory = (code) => {
+    setExpandedRuleCodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  };
+
+  const closeRulesModal = () => {
+    setShowRules(false);
+    setRuleFilter("");
+  };
 
   useEffect(() => {
     if (!rec) {
@@ -290,8 +399,11 @@ const FlightBestPriceCheck = () => {
     }
     let cancelled = false;
     const payload = buildPricingPayload(rec, pax, fareCurrency);
+    // Override AxiosInstance's global 30s timeout — TIPNR re-pricing is
+    // usually fast (1-2s), but under load it's a real Amadeus SOAP call
+    // like search, so it gets the same generous ceiling.
     axiosInstance
-      .post("/custom/amadeus/fareInformationPrice", payload)
+      .post("/custom/amadeus/fareInformationPrice", payload, { timeout: 90000 })
       .then((res) => {
         if (cancelled) return;
         const priced = res.data || null;
@@ -308,11 +420,15 @@ const FlightBestPriceCheck = () => {
         setRulesLoading(true);
         setRulesError(null);
         axiosInstance
-          .post("/custom/amadeus/fareCheckRules", {
-            sessionToken: token,
-            fareReference: 1,
-            fareBasis: priced.fareFamily || null,
-          })
+          .post(
+            "/custom/amadeus/fareCheckRules",
+            {
+              sessionToken: token,
+              fareReference: 1,
+              fareBasis: priced.fareFamily || null,
+            },
+            { timeout: 90000 },
+          )
           .then((r) => {
             if (cancelled) return;
             setRulesData(r.data || null);
@@ -424,7 +540,24 @@ const FlightBestPriceCheck = () => {
               borderRadius: 12,
             }}
           >
-            <Card.Body className="d-flex align-items-center justify-content-between">
+            <Card.Body className="d-flex align-items-center gap-3">
+              <Button
+                variant="light"
+                size="sm"
+                onClick={() =>
+                  // Explicit route beats navigate(-1) — the latter breaks on
+                  // cold reloads and bookmark visits where there's no prior
+                  // history entry to pop to. agentId is preserved so the
+                  // search page reopens in the same agent context.
+                  navigate(
+                    `/new-booking/flight${agentId ? `?agentId=${encodeURIComponent(agentId)}` : ""}`,
+                  )
+                }
+                style={{ fontWeight: 600 }}
+              >
+                <FaArrowLeft style={{ marginRight: 6 }} />
+                Back
+              </Button>
               <div className="d-flex align-items-center">
                 <div
                   style={{
@@ -447,23 +580,6 @@ const FlightBestPriceCheck = () => {
                   </div>
                 </div>
               </div>
-              <Button
-                variant="light"
-                size="sm"
-                onClick={() =>
-                  // Explicit route beats navigate(-1) — the latter breaks on
-                  // cold reloads and bookmark visits where there's no prior
-                  // history entry to pop to. agentId is preserved so the
-                  // search page reopens in the same agent context.
-                  navigate(
-                    `/new-booking/flight${agentId ? `?agentId=${encodeURIComponent(agentId)}` : ""}`,
-                  )
-                }
-                style={{ fontWeight: 600 }}
-              >
-                <FaArrowLeft style={{ marginRight: 6 }} />
-                Back to Search
-              </Button>
             </Card.Body>
           </Card>
 
@@ -569,7 +685,7 @@ const FlightBestPriceCheck = () => {
       {/* Fare Rules modal — fetches Amadeus FARQNQ on open, renders each
           category as its own collapsible panel. Falls back to raw text when
           the mapper could not group categories. */}
-      <Modal show={showRules} onHide={() => setShowRules(false)} centered size="lg" scrollable>
+      <Modal show={showRules} onHide={closeRulesModal} centered size="xl" scrollable>
         <Modal.Header closeButton>
           <Modal.Title>
             Fare Rules
@@ -642,33 +758,150 @@ const FlightBestPriceCheck = () => {
               )}
 
               {rulesData.categories && rulesData.categories.length > 0 ? (
-                <Accordion defaultActiveKey="0" alwaysOpen>
-                  {rulesData.categories.map((cat, i) => (
-                    <Accordion.Item eventKey={String(i)} key={cat.code || i}>
-                      <Accordion.Header>
-                        <span style={{ fontWeight: 600 }}>
-                          {cat.title || `Category ${cat.code || "?"}`}
-                        </span>
-                        <Badge bg="light" text="dark" className="ms-2">
-                          {cat.code || "??"}
-                        </Badge>
-                      </Accordion.Header>
-                      <Accordion.Body>
-                        {cat.lines && cat.lines.length > 0 ? (
-                          <ul className="mb-0" style={{ fontSize: 13, paddingLeft: 20 }}>
-                            {cat.lines.map((l, j) => (
-                              <li key={j}>{l}</li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="text-muted small">
-                            No text returned for this category.
+                <>
+                  {/* Search box — only worth the screen space once there's
+                      enough to search through. */}
+                  {rulesData.categories.length > 3 && (
+                    <div className="mb-3" style={{ position: "relative" }}>
+                      <FaSearch
+                        style={{
+                          position: "absolute",
+                          left: 12,
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          color: "#9ca3af",
+                          fontSize: 13,
+                        }}
+                      />
+                      <input
+                        type="text"
+                        placeholder="Search rules — e.g. refund, penalty, baggage…"
+                        value={ruleFilter}
+                        onChange={(e) => setRuleFilter(e.target.value)}
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px 10px 34px",
+                          borderRadius: 8,
+                          border: "1px solid #d1d5db",
+                          fontSize: 13.5,
+                          outline: "none",
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {(() => {
+                    const groups = groupFareCategories(rulesData.categories)
+                      .map((g) => ({
+                        ...g,
+                        items: g.items.filter((c) => categoryMatchesFilter(c, ruleFilter)),
+                      }))
+                      .filter((g) => g.items.length > 0);
+
+                    if (groups.length === 0) {
+                      return (
+                        <div className="text-center text-muted py-4" style={{ fontSize: 13 }}>
+                          No rules match "{ruleFilter}".
+                        </div>
+                      );
+                    }
+
+                    return groups.map((group) => {
+                      const GroupIcon = group.icon;
+                      return (
+                        <div key={group.key} className="mb-3">
+                          <div
+                            className="d-flex align-items-center mb-2"
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: group.accent,
+                              letterSpacing: 0.4,
+                              textTransform: "uppercase",
+                            }}
+                          >
+                            <GroupIcon style={{ marginRight: 6 }} />
+                            {group.label}
                           </div>
-                        )}
-                      </Accordion.Body>
-                    </Accordion.Item>
-                  ))}
-                </Accordion>
+                          <div
+                            style={{
+                              border: "1px solid #eef1f5",
+                              borderRadius: 10,
+                              overflow: "hidden",
+                            }}
+                          >
+                            {group.items.map((cat, i) => {
+                              const isOpen = expandedRuleCodes.has(cat.code);
+                              const isKeyRule = KEY_RULE_CODES.has(cat.code);
+                              return (
+                                <div
+                                  key={cat.code || i}
+                                  style={{ borderTop: i === 0 ? "none" : "1px solid #f1f3f5" }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleRuleCategory(cat.code)}
+                                    className="d-flex align-items-center justify-content-between w-100"
+                                    style={{
+                                      background: isOpen ? "#f8f9fb" : "#fff",
+                                      border: "none",
+                                      padding: "12px 14px",
+                                      textAlign: "left",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    <span className="d-flex align-items-center" style={{ gap: 8 }}>
+                                      <span style={{ fontWeight: 600, fontSize: 14, color: "#111827" }}>
+                                        {cat.title || `Category ${cat.code || "?"}`}
+                                      </span>
+                                      {isKeyRule && (
+                                        <FaExclamationTriangle
+                                          title="Key rule — read before booking"
+                                          style={{ color: "#dc2626", fontSize: 12 }}
+                                        />
+                                      )}
+                                    </span>
+                                    <span className="d-flex align-items-center" style={{ gap: 10 }}>
+                                      <Badge bg="light" text="dark" style={{ fontWeight: 500, fontSize: 11 }}>
+                                        {cat.code || "??"}
+                                      </Badge>
+                                      <FaChevronDown
+                                        style={{
+                                          fontSize: 11,
+                                          color: "#9ca3af",
+                                          transition: "transform 150ms ease",
+                                          transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
+                                        }}
+                                      />
+                                    </span>
+                                  </button>
+                                  {isOpen && (
+                                    <div style={{ padding: "0 14px 14px 14px" }}>
+                                      {cat.lines && cat.lines.length > 0 ? (
+                                        <ul
+                                          className="mb-0"
+                                          style={{ fontSize: 13, lineHeight: 1.6, paddingLeft: 18, color: "#374151" }}
+                                        >
+                                          {cat.lines.map((l, j) => (
+                                            <li key={j}>{l}</li>
+                                          ))}
+                                        </ul>
+                                      ) : (
+                                        <div className="text-muted small">
+                                          No text returned for this category.
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </>
               ) : rulesData.rawText ? (
                 <>
                   <Alert variant="info" style={{ fontSize: 13 }}>
@@ -700,7 +933,7 @@ const FlightBestPriceCheck = () => {
           )}
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowRules(false)}>
+          <Button variant="secondary" onClick={closeRulesModal}>
             Close
           </Button>
         </Modal.Footer>
@@ -720,7 +953,14 @@ function normaliseFamily(f, currencyFallback) {
   const dateChangeRaw = f.flexibility?.dateChange || "";
   return {
     familyCode: f.fareFamily || f.familyCode || "FARE",
-    price: f.totalFare ?? f.totalRateWithMarkup ?? f.totalRate ?? null,
+    // Sell price (what the customer pays) — matches the search-results
+    // list, which shows totalRateWithMarkup as the headline price. Falls
+    // back to the raw totalFare only if the backend didn't compute markup
+    // (e.g. an older cached response).
+    price: f.totalRateWithMarkup ?? f.totalFare ?? f.totalRate ?? null,
+    // Raw Amadeus fare-informative price, pre-markup — shown alongside the
+    // sell price so the agent can see both figures on this page.
+    netFare: f.totalFare ?? null,
     currency: f.currency || currencyFallback || "AED",
     baggage: {
       cabin: f.baggageDetails?.cabinBaggage || "7 Kgs Cabin Baggage",
