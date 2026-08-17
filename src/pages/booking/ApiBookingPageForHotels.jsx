@@ -295,9 +295,15 @@ const ApiBookingPageForHotels = () => {
     axiosInstance
       .get(`/api/agent/${aId}`)
       .then((res) => {
-        if (!cancelled) {
-          setAgentCardPaymentEnabled(!!res?.data?.cardPaymentEnabled);
-        }
+        if (cancelled) return;
+        setAgentCardPaymentEnabled(!!res?.data?.cardPaymentEnabled);
+        // RateHawk (apiId=14) needs user.email / user.phone on
+        // booking/finish/. Instead of asking the operator to retype them,
+        // seed the payload from the chosen agent's registration record —
+        // personalEmail + mobileNumber are @NotBlank on the agent DTO, so
+        // they're always populated for a valid agent.
+        setRatehawkEmail(res?.data?.personalEmail || "");
+        setRatehawkPhone(res?.data?.mobileNumber || "");
       })
       .catch(() => {
         if (!cancelled) setAgentCardPaymentEnabled(false);
@@ -624,25 +630,31 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
       }
     }
 
-    // RATEHAWK (apiId=14): primary-guest email + phone are mandatory. The
-    // vendor rejects /hotel/order/booking/finish/ with a generic
-    // "invalid_params" when they're missing. Format checks are lenient —
-    // enough to catch typos, not RFC-strict.
+    // RATEHAWK (apiId=14): primary-guest email + phone are mandatory —
+    // vendor rejects /hotel/order/booking/finish/ with "invalid_params"
+    // when they're missing. Values come from the chosen agent's
+    // registration record (not from an input on this page), so if either
+    // is blank/malformed the fix is to update the agent, not the booking
+    // form. Format checks are lenient — enough to catch typos.
     if (requiresRatehawkContact()) {
       const emailTrim = (ratehawkEmail || "").trim();
       if (!emailTrim) {
-        errors.ratehawkEmail = "Email is required for RateHawk bookings.";
+        errors.ratehawkEmail =
+          "Selected agent has no email on file — update the agent's Personal Email before booking.";
         hasErrors = true;
       } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
-        errors.ratehawkEmail = "Enter a valid email address.";
+        errors.ratehawkEmail =
+          "Selected agent's Personal Email is invalid — please correct it on the agent record.";
         hasErrors = true;
       }
       const phoneTrim = (ratehawkPhone || "").trim();
       if (!phoneTrim) {
-        errors.ratehawkPhone = "Phone is required for RateHawk bookings.";
+        errors.ratehawkPhone =
+          "Selected agent has no mobile number on file — update the agent's Mobile Number before booking.";
         hasErrors = true;
       } else if (phoneTrim.replace(/\D/g, "").length < 7) {
-        errors.ratehawkPhone = "Enter a valid phone number.";
+        errors.ratehawkPhone =
+          "Selected agent's Mobile Number is invalid — please correct it on the agent record.";
         hasErrors = true;
       }
     }
@@ -1871,83 +1883,12 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                     </Card>
                   )}
 
-                  {/* RATEHAWK (apiId=14) ONLY: primary-guest email + phone
-                      capture. RateHawk's /hotel/order/booking/finish/ call
-                      requires user.email and user.phone; without them the
-                      vendor rejects with "invalid_params" and the operator
-                      sees an opaque failure. Gated so every other supplier
-                      on this page keeps its existing layout unchanged, and
-                      the payload only emits these fields on RateHawk
-                      bookings (line 675/676 above). */}
-                  {requiresRatehawkContact() && (
-                    <Card className="p-4 mb-2 shadow-sm border-0">
-                      <h5 className="mb-1 fw-bold">
-                        Primary Guest Contact Details
-                      </h5>
-                      <div className="text-muted small mb-3">
-                        Email and phone are required for RateHawk bookings and
-                        are used to send the booking confirmation.
-                      </div>
-                      <Row className="g-3">
-                        <Col md={6}>
-                          <Form.Group>
-                            <Form.Label className="fw-semibold">
-                              Email <span className="text-danger">*</span>
-                            </Form.Label>
-                            <Form.Control
-                              type="email"
-                              value={ratehawkEmail}
-                              placeholder="guest@example.com"
-                              isInvalid={!!validationErrors.ratehawkEmail}
-                              onChange={(e) => {
-                                setRatehawkEmail(e.target.value);
-                                if (validationErrors.ratehawkEmail) {
-                                  setValidationErrors((prev) => {
-                                    const next = { ...prev };
-                                    delete next.ratehawkEmail;
-                                    return next;
-                                  });
-                                }
-                              }}
-                            />
-                            {validationErrors.ratehawkEmail && (
-                              <Form.Control.Feedback type="invalid">
-                                {validationErrors.ratehawkEmail}
-                              </Form.Control.Feedback>
-                            )}
-                          </Form.Group>
-                        </Col>
-                        <Col md={6}>
-                          <Form.Group>
-                            <Form.Label className="fw-semibold">
-                              Phone <span className="text-danger">*</span>
-                            </Form.Label>
-                            <Form.Control
-                              type="tel"
-                              value={ratehawkPhone}
-                              placeholder="e.g. 12124567899"
-                              isInvalid={!!validationErrors.ratehawkPhone}
-                              onChange={(e) => {
-                                setRatehawkPhone(e.target.value);
-                                if (validationErrors.ratehawkPhone) {
-                                  setValidationErrors((prev) => {
-                                    const next = { ...prev };
-                                    delete next.ratehawkPhone;
-                                    return next;
-                                  });
-                                }
-                              }}
-                            />
-                            {validationErrors.ratehawkPhone && (
-                              <Form.Control.Feedback type="invalid">
-                                {validationErrors.ratehawkPhone}
-                              </Form.Control.Feedback>
-                            )}
-                          </Form.Group>
-                        </Col>
-                      </Row>
-                    </Card>
-                  )}
+                  {/* RATEHAWK (apiId=14): primary-guest email + phone are
+                      auto-sourced from the chosen agent's registration
+                      record (see the /api/agent/{id} fetch effect above),
+                      so there's no input card here anymore. The payload
+                      still emits these fields on RateHawk bookings via
+                      requiresRatehawkContact() (see line 1010/1011). */}
 
                   {/* Special Requests card — matches Inhouse
                       HotelBookingPage: optional Booking Done For text
