@@ -162,6 +162,13 @@ const PackageBooking = () => {
       hotelPrice: 0,
       cabPrice: 0,
       activityPrice: 0,
+      // Meal plan picked on the Hotels tab (BB/HB/FB/AI), sourced from the
+      // selected hotel's mealPlans list — same category+occupancy rates
+      // configured in PackageRates.jsx's Meal Plan Rates block. mealPlanPrice
+      // is the pax-scaled, markup-applied total for the chosen plan; it's
+      // added on top of hotelPrice in the Total Price sidebar below.
+      selectedMealPlan: null,
+      mealPlanPrice: 0,
     },
     // Contact card was removed — the first traveller is the primary contact
     // and their email + mobile are captured directly on the traveller row.
@@ -357,7 +364,7 @@ const PackageBooking = () => {
       Number(searchRate) > 0
         ? Number(searchRate)
         : Number(packageData?.rate) || 0;
-    const { hotelPrice, cabPrice, activityPrice } = bookingData.selections;
+    const { hotelPrice, cabPrice, activityPrice, mealPlanPrice } = bookingData.selections;
 
     // Show the package rate exactly as it appeared on the search card until
     // the user actually picks a hotel. Applying any category- or pax-based
@@ -369,7 +376,9 @@ const PackageBooking = () => {
     // takes over directly.
     const packageTotal = hotelPrice > 0 ? hotelPrice : baseRate;
 
-    setTotalPrice(packageTotal + cabPrice + activityPrice);
+    // Meal plan (if any) is appended on top — its rate is already pax-scaled
+    // + markup-applied by the backend (see mealPlanPrice from HotelsTab).
+    setTotalPrice(packageTotal + cabPrice + activityPrice + (Number(mealPlanPrice) || 0));
   }, [bookingData.selections, packageData, searchRate]);
 
   const updateSelections = (selections) =>
@@ -799,10 +808,23 @@ const PackageBooking = () => {
                     (Number(searchRate) > 0 ? Number(searchRate) : Number(packageData?.rate) || 0) +
                     (Number(bookingData.selections.hotelPrice) || 0) +
                     (Number(bookingData.selections.cabPrice) || 0) +
-                    (Number(bookingData.selections.activityPrice) || 0)
+                    (Number(bookingData.selections.activityPrice) || 0) +
+                    (Number(bookingData.selections.mealPlanPrice) || 0)
                   ).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
                 <div className="price-sidebar-sub">AED · Selling price</div>
+                {/* Meal plan line — only shown once one is picked on the
+                    Hotels tab, so the operator can see what's stacked on
+                    top of the hotel rate at a glance. */}
+                {bookingData.selections.selectedMealPlan && (
+                  <div className="price-sidebar-mealplan">
+                    + {bookingData.selections.selectedMealPlan.label} meal plan · AED{" "}
+                    {Number(bookingData.selections.mealPlanPrice || 0).toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Cancellation Policies & Terms — moved out of the Total

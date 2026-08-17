@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Row, Col, Spinner, Modal, Form, Button, Card } from "react-bootstrap";
+import { Spinner, Modal, Form, Button } from "react-bootstrap";
 import axiosInstance from "../../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import {
@@ -13,6 +13,7 @@ import {
   FaShieldAlt,
   FaRegClock,
   FaSuitcase,
+  FaBed,
 } from "react-icons/fa";
 
 const HotelsTab = ({ searchParams, bookingData, programme, updateData, updateProgramme, packageRate, onPrev, onNext }) => {
@@ -33,37 +34,10 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
   const [showNoHotelModal, setShowNoHotelModal] = useState(false);
   const [ackNoHotel, setAckNoHotel] = useState(false);
 
-  // ── Hotel-list filters ──
-  // Mirrors the "Filters" panel on /room-list (Refund Policy + Room Type).
-  // The two dimensions the package hotel list actually exposes are:
-  //   • location (hotel.stateName) — analogous to Room Type
-  //   • duration (hotel.noOfnight) — a checkbox list of the distinct stays
-  //     the package offers, useful when a package includes hotels with
-  //     different night counts (city stop vs. resort leg).
-  // Both start empty (no filter) so the sidebar is purely additive; clicking
-  // "Clear filters" restores that state.
-  const [selectedLocations, setSelectedLocations] = useState([]);
-  const [selectedNights, setSelectedNights] = useState([]);
-  // Price-range filter (AED). Bounds are strings so an empty input just
-  // means "no lower / upper bound" — filteredHotels below reads them as
-  // numbers only when non-empty. Wired against hotel.totalRateWithMarkup,
-  // which is the same number driving the Total Price sidebar.
-  const [priceMin, setPriceMin] = useState("");
-  const [priceMax, setPriceMax] = useState("");
-  const toggleLocation = (name) =>
-    setSelectedLocations((prev) =>
-      prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name],
-    );
-  const toggleNights = (n) =>
-    setSelectedNights((prev) =>
-      prev.includes(n) ? prev.filter((x) => x !== n) : [...prev, n],
-    );
-  const clearHotelFilters = () => {
-    setSelectedLocations([]);
-    setSelectedNights([]);
-    setPriceMin("");
-    setPriceMax("");
-  };
+  // Selected meal plan (BB/HB/FB/AI) for the chosen hotel — offered once a
+  // hotel is picked, since the hotel DTO carries the shared mealPlans list
+  // for its category + occupancy. null = no meal plan added (hotel rate only).
+  const [selectedMealPlan, setSelectedMealPlan] = useState(null);
 
   // Resolves relative / windows-path image paths from packageView into
   // absolute /api/files/{filename} URLs (same pattern PackageSearch uses).
@@ -147,6 +121,9 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
 
   // Pre-select a hotel when returning to this step with one already chosen
   // (e.g. the user went forward then came back). Runs once hotels load.
+  // Also restores a previously picked meal plan, matched by mealPlan code
+  // against the re-selected hotel's current mealPlans list (the list is
+  // re-fetched fresh each time, so match by code rather than object identity).
   useEffect(() => {
     if (!hotels.length) return;
     const existing =
@@ -156,6 +133,12 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         : null;
     if (existing != null && hotels.some((h) => h.hotelId === existing)) {
       setSelectedHotelId(existing);
+      const hotel = hotels.find((h) => h.hotelId === existing);
+      const savedPlanCode = bookingData?.selectedMealPlan?.mealPlan;
+      if (savedPlanCode && Array.isArray(hotel?.mealPlans)) {
+        const match = hotel.mealPlans.find((p) => p.mealPlan === savedPlanCode);
+        if (match) setSelectedMealPlan(match);
+      }
     }
   }, [hotels]);
 
@@ -170,16 +153,42 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
   const selectHotel = (hotel) => {
     if (selectedHotelId === hotel.hotelId) {
       setSelectedHotelId(null);
+      setSelectedMealPlan(null);
       updateData({
         selectedHotels: [],
         hotelPrice: 0,
+        selectedMealPlan: null,
+        mealPlanPrice: 0,
       });
       return;
     }
     setSelectedHotelId(hotel.hotelId);
+    // Switching hotels drops any meal-plan pick — plans are scoped to the
+    // hotel's category + occupancy and the new hotel may not offer the same
+    // set (or any set at all).
+    setSelectedMealPlan(null);
     updateData({
       selectedHotels: [hotel],
       hotelPrice: Number(hotel.totalRateWithMarkup || 0),
+      selectedMealPlan: null,
+      mealPlanPrice: 0,
+    });
+  };
+
+  // Meal-plan picker — offered under the selected hotel once it carries a
+  // mealPlans list. Selecting a plan (or "None") pushes mealPlanPrice into
+  // bookingData so PackageBooking.jsx's Total Price sidebar appends it
+  // alongside the hotel rate, exactly as the client asked.
+  const selectMealPlan = (hotel, plan) => {
+    if (!plan || selectedMealPlan?.mealPlan === plan.mealPlan) {
+      setSelectedMealPlan(null);
+      updateData({ selectedMealPlan: null, mealPlanPrice: 0 });
+      return;
+    }
+    setSelectedMealPlan(plan);
+    updateData({
+      selectedMealPlan: plan,
+      mealPlanPrice: Number(plan.totalRateWithMarkup || 0),
     });
   };
 
@@ -219,48 +228,10 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
   // Package Information card. Now consumed inside the Cancellation Policies
   // popup in PackageBooking.jsx, which reads them directly from packageView.
 
-  // ── Filter options derived from the loaded hotel list ──
-  // Same shape /room-list uses for its Room Type list: only surface values
-  // that actually appear in the current results so a checkbox can never
-  // narrow to zero from the outset. Duplicates are collapsed.
-  const locationOptions = Array.from(
-    new Set(hotels.map((h) => h.stateName).filter(Boolean)),
-  ).sort((a, b) => a.localeCompare(b));
-  const nightsOptions = Array.from(
-    new Set(hotels.map((h) => h.noOfnight).filter((n) => n != null)),
-  ).sort((a, b) => a - b);
-
-  // Price-range gate — evaluated ONCE against the PACKAGE rate (the
-  // single value that drives the Total Price sidebar / search-result
-  // card), not each hotel's own totalRateWithMarkup. When the package
-  // rate falls outside the picked [Min, Max] window, the whole hotel
-  // list is hidden; when it falls inside, only Location + Nights
-  // continue to filter individual rows. Bounds default to no-op when
-  // priceMin / priceMax are empty strings.
-  const pkgRate = Number(packageRate);
-  const withinPriceRange =
-    (!Number.isFinite(pkgRate)) ||
-    ((priceMin === "" || pkgRate >= Number(priceMin)) &&
-      (priceMax === "" || pkgRate <= Number(priceMax)));
-
-  // Apply the row-level filters. If the package rate is outside the
-  // chosen band, `withinPriceRange` short-circuits every hotel out.
-  const filteredHotels = hotels.filter((h) => {
-    if (!withinPriceRange) return false;
-    if (
-      selectedLocations.length > 0 &&
-      !selectedLocations.includes(h.stateName)
-    ) {
-      return false;
-    }
-    if (
-      selectedNights.length > 0 &&
-      !selectedNights.includes(h.noOfnight)
-    ) {
-      return false;
-    }
-    return true;
-  });
+  // The Filters sidebar (Location / Nights / Price Range) was removed per
+  // client ask — the hotel list below now just renders every hotel the
+  // /hotel-details endpoint returns for this package + category + occupancy.
+  const filteredHotels = hotels;
 
   // cancellationParts derivation was removed with the Cancellation Policy
   // card. The same fields on packageView still drive the identical block
@@ -289,12 +260,6 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         </div>
       </div>
 
-      {/* Day-wise Itinerary was moved INSIDE the Filters + Hotels row
-          below (top of the right-hand Col lg=9) so the sticky Filters
-          column on the left runs beside it AND continues beside the
-          hotel list as the operator scrolls. Same accordion behaviour
-          and content — only the wrapping location changed. */}
-
       {/* Package Information card (Includes / Excludes / After booking) was
           removed per product spec:
           • Includes + Excludes now live in the Cancellation Policies popup
@@ -305,107 +270,12 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           is untouched and still fetched by PackageBooking; only its display
           location moved. */}
 
-      {/* ────── Hotels in the package + Filters sidebar ──────
-          Same two-column pattern as /room-list's "Available Room Categories"
-          (Filters at Col lg={3}, results at Col lg={9}) so the two flows read
-          the same way. On smaller viewports the filters card sits above the
-          hotel grid — same fallback /room-list uses. */}
-      <Row className="g-3 mb-3">
-        <Col lg={3} md={4}>
-          {/* .room-filters-card owns its own position: sticky (see
-              RoomList.css) so the panel follows scroll on long hotel lists —
-              same behaviour as /room-list's filters. `h-100` was previously
-              stretching the card to match the hotel column, which killed the
-              sticky (a sticky element can't scroll-follow inside a container
-              it fully fills). Dropped to restore the intended behaviour. */}
-          <Card className="room-filters-card">
-            <Card.Body className="p-3">
-              <h6 className="filter-title mb-3">Filters</h6>
-
-              <div className="filter-group mb-3">
-                <div className="filter-group-label">Location</div>
-                {locationOptions.length === 0 ? (
-                  <div className="text-muted small">No options</div>
-                ) : (
-                  locationOptions.map((loc) => (
-                    <Form.Check
-                      key={`floc-${loc}`}
-                      type="checkbox"
-                      id={`filter-loc-${loc}`}
-                      label={loc}
-                      checked={selectedLocations.includes(loc)}
-                      onChange={() => toggleLocation(loc)}
-                    />
-                  ))
-                )}
-              </div>
-
-              <div className="filter-group mb-3">
-                <div className="filter-group-label">Nights</div>
-                {nightsOptions.length === 0 ? (
-                  <div className="text-muted small">No options</div>
-                ) : (
-                  nightsOptions.map((n) => (
-                    <Form.Check
-                      key={`fn-${n}`}
-                      type="checkbox"
-                      id={`filter-nights-${n}`}
-                      label={`${n} Night${n === 1 ? "" : "s"}`}
-                      checked={selectedNights.includes(n)}
-                      onChange={() => toggleNights(n)}
-                    />
-                  ))
-                )}
-              </div>
-
-              {/* Price Range (AED) — two number inputs; empty = no bound.
-                  Wired against hotel.totalRateWithMarkup. */}
-              <div className="filter-group">
-                <div className="filter-group-label">Price Range (AED)</div>
-                <div className="d-flex align-items-center gap-2">
-                  <Form.Control
-                    type="number"
-                    size="sm"
-                    min="0"
-                    placeholder="Min"
-                    value={priceMin}
-                    onChange={(e) => setPriceMin(e.target.value)}
-                  />
-                  <span className="text-muted small">–</span>
-                  <Form.Control
-                    type="number"
-                    size="sm"
-                    min="0"
-                    placeholder="Max"
-                    value={priceMax}
-                    onChange={(e) => setPriceMax(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {(selectedLocations.length > 0 ||
-                selectedNights.length > 0 ||
-                priceMin !== "" ||
-                priceMax !== "") && (
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="p-0 mt-2"
-                  onClick={clearHotelFilters}
-                >
-                  Clear filters
-                </Button>
-              )}
-            </Card.Body>
-          </Card>
-        </Col>
-
-        <Col lg={9} md={8}>
-          {/* ────── Day-wise Itinerary — moved here from its own standalone
-              Row so the sticky Filters column on the left runs beside it
-              (and continues beside the Hotels list below). Same accordion
-              behaviour and content as before; only the wrapping location
-              changed. ────── */}
+      {/* ────── Hotels in the package ──────
+          Filters sidebar (Location / Nights / Price Range) removed per
+          client ask — this now runs full-width instead of the previous
+          Col lg={3} filters / Col lg={9} results split. */}
+      <div className="mb-3">
+          {/* ────── Day-wise Itinerary ────── */}
           <div className="prg-section mb-3">
             <div className="prg-section-head">
               <FaMapMarkerAlt className="me-2" />
@@ -579,6 +449,16 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
                                 <FaMapMarkerAlt size={10} className="me-1" />
                                 {hotel.stateName}
                               </p>
+                              {/* Selected Room — the room category priced on
+                                  this hotel's PackageRates row. Shown so the
+                                  operator sees what room they're booking, not
+                                  just the hotel name. */}
+                              {hotel.roomTypeName && (
+                                <p className="mb-0 text-muted small">
+                                  <FaBed size={10} className="me-1" />
+                                  Room: {hotel.roomTypeName}
+                                </p>
+                              )}
                             </div>
                           </div>
                           <div className="d-flex align-items-center gap-3">
@@ -611,25 +491,64 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
                           </div>
                         </div>
                       </div>
+
+                      {/* Meal Plan picker — only offered once this hotel is
+                          selected and it carries a mealPlans list (from
+                          PackageRates' Meal Plan Rates block for the same
+                          category + occupancy). Picking a plan appends its
+                          pax-scaled, markup-applied rate to the Total Price
+                          sidebar on the parent page alongside the hotel rate. */}
+                      {isSelected && Array.isArray(hotel.mealPlans) && hotel.mealPlans.length > 0 && (
+                        <div className="pkg-mealplan-section">
+                          <div className="pkg-mealplan-title">
+                            Add a Meal Plan (optional)
+                          </div>
+                          <div className="d-flex flex-column gap-2">
+                            {hotel.mealPlans.map((plan) => {
+                              const planSelected = selectedMealPlan?.mealPlan === plan.mealPlan;
+                              return (
+                                <label
+                                  key={plan.mealPlan}
+                                  className={`pkg-mealplan-row ${planSelected ? "active" : ""}`}
+                                >
+                                  <span className="d-flex align-items-center gap-2">
+                                    <Form.Check
+                                      type="radio"
+                                      name={`mealplan-${hotel.hotelId}`}
+                                      checked={planSelected}
+                                      onChange={() => selectMealPlan(hotel, plan)}
+                                    />
+                                    <span>
+                                      {plan.label}
+                                      {plan.mealPlan === "FB" && plan.lunchOrDinner && (
+                                        <span className="text-muted small">
+                                          {" "}({plan.lunchOrDinner === "DINNER" ? "Dinner" : "Lunch"})
+                                        </span>
+                                      )}
+                                    </span>
+                                  </span>
+                                  <span className="fw-semibold">
+                                    + AED {Number(plan.totalRateWithMarkup || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </span>
+                                </label>
+                              );
+                            })}
+                            {selectedMealPlan && (
+                              <Button
+                                variant="link"
+                                size="sm"
+                                className="p-0 align-self-start"
+                                onClick={() => selectMealPlan(hotel, null)}
+                              >
+                                Remove meal plan
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
-              </div>
-            ) : hasSearched && hotels.length > 0 ? (
-              // Search ran, hotels were returned, but the filter picks match
-              // nothing. Suggest the user loosen filters rather than the query.
-              <div className="prg-empty-state">
-                <FaHotel size={28} />
-                <p className="mb-0 mt-2 fw-semibold">No hotels match the filters</p>
-                <p className="small text-muted">Try removing a location or nights checkbox.</p>
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="p-0"
-                  onClick={clearHotelFilters}
-                >
-                  Clear filters
-                </Button>
               </div>
             ) : hasSearched ? (
               <div className="prg-empty-state">
@@ -644,8 +563,7 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
               </div>
             )}
           </div>
-        </Col>
-      </Row>
+      </div>
 
       {/* Cancellation Policy card removed per product spec — the same
           cancellation-window details are still accessible from the
@@ -1022,6 +940,42 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         }
         .pkg-hotel-selected {
           box-shadow: 0 0 0 1px #22c55e, 0 6px 18px rgba(34, 197, 94, 0.10);
+        }
+
+        /* Meal Plan picker — sits inside the selected hotel's card, below
+           the header row. Same card language as the rest of the page. */
+        .pkg-mealplan-section {
+          padding: 14px 18px 16px;
+          border-top: 1px dashed #e2e8f0;
+          background: #FAFAF8;
+        }
+        .pkg-mealplan-title {
+          font-size: 0.78rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          color: #6B7280;
+          margin-bottom: 8px;
+        }
+        .pkg-mealplan-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 8px 12px;
+          border: 1px solid #e2e8f0;
+          border-radius: 10px;
+          background: #ffffff;
+          cursor: pointer;
+          transition: border-color 0.15s, background 0.15s;
+          font-size: 0.86rem;
+        }
+        .pkg-mealplan-row:hover {
+          border-color: #EC0B43;
+        }
+        .pkg-mealplan-row.active {
+          border-color: #EC0B43;
+          background: #FDE7ED;
         }
 
         /* === BULLETS === */
