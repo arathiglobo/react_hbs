@@ -211,6 +211,13 @@ const PackageBooking = () => {
     },
   });
 
+  // The package's real price for the searched occupancy
+  // (perAdultRate * adults + perChildRate * children + agent markup), reported
+  // by HotelsTab as soon as /hotel-details returns. Held here rather than
+  // inside the tab because the Total Price sidebar needs it before the
+  // operator has picked anything.
+  const [resolvedPackageRate, setResolvedPackageRate] = useState(0);
+
   // Total Price — derived, not state, so there is exactly one place the
   // number comes from. computePackageTotal() owns the maths: the picked
   // hotel's pax-scaled rate REPLACES the package's "from" rate (both are the
@@ -219,10 +226,11 @@ const PackageBooking = () => {
   // sidebar here, the sidebar there and the /book payload always agree.
   const priceBreakdown = computePackageTotal(
     bookingData.selections,
-    // Prefer the rate that was shown on the search-result card so the sidebar
-    // mirrors what the user clicked Book Now on; falls back to the rates-API
-    // value for direct / refresh visits.
-    resolvePackageBaseRate(searchRate, packageData),
+    // resolvedPackageRate is the pax-scaled package price reported by the
+    // Hotels step the moment /hotel-details returns; searchRate (the card's
+    // per-adult "from" figure) only stands in for the split second before
+    // that. See resolvePackageBaseRate for why the order matters.
+    resolvePackageBaseRate(searchRate, packageData, resolvedPackageRate),
   );
   const totalPrice = priceBreakdown.total;
 
@@ -541,6 +549,11 @@ const PackageBooking = () => {
       editingBookingId,
       parentBookingCode,
       searchRate,
+      // Carried so the checkout page resolves the same base rate this page
+      // did. A hotel is always selected by the time we get here (HotelsTab
+      // enforces it), so the base is not normally used there — but sending it
+      // keeps the two pages on identical inputs rather than relying on that.
+      resolvedPackageRate,
     };
     try {
       localStorage.setItem(
@@ -567,11 +580,8 @@ const PackageBooking = () => {
                         programme={bookingData.programme}
                         updateData={updateSelections}
                         updateProgramme={updateProgramme}
-                        packageRate={
-                          Number(searchRate) > 0
-                            ? Number(searchRate)
-                            : Number(packageData?.rate || 0)
-                        }
+                        packageRate={priceBreakdown.accommodation}
+                        onPackageRateResolved={setResolvedPackageRate}
                         onPrev={() => navigate("/new-booking/package-search")}
                         onNext={goToCheckout} />;
       // case 2 was PaxInformation — moved to a dedicated route
@@ -999,110 +1009,178 @@ const PackageBooking = () => {
         size="lg"
         scrollable
       >
-        <Modal.Header closeButton style={{ background: "#f8fafc" }}>
-          <Modal.Title
-            className="d-flex align-items-center"
-            style={{ fontSize: "1.05rem" }}
-          >
-            <FaShieldAlt className="me-2" style={{ color: "#EC0B43" }} />
+        {/* One accent colour (the brand red) carried by the header icon and
+            the non-refundable note only. Section headings used to be four
+            different colours — red / green / red / dark-with-red-icon — which
+            made four peer sections read as four unrelated warnings. They are
+            now identical muted labels, so the eye goes to the CONTENT. */}
+        <Modal.Header closeButton className="pkg-policy-head">
+          <Modal.Title className="pkg-policy-title">
+            <FaShieldAlt className="pkg-policy-title-icon" />
             Cancellation Policies &amp; Terms &amp; Conditions
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body className="p-4">
-          {/* Cancellation policy — matches the room-list "Cancellation Policy"
-              block (see RoomList.jsx:2020-2047) and the equivalent block on
-              the Package Details step (HotelsTab.jsx): red danger-toned h6
-              heading with the solid X-circle icon, and a bulleted <ul> list.
-              The NON-REFUNDABLE note is folded in as the final list item so
-              the emphasis carries over without a separate callout row. */}
-          <h6 className="text-danger mb-3">
-            <FaTimesCircle className="me-2" />
-            Cancellation Policy
-          </h6>
-          <ul className="mb-0 ps-3">
-            {cancellationParts.map((p, i) => (
-              <li key={i} className="mb-2">
-                <div style={{ whiteSpace: "pre-line" }}>{p.text}</div>
-              </li>
-            ))}
-            <li className="mb-0 text-danger">
-              <FaShieldAlt className="me-2" />
-              This is a <strong>NON-REFUNDABLE</strong> package within the charge window.
-            </li>
-          </ul>
 
-          {/* Includes — moved here from the removed Package Information card
-              on the Package Details step. Same "empty state" fallback as
-              before so operators still see the "will be uploaded by supplier"
-              hint when the package has no inclusions attached yet. */}
-          <h6 className="text-success mb-3 mt-4">
-            <FaCheckCircle className="me-2" />
-            Includes
-          </h6>
-          {inclusions.length > 0 ? (
-            <ul className="mb-0 ps-3">
-              {inclusions.map((x) => (
-                <li key={`inc-${x.otherId}`} className="mb-2">
-                  {x.description}
+        <Modal.Body className="pkg-policy-body">
+          <section className="pkg-policy-section">
+            <div className="pkg-policy-label">
+              <FaTimesCircle /> Cancellation Policy
+            </div>
+            <ul className="pkg-policy-list">
+              {cancellationParts.map((p, i) => (
+                <li key={i} style={{ whiteSpace: "pre-line" }}>
+                  {p.text}
                 </li>
               ))}
             </ul>
-          ) : (
-            <p className="small text-muted fst-italic mb-0">
-              Includes will be uploaded by supplier.
+            {/* The one place emphasis is genuinely warranted — kept as a
+                restrained left-rule note instead of the old red list item. */}
+            <p className="pkg-policy-note">
+              This is a <strong>NON-REFUNDABLE</strong> package within the
+              charge window.
             </p>
-          )}
+          </section>
 
-          {/* Excludes — same treatment as Includes above. */}
-          <h6 className="text-danger mb-3 mt-4">
-            <FaTimesCircle className="me-2" />
-            Excludes
-          </h6>
-          {exclusions.length > 0 ? (
-            <ul className="mb-0 ps-3">
-              {exclusions.map((x) => (
-                <li key={`exc-${x.otherId}`} className="mb-2">
-                  {x.description}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="small text-muted fst-italic mb-0">
-              Excludes will be uploaded by supplier.
-            </p>
-          )}
+          {/* Includes / Excludes — moved here from the removed Package
+              Information card on the Package Details step. Same "empty state"
+              fallback so operators still see the "will be uploaded by
+              supplier" hint when nothing is attached yet. */}
+          <section className="pkg-policy-section">
+            <div className="pkg-policy-label">
+              <FaCheckCircle /> Includes
+            </div>
+            {inclusions.length > 0 ? (
+              <ul className="pkg-policy-list">
+                {inclusions.map((x) => (
+                  <li key={`inc-${x.otherId}`}>{x.description}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="pkg-policy-empty">
+                Includes will be uploaded by supplier.
+              </p>
+            )}
+          </section>
 
-          {/* Terms & Conditions */}
-          <h6
-            className="fw-bold d-flex align-items-center mb-2 mt-4"
-            style={{ color: "#1e293b" }}
-          >
-            <FaFileContract className="me-2 text-danger" /> Terms &amp; Conditions
-          </h6>
-          {termsList.length > 0 ? (
-            <ul className="small mb-0 ps-3">
-              {termsList.map((t) => (
-                <li key={t.otherId} className="mb-2">
-                  {t.description}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="small text-muted fst-italic mb-0">
-              No specific terms were attached to this package. By proceeding you
-              confirm you have read the cancellation window and accept the
-              standard package conditions.
-            </p>
-          )}
+          <section className="pkg-policy-section">
+            <div className="pkg-policy-label">
+              <FaTimesCircle /> Excludes
+            </div>
+            {exclusions.length > 0 ? (
+              <ul className="pkg-policy-list">
+                {exclusions.map((x) => (
+                  <li key={`exc-${x.otherId}`}>{x.description}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="pkg-policy-empty">
+                Excludes will be uploaded by supplier.
+              </p>
+            )}
+          </section>
+
+          <section className="pkg-policy-section">
+            <div className="pkg-policy-label">
+              <FaFileContract /> Terms &amp; Conditions
+            </div>
+            {termsList.length > 0 ? (
+              <ul className="pkg-policy-list">
+                {termsList.map((t) => (
+                  <li key={t.otherId}>{t.description}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="pkg-policy-empty">
+                No specific terms were attached to this package. By proceeding
+                you confirm you have read the cancellation window and accept
+                the standard package conditions.
+              </p>
+            )}
+          </section>
         </Modal.Body>
-        <Modal.Footer style={{ background: "#f1f5f9" }}>
+
+        <Modal.Footer className="pkg-policy-foot">
           <Button
+            size="sm"
             variant="outline-secondary"
             onClick={() => setShowPolicyModal(false)}
           >
             Close
           </Button>
         </Modal.Footer>
+
+        <style>{`
+          /* Flat white chrome — the grey header / footer bars added two more
+             tones for no information gain. A hairline rule does the same job. */
+          .pkg-policy-head {
+            background: #fff;
+            border-bottom: 1px solid #eceef1;
+            padding: 14px 20px;
+          }
+          .pkg-policy-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: #0f172a;
+          }
+          .pkg-policy-title-icon { color: #EC0B43; font-size: 0.95rem; }
+
+          .pkg-policy-body { padding: 4px 20px 16px; }
+
+          /* Sections are separated by a rule rather than a 1.5rem margin, so
+             the panel reads as one document instead of four floating blocks. */
+          .pkg-policy-section { padding: 14px 0; border-top: 1px solid #f1f3f5; }
+          .pkg-policy-section:first-child { border-top: 0; }
+
+          .pkg-policy-label {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            color: #64748b;
+            margin-bottom: 8px;
+          }
+          .pkg-policy-label svg { font-size: 0.8rem; color: #94a3b8; }
+
+          .pkg-policy-list {
+            margin: 0;
+            padding-left: 18px;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            color: #334155;
+          }
+          .pkg-policy-list li { margin-bottom: 5px; }
+          .pkg-policy-list li:last-child { margin-bottom: 0; }
+          .pkg-policy-list li::marker { color: #cbd5e1; }
+
+          .pkg-policy-empty {
+            margin: 0;
+            font-size: 0.82rem;
+            font-style: italic;
+            color: #94a3b8;
+          }
+
+          .pkg-policy-note {
+            margin: 10px 0 0;
+            padding: 7px 12px;
+            border-left: 3px solid #EC0B43;
+            background: #fff5f7;
+            border-radius: 0 6px 6px 0;
+            font-size: 0.82rem;
+            color: #7f1d2e;
+          }
+
+          .pkg-policy-foot {
+            background: #fff;
+            border-top: 1px solid #eceef1;
+            padding: 10px 20px;
+          }
+        `}</style>
       </Modal>
     </div>
   );

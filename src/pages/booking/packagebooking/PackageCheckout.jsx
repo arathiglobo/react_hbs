@@ -250,6 +250,10 @@ const PackageCheckout = () => {
   const editingBookingId = checkoutState?.editingBookingId || null;
   const parentBookingCode = checkoutState?.parentBookingCode || null;
   const searchRate = checkoutState?.searchRate ?? null;
+  // Pax-scaled package rate resolved on the Package Details page (step 1) and
+  // carried in the draft, so both pages feed resolvePackageBaseRate the same
+  // inputs and can never disagree on the total.
+  const resolvedPackageRate = checkoutState?.resolvedPackageRate ?? null;
 
   // Ref into PaxInformation so the sidebar Confirm booking button (rendered
   // directly below the "Are you sure you want to continue with the booking?"
@@ -273,6 +277,7 @@ const PackageCheckout = () => {
           editingBookingId,
           parentBookingCode,
           searchRate,
+          resolvedPackageRate,
         }),
       );
     } catch {
@@ -286,6 +291,7 @@ const PackageCheckout = () => {
     editingBookingId,
     parentBookingCode,
     searchRate,
+    resolvedPackageRate,
   ]);
 
   // ── Total price ─────────────────────────────────────────────────────
@@ -303,7 +309,7 @@ const PackageCheckout = () => {
   // here. See packageTotal.js for the full reasoning.
   const priceBreakdown = computePackageTotal(
     bookingData?.selections,
-    resolvePackageBaseRate(searchRate, packageData),
+    resolvePackageBaseRate(searchRate, packageData, resolvedPackageRate),
   );
   const totalPrice = priceBreakdown.total;
 
@@ -318,6 +324,7 @@ const PackageCheckout = () => {
         editingBookingId,
         parentBookingCode,
         searchRate,
+        resolvedPackageRate,
       },
     });
   };

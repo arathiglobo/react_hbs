@@ -37,12 +37,30 @@ const num = (value) => {
 };
 
 /**
- * The package's headline rate: whatever the search-result card showed for the
- * package, falling back to the /api/packageRates/{id} value on a direct visit
- * or a hard refresh.
+ * The package's accommodation rate to show before a hotel has been picked.
+ *
+ * Precedence matters here, and the order is deliberate:
+ *
+ *  1. `resolvedRate` — the pax-scaled figure the backend returned from
+ *     /api/v1/package-booking/hotel-details, i.e.
+ *     perAdultRate * adults + perChildRate * children + agent markup. This is
+ *     the REAL price of the package for the searched occupancy and is what the
+ *     operator is charged. Use it whenever it has arrived.
+ *  2. `searchRate` — the search card's "starting from" number, which is only
+ *     the LOWEST *per-adult* rate (resolveBestBaseAdultRate on the backend).
+ *     For 2 adults + 1 child at 500/adult + 200/child it reads 500, not 1200,
+ *     so it is a placeholder for the moment before the rates load, never the
+ *     final answer.
+ *  3. `packageData?.rate` — last-ditch fallback for a direct visit / hard
+ *     refresh. Note /api/packageRates/{id} is keyed by RATE id, not package
+ *     id, so this is usually empty on this page; it is kept only so the
+ *     sidebar renders something rather than 0.
  */
-export const resolvePackageBaseRate = (searchRate, packageData) =>
-  num(searchRate) > 0 ? num(searchRate) : num(packageData?.rate);
+export const resolvePackageBaseRate = (searchRate, packageData, resolvedRate) => {
+  if (num(resolvedRate) > 0) return num(resolvedRate);
+  if (num(searchRate) > 0) return num(searchRate);
+  return num(packageData?.rate);
+};
 
 /**
  * Breakdown + grand total for a package booking.

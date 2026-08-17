@@ -16,7 +16,7 @@ import {
   FaBed,
 } from "react-icons/fa";
 
-const HotelsTab = ({ searchParams, bookingData, programme, updateData, updateProgramme, packageRate, onPrev, onNext }) => {
+const HotelsTab = ({ searchParams, bookingData, programme, updateData, updateProgramme, packageRate, onPackageRateResolved, onPrev, onNext }) => {
   const [hotels, setHotels] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
@@ -104,12 +104,32 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
       };
 
       const response = await axiosInstance.post("/api/v1/package-booking/hotel-details", payload);
-      setHotels(Array.isArray(response.data) ? response.data : []);
+      const rows = Array.isArray(response.data) ? response.data : [];
+      setHotels(rows);
 
-      if (!response.data?.length) {
+      // Report the package's real, pax-scaled rate up to the page as soon as
+      // it lands, so the Total Price sidebar shows the correct figure on load
+      // instead of the search card's per-adult "from" price (which reads 500
+      // for a 500/adult + 200/child package booked for 2 adults + 1 child,
+      // when the package actually costs 1200).
+      //
+      // Every hotel row in a category + occupancy shares ONE rate — the
+      // PackageRates form has a single "Hotel Rates" per-adult / per-child
+      // amount that applies to every hotel listed under it — so any row's
+      // totalRateWithMarkup is the package rate. We take the minimum anyway,
+      // to stay consistent with the "starting from" price the search card
+      // shows if a package ever does carry differing rows.
+      if (typeof onPackageRateResolved === "function") {
+        const rates = rows
+          .map((h) => Number(h.totalRateWithMarkup))
+          .filter((n) => Number.isFinite(n) && n > 0);
+        onPackageRateResolved(rates.length ? Math.min(...rates) : 0);
+      }
+
+      if (!rows.length) {
         toast.error("No hotels available for the selected criteria.");
       } else {
-        toast.success(`Found ${response.data.length} hotels.`);
+        toast.success(`Found ${rows.length} hotels.`);
       }
     } catch (error) {
       console.error("Error searching hotels:", error);
