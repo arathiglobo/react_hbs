@@ -970,7 +970,7 @@ const PaxInformation = forwardRef(({
                 <Col xs={12} md={{ span: 6, offset: 2 }}>
                   <Form.Group>
                     <Form.Label className="booking-field-label">
-                      Contact <span className="text-danger">*</span>
+                     Passenger Contact <span className="text-danger">*</span>
                     </Form.Label>
                     <Form.Control
                       className="form-control-sm"

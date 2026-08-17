@@ -2441,9 +2441,9 @@ const PackageReg = () => {
                                   }
                                 />
                                 <div className="d-flex justify-content-between mt-1">
-                                  <small className="text-muted">
+                                  {/* <small className="text-muted">
                                     {overviewWords} words • drag corner to enlarge
-                                  </small>
+                                  </small> */}
                                   <small className={nearCap ? "text-danger fw-semibold" : "text-muted"}>
                                     {overviewLen} / {OVERVIEW_MAX} characters
                                   </small>
