@@ -25,12 +25,31 @@ const Login = () => {
   // /auth/verify-login-otp. No token is stored until the code is verified.
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otpUsername, setOtpUsername] = useState("");
-  const [otpMaskedEmail, setOtpMaskedEmail] = useState("");
+  const [otpEmail, setOtpEmail] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [otpError, setOtpError] = useState(null);
   const [otpSubmitting, setOtpSubmitting] = useState(false);
   const [otpResending, setOtpResending] = useState(false);
   const [otpResendIn, setOtpResendIn] = useState(0); // resend cooldown, seconds
+  // True when the backend flags this as the account's very first login —
+  // never signed in before. Only ever set on the initial /auth/login response
+  // (not on resend), so the welcome message stays specifically about the
+  // first-time flow and doesn't reappear on later logins from the same page.
+  const [otpFirstLogin, setOtpFirstLogin] = useState(false);
+  // ── TOTP (Ente Auth) second factor ──
+  // Separate from the emailed-OTP flow above: the code comes from the user's
+  // authenticator app, so there is nothing to send and nothing to resend. When
+  // /auth/login returns { totpRequired: true } we collect the 6-digit code and
+  // finish via /auth/verify-totp, echoing back the one-time twoFactorToken that
+  // proves the password step just succeeded. The backend only ever sets one of
+  // otpRequired / totpRequired, so the two modals can never both be open.
+  const [showTotpModal, setShowTotpModal] = useState(false);
+  const [totpUsername, setTotpUsername] = useState("");
+  const [totpToken, setTotpToken] = useState("");
+  const [totpCode, setTotpCode] = useState("");
+  const [totpError, setTotpError] = useState(null);
+  const [totpSubmitting, setTotpSubmitting] = useState(false);
+  const [totpFallingBack, setTotpFallingBack] = useState(false);
   // Promo carousel on the login brand panel. Two public sources feed it:
   //   1. OfferZone banners (/api/offerDetails) — shown FIRST, each carrying a
   //      description + validity dates overlaid on the banner image.
@@ -202,12 +221,33 @@ const Login = () => {
         withCredentials: true,
       });
 
+      // The account has an authenticator enrolled: the backend validated the
+      // password and withheld the token. Collect the code from Ente Auth
+      // instead of completing the login here. Checked before otpRequired to
+      // mirror the backend's precedence.
+      if (response.data?.totpRequired) {
+        setTotpUsername(response.data.username || username);
+        setTotpToken(response.data.twoFactorToken || "");
+        setTotpCode("");
+        setTotpError(null);
+        setShowTotpModal(true);
+        return;
+      }
+
       // Agent accounts get a second factor: the backend has validated the
       // password, emailed a one-time code, and withheld the token. Open the
       // OTP popup instead of completing the login here.
+      //
+      // First-time agents (registered, admin-approved, never signed in) are
+      // guaranteed to land here — the TOTP branch above cannot fire without an
+      // enrolled device, and TOTP enrolment requires an authenticated session,
+      // which they don't have yet. The backend flags this case with
+      // firstLogin so the modal can greet them with a welcome message
+      // explaining why they're getting an emailed code.
       if (response.data?.otpRequired) {
         setOtpUsername(response.data.username || username);
-        setOtpMaskedEmail(response.data.maskedEmail || "");
+        setOtpEmail(response.data.email || "");
+        setOtpFirstLogin(!!response.data.firstLogin);
         setOtpCode("");
         setOtpError(null);
         setOtpResendIn(30);
@@ -263,7 +303,7 @@ const Login = () => {
         { username: otpUsername },
         { withCredentials: true },
       );
-      if (res.data?.maskedEmail) setOtpMaskedEmail(res.data.maskedEmail);
+      if (res.data?.email) setOtpEmail(res.data.email);
       setOtpCode("");
       setOtpResendIn(30);
       toast.success("A new verification code has been sent to your email.");
@@ -282,8 +322,102 @@ const Login = () => {
     setOtpCode("");
     setOtpError(null);
     setOtpUsername("");
-    setOtpMaskedEmail("");
+    setOtpEmail("");
     setOtpResendIn(0);
+    setOtpFirstLogin(false);
+  };
+
+  // Submit the 6-digit authenticator code. On success the backend returns the
+  // same { token, roles, username } shape as a normal login.
+  const handleVerifyTotp = async (e) => {
+    if (e) e.preventDefault();
+    const code = totpCode.trim();
+    if (code.length !== 6) {
+      setTotpError("Please enter the 6-digit code from your authenticator app.");
+      return;
+    }
+    setTotpSubmitting(true);
+    setTotpError(null);
+    try {
+      const res = await axiosInstance.post(
+        "/auth/verify-totp",
+        { username: totpUsername, otp: code, twoFactorToken: totpToken },
+        { withCredentials: true },
+      );
+      // On success completeLogin navigates away, unmounting this page (and the
+      // modal). If it throws, the modal stays open and shows the error below.
+      await completeLogin(res.data);
+    } catch (err) {
+      // The backend returns 400 (not 401/403) for a bad, reused or rate-limited
+      // code, so it lands here rather than triggering the axios refresh flow.
+      setTotpError(
+        err?.response?.data?.message ||
+          "Invalid code. Please try again.",
+      );
+      // A used-up code can never work again — clear it so the user reads the
+      // next one off their app rather than resubmitting the same digits.
+      setTotpCode("");
+    } finally {
+      setTotpSubmitting(false);
+    }
+  };
+
+  const closeTotpModal = () => {
+    setShowTotpModal(false);
+    setTotpCode("");
+    setTotpError(null);
+    setTotpUsername("");
+    // Drop the one-time token too — going back to the login form abandons this
+    // login attempt entirely, and the token is useless without a fresh password
+    // step anyway.
+    setTotpToken("");
+  };
+
+  // "Lost my authenticator" escape hatch. Trades the mid-flight TOTP challenge
+  // (via the single-use twoFactorToken) for an emailed code, then hands off to
+  // the existing email-OTP modal. The backend consumes the pending TOTP row on
+  // the server side, so there is no going back to the authenticator for this
+  // sign-in — the user has to complete the email flow or start over.
+  const handleTotpFallbackToEmail = async () => {
+    if (totpFallingBack || totpSubmitting) return;
+    setTotpFallingBack(true);
+    setTotpError(null);
+    try {
+      const res = await axiosInstance.post(
+        "/auth/totp-fallback-email",
+        { username: totpUsername, twoFactorToken: totpToken },
+        { withCredentials: true },
+      );
+      // Both the direct email-OTP path and this fallback path return the
+      // address unmasked (`email`). The code is going to the user's own
+      // inbox; there is no leak in showing them where it went.
+      const email = res.data?.email || "";
+      const uname = res.data?.username || totpUsername;
+      // Close the authenticator modal and hand the sign-in over to the email
+      // flow. The existing verify-login-otp path handles it from here — same
+      // OTP modal, same submit endpoint, same resend cooldown.
+      setShowTotpModal(false);
+      setTotpCode("");
+      setTotpToken("");
+      setOtpUsername(uname);
+      setOtpEmail(email);
+      setOtpCode("");
+      setOtpError(null);
+      setOtpResendIn(30);
+      setShowOtpModal(true);
+      toast.success(
+        email
+          ? `A verification code has been sent to ${email}.`
+          : "A verification code has been sent to your email.",
+      );
+    } catch (err) {
+      setTotpError(
+        err?.response?.data?.message ||
+          "Could not send an email code. Please try again.",
+      );
+    } finally {
+      setTotpFallingBack(false);
+    }
   };
 
   const [forgetSubmitting, setForgetSubmitting] = useState(false);
@@ -666,21 +800,57 @@ const Login = () => {
                   color: "#c0392b", fontSize: 22, marginBottom: 12,
                 }}
               >
-                <i className="fas fa-shield-alt"></i>
+                <i className={`fas ${otpFirstLogin ? "fa-hand-sparkles" : "fa-shield-alt"}`}></i>
               </div>
               <h5 style={{ margin: 0, fontWeight: 700, color: "#1a1a2e" }}>
-                Verify it's you
+                {otpFirstLogin ? "Welcome — let's verify your email" : "Verify it's you"}
               </h5>
               <p style={{ margin: "8px 0 0", color: "#6c757d", fontSize: 14 }}>
-                We&apos;ve emailed a 6-digit verification code
-                {otpMaskedEmail ? (
+                {otpFirstLogin ? (
                   <>
-                    {" "}to <strong>{otpMaskedEmail}</strong>
+                    This is your first sign-in, so we&apos;ve emailed a 6-digit
+                    verification code
+                    {otpEmail ? (
+                      <>
+                        {" "}to{" "}
+                        <strong style={{ wordBreak: "break-word" }}>
+                          {otpEmail}
+                        </strong>
+                      </>
+                    ) : null}
+                    . Enter it below to finish signing in.
                   </>
-                ) : null}
-                . Enter it below to finish signing in.
+                ) : (
+                  <>
+                    We&apos;ve emailed a 6-digit verification code
+                    {otpEmail ? (
+                      <>
+                        {" "}to{" "}
+                        <strong style={{ wordBreak: "break-word" }}>
+                          {otpEmail}
+                        </strong>
+                      </>
+                    ) : null}
+                    . Enter it below to finish signing in.
+                  </>
+                )}
               </p>
             </div>
+
+            {otpFirstLogin && (
+              <div
+                style={{
+                  marginTop: 14, padding: "10px 12px",
+                  background: "#e6f4ea", border: "1px solid #b7e0c1",
+                  borderRadius: 8, color: "#1e5631", fontSize: 12,
+                }}
+              >
+                <i className="fas fa-info-circle me-2"></i>
+                For your first sign-in, verification is by email only. Once
+                you&apos;re in, you can set up an authenticator app under
+                Two-Factor Authentication if you prefer.
+              </div>
+            )}
 
             <form onSubmit={handleVerifyOtp}>
               <input
@@ -762,6 +932,164 @@ const Login = () => {
                   ? `Resend in ${otpResendIn}s`
                   : "Resend code"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Authenticator (Ente Auth) TOTP Modal ── */}
+      {showTotpModal && (
+        <div
+          style={{
+            position: "fixed", inset: 0, zIndex: 1070,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff", borderRadius: 12, padding: "30px 34px",
+              width: 400, maxWidth: "100%", boxShadow: "0 8px 32px rgba(0,0,0,0.18)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ textAlign: "center", marginBottom: 6 }}>
+              <div
+                style={{
+                  width: 56, height: 56, borderRadius: "50%", background: "#fff5f5",
+                  display: "inline-flex", alignItems: "center", justifyContent: "center",
+                  color: "#c0392b", fontSize: 22, marginBottom: 12,
+                }}
+              >
+                <i className="fas fa-mobile-alt"></i>
+              </div>
+              <h5 style={{ margin: 0, fontWeight: 700, color: "#1a1a2e" }}>
+                Two-factor authentication
+              </h5>
+              <p style={{ margin: "8px 0 0", color: "#6c757d", fontSize: 14 }}>
+                Open <strong>Ente Auth</strong> and enter the 6-digit code shown
+                for this account to finish signing in.
+              </p>
+            </div>
+
+            <form onSubmit={handleVerifyTotp}>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                autoFocus
+                value={totpCode}
+                onChange={(e) => {
+                  setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6));
+                  if (totpError) setTotpError(null);
+                }}
+                placeholder="••••••"
+                aria-label="6-digit authenticator code"
+                style={{
+                  width: "100%", textAlign: "center", letterSpacing: "0.5em",
+                  fontSize: 24, fontWeight: 600, padding: "12px 14px",
+                  border: `2px solid ${totpError ? "#c0392b" : "#e0e0e0"}`,
+                  borderRadius: 8, outline: "none", marginTop: 16, boxSizing: "border-box",
+                }}
+              />
+
+              {totpError && (
+                <div
+                  style={{
+                    color: "#c0392b", fontSize: 13, marginTop: 10, textAlign: "center",
+                  }}
+                >
+                  {totpError}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={totpSubmitting || totpCode.length !== 6}
+                style={{
+                  width: "100%", marginTop: 18, padding: "11px 0", borderRadius: 8,
+                  border: "none",
+                  background: totpSubmitting || totpCode.length !== 6 ? "#e39b93" : "#c0392b",
+                  color: "#fff", fontWeight: 600, fontSize: 15,
+                  cursor: totpSubmitting || totpCode.length !== 6 ? "not-allowed" : "pointer",
+                }}
+              >
+                {totpSubmitting ? "Verifying…" : "Verify & Sign In"}
+              </button>
+            </form>
+
+            {/* No "resend" here — unlike the emailed code, the authenticator
+                generates a new one every 30 seconds on the user's own device. */}
+
+            {/* "OR" divider, then the email fallback. The divider uses two flex
+                lines around the word to avoid a single hairline underlining a
+                middle span, which drifts by 1px depending on browser DPI. */}
+            <div
+              style={{
+                display: "flex", alignItems: "center", gap: 10, margin: "18px 0 12px",
+              }}
+              aria-hidden="true"
+            >
+              <div style={{ flex: 1, height: 1, background: "#eef0f2" }} />
+              <span style={{ color: "#adb5bd", fontSize: 11, letterSpacing: "0.08em" }}>
+                OR
+              </span>
+              <div style={{ flex: 1, height: 1, background: "#eef0f2" }} />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleTotpFallbackToEmail}
+              disabled={totpFallingBack || totpSubmitting}
+              style={{
+                width: "100%", padding: "10px 0", borderRadius: 8,
+                border: "1px solid #c0392b",
+                background: "#fff",
+                color: totpFallingBack || totpSubmitting ? "#adb5bd" : "#c0392b",
+                fontWeight: 600, fontSize: 14,
+                cursor: totpFallingBack || totpSubmitting ? "not-allowed" : "pointer",
+              }}
+            >
+              {totpFallingBack ? (
+                "Sending code…"
+              ) : (
+                <>
+                  <i className="fas fa-envelope me-2"></i>
+                  Send a code to my email instead
+                </>
+              )}
+            </button>
+
+            <div
+              style={{
+                marginTop: 6, color: "#6c757d", fontSize: 12, textAlign: "center",
+              }}
+            >
+              Can't access your authenticator app?
+            </div>
+
+            <div style={{ marginTop: 16, textAlign: "center" }}>
+              <button
+                type="button"
+                onClick={closeTotpModal}
+                style={{
+                  border: "none", background: "none", color: "#6c757d",
+                  cursor: "pointer", fontSize: 13, padding: 0,
+                }}
+              >
+                <i className="fas fa-arrow-left me-1"></i> Back to login
+              </button>
+            </div>
+
+            <div
+              style={{
+                marginTop: 14, paddingTop: 12, borderTop: "1px solid #f0f0f0",
+                color: "#adb5bd", fontSize: 12, textAlign: "center",
+              }}
+            >
+              Still stuck? Contact your administrator.
             </div>
           </div>
         </div>

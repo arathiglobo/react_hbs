@@ -32,13 +32,13 @@ import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
 // /booking/hotel.
 import "../../styles/HotelBookingPage.css";
 
-// Dummy online-payment gateways — mirrors HotelBookingPage /
-// StudentBookingPage so the operator gets the same payment picker when
-// the agent's credit is short.
+// Online-payment gateways — mirrors HotelBookingPage so the operator gets
+// the same payment picker when the agent's credit is short. CC Avenue is
+// real (see the "Proceed to Pay" handler below); the rest are still the
+// dummy placeholder flow.
 const PAYMENT_GATEWAYS = [
-  { id: "razorpay", name: "Razorpay", desc: "Cards, UPI, Net Banking" },
-  { id: "stripe", name: "Stripe", desc: "International cards" },
-  { id: "payu", name: "PayU", desc: "Cards & wallets" },
+  { id: "ccavenue", name: "CC Avenue", desc: "Cards, UPI, Net Banking" },
+  
 ];
 
 // Special-request checklist — mirrors HotelBookingPage so the long-stay
@@ -443,6 +443,58 @@ export default function LongStayBookingPage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state?.resumeCreate]);
+
+  // CC Avenue post-payment resume — mirrors HotelBookingPage.jsx. CC
+  // Avenue's redirect is a real cross-domain browser navigation, so React
+  // Router `state` (resumeCreate above) never survives it; the backend
+  // instead appends ?ccavenueOrderId=&ccavenueStatus= to the URL when it
+  // redirects back here. No sessionStorage payload is needed — the backend
+  // already persisted it at /initiate.
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const ccavenueOrderId = searchParams.get("ccavenueOrderId");
+    const ccavenueStatus = searchParams.get("ccavenueStatus");
+    if (!ccavenueOrderId) return;
+
+    // Strip the query string so a reload doesn't re-trigger this. draft is
+    // lost either way (it never survives the real redirect), so the page
+    // will briefly show its "no draft" fallback while this runs.
+    navigate(location.pathname, { replace: true, state: {} });
+
+    (async () => {
+      if (ccavenueStatus !== "success") {
+        toast.error("Payment was not completed. Please try again.");
+        return;
+      }
+      try {
+        setSubmitting(true);
+        const statusResponse = await axiosInstance.get(
+          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+        );
+        if (statusResponse.data?.status !== "SUCCESS") {
+          toast.error(
+            statusResponse.data?.statusMessage ||
+              "Payment was not successful. Please try again.",
+          );
+          return;
+        }
+        const res = await axiosInstance.post(
+          `/api/payment/ccavenue/finalize-longstay/${ccavenueOrderId}`,
+        );
+        toast.success(`Booking confirmed: ${res.data?.bookingCode || ""}`);
+        sessionStorage.removeItem("longStayBookingDraft");
+        setShowConfirmModal(false);
+        navigate("/booking-details/long-stay-booking-list");
+      } catch (err) {
+        const beMsg = err?.response?.data?.message || err?.message || null;
+        console.error("Post-payment long-stay finalize failed:", err);
+        toast.error(beMsg || "Booking submission failed. Please try again.");
+      } finally {
+        setSubmitting(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   useEffect(() => {
     if (!draft) return;
@@ -2000,7 +2052,7 @@ export default function LongStayBookingPage() {
                 </Modal.Footer>
               </Modal>
 
-              {/* ─── Payment Gateway (dummy) ─── */}
+              {/* ─── Select Payment Gateway ─── */}
               <Modal
                 show={showGatewayModal}
                 onHide={() => setShowGatewayModal(false)}
@@ -2013,25 +2065,41 @@ export default function LongStayBookingPage() {
                   <p className="text-muted small mb-3">
                     Choose a gateway to enter your card details.
                   </p>
-                  {PAYMENT_GATEWAYS.map((g) => (
-                    <Form.Check
-                      key={g.id}
-                      type="radio"
-                      name="longstay-payment-gateway"
-                      id={`longstay-gw-${g.id}`}
-                      className="mb-2"
-                      checked={selectedGateway === g.id}
-                      onChange={() => setSelectedGateway(g.id)}
-                      label={
-                        <span>
-                          <span className="fw-semibold">{g.name}</span>
-                          <span className="text-muted small ms-2">
-                            {g.desc}
+                  <div className="pg-option-list">
+                    {PAYMENT_GATEWAYS.map((g) => {
+                      const isSelected = selectedGateway === g.id;
+                      return (
+                        <label
+                          key={g.id}
+                          htmlFor={`longstay-gw-${g.id}`}
+                          className={`pg-option${
+                            isSelected ? " pg-option-selected" : ""
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="longstay-payment-gateway"
+                            id={`longstay-gw-${g.id}`}
+                            className="pg-option-input"
+                            checked={isSelected}
+                            onChange={() => setSelectedGateway(g.id)}
+                          />
+                          <span className="pg-option-radio" aria-hidden="true" />
+                          {g.id === "ccavenue" && (
+                            <img
+                              src={`${process.env.PUBLIC_URL}/ccavanue.png`}
+                              alt="CC Avenue"
+                              className="pg-option-logo"
+                            />
+                          )}
+                          <span className="pg-option-text">
+                            <span className="pg-option-name">{g.name}</span>
+                            <span className="pg-option-desc">{g.desc}</span>
                           </span>
-                        </span>
-                      }
-                    />
-                  ))}
+                        </label>
+                      );
+                    })}
+                  </div>
                 </Modal.Body>
                 <Modal.Footer className="border-0">
                   <Button
@@ -2048,9 +2116,37 @@ export default function LongStayBookingPage() {
                         (x) => x.id === selectedGateway,
                       );
                       setShowGatewayModal(false);
+
+                      // ── CC Avenue: real billing-page redirect ──
+                      // Distinct from the dummy /payment/:gateway path
+                      // below — the browser fully navigates away to CC
+                      // Avenue's hosted page and back, so the resume
+                      // signal has to travel as a URL query param (React
+                      // Router state doesn't survive a real cross-origin
+                      // redirect). See the ccavenueOrderId resume effect
+                      // above. flowType tells the backend to create a
+                      // LONG STAY booking rather than a regular hotel one
+                      // when it finalizes.
+                      if (selectedGateway === "ccavenue") {
+                        navigate("/payment/ccavenue-redirect", {
+                          state: {
+                            flowType: "LONGSTAY_CREATE",
+                            bookingPayload: {
+                              ...pendingPayload,
+                              paymentMode: "ONLINE",
+                            },
+                            billingName: pendingPayload?.primaryGuestName || "",
+                            amountLabel: formatPrice(insufficientAmount),
+                            returnTo: location.pathname,
+                          },
+                        });
+                        return;
+                      }
+
+                      // Dummy /payment/:gateway flow (test/local only).
                       // Persist the payload the resume flow will replay.
                       // React state is lost when the user navigates away
-                      // to /payment and back, so the resume effect below
+                      // to /payment and back, so the resume effect above
                       // rebuilds the create call purely from sessionStorage.
                       // paymentMode flipped to "ONLINE" so the Booking List
                       // labels the row correctly and the backend skips its
@@ -2074,7 +2170,7 @@ export default function LongStayBookingPage() {
                           amountLabel: formatPrice(insufficientAmount),
                           gatewayName: gw ? gw.name : selectedGateway,
                           // After payment, land back on this booking page
-                          // with resumeCreate=true — the effect below fires
+                          // with resumeCreate=true — the effect above fires
                           // the create call using the persisted payload,
                           // then navigates to the long-stay booking list on
                           // success.

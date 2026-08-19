@@ -53,6 +53,19 @@ import { toast } from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
+// HotelBookingPage's stylesheet is the source of truth for the .pg-option /
+// .pg-option-selected / .pg-option-radio / .pg-option-logo classes used by
+// the "Select Payment Gateway" modal below. Importing here keeps the modal
+// visually identical to the Hotel / Package-Create / LastMinute / LongStay
+// flows without a copy.
+import "../../styles/HotelBookingPage.css";
+
+// CC Avenue is the only real gateway wired today (see
+// project_ccavenue_payment_integration memory). Kept as a list so adding
+// more later needs no modal wiring changes.
+const PAYMENT_GATEWAYS = [
+  { id: "ccavenue", name: "CC Avenue", desc: "Cards, UPI, Net Banking" },
+];
 
 // Reverse-geocode browser coordinates to a readable address for the Booking
 // History audit trail — used when the user reconfirms a held booking so the
@@ -333,6 +346,9 @@ export default function PackageBookingDetailView() {
   // Cancellation state
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  // Mandatory reason, matching the hotel detail view's Cancel modal. Sent as
+  // `reason` on the cancel request and persisted on the booking.
+  const [cancellationReason, setCancellationReason] = useState("");
   const [showReconfirmModal, setShowReconfirmModal] = useState(false);
   const [isReconfirming, setIsReconfirming] = useState(false);
   // Client location captured when the user opens the Reconfirm / Cancel
@@ -341,6 +357,27 @@ export default function PackageBookingDetailView() {
   // address is stamped server-side from the HTTP request.
   const [reconfirmLocation, setReconfirmLocation] = useState(null);
   const [cancelLocation, setCancelLocation] = useState(null);
+
+  // ── CC Avenue reconfirm gateway state ────────────────────────────────
+  // Mirrors the shape of the PaxInformation / HotelBookingPage credit-
+  // gate flow: when the plain PUT /reconfirm/{id} call comes back
+  // "Insufficient credit", we show a "Booking Cannot Be Completed" popup
+  // (no card enabled) OR "Online Payment Required" → "Select Payment
+  // Gateway" (card enabled) → navigate to /payment/ccavenue-redirect with
+  // flowType=PACKAGE_RECONFIRM. isFinalizingReconfirmPayment gates the
+  // full-viewport "creating your booking" overlay while the resume effect
+  // calls /finalize-package-reconfirm/{orderId}.
+  const [showReconfirmInsufficientModal, setShowReconfirmInsufficientModal] =
+    useState(false);
+  const [showReconfirmNoPaymentPathModal, setShowReconfirmNoPaymentPathModal] =
+    useState(false);
+  const [showReconfirmGatewayModal, setShowReconfirmGatewayModal] =
+    useState(false);
+  const [reconfirmSelectedGateway, setReconfirmSelectedGateway] = useState("");
+  const [reconfirmInsufficientAmount, setReconfirmInsufficientAmount] =
+    useState(0);
+  const [isFinalizingReconfirmPayment, setIsFinalizingReconfirmPayment] =
+    useState(false);
 
   // ── Add New Item (amendment) picker — same flow as hotel detail view.
   // Opens a modal listing every sub-booking type; the chosen type's create
@@ -391,6 +428,86 @@ export default function PackageBookingDetailView() {
     fetchDetails();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingId]);
+
+  // CC Avenue post-payment resume — mirrors BookingDetailedView.jsx (hotel
+  // reconfirm) and PackageCheckout.jsx (package create). CC Avenue's
+  // redirect is a real cross-domain browser navigation, so React Router
+  // `state` never survives it; the backend appends
+  // ?ccavenueOrderId=&ccavenueStatus= to the URL when it 302s the browser
+  // back. We verify server-side (so a tampered URL can't force a
+  // reconfirm), then call /finalize-package-reconfirm which stamps the
+  // booking as RECONFIRMED with modeOfPayment=ONLINE and no credit debit
+  // (real money already captured via CC Avenue).
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const ccavenueOrderId = searchParams.get("ccavenueOrderId");
+    const ccavenueStatus = searchParams.get("ccavenueStatus");
+    if (!ccavenueOrderId) return;
+
+    // Strip the resume query right away so a remount / reload can't
+    // re-trigger this effect (and re-POST /finalize-package-reconfirm).
+    navigate(location.pathname, { replace: true, state: {} });
+
+    (async () => {
+      if (ccavenueStatus !== "success") {
+        toast.error("Payment was not completed. Please try again.");
+        return;
+      }
+      try {
+        setIsFinalizingReconfirmPayment(true);
+        const statusResponse = await axiosInstance.get(
+          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+        );
+        if (statusResponse.data?.status !== "SUCCESS") {
+          toast.error(
+            statusResponse.data?.statusMessage ||
+              "Payment was not successful. Please try again.",
+          );
+          return;
+        }
+        const res = await axiosInstance.post(
+          `/api/payment/ccavenue/finalize-package-reconfirm/${ccavenueOrderId}`,
+        );
+        const body = res?.data || {};
+        if (body.status === "success") {
+          toast.success(body.message || "Booking reconfirmed successfully");
+          // Refresh so the detail page picks up the new RECONFIRMED status,
+          // the ONLINE payment-mode label, the reconfirm audit fields, and
+          // switches Voucher / Invoice from Proforma to Final.
+          await fetchDetails();
+        } else {
+          toast.error(
+            body.message ||
+              "Payment succeeded but reconfirm could not be completed. Please contact support with your payment reference.",
+          );
+        }
+      } catch (err) {
+        const beMsg =
+          err?.response?.data?.message || err?.message || null;
+        console.error("Post-payment package reconfirm failed:", err);
+        toast.error(
+          beMsg ||
+            "Payment succeeded but reconfirm could not be completed. Please contact support with your payment reference.",
+        );
+      } finally {
+        setIsFinalizingReconfirmPayment(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
+
+  // Warn on close / navigate-away while the paid-for reconfirm is still
+  // being applied server-side. Only attached during that window.
+  useEffect(() => {
+    if (!isFinalizingReconfirmPayment) return;
+    const beforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [isFinalizingReconfirmPayment]);
 
   // Backend is now the single source of truth for notes.
   const mergedNotes = bookingNotes;
@@ -486,17 +603,27 @@ export default function PackageBookingDetailView() {
   // the IP is resolved server-side from the HTTP request itself.
   const confirmCancelBooking = async () => {
     if (!bookingId) return;
+    // Cancellation reason is mandatory — the modal marks the field with an
+    // asterisk + invalid state and disables "Yes, Cancel" while it's empty.
+    // Belt-and-braces guard so a stray submit can't sneak past. Mirrors
+    // cancelBooking() on the hotel detail view.
+    const reason = cancellationReason.trim();
+    if (!reason) {
+      toast.error("Please enter a cancellation reason.");
+      return;
+    }
     try {
       setIsCancelling(true);
       const response = await axiosInstance.put(
         `/api/v1/package-booking/cancel/${bookingId}`,
-        { bookingLocation: cancelLocation },
+        { bookingLocation: cancelLocation, reason },
       );
       if (response.data && response.data.status === "success") {
         toast.success(
           response.data.message || "Booking cancelled successfully"
         );
         setShowCancelModal(false);
+        setCancellationReason("");
         navigate(-1);
       } else {
         toast.error(response.data?.message || "Failed to cancel booking");
@@ -589,9 +716,47 @@ export default function PackageBookingDetailView() {
       }
     } catch (error) {
       console.error("Error reconfirming booking:", error);
+      // Insufficient-credit branch: PackageBookingServiceImpl.reconfirmBooking
+      // throws IllegalArgumentException whose message starts with "Agent
+      // credit limit is insufficient to reconfirm this booking." (400 body:
+      // {status:"error", message:"…Insufficient credit. Available: X,
+      // Required: Y"}). Instead of leaving the operator stuck, route them
+      // through the same "Online Payment Required → CC Avenue" flow the
+      // create-side PaxInformation uses. We probe the agent's card gate in
+      // parallel — a Cash-only agent gets the "Booking Cannot Be Completed"
+      // popup instead. Fails open on the card-probe request (assumes card
+      // disabled) so a hiccup can't silently expose Card.
+      const beMsg =
+        error?.response?.data?.message || error?.message || "";
+      const isInsufficientCredit =
+        /insufficient credit|credit limit is insufficient/i.test(beMsg);
+      const agentIdForProbe = bookingDetails?.agentId;
+      if (isInsufficientCredit && agentIdForProbe) {
+        try {
+          const agentResp = await axiosInstance
+            .get(`/api/agent/${agentIdForProbe}`)
+            .catch(() => ({ data: { cardPaymentEnabled: false } }));
+          const requiredMatch = /Required:\s*([0-9.,]+)/i.exec(beMsg);
+          const required = requiredMatch
+            ? Number(String(requiredMatch[1]).replace(/,/g, ""))
+            : Number(bookingDetails?.totalPrice) || 0;
+          setReconfirmInsufficientAmount(required);
+          setShowReconfirmModal(false);
+          if (!agentResp?.data?.cardPaymentEnabled) {
+            setShowReconfirmNoPaymentPathModal(true);
+            return;
+          }
+          setReconfirmSelectedGateway("");
+          setShowReconfirmInsufficientModal(true);
+          return;
+        } catch (probeErr) {
+          console.warn("Card-gate probe failed:", probeErr);
+          // Fall through to the plain error toast so the operator at least
+          // sees the raw insufficient-credit message.
+        }
+      }
       toast.error(
-        error.response?.data?.message ||
-          "Failed to reconfirm booking. Please try again.",
+        beMsg || "Failed to reconfirm booking. Please try again.",
       );
     } finally {
       setIsReconfirming(false);
@@ -1152,8 +1317,62 @@ export default function PackageBookingDetailView() {
       CARD_PAYMENT: "Card payment",
       BANK_TRANSFER: "Bank transfer",
       CASH: "Cash",
+      CREDIT: "Credit Limit",
+      CARD: "Card",
+      ONLINE: "Online Payment",
     };
     return dict[m] || m.replace(/_/g, " ");
+  })();
+
+  // ── Payment Status (derived) ─────────────────────────────────────────
+  // Distinct from "Mode of Payment" — the mode is *how* the operator chose
+  // to pay; the status is *whether* money has actually moved yet. Reads
+  // cleanly across every combination:
+  //
+  //   • Cancelled + previously RECONFIRMED via credit → "Refunded"
+  //     (backend restores the debit on cancel).
+  //   • Cancelled + previously RECONFIRMED via ONLINE → "Cancelled (Paid)"
+  //     (ONLINE cancels don't restore anything — real money already left).
+  //   • Cancelled otherwise → "Cancelled — Not Paid".
+  //   • RECONFIRMED + modeOfPayment=ONLINE → "Paid Online (CC Avenue)"
+  //     — real money captured via CC Avenue's PACKAGE_CREATE or
+  //     PACKAGE_RECONFIRM flow.
+  //   • RECONFIRMED otherwise → "Paid via {mode}" (credit was debited).
+  //   • CONFIRMED (Hold Package and Pay Later) → "Not Paid — Pending
+  //     Reconfirm" — no credit debited, no money moved yet; the operator
+  //     must Reconfirm (which routes through the payment gate) to settle.
+  //   • Anything else → the derived status word only.
+  const paymentStatus = (() => {
+    const status = String(bookingDetails?.bookingStatus || "").trim().toUpperCase();
+    const mode = String(bookingDetails?.modeOfPayment || "").trim().toUpperCase();
+    const isOnline = mode === "ONLINE";
+    if (listStatus === "cancelled" || bookingDetails?.isCancelled === true) {
+      if (status === "RECONFIRMED") {
+        return isOnline
+          ? { label: "Cancelled (Paid Online)", color: "#dc2626" }
+          : { label: "Refunded", color: "#0d9488" };
+      }
+      return { label: "Cancelled — Not Paid", color: "#dc2626" };
+    }
+    if (status === "RECONFIRMED") {
+      if (isOnline) {
+        return { label: "Paid Online (CC Avenue)", color: "#16a34a" };
+      }
+      const humanMode = modePaymentLabel && modePaymentLabel !== "-"
+        ? modePaymentLabel
+        : "Credit";
+      return { label: `Paid via ${humanMode}`, color: "#16a34a" };
+    }
+    if (status === "CONFIRMED") {
+      return {
+        label: "Not Paid — Pending Reconfirm",
+        color: "#b45309",
+      };
+    }
+    // Any other bookingStatus (legacy rows / unknown values) — just render
+    // the raw value; NEVER reference derivedStatus here, it's defined
+    // below and hitting it during initial render throws a TDZ ReferenceError.
+    return { label: status || "-", color: "#475569" };
   })();
 
   // Plain status label — Confirmed / Cancelled — colored inline only
@@ -1319,9 +1538,40 @@ export default function PackageBookingDetailView() {
                           value={modePaymentLabel}
                         />
                         <InfoRow
-                          label="Flight Details"
-                          value={bookingDetails.flightDetails}
+                          label="Payment Status"
+                          value={
+                            <span
+                              style={{
+                                color: paymentStatus.color,
+                                fontWeight: 700,
+                              }}
+                            >
+                              {paymentStatus.label}
+                            </span>
+                          }
                         />
+                        {/* Flight legs are captured separately from
+                            2026-08-17 onward. Bookings made before that only
+                            carry the combined field, so fall back to it
+                            rather than showing two empty rows. */}
+                        {bookingDetails.arrivalFlightDetails ||
+                        bookingDetails.departureFlightDetails ? (
+                          <>
+                            <InfoRow
+                              label="Arrival Flight"
+                              value={bookingDetails.arrivalFlightDetails}
+                            />
+                            <InfoRow
+                              label="Departure Flight"
+                              value={bookingDetails.departureFlightDetails}
+                            />
+                          </>
+                        ) : (
+                          <InfoRow
+                            label="Flight Details"
+                            value={bookingDetails.flightDetails}
+                          />
+                        )}
                         <InfoRow
                           label="Pax Count"
                           value={`${bookingDetails.counts?.adultCount || 0} Adult${bookingDetails.counts?.childCount ? `, ${bookingDetails.counts.childCount} Child` : ""}${bookingDetails.counts?.infantCount ? `, ${bookingDetails.counts.infantCount} Infant` : ""}`}
@@ -2317,47 +2567,131 @@ export default function PackageBookingDetailView() {
         </Modal.Footer>
       </Modal>
 
-      {/* ── Cancellation Modal ──────────────────────────────────────── */}
+      {/* ── Cancellation Modal ──────────────────────────────────────────
+          Mirrors the Cancel Booking modal on the hotel detail view
+          (BookingDetailedView.jsx) — same header rule, same wording, same
+          booking-value warning, same mandatory Cancellation Reason field, and
+          the same No / Yes, Cancel footer — so the two flows behave
+          identically for the operator.
+
+          One deliberate difference in the maths: package_booking.total_price
+          ALREADY includes Tourism Dirham (see bookPackage on the backend),
+          whereas the hotel row stores them separately and its modal sums
+          them. Adding tourismDirham here too would overstate the figure, so
+          the warning shows totalPrice as-is — the same number the Pricing
+          section on this page renders. */}
       <Modal
         show={showCancelModal}
-        onHide={() => !isCancelling && setShowCancelModal(false)}
+        onHide={() => {
+          if (!isCancelling) {
+            setShowCancelModal(false);
+            setCancellationReason("");
+          }
+        }}
         centered
         backdrop="static"
         keyboard={false}
       >
-        <Modal.Header closeButton={!isCancelling} className="border-0">
+        <Modal.Header
+          closeButton={!isCancelling}
+          style={{
+            backgroundColor: "#fff",
+            borderBottom: "2px solid #e9ecef",
+          }}
+        >
           <Modal.Title className="fw-bold d-flex align-items-center">
             <FaExclamationCircle className="me-2 text-danger" />
             <span>Cancel Booking</span>
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body className="py-4 text-center">
-          <p className="fs-5 mb-0">
-            Are you sure you want to cancel this booking?
-          </p>
-          {bookingDetails && (
-            <div className="mt-3 text-muted small">
-              <div className="fw-bold text-dark">
-                {bookingDetails.confirmationCode}
+        <Modal.Body style={{ padding: "1.5rem" }}>
+          <div className="text-center">
+            <p className="fs-5 mb-3">
+              Are you sure you want to cancel this booking?
+            </p>
+            <div className="text-muted small mb-3">
+              <div>
+                <strong>Booking Code:</strong>{" "}
+                {bookingDetails?.confirmationCode ||
+                  rowStub?.confirmationCode ||
+                  "N/A"}
               </div>
-              <div>{bookingDetails.packageName || rowStub?.packageName}</div>
+              {(bookingDetails?.packageName || rowStub?.packageName) && (
+                <div>
+                  <strong>Package:</strong>{" "}
+                  {bookingDetails?.packageName || rowStub?.packageName}
+                </div>
+              )}
             </div>
-          )}
+            {/* Informational only — booking value warning. Reuses the SAME
+                total shown in the Pricing section of this page. Does not
+                alter any cancellation logic. */}
+            {bookingDetails?.totalPrice != null && (
+              <div
+                className="mb-3"
+                style={{
+                  border: "1px solid #ffe69c",
+                  backgroundColor: "#fff3cd",
+                  color: "#664d03",
+                  borderRadius: "4px",
+                  padding: "10px 12px",
+                  fontSize: "0.9rem",
+                }}
+              >
+                <FaExclamationCircle className="me-2 text-warning" />
+                Total value of this booking is{" "}
+                <strong>
+                  AED {Number(bookingDetails.totalPrice).toFixed(2)}
+                </strong>
+                .
+                <div className="fw-semibold mt-1">
+                  Do you still want to cancel it?
+                </div>
+              </div>
+            )}
+            <Form.Group
+              controlId="packageCancellationReason"
+              className="text-start"
+            >
+              <Form.Label className="fw-semibold">
+                Cancellation Reason <span className="text-danger">*</span>
+              </Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={3}
+                placeholder="Add a reason for cancellation"
+                value={cancellationReason}
+                onChange={(e) => setCancellationReason(e.target.value)}
+                disabled={isCancelling}
+                isInvalid={!cancellationReason.trim()}
+                required
+              />
+              <Form.Control.Feedback type="invalid">
+                Cancellation reason is required.
+              </Form.Control.Feedback>
+            </Form.Group>
+          </div>
         </Modal.Body>
-        <Modal.Footer className="border-0 justify-content-center pb-4">
+        <Modal.Footer
+          style={{
+            backgroundColor: "#f8f9fa",
+            borderTop: "1px solid #dee2e6",
+          }}
+        >
           <Button
             variant="secondary"
-            className="px-4 fw-bold"
-            onClick={() => setShowCancelModal(false)}
+            onClick={() => {
+              setShowCancelModal(false);
+              setCancellationReason("");
+            }}
             disabled={isCancelling}
           >
             No
           </Button>
           <Button
             variant="danger"
-            className="px-4 fw-bold shadow-sm"
             onClick={confirmCancelBooking}
-            disabled={isCancelling}
+            disabled={isCancelling || !cancellationReason.trim()}
           >
             {isCancelling ? (
               <>
@@ -2997,6 +3331,271 @@ export default function PackageBookingDetailView() {
           </Button>
         </Modal.Footer>
       </Modal>
+
+      {/* ─── Reconfirm: Booking Cannot Be Completed (no viable payment path) ───
+          Shown when the agent has no available credit AND Card payment is
+          disabled on their profile — mirrors the same-titled popup on
+          HotelBookingPage / PaxInformation. */}
+      <Modal
+        show={showReconfirmNoPaymentPathModal}
+        onHide={() => setShowReconfirmNoPaymentPathModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Booking Cannot Be Completed</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="text-center py-4">
+          <p className="mb-2 text-dark">
+            Sorry — this reconfirm can't be completed because the agent has
+            no available credit and{" "}
+            <strong>Card payment is not enabled</strong> for this account.
+          </p>
+          <p className="mb-0 text-muted small">
+            Please top up the agent's credit limit, or ask an administrator
+            to enable Card payment on the agent's profile, then try again.
+          </p>
+          <div className="mt-3">
+            <div className="text-muted small">Payable amount</div>
+            <div className="fs-4 fw-bold text-dark">
+              AED{" "}
+              {Number(reconfirmInsufficientAmount || 0).toLocaleString(
+                "en-US",
+                { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+              )}
+            </div>
+          </div>
+        </Modal.Body>
+        <Modal.Footer className="justify-content-center border-0">
+          <Button
+            variant="secondary"
+            onClick={() => setShowReconfirmNoPaymentPathModal(false)}
+          >
+            OK
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ─── Reconfirm: Online Payment Required ───
+          Bridge between the credit-check failure and the gateway picker.
+          Green Pay opens the "Select Payment Gateway" modal below. */}
+      <Modal
+        show={showReconfirmInsufficientModal}
+        onHide={() => setShowReconfirmInsufficientModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Online Payment Required</Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="text-center py-4">
+          <p className="mb-2 text-muted">
+            The agent's available credit is insufficient to reconfirm this
+            booking. You need to proceed with{" "}
+            <strong>online payment</strong>.
+          </p>
+          <div className="mt-3">
+            <div className="text-muted small">Payable amount</div>
+            <div className="fs-4 fw-bold text-dark">
+              AED{" "}
+              {Number(reconfirmInsufficientAmount || 0).toLocaleString(
+                "en-US",
+                { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+              )}
+            </div>
+          </div>
+        </Modal.Body>
+        <Modal.Footer className="justify-content-center border-0">
+          <Button
+            variant="danger"
+            onClick={() => setShowReconfirmInsufficientModal(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="success"
+            onClick={() => {
+              setShowReconfirmInsufficientModal(false);
+              setReconfirmSelectedGateway("");
+              setShowReconfirmGatewayModal(true);
+            }}
+          >
+            Pay
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ─── Reconfirm: Select Payment Gateway ───
+          Same pg-option card-style radios as the create flows (styles come
+          from the top-of-file HotelBookingPage.css import). On Proceed, CC
+          Avenue navigates to /payment/ccavenue-redirect with
+          flowType=PACKAGE_RECONFIRM + existingBookingId. Browser leaves for
+          CC Avenue's hosted billing page and returns to this same detail
+          URL with ?ccavenueOrderId=&ccavenueStatus= — picked up by the
+          resume useEffect above. */}
+      <Modal
+        show={showReconfirmGatewayModal}
+        onHide={() => setShowReconfirmGatewayModal(false)}
+        centered
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Select Payment Gateway</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted small mb-3">
+            Choose a gateway to enter your card details.
+          </p>
+          <div className="pg-option-list">
+            {PAYMENT_GATEWAYS.map((g) => {
+              const isSelected = reconfirmSelectedGateway === g.id;
+              return (
+                <label
+                  key={g.id}
+                  htmlFor={`pkg-reconfirm-gw-${g.id}`}
+                  className={`pg-option${
+                    isSelected ? " pg-option-selected" : ""
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="pkg-reconfirm-payment-gateway"
+                    id={`pkg-reconfirm-gw-${g.id}`}
+                    className="pg-option-input"
+                    checked={isSelected}
+                    onChange={() => setReconfirmSelectedGateway(g.id)}
+                  />
+                  <span className="pg-option-radio" aria-hidden="true" />
+                  {g.id === "ccavenue" && (
+                    <img
+                      src={`${process.env.PUBLIC_URL}/ccavanue.png`}
+                      alt="CC Avenue"
+                      className="pg-option-logo"
+                    />
+                  )}
+                  <span className="pg-option-text">
+                    <span className="pg-option-name">{g.name}</span>
+                    <span className="pg-option-desc">{g.desc}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </Modal.Body>
+        <Modal.Footer className="border-0">
+          <Button
+            variant="secondary"
+            onClick={() => setShowReconfirmGatewayModal(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="success"
+            disabled={!reconfirmSelectedGateway || !bookingId}
+            onClick={() => {
+              setShowReconfirmGatewayModal(false);
+              if (reconfirmSelectedGateway === "ccavenue") {
+                const leadName = (() => {
+                  const t =
+                    bookingDetails?.travellers &&
+                    bookingDetails.travellers[0];
+                  if (t) {
+                    return [t.title, t.firstName, t.middleName, t.lastName]
+                      .filter(Boolean)
+                      .join(" ")
+                      .trim();
+                  }
+                  return bookingDetails?.contactInfo?.name || "";
+                })();
+                navigate("/payment/ccavenue-redirect", {
+                  state: {
+                    flowType: "PACKAGE_RECONFIRM",
+                    reconfirmBookingId: bookingId,
+                    // CCAvenueCheckoutPage forwards flowType +
+                    // existingBookingId to /initiate — the backend
+                    // dispatcher (initiatePackageReconfirm) computes the
+                    // authoritative amount from the stored
+                    // booking.totalPrice, so no bookingPayload is needed.
+                    billingName: leadName,
+                    amountLabel: `AED ${Number(
+                      reconfirmInsufficientAmount || 0,
+                    ).toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}`,
+                    returnTo: location.pathname,
+                  },
+                });
+              }
+            }}
+          >
+            Proceed to Pay
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Post-payment finalize overlay — shown while
+          /api/payment/ccavenue/finalize-package-reconfirm/{orderId} is
+          running. Same look as the other CC Avenue finalize overlays so
+          operators see a consistent "do not close this window" popup
+          across booking flows. */}
+      {isFinalizingReconfirmPayment && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-live="assertive"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 20000,
+            background: "rgba(15, 23, 42, 0.75)",
+            backdropFilter: "blur(2px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "1rem",
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: "2rem 1.75rem",
+              maxWidth: 440,
+              width: "100%",
+              textAlign: "center",
+              boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+            }}
+          >
+            <Spinner
+              animation="border"
+              variant="success"
+              role="status"
+              style={{ width: 48, height: 48, marginBottom: 16 }}
+            />
+            <h5 className="fw-bold mb-2" style={{ color: "#0f172a" }}>
+              Payment successful — reconfirming your booking
+            </h5>
+            <p className="text-muted mb-3" style={{ fontSize: 14 }}>
+              Please{" "}
+              <strong>
+                do not close this window, refresh the page, or press the
+                back button
+              </strong>{" "}
+              until you see the confirmation.
+            </p>
+            <div
+              className="small"
+              style={{
+                color: "#b45309",
+                background: "#fef3c7",
+                border: "1px solid #fde68a",
+                borderRadius: 8,
+                padding: "8px 12px",
+              }}
+            >
+              This usually takes just a few seconds.
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

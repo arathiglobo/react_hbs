@@ -41,10 +41,18 @@ const COLUMN_WIDTHS = {
   sn: "40px",
   customerName: "150px",
   bookingCode: "100px",
+  // Supplier-side confirmation number added on the LM booking detail view.
+  // Sits next to Booking Code so the two identifiers (internal + supplier)
+  // read together. Cell renders blank for rows that don't have one yet.
+  // Width tuned so the two-word header ("CONFIRMATION" / "NO") wraps at
+  // its space instead of splitting "CONFIRMATION" mid-word — needs enough
+  // room for the longest word on its own line. Mirrors the hotel list.
+  confirmationNo: "130px",
   bookDate: "95px",
   bookingDetails: "240px",
   nights: "70px",
   total: "110px",
+  paymentStatus: "110px",
   status: "110px",
   action: "70px",
 };
@@ -66,7 +74,7 @@ const formatShortDate = (dateString) => {
 const STATUS_META = {
   CONFIRMED: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
   Confirmed: { label: "Confirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
-  ReConfirmed: { label: "ReConfirmed", bg: "#e6f0ff", color: "#1d4ed8", dot: "#3b82f6" },
+  ReConfirmed: { label: "ReConfirmed", bg: "#e7f6ec", color: "#1b7f3a", dot: "#22c55e" },
   Requested: { label: "Requested", bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   PENDING:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
@@ -94,6 +102,63 @@ const deriveDisplayStatus = (b) => {
   if (engine === "CONFIRMED" || conf === "confirmed") return "Confirmed";
   if (engine === "REQUESTED" || conf === "requested") return "Requested";
   return b?.confirmationStatus || "Confirmed";
+};
+
+// Resolve the Payment Status label from the booking's DISPLAYED status — same
+// mapping as /booking-details/hotel-booking-list:
+//   Confirmed   → Payment Pending
+//   On Request  → Payment Pending
+//   ReConfirmed → Paid
+//   Cancelled   → Paid when the booking had been reconfirmed before it was
+//                 cancelled, otherwise Un-Paid
+// Anything else — Requested, Rejected, or an unknown/empty status — has no
+// defined mapping and renders "-".
+//
+// A cancelled booking reports whether the money had already been collected at
+// the point of cancellation rather than the cancellation itself: a history that
+// reached ReConfirmed was paid, one that stopped at On Request / Confirmed
+// never was.
+//
+// On Request rooms haven't collected money yet either, so they carry the same
+// "Payment Pending" meaning as a genuinely Confirmed row. The Status column
+// still shows them as "On Request" (orange) — only the Payment Status column
+// collapses the two into the same settled/unsettled label.
+//
+// It is deliberately fed the label already computed by deriveDisplayStatus so
+// this column can never disagree with the adjacent Status column.
+const getPaymentStatusLabel = (booking, displayStatus) => {
+  const normalized = String(displayStatus || "").replace(/\s+/g, "").toLowerCase();
+  if (!normalized) return "-";
+
+  if (normalized === "cancelled" || normalized === "canceled") {
+    // Whether the money had been collected before the cancellation. The
+    // last-minute cancel endpoint (PATCH /api/last-minute-booking/{id}/cancel)
+    // only stamps is_cancelled + cancelled_at — it leaves confirmationStatus and
+    // cancelledFromStatus untouched — so the persisted `reconfirmation` flag is
+    // the signal that survives for rows cancelled through that route. The
+    // compound-status and cancelledFromStatus checks mirror the hotel list and
+    // cover bookings cancelled through the shared booking-cancellation flow.
+    const segments = String(booking?.confirmationStatus || "")
+      .split("/")
+      .map((seg) => seg.replace(/\s+/g, "").toLowerCase())
+      .filter(Boolean);
+    const cancelledFromNormalized = String(booking?.cancelledFromStatus || "")
+      .replace(/\s+/g, "")
+      .toLowerCase();
+    const wasReconfirmedBeforeCancel =
+      booking?.reconfirmation === true ||
+      segments.includes("reconfirmed") ||
+      cancelledFromNormalized.includes("reconfirmed");
+    return wasReconfirmedBeforeCancel ? "Paid" : "Un-Paid";
+  }
+
+  if (normalized === "reconfirmed") return "Paid";
+  if (normalized === "confirmed") return "Payment Pending";
+  // Match the hotel list: an On Request booking is Confirmed-in-waiting —
+  // no money collected yet, same badge as a Confirmed row.
+  if (normalized === "onrequest") return "Payment Pending";
+
+  return "-";
 };
 
 // Every customer/guest name on a booking. The backend now sends a
@@ -562,6 +627,24 @@ export default function LastMinuteBookingList() {
                             <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingCode }}>
                               Booking Code
                             </th>
+                            {/* Confirmation No — supplier's confirmation number,
+                                populated via the "CONFIRMATION NO." button on
+                                the booking detail view (booking.confirmationNumber).
+                                Cell renders blank on rows that don't have one.
+                                wordBreak / overflowWrap normal keep the two-word
+                                header wrapping only at its space, mirroring
+                                the hotel list. */}
+                            <th
+                              style={{
+                                ...baseHeaderStyle,
+                                width: COLUMN_WIDTHS.confirmationNo,
+                                whiteSpace: "normal",
+                                wordBreak: "normal",
+                                overflowWrap: "normal",
+                              }}
+                            >
+                              Confirmation No
+                            </th>
                             <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.bookDate }}>
                               Book Date
                             </th>
@@ -573,6 +656,12 @@ export default function LastMinuteBookingList() {
                             </th>
                             <th style={{ ...baseHeaderStyle, textAlign: "right", width: COLUMN_WIDTHS.total }}>
                               Total
+                            </th>
+                            {/* Payment Status column — same mapping as
+                                /booking-details/hotel-booking-list. See
+                                getPaymentStatusLabel. */}
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentStatus }}>
+                              Payment Status
                             </th>
                             <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
                               Status
@@ -650,9 +739,39 @@ export default function LastMinuteBookingList() {
                                     {b.bookingCode || "-"}
                                   </span>
                                 </td>
+                                {/* Confirmation No cell — mirrors the detail
+                                    view's field resolution. Renders blank
+                                    when the supplier hasn't stamped a number
+                                    yet, per the requirement that empty means
+                                    "nothing shown here". nowrap keeps the
+                                    number atomic. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.confirmationNo,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {(() => {
+                                    const confNo =
+                                      b.confirmationNumber ||
+                                      b.customer?.confirmationNumber ||
+                                      "";
+                                    return confNo ? (
+                                      <span
+                                        className="fw-semibold text-dark"
+                                        style={{ fontSize: "0.85rem" }}
+                                      >
+                                        {confNo}
+                                      </span>
+                                    ) : (
+                                      <span className="text-muted">-</span>
+                                    );
+                                  })()}
+                                </td>
                                 <td
                                   className="text-muted"
-                                  style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.bookDate }}
+                                  style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.bookDate, whiteSpace: "nowrap" }}
                                 >
                                   {formatShortDate(b.bookingDate) ||
                                     formatDateTime(b.bookingDate) ||
@@ -697,6 +816,40 @@ export default function LastMinuteBookingList() {
                                         ? `AED ${Number(b.totalRate).toFixed(2)}`
                                         : "-"}
                                   </span>
+                                </td>
+                                {/* Payment Status cell — derived from the
+                                    booking's displayed Status: Confirmed →
+                                    Payment Pending, ReConfirmed → Paid, a
+                                    cancellation → Paid or Un-Paid depending on
+                                    whether it had been reconfirmed. See
+                                    getPaymentStatusLabel. */}
+                                <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentStatus }}>
+                                  {(() => {
+                                    const label = getPaymentStatusLabel(b, statusText);
+                                    if (label === "-") {
+                                      return <span className="text-muted">-</span>;
+                                    }
+                                    // Same palette as the hotel list — green
+                                    // settled, red never collected, orange still
+                                    // outstanding.
+                                    const color =
+                                      label === "Paid"
+                                        ? "#06a301"
+                                        : label === "Un-Paid"
+                                          ? "#dc3545"
+                                          : "#e67e22";
+                                    return (
+                                      <span
+                                        style={{
+                                          color,
+                                          fontSize: "0.82rem",
+                                          fontWeight: "600",
+                                        }}
+                                      >
+                                        {label}
+                                      </span>
+                                    );
+                                  })()}
                                 </td>
                                 <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
                                   <StatusPill meta={sMeta} raw={statusText} />

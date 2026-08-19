@@ -5,10 +5,13 @@ import './styles/custom.scss'; // compiles full Bootstrap from SCSS with the bra
 import './styles/modernTheme.css'; // global modern-premium polish (layout/spacing/shadows/motion only)
 import 'bootstrap/dist/js/bootstrap.bundle.min.js'; // Includes Popper.js for Tabs
 import App from './App';
+import { FeatureFlagsProvider } from './config/FeatureFlagsContext';
 const container = document.getElementById('root');
 const root = createRoot(container);
 root.render(
   <BrowserRouter>
-   <App />
+    <FeatureFlagsProvider>
+      <App />
+    </FeatureFlagsProvider>
    </BrowserRouter>
 );

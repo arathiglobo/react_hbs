@@ -1143,7 +1143,7 @@ const ActivitySearch = () => {
    <Row className="mt-4">
   <Col md={12} className="d-flex justify-content-center">
     <Button
-      variant="warning"
+      variant="danger"
       className="px-4 fw-bold"
       type="submit"
       disabled={tourLoading}

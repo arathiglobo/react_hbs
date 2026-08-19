@@ -74,12 +74,55 @@ const LAYOUTS = ["Theatre", "U-Shape", "Classroom", "Boardroom", "Banquet", "Rec
 const ID_TYPES = ["Aadhaar", "PAN", "Passport", "Driving License", "Voter ID"];
 const PAYMENT_MODES = ["Cash", "Card", "UPI", "Bank Transfer", "Cheque"];
 
+/**
+ * Read the booking-page criteria.
+ *
+ * Two delivery paths supported so the URL can stay clean AND so the
+ * pre-existing edit link (?editBookingId=…) keeps working:
+ *
+ *  1. URL query params — used by the edit flow (MeetAndSpaceBookingEditPage
+ *     navigates with `?editBookingId=<id>`) and as a fallback when
+ *     localStorage is unavailable.
+ *  2. localStorage["msBookingDraft"] — written by MeetAndSpaceSearch
+ *     .handleBook right before opening this page in a new tab. Keeps
+ *     spaceId / bookingDate / rates / agent / nationality out of the
+ *     address bar.
+ *
+ * Precedence: URL wins over draft when both are present. That way an
+ * ?editBookingId=… link can never be silently overridden by a stale
+ * search draft.
+ *
+ * The draft is NOT deleted on read. React StrictMode double-invokes
+ * useMemo factories in dev, and a self-clearing reader would race with
+ * itself and end up returning an empty object on the second call. A
+ * fresh "Book" click naturally overwrites the key, so staleness is
+ * bounded to "the last criteria this user clicked Book on".
+ */
 function useQueryParams() {
   const { search } = useLocation();
-  return useMemo(
-    () => Object.fromEntries(new URLSearchParams(search)),
-    [search]
-  );
+  return useMemo(() => {
+    const urlParams = Object.fromEntries(new URLSearchParams(search));
+    if (urlParams.spaceId || urlParams.editBookingId) {
+      // URL already carries everything the page needs — don't touch the
+      // draft. This also preserves the fallback path from
+      // MeetAndSpaceSearch when localStorage was unavailable.
+      return urlParams;
+    }
+    try {
+      const raw = localStorage.getItem("msBookingDraft");
+      if (raw) {
+        const draft = JSON.parse(raw);
+        // URL wins over draft on any overlapping key.
+        return { ...draft, ...urlParams };
+      }
+    } catch (e) {
+      // Storage disabled / corrupt payload — silently fall back to
+      // whatever the URL carries (may be empty). The page's own error
+      // path already handles a missing spaceId by showing the empty
+      // state.
+    }
+    return urlParams;
+  }, [search]);
 }
 
 export default function MeetAndSpaceBookingPage() {
@@ -749,7 +792,32 @@ export default function MeetAndSpaceBookingPage() {
                         <Button
                           variant="outline-secondary"
                           size="sm"
-                          onClick={() => navigate(-1)}
+                          onClick={() => {
+                            // Three routes this page can be reached by,
+                            // each with a different "previous page":
+                            //  - Edit flow: opened in the SAME tab from
+                            //    /booking-details/... — real history
+                            //    exists, so navigate(-1) works.
+                            //  - Search flow: opened in a NEW tab via
+                            //    window.open from MeetAndSpaceSearch —
+                            //    no history to go back to. Close the
+                            //    tab; the search tab is still open
+                            //    behind it. Same pattern used lower in
+                            //    this file for the post-save Back link.
+                            //  - Direct load (bookmark / typed URL):
+                            //    neither history nor opener — fall back
+                            //    to the search page so the user isn't
+                            //    dead-ended.
+                            if (isEditMode) {
+                              navigate(-1);
+                              return;
+                            }
+                            if (window.opener && !window.opener.closed) {
+                              window.close();
+                              return;
+                            }
+                            navigate("/new-booking/meet-and-space");
+                          }}
                           className="me-3"
                         >
                           ← Back

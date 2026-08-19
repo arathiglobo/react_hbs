@@ -266,26 +266,28 @@ const Register = () => {
   // addresses; hits the public /api/agent/check-email endpoint and
   // flags duplicates so the field can warn inline before submit. A
   // failed check never blocks the user (server still validates on save).
-  useEffect(() => {
-    const email = (formData.personalEmail || "").trim();
-    if (emailCheckTimer.current) clearTimeout(emailCheckTimer.current);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setEmailExists(false);
-      setEmailChecking(false);
-      return undefined;
-    }
-    setEmailChecking(true);
-    emailCheckTimer.current = setTimeout(() => {
-      axiosInstance
-        .get("/api/agent/check-email", { params: { email } })
-        .then((res) => setEmailExists(Boolean(res.data?.exists)))
-        .catch(() => setEmailExists(false))
-        .finally(() => setEmailChecking(false));
-    }, 500);
-    return () => {
-      if (emailCheckTimer.current) clearTimeout(emailCheckTimer.current);
-    };
-  }, [formData.personalEmail]);
+  // Disabled per requirement — the /register page no longer enforces
+  // email uniqueness (frontend + backend duplicate checks are commented).
+  // useEffect(() => {
+  //   const email = (formData.personalEmail || "").trim();
+  //   if (emailCheckTimer.current) clearTimeout(emailCheckTimer.current);
+  //   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+  //     setEmailExists(false);
+  //     setEmailChecking(false);
+  //     return undefined;
+  //   }
+  //   setEmailChecking(true);
+  //   emailCheckTimer.current = setTimeout(() => {
+  //     axiosInstance
+  //       .get("/api/agent/check-email", { params: { email } })
+  //       .then((res) => setEmailExists(Boolean(res.data?.exists)))
+  //       .catch(() => setEmailExists(false))
+  //       .finally(() => setEmailChecking(false));
+  //   }, 500);
+  //   return () => {
+  //     if (emailCheckTimer.current) clearTimeout(emailCheckTimer.current);
+  //   };
+  // }, [formData.personalEmail]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -337,7 +339,7 @@ const Register = () => {
       if (!formData.businessType.trim()) newErrors.businessType = "Business Type is required";
       if (!formData.agentCategoryId) newErrors.agentCategoryId = "Company Type is required";
       if (!formData.currency) newErrors.currency = "Currency is required";
-      if (!formData.markup) newErrors.markup = "Markup is required";
+      // if (!formData.markup) newErrors.markup = "Markup is required";
 
     } else if (currentStep === 2) {
       if (!formData.firstName.trim()) newErrors.firstName = "First Name is required";
@@ -346,9 +348,11 @@ const Register = () => {
       if (!formData.personalEmail.trim()) newErrors.personalEmail = "Email ID is required";
       if (formData.personalEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.personalEmail)) {
         newErrors.personalEmail = "Invalid email format";
-      } else if (emailExists) {
-        newErrors.personalEmail = "An agent with this email already exists";
       }
+      // Duplicate-email guard removed per requirement.
+      // else if (emailExists) {
+      //   newErrors.personalEmail = "An agent with this email already exists";
+      // }
       if (formData.mobileNumber && !/^\+?\d{10,15}$/.test(formData.mobileNumber.replace(/\s/g, ""))) {
         newErrors.mobileNumber = "Mobile Number must be 10-15 digits";
       }
@@ -435,7 +439,7 @@ const Register = () => {
     if (!formData.agentCategoryId)
       newErrors.agentCategoryId = "Company Type or Agent category is required";
     if (!formData.currency) newErrors.currency = "Currency is required";
-    if (!formData.markup) newErrors.markup = "Markup is required";
+    // if (!formData.markup) newErrors.markup = "Markup is required";
     if (!formData.firstName.trim())
       newErrors.firstName = "First Name is required";
     if (!formData.lastName.trim()) newErrors.lastName = "Last Name is required";
@@ -455,8 +459,9 @@ const Register = () => {
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.personalEmail)
     )
       newErrors.personalEmail = "Invalid email format";
-    else if (emailExists)
-      newErrors.personalEmail = "An agent with this email already exists";
+    // Duplicate-email guard removed per requirement.
+    // else if (emailExists)
+    //   newErrors.personalEmail = "An agent with this email already exists";
     if (
       formData.mobileNumber &&
       !/^\+?\d{10,15}$/.test(formData.mobileNumber.replace(/\s/g, ""))
@@ -958,6 +963,7 @@ const Register = () => {
                             </Form.Group>
                           </Col>
 
+                          {/*
                           <Col md={6}>
                             <Form.Group>
                               <Form.Label className="form-label">
@@ -983,6 +989,7 @@ const Register = () => {
                               )}
                             </Form.Group>
                           </Col>
+                          */}
                         </Row>
                       </div>
 
@@ -1103,12 +1110,15 @@ const Register = () => {
                                   {errors.personalEmail}
                                 </Form.Control.Feedback>
                               )}
-                              {/* Live availability hint (agent.personal_email). */}
+                              {/* Live availability hint (agent.personal_email) — disabled per requirement. */}
+                              {/*
                               {!errors.personalEmail && emailChecking && (
                                 <div className="text-muted small mt-1">
                                   Checking availability…
                                 </div>
                               )}
+                              */}
+                              {/*
                               {!errors.personalEmail &&
                                 !emailChecking &&
                                 emailExists && (
@@ -1116,6 +1126,8 @@ const Register = () => {
                                     An agent with this email already exists.
                                   </div>
                                 )}
+                              */}
+                              {/*
                               {!errors.personalEmail &&
                                 !emailChecking &&
                                 !emailExists &&
@@ -1126,6 +1138,7 @@ const Register = () => {
                                     Email is available.
                                   </div>
                                 )}
+                              */}
                             </Form.Group>
                           </Col>
 

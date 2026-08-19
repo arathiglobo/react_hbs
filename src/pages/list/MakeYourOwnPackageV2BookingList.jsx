@@ -31,6 +31,13 @@ const COLUMN_WIDTHS = {
   sn: "40px",
   customerName: "170px",
   bookingCode: "110px",
+  // Supplier-side confirmation number added on the MYOP v2 booking detail
+  // view via the "CONFIRMATION NO." button. Sits next to Booking Code so
+  // the two identifiers (internal + supplier) read together. Cell renders
+  // blank for rows that don't have one yet. Width tuned so the two-word
+  // header ("CONFIRMATION" / "NO") wraps at its space instead of splitting
+  // "CONFIRMATION" mid-letter — matches hotel + LM + LS + DS lists.
+  confirmationNo: "130px",
   agent: "130px",
   tourDate: "100px",
   total: "110px",
@@ -458,6 +465,25 @@ const MakeYourOwnPackageV2BookingList = () => {
                           >
                             Booking Code
                           </th>
+                          {/* Confirmation No — supplier's confirmation number,
+                              populated via the "CONFIRMATION NO." button on
+                              the MYOP v2 detail view. MyPkgV2BookingListItem
+                              already exposes `confirmationNumber` (mapped in
+                              MyPkgV2Service.toResponse), so no backend change
+                              is needed. Cell renders blank on rows that don't
+                              have one. wordBreak / overflowWrap normal keep
+                              the two-word header wrapping only at its space. */}
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.confirmationNo,
+                              whiteSpace: "normal",
+                              wordBreak: "normal",
+                              overflowWrap: "normal",
+                            }}
+                          >
+                            Confirmation No
+                          </th>
                           <th
                             style={{
                               ...baseHeaderStyle,
@@ -620,6 +646,31 @@ const MakeYourOwnPackageV2BookingList = () => {
                                   <span className="fw-bold text-primary">
                                     {b.bookingCode || "-"}
                                   </span>
+                                </td>
+                                {/* Confirmation No cell — reads the field
+                                    already exposed by MyPkgV2BookingListItem.
+                                    Renders a muted "-" placeholder when the
+                                    supplier hasn't stamped a number yet, so
+                                    operators can tell "no confirmation yet"
+                                    apart from "cell failed to render". nowrap
+                                    keeps the number atomic when present. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.confirmationNo,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {b.confirmationNumber ? (
+                                    <span
+                                      className="fw-semibold text-dark"
+                                      style={{ fontSize: "0.85rem" }}
+                                    >
+                                      {b.confirmationNumber}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
                                 </td>
                                 <td
                                   style={{

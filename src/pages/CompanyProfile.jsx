@@ -93,6 +93,10 @@ export default function CompanyProfile() {
   };
 
   const validateForm = () => {
+    // Only four fields are business-mandatory: Company Name, Authorized
+    // Person, Address, Email. Everything else is optional — but when the
+    // user DOES fill in a number/year/URL we still enforce the format so
+    // the backend doesn't get garbage.
     const errors = {};
 
     if (!safeTrim(formData.companyName)) {
@@ -107,36 +111,6 @@ export default function CompanyProfile() {
       errors.address = "Address is required";
     }
 
-    const website = safeTrim(formData.website);
-    if (website && !isValidUrl(website)) {
-      errors.website = "Please enter a valid website URL";
-    }
-
-    if (!safeTrim(formData.mainOffice)) {
-      errors.mainOffice = "Main Office is required";
-    }
-
-    const yearStandUp = safeTrim(formData.yearStandUp);
-    if (!yearStandUp) {
-      errors.yearStandUp = "Year Stand Up is required";
-    } else if (!isValidYear(yearStandUp)) {
-      errors.yearStandUp = "Please enter a valid year (e.g., 2010)";
-    }
-
-    const labours = safeTrim(formData.labours);
-    if (!labours) {
-      errors.labours = "Number of Labours is required";
-    } else if (isNaN(labours) || parseInt(labours) <= 0) {
-      errors.labours = "Please enter a valid number";
-    }
-
-    const branches = safeTrim(formData.branches);
-    if (!branches) {
-      errors.branches = "Number of Branches is required";
-    } else if (isNaN(branches) || parseInt(branches) <= 0) {
-      errors.branches = "Please enter a valid number";
-    }
-
     const mailId = safeTrim(formData.mailId);
     if (!mailId) {
       errors.mailId = "Email is required";
@@ -144,14 +118,29 @@ export default function CompanyProfile() {
       errors.mailId = "Please enter a valid email address";
     }
 
-    if (!safeTrim(formData.mobile)) {
-      errors.mobile = "Mobile is required";
+    const website = safeTrim(formData.website);
+    if (website && !isValidUrl(website)) {
+      errors.website = "Please enter a valid website URL";
+    }
+
+    // Format-only checks — no "is required".
+    const yearStandUp = safeTrim(formData.yearStandUp);
+    if (yearStandUp && !isValidYear(yearStandUp)) {
+      errors.yearStandUp = "Please enter a valid year (e.g., 2010)";
+    }
+
+    const labours = safeTrim(formData.labours);
+    if (labours && (isNaN(labours) || parseInt(labours) <= 0)) {
+      errors.labours = "Please enter a valid number";
+    }
+
+    const branches = safeTrim(formData.branches);
+    if (branches && (isNaN(branches) || parseInt(branches) <= 0)) {
+      errors.branches = "Please enter a valid number";
     }
 
     const postOffice = safeTrim(formData.postOffice);
-    if (!postOffice) {
-      errors.postOffice = "Post Office is required";
-    } else if (isNaN(postOffice) || parseInt(postOffice) <= 0) {
+    if (postOffice && (isNaN(postOffice) || parseInt(postOffice) <= 0)) {
       errors.postOffice = "Please enter a valid number";
     }
 
@@ -696,9 +685,7 @@ export default function CompanyProfile() {
                   </Col>
                   <Col md={6}>
                     <Form.Group className="mb-3">
-                      <Form.Label>
-                        Main Office <span className="text-danger">*</span>
-                      </Form.Label>
+                      <Form.Label>Main Office</Form.Label>
                       <Form.Control
                         type="text"
                         value={formData.mainOffice}
@@ -718,9 +705,7 @@ export default function CompanyProfile() {
                 <Row>
                   <Col md={6}>
                     <Form.Group className="mb-3">
-                      <Form.Label>
-                        Year Stand Up <span className="text-danger">*</span>
-                      </Form.Label>
+                      <Form.Label>Year Stand Up</Form.Label>
                       <Form.Control
                         type="text"
                         value={formData.yearStandUp}
@@ -759,9 +744,7 @@ export default function CompanyProfile() {
                 <Row>
                   <Col md={4}>
                     <Form.Group className="mb-3">
-                      <Form.Label>
-                        Labours <span className="text-danger">*</span>
-                      </Form.Label>
+                      <Form.Label>Labours</Form.Label>
                       <Form.Control
                         type="number"
                         value={formData.labours}
@@ -777,9 +760,7 @@ export default function CompanyProfile() {
                   </Col>
                   <Col md={4}>
                     <Form.Group className="mb-3">
-                      <Form.Label>
-                        Branches <span className="text-danger">*</span>
-                      </Form.Label>
+                      <Form.Label>Branches</Form.Label>
                       <Form.Control
                         type="number"
                         value={formData.branches}
@@ -795,9 +776,7 @@ export default function CompanyProfile() {
                   </Col>
                   <Col md={4}>
                     <Form.Group className="mb-3">
-                      <Form.Label>
-                        Post Office <span className="text-danger">*</span>
-                      </Form.Label>
+                      <Form.Label>Post Office</Form.Label>
                       <Form.Control
                         type="text"
                         value={formData.postOffice}
@@ -828,9 +807,7 @@ export default function CompanyProfile() {
                   </Col>
                   <Col md={4}>
                     <Form.Group className="mb-3">
-                      <Form.Label>
-                        Mobile <span className="text-danger">*</span>
-                      </Form.Label>
+                      <Form.Label>Mobile</Form.Label>
                       <Form.Control
                         type="text"
                         value={formData.mobile}
@@ -858,37 +835,10 @@ export default function CompanyProfile() {
                   </Col>
                 </Row>
 
-                <Row>
-                  <Col md={6}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>Whitelisted Suppliers</Form.Label>
-
-                      <Select
-                        isMulti
-                        options={suppliers}
-                        value={suppliers.filter((opt) =>
-                          formData.whitelistedSupplierCodes?.includes(
-                            opt.value,
-                          ),
-                        )}
-                        onChange={(selected) => {
-                          const values = selected
-                            ? selected.map((o) => o.value)
-                            : [];
-                          handleInputChange("whitelistedSupplierCodes", values);
-                        }}
-                        placeholder="SELECT" // 👈 This is what you want
-                        menuPortalTarget={document.body}
-                        menuPlacement="auto"
-                        menuPosition="fixed"
-                        maxMenuHeight={200}
-                        styles={{
-                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                        }}
-                      />
-                    </Form.Group>
-                  </Col>
-                </Row>
+                {/* Whitelisted Suppliers picker intentionally hidden —
+                    feature not currently used. The formData field and
+                    payload key are kept intact so any codes on existing
+                    rows are preserved on edit; only the UI is hidden. */}
 
                 {/* Company branding — logo goes on the LEFT of every
                     voucher / invoice PDF, image is the larger cover/
@@ -1136,14 +1086,9 @@ export default function CompanyProfile() {
                                 </a>
                               </p>
                             </Col>
-                            <Col md={12}>
-                              <p className="mb-0">
-                                <strong>Whitelisted Suppliers:</strong>{" "}
-                                {viewData.whitelistedSupplierCodes?.length > 0
-                                  ? viewData.whitelistedSupplierCodes.join(", ")
-                                  : "None"}
-                              </p>
-                            </Col>
+                            {/* Whitelisted Suppliers row hidden — feature
+                                not currently used. Data still round-trips
+                                through the DTO untouched. */}
                           </Row>
                         </div>
                       </div>

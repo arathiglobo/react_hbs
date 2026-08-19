@@ -41,6 +41,14 @@ const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 const COLUMN_WIDTHS = {
   sn: "40px",
   booking: "120px",
+  // Supplier-side confirmation number from the "CONFIRMATION NO." button
+  // on the Scheffer detail view. Sourced from
+  // SchefferBooking.confirmationNumber and already exposed on
+  // SchefferBookingResponseDTO by the grouped mapper (see
+  // SchefferBookingService.toResponse). Width tuned so the two-word
+  // header ("CONFIRMATION" / "NO") wraps at its space instead of
+  // splitting "CONFIRMATION" mid-letter — matches the other list pages.
+  confirmationNo: "130px",
   customer: "160px",
   cab: "150px",
   travel: "260px",
@@ -524,6 +532,26 @@ const SchefferDriverBookingList = ({
                           >
                             Booking
                           </th>
+                          {/* Confirmation No — supplier's confirmation number
+                              from the "CONFIRMATION NO." button on the
+                              Scheffer detail view. SchefferBookingResponseDTO
+                              already exposes `confirmationNumber`, so no
+                              backend change is needed. Cell renders "-" on
+                              rows that don't have one. wordBreak /
+                              overflowWrap normal keep the two-word header
+                              wrapping only at its space, mirroring the other
+                              list pages. */}
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.confirmationNo,
+                              whiteSpace: "normal",
+                              wordBreak: "normal",
+                              overflowWrap: "normal",
+                            }}
+                          >
+                            Confirmation No
+                          </th>
                           <th
                             style={{
                               ...baseHeaderStyle,
@@ -656,6 +684,30 @@ const SchefferDriverBookingList = ({
                                     >
                                       {fmtDateLong(b.createdAt)}
                                     </div>
+                                  )}
+                                </td>
+                                {/* Confirmation No cell — reads the field
+                                    already returned on SchefferBookingResponseDTO.
+                                    Muted "-" when the operator hasn't saved
+                                    a number yet (consistent with the other
+                                    list pages' placeholder). nowrap keeps a
+                                    present number atomic. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.confirmationNo,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {b.confirmationNumber ? (
+                                    <span
+                                      className="fw-semibold text-dark"
+                                      style={{ fontSize: "0.85rem" }}
+                                    >
+                                      {b.confirmationNumber}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted">-</span>
                                   )}
                                 </td>
                                 <td

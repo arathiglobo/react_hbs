@@ -53,6 +53,13 @@ const CREDENTIAL_SCHEMAS = {
   IWTX: [
     { key: "url", label: "Search URL", type: "text" },
     { key: "availabilityUrl", label: "Availability URL", type: "text" },
+    // Booking + cancellation both derive their endpoint from this field
+    // (IwtxHotelBookingService.pickBookUrl reads "bookUrl", then falls
+    // back to "book_url", then to iwtx.api.book.url in
+    // application.properties). Without it, IWTX book/cancel throws
+    // "IWTX book URL is not configured" even though search works fine
+    // off the two URLs above.
+    { key: "bookUrl", label: "Book URL (iwtx.api.book.url)", type: "text" },
     { key: "password", label: "Password", type: "password" },
     { key: "code", label: "Code", type: "text" },
     { key: "token", label: "Token", type: "password" },
@@ -60,6 +67,12 @@ const CREDENTIAL_SCHEMAS = {
   X3: [
     { key: "url", label: "Search URL (x3.api.url)", type: "text" },
     { key: "availabilityUrl", label: "Availability URL (x3.api.availability.url)", type: "text" },
+    // Booking + cancellation both derive their endpoint from this field
+    // (X3HotelBookingService.pickBookUrl reads "bookUrl", then falls back
+    // to "book_url", then to x3.api.book.url in application.properties).
+    // Without it, X3 book/cancel throws "X3 book URL is not configured"
+    // even though search works fine off the two URLs above.
+    { key: "bookUrl", label: "Book URL (x3.api.book.url)", type: "text" },
     { key: "code", label: "Client Code (x3.api.code)", type: "text" },
     { key: "password", label: "Password (x3.api.password)", type: "password" },
     { key: "token", label: "Token (x3.api.token)", type: "password" },
@@ -86,8 +99,60 @@ const CREDENTIAL_SCHEMAS = {
     { key: "baseUrl", label: "Base URL (grn.api.base-url)", type: "text" },
     { key: "apiKey", label: "API Key (grn.api.key)", type: "password" },
   ],
+
+  // IWay (i'way BS Transfers). Keys map to IwayAuthService.pick* on the
+  // backend — same DB-first-with-properties-fallback pattern as ATHARVA
+  // / IWTX. Base URL is the "/transnextgen" prefix only; the /v4 (or
+  // whatever version the API is on) is set separately so ops can move
+  // to a new major without editing the base URL.
+  IWAY: [
+    { key: "baseUrl", label: "Base URL (iway.api.baseUrl)", type: "text" },
+    { key: "version", label: "API Version (v4)", type: "text" },
+    { key: "userId", label: "User ID (iway.api.userId)", type: "text" },
+    { key: "login", label: "Login (iway.api.login)", type: "text" },
+    { key: "password", label: "Password (iway.api.password)", type: "password" },
+    { key: "currency", label: "Default Currency (e.g. AED)", type: "text" },
+    { key: "lang", label: "Response Language (e.g. en)", type: "text" },
+    { key: "imagesUrl", label: "Images URL (car photos base)", type: "text" },
+    { key: "platform", label: "Platform ID (guide §11.6 — 7 for API)", type: "text" },
+  ],
   // INHOUSE reads from the app's own DB — no external credentials to set.
   INHOUSE: [],
+
+
+  // Keys map to GoGlobalCredentials.fromMap() on the backend, which also
+  // accepts base-url/base_url/url, agencyId/agency-id, userName/username
+  // and passwd/pwd. GoGlobal issues a DEDICATED endpoint per client, so
+  // baseUrl is the origin only and servicePath is appended to it — leave
+  // servicePath blank to fall back to goglobal.api.service-path.
+GOGLOBAL: [
+  { key: "baseUrl", label: "Base URL (goglobal.api.base-url)", type: "text" },
+  { key: "servicePath", label: "Service Path — optional (goglobal.api.service-path)", type: "text" },
+  { key: "agency", label: "Agency ID (goglobal.api.agency)", type: "text" },
+  { key: "user", label: "User (goglobal.api.user)", type: "text" },
+  { key: "password", label: "Password (goglobal.api.password)", type: "password" },
+],
+
+// IWay (i'way BS Transfers). Keys map to IwayAuthService.pick* on the
+// backend — same DB-first-with-properties-fallback pattern as ATHARVA
+// / IWTX. Base URL is the "/transnextgen" prefix only; the /v4 (or
+// whatever version the API is on) is set separately so ops can move
+// to a new major without editing the base URL.
+IWAY: [
+  { key: "baseUrl", label: "Base URL (iway.api.baseUrl)", type: "text" },
+  { key: "version", label: "API Version (v4)", type: "text" },
+  { key: "userId", label: "User ID (iway.api.userId)", type: "text" },
+  { key: "login", label: "Login (iway.api.login)", type: "text" },
+  { key: "password", label: "Password (iway.api.password)", type: "password" },
+  { key: "currency", label: "Default Currency (e.g. AED)", type: "text" },
+  { key: "lang", label: "Response Language (e.g. en)", type: "text" },
+  { key: "imagesUrl", label: "Images URL (car photos base)", type: "text" },
+  { key: "platform", label: "Platform ID (guide §11.6 — 7 for API)", type: "text" },
+],
+
+// INHOUSE reads from the app's own DB — no external credentials to set.
+INHOUSE: [],
+
 };
 
 const MASK = "••••••••";
@@ -367,6 +432,10 @@ export default function AdminApiAccess() {
 function CredentialsModal({ row, initialEnv, onClose, onSaved }) {
   const [env, setEnv] = useState(initialEnv);
   const [values, setValues] = useState({ TEST: {}, LIVE: {} });
+  // Whether each env currently has something stored, straight from the GET's
+  // `exists` flag. Drives the difference between "you saved nothing" (reject)
+  // and "you deliberately wiped what was there" (confirm).
+  const [existing, setExisting] = useState({ TEST: false, LIVE: false });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   // Per-field password visibility toggle. Keyed by `${env}:${fieldKey}` so
@@ -447,6 +516,10 @@ function CredentialsModal({ row, initialEnv, onClose, onSaved }) {
           TEST: t?.credentials || {},
           LIVE: l?.credentials || {},
         });
+        setExisting({
+          TEST: !!t?.exists,
+          LIVE: !!l?.exists,
+        });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -463,13 +536,47 @@ function CredentialsModal({ row, initialEnv, onClose, onSaved }) {
     }));
 
   const save = async () => {
+    const current = values[env] || {};
+
+    // A field still holding the mask means "keep the stored secret", so it
+    // counts as a value — only a form with no masks AND no typed text is
+    // actually empty. Saving one of those used to write {"password":"",…},
+    // which lit the green pill and then masked the empty value forever.
+    const keepsExisting = schema.some((f) => current[f.key] === MASK);
+    const hasTyped = schema.some(
+      (f) => current[f.key] !== MASK && String(current[f.key] ?? "").trim() !== "",
+    );
+    const willBeEmpty = !keepsExisting && !hasTyped;
+
+    if (willBeEmpty && !existing[env]) {
+      toast.error(`Enter at least one ${env} value before saving.`);
+      return;
+    }
+    if (willBeEmpty && existing[env]) {
+      const proceed = window.confirm(
+        `This clears the saved ${env} credentials for ${row.apiName || row.apiCode}. Continue?`,
+      );
+      if (!proceed) return;
+    }
+
+    // Trim on the way out. Blanks are sent on purpose — the backend reads a
+    // blank as "clear this key" and drops it from the stored blob.
+    const payload = {};
+    Object.entries(current).forEach(([k, v]) => {
+      payload[k] = typeof v === "string" ? v.trim() : v;
+    });
+
     setSaving(true);
     try {
-      await axiosInstance.put(
+      const res = await axiosInstance.put(
         `${BASE}/${row.externalApiId}/credentials/${env}`,
-        values[env] || {},
+        payload,
       );
-      toast.success(`${env} credentials saved`);
+      toast.success(
+        res?.data?.cleared
+          ? `${env} credentials cleared`
+          : `${env} credentials saved`,
+      );
       await onSaved();
     } catch (e) {
       const msg =
@@ -505,13 +612,26 @@ function CredentialsModal({ row, initialEnv, onClose, onSaved }) {
             onSelect={(k) => k && setEnv(k)}
           >
             <Nav variant="tabs" className="mb-3">
-              <Nav.Item>
-                <Nav.Link eventKey="TEST">Test</Nav.Link>
-              </Nav.Item>
-              <Nav.Item>
-                <Nav.Link eventKey="LIVE">Live</Nav.Link>
-              </Nav.Item>
+              {["TEST", "LIVE"].map((thisEnv) => (
+                <Nav.Item key={thisEnv}>
+                  <Nav.Link eventKey={thisEnv}>
+                    {thisEnv === "TEST" ? "Test" : "Live"}
+                    <Badge
+                      bg={existing[thisEnv] ? "success" : "secondary"}
+                      className="ms-2 fw-normal"
+                      style={{ fontSize: 10 }}
+                    >
+                      {existing[thisEnv] ? "Configured" : "Not set"}
+                    </Badge>
+                  </Nav.Link>
+                </Nav.Item>
+              ))}
             </Nav>
+            <div className="text-muted small mb-3">
+              Test and Live are stored separately — saving one never touches the
+              other. Fields showing <code>{MASK}</code> keep their saved value;
+              clear a field to remove it.
+            </div>
             <Tab.Content>
               {["TEST", "LIVE"].map((thisEnv) => (
                 <Tab.Pane key={thisEnv} eventKey={thisEnv}>

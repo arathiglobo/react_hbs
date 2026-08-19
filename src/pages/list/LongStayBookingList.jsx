@@ -36,10 +36,18 @@ const COLUMN_WIDTHS = {
   sn: "40px",
   customerName: "150px",
   bookingCode: "100px",
+  // Supplier-side confirmation number added on the LS booking detail view
+  // via the "CONFIRMATION NO." button. Sits next to Booking Code so the
+  // two identifiers (internal + supplier) read together. Cell renders
+  // blank for rows that don't have one yet. Width tuned so the two-word
+  // header ("CONFIRMATION" / "NO") wraps at its space instead of splitting
+  // the word "CONFIRMATION" mid-letter — mirrors the hotel + LM lists.
+  confirmationNo: "130px",
   bookDate: "95px",
   bookingDetails: "240px",
   nights: "70px",
   total: "110px",
+  paymentStatus: "110px",
   status: "110px",
   action: "70px",
 };
@@ -49,6 +57,92 @@ const STATUS_META = {
   COMPLETED: { label: "Completed", bg: "#eff8ff", color: "#175cd3", dot: "#3b82f6" },
   PENDING:   { label: "Pending",   bg: "#fff7e6", color: "#b76e00", dot: "#f59e0b" },
   CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
+  // On Request — orange pill, same palette the hotel + LM lists use for this
+  // state. Aliased under every spelling the backend has been seen to emit
+  // (uppercase `ONREQUEST`, snake `ON_REQUEST`, spaced `On Request`,
+  // `Requested`/`REQUESTED`) so the Status column never falls through to the
+  // unstyled raw-text branch of StatusPill for an on-request booking.
+  ONREQUEST:    { label: "On Request", bg: "#fff3e0", color: "#e67e22", dot: "#f59e0b" },
+  ON_REQUEST:   { label: "On Request", bg: "#fff3e0", color: "#e67e22", dot: "#f59e0b" },
+  "On Request": { label: "On Request", bg: "#fff3e0", color: "#e67e22", dot: "#f59e0b" },
+  REQUESTED:    { label: "Requested",  bg: "#fff3e0", color: "#e67e22", dot: "#f59e0b" },
+  Requested:    { label: "Requested",  bg: "#fff3e0", color: "#e67e22", dot: "#f59e0b" },
+  // ReConfirmed — green pill, same palette hotel + LM lists use.
+  RECONFIRMED:  { label: "ReConfirmed", bg: "#e7f6ec", color: "#06a301", dot: "#22c55e" },
+  ReConfirmed:  { label: "ReConfirmed", bg: "#e7f6ec", color: "#06a301", dot: "#22c55e" },
+  Reconfirmed:  { label: "ReConfirmed", bg: "#e7f6ec", color: "#06a301", dot: "#22c55e" },
+};
+
+// Resolve the Payment Status label from the booking's DISPLAYED status — same
+// mapping as /booking-details/hotel-booking-list:
+//   Confirmed   → Payment Pending
+//   On Request  → Payment Pending
+//   ReConfirmed → Paid
+//   Cancelled   → Paid when the booking had been reconfirmed before it was
+//                 cancelled, otherwise Un-Paid
+// Anything else — Pending, Completed, or an unknown/empty status — has no
+// defined mapping and renders "-".
+//
+// On Request bookings haven't collected money yet, so they carry the same
+// "Payment Pending" meaning as a genuinely Confirmed row. The Status column
+// still shows them as "On Request" (orange) — only the Payment Status column
+// collapses the two into the same settled/unsettled label.
+//
+// A cancelled booking reports whether the money had already been collected at
+// the point of cancellation rather than the cancellation itself: a history that
+// reached ReConfirmed was paid, one that stopped at On Request / Confirmed
+// never was.
+//
+// The Status column on this page renders `bookingStatus`, so that is the field
+// consulted first — the two columns can then never disagree. `confirmationStatus`
+// is the fallback when bookingStatus is blank, matching the `bookingStatus ||
+// confirmationStatus` idiom this page already uses in its Booking Type filter.
+const getPaymentStatusLabel = (booking) => {
+  // Cancelled is checked first: the label reflects what the booking reached
+  // BEFORE the cancellation. `cancelStatus` is treated as a cancellation signal
+  // alongside bookingStatus, mirroring the isCancelled test in filteredBookings.
+  const rawStatus = String(booking?.bookingStatus || booking?.confirmationStatus || "");
+  const segments = rawStatus
+    .split("/")
+    .map((seg) => seg.replace(/\s+/g, "").toLowerCase())
+    .filter(Boolean);
+  if (segments.length === 0 && booking?.cancelStatus !== true) return "-";
+
+  const latest = segments[segments.length - 1];
+  if (booking?.cancelStatus === true || latest === "cancelled" || latest === "canceled") {
+    const cancelledFromNormalized = String(booking?.cancelledFromStatus || "")
+      .replace(/\s+/g, "")
+      .toLowerCase();
+    const wasReconfirmedBeforeCancel =
+      booking?.reconfirmation === true ||
+      segments.includes("reconfirmed") ||
+      cancelledFromNormalized.includes("reconfirmed");
+    return wasReconfirmedBeforeCancel ? "Paid" : "Un-Paid";
+  }
+
+  // Collapse a confirm-history compound ("Confirmed / ReConfirmed") to its
+  // LATEST segment, exactly as the hotel list does.
+  const isConfirmHistoryCompound =
+    segments.length > 1 &&
+    segments.every((seg) => ["confirmed", "reconfirmed"].includes(seg));
+  const effective = isConfirmHistoryCompound ? latest : segments.join("/");
+
+  if (effective === "reconfirmed") return "Paid";
+  if (effective === "confirmed") {
+    // Both display states collapse to the same "money not yet collected"
+    // label: a genuine "Confirmed" row AND an on-request-room-still-pending
+    // row (whose Status column shows "On Request" via the display override).
+    // The Status column keeps the two visually distinct on its own.
+    return "Payment Pending";
+  }
+  // bookingStatus stamped directly as ONREQUEST / ON_REQUEST / "On Request"
+  // (Long Stay stamps this at the top level, unlike the hotel list where
+  // it hides under confirmationStatus="Confirmed" + roomStatus="On Request").
+  if (effective === "onrequest" || effective === "on_request") {
+    return "Payment Pending";
+  }
+
+  return "-";
 };
 
 // Every customer/guest name on a long-stay booking. The list payload
@@ -527,6 +621,25 @@ export default function LongStayBookingList() {
                           >
                             Booking Code
                           </th>
+                          {/* Confirmation No — supplier's confirmation number,
+                              populated via the "CONFIRMATION NO." button on
+                              the LS booking detail view. LongStayBookingDTO
+                              already exposes `confirmationNumber`, so no
+                              backend change is needed. Cell renders blank on
+                              rows that don't have one. wordBreak / overflowWrap
+                              normal keep the two-word header wrapping only at
+                              its space, mirroring the hotel list. */}
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.confirmationNo,
+                              whiteSpace: "normal",
+                              wordBreak: "normal",
+                              overflowWrap: "normal",
+                            }}
+                          >
+                            Confirmation No
+                          </th>
                           <th
                             style={{
                               ...baseHeaderStyle,
@@ -562,6 +675,18 @@ export default function LongStayBookingList() {
                           >
                             Total
                           </th>
+                          {/* Payment Status column — same mapping as
+                              /booking-details/hotel-booking-list. See
+                              getPaymentStatusLabel. */}
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.paymentStatus,
+                            }}
+                          >
+                            Payment Status
+                          </th>
                           <th
                             style={{
                               ...baseHeaderStyle,
@@ -586,7 +711,7 @@ export default function LongStayBookingList() {
                         {pageBookings.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={9}
+                              colSpan={10}
                               className="text-center py-5 text-muted"
                               style={{
                                 border: "1px solid #dee2e6",
@@ -607,7 +732,21 @@ export default function LongStayBookingList() {
                           </tr>
                         ) : (
                           pageBookings.map((b, i) => {
-                            const sMeta = STATUS_META[b.bookingStatus];
+                            // Long-stay bookings can advance to ReConfirmed while
+                            // the roll-up `bookingStatus` column still reads
+                            // "Confirmed" (the reconfirm write only stamps
+                            // `confirmationStatus`). Prefer confirmationStatus
+                            // when it's ahead of bookingStatus so the list pill
+                            // matches what the detail page shows — mirrors the
+                            // same precedence getPaymentStatusLabel already uses.
+                            const confNorm = String(b?.confirmationStatus || "")
+                              .replace(/\s+/g, "")
+                              .toLowerCase();
+                            const effectiveStatus =
+                              !b.cancelStatus && confNorm === "reconfirmed"
+                                ? "Reconfirmed"
+                                : b.bookingStatus;
+                            const sMeta = STATUS_META[effectiveStatus];
                             return (
                               <tr
                                 key={b.longStayBookingId}
@@ -722,12 +861,37 @@ export default function LongStayBookingList() {
                                     {b.bookingCode || "-"}
                                   </span>
                                 </td>
+                                {/* Confirmation No cell — reads the field
+                                    already exposed by LongStayBookingDTO.
+                                    Renders blank when the supplier hasn't
+                                    stamped a number yet, per the "empty means
+                                    nothing shown" rule. nowrap keeps the
+                                    number atomic. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.confirmationNo,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {b.confirmationNumber ? (
+                                    <span
+                                      className="fw-semibold text-dark"
+                                      style={{ fontSize: "0.85rem" }}
+                                    >
+                                      {b.confirmationNumber}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
+                                </td>
                                 <td
                                   className="text-muted"
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     width: COLUMN_WIDTHS.bookDate,
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
                                   {formatShortDate(b.bookingDateTime) ||
@@ -794,6 +958,48 @@ export default function LongStayBookingList() {
                                       : b.totalAmount ?? "-"}
                                   </span>
                                 </td>
+                                {/* Payment Status cell — derived from the
+                                    booking's displayed Status: Confirmed →
+                                    Payment Pending, ReConfirmed → Paid, a
+                                    cancellation → Paid or Un-Paid depending on
+                                    whether it had been reconfirmed. See
+                                    getPaymentStatusLabel. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.paymentStatus,
+                                  }}
+                                >
+                                  {(() => {
+                                    const label = getPaymentStatusLabel(b);
+                                    if (label === "-") {
+                                      return (
+                                        <span className="text-muted">-</span>
+                                      );
+                                    }
+                                    // Same palette as the hotel list — green
+                                    // settled, red never collected, orange
+                                    // still outstanding.
+                                    const color =
+                                      label === "Paid"
+                                        ? "#06a301"
+                                        : label === "Un-Paid"
+                                          ? "#dc3545"
+                                          : "#e67e22";
+                                    return (
+                                      <span
+                                        style={{
+                                          color,
+                                          fontSize: "0.82rem",
+                                          fontWeight: "600",
+                                        }}
+                                      >
+                                        {label}
+                                      </span>
+                                    );
+                                  })()}
+                                </td>
                                 <td
                                   style={{
                                     ...baseCellStyle,
@@ -803,7 +1009,7 @@ export default function LongStayBookingList() {
                                 >
                                   <StatusPill
                                     meta={sMeta}
-                                    raw={b.bookingStatus}
+                                    raw={effectiveStatus}
                                   />
                                 </td>
                                 <td

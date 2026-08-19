@@ -7,6 +7,7 @@ import {
   Form,
   Pagination,
   Spinner,
+  FormControl,
 } from "react-bootstrap";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
@@ -16,6 +17,7 @@ import AgentCreditBalance from "../components/AgentCreditBalance";
 import axiosInstance from "../components/AxiosInstance";
 import AdvertisementCarousel from "../components/AdvertisementCarousel";
 import TimeApplyPicker from "../components/TimeApplyPicker";
+import DateInput from "../components/DateInput";
 import MapModal from "../components/map/MapModal";
 import { ENABLE_MAP_PREVIEW } from "../config/featureFlags";
 import { FaSearch, FaStar, FaInfoCircle } from "react-icons/fa";
@@ -36,6 +38,7 @@ const DEFAULT_PROGRESS_CHANNELS = [
   "darina",
   "atharva",
   "jumeirah",
+  "grn",
 ];
 
 function SearchProgressBar({ pollStatus, completedChannels, channels }) {
@@ -671,6 +674,8 @@ export default function HotelSearch({
      { value: "jumeirah", label: "Jumeirah" },
      { value: "ratehawk", label: "Ratehawk" },
      { value: "darina", label: "Darina" },
+     { value: "grn", label: "GRN" },
+     { value: "goglobal", label: "GoGlobal" },
   ];
 
   // Narrows the Channel sidebar filter (and the SearchProgressBar pills)
@@ -1569,7 +1574,7 @@ export default function HotelSearch({
         "inhouse",
         // "iwtx",
         // "x3",
-        // "ratehawk",
+        "ratehawk",
         // "darina",
         // "atharva",
         // "jumeirah",
@@ -1662,7 +1667,14 @@ export default function HotelSearch({
           }
         },
         2000,
-        20000,
+        // 60 s timeout — GRN Connect's fan-out over ~300 hotel codes for a
+        // Dubai search finishes in ~30-40 s against the sandbox. The prior
+        // 20 s ceiling would reject before GRN completed, and the catch
+        // below then set hasSearched=false, silently blocking every
+        // subsequent filter change (e.g. ticking Channel = GRN) from
+        // re-fetching. 60 s covers observed GRN latency; faster suppliers
+        // still resolve early via the finalStatus=COMPLETED check.
+        60000,
         2000,
       );
       // ── 24 Hour Check-In post-processing ───────────────────────────
@@ -1737,7 +1749,22 @@ export default function HotelSearch({
     // races by nameSearchSeqRef. Without this exemption, typing a hotel
     // name during the initial supplier poll silently no-ops until poll
     // completes, which is the "sometimes it doesn't work" symptom.
-    if (pollStatus === "IN_PROGRESS" && !finalHotelSearchTerm.trim()) return;
+    //
+    // Filter-driven fetches (channelType, starRating) are ALSO exempt from
+    // the guard: they issue a filtered /results call (e.g. apiType=GRN)
+    // that returns a different result set than the unfiltered poll, so
+    // the "double-write" concern doesn't apply. Blocking them meant that
+    // ticking Channel = GRN while a slow supplier (GRN itself, ~30-40 s
+    // for Dubai) was still polling silently zeroed the list.
+    const hasActiveFilter =
+      (channelType && channelType.length > 0) ||
+      !!starRating ||
+      (hotelType && hotelType.length > 0);
+    if (
+      pollStatus === "IN_PROGRESS" &&
+      !finalHotelSearchTerm.trim() &&
+      !hasActiveFilter
+    ) return;
     setIsLoading(true);
     fetchHotels(pageIndex, searchId, agent, finalHotelSearchTerm).finally(() =>
       setIsLoading(false),
@@ -1747,6 +1774,7 @@ export default function HotelSearch({
     sortBy,
     starRating,
     channelType,
+    hotelType,
     searchId,
     agent,
     hasSearched,
@@ -2094,23 +2122,26 @@ export default function HotelSearch({
                     </Col>
                   )}
 
-                  {/* 4. Check-In */}
+                  {/* 4. Check-In — RateCalendar renders a picker that
+                       shows the "starting from" nightly rate under each day
+                       (from GET /api/hotel-search/rate-calendar). Same
+                       ISO yyyy-MM-dd contract in value/onChange as the
+                       previous <Form.Control type="date">, so all downstream
+                       consumers (nights sync, submit payload, sticky summary
+                       strip) work unchanged. */}
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         Check-In
                       </Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        type="date"
+                      <DateInput
                         value={checkIn}
                         min={today}
-                        onClick={(e) =>
-                          e.target.showPicker && e.target.showPicker()
-                        }
-                        onChange={(e) => {
-                          const newCheckIn = e.target.value;
+                        stateId={selectedDestination?.value}
+                        currency="AED"
+                        isInvalid={!!errors.checkIn}
+                        ariaLabel="Check-in date"
+                        onChange={(newCheckIn) => {
                           setCheckIn(newCheckIn);
                           if (newCheckIn) {
                             clearError("checkIn");
@@ -2152,24 +2183,26 @@ export default function HotelSearch({
                     </Form.Group>
                   </Col>
 
-                  {/* 6. Check-Out */}
+                  {/* 6. Check-Out — same RateCalendar treatment as Check-In.
+                       min={minCheckOutDate} keeps operators from picking a
+                       date before/equal to check-in (the picker greys those
+                       days out and refuses selection). */}
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         Check-Out
                       </Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        type="date"
+                      <DateInput
+                    
                         value={checkOut}
                         min={minCheckOutDate}
-                        onClick={(e) =>
-                          e.target.showPicker && e.target.showPicker()
-                        }
-                        onChange={(e) => {
-                          setCheckOut(e.target.value);
-                          if (e.target.value) clearError("checkOut");
+                        stateId={selectedDestination?.value}
+                        currency="AED"
+                        isInvalid={!!errors.checkOut}
+                        ariaLabel="Check-out date"
+                        onChange={(newCheckOut) => {
+                          setCheckOut(newCheckOut);
+                          if (newCheckOut) clearError("checkOut");
                         }}
                       />
                       {errors.checkOut && (
@@ -2203,7 +2236,7 @@ export default function HotelSearch({
                       </Button>
                      <Button
   type="button"
-  className="flex-shrink-0 btn-add-room-premium"
+  className="flex-shrink-0 btn-add-room-premium hs-add-room-btn-red"
   disabled={roomsOpen && rooms.length >= MAX_ROOMS}
   onClick={() => {
     if (!roomsOpen) {
@@ -2748,18 +2781,29 @@ export default function HotelSearch({
                                     >
                                       <FaStar className="text-warning" />
                                       {hotel.rating}
-                                      <span
-                                        style={{
-                                          marginLeft: "5px",
-                                          backgroundColor: "#6c757d",
-                                          padding: "2px 6px",
-                                          borderRadius: "10px",
-                                        }}
-                                      >
-                                        {(
-                                          hotel.channelType || ""
-                                        ).toUpperCase()}
-                                      </span>
+                                      {/* Supplier / channel-type pill
+                                          (INHOUSE / IWTX / DARINA …). Only
+                                          admin-side roles need to see which
+                                          supplier a hotel came from —
+                                          agents book against a single
+                                          curated inventory and the label
+                                          just adds noise. Guarded on
+                                          isAgentRole so admin / super
+                                          admin / all other roles keep it. */}
+                                      {!isAgentRole && (
+                                        <span
+                                          style={{
+                                            marginLeft: "5px",
+                                            backgroundColor: "#6c757d",
+                                            padding: "2px 6px",
+                                            borderRadius: "10px",
+                                          }}
+                                        >
+                                          {(
+                                            hotel.channelType || ""
+                                          ).toUpperCase()}
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 </Col>
@@ -2999,6 +3043,13 @@ export default function HotelSearch({
                                             ratehawk: 14,
                                             darina: 16,
                                             atharva: 3,
+                                            // GRN Connect. Room list backend
+                                            // routes apiId=20 to the new
+                                            // GrnHotelRoomSearchService which
+                                            // returns bundled rates only.
+                                            // 20 avoids colliding with the
+                                            // existing Juniper booking's 17.
+                                            grn: 20,
                                           };
                                           const apiId =
                                             apiIdMapping[

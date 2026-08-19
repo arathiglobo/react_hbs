@@ -31,6 +31,7 @@ import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
+import DateInput from "../../../components/DateInput";
 import "../../../styles/HotelSearch.css";
 
 // ─────────────────────────────────────────────
@@ -1057,23 +1058,24 @@ export default function GovEmployeeSearch() {
                     </Col>
                   )}
 
-                  {/* 4. Check-In */}
+                  {/* 4. Check-In — RateCalendar fetches per-day
+                       GE-discounted rate hints for the selected city
+                       from /api/gov-employee-hotel-search/rate-calendar.
+                       Days on which no hotel has an active GE promo
+                       render as "—" (matches the search's hard filter). */}
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         Check-In
                       </Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        type="date"
+                      <DateInput
                         value={checkIn}
                         min={today}
-                        onClick={(e) =>
-                          e.target.showPicker && e.target.showPicker()
-                        }
-                        onChange={(e) => {
-                          const newCheckIn = e.target.value;
+                        stateId={selectedDestination?.value}
+                        endpoint="/api/gov-employee-hotel-search/rate-calendar"
+                        ariaLabel="Gov-employee check-in date"
+                        isInvalid={!!errors.checkIn}
+                        onChange={(newCheckIn) => {
                           setCheckIn(newCheckIn);
                           if (newCheckIn) {
                             clearError("checkIn");
@@ -1113,24 +1115,23 @@ export default function GovEmployeeSearch() {
                     </Form.Group>
                   </Col>
 
-                  {/* 6. Check-Out */}
+                  {/* 6. Check-Out — same GE calendar as check-in,
+                       min day is check-in + 1. */}
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         Check-Out
                       </Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        type="date"
+                      <DateInput
                         value={checkOut}
                         min={minCheckOutDate}
-                        onClick={(e) =>
-                          e.target.showPicker && e.target.showPicker()
-                        }
-                        onChange={(e) => {
-                          setCheckOut(e.target.value);
-                          if (e.target.value) clearError("checkOut");
+                        stateId={selectedDestination?.value}
+                        endpoint="/api/gov-employee-hotel-search/rate-calendar"
+                        ariaLabel="Gov-employee check-out date"
+                        isInvalid={!!errors.checkOut}
+                        onChange={(v) => {
+                          setCheckOut(v);
+                          if (v) clearError("checkOut");
                         }}
                       />
                       {errors.checkOut && (
@@ -1167,7 +1168,7 @@ export default function GovEmployeeSearch() {
                       </Button>
                       <Button
                         type="button"
-                        className="flex-shrink-0 btn-add-room-premium"
+                        className="flex-shrink-0 btn-add-room-premium hs-add-room-btn-red"
                         disabled={roomsOpen && rooms.length >= MAX_ROOMS}
                         onClick={() => {
                           if (!roomsOpen) {

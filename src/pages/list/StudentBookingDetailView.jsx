@@ -38,6 +38,50 @@ import {
   FaUserAlt, FaPlusCircle, FaCheckCircle, FaSyncAlt, FaTimesCircle,
 } from "react-icons/fa";
 
+// Reverse-geocode browser coordinates to a readable address for the
+// Booking History audit trail. Tries OpenStreetMap Nominatim first
+// (street-level detail), then BigDataCloud (locality-level, keyless) —
+// both free, CORS-enabled endpoints. Returns null when neither responds
+// so the caller keeps its IP-derived fallback. Mirrors the hotel
+// BookingDetailedView + the student booking page.
+async function reverseGeocode(lat, lon) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=16&addressdetails=1`,
+      { headers: { Accept: "application/json" } }
+    );
+    if (res.ok) {
+      const a = (await res.json())?.address || {};
+      const parts = [
+        a.road,
+        a.neighbourhood || a.suburb,
+        a.village || a.town || a.city || a.municipality,
+        a.state,
+        a.postcode,
+        a.country,
+      ].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255); // DB column is VARCHAR(255)
+    }
+  } catch {
+    // fall through to BigDataCloud
+  }
+  try {
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`
+    );
+    if (res.ok) {
+      const d = await res.json();
+      const parts = [d.locality, d.city, d.principalSubdivision, d.countryName].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255);
+    }
+  } catch {
+    // give up — caller keeps the IP-based fallback
+  }
+  return null;
+}
+
 const BUTTON_STYLE = {
   backgroundColor: "#c0392b",
   color: "#fff",
@@ -176,6 +220,16 @@ export default function StudentBookingDetailView() {
   // convention.
   const activeUserRole = localStorage.getItem("currentActiveRole");
   const isAdmin = String(activeUserRole || "").toUpperCase() === "ADMIN";
+  const isSuperAdmin =
+    String(activeUserRole || "").toUpperCase() === "SUPER_ADMIN";
+  // Confirming an On-Request booking (step 1 of the two-step flow — moves
+  // the row from tentative to "On Request/Confirmed") is a supplier-facing
+  // action agents must not perform on their own. Admin / super-admin keep
+  // full control. Reconfirming a NON-On-Request booking (or step 2 of the
+  // On Request flow after admin already confirmed step 1) is unaffected
+  // — agents still see the RECONFIRM button. Mirrors the identical gate
+  // on the other detail views.
+  const canConfirmOnRequest = isAdmin || isSuperAdmin;
   // Agent-role gate (UI visibility only) — hides internal/admin-facing actions
   // (Booking Remark, Notes, Confirmation No.) for Agent logins.
   // currentActiveRole isn't set for single-role logins, so fall back to
@@ -193,6 +247,43 @@ export default function StudentBookingDetailView() {
 
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Operator location snapshot for the Booking History audit trail. Resolved
+  // once on mount and sent on the reconfirm PATCH / cancel-reject DELETE so
+  // the BE can stamp confirmed_location / reconfirmed_location /
+  // cancelled_location the same way the Create flow stamps booking_location.
+  // The IP is NOT resolved here — browsers only see the shared public/NAT IP;
+  // StudentBookingController fills it in from the HTTP request itself. Same
+  // two-step resolution as the student booking page: coarse IP-derived city
+  // first, precise geolocation second (only if it lands and permission is
+  // granted).
+  const [operatorLocation, setOperatorLocation] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("https://ipapi.co/json/")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((info) => {
+        if (cancelled || !info) return;
+        setOperatorLocation((prev) =>
+          // Never clobber a precise geolocation result that already landed.
+          prev ||
+          [info.city, info.region, info.country_name].filter(Boolean).join(", ") ||
+          null
+        );
+      })
+      .catch(() => {});
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async ({ coords }) => {
+          const precise = await reverseGeocode(coords.latitude, coords.longitude);
+          if (!cancelled && precise) setOperatorLocation(precise);
+        },
+        () => {}, // denied / unavailable — keep the IP-derived fallback
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+      );
+    }
+    return () => { cancelled = true; };
+  }, []);
 
   // Cancel
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -383,35 +474,31 @@ export default function StudentBookingDetailView() {
       normalizedStatus === "COMPLETED";
     const base = { fontWeight: "700", fontSize: "0.85rem" };
 
-    // ── On Request breadcrumb chain (mirrors BookingDetailedView) ──
+    // ── On Request breadcrumb chain (mirrors SeniorCitizenBookingDetailView) ──
     // On Request student bookings are created with confirmationStatus
     // "Confirmed", so without this override the badge would read a plain
-    // green "Confirmed". The chain grows as the operator acts:
-    //   created            → "On Request"                       (orange)
-    //   after step-1 Confirm → "On Request/Confirmed"            (orange)
-    //   after Reconfirm     → "On Request/Confirmed/Reconfirmed" (green)
-    //   cancelled at any point → chain + " / Cancelled" two-tone.
+    // green "Confirmed". Each segment carries the colour of the state it
+    // represents so the reader can see at a glance what has landed:
+    //   "On Request"                        → orange (pending step-1)
+    //   "/Confirmed"                        → green  (step-1 done)
+    //   "/Reconfirmed"                      → green  (finalised)
+    //   " / Cancelled" appended at any step → red
     if (isOnRequestRoom) {
       const finalised =
         normalizedStatus === "RECONFIRMED" || normalizedStatus === "COMPLETED";
-      const chain = finalised
-        ? "On Request/Confirmed/Reconfirmed"
-        : booking?.onRequestConfirmed
-        ? "On Request/Confirmed"
-        : "On Request";
-      if (isCancelled) {
-        return (
-          <span style={base}>
-            <span style={{ color: finalised ? "#198754" : "#e67e22" }}>
-              {chain}
-            </span>
-            <span style={{ color: "#dc3545" }}> / Cancelled</span>
-          </span>
-        );
-      }
+      const showConfirmed = finalised || booking?.onRequestConfirmed;
       return (
-        <span style={{ ...base, color: finalised ? "#198754" : "#e67e22" }}>
-          {chain}
+        <span style={base}>
+          <span style={{ color: "#e67e22" }}>On Request</span>
+          {showConfirmed && (
+            <span style={{ color: "#198754" }}>/Confirmed</span>
+          )}
+          {finalised && (
+            <span style={{ color: "#198754" }}>/Reconfirmed</span>
+          )}
+          {isCancelled && (
+            <span style={{ color: "#dc3545" }}> / Cancelled</span>
+          )}
         </span>
       );
     }
@@ -455,7 +542,14 @@ export default function StudentBookingDetailView() {
     try {
       setCancellingBooking(true);
       const res = await axiosInstance.delete(`/api/student-booking/${id}`, {
-        params: cancellationReason ? { reason: cancellationReason } : {},
+        // Booking History audit — BE stamps bookingLocation onto
+        // cancelled_location. May be null if the operator denied geolocation
+        // and the IP-derived fallback also failed; the BE treats null as "no
+        // capture" and the "Booking Cancelled" row renders "-".
+        params: {
+          ...(cancellationReason ? { reason: cancellationReason } : {}),
+          bookingLocation: operatorLocation,
+        },
       });
       if (res.data?.success !== false) {
         setShowCancelModal(false);
@@ -472,7 +566,19 @@ export default function StudentBookingDetailView() {
     }
   };
 
-  const openConfirmModal = () => setShowConfirmModal(true);
+  // The button that calls this is already role-gated (see
+  // canConfirmOnRequest); this second check is defence-in-depth so a
+  // future caller / devtools-forged click can't sneak past the same rule.
+  // Backend authorisation still owns the real enforcement.
+  const openConfirmModal = () => {
+    if (isOnRequestPending && !canConfirmOnRequest) {
+      toast.error(
+        "Only admin or super-admin can confirm an On Request booking.",
+      );
+      return;
+    }
+    setShowConfirmModal(true);
+  };
 
   const openRejectModal = () => {
     setShowConfirmModal(false);
@@ -499,7 +605,10 @@ export default function StudentBookingDetailView() {
       const reasonParts = ["Rejected by " + by];
       if (rejectionRemarks.trim()) reasonParts.push(rejectionRemarks.trim());
       const res = await axiosInstance.delete(`/api/student-booking/${id}`, {
-        params: { reason: reasonParts.join(" — ") },
+        // Booking History audit — BE stamps bookingLocation onto
+        // cancelled_location. Reject cancels the booking, so its history row
+        // carries the same audit pair as a plain cancel.
+        params: { reason: reasonParts.join(" — "), bookingLocation: operatorLocation },
       });
       if (res.data?.success !== false) {
         setShowRejectModal(false);
@@ -525,7 +634,17 @@ export default function StudentBookingDetailView() {
   const runReconfirm = async () => {
     try {
       setConfirmingBooking(true);
-      const res = await axiosInstance.patch(`/api/student-booking/${id}/reconfirm`);
+      const res = await axiosInstance.patch(
+        `/api/student-booking/${id}/reconfirm`,
+        {
+          // Booking History audit — BE stamps this onto confirmed_location /
+          // reconfirmed_location depending on which step this call lands (the
+          // same button drives both On-Request steps). May be null if the
+          // operator denied geolocation and the IP-derived fallback also
+          // failed; the history row then shows "-".
+          bookingLocation: operatorLocation,
+        },
+      );
       if (res.data?.success) {
         setShowConfirmModal(false);
         toast.success(res.data.message || "Booking reconfirmed successfully!");
@@ -947,9 +1066,16 @@ export default function StudentBookingDetailView() {
   const bookingHistory = (() => {
     if (!booking) return [];
     const events = [];
+    // Each event carries the resulting booking status right after that
+    // action ran — surfaced in the new "Status" column so the History
+    // modal reads as a lifecycle timeline (Confirmed → ReConfirmed →
+    // Cancelled) instead of a bare action log. Mirrors the identical
+    // treatment on the other detail views.
+    const createdRowStatus = isOnRequestRoom ? "On Request" : "Confirmed";
     if (booking.bookingDate) {
       events.push({
         action: "Booking Created",
+        status: createdRowStatus,
         at: booking.bookingDate,
         by: creatorLabel,
         // Captured at create time only — later lifecycle rows show "-".
@@ -960,23 +1086,41 @@ export default function StudentBookingDetailView() {
     if (booking.confirmedDate) {
       events.push({
         action: "Booking Confirmed",
+        // For an On Request row the "Confirmed" action is the step-1
+        // supplier acknowledgement, so the status label reads
+        // "On Request/Confirmed" to preserve the on-request origin.
+        status: isOnRequestRoom ? "On Request/Confirmed" : "Confirmed",
         at: booking.confirmedDate,
         by: booking.confirmedBy || "-",
+        // Per-action audit captured on the RECONFIRM PATCH (On-Request step 1).
+        // Rows actioned before this was captured have both null and render "-".
+        location: booking.confirmedLocation,
+        ip: booking.confirmedIp,
       });
     }
     if (booking.reconfirmedDate) {
       events.push({
         action: "Booking Reconfirmed",
+        status: isOnRequestRoom
+          ? "On Request/Confirmed/Reconfirmed"
+          : "ReConfirmed",
         at: booking.reconfirmedDate,
         by: booking.reconfirmedBy || "-",
+        location: booking.reconfirmedLocation,
+        ip: booking.reconfirmedIp,
       });
     }
     const cancelTs = booking.cancelledAt || booking.cancelledDate;
     if (cancelTs) {
       events.push({
         action: "Booking Cancelled",
+        status: "Cancelled",
         at: cancelTs,
         by: booking.cancelledBy || "-",
+        // Per-action audit captured on the cancel/reject DELETE. Rows
+        // cancelled before this was captured have both null and render "-".
+        location: booking.cancelledLocation,
+        ip: booking.cancelledIp,
       });
     }
     return events.sort((a, b) => {
@@ -1355,30 +1499,34 @@ export default function StudentBookingDetailView() {
                     </button>
                   )}
 
-                  {!showsFinalDocs && !isCancelled && (
-                    <button
-                      style={{
-                        ...(isOnRequestPending ? BTN_SUCCESS : BTN_TEAL),
-                        opacity: isPastCheckIn ? 0.55 : 1,
-                        cursor: isPastCheckIn ? "not-allowed" : "pointer",
-                      }}
-                      onClick={openConfirmModal}
-                      disabled={isPastCheckIn}
-                      title={
-                        isPastCheckIn
-                          ? (isOnRequestPending
-                              ? "Confirmation is not allowed after the check-in date."
-                              : "Reconfirmation is not allowed after the check-in date.")
-                          : undefined
-                      }
-                    >
-                      {/* An On-Request booking hasn't been confirmed yet, so
-                          the first action is CONFIRM. Once confirmed it
-                          behaves like a normal Confirmed booking →
-                          RECONFIRM. */}
-                      {isOnRequestPending ? "CONFIRM" : "RECONFIRM"}
-                    </button>
-                  )}
+                  {!showsFinalDocs &&
+                    !isCancelled &&
+                    !(isOnRequestPending && !canConfirmOnRequest) && (
+                      <button
+                        style={{
+                          ...(isOnRequestPending ? BTN_SUCCESS : BTN_TEAL),
+                          opacity: isPastCheckIn ? 0.55 : 1,
+                          cursor: isPastCheckIn ? "not-allowed" : "pointer",
+                        }}
+                        onClick={openConfirmModal}
+                        disabled={isPastCheckIn}
+                        title={
+                          isPastCheckIn
+                            ? (isOnRequestPending
+                                ? "Confirmation is not allowed after the check-in date."
+                                : "Reconfirmation is not allowed after the check-in date.")
+                            : undefined
+                        }
+                      >
+                        {/* An On-Request booking hasn't been confirmed yet,
+                            so the first action is CONFIRM. Once confirmed
+                            it behaves like a normal Confirmed booking →
+                            RECONFIRM. Agents don't get to see this action
+                            for On Request bookings — only admin / super-
+                            admin do; see canConfirmOnRequest above. */}
+                        {isOnRequestPending ? "CONFIRM" : "RECONFIRM"}
+                      </button>
+                    )}
 
                   {/* Proforma Voucher / Invoice — pre-finalised state, and
                       not available while On-Request is still pending. */}
@@ -2229,12 +2377,13 @@ export default function StudentBookingDetailView() {
                   <tr style={{ backgroundColor: "#f1f5f9" }}>
                     {[
                       { label: "S/N", width: "5%" },
-                      { label: "Action", width: "17%" },
-                      { label: "Performed By", icon: FaUserAlt, width: "13%" },
-                      { label: "Location", icon: FaMapMarkerAlt, width: "30%" },
-                      { label: "IP Address", icon: FaNetworkWired, width: "14%" },
+                      { label: "Action", width: "15%" },
+                      { label: "Status", width: "12%" },
+                      { label: "Performed By", icon: FaUserAlt, width: "11%" },
+                      { label: "Location", icon: FaMapMarkerAlt, width: "24%" },
+                      { label: "IP Address", icon: FaNetworkWired, width: "13%" },
                       { label: "Date", icon: FaCalendarAlt, width: "11%" },
-                      { label: "Time", icon: FaClock, width: "10%" },
+                      { label: "Time", icon: FaClock, width: "9%" },
                     ].map((col) => (
                       <th
                         key={col.label}
@@ -2291,6 +2440,39 @@ export default function StudentBookingDetailView() {
                             <ActionIcon size={10} style={{ flexShrink: 0 }} />
                             {evt.action}
                           </span>
+                        </td>
+                        {/* Status column — the resulting booking state right
+                            after this action. Colour-coded so a timeline
+                            glance conveys the progression: green for
+                            confirmed / reconfirmed / on-request-confirmed,
+                            amber for the original on-request state, red for
+                            cancelled, slate for anything unrecognised.
+                            Mirrors the identical treatment on the other
+                            detail views. */}
+                        <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>
+                          {(() => {
+                            const raw = String(evt.status || "").trim();
+                            if (!raw) return <span style={{ color: "#94a3b8" }}>-</span>;
+                            const lower = raw.toLowerCase();
+                            const color = lower.includes("cancel")
+                              ? "#dc2626"
+                              : lower === "on request"
+                                ? "#d97706"
+                                : "#16a34a";
+                            return (
+                              <span
+                                style={{
+                                  color,
+                                  fontWeight: 600,
+                                  fontSize: "0.78rem",
+                                  whiteSpace: "normal",
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                {raw}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>{evt.by || "-"}</td>
                         <td

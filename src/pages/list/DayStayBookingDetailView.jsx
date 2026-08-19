@@ -63,6 +63,50 @@ const PAYMENT_GATEWAYS = [
   { id: "payu", name: "PayU", desc: "Cards & wallets" },
 ];
 
+// Reverse-geocode browser coordinates to a readable address for the
+// Booking History audit trail. Tries OpenStreetMap Nominatim first
+// (street-level detail), then BigDataCloud (locality-level, keyless) —
+// both free, CORS-enabled endpoints. Returns null when neither responds
+// so the caller keeps its IP-derived fallback. Mirrors the hotel
+// BookingDetailedView + the day-stay booking page.
+async function reverseGeocode(lat, lon) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=16&addressdetails=1`,
+      { headers: { Accept: "application/json" } }
+    );
+    if (res.ok) {
+      const a = (await res.json())?.address || {};
+      const parts = [
+        a.road,
+        a.neighbourhood || a.suburb,
+        a.village || a.town || a.city || a.municipality,
+        a.state,
+        a.postcode,
+        a.country,
+      ].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255); // DB column is VARCHAR(255)
+    }
+  } catch {
+    // fall through to BigDataCloud
+  }
+  try {
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`
+    );
+    if (res.ok) {
+      const d = await res.json();
+      const parts = [d.locality, d.city, d.principalSubdivision, d.countryName].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255);
+    }
+  } catch {
+    // give up — caller keeps the IP-based fallback
+  }
+  return null;
+}
+
 // ── Visual tokens (copied from the Hotel Booking detail view) ──────────
 const BUTTON_STYLE = {
   backgroundColor: "#c0392b",
@@ -215,6 +259,16 @@ export default function DayStayBookingDetailView() {
   // convention.
   const activeUserRole = localStorage.getItem("currentActiveRole");
   const isAdmin = String(activeUserRole || "").toUpperCase() === "ADMIN";
+  const isSuperAdmin =
+    String(activeUserRole || "").toUpperCase() === "SUPER_ADMIN";
+  // Confirming an On-Request booking (step 1 of the two-step flow — moves
+  // the row from tentative to "On Request/Confirmed") is a supplier-facing
+  // action agents must not perform on their own. Admin / super-admin keep
+  // full control. Reconfirming a NON-On-Request booking (or step 2 of the
+  // On Request flow after admin already confirmed step 1) is unaffected
+  // — agents still see the RECONFIRM button. Mirrors the identical gate
+  // on BookingDetailedView / LongStayBookingDetailView.
+  const canConfirmOnRequest = isAdmin || isSuperAdmin;
   // Agent-role gate (UI visibility only) — hides internal/admin-facing actions
   // (Booking Remark, Notes, Confirmation No.) for Agent logins.
   // currentActiveRole isn't set for single-role logins, so fall back to
@@ -237,6 +291,43 @@ export default function DayStayBookingDetailView() {
   // used). Seeded with the row stub so the header renders immediately.
   const [selected, setSelected] = useState(rowStub);
   const [detailsLoading, setDetailsLoading] = useState(true);
+
+  // Operator location snapshot for the Booking History audit trail. Resolved
+  // once on mount and sent on the confirmation-status PATCH / cancel POST so
+  // the BE can stamp confirmed_location / reconfirmed_location /
+  // cancelled_location the same way the Create flow stamps booking_location.
+  // The IP is NOT resolved here — browsers only see the shared public/NAT IP;
+  // DayStayBookingController fills it in from the HTTP request itself. Same
+  // two-step resolution as DayStayBookingPage.jsx: coarse IP-derived city
+  // first, precise geolocation second (only if it lands and permission is
+  // granted).
+  const [operatorLocation, setOperatorLocation] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("https://ipapi.co/json/")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((info) => {
+        if (cancelled || !info) return;
+        setOperatorLocation((prev) =>
+          // Never clobber a precise geolocation result that already landed.
+          prev ||
+          [info.city, info.region, info.country_name].filter(Boolean).join(", ") ||
+          null
+        );
+      })
+      .catch(() => {});
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async ({ coords }) => {
+          const precise = await reverseGeocode(coords.latitude, coords.longitude);
+          if (!cancelled && precise) setOperatorLocation(precise);
+        },
+        () => {}, // denied / unavailable — keep the IP-derived fallback
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+      );
+    }
+    return () => { cancelled = true; };
+  }, []);
 
   // Cancel modal
   const [showCancel, setShowCancel] = useState(false);
@@ -404,7 +495,14 @@ export default function DayStayBookingDetailView() {
       // @RequestBody Map<String,Object> handler rejects with 415.
       await axiosInstance.post(
         `/api/day-stay-booking/${bookingId}/cancel`,
-        { reason: trimmed || null },
+        {
+          reason: trimmed || null,
+          // Booking History audit — BE stamps this onto cancelled_location.
+          // May be null if the operator denied geolocation and the IP-derived
+          // fallback also failed; the BE treats null as "no capture" and the
+          // "Booking Cancelled" history row renders "-".
+          bookingLocation: operatorLocation,
+        },
       );
       toast.success("Booking cancelled");
       setShowCancel(false);
@@ -529,7 +627,19 @@ export default function DayStayBookingDetailView() {
   })();
 
   // ── Reconfirm ──────────────────────────────────────────────────────
-  const openConfirmModal = () => setShowConfirmModal(true);
+  // The button that calls this is already role-gated (see
+  // canConfirmOnRequest); this second check is defence-in-depth so a
+  // future caller / devtools-forged click can't sneak past the same rule.
+  // Backend authorisation still owns the real enforcement.
+  const openConfirmModal = () => {
+    if (isOnRequestPending && !canConfirmOnRequest) {
+      toast.error(
+        "Only admin or super-admin can confirm an On Request booking.",
+      );
+      return;
+    }
+    setShowConfirmModal(true);
+  };
 
   // Actual reconfirm API call. Split out (mirrors BookingDetailedView)
   // so the same call can be made from (a) the Reconfirm modal's Confirm
@@ -541,7 +651,14 @@ export default function DayStayBookingDetailView() {
       setConfirmingBooking(true);
       await axiosInstance.patch(
         `/api/day-stay-booking/${bookingId}/confirmation-status`,
-        { confirmStatus: true }
+        {
+          confirmStatus: true,
+          // Booking History audit — BE stamps this onto confirmed_location /
+          // reconfirmed_location depending on which step this call lands.
+          // May be null if the operator denied geolocation and the IP-derived
+          // fallback also failed; the history row then shows "-".
+          bookingLocation: operatorLocation,
+        }
       );
       setShowConfirmModal(false);
       // Step-aware message: the same PATCH drives BOTH On-Request steps —
@@ -946,10 +1063,17 @@ export default function DayStayBookingDetailView() {
   const bookingHistory = (() => {
     if (!selected) return [];
     const events = [];
+    // Each event carries the resulting booking status right after that
+    // action ran — surfaced in the new "Status" column so the History
+    // modal reads as a lifecycle timeline (Confirmed → ReConfirmed →
+    // Cancelled) instead of a bare action log. Mirrors the identical
+    // treatment on BookingDetailedView / LongStayBookingDetailView.
+    const createdRowStatus = isOnRequestRoom ? "On Request" : "Confirmed";
     const createdTs = selected.createdAt || selected.bookingDate;
     if (createdTs) {
       events.push({
         action: "Booking Created",
+        status: createdRowStatus,
         at: createdTs,
         by: creatorLabel,
         // Captured at create time only — later lifecycle rows show "-".
@@ -957,26 +1081,48 @@ export default function DayStayBookingDetailView() {
         ip: selected.ipAddress,
       });
     }
-    if (selected.confirmedDate) {
+    // The day-stay DTO names these confirmedAt / reconfirmedAt (the hotel and
+    // long-stay DTOs use *Date). Read the day-stay names first and keep the
+    // *Date fallback so this stays correct if the payload is ever aligned.
+    const confirmedTs = selected.confirmedAt || selected.confirmedDate;
+    if (confirmedTs) {
       events.push({
         action: "Booking Confirmed",
-        at: selected.confirmedDate,
+        // For an On Request row the "Confirmed" action is the step-1
+        // supplier acknowledgement, so the status label reads
+        // "On Request/Confirmed" to preserve the on-request origin.
+        status: isOnRequestRoom ? "On Request/Confirmed" : "Confirmed",
+        at: confirmedTs,
         by: selected.confirmedBy || "-",
+        // Per-action audit. Bookings confirmed at create time copy the create
+        // pair; a later Confirm stamps the operator's own location/IP. Legacy
+        // rows have both null and render "-".
+        location: selected.confirmedLocation,
+        ip: selected.confirmedIp,
       });
     }
-    if (selected.reconfirmedDate) {
+    const reconfirmedTs = selected.reconfirmedAt || selected.reconfirmedDate;
+    if (reconfirmedTs) {
       events.push({
         action: "Booking Reconfirmed",
-        at: selected.reconfirmedDate,
+        status: isOnRequestRoom
+          ? "On Request/Confirmed/Reconfirmed"
+          : "ReConfirmed",
+        at: reconfirmedTs,
         by: selected.reconfirmedBy || "-",
+        location: selected.reconfirmedLocation,
+        ip: selected.reconfirmedIp,
       });
     }
     const cancelTs = selected.cancelledAt || selected.cancelledDate;
     if (cancelTs) {
       events.push({
         action: "Booking Cancelled",
+        status: "Cancelled",
         at: cancelTs,
         by: selected.cancelledBy || "-",
+        location: selected.cancelledLocation,
+        ip: selected.cancelledIp,
       });
     }
     return events.sort((a, b) => {
@@ -1736,30 +1882,34 @@ export default function DayStayBookingDetailView() {
                     </button>
                   )}
 
-                  {!showsFinalDocs && !isCancelledStatus && (
-                    <button
-                      style={{
-                        ...(isOnRequestPending ? BTN_SUCCESS : BTN_TEAL),
-                        opacity: isPastCheckIn ? 0.55 : 1,
-                        cursor: isPastCheckIn ? "not-allowed" : "pointer",
-                      }}
-                      onClick={openConfirmModal}
-                      disabled={isPastCheckIn}
-                      title={
-                        isPastCheckIn
-                          ? (isOnRequestPending
-                              ? "Confirmation is not allowed after the check-in date."
-                              : "Reconfirmation is not allowed after the check-in date.")
-                          : undefined
-                      }
-                    >
-                      {/* An On-Request booking hasn't been confirmed yet, so
-                          the first action is CONFIRM. Once confirmed it
-                          behaves like a normal Confirmed booking →
-                          RECONFIRM. */}
-                      {isOnRequestPending ? "CONFIRM" : "RECONFIRM"}
-                    </button>
-                  )}
+                  {!showsFinalDocs &&
+                    !isCancelledStatus &&
+                    !(isOnRequestPending && !canConfirmOnRequest) && (
+                      <button
+                        style={{
+                          ...(isOnRequestPending ? BTN_SUCCESS : BTN_TEAL),
+                          opacity: isPastCheckIn ? 0.55 : 1,
+                          cursor: isPastCheckIn ? "not-allowed" : "pointer",
+                        }}
+                        onClick={openConfirmModal}
+                        disabled={isPastCheckIn}
+                        title={
+                          isPastCheckIn
+                            ? (isOnRequestPending
+                                ? "Confirmation is not allowed after the check-in date."
+                                : "Reconfirmation is not allowed after the check-in date.")
+                            : undefined
+                        }
+                      >
+                        {/* An On-Request booking hasn't been confirmed yet,
+                            so the first action is CONFIRM. Once confirmed
+                            it behaves like a normal Confirmed booking →
+                            RECONFIRM. Agents don't get to see this action
+                            for On Request bookings — only admin / super-
+                            admin do; see canConfirmOnRequest above. */}
+                        {isOnRequestPending ? "CONFIRM" : "RECONFIRM"}
+                      </button>
+                    )}
 
                   {/* Proforma Voucher / Invoice — pre-finalised state, and
                       not available while On-Request is still pending. */}
@@ -2903,12 +3053,13 @@ export default function DayStayBookingDetailView() {
                   <tr style={{ backgroundColor: "#f1f5f9" }}>
                     {[
                       { label: "S/N", width: "5%" },
-                      { label: "Action", width: "17%" },
-                      { label: "Performed By", icon: FaUserAlt, width: "13%" },
-                      { label: "Location", icon: FaMapMarkerAlt, width: "30%" },
-                      { label: "IP Address", icon: FaNetworkWired, width: "14%" },
+                      { label: "Action", width: "15%" },
+                      { label: "Status", width: "12%" },
+                      { label: "Performed By", icon: FaUserAlt, width: "11%" },
+                      { label: "Location", icon: FaMapMarkerAlt, width: "24%" },
+                      { label: "IP Address", icon: FaNetworkWired, width: "13%" },
                       { label: "Date", icon: FaCalendarAlt, width: "11%" },
-                      { label: "Time", icon: FaClock, width: "10%" },
+                      { label: "Time", icon: FaClock, width: "9%" },
                     ].map((col) => (
                       <th
                         key={col.label}
@@ -2965,6 +3116,39 @@ export default function DayStayBookingDetailView() {
                             <ActionIcon size={10} style={{ flexShrink: 0 }} />
                             {evt.action}
                           </span>
+                        </td>
+                        {/* Status column — the resulting booking state right
+                            after this action. Colour-coded so a timeline
+                            glance conveys the progression: green for
+                            confirmed / reconfirmed / on-request-confirmed,
+                            amber for the original on-request state, red for
+                            cancelled, slate for anything unrecognised.
+                            Mirrors the identical treatment on
+                            BookingDetailedView / LongStayBookingDetailView. */}
+                        <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>
+                          {(() => {
+                            const raw = String(evt.status || "").trim();
+                            if (!raw) return <span style={{ color: "#94a3b8" }}>-</span>;
+                            const lower = raw.toLowerCase();
+                            const color = lower.includes("cancel")
+                              ? "#dc2626"
+                              : lower === "on request"
+                                ? "#d97706"
+                                : "#16a34a";
+                            return (
+                              <span
+                                style={{
+                                  color,
+                                  fontWeight: 600,
+                                  fontSize: "0.78rem",
+                                  whiteSpace: "normal",
+                                  wordBreak: "break-word",
+                                }}
+                              >
+                                {raw}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td style={{ padding: "10px 14px", borderBottom: "1px solid #eef2f6" }}>{evt.by || "-"}</td>
                         <td

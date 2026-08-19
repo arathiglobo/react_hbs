@@ -179,6 +179,11 @@ const AgentView = () => {
   // Combined "regular available + active temporary" figure surfaced by the
   // backend on the same GET the base credit-limit fields come from.
   const [effectiveAvailableCredit, setEffectiveAvailableCredit] = useState(null);
+  // Header-scoped copy of the effective available credit — same value the
+  // Credit Limit modal shows internally, but kept live even when the modal
+  // is closed so the red "Available Credit" line under the agent logo stays
+  // accurate as credit / temp-credit changes happen.
+  const [headerAvailableCredit, setHeaderAvailableCredit] = useState(null);
   const [showTempCreditForm, setShowTempCreditForm] = useState(false);
   const [editingTempCreditId, setEditingTempCreditId] = useState(null);
   const [tempCreditFormData, setTempCreditFormData] = useState({
@@ -220,8 +225,26 @@ const AgentView = () => {
     }
   };
 
+  // Fetch the header's "Available Credit" figure. Same endpoint the Credit
+  // Limit modal reads on open — kept separate so mutations elsewhere (base
+  // credit update, temporary credit add/edit/delete/toggle) can refresh
+  // just this figure without re-opening the modal.
+  const fetchHeaderCredit = async () => {
+    try {
+      const res = await axiosInstance.get(`/api/agent-credit-limit/agent/${id}`);
+      setHeaderAvailableCredit(
+        res.data?.effectiveAvailableCreditLimit ?? res.data?.availableCreditLimit ?? null
+      );
+    } catch (_) {
+      // No credit row yet is normal for a freshly created agent — leave null
+      // so the header shows nothing rather than a stale figure.
+      setHeaderAvailableCredit(null);
+    }
+  };
+
   useEffect(() => {
     fetchAgent();
+    fetchHeaderCredit();
     (async () => {
       try {
         const rolesRes = await axiosInstance.get("/api/userRoles");
@@ -243,6 +266,7 @@ const AgentView = () => {
         setApprovalInfo(null);
       }
     })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // ===================================================================
@@ -350,9 +374,12 @@ const AgentView = () => {
       // Scope the check to the AGENT user type so entities of other types that
       // share the same numeric id don't resolve to this agent's account.
       const agentRole = rolesList.find((r) => r.roleName === "AGENT");
+      // subUserType=AGENT_MAIN disambiguates from sub-agent / sub-user rows
+      // that share the same (user_id, user_type_id) because those three
+      // entity tables have overlapping id sequences under the AGENT type.
       const response = await axiosInstance.post(
         agentRole
-          ? `/auth/checkRegisteredUserExist/${id}?userTypeId=${agentRole.id}`
+          ? `/auth/checkRegisteredUserExist/${id}?userTypeId=${agentRole.id}&subUserType=AGENT_MAIN`
           : `/auth/checkRegisteredUserExist/${id}`
       );
       if (response.data) {
@@ -727,12 +754,14 @@ const AgentView = () => {
       closeTempCreditForm();
       await fetchTempCredits();
       // Refresh the combined "Total Available Credit" figure so it reflects
-      // the newly added/edited temporary credit immediately.
+      // the newly added/edited temporary credit immediately (both the modal
+      // strip and the header line under the agent logo).
       try {
         const res = await axiosInstance.get(`/api/agent-credit-limit/agent/${id}`);
-        setEffectiveAvailableCredit(
-          res.data?.effectiveAvailableCreditLimit ?? res.data?.availableCreditLimit ?? null
-        );
+        const nextEffective =
+          res.data?.effectiveAvailableCreditLimit ?? res.data?.availableCreditLimit ?? null;
+        setEffectiveAvailableCredit(nextEffective);
+        setHeaderAvailableCredit(nextEffective);
       } catch (_) {
         /* non-critical refresh */
       }
@@ -762,9 +791,10 @@ const AgentView = () => {
         await fetchTempCredits();
         try {
           const res = await axiosInstance.get(`/api/agent-credit-limit/agent/${id}`);
-          setEffectiveAvailableCredit(
-            res.data?.effectiveAvailableCreditLimit ?? res.data?.availableCreditLimit ?? null
-          );
+          const nextEffective =
+            res.data?.effectiveAvailableCreditLimit ?? res.data?.availableCreditLimit ?? null;
+          setEffectiveAvailableCredit(nextEffective);
+          setHeaderAvailableCredit(nextEffective);
         } catch (_) {
           /* non-critical refresh */
         }
@@ -796,9 +826,10 @@ const AgentView = () => {
       await fetchTempCredits();
       try {
         const res = await axiosInstance.get(`/api/agent-credit-limit/agent/${id}`);
-        setEffectiveAvailableCredit(
-          res.data?.effectiveAvailableCreditLimit ?? res.data?.availableCreditLimit ?? null
-        );
+        const nextEffective =
+          res.data?.effectiveAvailableCreditLimit ?? res.data?.availableCreditLimit ?? null;
+        setEffectiveAvailableCredit(nextEffective);
+        setHeaderAvailableCredit(nextEffective);
       } catch (_) {
         /* non-critical refresh */
       }
@@ -916,6 +947,7 @@ const AgentView = () => {
         setHasInitialCredit(true);
         setCreditRowExists(true);
         closeCreditLimitModal();
+        fetchHeaderCredit();
       }
     } catch (e) {
       console.error(e);
@@ -1117,6 +1149,7 @@ const AgentView = () => {
                 </span>
               </h4>
             </div>
+            <div className="d-flex flex-column align-items-center" style={{ gap: 6 }}>
             {(() => {
               /* Robust agent-logo rendering:
                  - Accept either a data:URL or a raw base64 string.
@@ -1208,6 +1241,31 @@ const AgentView = () => {
                 </div>
               );
             })()}
+            {/* Red "Available Credit" line under the agent logo — mirrors the
+                figure shown inside the Credit Limit modal so the admin can
+                see the current balance without having to open the modal.
+                Hidden until the credit endpoint has resolved. */}
+            {headerAvailableCredit != null && (
+              <div
+                style={{
+                  color: "#dc3545",
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  lineHeight: 1.15,
+                  textAlign: "center",
+                  whiteSpace: "nowrap",
+                }}
+                title="Available credit balance (includes any active temporary credit)"
+              >
+                Available Credit:{" "}
+                {Number(headerAvailableCredit).toLocaleString(undefined, {
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 2,
+                })}
+                {agent.currencyCode ? ` ${agent.currencyCode}` : ""}
+              </div>
+            )}
+            </div>
           </div>
 
           <Section title="Agent Details">
@@ -1510,17 +1568,10 @@ const AgentView = () => {
                 <FaBan className="me-2" />
                 Agent Exclude
               </Button>
-              {/* Login button removed — agent login credentials are now
-                  collected on the public /register page and provisioned by
-                  the admin from /admin/approval/agents. Keeping the modal
-                  code below so the reset-password flow (used elsewhere)
-                  still compiles. */}
-              {false && (
               <Button variant="success" onClick={handleLogin}>
                 <FaSignInAlt className="me-2" />
                 Login
               </Button>
-              )}
               <Button
                 variant={isAgentActive ? "outline-danger" : "outline-success"}
                 onClick={handleToggleStatus}

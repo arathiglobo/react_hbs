@@ -31,6 +31,50 @@ import {
   FaUserAlt, FaPlusCircle, FaCheckCircle, FaSyncAlt, FaTimesCircle,
 } from "react-icons/fa";
 
+// Reverse-geocode browser coordinates to a readable address for the
+// Booking History audit trail. Tries OpenStreetMap Nominatim first
+// (street-level detail), then BigDataCloud (locality-level, keyless) —
+// both free, CORS-enabled endpoints. Returns null when neither responds
+// so the caller keeps its IP-derived fallback. Mirrors the hotel
+// BookingDetailedView + the senior-citizen booking page.
+async function reverseGeocode(lat, lon) {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=16&addressdetails=1`,
+      { headers: { Accept: "application/json" } }
+    );
+    if (res.ok) {
+      const a = (await res.json())?.address || {};
+      const parts = [
+        a.road,
+        a.neighbourhood || a.suburb,
+        a.village || a.town || a.city || a.municipality,
+        a.state,
+        a.postcode,
+        a.country,
+      ].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255); // DB column is VARCHAR(255)
+    }
+  } catch {
+    // fall through to BigDataCloud
+  }
+  try {
+    const res = await fetch(
+      `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`
+    );
+    if (res.ok) {
+      const d = await res.json();
+      const parts = [d.locality, d.city, d.principalSubdivision, d.countryName].filter(Boolean);
+      const line = parts.filter((p, i) => parts.indexOf(p) === i).join(", ");
+      if (line) return line.slice(0, 255);
+    }
+  } catch {
+    // give up — caller keeps the IP-based fallback
+  }
+  return null;
+}
+
 const BUTTON_STYLE = {
   backgroundColor: "#c0392b",
   color: "#fff",
@@ -186,6 +230,43 @@ export default function SeniorCitizenBookingDetailView() {
 
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Operator location snapshot for the Booking History audit trail. Resolved
+  // once on mount and sent on the reconfirm PATCH / cancel-reject DELETE so
+  // the BE can stamp confirmed_location / reconfirmed_location /
+  // cancelled_location the same way the Create flow stamps booking_location.
+  // The IP is NOT resolved here — browsers only see the shared public/NAT IP;
+  // SeniorCitizenBookingController fills it in from the HTTP request itself.
+  // Same two-step resolution as the senior-citizen booking page: coarse
+  // IP-derived city first, precise geolocation second (only if it lands and
+  // permission is granted).
+  const [operatorLocation, setOperatorLocation] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("https://ipapi.co/json/")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((info) => {
+        if (cancelled || !info) return;
+        setOperatorLocation((prev) =>
+          // Never clobber a precise geolocation result that already landed.
+          prev ||
+          [info.city, info.region, info.country_name].filter(Boolean).join(", ") ||
+          null
+        );
+      })
+      .catch(() => {});
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async ({ coords }) => {
+          const precise = await reverseGeocode(coords.latitude, coords.longitude);
+          if (!cancelled && precise) setOperatorLocation(precise);
+        },
+        () => {}, // denied / unavailable — keep the IP-derived fallback
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+      );
+    }
+    return () => { cancelled = true; };
+  }, []);
 
   // Cancel
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -384,32 +465,29 @@ export default function SeniorCitizenBookingDetailView() {
     // ── On Request breadcrumb chain (mirrors BookingDetailedView) ──
     // On Request senior-citizen bookings are created with confirmationStatus
     // "Confirmed", so without this override the badge would read a plain
-    // green "Confirmed". The chain grows as the operator acts:
-    //   created            → "On Request"                       (orange)
-    //   after step-1 Confirm → "On Request/Confirmed"            (orange)
-    //   after Reconfirm     → "On Request/Confirmed/Reconfirmed" (green)
-    //   cancelled at any point → chain + " / Cancelled" two-tone.
+    // green "Confirmed". The chain grows as the operator acts. Each segment
+    // carries the colour of the state it represents so the reader can see
+    // at a glance what has already landed:
+    //   "On Request"                        → orange (pending step-1)
+    //   "/Confirmed"                        → green  (step-1 done)
+    //   "/Reconfirmed"                      → green  (finalised)
+    //   " / Cancelled" appended at any step → red
     if (isOnRequestRoom) {
       const finalised =
         normalizedStatus === "RECONFIRMED" || normalizedStatus === "COMPLETED";
-      const chain = finalised
-        ? "On Request/Confirmed/Reconfirmed"
-        : booking?.onRequestConfirmed
-        ? "On Request/Confirmed"
-        : "On Request";
-      if (isCancelled) {
-        return (
-          <span style={base}>
-            <span style={{ color: finalised ? "#198754" : "#e67e22" }}>
-              {chain}
-            </span>
-            <span style={{ color: "#dc3545" }}> / Cancelled</span>
-          </span>
-        );
-      }
+      const showConfirmed = finalised || booking?.onRequestConfirmed;
       return (
-        <span style={{ ...base, color: finalised ? "#198754" : "#e67e22" }}>
-          {chain}
+        <span style={base}>
+          <span style={{ color: "#e67e22" }}>On Request</span>
+          {showConfirmed && (
+            <span style={{ color: "#198754" }}>/Confirmed</span>
+          )}
+          {finalised && (
+            <span style={{ color: "#198754" }}>/Reconfirmed</span>
+          )}
+          {isCancelled && (
+            <span style={{ color: "#dc3545" }}> / Cancelled</span>
+          )}
         </span>
       );
     }
@@ -476,7 +554,10 @@ export default function SeniorCitizenBookingDetailView() {
       const reasonParts = ["Rejected by " + by];
       if (rejectionRemarks.trim()) reasonParts.push(rejectionRemarks.trim());
       const res = await axiosInstance.delete(`/api/senior-citizen-booking/${id}`, {
-        params: { reason: reasonParts.join(" — ") },
+        // Booking History audit — BE stamps bookingLocation onto
+        // cancelled_location. Reject cancels the booking, so its history row
+        // carries the same audit pair as a plain cancel.
+        params: { reason: reasonParts.join(" — "), bookingLocation: operatorLocation },
       });
       if (res.data?.success !== false) {
         setShowRejectModal(false);
@@ -496,7 +577,14 @@ export default function SeniorCitizenBookingDetailView() {
     try {
       setCancellingBooking(true);
       const res = await axiosInstance.delete(`/api/senior-citizen-booking/${id}`, {
-        params: cancellationReason ? { reason: cancellationReason } : {},
+        // Booking History audit — BE stamps bookingLocation onto
+        // cancelled_location. May be null if the operator denied geolocation
+        // and the IP-derived fallback also failed; the BE treats null as "no
+        // capture" and the "Booking Cancelled" row renders "-".
+        params: {
+          ...(cancellationReason ? { reason: cancellationReason } : {}),
+          bookingLocation: operatorLocation,
+        },
       });
       if (res.data?.success !== false) {
         setShowCancelModal(false);
@@ -523,7 +611,17 @@ export default function SeniorCitizenBookingDetailView() {
   const runReconfirm = async () => {
     try {
       setConfirmingBooking(true);
-      const res = await axiosInstance.patch(`/api/senior-citizen-booking/${id}/reconfirm`);
+      const res = await axiosInstance.patch(
+        `/api/senior-citizen-booking/${id}/reconfirm`,
+        {
+          // Booking History audit — BE stamps this onto confirmed_location /
+          // reconfirmed_location depending on which step this call lands (the
+          // same button drives both On-Request steps). May be null if the
+          // operator denied geolocation and the IP-derived fallback also
+          // failed; the history row then shows "-".
+          bookingLocation: operatorLocation,
+        },
+      );
       if (res.data?.success) {
         setShowConfirmModal(false);
         toast.success(res.data.message || "Booking reconfirmed successfully!");
@@ -959,6 +1057,10 @@ export default function SeniorCitizenBookingDetailView() {
         action: "Booking Confirmed",
         at: booking.confirmedDate,
         by: booking.confirmedBy || "-",
+        // Per-action audit captured on the RECONFIRM PATCH (On-Request step 1).
+        // Rows actioned before this was captured have both null and render "-".
+        location: booking.confirmedLocation,
+        ip: booking.confirmedIp,
       });
     }
     if (booking.reconfirmedDate) {
@@ -966,6 +1068,8 @@ export default function SeniorCitizenBookingDetailView() {
         action: "Booking Reconfirmed",
         at: booking.reconfirmedDate,
         by: booking.reconfirmedBy || "-",
+        location: booking.reconfirmedLocation,
+        ip: booking.reconfirmedIp,
       });
     }
     const cancelTs = booking.cancelledAt || booking.cancelledDate;
@@ -974,6 +1078,10 @@ export default function SeniorCitizenBookingDetailView() {
         action: "Booking Cancelled",
         at: cancelTs,
         by: booking.cancelledBy || "-",
+        // Per-action audit captured on the cancel/reject DELETE. Rows
+        // cancelled before this was captured have both null and render "-".
+        location: booking.cancelledLocation,
+        ip: booking.cancelledIp,
       });
     }
     return events.sort((a, b) => {

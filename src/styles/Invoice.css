@@ -1,0 +1,156 @@
+/* ════════════════════════════════════════════════════════════
+ * Invoice (Tax Invoice List) — layout-only styles.
+ *
+ * The page is built to fit one viewport with no scrollbars in either
+ * direction: the grid spans exactly 100% width (table-layout: fixed)
+ * and the row count is measured against the available height in
+ * Invoice.jsx, so nothing ever overflows.
+ *
+ * Every rule is scoped under `.invoice-page` so the shell / print
+ * overrides can never leak into another page once this stylesheet has
+ * been loaded. No font sizes or colours are introduced here that
+ * differ from the inline styles already used by Invoice.jsx.
+ * ════════════════════════════════════════════════════════════ */
+
+/* ── Screen fit ──
+   TopBar is a fixed 60px band (see custom.scss) and Sidebar already
+   reserves `calc(100vh - 60px)`, so the main column matches it. */
+.invoice-page .invoice-main {
+  height: calc(100vh - 60px);
+  overflow: hidden;
+  min-width: 0; /* let the grid shrink to fit instead of widening the shell */
+}
+
+/* Nested flex children only shrink when min-height is cleared. */
+.invoice-page .invoice-flex-fill {
+  min-height: 0;
+}
+
+/* The measured region — its height decides how many rows are requested. */
+.invoice-page .invoice-table-area {
+  min-height: 0;
+}
+
+/* No scrollbars: the row count is sized to fit this box exactly. */
+.invoice-page .invoice-table-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Action column buttons ──
+   Outlined icon + label pills, matching the View / Edit / Delete treatment
+   used elsewhere in the product: white face, 1px border in the action's own
+   colour, icon and label sharing that colour via `currentColor`.
+     • Proforma — document icon, blue   (invoiceType=PROFORMA)
+     • Tax      — receipt icon,  brand red (invoiceType=TAX)
+   Deliberately compact — font size is inherited from the cell (0.82rem) and
+   min-height is capped at 24px, so adding the labels costs no row height and
+   the buttons stay inside ROW_HEIGHT_PX. */
+.invoice-page .invoice-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 0.1rem 0.4rem;
+  background: #ffffff;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+/* react-icons default to 1em, which would inherit the 0.82rem cell size. */
+.invoice-page .invoice-action-btn svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.invoice-page .invoice-action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.14);
+}
+
+.invoice-page .invoice-action-btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.invoice-page .invoice-action-btn:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+
+.invoice-page .invoice-action-proforma {
+  color: #0284c7;
+}
+
+.invoice-page .invoice-action-proforma:hover {
+  background: #e7f3fe;
+}
+
+.invoice-page .invoice-action-tax {
+  color: #ec0b43;
+}
+
+.invoice-page .invoice-action-tax:hover {
+  background: #fde7ed;
+}
+
+/* ── Narrow desktops ──
+   Below this width the eleven columns cannot hold labelled buttons without
+   a horizontal scrollbar, so the labels drop and the buttons fall back to
+   icon-only squares. The tooltip still names the action.
+   Note: this is CSS pixels, so Windows display scaling counts — a 1920px
+   screen at 125% reports 1536px here. */
+@media (max-width: 1399.98px) {
+  .invoice-page .invoice-action-label {
+    display: none;
+  }
+
+  .invoice-page .invoice-action-btn {
+    width: 24px;
+    padding: 0;
+  }
+}
+
+/* ── Below lg the sidebar collapses and the filter row stacks into four
+      full-width rows, leaving too little height for a usable grid. The
+      viewport lock is released there so the content stays readable. ── */
+@media (max-width: 991.98px) {
+  .invoice-page .invoice-main {
+    height: auto;
+    overflow: visible;
+  }
+
+  .invoice-page .invoice-table-viewport {
+    overflow: visible;
+  }
+}
+
+/* ── Print — release the viewport lock so every fetched row reaches paper ── */
+@media print {
+  .invoice-page .topbar,
+  .invoice-page .sidebar,
+  .invoice-page .invoice-no-print {
+    display: none !important;
+  }
+
+  .invoice-page .invoice-main {
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  .invoice-page .invoice-table-viewport {
+    overflow: visible !important;
+  }
+}

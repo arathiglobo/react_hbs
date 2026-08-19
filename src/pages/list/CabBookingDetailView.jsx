@@ -212,17 +212,38 @@ const formatDate = (value) => {
 // Confirmed / ReConfirmed (incl. "Confirm/ReConfirmed") → green, On Request →
 // orange, anything else → grey.
 const StatusBadge = ({ status }) => {
-  const p = String(status || "-").trim().toUpperCase();
-  const color = p.includes("CANCELLED")
-    ? "#dc2626"
-    : p.includes("CONFIRM")
-      ? "#16a34a"
-      : p === "ON REQUEST"
-        ? "#e67e22"
-        : "#888";
+  const raw = String(status ?? "-").trim();
+
+  // Per-token colour rule — matches the pre-change whole-string logic
+  // so isolated labels look identical.
+  const colorFor = (label) => {
+    const p = label.trim().toUpperCase();
+    if (p.includes("CANCELLED")) return "#dc2626";
+    if (p.includes("CONFIRM")) return "#16a34a";
+    if (p === "ON REQUEST") return "#e67e22";
+    return "#888";
+  };
+
+  // Combined labels like "ReConfirmed/Cancelled" render each part in its
+  // own colour so the operator sees the prior state (green) alongside
+  // the terminal one (red) at a glance. The slash separator stays muted.
+  if (raw.includes("/")) {
+    const parts = raw.split("/");
+    return (
+      <span style={{ fontWeight: "700", fontSize: "0.85rem" }}>
+        {parts.map((part, idx) => (
+          <span key={idx}>
+            {idx > 0 && <span style={{ color: "#888" }}>/</span>}
+            <span style={{ color: colorFor(part) }}>{part.trim()}</span>
+          </span>
+        ))}
+      </span>
+    );
+  }
+
   return (
-    <span style={{ fontWeight: "700", fontSize: "0.85rem", color }}>
-      {status ?? "-"}
+    <span style={{ fontWeight: "700", fontSize: "0.85rem", color: colorFor(raw) }}>
+      {raw}
     </span>
   );
 };
@@ -325,6 +346,14 @@ export default function CabBookingDetailView() {
 
   // Cancel (with reason)
   const [cancellationReason, setCancellationReason] = useState("");
+
+  // Cancel-modal preview — Free vs Penalty banner + refund figure the
+  // operator sees before confirming. Populated by /api/cab/{id}/cancel-preview
+  // on modal open. For i'way bookings this hits i'way's check-cancel
+  // (§11.13) server-side; in-house rows short-circuit to "full refund".
+  const [cancelPreview, setCancelPreview] = useState(null);
+  const [cancelPreviewLoading, setCancelPreviewLoading] = useState(false);
+  const [cancelPenaltyAcknowledged, setCancelPenaltyAcknowledged] = useState(false);
 
   // Client location captured when the Cancel / Reconfirm modals open, so the
   // History modal's "Booking Cancelled" / "Booking Reconfirmed" rows show
@@ -497,8 +526,22 @@ export default function CabBookingDetailView() {
   const openCancelModal = () => {
     setCancellationReason("");
     setCancelLocation(null);
+    setCancelPreview(null);
+    setCancelPenaltyAcknowledged(false);
     setShowCancelModal(true);
     resolveClientLocation(setCancelLocation);
+    // Fetch penalty preview so the modal can render Free/Penalty banner
+    // + refund amount before the operator confirms. Preview failure is
+    // non-blocking — the operator can still cancel (backend will re-check
+    // and reject if truly not allowed), but the banner just won't render.
+    if (booking?.custombookingId) {
+      setCancelPreviewLoading(true);
+      axiosInstance
+        .get(`/api/cab/${booking.custombookingId}/cancel-preview`)
+        .then((res) => setCancelPreview(res.data || null))
+        .catch(() => setCancelPreview(null))
+        .finally(() => setCancelPreviewLoading(false));
+    }
   };
 
   // ── Reconfirm ──
@@ -938,29 +981,27 @@ export default function CabBookingDetailView() {
     .filter(Boolean)
     .join(" ");
 
-  // Display status for the StatusBadge — cancelled shows red, otherwise the
-  // live confirmation status (falling back to Confirmed) coloured green.
-  // The default "OK" confirmation status reads as "Confirmed" on this page;
-  // only "OK" is remapped — every other status (ReConfirmed, Rejected, …) is
-  // shown as-is. Display-only: the stored confirmationStatus is unchanged.
-  const rawStatus = actionState.confirmationStatus || "Confirmed";
-  const baseStatus = isCancelled
-    ? "Cancelled"
-    : String(rawStatus).trim().toUpperCase() === "OK"
-      ? "Confirmed"
-      : rawStatus;
-  // Display-only relabels (mirror PackageBookingDetailView): a ReConfirmed
-  // booking reads "Confirm/ReConfirmed" and a Cancelled one reads
-  // "ReConfirmed/Cancelled". The underlying state (isCancelled / the stored
-  // confirmationStatus) is unchanged, so the action-button gates still work off
-  // the real status.
-  const normalizedBase = String(baseStatus).trim().toUpperCase();
-  const displayStatus =
-    normalizedBase === "CANCELLED"
-      ? "ReConfirmed/Cancelled"
-      : normalizedBase === "RECONFIRMED"
-        ? "Confirm/ReConfirmed"
-        : baseStatus;
+  // Display status for the StatusBadge — cancelled shows red, everything
+  // else reads as "Reconfirmed". Rationale: any booking that survived
+  // create-order + approve + wallet deduction is fully committed on both
+  // sides, and the operator no longer has to press RECONFIRM manually.
+  // Legacy raw values ("OK", "CONFIRMED", "PENDING_IWAY_PAYMENT") all fold
+  // into the same "Reconfirmed" label so historic rows read consistently
+  // with new ones. The underlying confirmationStatus in the DB is unchanged.
+  //
+  // Cancellations that happened AFTER a reconfirmation render as the
+  // combined "ReConfirmed/Cancelled" label so the operator sees both
+  // the booking's terminal state (Cancelled — red wins per the status
+  // renderer's rule) and the fact that it was fully committed before
+  // being cancelled. Cancellations from any other prior state (e.g. a
+  // pending booking cancelled before it ever confirmed) keep the plain
+  // "Cancelled" label so we don't imply a reconfirmation that never
+  // happened.
+  const wasReconfirmedBeforeCancel =
+    String(actionState.confirmationStatus || "").toUpperCase() === "RECONFIRMED";
+  const displayStatus = isCancelled
+    ? (wasReconfirmedBeforeCancel ? "ReConfirmed/Cancelled" : "Cancelled")
+    : "Reconfirmed";
 
   // Booking lifecycle events for the History modal — built from the row stub
   // already loaded (no extra API call), mirroring the Package / Hotel booking
@@ -1131,9 +1172,30 @@ export default function CabBookingDetailView() {
                           booking.pickupDate
                       )}
                     />
+                    {/* Reflects the value saved via "CONFIRMATION NO." —
+                        actionState.confirmationNumber is refreshed on save.
+                        Moved here from Guest Information (booking-level id,
+                        belongs with the other booking identifiers). */}
+                    <InfoRow
+                      label="Confirmation No."
+                      value={
+                        actionState.confirmationNumber ||
+                        booking.confirmationNumber
+                      }
+                    />
                   </Col>
                   <Col md={6}>
                     <InfoRow label="Agent" value={booking.agentName} />
+                    {/* Reflects the value saved via "ADD AGENT REFERENCE" —
+                        actionState.agentLpo is refreshed on save (mergeActionState),
+                        falling back to whatever the row stub carried. Renamed
+                        from "Agent LPO" and grouped next to Agent. */}
+                    <InfoRow
+                      label="Agent Reference"
+                      value={
+                        actionState.agentLpo || booking.agentLpo || booking.lpo
+                      }
+                    />
                     <InfoRow
                       label="Pickup"
                       value={
@@ -1173,7 +1235,11 @@ export default function CabBookingDetailView() {
               </SectionBody>
             </div>
 
-            {/* ── Guest Information ── */}
+            {/* ── Guest Information ──
+                 Passport No and Nationality removed on request; Agent
+                 Reference and Confirmation No. moved into Booking
+                 Information above, so this section is just the lead
+                 contact triad now. */}
             <div style={card}>
               <SectionHeader>Guest Information</SectionHeader>
               <SectionBody>
@@ -1181,38 +1247,14 @@ export default function CabBookingDetailView() {
                   <Col md={6}>
                     <InfoRow label="Guest Name" value={customerName} />
                     <InfoRow label="Email" value={booking.customer?.emailId} />
-                    <InfoRow
-                      label="Phone"
-                      value={booking.customer?.contactNumber}
-                    />
                   </Col>
                   <Col md={6}>
                     <InfoRow
-                      label="Passport No."
-                      value={booking.customer?.passportNumber}
-                    />
-                    <InfoRow
-                      label="Nationality"
+                      label="Phone"
                       value={
-                        booking.customer?.nationality || booking.nationality
-                      }
-                    />
-                    {/* Reflects the value saved via "ADD AGENT REFERENCE" —
-                        actionState.agentLpo is refreshed on save (mergeActionState),
-                        falling back to whatever the row stub carried. */}
-                    <InfoRow
-                      label="Agent LPO"
-                      value={
-                        actionState.agentLpo || booking.agentLpo || booking.lpo
-                      }
-                    />
-                    {/* Reflects the value saved via "CONFIRMATION NO." —
-                        actionState.confirmationNumber is refreshed on save. */}
-                    <InfoRow
-                      label="Confirmation No."
-                      value={
-                        actionState.confirmationNumber ||
-                        booking.confirmationNumber
+                        booking.customer?.mobileNumber ||
+                        booking.customer?.contactNumber ||
+                        booking.customer?.phone
                       }
                     />
                   </Col>
@@ -1243,7 +1285,7 @@ export default function CabBookingDetailView() {
                       <th style={{ width: 90 }}>Type</th>
                       <th>Name</th>
                       <th style={{ width: 80 }}>Age</th>
-                      <th>Passport</th>
+                      <th>Phone</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1266,7 +1308,21 @@ export default function CabBookingDetailView() {
                             .join(" ") || "—"}
                         </td>
                         <td>{g.age ?? "—"}</td>
-                        <td>{g.passportNo || "—"}</td>
+                        {/* We collect one phone per booking (lead only) — the
+                            per-guest form has no phone field. Show the lead
+                            passenger's number on the lead row; blank otherwise.
+                            Backend serializes the customer's phone under the
+                            `mobileNumber` key; read the older aliases too so
+                            historical rows keep rendering. */}
+                        <td>
+                          {g.contactNumber ||
+                            (g.isLead
+                              ? booking.customer?.mobileNumber ||
+                                booking.customer?.contactNumber ||
+                                booking.customer?.phone ||
+                                "—"
+                              : "—")}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1334,6 +1390,72 @@ export default function CabBookingDetailView() {
                 </div>
               </SectionBody>
             </div>
+
+            {/* ── Special Requirements ── Multi-select picks from the
+                provider's configured catalog + any free-text notes the
+                customer added on the booking page. Either can be absent. */}
+            {(Array.isArray(booking?.selectedSpecialRequirements) &&
+              booking.selectedSpecialRequirements.length > 0) ||
+            (booking?.specialRequirements &&
+              String(booking.specialRequirements).trim()) ? (
+              <div style={card}>
+                <SectionHeader>Special Requirements</SectionHeader>
+                <SectionBody>
+                  {Array.isArray(booking?.selectedSpecialRequirements) &&
+                    booking.selectedSpecialRequirements.length > 0 && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 6,
+                          marginBottom:
+                            booking?.specialRequirements &&
+                            String(booking.specialRequirements).trim()
+                              ? 8
+                              : 0,
+                        }}
+                      >
+                        {booking.selectedSpecialRequirements.map((item, i) => (
+                          <span
+                            key={`ssr-${i}`}
+                            style={{
+                              background: "#F1F3F5",
+                              color: "#222",
+                              padding: "2px 8px",
+                              borderRadius: 12,
+                              fontSize: "0.78rem",
+                            }}
+                          >
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  {booking?.specialRequirements &&
+                    String(booking.specialRequirements).trim() && (
+                      <div
+                        style={{
+                          fontSize: "0.82rem",
+                          color: "#222",
+                          whiteSpace: "pre-line",
+                        }}
+                      >
+                        <span
+                          style={{
+                            color: "#666",
+                            fontSize: "0.75rem",
+                            display: "block",
+                            marginBottom: 2,
+                          }}
+                        >
+                          Additional notes
+                        </span>
+                        {String(booking.specialRequirements).trim()}
+                      </div>
+                    )}
+                </SectionBody>
+              </div>
+            ) : null}
 
             {/* ── Remarks ── Saved via the "BOOKING REMARK" modal;
                 actionState.remarks refreshes on save (mergeActionState). */}
@@ -1446,11 +1568,12 @@ export default function CabBookingDetailView() {
                 </button>
               )}
 
-              {!showsFinalDocs && !isCancelled && (
-                <button style={BTN_TEAL} onClick={openConfirmModal}>
-                  RECONFIRM
-                </button>
-              )}
+              {/* Manual RECONFIRM removed — every successful booking is
+                  auto-reconfirmed at save time (TripServiceImpl.placeIwayOrder
+                  → confirmationStatus = "RECONFIRMED"), so this button had no
+                  new state to move to. The Reconfirm handler + modal remain
+                  in the file for potential future use / audit backfill but
+                  are no longer reachable from the UI. */}
 
               {!showsFinalDocs ? (
                 <>
@@ -1919,6 +2042,104 @@ export default function CabBookingDetailView() {
             </p>
             <h5 className="mb-1">{booking.packageBookCode}</h5>
             <p className="text-primary small mb-3">{booking.cabName}</p>
+
+            {/* Cancellation-preview banner — Free / Penalty / Blocked. Only
+                rendered once the preview call has returned. Non-blocking:
+                a preview fetch failure just hides the banner and lets the
+                backend re-check on the actual cancel. */}
+            {cancelPreviewLoading && (
+              <div className="text-muted small mb-3">
+                <Spinner animation="border" size="sm" className="me-2" />
+                Checking cancellation eligibility…
+              </div>
+            )}
+            {!cancelPreviewLoading && cancelPreview && (
+              <div
+                className={`alert text-start ${
+                  !cancelPreview.allowed
+                    ? "alert-danger"
+                    : cancelPreview.hasPenalty
+                      ? "alert-warning"
+                      : "alert-success"
+                }`}
+                role="alert"
+              >
+                {!cancelPreview.allowed ? (
+                  <>
+                    <div className="fw-semibold mb-1">Cancellation blocked</div>
+                    <div className="small">
+                      {cancelPreview.message ||
+                        "This booking can no longer be cancelled."}
+                    </div>
+                  </>
+                ) : cancelPreview.hasPenalty ? (
+                  <>
+                    <div className="fw-semibold mb-1">
+                      Penalty window — 100% charge applies
+                    </div>
+                    <div className="small mb-2">
+                      The free-cancellation window has closed. i'way will
+                      charge the full trip cost as a penalty.
+                    </div>
+                    <div className="small">
+                      <div>
+                        Trip total:{" "}
+                        <b>
+                          {cancelPreview.totalAmount != null
+                            ? cancelPreview.totalAmount.toFixed(2)
+                            : "—"}{" "}
+                          {cancelPreview.currency || ""}
+                        </b>
+                      </div>
+                      <div>
+                        Penalty:{" "}
+                        <b>
+                          {cancelPreview.penaltyAmount != null
+                            ? cancelPreview.penaltyAmount.toFixed(2)
+                            : "—"}{" "}
+                          {cancelPreview.currency || ""}
+                        </b>
+                      </div>
+                      <div>
+                        Wallet refund:{" "}
+                        <b>
+                          {cancelPreview.refundAmount != null
+                            ? cancelPreview.refundAmount.toFixed(2)
+                            : "—"}{" "}
+                          {cancelPreview.currency || ""}
+                        </b>
+                      </div>
+                    </div>
+                    <Form.Check
+                      type="checkbox"
+                      className="mt-2"
+                      id="cancelPenaltyAck"
+                      label="I understand the agent will not be refunded for this cancellation."
+                      checked={cancelPenaltyAcknowledged}
+                      onChange={(e) =>
+                        setCancelPenaltyAcknowledged(e.target.checked)
+                      }
+                      disabled={cancelling}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <div className="fw-semibold mb-1">Free cancellation</div>
+                    <div className="small">
+                      Full wallet refund of{" "}
+                      <b>
+                        {cancelPreview.refundAmount != null
+                          ? cancelPreview.refundAmount.toFixed(2)
+                          : "—"}{" "}
+                        {cancelPreview.currency || ""}
+                      </b>{" "}
+                      will be credited.
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             <Form.Group controlId="cabCancellationReason" className="text-start">
               <Form.Label className="fw-semibold">
                 Cancellation Reason{" "}
@@ -1954,7 +2175,15 @@ export default function CabBookingDetailView() {
           <Button
             variant="danger"
             onClick={handleCancelBooking}
-            disabled={cancelling}
+            disabled={
+              cancelling ||
+              // Preview arrived and said "not allowed" — hard-block.
+              (cancelPreview && !cancelPreview.allowed) ||
+              // Penalty case requires explicit acknowledgement.
+              (cancelPreview &&
+                cancelPreview.hasPenalty &&
+                !cancelPenaltyAcknowledged)
+            }
           >
             {cancelling ? (
               <>

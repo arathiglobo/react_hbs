@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   FaHotel,
   FaCalendarAlt,
@@ -21,10 +21,19 @@ import {
   Alert,
   Badge,
   Modal,
+  Spinner,
 } from "react-bootstrap";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
+
+// Online-payment gateways shown when the agent's credit is short. Kept
+// as a single-item list today because CC Avenue is the only wired gateway;
+// mirrors the shape used by Inhouse HotelBookingPage so a second gateway
+// can be added later without further changes here.
+const PAYMENT_GATEWAYS = [
+  { id: "ccavenue", name: "CC Avenue", desc: "Cards, UPI, Net Banking" },
+];
 
 // Same 11-chip list Inhouse HotelBookingPage uses so the two pages read
 // identically. Kept as a top-level constant so it stays out of render
@@ -77,6 +86,11 @@ const stripPolicyHtml = (raw) => {
  */
 const ApiBookingPageForHotels = () => {
   const navigate = useNavigate();
+  // CC Avenue's redirect back from its hosted page carries the outcome in
+  // the URL query string (React Router `state` never survives the
+  // cross-origin round trip). location.search is watched by the return-
+  // handling effect below to finalize the paid-for booking.
+  const location = useLocation();
 
   const activeUserRole = localStorage.getItem("currentActiveRole");
 
@@ -91,6 +105,12 @@ const ApiBookingPageForHotels = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingPayload, setPendingPayload] = useState(null);
+  // Duplicate-booking modal — shown when the backend surfaces
+  // status="DUPLICATE" (GRN's error code 6000). GRN detects the duplicate
+  // on its side; we just render a clean modal so the operator knows the
+  // booking already exists and doesn't retry blindly.
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [duplicateMessage, setDuplicateMessage] = useState("");
   // Policy consent modal — shown first when the operator clicks Confirm
   // Booking. Cancellation policies come from the search-time rate object
   // (API-side hotels don't expose a /policies endpoint). Only after
@@ -129,12 +149,76 @@ const ApiBookingPageForHotels = () => {
   // per the vendor's PANCardType enum. Corporate/Trust/etc. can be picked in
   // the dropdown if the booking is on behalf of an entity.
   const [panCardType, setPanCardType] = useState("2");
+  // GRN-optional PAN Company Name — forwarded to holder.pan_company_name
+  // for corporate PANs. Only rendered when the selected rate is GRN AND
+  // panRequired=true. Left empty for personal PANs (no impact on GRN).
+  const [panCompanyName, setPanCompanyName] = useState("");
+
+  // ── Online-payment flow (fires when the agent's credit is short) ──
+  // Same three-modal chain Inhouse HotelBookingPage exposes:
+  //   1. showNoPaymentPathModal — no credit AND Card mode disabled for the
+  //      agent → booking is blocked, informational modal only.
+  //   2. showInsufficientModal  — no credit but Card mode enabled → "Online
+  //      Payment Required" with Pay/Cancel; Pay opens the gateway picker.
+  //   3. showGatewayModal       — pick a gateway (currently only CC Avenue)
+  //      → navigate to /payment/ccavenue-redirect which posts to
+  //      /api/payment/ccavenue/initiate and hands off to CC Avenue's
+  //      hosted billing page.
+  const [showInsufficientModal, setShowInsufficientModal] = useState(false);
+  const [showGatewayModal, setShowGatewayModal] = useState(false);
+  const [insufficientAmount, setInsufficientAmount] = useState(0);
+  const [showNoPaymentPathModal, setShowNoPaymentPathModal] = useState(false);
+  const [selectedGateway, setSelectedGateway] = useState("");
+  // True only while the post-CC-Avenue /finalize call is in flight. Drives
+  // the full-screen "Booking in progress — do not close" overlay and the
+  // beforeunload guard so the operator can't navigate away while the
+  // backend is still creating the paid-for booking.
+  const [isFinalizingPayment, setIsFinalizingPayment] = useState(false);
 
   // ─────────────────────────── effects ────────────────────────────────
   useEffect(() => {
     const storedData = sessionStorage.getItem("bookingData");
     if (storedData) {
       const parsedData = JSON.parse(storedData);
+
+      // Diagnostic: dump the exact bookingData handed off from
+      // /api-room-list so we can see whether Darina-specific fields
+      // (deadlineDate, cancellationPolicies, apiId) survive the transfer.
+      // Grouped for readability — collapse "BookingPage: incoming data"
+      // in DevTools console.
+      // eslint-disable-next-line no-console
+      console.groupCollapsed(
+        "%cBookingPage: incoming data from /api-room-list",
+        "color:#0d6efd;font-weight:bold",
+      );
+      // eslint-disable-next-line no-console
+      console.log("bookingData (full):", parsedData);
+      // eslint-disable-next-line no-console
+      console.log("bookingData.payload.apiId:", parsedData?.payload?.apiId,
+        "typeof:", typeof parsedData?.payload?.apiId);
+      // eslint-disable-next-line no-console
+      console.log(
+        "bookingData.selectedRate (per slot deadline + cancellation):",
+        (parsedData?.selectedRate || []).map((slot, i) => ({
+          index: i,
+          roomCategory: slot?.roomCategory,
+          mealPlan: slot?.mealPlan,
+          deadlineDate: slot?.deadlineDate,
+          nonRefundable: slot?.nonRefundable,
+          cancellationPolicy_count:
+            Array.isArray(slot?.cancellationPolicy)
+              ? slot.cancellationPolicy.length
+              : slot?.cancellationPolicy
+                ? 1
+                : 0,
+          cancellationPolicy_first: Array.isArray(slot?.cancellationPolicy)
+            ? slot.cancellationPolicy[0]
+            : slot?.cancellationPolicy,
+        })),
+      );
+      // eslint-disable-next-line no-console
+      console.groupEnd();
+
       setBookingData(parsedData);
 
       const initialRooms = parsedData.payload.rooms.map((room) => ({
@@ -199,6 +283,119 @@ const ApiBookingPageForHotels = () => {
     };
   }, [bookingData]);
 
+  // ── CC Avenue return handling ──
+  //   CC Avenue's redirect is a real browser navigation away to their
+  //   domain and back (via the backend's /api/payment/ccavenue/response
+  //   redirect), so React Router `state` never survives the round trip.
+  //   The backend instead appends the outcome as a
+  //   ?ccavenueOrderId=&ccavenueStatus= query string when it 302s the
+  //   browser back to this page. The status query param is only a hint —
+  //   before finalising anything we re-verify it against
+  //   GET /api/payment/ccavenue/status/{orderId}, which reflects what the
+  //   backend actually decrypted from CC Avenue, so a tampered/stale URL
+  //   can't force a booking through.
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const ccavenueOrderId = searchParams.get("ccavenueOrderId");
+    const ccavenueStatus = searchParams.get("ccavenueStatus");
+    if (!ccavenueOrderId) return;
+
+    // Strip the resume signal from history right away so remounts /
+    // reloads don't re-trigger. Do it before the async work so a fast
+    // re-render can't race the effect.
+    navigate(location.pathname, { replace: true, state: {} });
+
+    // Real CC Avenue path — the backend owns the payload and the create
+    // call. We just ask it to finalize. Idempotent: a second call for
+    // the same orderId returns the already-created booking, so a
+    // StrictMode double-fire or an operator refresh cannot double-book.
+    const finalizeAfterCCAvenue = async () => {
+      try {
+        setIsFinalizingPayment(true);
+        setIsSubmitting(true);
+        const response = await axiosInstance.post(
+          `/api/payment/ccavenue/finalize/${ccavenueOrderId}`,
+        );
+        const bookingResponse = response.data;
+        const statusUpper = String(bookingResponse?.status || "").toUpperCase();
+        const isSuccess =
+          (statusUpper === "CONFIRMED" ||
+            statusUpper === "RECONFIRMED" ||
+            statusUpper === "NOT CONFIRMED" ||
+            statusUpper === "ON REQUEST") &&
+          bookingResponse?.bookingId &&
+          bookingResponse.bookingId != 0;
+        if (isSuccess) {
+          toast.success(
+            bookingResponse.message || "Booking created after payment.",
+          );
+          setShowConfirmModal(false);
+          navigate("/booking-details/hotel-booking-list");
+        } else {
+          const beMsg = (bookingResponse && bookingResponse.message) || null;
+          toast.error(
+            beMsg ||
+              "Payment succeeded but booking could not be created. Please contact support with your payment reference.",
+          );
+        }
+      } catch (err) {
+        const beMsg =
+          err?.response?.data?.message || err?.response?.data?.error || null;
+        console.error("Post-payment finalize failed:", err);
+        toast.error(
+          beMsg ||
+            "Payment succeeded but booking could not be created. Please contact support with your payment reference.",
+        );
+      } finally {
+        setIsSubmitting(false);
+        setIsFinalizingPayment(false);
+      }
+    };
+
+    (async () => {
+      if (ccavenueStatus !== "success") {
+        toast.error("Payment was not completed. Please try again.");
+        return;
+      }
+      try {
+        const statusResponse = await axiosInstance.get(
+          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+        );
+        if (statusResponse.data?.status !== "SUCCESS") {
+          toast.error(
+            statusResponse.data?.statusMessage ||
+              "Payment was not successful. Please try again.",
+          );
+          return;
+        }
+      } catch (err) {
+        console.error("Could not verify CC Avenue payment status:", err);
+        toast.error(
+          "Could not verify payment status. Please contact support if you were charged.",
+        );
+        return;
+      }
+      finalizeAfterCCAvenue();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
+
+  // Warn on close / navigate-away while the paid-for booking is still
+  // being created server-side. Only attached during that window so it
+  // never fires on the normal flow. The browser only respects this if
+  // the user has interacted with the page in this session (which they
+  // certainly have — they just came back from paying).
+  useEffect(() => {
+    if (!isFinalizingPayment) return;
+    const beforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
+  }, [isFinalizingPayment]);
+
   // ─────────────────────────── handlers ───────────────────────────────
   const handleSpecialRequestToggle = (request) => {
     setSpecialRequests((prev) =>
@@ -248,6 +445,25 @@ const ApiBookingPageForHotels = () => {
     return n === "IN" || n === "IND" || n === "INDIA";
   };
 
+  // GRN-only PAN requirement: rate's pan_required=true (set from the recheck
+  // response and carried through on each selectedRate). Independent of the
+  // guest's nationality — GRN flags per-rate, not per-nationality. When true,
+  // the same PAN input card renders (shared with Atharva) and the payload
+  // sends holder.pan_number / pan_company_name. Any selectedRate having the
+  // flag is sufficient — a mixed multi-room booking with even one
+  // pan_required rate needs PAN.
+  const requiresGrnPan = () => {
+    if (!bookingData) return false;
+    if (Number(bookingData?.payload?.apiId) !== 20) return false;
+    const rates = bookingData?.selectedRate || [];
+    return rates.some((r) => r?.panRequired === true);
+  };
+
+  // Unified PAN-required check that either supplier can trigger. Kept as a
+  // helper so the PAN input card, validation, and payload builder all share
+  // one truth source and can't drift.
+  const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
+
   const validateForm = () => {
     const errors = {};
     let hasErrors = false;
@@ -279,21 +495,26 @@ const ApiBookingPageForHotels = () => {
       });
     });
 
-    // ATHARVA (apiId=3) + Indian primary guest: PAN is mandatory. The vendor
-    // rejects HCreateBooking with error 3006 otherwise, and the operator sees
-    // a swallowed "no status returned" failure. Length-only check (10 chars);
-    // the strict ABCDE1234F format is not enforced here per product decision.
-    if (requiresAtharvaPan()) {
+    // PAN mandatory when either supplier requires it:
+    //   • ATHARVA (apiId=3) + Indian primary guest — vendor rejects
+    //     HCreateBooking with error 3006 otherwise.
+    //   • GRN (apiId=20) + rate.pan_required=true — GRN rejects the
+    //     create-booking call and returns an error envelope.
+    // Length-only check (10 chars) — strict ABCDE1234F format is not
+    // enforced here per product decision. PAN Card Type is Atharva-only
+    // so it's still gated on requiresAtharvaPan().
+    if (requiresPan()) {
       const trimmed = (panCardNo || "").trim().toUpperCase();
       if (!trimmed) {
-        errors.panCardNo =
-          "PAN Card No is required (Indian primary guest booking with Atharva).";
+        errors.panCardNo = requiresAtharvaPan()
+          ? "PAN Card No is required (Indian primary guest booking with Atharva)."
+          : "PAN Card No is required (this GRN rate mandates PAN on the holder).";
         hasErrors = true;
       } else if (trimmed.length !== 10) {
         errors.panCardNo = "PAN must be 10 characters.";
         hasErrors = true;
       }
-      if (!panCardType) {
+      if (requiresAtharvaPan() && !panCardType) {
         errors.panCardType = "PAN Card Type is required.";
         hasErrors = true;
       }
@@ -407,6 +628,16 @@ const ApiBookingPageForHotels = () => {
           cancellationPolicy:
             (data.cancellationPolicies?.length && data.cancellationPolicies) ||
             r.cancellationPolicy,
+          // Capture the HPreBooking-response echoes so /api/hotel-booking/create
+          // can forward them as atharvaExpectedAmount / atharvaWithinTimeLimit /
+          // atharvaPackageRate. The BE uses these for ExpectedAmount cost
+          // verification (docs 6.1) — a mismatch triggers error 3002.
+          atharvaExpectedAmount:
+            data.amountWithoutMarkup ?? data.amount ?? r.atharvaExpectedAmount ?? null,
+          atharvaWithinTimeLimit:
+            data.withinTimeLimit ?? r.atharvaWithinTimeLimit ?? null,
+          atharvaPackageRate:
+            data.packageRate ?? r.atharvaPackageRate ?? null,
         };
       });
       setBookingData({ ...bookingData, selectedRate: patched });
@@ -538,6 +769,16 @@ const ApiBookingPageForHotels = () => {
         // ATHARVA carriers (harmless nulls for other suppliers).
         tokenId: firstRate.atharvaTokenId || null,
         hKey: firstRate.atharvaHKey || null,
+        // ATHARVA HPreBooking-response echoes. The BE uses these on
+        // HCreateBooking so ExpectedAmount matches the vendor's total on the
+        // first try (no error 3002 / no double call), WithinTimeLimit drives
+        // the RR vs KK gate correctly, and PackageRate triggers
+        // AirlineName/AirlinePNR when the vendor tagged the rate as a package
+        // (docs §5.3, §6.1). Null when no prebook has run yet — BE falls back
+        // to legacy behaviour.
+        atharvaExpectedAmount: firstRate.atharvaExpectedAmount ?? null,
+        atharvaWithinTimeLimit: firstRate.atharvaWithinTimeLimit ?? null,
+        atharvaPackageRate: firstRate.atharvaPackageRate ?? null,
         cityId: bookingData.payload?.cityId || null,
         nationalityId: bookingData.payload?.nationalityId || null,
         hotelName: bookingData.hotelStaticData.hotelName,
@@ -565,12 +806,41 @@ const ApiBookingPageForHotels = () => {
                 rate.nonRefundable === "true" ||
                 rate.nonRefundable === "Y";
 
+              // Darina (apiId=16): rate.deadlineDate is the LIVE
+              // free-cancellation cut-off carried from
+              // CheckAvailabilityWithCancellation_NoCache_LiveCalculation
+              // (BE parses the "Free Cancellation" band's toDate). It is
+              // the deadline the operator sees in the room accordion.
+              // Use it verbatim — the generic "earliest cancellationPolicy
+              // fromDate minus 2 days" fallback below picks up the Free
+              // Cancellation band's FromDate instead of the cut-off, which
+              // reports a wildly earlier date (September vs December).
+              if (
+                bookingData?.payload?.apiId === 16 &&
+                !nonRefundable &&
+                rate.deadlineDate
+              ) {
+                const iso = String(rate.deadlineDate).slice(0, 10);
+                const parts = iso.split("-");
+                if (parts.length === 3) {
+                  const d = new Date(
+                    Number(parts[0]),
+                    Number(parts[1]) - 1,
+                    Number(parts[2]),
+                  );
+                  if (!isNaN(d.getTime())) {
+                    d.setHours(0, 0, 0, 0);
+                    return d;
+                  }
+                }
+              }
+
               if (nonRefundable === true) {
-                const today = new Date();
-                const deadline = new Date(today);
-                deadline.setDate(today.getDate() - 2);
-                deadline.setHours(0, 0, 0, 0);
-                return deadline;
+                // Non-refundable rates have no free-cancellation window, so
+                // no deadline applies — send nothing rather than a fabricated
+                // "today - 2 days" date (which always lands in the past and
+                // confuses anything that reads deadlineDate literally).
+                return null;
               } else {
                 const policies = rate.cancellationPolicy || [];
                 if (policies.length === 0) return null;
@@ -609,13 +879,20 @@ const ApiBookingPageForHotels = () => {
           passportNo: "",
           agentLpo: "",
           nativeCountry: bookingData.payload.nationality,
-          // ATHARVA-only carriers (apiId=3, Indian primary guest). Emit them
-          // only when the PAN gate applies so non-Atharva payloads stay byte-
-          // for-byte identical to before this change.
-          panCardNo: requiresAtharvaPan()
+          // PAN carriers — populated when either Atharva (Indian primary
+          // guest) or GRN (rate.pan_required=true) requires them. panCardNo
+          // is the shared PAN number field forwarded to Atharva's PANCardNo
+          // and GRN's holder.pan_number. panCardType is Atharva-only.
+          // panCompanyName is GRN-only (optional, for corporate PANs).
+          // When neither supplier requires PAN, the fields stay null so
+          // non-PAN payloads are byte-for-byte identical to before.
+          panCardNo: requiresPan()
             ? (panCardNo || "").trim().toUpperCase()
             : null,
           panCardType: requiresAtharvaPan() ? panCardType || "2" : null,
+          panCompanyName: requiresGrnPan()
+            ? (panCompanyName || "").trim() || null
+            : null,
         },
         rooms: rooms.map((room, roomIndex) => {
           const rate = bookingData.selectedRate[roomIndex] || {};
@@ -644,6 +921,12 @@ const ApiBookingPageForHotels = () => {
             // prebook was skipped still round-trips. Ignored by other
             // suppliers (RoomBookingRequest.rateKey is @Nullable).
             rateKey: rate.atharvaRateKey || null,
+            // Darina free-cancellation deadline shown to the customer at
+            // rate-selection time (ISO yyyy-MM-dd). BE audits this in
+            // DarinaHotelBookingService so we know exactly which cut-off
+            // was in effect when the booking was confirmed. Null / ignored
+            // by other suppliers.
+            cancellationDeadline: rate.deadlineDate || null,
             guests: room.guests.map((guest) => ({
               salutation: guest.salutation,
               firstName: guest.firstName,
@@ -719,10 +1002,21 @@ const ApiBookingPageForHotels = () => {
         );
 
         if (creditResponse.data === false) {
-          toast.error(
-            "Insufficient credit. Please proceed with online payment.",
-          );
-          return;
+          // ❌ Not enough credit — hand off to the online-payment chain
+          // instead of a dead-end toast. Mirrors HotelBookingPage.jsx:
+          //   • Card mode disabled for this agent → block with the
+          //     "Booking Cannot Be Completed" modal.
+          //   • Card mode enabled                → open "Online Payment
+          //     Required" (Pay/Cancel); Pay opens the gateway picker,
+          //     which redirects to CC Avenue.
+          setInsufficientAmount(requiredAmount);
+          setShowConfirmModal(false);
+          if (!agentCardPaymentEnabled) {
+            setShowNoPaymentPathModal(true);
+          } else {
+            setShowInsufficientModal(true);
+          }
+          return; // handled by the payment popup
         }
       }
 
@@ -744,7 +1038,21 @@ const ApiBookingPageForHotels = () => {
 
       if (bookingResponse && isSuccess) {
         toast.success(bookingResponse.message);
+        // All suppliers land on the booking list after a successful confirm
+        // (matches IWTX / X3 / ATHARVA / DARINA / JUMEIRAH / JUNIPER). GRN
+        // used to route straight to its detail page instead but the client
+        // asked for uniform post-confirm UX — the detail page is still one
+        // click away from the list row.
         navigate("/booking-details/hotel-booking-list");
+      } else if (statusUpper === "DUPLICATE") {
+        // GRN error code 6000 — the exact booking already exists at the
+        // supplier. Show a dedicated modal (not a toast) so the operator
+        // has to acknowledge before continuing, and doesn't retry blindly.
+        setDuplicateMessage(
+          bookingResponse?.message ||
+            "Duplicate booking detected. This exact booking was already made. Please check your recent bookings before retrying.",
+        );
+        setShowDuplicateModal(true);
       } else {
         // Surface backend / IWTX validation message when present (e.g.
         // "invalid_passengers[0].gender") instead of the generic
@@ -985,6 +1293,52 @@ const ApiBookingPageForHotels = () => {
                                         </span>
                                       );
                                     })()}
+                                  {/* Darina (apiId 16) free-cancellation deadline
+                                      — slot.deadlineDate is ISO yyyy-MM-dd from
+                                      the search-time cancellation ladder (the
+                                      "Free cancellation until X" band's toDate). */}
+                                  {bookingData?.payload?.apiId === 16 &&
+                                    slot.deadlineDate &&
+                                    (() => {
+                                      const parts =
+                                        slot.deadlineDate.split("-");
+                                      if (parts.length !== 3) return null;
+                                      const [y, m, d] = parts;
+                                      const monthNames = [
+                                        "Jan",
+                                        "Feb",
+                                        "Mar",
+                                        "Apr",
+                                        "May",
+                                        "Jun",
+                                        "Jul",
+                                        "Aug",
+                                        "Sep",
+                                        "Oct",
+                                        "Nov",
+                                        "Dec",
+                                      ];
+                                      const idx = parseInt(m, 10) - 1;
+                                      if (
+                                        !y ||
+                                        !d ||
+                                        Number.isNaN(idx) ||
+                                        idx < 0 ||
+                                        idx > 11
+                                      )
+                                        return null;
+                                      return (
+                                        <span
+                                          className="ms-2 small fw-normal"
+                                          style={{ opacity: 0.95 }}
+                                          title="Free cancellation until this date/time"
+                                        >
+                                          | Free cancellation until{" "}
+                                          {parseInt(d, 10)} {monthNames[idx]}{" "}
+                                          {y}, 11:59 PM (UAE)
+                                        </span>
+                                      );
+                                    })()}
                                   {/* {slot.rate != null && (
                                     <span
                                       className="ms-auto small fw-normal"
@@ -1209,23 +1563,28 @@ const ApiBookingPageForHotels = () => {
                     </Card.Body>
                   </Card>
 
-                  {/* ATHARVA (apiId=3) + Indian primary guest ONLY:
-                      PAN Card capture. Atharva §6.1 documents PAN as
-                      MANDATORY for Indian nationals booking a hotel
-                      outside India; omitting it makes HCreateBooking
-                      reject with error 3006 ("Invalid PAN details") and
-                      the operator sees an opaque "no status returned"
-                      failure. Card is gated so every other supplier on
-                      this page (and Indian-domestic Atharva bookings)
-                      keeps its existing 4-card layout unchanged. */}
-                  {requiresAtharvaPan() && (
+                  {/* PAN Card capture — rendered when EITHER supplier
+                      requires PAN on the primary guest:
+                        • Atharva (apiId=3) + Indian primary guest —
+                          §6.1 mandates PAN or HCreateBooking rejects with
+                          error 3006 ("Invalid PAN details").
+                        • GRN (apiId=20) + rate.pan_required=true — GRN
+                          returns an error envelope when holder.pan_number
+                          is missing on a pan_required rate.
+                      The card is fully hidden when neither applies, so
+                      every other supplier / non-PAN rate keeps its
+                      existing 4-card layout unchanged. The PAN Card Type
+                      dropdown is Atharva-only; the PAN Company Name
+                      input is GRN-only (optional, for corporate PANs). */}
+                  {requiresPan() && (
                     <Card className="p-4 mb-2 shadow-sm border-0">
                       <h5 className="mb-1 fw-bold">
                         Primary Guest PAN Details
                       </h5>
                       <div className="text-muted small mb-3">
-                        PAN is required for Indian nationals booking with
-                        Atharva. Enter the primary guest's PAN card details.
+                        {requiresAtharvaPan()
+                          ? "PAN is required for Indian nationals booking with Atharva. Enter the primary guest's PAN card details."
+                          : "This GRN rate mandates PAN on the holder. Enter the primary guest's PAN details."}
                       </div>
                       <Row className="g-3">
                         <Col md={6}>
@@ -1260,44 +1619,66 @@ const ApiBookingPageForHotels = () => {
                             )}
                           </Form.Group>
                         </Col>
-                        <Col md={6}>
-                          <Form.Group>
-                            <Form.Label className="fw-semibold">
-                              PAN Card Type{" "}
-                              <span className="text-danger">*</span>
-                            </Form.Label>
-                            <Form.Select
-                              value={panCardType}
-                              isInvalid={!!validationErrors.panCardType}
-                              onChange={(e) => {
-                                setPanCardType(e.target.value);
-                                if (validationErrors.panCardType) {
-                                  setValidationErrors((prev) => {
-                                    const next = { ...prev };
-                                    delete next.panCardType;
-                                    return next;
-                                  });
+                        {requiresAtharvaPan() && (
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="fw-semibold">
+                                PAN Card Type{" "}
+                                <span className="text-danger">*</span>
+                              </Form.Label>
+                              <Form.Select
+                                value={panCardType}
+                                isInvalid={!!validationErrors.panCardType}
+                                onChange={(e) => {
+                                  setPanCardType(e.target.value);
+                                  if (validationErrors.panCardType) {
+                                    setValidationErrors((prev) => {
+                                      const next = { ...prev };
+                                      delete next.panCardType;
+                                      return next;
+                                    });
+                                  }
+                                }}
+                              >
+                                {/* Values are the Atharva PANCardType enum
+                                    per §6.1 — sent verbatim on the wire. */}
+                                <option value="2">Personal</option>
+                                <option value="1">Corporate</option>
+                                <option value="3">Government</option>
+                                <option value="4">Proprietor</option>
+                                <option value="5">Firm</option>
+                                <option value="6">HUF</option>
+                                <option value="7">Trust</option>
+                                <option value="8">Education Society</option>
+                              </Form.Select>
+                              {validationErrors.panCardType && (
+                                <Form.Control.Feedback type="invalid">
+                                  {validationErrors.panCardType}
+                                </Form.Control.Feedback>
+                              )}
+                            </Form.Group>
+                          </Col>
+                        )}
+                        {requiresGrnPan() && (
+                          <Col md={6}>
+                            <Form.Group>
+                              <Form.Label className="fw-semibold">
+                                PAN Company Name{" "}
+                                <span className="text-muted small">
+                                  (optional)
+                                </span>
+                              </Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={panCompanyName}
+                                placeholder="Only for corporate PANs"
+                                onChange={(e) =>
+                                  setPanCompanyName(e.target.value)
                                 }
-                              }}
-                            >
-                              {/* Values are the Atharva PANCardType enum
-                                  per §6.1 — sent verbatim on the wire. */}
-                              <option value="2">Personal</option>
-                              <option value="1">Corporate</option>
-                              <option value="3">Government</option>
-                              <option value="4">Proprietor</option>
-                              <option value="5">Firm</option>
-                              <option value="6">HUF</option>
-                              <option value="7">Trust</option>
-                              <option value="8">Education Society</option>
-                            </Form.Select>
-                            {validationErrors.panCardType && (
-                              <Form.Control.Feedback type="invalid">
-                                {validationErrors.panCardType}
-                              </Form.Control.Feedback>
-                            )}
-                          </Form.Group>
-                        </Col>
+                              />
+                            </Form.Group>
+                          </Col>
+                        )}
                       </Row>
                     </Card>
                   )}
@@ -2111,10 +2492,307 @@ const ApiBookingPageForHotels = () => {
                   </Button>
                 </Modal.Footer>
               </Modal>
+
+              {/* ── Insufficient credit + card disabled → block booking ──
+                  Shown when the agent has no available credit AND the
+                  AgentView "Allow Card payment mode" toggle is off. There
+                  is no payment path open, so the booking is turned away. */}
+              <Modal
+                show={showNoPaymentPathModal}
+                onHide={() => setShowNoPaymentPathModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Booking Cannot Be Completed</Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="text-center py-4">
+                  <p className="mb-2 text-dark">
+                    Sorry — this booking can't be completed because the agent
+                    has no available credit and{" "}
+                    <strong>Card payment is not enabled</strong> for this
+                    account.
+                  </p>
+                  <p className="mb-0 text-muted small">
+                    Please top up the agent's credit limit, or ask an
+                    administrator to enable Card payment on the agent's
+                    profile, then try again.
+                  </p>
+                  <div className="mt-3">
+                    <div className="text-muted small">Payable amount</div>
+                    <div className="fs-4 fw-bold text-dark">
+                      {formatPrice(insufficientAmount)}
+                    </div>
+                  </div>
+                </Modal.Body>
+                <Modal.Footer className="justify-content-center border-0">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowNoPaymentPathModal(false)}
+                  >
+                    OK
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* ── Insufficient credit → online payment required ──
+                  Shows payable amount with Pay (green) / Cancel (red).
+                  Pay opens the gateway picker below. */}
+              <Modal
+                show={showInsufficientModal}
+                onHide={() => setShowInsufficientModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Online Payment Required</Modal.Title>
+                </Modal.Header>
+                <Modal.Body className="text-center py-4">
+                  <p className="mb-2 text-muted">
+                    The agent's available credit is insufficient for this
+                    booking. You need to proceed with{" "}
+                    <strong>online payment</strong>.
+                  </p>
+                  <div className="mt-3">
+                    <div className="text-muted small">Payable amount</div>
+                    <div className="fs-4 fw-bold text-dark">
+                      {formatPrice(insufficientAmount)}
+                    </div>
+                  </div>
+                </Modal.Body>
+                <Modal.Footer className="justify-content-center border-0">
+                  <Button
+                    variant="danger"
+                    onClick={() => setShowInsufficientModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="success"
+                    onClick={() => {
+                      setShowInsufficientModal(false);
+                      setSelectedGateway("");
+                      setShowGatewayModal(true);
+                    }}
+                  >
+                    Pay
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* ── Select payment gateway ──
+                  Currently CC Avenue only; the list is a top-level
+                  constant so adding another wired gateway later is a
+                  one-line change. Proceed navigates to
+                  /payment/ccavenue-redirect, which posts the booking
+                  payload to /api/payment/ccavenue/initiate and hands off
+                  to CC Avenue's hosted billing page. */}
+              <Modal
+                show={showGatewayModal}
+                onHide={() => setShowGatewayModal(false)}
+                centered
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Select Payment Gateway</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                  <p className="text-muted small mb-3">
+                    Choose a gateway to enter your card details.
+                  </p>
+                  <div className="pg-option-list">
+                    {PAYMENT_GATEWAYS.map((g) => {
+                      const isSelected = selectedGateway === g.id;
+                      return (
+                        <label
+                          key={g.id}
+                          htmlFor={`gw-${g.id}`}
+                          className={`pg-option${
+                            isSelected ? " pg-option-selected" : ""
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="payment-gateway"
+                            id={`gw-${g.id}`}
+                            className="pg-option-input"
+                            checked={isSelected}
+                            onChange={() => setSelectedGateway(g.id)}
+                          />
+                          <span
+                            className="pg-option-radio"
+                            aria-hidden="true"
+                          />
+                          {g.id === "ccavenue" && (
+                            <img
+                              src={`${process.env.PUBLIC_URL}/ccavanue.png`}
+                              alt="CC Avenue"
+                              className="pg-option-logo"
+                            />
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </Modal.Body>
+                <Modal.Footer className="border-0">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowGatewayModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="success"
+                    disabled={!selectedGateway}
+                    onClick={() => {
+                      setShowGatewayModal(false);
+                      // Payload the resume flow / gateway needs.
+                      // paymentMode is flipped to "ONLINE" so the Booking
+                      // List can label the row correctly (mirrors the
+                      // Inhouse HotelBookingPage — the online-payment
+                      // branch sends "ONLINE").
+                      const onlinePayload = {
+                        ...pendingPayload,
+                        paymentMode: "ONLINE",
+                      };
+
+                      // CC Avenue: real billing-page redirect. The
+                      // backend's /initiate stores the payload alongside
+                      // the transaction row and /finalize replays it
+                      // after payment, so no sessionStorage is needed —
+                      // if the browser tab dies mid-payment the booking
+                      // can still be recovered from the transaction row.
+                      if (selectedGateway === "ccavenue") {
+                        const guest = onlinePayload?.primaryGuest;
+                        const billingName = guest
+                          ? [guest.firstName, guest.lastName]
+                              .filter(Boolean)
+                              .join(" ")
+                          : "";
+                        navigate("/payment/ccavenue-redirect", {
+                          state: {
+                            amountLabel: formatPrice(insufficientAmount),
+                            billingName,
+                            returnTo: location.pathname,
+                            bookingPayload: onlinePayload,
+                          },
+                        });
+                      }
+                    }}
+                  >
+                    Proceed to Pay
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              {/* Duplicate-booking modal — opened when the backend replies
+                  status="DUPLICATE" (GRN error code 6000). Read-only
+                  acknowledgement; the operator dismisses and goes to check
+                  the existing booking. No retry action here on purpose. */}
+              <Modal
+                show={showDuplicateModal}
+                onHide={() => setShowDuplicateModal(false)}
+                centered
+                backdrop="static"
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>
+                    <i className="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+                    Duplicate Booking
+                  </Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                  <p className="mb-2">{duplicateMessage}</p>
+                  <p className="text-muted small mb-0">
+                    Please check the Hotel Bookings list for the existing
+                    reservation before retrying.
+                  </p>
+                </Modal.Body>
+                <Modal.Footer>
+                  <Button
+                    variant="outline-secondary"
+                    onClick={() => setShowDuplicateModal(false)}
+                  >
+                    Close
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      setShowDuplicateModal(false);
+                      navigate("/booking-details/hotel-booking-list");
+                    }}
+                  >
+                    View Bookings
+                  </Button>
+                </Modal.Footer>
+              </Modal>
             </Form>
           </Container>
         </main>
       </div>
+
+      {/* ── Post-payment finalize overlay ──
+          Visible only while the backend is creating the paid-for booking
+          after a successful CC Avenue return. Backdrop is fully opaque
+          and non-dismissable so the operator physically cannot click on
+          anything else, and the beforeunload effect above adds the
+          browser's own confirm dialog if they try to close the tab or
+          refresh. Cleared automatically in the finally block of
+          finalizeAfterCCAvenue, whether the create succeeded or errored. */}
+      {isFinalizingPayment && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-live="assertive"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 20000,
+            background: "rgba(15, 23, 42, 0.75)",
+            backdropFilter: "blur(2px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "1rem",
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 12,
+              padding: "2rem 1.75rem",
+              maxWidth: 440,
+              width: "100%",
+              textAlign: "center",
+              boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+            }}
+          >
+            <Spinner
+              animation="border"
+              variant="success"
+              role="status"
+              style={{ width: 48, height: 48, marginBottom: 16 }}
+            />
+            <h5 className="fw-bold mb-2" style={{ color: "#0f172a" }}>
+              Payment successful — creating your booking
+            </h5>
+            <p className="text-muted mb-3" style={{ fontSize: 14 }}>
+              Please <strong>do not close this window, refresh the page, or
+              press the back button</strong> until you see the confirmation.
+            </p>
+            <div
+              className="small"
+              style={{
+                color: "#b45309",
+                background: "#fef3c7",
+                border: "1px solid #fde68a",
+                borderRadius: 8,
+                padding: "8px 12px",
+              }}
+            >
+              This usually takes just a few seconds.
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

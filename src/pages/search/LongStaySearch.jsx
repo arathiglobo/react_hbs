@@ -16,6 +16,7 @@ import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import AgentSelect from "../../components/AgentSelect";
 import AdvertisementCarousel from "../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../components/AgentCreditBalance";
+import DateInput from "../../components/DateInput";
 import { FaSearch, FaStar } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import "../../styles/HotelSearch.css";
@@ -786,7 +787,12 @@ export default function LongStaySearch() {
             address: h.hotelAddress || "",
             city: h.cityName || "",
             price: h.baseRate || null,
-            badge: h.baseRate ? "Long Stay Available" : "Rate Unavailable",
+            // "Long Stay Available" badge dropped — every card on this
+            // page is a long-stay result, so the label was redundant
+            // noise. The "Rate Unavailable" case is still surfaced when
+            // a hotel came back with no baseRate — that's real info the
+            // operator needs before clicking "View Rooms".
+            badge: h.baseRate ? null : "Rate Unavailable",
             image: h.hotelImage || "https://details/assets/details/profilepic/hotel/hoteldefault.jpg",
             rating: h.starRating || 0,
             hotelType: "hotel",
@@ -932,7 +938,12 @@ export default function LongStaySearch() {
                 address: h.hotelAddress || "",
                 city: h.cityName || "",
                 price: h.baseRate || null,
-                badge: h.baseRate ? "Long Stay Available" : "Rate Unavailable",
+                // "Long Stay Available" badge dropped — every card on this
+            // page is a long-stay result, so the label was redundant
+            // noise. The "Rate Unavailable" case is still surfaced when
+            // a hotel came back with no baseRate — that's real info the
+            // operator needs before clicking "View Rooms".
+            badge: h.baseRate ? null : "Rate Unavailable",
                 image:
                   h.hotelImage ||
                   "https://details/assets/details/profilepic/hotel/hoteldefault.jpg",
@@ -1240,15 +1251,14 @@ export default function LongStaySearch() {
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Check-in</Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        type="date"
+                      <DateInput
                         value={checkIn}
                         min={today}
-                        onClick={(e) => e.target.showPicker && e.target.showPicker()}
-                        onChange={(e) => {
-                          const newCheckIn = e.target.value;
+                        stateId={selectedDestination?.value}
+                        endpoint="/api/long-stay-search/rate-calendar"
+                        ariaLabel="Long-stay check-in date"
+                        isInvalid={!!errors.checkIn}
+                        onChange={(newCheckIn) => {
                           setCheckIn(newCheckIn);
                           if (!newCheckIn) return;
                           clearError("checkIn");
@@ -1342,25 +1352,23 @@ export default function LongStaySearch() {
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Check-out</Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        type="date"
+                      <DateInput
                         value={checkOut}
                         min={minCheckOutDate}
-                        onClick={(e) => e.target.showPicker && e.target.showPicker()}
-                        onChange={(e) => {
-                          const newCheckOut = e.target.value;
+                        stateId={selectedDestination?.value}
+                        endpoint="/api/long-stay-search/rate-calendar"
+                        ariaLabel="Long-stay check-out date"
+                        isInvalid={!!errors.checkOut}
+                        onChange={(newCheckOut) => {
                           setCheckOut(newCheckOut);
                           if (newCheckOut) clearError("checkOut");
                           // CheckOut → Nights sync. If CheckIn is set and
                           // the new CheckOut is on/after it, mirror the
                           // diff into the Nights field so the operator
-                          // sees a coherent triple. The browser's `min`
-                          // attribute already blocks pre-CheckIn values
-                          // from the picker; the helper additionally
-                          // clamps to 0 for safety when the user types
-                          // an earlier date by hand.
+                          // sees a coherent triple. RateCalendar's own
+                          // `min` prop already blocks pre-CheckIn values;
+                          // the helper additionally clamps to 0 for
+                          // safety when an earlier date somehow lands.
                           if (newCheckOut && checkIn) {
                             const n = nightsBetween(checkIn, newCheckOut);
                             if (n !== null) {
@@ -1394,7 +1402,15 @@ export default function LongStaySearch() {
                       </Button>
                       <Button
                         type="button"
-                        className="flex-shrink-0 btn-add-room-premium"
+                        // hs-add-room-btn-red is the shared solid-red variant
+                        // already defined in HotelSearch.css alongside the
+                        // base .btn-add-room-premium pill. Matches the red
+                        // used by the SEARCH LONG STAY button below (#EC0B43
+                        // → #C90939). Same convention HotelSearch uses; other
+                        // search pages sharing btn-add-room-premium (Student,
+                        // GovEmployee, etc.) don't carry this modifier and
+                        // keep their pink→violet gradient.
+                        className="flex-shrink-0 btn-add-room-premium hs-add-room-btn-red"
                         disabled={roomsOpen && rooms.length >= MAX_ROOMS}
                         onClick={() => {
                           if (!roomsOpen) {
@@ -1695,15 +1711,23 @@ export default function LongStaySearch() {
                                     >
                                       <FaStar className="text-warning" />
                                       {hotel.rating}
+                                      {/* Channel chip — same gray pill the
+                                          Last Minute results use. Long Stay
+                                          only surfaces in-house contracts
+                                          (see channelTypeOptions above), so
+                                          this is always "INHOUSE". Kept
+                                          static to match LM instead of
+                                          driving from hotel.channelType so
+                                          the two pages read as one system. */}
                                       <span
                                         style={{
                                           marginLeft: "5px",
-                                          backgroundColor: "#17a2b8",
+                                          backgroundColor: "#6c757d",
                                           padding: "2px 6px",
                                           borderRadius: "10px",
                                         }}
                                       >
-                                        LONG STAY
+                                        INHOUSE
                                       </span>
                                     </div>
                                   </div>

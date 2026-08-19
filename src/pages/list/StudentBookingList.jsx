@@ -96,11 +96,17 @@ const COLUMN_WIDTHS = {
   agentName: "90px",
   customerName: "120px",
   bookingCode: "95px",
+  // Supplier-side confirmation number saved on the student detail view via
+  // the "CONFIRMATION NO." button. Width tuned so the two-word header
+  // wraps at its space (like PAYMENT MODE) instead of splitting
+  // "CONFIRMATION" mid-letter — matches HotelBookingList's convention.
+  confirmationNo: "130px",
   referenceCode: "160px",
   bookDate: "90px",
   bookingDetails: "230px",
   deadlineDate: "105px",
   paymentMode: "110px",
+  paymentStatus: "110px",
   notification: "100px",
   action: "110px",
 };
@@ -142,6 +148,64 @@ const getPaymentModeLabel = (booking) => {
   if (norm === "BANK_TRANSFER" || norm === "BANK TRANSFER") return "Bank Transfer";
   if (norm === "CHEQUE") return "Cheque";
   if (norm) return raw;
+  return "-";
+};
+
+// Resolve the Payment Status label from the booking's DISPLAYED status — same
+// mapping as /booking-details/hotel-booking-list:
+//   Confirmed                      → Payment Pending
+//   ReConfirmed                    → Paid
+//   ReConfirmed/Cancelled          → Paid
+//   Confirmed/Cancelled            → Un-Paid
+//   On Request/Confirmed/Cancelled → Un-Paid
+// plus the Day-Stay rule: a live On Request booking — whether or not step-1
+// Confirm has landed — reads "Payment Pending", because the money has not been
+// collected yet.
+// Anything else — Not Confirmed, or an unknown/empty status — has no defined
+// mapping and renders "-".
+//
+// A cancelled booking reports whether the money had already been collected at
+// the point of cancellation rather than the cancellation itself: a history that
+// reached ReConfirmed was paid, one that stopped at On Request / Confirmed
+// never was.
+//
+// This takes the composite label built by `compositeStatus` — the same value the
+// Notification cell renders — so the two columns can never disagree. That label
+// is all that is needed: the student list row carries no `reconfirmation` /
+// `cancelledFromStatus` field, but compositeStatus already folds both the On
+// Request chain and the pre-cancellation state into the label itself
+// ("On Request/Confirmed / Cancelled", "ReConfirmed / Cancelled"), which is
+// exactly what the segment split below reads.
+const getPaymentStatusLabel = (displayStatus) => {
+  const segments = String(displayStatus || "")
+    .split("/")
+    .map((seg) => seg.replace(/\s+/g, "").toLowerCase())
+    .filter(Boolean);
+  if (segments.length === 0) return "-";
+
+  // Cancelled histories are settled by what the booking reached BEFORE the
+  // cancellation, so check this ahead of everything else — compositeStatus puts
+  // "Cancelled" last in the compound, and only a ReConfirmed history was paid.
+  const latest = segments[segments.length - 1];
+  if (latest === "cancelled" || latest === "canceled") {
+    return segments.includes("reconfirmed") ? "Paid" : "Un-Paid";
+  }
+
+  // On Request → Payment Pending. Covers both "On Request" and, after step-1
+  // Confirm, "On Request/Confirmed". A reconfirmed booking never carries the
+  // On Request chain (see compositeStatus), so it falls through to "Paid".
+  if (segments.includes("onrequest")) return "Payment Pending";
+
+  // Collapse a confirm-history compound ("Confirmed / ReConfirmed") to its
+  // LATEST segment, exactly as the hotel list does.
+  const isConfirmHistoryCompound =
+    segments.length > 1 &&
+    segments.every((seg) => ["confirmed", "reconfirmed"].includes(seg));
+  const effective = isConfirmHistoryCompound ? latest : segments.join("/");
+
+  if (effective === "reconfirmed") return "Paid";
+  if (effective === "confirmed") return "Payment Pending";
+
   return "-";
 };
 
@@ -229,33 +293,33 @@ export default function StudentBookingList() {
 
   // Composite status — a booking that was Confirmed and is later Cancelled
   // shows "Confirmed / Cancelled".
+  //
+  // On-Request handling mirrors GovEmployeeBookingList / SeniorCitizen: On
+  // Request student bookings are created with confirmationStatus "Confirmed"
+  // but roomStatus "On Request". Until the operator applies the step-1
+  // Confirm (onRequestConfirmed=true), the finalised list status is
+  // "On Request". Once step-1 Confirm lands, the row falls through to the
+  // plain "Confirmed" pill — matching how the gov-employee list rolls the
+  // "On Request/Confirmed" chain forward to "Confirmed".
   const compositeStatus = (b) => {
     const raw = String(b?.confirmationStatus || "").trim();
     const normalized = raw.replace(/\s+/g, "").toLowerCase();
-    // On Request chain — keyed off the ROOM status (mirrors
-    // HotelBookingList / DayStayBookingList), because On Request student
-    // bookings are created with confirmationStatus "Confirmed" and would
-    // otherwise render as a plain green "Confirmed":
-    //   created            → "On Request"
-    //   after step-1 Confirm → "On Request/Confirmed"
-    //   ReConfirmed / Cancelled fall through to the standard branches.
     const isOnRequestRoom = /^on\s*request$/i.test(
       String(b?.roomStatus || "").trim(),
     );
-    const onRequestChain = b?.onRequestConfirmed
-      ? "On Request/Confirmed"
-      : "On Request";
+    const isPreConfirmOnRequest =
+      isOnRequestRoom && !b?.onRequestConfirmed && normalized !== "reconfirmed";
     if (b?.cancelled) {
-      if (isOnRequestRoom && normalized !== "reconfirmed") {
-        return { label: `${onRequestChain} / Cancelled`, kind: "cancelled" };
+      if (isPreConfirmOnRequest) {
+        return { label: "On Request / Cancelled", kind: "cancelled" };
       }
       if (normalized === "confirmed" || normalized === "reconfirmed") {
         return { label: `${raw} / Cancelled`, kind: "cancelled" };
       }
       return { label: "Cancelled", kind: "cancelled" };
     }
-    if (isOnRequestRoom && normalized !== "reconfirmed") {
-      return { label: onRequestChain, kind: "onrequest" };
+    if (isPreConfirmOnRequest) {
+      return { label: "On Request", kind: "onrequest" };
     }
     if (normalized === "confirmed") return { label: "Confirmed", kind: "confirmed" };
     if (normalized === "reconfirmed") return { label: "ReConfirmed", kind: "confirmed" };
@@ -282,10 +346,14 @@ export default function StudentBookingList() {
             return !b.cancelled && checkout && checkout < now;
           case "onrequest":
             // On Request is a ROOM status for student bookings (they are
-            // created with confirmationStatus "Confirmed"), so filter on
-            // roomStatus — matching the Notification pill.
+            // created with confirmationStatus "Confirmed"). Once step-1
+            // Confirm has landed (onRequestConfirmed=true) the finalised
+            // status becomes plain "Confirmed" and the row drops out of
+            // this filter — mirrors the pill logic in compositeStatus and
+            // the gov-employee list.
             return (
               !b.cancelled &&
+              !b.onRequestConfirmed &&
               /^on\s*request$/i.test(String(b.roomStatus || "").trim())
             );
           case "reconfirmed":
@@ -368,7 +436,8 @@ export default function StudentBookingList() {
     setPage(0);
   };
 
-  const colSpan = role === "admin" ? 11 : 10;
+  // +1 for the Payment Status column.
+  const colSpan = role === "admin" ? 12 : 11;
 
   // Notification cell renderer — maps the composite student status onto the
   // shared StatusPill badges so it matches the Hotel/LongStay skin. The page
@@ -413,6 +482,9 @@ export default function StudentBookingList() {
     textAlign: center ? "center" : undefined,
     border: "1px solid #dee2e6",
     whiteSpace: "normal",
+    // Break only at spaces — never mid-word (matches HotelBookingList).
+    wordBreak: "normal",
+    overflowWrap: "normal",
     lineHeight: 1.2,
     width: w,
   });
@@ -595,11 +667,16 @@ export default function StudentBookingList() {
                           )}
                           <th style={thStyle(COLUMN_WIDTHS.customerName)}>Customer Name</th>
                           <th style={thStyle(COLUMN_WIDTHS.bookingCode)}>Booking Code</th>
+                          <th style={thStyle(COLUMN_WIDTHS.confirmationNo)}>Confirmation No</th>
                           <th style={thStyle(COLUMN_WIDTHS.referenceCode)}>Reference Code</th>
                           <th style={thStyle(COLUMN_WIDTHS.bookDate, true)}>Book Date</th>
                           <th style={thStyle(COLUMN_WIDTHS.bookingDetails)}>Booking Details</th>
                           <th style={thStyle(COLUMN_WIDTHS.deadlineDate, true)}>Deadline Date</th>
                           <th style={thStyle(COLUMN_WIDTHS.paymentMode, true)}>Payment Mode</th>
+                          {/* Payment Status — same mapping as
+                              /booking-details/hotel-booking-list. See
+                              getPaymentStatusLabel. */}
+                          <th style={thStyle(COLUMN_WIDTHS.paymentStatus, true)}>Payment Status</th>
                           <th style={thStyle(COLUMN_WIDTHS.notification, true)}>Notification</th>
                           <th style={thStyle(COLUMN_WIDTHS.action, true)}>Action</th>
                         </tr>
@@ -624,6 +701,11 @@ export default function StudentBookingList() {
                             const first = names[0] || "-";
                             const extra = Math.max(0, names.length - 1);
                             const payLabel = getPaymentModeLabel(b);
+                            // Fed the same composite label the Notification cell
+                            // renders, so the two columns stay in lockstep.
+                            const payStatusLabel = getPaymentStatusLabel(
+                              compositeStatus(b).label,
+                            );
                             return (
                               <tr
                                 key={b.bookingId}
@@ -694,6 +776,28 @@ export default function StudentBookingList() {
                                     {b.bookingCode || "-"}
                                   </span>
                                 </td>
+                                {/* Confirmation No — supplier's confirmation number,
+                                    populated via the "CONFIRMATION NO." button on
+                                    the booking detail view. Matches
+                                    HotelBookingList's placeholder/style rules. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.confirmationNo,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {b.confirmationNumber ? (
+                                    <span
+                                      className="fw-semibold text-dark"
+                                      style={{ fontSize: "0.85rem" }}
+                                    >
+                                      {b.confirmationNumber}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
+                                </td>
                                 <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.referenceCode }}>
                                   <span className="text-muted" style={{ fontSize: "0.78rem" }}>
                                     {b.referenceNumber || "-"}
@@ -746,6 +850,41 @@ export default function StudentBookingList() {
                                     <span className="text-muted">-</span>
                                   ) : (
                                     <span style={{ color: "#000" }}>{payLabel}</span>
+                                  )}
+                                </td>
+                                {/* Payment Status — derived from the same
+                                    composite label the Notification cell
+                                    renders: Confirmed / On Request → Payment
+                                    Pending, ReConfirmed → Paid, a cancellation →
+                                    Paid or Un-Paid depending on whether it had
+                                    been reconfirmed. See getPaymentStatusLabel. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.paymentStatus,
+                                  }}
+                                >
+                                  {payStatusLabel === "-" ? (
+                                    <span className="text-muted">-</span>
+                                  ) : (
+                                    <span
+                                      style={{
+                                        // Same palette as the hotel list — green
+                                        // settled, red never collected, orange
+                                        // still outstanding.
+                                        color:
+                                          payStatusLabel === "Paid"
+                                            ? "#06a301"
+                                            : payStatusLabel === "Un-Paid"
+                                              ? "#dc3545"
+                                              : "#e67e22",
+                                        fontSize: "0.82rem",
+                                        fontWeight: "600",
+                                      }}
+                                    >
+                                      {payStatusLabel}
+                                    </span>
                                   )}
                                 </td>
                                 <td

@@ -60,6 +60,35 @@ const renderPolicyValidity = (fromDate, toDate) => {
  * spec. Returns null when the field is missing or the string doesn't parse,
  * so the pill silently disappears for non-Atharva rates and malformed rows.
  */
+/**
+ * Darina (apiId 16) per-rate free-cancellation deadline pill.
+ * BE emits `rate.deadlineDate` as ISO `yyyy-MM-dd` — the toDate of the
+ * "Free cancellation until X" band from Darina's WithFullResponseControl
+ * search response. We render "Free cancellation until DD MMM YYYY, 11:59 PM UAE"
+ * so the operator sees the exact cut-off before opening the policy modal.
+ * Returns null for missing / malformed input.
+ */
+const renderDarinaDeadlinePill = (deadlineDate) => {
+  if (!deadlineDate || typeof deadlineDate !== "string") return null;
+  const parts = deadlineDate.trim().split("-");
+  if (parts.length !== 3) return null;
+  const [y, mm, d] = parts;
+  const monthNames = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+  const monIdx = parseInt(mm, 10) - 1;
+  if (!y || !d || Number.isNaN(monIdx) || monIdx < 0 || monIdx > 11) return null;
+  return (
+    <span
+      className="text-danger fw-normal"
+      title="deadline date"
+    >
+      Deadline Date:  {parseInt(d, 10)} {monthNames[monIdx]} {y}
+    </span>
+  );
+};
+
 const renderAtharvaDeadlinePill = (deadlineDate) => {
   if (!deadlineDate || typeof deadlineDate !== "string") return null;
   const parts = deadlineDate.trim().split("-");
@@ -181,6 +210,14 @@ const ExternalApiRoomList = () => {
   // per-rate radio / bottom "Continue with Booking" flow lines up.
   const [selectedRooms, setSelectedRooms] = useState([]);
 
+  // GRN-only bundle mode toggle (visible only for GRN multi-room searches).
+  // "bundled"  = default, one rate covers all rooms (certified flow).
+  // "non-bundled" = per-room rate picker; each room gets its own rateKey,
+  //                 all picks must share the same group_code (tokenId).
+  // Toggling clears selections so an incompatible mid-flight pick can't leak
+  // into the booking payload. Non-GRN hotels ignore this state entirely.
+  const [bundleMode, setBundleMode] = useState("bundled");
+
   // Agent credit gate. Same pattern as Inhouse — soft warning, never
   // blocks; user clicks "OK, continue" and we resume the queued booking
   // handler with skipCreditCheck=true so downstream flow is unchanged.
@@ -208,6 +245,11 @@ const ExternalApiRoomList = () => {
   const [prebookError, setPrebookError] = useState(null);
   // rateKey -> AtharvaPreBookResponseDTO (fresh tokenId/hKey/rateKey/policies)
   const [atharvaPrebookCache, setAtharvaPrebookCache] = useState({});
+  // rateKey -> GrnRecheckResponseDTO (fresh price/policy/grnSearchId).
+  // Populated the first time the guest opens the Cancellation Policies &
+  // Terms modal for a GRN rate; subsequent opens are instant and the
+  // booking payload will pull `grnSearchId` back out of here.
+  const [grnRecheckCache, setGrnRecheckCache] = useState({});
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -219,6 +261,11 @@ const ExternalApiRoomList = () => {
     RATEHAWK: 14,
     DARINA: 16,
     ATHARVA: 3,
+    // GRN Connect. Rate-recheck path lives at /api/hotel-booking/grn/recheck
+    // and is called only when the guest opens the Cancellation Policies &
+    // Terms modal for a GRN rate — never on page load. apiId=20 avoids
+    // colliding with the existing Juniper booking's apiId=17.
+    GRN: 20,
   };
 
   const activeUserRole = localStorage.getItem("currentActiveRole");
@@ -286,6 +333,100 @@ const ExternalApiRoomList = () => {
     }
   };
 
+  /**
+   * Fetch GRN Rate Recheck for a single selected rate. Turns GRN's response
+   * into the same {policyText, fromDate, value, percentOrAmount} rows the
+   * modal already renders for other suppliers. On success caches the
+   * response against the rate's `rateKey` so opening the modal again is
+   * free and the booking payload can pull the fresh grnSearchId / rateKey /
+   * groupCode back out.
+   */
+  const fetchGrnRecheck = async (rate) => {
+    if (!rate?.rateKey) {
+      return {
+        success: false,
+        message: "GRN recheck: rate is missing rateKey — cannot verify policy.",
+      };
+    }
+    if (grnRecheckCache[rate.rateKey]) {
+      return grnRecheckCache[rate.rateKey];
+    }
+    const { payload } = roomData || {};
+    const req = {
+      hotelCode: payload?.hotelCode,
+      checkInDate: payload?.checkInDate,
+      checkOutDate: payload?.checkOutDate,
+      nationality: payload?.nationality,
+      agentId: payload?.agentId ? String(payload.agentId) : null,
+      rooms: payload?.rooms || [],
+      rateKey: rate.rateKey,
+      groupCode: rate.tokenId || null,
+      roomCode: rate.roomTypeCode || null,
+    };
+    try {
+      const resp = await axiosInstance.post(
+        "/api/hotel-booking/grn/recheck",
+        req,
+      );
+      const data = resp?.data || {};
+      if (data.success) {
+        setGrnRecheckCache((prev) => ({ ...prev, [rate.rateKey]: data }));
+      }
+      return data;
+    } catch (err) {
+      const backendMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Recheck request failed";
+      return { success: false, message: backendMsg };
+    }
+  };
+
+  /**
+   * Call /api/hotel-booking/darina/prebook for a single rate (search-time
+   * values are enough — hotelCode + roomTypeCode + mealPlanCode + pax +
+   * dates + nationality). Returns the DarinaPreBookResponseDTO shape:
+   *   { success, message, contractTokenId, rate, ratePerNight,
+   *     rateWithoutMarkup, cancellationPolicies, deadlineDate,
+   *     nonRefundable, roomCategory, mealPlan }
+   */
+  const fetchDarinaPrebook = async (rate) => {
+    const payload = roomData?.payload || {};
+    const hotel = roomData?.hotels?.[0] || {};
+    const firstRoom = payload?.rooms?.[0] || {};
+    const req = {
+      agentId: payload?.agentId ? String(payload.agentId) : null,
+      nationality: payload?.nationality || null,
+      checkInDate: payload?.checkInDate,
+      checkOutDate: payload?.checkOutDate,
+      hotelCode: payload?.hotelCode || hotel?.hotelId || null,
+      roomTypeCode: rate?.roomTypeCode,
+      mealPlanCode: rate?.mealPlanCode,
+      // BE tolerates a null occupancyId; passing it when known helps the
+      // supplier pick the exact rate serial we saw at search time.
+      occupancyId: rate?.occupancyId || null,
+      contractTokenId: rate?.contractTokenId || null,
+      adults: firstRoom.adults ?? firstRoom.noOfAdult ?? 1,
+      children: firstRoom.children ?? firstRoom.noOfChild ?? 0,
+      childAges: firstRoom.childAges || [],
+    };
+    try {
+      const resp = await axiosInstance.post(
+        "/api/hotel-booking/darina/prebook",
+        req,
+      );
+      return resp?.data || { success: false, message: "Empty response" };
+    } catch (err) {
+      const backendMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Prebook request failed";
+      return { success: false, message: backendMsg };
+    }
+  };
+
   const openPoliciesModal = async (rate, hotelDetail) => {
     const label = [rate?.roomCategory, rate?.mealPlan]
       .filter(Boolean)
@@ -305,6 +446,51 @@ const ExternalApiRoomList = () => {
 
     const supplierApiId = resolveApiId(hotelDetail);
     const isAtharva = supplierApiId === apiIdMapping.ATHARVA;
+    const isGrn = supplierApiId === apiIdMapping.GRN;
+
+    // GRN: policies come from a real-time recheck call. The Room List's
+    // policy rows are the search-time snapshot; recheck gives us GRN's
+    // authoritative price + cancellation + inclusions before the guest
+    // proceeds to booking. Opens the modal immediately with the search-time
+    // policies as a fallback, then swaps them for the rechecked values.
+    if (isGrn) {
+      const fallbackCancellation = Array.isArray(rate?.cancellationPolicies)
+        ? rate.cancellationPolicies
+        : [];
+      setPrebookError(null);
+      setPoliciesModalData({
+        cancellationPolicies: fallbackCancellation,
+        termsAndConditions: inlineTerms,
+        selectedRoomLabel: label,
+        nonRefundable: isNonRefundable,
+      });
+      setShowPoliciesModal(true);
+      setPrebookLoading(true);
+      try {
+        const recheck = await fetchGrnRecheck(rate);
+        if (recheck?.success) {
+          setPoliciesModalData({
+            cancellationPolicies: recheck.cancellationPolicies || fallbackCancellation,
+            termsAndConditions: inlineTerms,
+            selectedRoomLabel: label,
+            // GRN's rate_comments carry pax_comments / remarks / MandatoryTax
+            // etc — surface any of them as the top-of-modal notice so the
+            // guest sees GRN's own remarks before proceeding.
+            remark: recheck.policyText || null,
+            nonRefundable:
+              typeof recheck.nonRefundable === "boolean"
+                ? recheck.nonRefundable
+                : isNonRefundable,
+          });
+        } else {
+          setPrebookError(recheck?.message || "Recheck failed.");
+          console.warn("GRN recheck: no policy returned:", recheck?.message);
+        }
+      } finally {
+        setPrebookLoading(false);
+      }
+      return;
+    }
 
     // Non-ATHARVA: policies come from the search response, same as before.
     if (!isAtharva) {
@@ -487,7 +673,19 @@ const ExternalApiRoomList = () => {
           return;
         }
 
-        const res = await axiosInstance.post("/api/hotel-rooms/search", payload);
+        // For GRN multi-room searches, ask the backend to include
+        // non-bundled + partial-bundled rates alongside bundled ones in the
+        // response. The rates come back tagged with a `bundleType` field so
+        // the UI can toggle between "Book as one package" (bundled) and
+        // "Pick per room" (non-bundled) without a second network trip.
+        // Single-room and non-GRN searches are unaffected — the flag is
+        // GRN-scoped on the backend and other suppliers ignore it.
+        const isGrnMultiRoom =
+          Number(payload?.apiId) === 20 && (payload?.rooms || []).length > 1;
+        const searchBody = isGrnMultiRoom
+          ? { ...payload, includeNonBundled: true }
+          : payload;
+        const res = await axiosInstance.post("/api/hotel-rooms/search", searchBody);
 
         if (!res.data || res.data.success === false) {
           const message = res.data?.message || "Search failed. Please try again.";
@@ -576,6 +774,48 @@ const ExternalApiRoomList = () => {
     selectedRooms.length > 0 &&
     selectedRooms.every((r) => r.selectedRate !== null);
 
+  // GRN non-bundled UI is only relevant for a multi-room GRN search — the
+  // toggle, per-room picker, and group_code guard are all no-ops otherwise.
+  // Derived once so all downstream render code (filter chain, click handler,
+  // empty-state message) reads a single truthy value.
+  const isGrnMultiRoomFlow =
+    Number(roomData?.payload?.apiId) === 20 && isMultiRoom;
+  const isNonBundledMode = isGrnMultiRoomFlow && bundleMode === "non-bundled";
+
+  // For the empty-state banner: does the search response actually contain
+  // any non-bundled / partial-bundled rates? Some hotels have bundled-only
+  // inventory even when includeNonBundled=true is set — in that case the
+  // "Pick per room" mode has nothing to render and the user is stuck
+  // wondering why. Precomputing this lets the toggle show a helpful
+  // message instead of an empty accordion.
+  const hasNonBundledRates =
+    isGrnMultiRoomFlow &&
+    (roomData?.hotels || []).some((h) =>
+      (h?.roomCategories || []).some((c) =>
+        (c?.availableRates || []).some(
+          (r) => r?.bundleType === "non-bundled" || r?.bundleType === "partial-bundled",
+        ),
+      ),
+    );
+
+  // Handler for the mode toggle. Switching modes ALWAYS clears prior picks so
+  // (a) a bundled rate can't leak into the per-room picker (or vice versa) and
+  // (b) the group_code / rateKey combos stay coherent when the picker
+  // re-renders with the new rate set.
+  const switchBundleMode = (nextMode) => {
+    if (nextMode === bundleMode) return;
+    setBundleMode(nextMode);
+    setSelectedRooms((prev) =>
+      prev.map((r) => ({
+        ...r,
+        selectedRate: null,
+        hotelId: null,
+        hotelName: null,
+      })),
+    );
+    setActiveAccordions({});
+  };
+
   // ─────────────────── credit / booking handlers ──────────────────────
   const isInsufficientBalance = (requiredAmount) => {
     if (agentBalance == null) return false;
@@ -616,6 +856,12 @@ const ExternalApiRoomList = () => {
     const prebookRoom = prebook?.rooms?.find(
       (r) => (r.roomSrNo ?? null) === roomNo,
     );
+    // GRN recheck-time flag: pan_required=true means the booking page must
+    // render mandatory PAN input on the primary guest form. Read from the
+    // cached recheck response (populated when the operator opened the
+    // Cancellation Policies modal). Falls back to false when recheck wasn't
+    // run yet or the rate isn't GRN.
+    const grnRecheck = rate?.rateKey ? grnRecheckCache[rate.rateKey] : null;
 
     return {
       roomNo,
@@ -666,6 +912,27 @@ const ExternalApiRoomList = () => {
       // 2 days, computed on the backend). Booking page renders this in the
       // cancellation accordion header. Null when prebook wasn't run yet.
       atharvaDisplayDeadlineDate: prebook?.displayDeadlineDate || null,
+      // ATHARVA HPreBooking-response echoes forwarded to /api/hotel-booking/create
+      // so the BE can send the vendor's EXACT ExpectedAmount / WithinTimeLimit
+      // / PackageRate to HCreateBooking (avoids error 3002, correct RR/KK gate,
+      // triggers AirlineName/AirlinePNR for package rates). All three are the
+      // supplier's own numbers — do NOT apply markup here. Null when prebook
+      // wasn't run yet; the BE falls back to legacy behaviour.
+      atharvaExpectedAmount:
+        prebook?.amountWithoutMarkup ?? prebook?.amount ?? null,
+      atharvaWithinTimeLimit:
+        prebook?.withinTimeLimit ?? null,
+      atharvaPackageRate:
+        prebook?.packageRate ?? null,
+      // GRN-only carry: whether the rechecked rate requires PAN on the
+      // holder. Booking page uses this to render the PAN input card.
+      // Defaults to false; other suppliers just ignore this key.
+      panRequired: grnRecheck?.panRequired === true,
+      // Darina (apiId 16) free-cancellation deadline (ISO yyyy-MM-dd). BE
+      // emits it on rate.deadlineDate as the "Free cancellation until X"
+      // band's toDate. Carried through so the booking page's accordion
+      // header can show it and the outbound payload can echo it back.
+      deadlineDate: rate?.deadlineDate || null,
     };
   };
 
@@ -690,6 +957,136 @@ const ExternalApiRoomList = () => {
         );
         return;
       }
+    }
+
+    // GRN (apiId=20) bundled multi-room: one rate_key covers ALL rooms.
+    // A bundled rate returns rooms[] with one entry per physical room in
+    // the search request; the backend then builds a single booking_items[]
+    // with the requested pax split. Mirror the selection across every room
+    // so what the operator picks in ANY accordion is what actually gets
+    // booked (avoids the Room-1-only bug that produced Single-Standard-for
+    // -both when the operator asked for Single+Double).
+    //
+    // NON-BUNDLED mode (bundleMode === "non-bundled"): the user picks a
+    // different rate per room, all sharing the same group_code (enforced
+    // by the picker filter above + the backend guard). Fall through to the
+    // generic per-slot setter below — do NOT mirror.
+    if (currentApiId === "20" && selectedRooms.length > 1 && bundleMode === "bundled") {
+      setSelectedRooms((prev) => {
+        const currentlySelectedInClicked =
+          prev[roomIndex]?.selectedRate === rate;
+        if (currentlySelectedInClicked) {
+          // Toggle-off: clear the rate from every room in the bundle.
+          return prev.map((r) => ({
+            ...r,
+            selectedRate: null,
+            hotelId: null,
+            hotelName: null,
+          }));
+        }
+        // Select same rate for every room in the bundle.
+        return prev.map((r) => ({
+          ...r,
+          selectedRate: rate,
+          hotelId,
+          hotelName,
+        }));
+      });
+      return;
+    }
+
+    // GRN non-bundled AUTO-LINK: a rate with numberOfRooms > 1 (partial-
+    // bundled) MUST be picked for exactly that many matching rooms — GRN
+    // rejects the booking with error 5126 otherwise. Instead of blocking
+    // the user with a mismatch modal at Continue Booking, we auto-fill
+    // the clicked slot + the next (N-1) unpicked slots whose pax matches
+    // the rate's occupancy. The rate card render adds "Linked to Room X"
+    // badges so the auto-fill is visible. Toggle-off / re-pick clears the
+    // whole linked group atomically. Scoped strictly to GRN + non-bundled
+    // multi-room + numberOfRooms > 1 so every other flow falls through
+    // to the generic per-slot setter below.
+    const expectedRooms = Number(rate?.numberOfRooms) || 1;
+    if (
+      currentApiId === "20" &&
+      bundleMode === "non-bundled" &&
+      selectedRooms.length > 1 &&
+      expectedRooms > 1
+    ) {
+      // Toggle-off: clicking the same rate in an already-linked slot
+      // clears the whole group.
+      const alreadyLinkedInClicked =
+        selectedRooms[roomIndex]?.selectedRate?.rateKey === rate?.rateKey;
+      if (alreadyLinkedInClicked) {
+        setSelectedRooms((prev) =>
+          prev.map((r) =>
+            r?.selectedRate?.rateKey === rate?.rateKey
+              ? { ...r, selectedRate: null, hotelId: null, hotelName: null }
+              : r,
+          ),
+        );
+        return;
+      }
+
+      // Re-pick in a slot that's currently part of a DIFFERENT linked
+      // group: clear that whole group first, then fall through to the
+      // fresh link below. Keeps groups atomic.
+      const currentGroupKey = selectedRooms[roomIndex]?.selectedRate?.rateKey;
+      const searchRooms = roomData?.payload?.rooms || [];
+      const rateAdults = Number(rate?.paxAdults);
+      const rateChildren = Number(rate?.paxChildren);
+      const hasPaxOnRate = !Number.isNaN(rateAdults) && rate?.paxAdults != null;
+
+      // Find (expectedRooms - 1) additional slots that:
+      //   (a) aren't the clicked slot,
+      //   (b) aren't part of some OTHER group (empty, or part of the
+      //       group we're about to clear above), and
+      //   (c) have matching pax (skip pax check if the rate doesn't
+      //       expose paxAdults/paxChildren — filter chain already gates
+      //       by occupancy so any visible rate is pax-safe for its slot).
+      const linkTargets = [roomIndex];
+      for (
+        let i = 0;
+        i < selectedRooms.length && linkTargets.length < expectedRooms;
+        i++
+      ) {
+        if (i === roomIndex) continue;
+        const otherKey = selectedRooms[i]?.selectedRate?.rateKey;
+        const isFree =
+          !otherKey || (currentGroupKey && otherKey === currentGroupKey);
+        if (!isFree) continue;
+        if (hasPaxOnRate) {
+          const s = searchRooms[i];
+          const roomAdults = Number(s?.adults) || 0;
+          const roomChildren = Number(s?.children) || 0;
+          if (roomAdults !== rateAdults || roomChildren !== rateChildren) {
+            continue;
+          }
+        }
+        linkTargets.push(i);
+      }
+
+      if (linkTargets.length < expectedRooms) {
+        const label =
+          rate?.roomTypeDescription || rate?.roomCategory || "This rate";
+        toast.error(
+          `"${label}" covers ${expectedRooms} rooms — only ${linkTargets.length} matching unpicked slot(s) available. Unpick another room first, or use "Book as one package".`,
+        );
+        return;
+      }
+
+      setSelectedRooms((prev) =>
+        prev.map((r, i) => {
+          // Clear any slot that was part of the group we're replacing.
+          if (currentGroupKey && r?.selectedRate?.rateKey === currentGroupKey) {
+            r = { ...r, selectedRate: null, hotelId: null, hotelName: null };
+          }
+          if (linkTargets.includes(i)) {
+            return { ...r, selectedRate: rate, hotelId, hotelName };
+          }
+          return r;
+        }),
+      );
+      return;
     }
 
     setSelectedRooms((prev) =>
@@ -724,6 +1121,145 @@ const ExternalApiRoomList = () => {
     }
 
     const currentApiId = resolveApiId(hotel);
+
+    // ─── DARINA (apiId=16) live-rate re-check per v5.1 docs. ────────────
+    // Cached search response → LIVE re-check (CheckAvailabilityWithCancellation
+    // _NoCache_LiveCalculation) → SubmitBooking. Reuse the same
+    // "Fetching accurate rate…" spinner + "Room Details" confirm modal
+    // as IWTX/X3 (apiId 12/15) — Darina hands back a FRESH <RequestID>
+    // that gets stamped onto contractTokenId so SubmitBooking sends it.
+    if (currentApiId === apiIdMapping.DARINA) {
+      setLoadingRate(true);
+      (async () => {
+        try {
+          const live = await fetchDarinaPrebook(rate);
+          if (!live?.success) {
+            setLoadingRate(false);
+            alert(
+              live?.message ||
+                "Darina live-rate check failed. Please retry or reselect the rate.",
+            );
+            return;
+          }
+          // Build the same shape the Room Details modal reads (rate,
+          // roomCategory, mealPlan, nonRefundable, contractLabel) and the
+          // booking page's payload builder needs (contractTokenId,
+          // deadlineDate, cancellationPolicy, rateWithoutMarkup).
+          const accurateRates = [
+            {
+              roomNo: 1,
+              hotelId: hotel.hotelId,
+              hotelName: hotel.hotelName,
+              hotelCode: payload.hotelCode || hotel.hotelId,
+              roomCategory: live.roomCategory || rate.roomCategory,
+              mealPlan: live.mealPlan || rate.mealPlan,
+              // Contract label — surfaces "Live rate" so the operator
+              // knows the modal isn't showing search-time cached data.
+              contractLabel: rate.contractLabel || "Live rate (Darina)",
+              nonRefundable:
+                live.nonRefundable != null
+                  ? live.nonRefundable
+                  : rate.nonRefundable,
+              rate: live.rate ?? rate.totalRate,
+              rateWithoutMarkup:
+                live.rateWithoutMarkup ?? rate.totalRateWithoutMarkup,
+              currency: live.currency || "AED",
+              roomTypeCode: rate.roomTypeCode,
+              mealPlanCode: rate.mealPlanCode,
+              // FRESH Darina <RequestID> from live-calc — MUST replace
+              // the search-time contractTokenId so SubmitBooking works.
+              contractTokenId: live.contractTokenId || rate.contractTokenId,
+              // Live cancellation ladder + free-cancellation cut-off.
+              cancellationPolicy:
+                (live.cancellationPolicies?.length &&
+                  live.cancellationPolicies) ||
+                rate.cancellationPolicies,
+              deadlineDate: live.deadlineDate ?? rate.deadlineDate,
+            },
+          ];
+          setSelectedRate(accurateRates);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+        } catch (err) {
+          console.error("Darina live-rate fetch failed:", err);
+          setLoadingRate(false);
+          const backendMsg =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message;
+          alert(
+            backendMsg
+              ? `Unable to fetch live rate: ${backendMsg}`
+              : "Unable to fetch live rate. Please try again.",
+          );
+        }
+      })();
+      return;
+    }
+
+    // ─── GRN (apiId=20) single-room recheck. Mirrors the multi-room GRN
+    //    branch in handleProceedBooking so the single-room "View Details /
+    //    Select" path also runs GRN's mandatory /hotel-recheck before the
+    //    booking page opens. Without this, single-room GRN bookings skip
+    //    the recheck entirely — the room list shows search-time cached data
+    //    and any stale rate / policy would only surface after Book Now,
+    //    which the certification requires us to catch earlier.
+    //
+    //    Flow: fetchGrnRecheck (cached per rateKey, so if the operator
+    //    already opened the Cancellation Policies modal this is a cache
+    //    hit → zero round-trip) → on success, patch mapRateForPayload with
+    //    the rechecked price / currency / non-refundable / policies (same
+    //    fields the multi-room branch overwrites) → open the Room Details
+    //    confirm modal. On failure, alert with the recheck message and
+    //    keep the operator on the room list so they can reselect.
+    if (currentApiId === apiIdMapping.GRN) {
+      setLoadingRate(true);
+      (async () => {
+        try {
+          const recheck = await fetchGrnRecheck(rate);
+          if (!recheck?.success) {
+            setLoadingRate(false);
+            alert(
+              recheck?.message ||
+                "This rate is no longer available. Please reselect and try again.",
+            );
+            return;
+          }
+          const mapped = mapRateForPayload(rate, hotel, 1);
+          if (recheck.totalPriceWithMarkup != null) {
+            mapped.rate = recheck.totalPriceWithMarkup;
+          } else if (recheck.totalPrice != null) {
+            mapped.rate = recheck.totalPrice;
+          }
+          if (recheck.currency) {
+            mapped.currency = recheck.currency;
+          }
+          if (recheck.nonRefundable != null) {
+            mapped.nonRefundable = recheck.nonRefundable;
+          }
+          if (recheck.cancellationPolicies?.length) {
+            mapped.cancellationPolicy = recheck.cancellationPolicies;
+          }
+          // panRequired already flows via mapRateForPayload → grnRecheckCache.
+          setSelectedRate([mapped]);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+        } catch (err) {
+          console.error("GRN recheck fetch failed:", err);
+          setLoadingRate(false);
+          const backendMsg =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message;
+          alert(
+            backendMsg
+              ? `Unable to verify rate: ${backendMsg}`
+              : "Unable to verify rate. Please try again.",
+          );
+        }
+      })();
+      return;
+    }
 
     if (currentApiId === 12 || currentApiId === 15) {
       // Accurate-rate re-fetch for IWTX / X3 — same request the current
@@ -871,6 +1407,12 @@ const ExternalApiRoomList = () => {
       return;
     }
 
+    // NOTE: GRN partial-bundled pick-count guard used to live here as a
+    // blocking modal. handleRateSelect now auto-links partial-bundled
+    // rates across the exact number of slots they cover, so a mismatch
+    // is unreachable through the UI. Backend still enforces the same
+    // invariant as a safety net.
+
     const sum = (key) =>
       selectedRooms.reduce(
         (acc, r) => acc + (Number(r.selectedRate?.[key]) || 0),
@@ -884,6 +1426,169 @@ const ExternalApiRoomList = () => {
     }
 
     const currentApiId = resolveApiId(hotel);
+
+    // ─── GRN "Continue with Booking" recheck. Mirrors what IWTX / X3 /
+    //    DARINA do on this same click: fire the supplier-mandated
+    //    availability/rate-verify call, then open the same "Room Details"
+    //    modal with the fresh values so the operator can review before
+    //    the actual booking. Previously this recheck happened on the
+    //    booking-page Confirm (inside GrnHotelBookingService.createBooking);
+    //    moved here per client requirement so a stale rate never survives
+    //    into the booking-page render. Backend recheck call is removed too.
+    //
+    //    Recheck fanout — one call per UNIQUE rate_key:
+    //     • Bundled multi-room → all slots share one rate_key → 1 call.
+    //     • Partial-bundled + auto-linked → linked slots share the rate_key
+    //       so still 1 call per group.
+    //     • Fully-independent non-bundled → N calls (one per rate).
+    //    fetchGrnRecheck caches by rate_key, so any rate whose Cancellation
+    //    Policies modal was already opened is a cache hit here — zero
+    //    duplicate calls.
+    if (currentApiId === apiIdMapping.GRN) {
+      setLoadingRate(true);
+      (async () => {
+        try {
+          const uniqueRates = [];
+          const seenKeys = new Set();
+          selectedRooms.forEach((r) => {
+            const rk = r?.selectedRate?.rateKey;
+            if (!rk || seenKeys.has(rk)) return;
+            seenKeys.add(rk);
+            uniqueRates.push(r.selectedRate);
+          });
+          if (uniqueRates.length === 0) {
+            setLoadingRate(false);
+            alert("No rate selected. Please pick a rate and try again.");
+            return;
+          }
+
+          const results = await Promise.all(
+            uniqueRates.map((r) => fetchGrnRecheck(r)),
+          );
+          const failed = results.find((r) => !r?.success);
+          if (failed) {
+            setLoadingRate(false);
+            alert(
+              failed.message ||
+                "This rate is no longer available. Please reselect and try again.",
+            );
+            return;
+          }
+
+          // Map to the same shape ApiBookingPageForHotels reads. Overwrite
+          // rate / nonRefundable / cancellationPolicy with the rechecked
+          // values so the modal + downstream booking use guaranteed data,
+          // not the (potentially stale) search-time snapshot.
+          const rechkByKey = new Map();
+          uniqueRates.forEach((r, i) => rechkByKey.set(r.rateKey, results[i]));
+          const accurateRates = selectedRooms.map((slot, i) => {
+            const mapped = mapRateForPayload(slot.selectedRate, hotel, i + 1);
+            const recheck = rechkByKey.get(slot.selectedRate?.rateKey);
+            if (recheck?.success) {
+              if (recheck.totalPriceWithMarkup != null) {
+                mapped.rate = recheck.totalPriceWithMarkup;
+              } else if (recheck.totalPrice != null) {
+                mapped.rate = recheck.totalPrice;
+              }
+              if (recheck.currency) {
+                mapped.currency = recheck.currency;
+              }
+              if (recheck.nonRefundable != null) {
+                mapped.nonRefundable = recheck.nonRefundable;
+              }
+              if (recheck.cancellationPolicies?.length) {
+                mapped.cancellationPolicy = recheck.cancellationPolicies;
+              }
+              // panRequired already flows via mapRateForPayload → grnRecheckCache.
+            }
+            return mapped;
+          });
+          setSelectedRate(accurateRates);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+        } catch (err) {
+          console.error("GRN recheck fetch failed:", err);
+          setLoadingRate(false);
+          const backendMsg =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message;
+          alert(
+            backendMsg
+              ? `Unable to verify rate: ${backendMsg}`
+              : "Unable to verify rate. Please try again.",
+          );
+        }
+      })();
+      return;
+    }
+
+    // ─── DARINA multi-room live-rate re-check. One prebook per selected
+    //    rate (Darina's live-calc op takes a single hotel + room type +
+    //    meal plan per call). Fire in parallel, stitch the responses
+    //    into the same "Room Details" modal IWTX/X3 use.
+    if (currentApiId === apiIdMapping.DARINA) {
+      const rates = selectedRooms.map((r) => r.selectedRate);
+      setLoadingRate(true);
+      (async () => {
+        try {
+          const results = await Promise.all(rates.map((r) => fetchDarinaPrebook(r)));
+          const firstFail = results.find((r) => !r?.success);
+          if (firstFail) {
+            setLoadingRate(false);
+            alert(
+              firstFail.message ||
+                "One of the selected rates is no longer available. Please reselect.",
+            );
+            return;
+          }
+          const accurateRates = rates.map((r, i) => {
+            const live = results[i] || {};
+            return {
+              roomNo: i + 1,
+              hotelId: hotel.hotelId,
+              hotelName: hotel.hotelName,
+              hotelCode: payload.hotelCode || hotel.hotelId,
+              roomCategory: live.roomCategory || r.roomCategory,
+              mealPlan: live.mealPlan || r.mealPlan,
+              contractLabel: r.contractLabel || "Live rate (Darina)",
+              nonRefundable:
+                live.nonRefundable != null
+                  ? live.nonRefundable
+                  : r.nonRefundable,
+              rate: live.rate ?? r.totalRate,
+              rateWithoutMarkup:
+                live.rateWithoutMarkup ?? r.totalRateWithoutMarkup,
+              currency: live.currency || "AED",
+              roomTypeCode: r.roomTypeCode,
+              mealPlanCode: r.mealPlanCode,
+              contractTokenId: live.contractTokenId || r.contractTokenId,
+              cancellationPolicy:
+                (live.cancellationPolicies?.length &&
+                  live.cancellationPolicies) ||
+                r.cancellationPolicies,
+              deadlineDate: live.deadlineDate ?? r.deadlineDate,
+            };
+          });
+          setSelectedRate(accurateRates);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+        } catch (err) {
+          console.error("Darina multi-room live-rate fetch failed:", err);
+          setLoadingRate(false);
+          const backendMsg =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message;
+          alert(
+            backendMsg
+              ? `Unable to fetch live rate: ${backendMsg}`
+              : "Unable to fetch live rate. Please try again.",
+          );
+        }
+      })();
+      return;
+    }
 
     if (currentApiId === 12 || currentApiId === 15) {
       setLoadingRate(true);
@@ -1492,6 +2197,58 @@ const ExternalApiRoomList = () => {
             {/* Room categories area — grid/list toggle + filter sidebar +
                 per-room accordion (only in multi-room mode). */}
             <div className="room-categories-section">
+              {/* GRN multi-room mode toggle. Bundled = default certified
+                  flow; Non-bundled = per-room picker (all picks must share
+                  the same group_code, enforced below). Hidden completely
+                  for single-room or non-GRN searches. */}
+              {isGrnMultiRoomFlow && (
+                <div className="mb-3 p-3 rounded shadow-sm bg-white border">
+                  <div className="d-flex flex-wrap align-items-center gap-3">
+                    <div>
+                      <div className="fw-semibold">Booking mode</div>
+                      <small className="text-muted">
+                        {bundleMode === "bundled"
+                          ? "One package rate covers all rooms."
+                          : "Pick a different rate for each room (must share the same rate group)."}
+                      </small>
+                    </div>
+                    <div className="btn-group ms-auto" role="group" aria-label="Booking mode">
+                      <Button
+                        variant={
+                          bundleMode === "bundled" ? "primary" : "outline-primary"
+                        }
+                        size="sm"
+                        onClick={() => switchBundleMode("bundled")}
+                      >
+                        Book as one package
+                      </Button>
+                      <Button
+                        variant={
+                          bundleMode === "non-bundled" ? "primary" : "outline-primary"
+                        }
+                        size="sm"
+                        onClick={() => switchBundleMode("non-bundled")}
+                        disabled={!hasNonBundledRates}
+                        title={
+                          hasNonBundledRates
+                            ? "Pick a different rate for each room"
+                            : "This hotel doesn't have per-room rates for your search"
+                        }
+                      >
+                        Pick per room
+                      </Button>
+                    </div>
+                  </div>
+                  {isNonBundledMode && !hasNonBundledRates && (
+                    <Alert variant="warning" className="mt-3 mb-0">
+                      This hotel doesn't offer non-bundled (per-room) rates
+                      for your dates and occupancy. Switch back to
+                      <b> Book as one package</b> to see available rates.
+                    </Alert>
+                  )}
+                </div>
+              )}
+
               <div className="d-flex justify-content-between align-items-center mb-4">
                 <h4 className="mb-0">Available Room Categories</h4>
                 <div className="btn-group shadow-sm gap-1" role="group">
@@ -1550,6 +2307,61 @@ const ExternalApiRoomList = () => {
                               category.availableRates || []
                             )
                               .filter(rateMatches)
+                              // GRN multi-room bundle-mode filter. When the
+                              // user toggles "Book as one package" show only
+                              // bundled rates (or rates that have no
+                              // bundleType tag — those come from the certified
+                              // bundled-only fetch and are always bundled).
+                              // When they toggle "Pick per room" show only
+                              // non-bundled + partial-bundled. No-op for
+                              // non-GRN suppliers and single-room searches.
+                              .filter((rate) => {
+                                if (!isGrnMultiRoomFlow) return true;
+                                const bt = rate?.bundleType;
+                                if (bundleMode === "bundled") {
+                                  return bt == null || bt === "bundled";
+                                }
+                                return bt === "non-bundled" || bt === "partial-bundled";
+                              })
+                              // GRN non-bundled group_code guard. Once ANY
+                              // slot has picked a rate, every OTHER slot may
+                              // only show rates whose tokenId (group_code)
+                              // matches — GRN rejects the booking if the
+                              // picked rates come from different groups. The
+                              // backend has the same guard as a safety net;
+                              // this UI check exists so the user sees why an
+                              // incompatible rate isn't clickable, before
+                              // they invest attention in picking it.
+                              .filter((rate) => {
+                                if (!isNonBundledMode) return true;
+                                const anchor = selectedRooms.find(
+                                  (r, i) => i !== roomSlotIndex && r?.selectedRate,
+                                );
+                                const anchorGroup = anchor?.selectedRate?.tokenId;
+                                if (!anchorGroup) return true;
+                                return rate?.tokenId === anchorGroup;
+                              })
+                              // GRN non-bundled per-room occupancy filter.
+                              // Non-bundled rates are occupancy-specific — a
+                              // 2A/0C rate cannot accept a child pax, and
+                              // GRN 500s with a generic "Something went wrong"
+                              // instead of a proper validation error. Show
+                              // each rate ONLY in the room card whose
+                              // adults+children match the rate's
+                              // paxAdults+paxChildren. When the rate object
+                              // doesn't carry those fields (bundled rates,
+                              // other suppliers) the filter passes through.
+                              .filter((rate) => {
+                                if (!isNonBundledMode) return true;
+                                if (rate?.paxAdults == null) return true;
+                                const searchRoom = roomData?.payload?.rooms?.[roomSlotIndex];
+                                if (!searchRoom) return true;
+                                const roomAdults = Number(searchRoom.adults) || 0;
+                                const roomChildren = Number(searchRoom.children) || 0;
+                                const rateAdults = Number(rate.paxAdults) || 0;
+                                const rateChildren = Number(rate.paxChildren) || 0;
+                                return rateAdults === roomAdults && rateChildren === roomChildren;
+                              })
                               // ATHARVA (apiId=3) multi-room disambiguation:
                               // the search response mixes rates for every
                               // RoomSrNo into one vendor list, so each slot
@@ -1574,28 +2386,54 @@ const ExternalApiRoomList = () => {
                               // earlier picks per the vendor's Options[]
                               // combinations. Options entries look like
                               // "1,28" — one index per room slot in order.
+                              // atharvaFixedOption / atharvaOptions are
+                              // per-VENDOR (Atharva returns multiple vendors
+                              // per hotel, each with its own FixedOption +
+                              // Options[]), so they're carried on the RATE
+                              // itself — reading them off `hotel.*` would
+                              // cross-apply one vendor's Options[] to
+                              // another vendor's rate.
                               .filter((rate) => {
                                 if (
                                   String(roomData?.payload?.apiId || "") !== "3" ||
                                   !isMultiRoom ||
-                                  hotel?.atharvaFixedOption !== true ||
-                                  !Array.isArray(hotel?.atharvaOptions) ||
-                                  hotel.atharvaOptions.length === 0 ||
+                                  rate?.atharvaFixedOption !== true ||
+                                  !Array.isArray(rate?.atharvaOptions) ||
+                                  rate.atharvaOptions.length === 0 ||
                                   rate?.atharvaIndex == null
                                 ) {
                                   return true;
                                 }
-                                // Collect indices from any earlier slot with
-                                // a selection; positions without a selection
-                                // become wildcards (any Option row matches).
+                                // Collect indices + vendor hKeys from any
+                                // earlier slot with a selection; positions
+                                // without a selection become wildcards.
                                 const requiredIndices = selectedRooms.map(
                                   (r) => r?.selectedRate?.atharvaIndex ?? null,
                                 );
+                                const earlierPickHKey = selectedRooms
+                                  .slice(0, roomSlotIndex)
+                                  .map((r) => r?.selectedRate?.hKey)
+                                  .find((k) => k);
                                 const hasEarlierPick = requiredIndices
                                   .slice(0, roomSlotIndex)
                                   .some((v) => v != null);
                                 if (!hasEarlierPick) return true;
-                                return hotel.atharvaOptions.some((opt) => {
+                                // Cross-vendor guard — Options[] indices
+                                // are only meaningful within the picked
+                                // vendor. A candidate from a different
+                                // vendor could false-match by index
+                                // coincidence and then trip 1005: Invalid
+                                // RateKey at prebook (handleRateSelect
+                                // blocks the click too, but hiding the
+                                // rate up front is the cleaner UX).
+                                if (
+                                  earlierPickHKey &&
+                                  rate.hKey &&
+                                  rate.hKey !== earlierPickHKey
+                                ) {
+                                  return false;
+                                }
+                                return rate.atharvaOptions.some((opt) => {
                                   const parts = String(opt)
                                     .split(",")
                                     .map((p) => Number(p.trim()));
@@ -1672,6 +2510,24 @@ const ExternalApiRoomList = () => {
                                         isMultiRoom &&
                                         selectedRooms[roomSlotIndex]
                                           ?.selectedRate === rate;
+                                      // Auto-link visibility: does this rate
+                                      // cover >1 slot (partial-bundled), and
+                                      // if it's picked here, which OTHER
+                                      // slots is it currently linked to?
+                                      const rateCovers =
+                                        Number(rate?.numberOfRooms) || 1;
+                                      const linkedSlotNumbers =
+                                        isNonBundledMode && rateCovers > 1
+                                          ? selectedRooms
+                                              .map((r, i) =>
+                                                r?.selectedRate?.rateKey ===
+                                                  rate?.rateKey &&
+                                                i !== roomSlotIndex
+                                                  ? i + 1
+                                                  : null,
+                                              )
+                                              .filter(Boolean)
+                                          : [];
                                       return (
                                         <Col
                                           key={rateIndex}
@@ -1714,6 +2570,14 @@ const ExternalApiRoomList = () => {
                                                 ✓ Selected
                                               </span>
                                             )}
+                                            {/* GRN partial-bundled indicator
+                                                moved INLINE (below the rate
+                                                features) — the earlier
+                                                absolute-positioned corner
+                                                badge collided with the
+                                                refund-status pill. Rendered
+                                                inside the card body a bit
+                                                further down instead. */}
                                             {viewMode === "grid" ? (
                                               <Card.Body className="p-2 pb-0 d-flex flex-column gap-2">
                                                 <div className="rate-header d-flex justify-content-between align-items-start">
@@ -1776,6 +2640,34 @@ const ExternalApiRoomList = () => {
                                                 </div>
 
                                                 <div className="rate-features small">
+                                                  {/* GRN partial-bundled inline badge — placed
+                                                      here (below pricing, above other feature
+                                                      lines) so it's clearly visible inside the
+                                                      card body without collide with the refund-
+                                                      status pill in the top-right corner. Hidden
+                                                      once the rate is picked because the radio
+                                                      label below then says "Selected for Room X
+                                                      + Y" which conveys the same info. */}
+                                                  {isNonBundledMode &&
+                                                    rateCovers > 1 &&
+                                                    !isSelectedForThisSlot && (
+                                                      <div className="feature-item">
+                                                        <span
+                                                          style={{
+                                                            backgroundColor:
+                                                              "#0d6efd",
+                                                            color: "#fff",
+                                                            fontSize: "0.7rem",
+                                                            fontWeight: 700,
+                                                            padding: "2px 6px",
+                                                            borderRadius: "4px",
+                                                          }}
+                                                        >
+                                                          Covers {rateCovers}{" "}
+                                                          rooms
+                                                        </span>
+                                                      </div>
+                                                    )}
                                                   <div className="feature-item">
                                                     <FaInfoCircle className="me-2 text-muted" />
                                                     {rate.contractLabel}
@@ -1785,15 +2677,33 @@ const ExternalApiRoomList = () => {
                                                       sourced from HSearchByHotelCode_V2. Sits directly
                                                       above the Cancellation link so the operator
                                                       sees the cut-off before opening the policy
-                                                      modal. Helper returns null when the rate has
-                                                      no deadlineDate (non-Atharva or malformed). */}
-                                                  {rate.deadlineDate && (
-                                                    <div className="feature-item">
-                                                      {renderAtharvaDeadlinePill(
-                                                        rate.deadlineDate,
-                                                      )}
-                                                    </div>
-                                                  )}
+                                                      modal. Guarded on apiId now that Darina also
+                                                      populates rate.deadlineDate (ISO yyyy-MM-dd) —
+                                                      the Atharva helper expects DD-MMM-YYYY. */}
+                                                  {resolveApiId(hotel) ===
+                                                    apiIdMapping.ATHARVA &&
+                                                    rate.deadlineDate && (
+                                                      <div className="feature-item">
+                                                        {renderAtharvaDeadlinePill(
+                                                          rate.deadlineDate,
+                                                        )}
+                                                      </div>
+                                                    )}
+
+                                                  {/* Darina (apiId 16) free-cancellation deadline —
+                                                      BE emits rate.deadlineDate in ISO yyyy-MM-dd
+                                                      as the "Free cancellation until X" band's
+                                                      toDate. Hidden for non-refundable / no-free
+                                                      band rates (deadlineDate is null there). */}
+                                                  {resolveApiId(hotel) ===
+                                                    apiIdMapping.DARINA &&
+                                                    rate.deadlineDate && (
+                                                      <div className="feature-item">
+                                                        {renderDarinaDeadlinePill(
+                                                          rate.deadlineDate,
+                                                        )}
+                                                      </div>
+                                                    )}
 
                                                   <div className="feature-item">
                                                     <Button
@@ -1817,32 +2727,54 @@ const ExternalApiRoomList = () => {
                                                 </div>
 
                                                 {isMultiRoom ? (
-                                                  <Form.Check
-                                                    type="radio"
-                                                    id={`rate-radio-grid-${roomSlotIndex}-${index}-${rateIndex}`}
-                                                    name={`rate-radio-grid-room-${roomSlotIndex}`}
-                                                    className="w-100 mt-1 mb-1"
-                                                    label={
-                                                      selectedRooms[
-                                                        roomSlotIndex
-                                                      ]?.selectedRate === rate
-                                                        ? `Selected for Room ${roomSlotIndex + 1}`
-                                                        : `Select for Room ${roomSlotIndex + 1}`
-                                                    }
-                                                    checked={
-                                                      selectedRooms[
-                                                        roomSlotIndex
-                                                      ]?.selectedRate === rate
-                                                    }
-                                                    onChange={() =>
-                                                      handleRateSelect(
-                                                        roomSlotIndex,
-                                                        rate,
-                                                        hotel.hotelId,
-                                                        hotel.hotelName,
-                                                      )
-                                                    }
-                                                  />
+                                                  <>
+                                                    <Form.Check
+                                                      type="radio"
+                                                      id={`rate-radio-grid-${roomSlotIndex}-${index}-${rateIndex}`}
+                                                      name={`rate-radio-grid-room-${roomSlotIndex}`}
+                                                      className="w-100 mt-1 mb-1"
+                                                      label={
+                                                        isSelectedForThisSlot
+                                                          ? linkedSlotNumbers.length > 0
+                                                            ? `Selected for Room ${roomSlotIndex + 1} + ${linkedSlotNumbers.join(", ")}`
+                                                            : `Selected for Room ${roomSlotIndex + 1}`
+                                                          : isNonBundledMode && rateCovers > 1
+                                                            ? `Select — this rate books ${rateCovers} rooms together`
+                                                            : `Select for Room ${roomSlotIndex + 1}`
+                                                      }
+                                                      checked={
+                                                        selectedRooms[
+                                                          roomSlotIndex
+                                                        ]?.selectedRate === rate
+                                                      }
+                                                      onChange={() =>
+                                                        handleRateSelect(
+                                                          roomSlotIndex,
+                                                          rate,
+                                                          hotel.hotelId,
+                                                          hotel.hotelName,
+                                                        )
+                                                      }
+                                                    />
+                                                    {isSelectedForThisSlot &&
+                                                      linkedSlotNumbers.length >
+                                                        0 && (
+                                                        <div
+                                                          className="small text-muted"
+                                                          style={{
+                                                            marginTop: "-4px",
+                                                            paddingLeft: "1.5rem",
+                                                          }}
+                                                        >
+                                                          Also applied to Room{" "}
+                                                          {linkedSlotNumbers.join(
+                                                            ", ",
+                                                          )}{" "}
+                                                          — click again to
+                                                          unlink all.
+                                                        </div>
+                                                      )}
+                                                  </>
                                                 ) : (
                                                   <Button
                                                     variant="primary"
@@ -1879,7 +2811,26 @@ const ExternalApiRoomList = () => {
                                                     </div>
                                                     <div className="d-flex align-items-center gap-2 flex-shrink-0">
                                                       {getRefundStatusBadgeInRoomList(
-                                                        rate.nonRefundable,
+                                                        // Same override the grid
+                                                        // view uses (line 2386-
+                                                        // 2400): prefer the
+                                                        // prebook-time signal
+                                                        // (derived from Atharva's
+                                                        // Policies[].Remark
+                                                        // "Rates are
+                                                        // Non-refundable" match)
+                                                        // when a prebook has been
+                                                        // fetched for this rate,
+                                                        // else fall back to the
+                                                        // search-time flag.
+                                                        // Without this the list
+                                                        // view stayed "Flexible"
+                                                        // forever while grid view
+                                                        // flipped — inconsistent.
+                                                        atharvaPrebookCache?.[
+                                                          rate.rateKey
+                                                        ]?.nonRefundable ??
+                                                          rate.nonRefundable,
                                                       )}
                                                       {rate.roomStatus ===
                                                       "On Request" ? (
@@ -1908,16 +2859,31 @@ const ExternalApiRoomList = () => {
                                                       </span>
                                                     </div>
                                                     {/* ATHARVA (apiId 3) per-rate DeadLineDate pill,
-                                                        sourced from HSearchByHotelCode_V2. Helper
-                                                        returns null when the rate has no
-                                                        deadlineDate (non-Atharva or malformed). */}
-                                                    {rate.deadlineDate && (
-                                                      <div className="feature-item d-flex align-items-center">
-                                                        {renderAtharvaDeadlinePill(
-                                                          rate.deadlineDate,
-                                                        )}
-                                                      </div>
-                                                    )}
+                                                        sourced from HSearchByHotelCode_V2. Guarded
+                                                        on apiId now that Darina also populates
+                                                        rate.deadlineDate (different format). */}
+                                                    {resolveApiId(hotel) ===
+                                                      apiIdMapping.ATHARVA &&
+                                                      rate.deadlineDate && (
+                                                        <div className="feature-item d-flex align-items-center">
+                                                          {renderAtharvaDeadlinePill(
+                                                            rate.deadlineDate,
+                                                          )}
+                                                        </div>
+                                                      )}
+                                                    {/* Darina (apiId 16) free-cancellation deadline
+                                                        pill. BE emits ISO yyyy-MM-dd; helper renders
+                                                        "Free cancellation until DD MMM YYYY,
+                                                        11:59 PM UAE". */}
+                                                    {resolveApiId(hotel) ===
+                                                      apiIdMapping.DARINA &&
+                                                      rate.deadlineDate && (
+                                                        <div className="feature-item d-flex align-items-center">
+                                                          {renderDarinaDeadlinePill(
+                                                            rate.deadlineDate,
+                                                          )}
+                                                        </div>
+                                                      )}
                                                     <div className="feature-item d-flex align-items-center">
                                                       <Button
                                                         variant="link"
@@ -1969,34 +2935,74 @@ const ExternalApiRoomList = () => {
 
                                                 <div className="flex-shrink-0">
                                                   {isMultiRoom ? (
-                                                    <Form.Check
-                                                      type="radio"
-                                                      id={`rate-radio-list-${roomSlotIndex}-${index}-${rateIndex}`}
-                                                      name={`rate-radio-list-room-${roomSlotIndex}`}
-                                                      label={
-                                                        selectedRooms[
-                                                          roomSlotIndex
-                                                        ]?.selectedRate === rate
-                                                          ? `Selected for Room ${roomSlotIndex + 1}`
-                                                          : `Select for Room ${roomSlotIndex + 1}`
-                                                      }
-                                                      checked={
-                                                        selectedRooms[
-                                                          roomSlotIndex
-                                                        ]?.selectedRate === rate
-                                                      }
-                                                      onChange={() =>
-                                                        handleRateSelect(
-                                                          roomSlotIndex,
-                                                          rate,
-                                                          hotel.hotelId,
-                                                          hotel.hotelName,
-                                                        )
-                                                      }
-                                                      style={{
-                                                        whiteSpace: "nowrap",
-                                                      }}
-                                                    />
+                                                    <div>
+                                                      {isNonBundledMode &&
+                                                        rateCovers > 1 &&
+                                                        !isSelectedForThisSlot && (
+                                                          <div
+                                                            style={{
+                                                              backgroundColor:
+                                                                "#0d6efd",
+                                                              color: "#fff",
+                                                              fontSize: "0.7rem",
+                                                              fontWeight: 700,
+                                                              padding: "2px 6px",
+                                                              borderRadius: "4px",
+                                                              display: "inline-block",
+                                                              marginBottom: "4px",
+                                                            }}
+                                                          >
+                                                            Covers {rateCovers}{" "}
+                                                            rooms
+                                                          </div>
+                                                        )}
+                                                      <Form.Check
+                                                        type="radio"
+                                                        id={`rate-radio-list-${roomSlotIndex}-${index}-${rateIndex}`}
+                                                        name={`rate-radio-list-room-${roomSlotIndex}`}
+                                                        label={
+                                                          isSelectedForThisSlot
+                                                            ? linkedSlotNumbers.length > 0
+                                                              ? `Selected for Room ${roomSlotIndex + 1} + ${linkedSlotNumbers.join(", ")}`
+                                                              : `Selected for Room ${roomSlotIndex + 1}`
+                                                            : isNonBundledMode && rateCovers > 1
+                                                              ? `Select — this rate books ${rateCovers} rooms together`
+                                                              : `Select for Room ${roomSlotIndex + 1}`
+                                                        }
+                                                        checked={
+                                                          selectedRooms[
+                                                            roomSlotIndex
+                                                          ]?.selectedRate === rate
+                                                        }
+                                                        onChange={() =>
+                                                          handleRateSelect(
+                                                            roomSlotIndex,
+                                                            rate,
+                                                            hotel.hotelId,
+                                                            hotel.hotelName,
+                                                          )
+                                                        }
+                                                        style={{
+                                                          whiteSpace: "nowrap",
+                                                        }}
+                                                      />
+                                                      {isSelectedForThisSlot &&
+                                                        linkedSlotNumbers.length >
+                                                          0 && (
+                                                          <div
+                                                            className="small text-muted"
+                                                            style={{
+                                                              marginTop: "2px",
+                                                              paddingLeft: "1.5rem",
+                                                            }}
+                                                          >
+                                                            Also applied to Room{" "}
+                                                            {linkedSlotNumbers.join(
+                                                              ", ",
+                                                            )}
+                                                          </div>
+                                                        )}
+                                                    </div>
                                                   ) : (
                                                     <Button
                                                       variant="primary"
@@ -2045,6 +3051,22 @@ const ExternalApiRoomList = () => {
                       }
 
                       const slotSelection = selectedRooms[roomSlotIndex];
+                      // GRN partial-bundled: figure out if this slot is
+                      // filled by a rate that primarily belongs to an
+                      // earlier slot (auto-linked), so the header can
+                      // show "Linked to Room X" instead of the plain
+                      // "picked" badge — makes the atomic group visible.
+                      const linkedPrimaryIndex =
+                        isNonBundledMode && slotSelection?.selectedRate?.rateKey
+                          ? selectedRooms.findIndex(
+                              (r) =>
+                                r?.selectedRate?.rateKey ===
+                                slotSelection.selectedRate.rateKey,
+                            )
+                          : -1;
+                      const isLinkedChildSlot =
+                        linkedPrimaryIndex !== -1 &&
+                        linkedPrimaryIndex !== roomSlotIndex;
                       return (
                         <Accordion
                           key={`room-slot-${roomSlotIndex}`}
@@ -2058,14 +3080,25 @@ const ExternalApiRoomList = () => {
                                   Room {roomSlotIndex + 1}
                                 </span>
                                 {slotSelection?.selectedRate ? (
-                                  <Badge bg="success" className="ms-2">
-                                    {slotSelection.selectedRate.roomCategory}
-                                    {" — "}
-                                    {formatPrice(
-                                      slotSelection.selectedRate.totalRate ||
-                                        0,
-                                    )}
-                                  </Badge>
+                                  isLinkedChildSlot ? (
+                                    <Badge bg="info" className="ms-2">
+                                      Linked to Room{" "}
+                                      {linkedPrimaryIndex + 1} —{" "}
+                                      {
+                                        slotSelection.selectedRate
+                                          .roomCategory
+                                      }
+                                    </Badge>
+                                  ) : (
+                                    <Badge bg="success" className="ms-2">
+                                      {slotSelection.selectedRate.roomCategory}
+                                      {" — "}
+                                      {formatPrice(
+                                        slotSelection.selectedRate.totalRate ||
+                                          0,
+                                      )}
+                                    </Badge>
+                                  )
                                 ) : (
                                   <Badge
                                     bg="warning"
@@ -2180,7 +3213,7 @@ const ExternalApiRoomList = () => {
         </main>
       </div>
 
-      {/* Accurate-rate confirm modal (apiId 12/15). Preserves the ARRAY
+      {/* Accurate-rate confirm modal (apiId 12/15/16). Preserves the ARRAY
           shape ApiBookingPageForHotels reads from sessionStorage. */}
       <Modal
         show={showBookingModal}
@@ -2293,7 +3326,7 @@ const ExternalApiRoomList = () => {
               window.open("/api-booking-page-hotels", "_blank");
             }}
           >
-            Confirm Booking
+            Continue
           </Button>
         </Modal.Footer>
       </Modal>
