@@ -32,6 +32,11 @@ import axiosInstance from "../../../components/AxiosInstance";
 // same pattern FlightSearch.jsx already uses for HotelSearch.css.
 import "../../../styles/HotelBookingPage.css";
 
+// Fixed localStorage key used by FlightBestPriceCheck to hand off the
+// selected fare payload across the new-tab boundary. MUST match the
+// constant of the same name in FlightBestPriceCheck.jsx.
+const FBP_PAYLOAD_STORAGE_KEY = "fbp:pendingPayload";
+
 /*
  * FlightBookPage — /new-booking/flightBookPage
  *
@@ -126,13 +131,39 @@ const FlightBookPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const rec = location.state?.rec || null;
-  const fare = location.state?.fare || null;
-  const selectedFamily = location.state?.selectedFamily || null;
-  const pax = location.state?.pax || { adult: 1, children: 0, infant: 0 };
-  // agentId flows in via router state from Best Price Check — used to
-  // stamp the persisted flight_booking row for the agent booking list.
-  const agentId = location.state?.agentId || "";
+  // "Book Now" now opens this page in a NEW tab (see FlightBestPriceCheck),
+  // so the fare payload can't travel via React Router in-memory state —
+  // a fresh tab has no access to it. It's stashed in localStorage under a
+  // fixed key by the opener; we read it once on mount as a fallback for
+  // whichever field location.state doesn't have. The useEffect below
+  // removes the entry once so it doesn't leak into an unrelated visit.
+  const storedPayload = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(FBP_PAYLOAD_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.removeItem(FBP_PAYLOAD_STORAGE_KEY);
+    } catch (e) {
+      /* ignore — nothing to clean up if storage is unavailable */
+    }
+  }, []);
+
+  const rec = location.state?.rec || storedPayload?.rec || null;
+  const fare = location.state?.fare || storedPayload?.fare || null;
+  const selectedFamily = location.state?.selectedFamily || storedPayload?.selectedFamily || null;
+  const pax = location.state?.pax || storedPayload?.pax || { adult: 1, children: 0, infant: 0 };
+  // agentId flows in via router state or the URL query — used to stamp
+  // the persisted flight_booking row for the agent booking list.
+  const searchParams = new URLSearchParams(location.search);
+  const agentId = location.state?.agentId
+    || storedPayload?.agentId
+    || searchParams.get("agentId")
+    || "";
 
   const adultCount = Math.max(1, Number(pax.adult ?? 1) || 1);
   const childrenCount = Math.max(0, Number(pax.children ?? 0) || 0);
@@ -210,6 +241,20 @@ const FlightBookPage = () => {
       return () => clearTimeout(t);
     }
   }, [rec, fare, navigate]);
+
+  // Auto-redirect to the Flight Bookings list once a confirmation lands,
+  // mirroring the hotel booking flow (HotelBookingPage → hotel-booking-list).
+  // Short delay so the agent still sees the PNR + e-ticket numbers in the
+  // success modal; the "View All Bookings" button remains for an immediate
+  // jump, and "New Search" cancels the pending navigation.
+  useEffect(() => {
+    if (!confirmation) return;
+    const t = setTimeout(
+      () => navigate("/booking-details/flight-booking-list"),
+      3500,
+    );
+    return () => clearTimeout(t);
+  }, [confirmation, navigate]);
 
   // ── Trip Summary helpers (from rec / selectedFamily / fare) ──────────
   const summary = useMemo(() => {

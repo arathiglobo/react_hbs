@@ -25,6 +25,12 @@ import CountrySelect from "./CountrySelect";
 import FlightResults from "./FlightResults";
 import "../../../styles/HotelSearch.css";
 
+// Fixed localStorage key used to hand the selected flight recommendation
+// from FlightSearch → FlightBestPriceCheck across the tab boundary. Kept
+// out of the URL so the destination link stays short (agentId only).
+// FlightBestPriceCheck.jsx MUST read from the same key.
+const FBPC_PAYLOAD_STORAGE_KEY = "fbpc:pendingPayload";
+
 /* Amadeus cabin codes. Values match backend {@code normalizeCabin} mapping.
  * An empty value (Any Cabin) is the safe default — it tells the backend
  * NOT to send a <travelFlightInfo><cabinId> block, so Amadeus returns
@@ -488,10 +494,13 @@ const FlightSearch = () => {
               // in the same tab — it's stashed in localStorage instead
               // (shared across all tabs of this origin, unlike
               // sessionStorage which browsers only copy into a new tab
-              // inconsistently). Keyed uniquely per click so two "View
-              // Fares" clicks in a row never collide; the destination page
-              // reads it once on mount and removes it immediately so
-              // nothing accumulates.
+              // inconsistently). Stored under the fixed key
+              // FBPC_PAYLOAD_STORAGE_KEY so the URL stays clean (no
+              // dataKey query param); the destination reads it once on
+              // mount and removes it immediately so nothing accumulates.
+              // Trade-off: only ONE "View Fares" click can be in flight at
+              // a time — a second click before the first tab consumes will
+              // overwrite the payload.
               const payload = {
                 rec,
                 pax: {
@@ -501,17 +510,22 @@ const FlightSearch = () => {
                 },
                 fareCurrency: rec?.pricing?.currency || null,
               };
-              const dataKey = `fbpc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
               try {
-                localStorage.setItem(dataKey, JSON.stringify(payload));
+                localStorage.setItem(
+                  FBPC_PAYLOAD_STORAGE_KEY,
+                  JSON.stringify(payload),
+                );
               } catch (e) {
                 toast.error("Could not open fare details — please try again.");
                 return;
               }
               const params = new URLSearchParams();
               if (agentId) params.set("agentId", agentId);
-              params.set("dataKey", dataKey);
-              window.open(`/new-booking/flightBestPriceCheck?${params.toString()}`, "_blank");
+              const qs = params.toString();
+              window.open(
+                `/new-booking/flightBestPriceCheck${qs ? `?${qs}` : ""}`,
+                "_blank",
+              );
             }}
           />
         </main>

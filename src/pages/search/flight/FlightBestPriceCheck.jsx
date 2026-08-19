@@ -32,6 +32,19 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 
+// Fixed localStorage key used by FlightSearch to hand off the selected
+// recommendation across the new-tab boundary. Kept out of the URL so the
+// link stays short. MUST match the constant of the same name in
+// FlightSearch.jsx.
+const FBPC_PAYLOAD_STORAGE_KEY = "fbpc:pendingPayload";
+
+// Fixed localStorage key used to hand the priced fare + selected family
+// from THIS page to FlightBookPage across a new-tab window.open(). Same
+// trade-off as FBPC_PAYLOAD_STORAGE_KEY: only one "Book Now" click can
+// be in flight at a time; a second click overwrites the pending payload.
+// MUST match the constant of the same name in FlightBookPage.jsx.
+const FBP_PAYLOAD_STORAGE_KEY = "fbp:pendingPayload";
+
 /*
  * Flight Best Price Check page — reached from /new-booking/flight when the
  * user clicks "View Fares" on a search result card. Selected recommendation
@@ -176,10 +189,10 @@ const FareFamilyCard = ({ family, selected, onSelect, onFareRule, onBookNow }) =
       style={{
         minWidth: 260,
         maxWidth: 300,
-        border: selected ? "2px solid #2b5fdd" : "1px solid #e5e7eb",
+        border: selected ? "2px solid #e11d48" : "1px solid #e5e7eb",
         borderRadius: 12,
         cursor: "pointer",
-        boxShadow: selected ? "0 4px 12px rgba(43,95,221,0.15)" : "none",
+        boxShadow: selected ? "0 4px 12px rgba(225,29,72,0.15)" : "none",
         transition: "border-color 120ms ease, box-shadow 120ms ease",
       }}
     >
@@ -203,7 +216,7 @@ const FareFamilyCard = ({ family, selected, onSelect, onFareRule, onBookNow }) =
 
         {/* Price + label */}
         <div style={{ marginTop: 12 }}>
-          <div style={{ fontSize: 24, fontWeight: 700, color: "#2b5fdd", lineHeight: 1.1 }}>
+          <div style={{ fontSize: 24, fontWeight: 700, color: "#e11d48", lineHeight: 1.1 }}>
             {currency || "AED"} {fmtAmount(price)}
           </div>
           <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>Total Price</div>
@@ -280,7 +293,7 @@ const FareFamilyCard = ({ family, selected, onSelect, onFareRule, onBookNow }) =
             size="sm"
             style={{
               flex: 1,
-              background: "#ff7a00",
+              background: "#e11d48",
               border: "none",
               fontWeight: 700,
               textTransform: "uppercase",
@@ -317,33 +330,33 @@ const FlightBestPriceCheck = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const agentId = searchParams.get("agentId") || "";
-  const dataKey = searchParams.get("dataKey") || "";
 
-  // "View Fares" now opens this page in a new tab (see FlightSearch.jsx),
-  // so the selected recommendation can't travel via React Router's
-  // in-memory navigation state — a fresh tab has no access to it. It's
-  // stashed in localStorage instead, keyed by `dataKey` from the URL.
+  // "View Fares" opens this page in a new tab (see FlightSearch.jsx), so
+  // the selected recommendation can't travel via React Router's in-memory
+  // navigation state — a fresh tab has no access to it. It's stashed in
+  // localStorage under a fixed key (FBPC_PAYLOAD_STORAGE_KEY) so the URL
+  // stays clean (agentId only, no dataKey query param).
+  //
   // location.state is still checked first for any caller that stays in
-  // the same tab. Read-only here (no removal) so it survives React 18's
-  // double-invoke in dev; the effect below removes it once after mount.
+  // the same tab. useMemo is read-only so it survives React 18's
+  // double-invoke in dev; the effect below removes the entry once after
+  // mount so the payload doesn't leak to a subsequent unrelated visit.
   const storedPayload = useMemo(() => {
-    if (!dataKey) return null;
     try {
-      const raw = localStorage.getItem(dataKey);
+      const raw = localStorage.getItem(FBPC_PAYLOAD_STORAGE_KEY);
       return raw ? JSON.parse(raw) : null;
     } catch (e) {
       return null;
     }
-  }, [dataKey]);
+  }, []);
 
   useEffect(() => {
-    if (!dataKey) return;
     try {
-      localStorage.removeItem(dataKey);
+      localStorage.removeItem(FBPC_PAYLOAD_STORAGE_KEY);
     } catch (e) {
       /* ignore — nothing to clean up if storage is unavailable */
     }
-  }, [dataKey]);
+  }, []);
 
   const rec = location.state?.rec || storedPayload?.rec || null;
   const pax = location.state?.pax || storedPayload?.pax || { adult: 1, children: 0, infant: 0 };
@@ -494,14 +507,22 @@ const FlightBestPriceCheck = () => {
   // a single fare, so we wrap it into a one-element list. When TIBFPWQ
   // support lands and the response starts returning `fareFamilies[]`, this
   // memo just reads that array directly — no other UI change needed.
+  //
+  // Currency shown here MUST match what the search results page showed for
+  // the same recommendation — the agent picked a flight labelled "AED N"
+  // there, so displaying "EUR N" here would look like a bait-and-switch.
+  // We pass `fareCurrency` (captured from rec.pricing.currency at search
+  // time) as the display currency; normaliseFamily prefers it over the
+  // TIPNR-returned currency so the label carries through consistently.
   const families = useMemo(() => {
     if (!fare) return [];
+    const displayCurrency = fareCurrency || fare.currency;
     // Future shape: fare.fareFamilies is an array. Prefer it when present.
     if (Array.isArray(fare.fareFamilies) && fare.fareFamilies.length > 0) {
-      return fare.fareFamilies.map((f) => normaliseFamily(f, fare.currency));
+      return fare.fareFamilies.map((f) => normaliseFamily(f, displayCurrency));
     }
-    return [normaliseFamily(fare, fare.currency)];
-  }, [fare]);
+    return [normaliseFamily(fare, displayCurrency)];
+  }, [fare, fareCurrency]);
 
   // Rules are pre-fetched at page load (see the pricing useEffect) while
   // the Amadeus session is still alive — this button just opens the modal
@@ -509,12 +530,25 @@ const FlightBestPriceCheck = () => {
   const handleFareRule = () => setShowRules(true);
 
   const handleBookNow = (family) => {
-    navigate(
-      // Booking page target — clean URL, no ?agentId= query string. The
-      // agent context (and everything else the booking page needs) travels
-      // in React Router state instead so the URL stays shareable-clean.
-      "/new-booking/flightBookPage",
-      { state: { rec, pax, fare, fareCurrency, selectedFamily: family, agentId } },
+    // Open the booking page in a NEW tab so the agent can keep the fare
+    // comparison tab open for reference. window.open drops React Router
+    // state across the tab boundary, so we stash the full booking payload
+    // in localStorage under a fixed key (FBP_PAYLOAD_STORAGE_KEY) — the
+    // destination reads it once on mount, removes it, and the URL stays
+    // short (agentId query only, no dataKey).
+    const payload = { rec, pax, fare, fareCurrency, selectedFamily: family, agentId };
+    try {
+      localStorage.setItem(FBP_PAYLOAD_STORAGE_KEY, JSON.stringify(payload));
+    } catch (e) {
+      toast.error("Could not open booking page — please try again.");
+      return;
+    }
+    const params = new URLSearchParams();
+    if (agentId) params.set("agentId", agentId);
+    const qs = params.toString();
+    window.open(
+      `/new-booking/flightBookPage${qs ? `?${qs}` : ""}`,
+      "_blank",
     );
   };
 
@@ -961,7 +995,10 @@ function normaliseFamily(f, currencyFallback) {
     // Raw Amadeus fare-informative price, pre-markup — shown alongside the
     // sell price so the agent can see both figures on this page.
     netFare: f.totalFare ?? null,
-    currency: f.currency || currencyFallback || "AED",
+    // Prefer the caller-provided currency (the search page's display
+    // currency for this recommendation) over the TIPNR-returned fare
+    // currency, so the label stays consistent with what the agent picked.
+    currency: currencyFallback || f.currency || "AED",
     baggage: {
       cabin: f.baggageDetails?.cabinBaggage || "7 Kgs Cabin Baggage",
       checkin: f.baggageDetails?.checkinBaggage || "No check-in baggage included",
