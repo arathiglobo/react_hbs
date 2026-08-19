@@ -109,6 +109,14 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   // Analytics charts are collapsed by default to save vertical space.
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  // Admin-only Unbooked Opportunities tile — reads the aggregate
+  // summary from the new /api/ai/unbooked-opportunities/summary endpoint
+  // in an isolated effect so the main dashboard fetch is untouched.
+  const [unbookedSummary, setUnbookedSummary] = useState({
+    totalCount: 0,
+    potentialValue: 0,
+    currency: 'AED',
+  });
 
   useEffect(() => {
     const init = async () => {
@@ -124,6 +132,23 @@ export default function AdminDashboard() {
       }
     };
     init();
+  }, []);
+
+  useEffect(() => {
+    // Fire-and-forget: the tile silently keeps its zero defaults on any
+    // failure (403 for non-admins, network, backend down) so it never
+    // breaks the rest of the dashboard.
+    axiosInstance
+      .get('/api/ai/unbooked-opportunities/summary')
+      .then((res) => {
+        const body = res?.data || {};
+        setUnbookedSummary({
+          totalCount: Number(body.totalCount) || 0,
+          potentialValue: Number(body.potentialValue) || 0,
+          currency: body.currency || 'AED',
+        });
+      })
+      .catch(() => {});
   }, []);
 
   const totalBookingsObj = typeof stat.totalBookings === 'object' ? stat.totalBookings : {};
@@ -229,6 +254,41 @@ export default function AdminDashboard() {
                 <div className="adm-kpis-wide">
                   <Kpi icon="booking" label="Total Bookings" value={formatNumber(totalBookings)} breakdown={nonApiBreakdown} />
                   <Kpi icon="tour" label="API Bookings" value={formatNumber(apiBookingsCount)} breakdown={apiBreakdown} />
+                </div>
+                {/* Admin-only tile — clickable, jumps to the full report.
+                    Wrapped in a div so the existing <Kpi/> component stays
+                    presentation-only and untouched; keyboard support via
+                    role="button" + Enter/Space. */}
+                <div className="adm-kpis-wide">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => navigate('/admin/unbooked-opportunities')}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        navigate('/admin/unbooked-opportunities');
+                      }
+                    }}
+                    style={{ cursor: 'pointer' }}
+                    aria-label="Open Unbooked Opportunities report"
+                  >
+                    <Kpi
+                      icon="list"
+                      label="Unbooked Opportunities"
+                      value={`${formatNumber(unbookedSummary.totalCount)} active`}
+                      breakdown={[
+                        {
+                          // Currency lives on the label because the
+                          // Kpi breakdown value is passed through
+                          // formatNumber(), which would strip a
+                          // suffixed currency code.
+                          label: `Potential (${unbookedSummary.currency})`,
+                          value: unbookedSummary.potentialValue,
+                        },
+                      ]}
+                    />
+                  </div>
                 </div>
               </>
             )}

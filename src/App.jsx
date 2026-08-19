@@ -197,6 +197,10 @@ import AiDashboard from "./pages/ai/AiDashboard";
 import DemandForecast from "./pages/ai/DemandForecast";
 import AgentBehavior from "./pages/ai/AgentBehavior";
 import NoShowRisk from "./pages/ai/NoShowRisk";
+// Admin-only "Unbooked Opportunities" report — reads hotel_search_history
+// rows that never turned into a booking. Additive: no other page or
+// route is touched.
+import UnbookedOpportunities from "./pages/ai/UnbookedOpportunities";
 import { CabSearch } from "./pages/search/cab/CabSearch";
 import CabBookingPage from "./pages/booking/CabBookingPage";
 import ActivitySearch from "./pages/search/activity/ActivitySearch";
@@ -599,6 +603,9 @@ export default function App() {
         <Route path="/ai/demand-forecast" element={<PrivateRoute><DemandForecast /></PrivateRoute>} />
         <Route path="/ai/agent-behavior" element={<PrivateRoute><AgentBehavior /></PrivateRoute>} />
         <Route path="/ai/no-show-risk" element={<PrivateRoute><NoShowRisk /></PrivateRoute>} />
+        {/* Admin-only report — sidebar hides it for non-admin roles; the
+            backend endpoint returns 403 for non-admins as a second gate. */}
+        <Route path="/admin/unbooked-opportunities" element={<PrivateRoute><UnbookedOpportunities /></PrivateRoute>} />
         <Route path="/api-booking-page-hotels" element={<PrivateRoute><ApiBookingPageForHotels /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package" element={<PrivateRoute><MakeUrOwnPackage /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package/booking-page" element={<PrivateRoute><MakePkgBookingPage /></PrivateRoute>} />
