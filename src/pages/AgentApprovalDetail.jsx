@@ -114,6 +114,25 @@ export default function AgentApprovalDetail() {
       // The backend emails the official approval notice to the agent as part
       // of this call (async, best-effort) — surfaced here so the admin knows.
       toast.success("Agent approved. They can now log in — approval email sent.");
+      // Hand off to the full agent record so the admin can immediately
+      // manage credit limit / sub-agents / etc. Re-fetch the registration
+      // row first to pick up the agentId (approve is what creates the
+      // Agent row when the request came from /register, so the value may
+      // not have existed on the pre-approve reg loaded into state).
+      let agentId = null;
+      try {
+        const res = await axiosInstance.get(`/api/agent-external-register/${id}`);
+        agentId = res.data?.agentId ?? null;
+      } catch (_) {
+        // Swallow — fall back to in-place refresh below.
+      }
+      if (agentId) {
+        navigate(`/registration/agent/view/${agentId}`);
+        return;
+      }
+      // Fallback: agent id wasn't resolvable (older reg without a linked
+      // agent, or the GET failed). Keep the original behaviour so the
+      // admin at least sees the status flip on this page.
       fetchDetail();
     } catch (err) {
       toast.error(err?.response?.data?.message || "Approval failed.");

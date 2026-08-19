@@ -551,6 +551,15 @@ margin: 1.25rem 0 0;
     margin-top: 4px;
 }
 
+/* Meal-plan line under the Total Price amount — only rendered once a plan
+   is picked on the Hotels tab (see PackageBooking.jsx / HotelsTab.jsx). */
+.price-sidebar-mealplan {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #EC0B43;
+    margin-top: 6px;
+}
+
 .price-breakdown-row {
     display: flex;
     justify-content: space-between;
