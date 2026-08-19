@@ -736,6 +736,25 @@ const PackageSearch = () => {
         pkg.matchedCategoryId != null ? String(pkg.matchedCategoryId) : null,
       packageCategoryName: pkg.matchedCategoryName || null,
       parentBookingCode: incomingParent || null,
+      // ── Abandoned-package suggestion email context ──────────────────
+      // Extra fields the /api/package-search-history/save call needs so
+      // the follow-up email can name the package, its destination, the
+      // travel window the agent picked, and the rate they saw. Purely
+      // additive to bookingContext — no existing consumer reads any of
+      // these keys, so nothing else in the booking flow is affected.
+      destinationCityId:
+        selectedDestination?.value != null
+          ? String(selectedDestination.value)
+          : null,
+      destinationLabel: selectedDestination?.label || null,
+      destinationCityName: selectedDestination?.cityName || null,
+      destinationCountryName: selectedDestination?.countryName || null,
+      packageName: pkg.packageName || null,
+      packageType: pkg.packageType || null,
+      packageImage: pkg.packageImage || null,
+      noOfNights: pkg.duration != null ? String(pkg.duration) : null,
+      arrivalDateTime: arrivalDateTime || null,
+      departureDateTime: departureDateTime || null,
     };
 
     try {
