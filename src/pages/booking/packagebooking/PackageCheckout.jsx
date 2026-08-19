@@ -19,6 +19,11 @@ import {
   FaMoon,
 } from "react-icons/fa";
 import PaxInformation from "./tabs/PaxInformation";
+// Abandoned-package-search follow-up email — flags the history row as
+// booked when the CCAvenue-paid booking finalises so the scheduler
+// stops considering it a follow-up candidate. Standard (non-paid) flow
+// fires the same call from inside PaxInformation.handleSubmitBooking.
+import { markPackageSearchHistoryConfirmed } from "../../../utils/packageSearchHistory";
 // Total Price maths — shared with PackageBooking.jsx (step 1) so the number
 // the operator agreed to there is the number shown and billed here.
 import {
@@ -201,6 +206,9 @@ const PackageCheckout = () => {
         const body = res?.data || {};
         if (body.bookingId) {
           toast.success(body.message || "Booking confirmed successfully!");
+          // Flag the abandoned-search history row as booked so the
+          // scheduler stops considering it a follow-up candidate.
+          markPackageSearchHistoryConfirmed(id);
           try {
             localStorage.removeItem(SESSION_KEY(id));
           } catch {
