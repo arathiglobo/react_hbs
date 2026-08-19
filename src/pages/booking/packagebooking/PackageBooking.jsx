@@ -22,6 +22,16 @@ import {
   FaMapMarkerAlt,
 } from "react-icons/fa";
 
+// Total Price maths — shared with PackageCheckout.jsx so step 1 and step 2
+// can never disagree on the number again. See the header comment in
+// packageTotal.js for why the hotel rate REPLACES the base package rate
+// instead of stacking on top of it.
+import {
+  computePackageTotal,
+  formatPackageAmount,
+  resolvePackageBaseRate,
+} from "./packageTotal";
+
 import HotelsTab from "./tabs/HotelsTab";
 import CabsTab from "./tabs/CabsTab";
 import ActivitiesTab from "./tabs/ActivitiesTab";
@@ -162,6 +172,13 @@ const PackageBooking = () => {
       hotelPrice: 0,
       cabPrice: 0,
       activityPrice: 0,
+      // Meal plan picked on the Hotels tab (BB/HB/FB/AI), sourced from the
+      // selected hotel's mealPlans list — same category+occupancy rates
+      // configured in PackageRates.jsx's Meal Plan Rates block. mealPlanPrice
+      // is the pax-scaled, markup-applied total for the chosen plan; it's
+      // added on top of hotelPrice in the Total Price sidebar below.
+      selectedMealPlan: null,
+      mealPlanPrice: 0,
     },
     // Contact card was removed — the first traveller is the primary contact
     // and their email + mobile are captured directly on the traveller row.
@@ -173,7 +190,14 @@ const PackageBooking = () => {
     // flow into the submit payload via PaxInformation.
     programme: {
       checkInDate: "",
+      // Legacy combined flight text — only ever populated when amending a
+      // booking made before the arrival / departure split. New bookings fill
+      // the two legs below and the backend derives this one.
       flightDetails: "",
+      // Both mandatory on the Package Checkout page's "Travel details"
+      // section (see PaxInformation.validatePaxData).
+      arrivalFlightDetails: "",
+      departureFlightDetails: "",
       // Optional free-text notes captured under the Pax Info step's "Others"
       // heading. Sent on the /book POST as `initialNote`; backend persists it
       // as a package_booking_related_notes row so it lands in the detail
@@ -187,7 +211,28 @@ const PackageBooking = () => {
     },
   });
 
-  const [totalPrice, setTotalPrice] = useState(0);
+  // The package's real price for the searched occupancy
+  // (perAdultRate * adults + perChildRate * children + agent markup), reported
+  // by HotelsTab as soon as /hotel-details returns. Held here rather than
+  // inside the tab because the Total Price sidebar needs it before the
+  // operator has picked anything.
+  const [resolvedPackageRate, setResolvedPackageRate] = useState(0);
+
+  // Total Price — derived, not state, so there is exactly one place the
+  // number comes from. computePackageTotal() owns the maths: the picked
+  // hotel's pax-scaled rate REPLACES the package's "from" rate (both are the
+  // same PackageRates money — see packageTotal.js), then meal plan, cab and
+  // activity stack on top. The same helper runs on PackageCheckout, so the
+  // sidebar here, the sidebar there and the /book payload always agree.
+  const priceBreakdown = computePackageTotal(
+    bookingData.selections,
+    // resolvedPackageRate is the pax-scaled package price reported by the
+    // Hotels step the moment /hotel-details returns; searchRate (the card's
+    // per-adult "from" figure) only stands in for the split second before
+    // that. See resolvePackageBaseRate for why the order matters.
+    resolvePackageBaseRate(searchRate, packageData, resolvedPackageRate),
+  );
+  const totalPrice = priceBreakdown.total;
 
   useEffect(() => {
     const fetchPackageDetails = async () => {
@@ -195,14 +240,6 @@ const PackageBooking = () => {
         setIsLoading(true);
         const response = await axiosInstance.get(`/api/packageRates/${id}`);
         setPackageData(response.data);
-        // Prefer the rate that was shown on the search-result card so the
-        // Total Price sidebar mirrors what the user clicked Book Now on.
-        // Falls back to the rates-API value for direct/refresh visits.
-        const baseRate =
-          Number(searchRate) > 0
-            ? Number(searchRate)
-            : Number(response.data?.rate) || 0;
-        setTotalPrice(baseRate);
       } catch (error) {
         console.error("Error fetching package details:", error);
       } finally {
@@ -320,22 +357,38 @@ const PackageBooking = () => {
             activityPrice: Number(b.selections?.activity?.selectedRate || 0),
           },
           paxInfo: {
-            travellers: (b.travellers || []).map((t, i) => ({
-              type: t.type || (i === 0 ? "Adult" : "Adult"),
-              id: `${(t.type || "adult").toLowerCase()}-${i}-${Date.now()}`,
-              title: t.title || "Mr",
-              firstName: t.firstName || "",
-              middleName: t.middleName || "",
-              lastName: t.lastName || "",
-              // Email + mobile aren't on the per-traveller payload — pull
-              // them from the booking-level contactInfo for the first row.
-              email: i === 0 ? b.contactInfo?.email || "" : "",
-              mobile: i === 0 ? b.contactInfo?.mobile || "" : "",
-            })),
+            travellers: (() => {
+              const rows = b.travellers || [];
+              // Which row was flagged Lead when the booking was saved. Rows
+              // from before the Lead radio existed carry no flag — fall back
+              // to the first traveller, which is what that flow always used
+              // as the contact.
+              const savedLead = rows.findIndex((t) => t.isLead);
+              const leadIdx = savedLead > -1 ? savedLead : 0;
+              return rows.map((t, i) => ({
+                type: t.type || (i === 0 ? "Adult" : "Adult"),
+                id: `${(t.type || "adult").toLowerCase()}-${i}-${Date.now()}`,
+                title: t.title || "Mr",
+                firstName: t.firstName || "",
+                middleName: t.middleName || "",
+                lastName: t.lastName || "",
+                isLead: i === leadIdx,
+                // Email + mobile aren't on the per-traveller payload — pull
+                // them from the booking-level contactInfo onto the Lead row,
+                // since that traveller is the booking's contact.
+                email: i === leadIdx ? b.contactInfo?.email || "" : "",
+                mobile: i === leadIdx ? b.contactInfo?.mobile || "" : "",
+              }));
+            })(),
           },
           programme: {
             checkInDate: b.checkInDate || "",
             flightDetails: b.flightDetails || "",
+            // Bookings created before the split return null for both legs;
+            // the operator has to fill them in to save the amendment, which
+            // is the intended migration path for old bookings.
+            arrivalFlightDetails: b.arrivalFlightDetails || "",
+            departureFlightDetails: b.departureFlightDetails || "",
             modeOfPayment: b.modeOfPayment || "",
             bookingConfirmation: b.bookingConfirmation || "",
             termsAccepted: !!b.termsAccepted,
@@ -348,29 +401,6 @@ const PackageBooking = () => {
     };
     loadExistingBooking();
   }, [isEditMode, bookingId]);
-
-  useEffect(() => {
-    // Same precedence as the initial fetch — prefer the searched rate so
-    // the sidebar stays aligned with what the user clicked Book Now on,
-    // even after selections trigger a recompute.
-    const baseRate =
-      Number(searchRate) > 0
-        ? Number(searchRate)
-        : Number(packageData?.rate) || 0;
-    const { hotelPrice, cabPrice, activityPrice } = bookingData.selections;
-
-    // Show the package rate exactly as it appeared on the search card until
-    // the user actually picks a hotel. Applying any category- or pax-based
-    // multiplier here would make the sidebar disagree with the number the
-    // user clicked "Book Now" on for their package. Once a hotel IS
-    // selected, its totalRateWithMarkup is the authoritative charge
-    // (already pax-sized by the backend as
-    // perAdultRate*adultCount + perChildRate*childCount + markup), so it
-    // takes over directly.
-    const packageTotal = hotelPrice > 0 ? hotelPrice : baseRate;
-
-    setTotalPrice(packageTotal + cabPrice + activityPrice);
-  }, [bookingData.selections, packageData, searchRate]);
 
   const updateSelections = (selections) =>
     setBookingData((prev) => ({ ...prev, selections: { ...prev.selections, ...selections } }));
@@ -519,6 +549,11 @@ const PackageBooking = () => {
       editingBookingId,
       parentBookingCode,
       searchRate,
+      // Carried so the checkout page resolves the same base rate this page
+      // did. A hotel is always selected by the time we get here (HotelsTab
+      // enforces it), so the base is not normally used there — but sending it
+      // keeps the two pages on identical inputs rather than relying on that.
+      resolvedPackageRate,
     };
     try {
       localStorage.setItem(
@@ -545,11 +580,8 @@ const PackageBooking = () => {
                         programme={bookingData.programme}
                         updateData={updateSelections}
                         updateProgramme={updateProgramme}
-                        packageRate={
-                          Number(searchRate) > 0
-                            ? Number(searchRate)
-                            : Number(packageData?.rate || 0)
-                        }
+                        packageRate={priceBreakdown.accommodation}
+                        onPackageRateResolved={setResolvedPackageRate}
                         onPrev={() => navigate("/new-booking/package-search")}
                         onNext={goToCheckout} />;
       // case 2 was PaxInformation — moved to a dedicated route
@@ -565,6 +597,7 @@ const PackageBooking = () => {
                         onFinish={handleFinish}
                         packageData={packageData}
                         totalPrice={totalPrice}
+                        priceBreakdown={priceBreakdown}
                         editingBookingId={editingBookingId}
                         parentBookingCode={parentBookingCode}
                       />;
@@ -768,41 +801,39 @@ const PackageBooking = () => {
                   so the Total Price stays visible while the operator scrolls
                   through the main content. It unpins naturally when its
                   column ends. */}
-              {/* ── Displayed total (add-view) vs submitted total (billing) ──
-                  The number rendered here in the sidebar is INTENTIONALLY the
-                  sum: Package rate + Hotel (when selected) + Cabs + Activities
-                  — so the operator sees the components stacking up as they
-                  make selections. The `totalPrice` state that flows into the
-                  /book POST body is kept on its existing "hotel replaces
-                  package rate" logic (see the useEffect above), because
-                  hotel.totalRateWithMarkup ALREADY includes the package's
-                  pax-sized base + agent markup; adding baseRate on top of
-                  that would double-deduct the agent's credit at line 1374 of
-                  PackageBookingServiceImpl.java. So display ≠ billed on
-                  purpose — this component is presentational only. */}
+              {/* ── Displayed total == submitted total ──
+                  The number rendered here is `totalPrice`, the exact figure
+                  carried into /new-booking/package-checkout/{id} and posted on
+                  the /book payload. It used to be a second, hand-rolled "add
+                  everything up" sum that also added the package's base rate on
+                  top of the selected hotel — but both come from the same
+                  PackageRates rows (base = lowest per-adult rate, hotel = that
+                  same rate pax-scaled), so that double-charged the package.
+                  See packageTotal.js. */}
               <div className="sidebar-stack">
               {/* Booking Summary card was moved INTO the hero card at the top
                   of the page (right-side column, md=4) per operator feedback,
                   so the sidebar no longer duplicates it. The Total Price card
                   below is now the first sidebar item. */}
 
-              {/* Total Price — just the headline number. Per product spec
-                  the rate-splits (Package rate / Hotels / Cabs / Activities
-                  breakdown rows) were removed on this page so the operator
-                  sees the single total they're about to commit to. The
-                  detailed breakdown still appears on /new-booking/
-                  package-checkout/{id} if needed. */}
+              {/* Total Price — the headline number, with the meal-plan add-on
+                  called out underneath once one is picked so the operator can
+                  see what stacked on top of the accommodation rate. */}
               <div className="price-sidebar-card">
                 <div className="price-sidebar-label">Total Price</div>
                 <div className="price-sidebar-amount">
-                  {(
-                    (Number(searchRate) > 0 ? Number(searchRate) : Number(packageData?.rate) || 0) +
-                    (Number(bookingData.selections.hotelPrice) || 0) +
-                    (Number(bookingData.selections.cabPrice) || 0) +
-                    (Number(bookingData.selections.activityPrice) || 0)
-                  ).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {formatPackageAmount(totalPrice)}
                 </div>
                 <div className="price-sidebar-sub">AED · Selling price</div>
+                {/* Meal plan line — only shown once one is picked on the
+                    Hotels tab, so the operator can see what's stacked on
+                    top of the hotel rate at a glance. */}
+                {bookingData.selections.selectedMealPlan && (
+                  <div className="price-sidebar-mealplan">
+                    + {bookingData.selections.selectedMealPlan.label} meal plan · AED{" "}
+                    {formatPackageAmount(priceBreakdown.mealPlan)}
+                  </div>
+                )}
               </div>
 
               {/* Cancellation Policies & Terms — moved out of the Total
@@ -978,110 +1009,178 @@ const PackageBooking = () => {
         size="lg"
         scrollable
       >
-        <Modal.Header closeButton style={{ background: "#f8fafc" }}>
-          <Modal.Title
-            className="d-flex align-items-center"
-            style={{ fontSize: "1.05rem" }}
-          >
-            <FaShieldAlt className="me-2" style={{ color: "#EC0B43" }} />
+        {/* One accent colour (the brand red) carried by the header icon and
+            the non-refundable note only. Section headings used to be four
+            different colours — red / green / red / dark-with-red-icon — which
+            made four peer sections read as four unrelated warnings. They are
+            now identical muted labels, so the eye goes to the CONTENT. */}
+        <Modal.Header closeButton className="pkg-policy-head">
+          <Modal.Title className="pkg-policy-title">
+            <FaShieldAlt className="pkg-policy-title-icon" />
             Cancellation Policies &amp; Terms &amp; Conditions
           </Modal.Title>
         </Modal.Header>
-        <Modal.Body className="p-4">
-          {/* Cancellation policy — matches the room-list "Cancellation Policy"
-              block (see RoomList.jsx:2020-2047) and the equivalent block on
-              the Package Details step (HotelsTab.jsx): red danger-toned h6
-              heading with the solid X-circle icon, and a bulleted <ul> list.
-              The NON-REFUNDABLE note is folded in as the final list item so
-              the emphasis carries over without a separate callout row. */}
-          <h6 className="text-danger mb-3">
-            <FaTimesCircle className="me-2" />
-            Cancellation Policy
-          </h6>
-          <ul className="mb-0 ps-3">
-            {cancellationParts.map((p, i) => (
-              <li key={i} className="mb-2">
-                <div style={{ whiteSpace: "pre-line" }}>{p.text}</div>
-              </li>
-            ))}
-            <li className="mb-0 text-danger">
-              <FaShieldAlt className="me-2" />
-              This is a <strong>NON-REFUNDABLE</strong> package within the charge window.
-            </li>
-          </ul>
 
-          {/* Includes — moved here from the removed Package Information card
-              on the Package Details step. Same "empty state" fallback as
-              before so operators still see the "will be uploaded by supplier"
-              hint when the package has no inclusions attached yet. */}
-          <h6 className="text-success mb-3 mt-4">
-            <FaCheckCircle className="me-2" />
-            Includes
-          </h6>
-          {inclusions.length > 0 ? (
-            <ul className="mb-0 ps-3">
-              {inclusions.map((x) => (
-                <li key={`inc-${x.otherId}`} className="mb-2">
-                  {x.description}
+        <Modal.Body className="pkg-policy-body">
+          <section className="pkg-policy-section">
+            <div className="pkg-policy-label">
+              <FaTimesCircle /> Cancellation Policy
+            </div>
+            <ul className="pkg-policy-list">
+              {cancellationParts.map((p, i) => (
+                <li key={i} style={{ whiteSpace: "pre-line" }}>
+                  {p.text}
                 </li>
               ))}
             </ul>
-          ) : (
-            <p className="small text-muted fst-italic mb-0">
-              Includes will be uploaded by supplier.
+            {/* The one place emphasis is genuinely warranted — kept as a
+                restrained left-rule note instead of the old red list item. */}
+            <p className="pkg-policy-note">
+              This is a <strong>NON-REFUNDABLE</strong> package within the
+              charge window.
             </p>
-          )}
+          </section>
 
-          {/* Excludes — same treatment as Includes above. */}
-          <h6 className="text-danger mb-3 mt-4">
-            <FaTimesCircle className="me-2" />
-            Excludes
-          </h6>
-          {exclusions.length > 0 ? (
-            <ul className="mb-0 ps-3">
-              {exclusions.map((x) => (
-                <li key={`exc-${x.otherId}`} className="mb-2">
-                  {x.description}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="small text-muted fst-italic mb-0">
-              Excludes will be uploaded by supplier.
-            </p>
-          )}
+          {/* Includes / Excludes — moved here from the removed Package
+              Information card on the Package Details step. Same "empty state"
+              fallback so operators still see the "will be uploaded by
+              supplier" hint when nothing is attached yet. */}
+          <section className="pkg-policy-section">
+            <div className="pkg-policy-label">
+              <FaCheckCircle /> Includes
+            </div>
+            {inclusions.length > 0 ? (
+              <ul className="pkg-policy-list">
+                {inclusions.map((x) => (
+                  <li key={`inc-${x.otherId}`}>{x.description}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="pkg-policy-empty">
+                Includes will be uploaded by supplier.
+              </p>
+            )}
+          </section>
 
-          {/* Terms & Conditions */}
-          <h6
-            className="fw-bold d-flex align-items-center mb-2 mt-4"
-            style={{ color: "#1e293b" }}
-          >
-            <FaFileContract className="me-2 text-danger" /> Terms &amp; Conditions
-          </h6>
-          {termsList.length > 0 ? (
-            <ul className="small mb-0 ps-3">
-              {termsList.map((t) => (
-                <li key={t.otherId} className="mb-2">
-                  {t.description}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="small text-muted fst-italic mb-0">
-              No specific terms were attached to this package. By proceeding you
-              confirm you have read the cancellation window and accept the
-              standard package conditions.
-            </p>
-          )}
+          <section className="pkg-policy-section">
+            <div className="pkg-policy-label">
+              <FaTimesCircle /> Excludes
+            </div>
+            {exclusions.length > 0 ? (
+              <ul className="pkg-policy-list">
+                {exclusions.map((x) => (
+                  <li key={`exc-${x.otherId}`}>{x.description}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="pkg-policy-empty">
+                Excludes will be uploaded by supplier.
+              </p>
+            )}
+          </section>
+
+          <section className="pkg-policy-section">
+            <div className="pkg-policy-label">
+              <FaFileContract /> Terms &amp; Conditions
+            </div>
+            {termsList.length > 0 ? (
+              <ul className="pkg-policy-list">
+                {termsList.map((t) => (
+                  <li key={t.otherId}>{t.description}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="pkg-policy-empty">
+                No specific terms were attached to this package. By proceeding
+                you confirm you have read the cancellation window and accept
+                the standard package conditions.
+              </p>
+            )}
+          </section>
         </Modal.Body>
-        <Modal.Footer style={{ background: "#f1f5f9" }}>
+
+        <Modal.Footer className="pkg-policy-foot">
           <Button
+            size="sm"
             variant="outline-secondary"
             onClick={() => setShowPolicyModal(false)}
           >
             Close
           </Button>
         </Modal.Footer>
+
+        <style>{`
+          /* Flat white chrome — the grey header / footer bars added two more
+             tones for no information gain. A hairline rule does the same job. */
+          .pkg-policy-head {
+            background: #fff;
+            border-bottom: 1px solid #eceef1;
+            padding: 14px 20px;
+          }
+          .pkg-policy-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.98rem;
+            font-weight: 700;
+            color: #0f172a;
+          }
+          .pkg-policy-title-icon { color: #EC0B43; font-size: 0.95rem; }
+
+          .pkg-policy-body { padding: 4px 20px 16px; }
+
+          /* Sections are separated by a rule rather than a 1.5rem margin, so
+             the panel reads as one document instead of four floating blocks. */
+          .pkg-policy-section { padding: 14px 0; border-top: 1px solid #f1f3f5; }
+          .pkg-policy-section:first-child { border-top: 0; }
+
+          .pkg-policy-label {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            color: #64748b;
+            margin-bottom: 8px;
+          }
+          .pkg-policy-label svg { font-size: 0.8rem; color: #94a3b8; }
+
+          .pkg-policy-list {
+            margin: 0;
+            padding-left: 18px;
+            font-size: 0.85rem;
+            line-height: 1.5;
+            color: #334155;
+          }
+          .pkg-policy-list li { margin-bottom: 5px; }
+          .pkg-policy-list li:last-child { margin-bottom: 0; }
+          .pkg-policy-list li::marker { color: #cbd5e1; }
+
+          .pkg-policy-empty {
+            margin: 0;
+            font-size: 0.82rem;
+            font-style: italic;
+            color: #94a3b8;
+          }
+
+          .pkg-policy-note {
+            margin: 10px 0 0;
+            padding: 7px 12px;
+            border-left: 3px solid #EC0B43;
+            background: #fff5f7;
+            border-radius: 0 6px 6px 0;
+            font-size: 0.82rem;
+            color: #7f1d2e;
+          }
+
+          .pkg-policy-foot {
+            background: #fff;
+            border-top: 1px solid #eceef1;
+            padding: 10px 20px;
+          }
+        `}</style>
       </Modal>
     </div>
   );

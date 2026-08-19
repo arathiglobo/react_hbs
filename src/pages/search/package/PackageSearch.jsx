@@ -327,6 +327,11 @@ const PackageSearch = () => {
   const navigate = useNavigate();
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState(null);
+  // Category resolved for the current search's pax count — captured off the
+  // clicked result row so the View modal's "Categories" line shows only the
+  // room that will actually be booked (not every category the package sells).
+  // Falls back to the full list if the backend didn't send matchedCategoryName.
+  const [selectedMatchedCategory, setSelectedMatchedCategory] = useState(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
 
   // ─────────────────────────────────────────────
@@ -759,10 +764,21 @@ const PackageSearch = () => {
     return `${process.env.REACT_APP_API_BASE_URL}/api/files/${imagePath}`;
   };
 
-  const handleView = React.useCallback(async (packageId) => {
+  const handleView = React.useCallback(async (pkgOrId) => {
+    // Accept either the whole result row (preferred — carries the matched
+    // category the search resolved for this pax count) or a bare id for
+    // legacy callers. The matched category, if any, is captured into state
+    // so the modal's Categories line shows only the room to be booked.
+    const packageId = typeof pkgOrId === "object" && pkgOrId !== null
+      ? pkgOrId.packageId
+      : pkgOrId;
+    const matched = typeof pkgOrId === "object" && pkgOrId !== null
+      ? pkgOrId.matchedCategoryName || null
+      : null;
     try {
       setIsDetailLoading(true);
       setSelectedPackage(null);
+      setSelectedMatchedCategory(matched);
       setShowDetailModal(true);
 
       const response = await axiosInstance.get(
@@ -791,8 +807,8 @@ const PackageSearch = () => {
   // package (returned by the search response).
   const packageIncludesOptions = [
     { value: "hotel", label: "Hotel", flag: "containHotel" },
-    { value: "cab", label: "Cab", flag: "containCab" },
-    { value: "activity", label: "Activity", flag: "containActivity" },
+    { value: "Transfers", label: "Transfers", flag: "containCab" },
+    { value: "Tours", label: "Tours", flag: "containActivity" },
   ];
 
   // Duration buckets — mirrors the "All Stars" top-of-results dropdown. Each
@@ -1675,10 +1691,10 @@ const PackageSearch = () => {
                                           "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=800&q=80";
                                       }}
                                     />
-                                    <div className="duration-badge">
+                                    {/* <div className="duration-badge">
                                       <FaClock className="me-1 mb-1" size={11} />
                                       {pkg.duration} Night(s)
-                                    </div>
+                                    </div> */}
                                   </div>
                                 </Col>
 
@@ -1714,23 +1730,10 @@ const PackageSearch = () => {
                                       </div>
                                     )}
 
-                                    {/* Price + Book — the two action buttons
-                                        live in a right-hand cluster so the eye
-                                        button no longer jams between price and
-                                        Book Now, and the whole row wraps as a
-                                        unit on narrow columns (price above,
-                                        actions below) instead of the buttons
-                                        breaking mid-word. */}
-                                    <div className="price-box d-flex flex-wrap justify-content-between align-items-center gap-2 mt-auto">
-                                      <div className="price-line">
-                                        <span className="price-currency">AED</span>
-                                        <span className="price-value">
-                                          {pkg.rate}
-                                        </span>
-                                        <span className="price-unit">
-                                          Package Base Rate / {pkg.rateType}
-                                        </span>
-                                      </div>
+                                    {/* Actions cluster — the price/base-rate line was
+                                        removed per client ask; the card just shows
+                                        View + Book on the right now. */}
+                                    <div className="price-box d-flex flex-wrap justify-content-end align-items-center gap-2 mt-auto">
                                       <div className="package-actions d-flex align-items-center gap-2">
                                         <Button
                                           variant="outline-success"
@@ -1738,7 +1741,7 @@ const PackageSearch = () => {
                                           className="pkg-view-btn"
                                           title="View package details"
                                           aria-label="View package details"
-                                          onClick={() => handleView(pkg.packageId)}
+                                          onClick={() => handleView(pkg)}
                                         >
                                          View
                                         </Button>
@@ -1892,7 +1895,7 @@ const PackageSearch = () => {
               <div className="detail-body-content p-3">
                 {/* ─── Highlight Strip ───────────────────────────── */}
                 <div className="highlight-strip">
-                  <div className="highlight-item">
+                  {/* <div className="highlight-item">
                     <FaMoneyBillWave className="highlight-icon" />
                     <div>
                       <div className="highlight-label">Basic Rate</div>
@@ -1903,7 +1906,7 @@ const PackageSearch = () => {
                         {selectedPackage.packageBasicRate ?? "-"}
                       </div>
                     </div>
-                  </div>
+                  </div> */}
                   <div className="highlight-item">
                     <FaClock className="highlight-icon" />
                     <div>
@@ -1944,14 +1947,14 @@ const PackageSearch = () => {
                       selectedPackage.containCab === 1 ? "active" : ""
                     }`}
                   >
-                    <FaCar className="me-1" /> Cab
+                    <FaCar className="me-1" /> Transfers
                   </span>
                   <span
                     className={`include-chip ${
                       selectedPackage.containActivity === 1 ? "active" : ""
                     }`}
                   >
-                    <FaHiking className="me-1" /> Activity
+                    <FaHiking className="me-1" /> Tours
                   </span>
                 </div>
 
@@ -1976,12 +1979,12 @@ const PackageSearch = () => {
                             {selectedPackage.packageTypeName || "-"}
                           </span>
                         </div>
-                        <div className="info-row">
+                        {/* <div className="info-row">
                           <span className="info-label">Currency</span>
                           <span className="info-value">
                             {selectedPackage.currencyName || "-"}
                           </span>
-                        </div>
+                        </div> */}
                       </Col>
                       <Col md={6}>
                         <div className="info-row">
@@ -2005,8 +2008,10 @@ const PackageSearch = () => {
                         <div className="info-row">
                           <span className="info-label">Categories</span>
                           <span className="info-value">
-                            {selectedPackage.packageCategories &&
-                            selectedPackage.packageCategories.length > 0
+                            {selectedMatchedCategory
+                              ? selectedMatchedCategory
+                              : selectedPackage.packageCategories &&
+                                selectedPackage.packageCategories.length > 0
                               ? selectedPackage.packageCategories
                                   .map((c) => c.name)
                                   .filter(Boolean)
@@ -2190,7 +2195,7 @@ const PackageSearch = () => {
           >
             Close
           </Button>
-          {selectedPackage?.packageId && (
+          {/* {selectedPackage?.packageId && (
             <Button
               variant="danger"
               size="sm"
@@ -2212,7 +2217,7 @@ const PackageSearch = () => {
             >
               Book Now
             </Button>
-          )}
+          )} */}
         </Modal.Footer>
       </Modal>
 

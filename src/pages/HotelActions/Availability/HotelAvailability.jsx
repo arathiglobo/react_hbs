@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   Card,
@@ -14,12 +15,471 @@ import {
   Tab,
 } from "react-bootstrap";
 import { FaArrowLeft, FaEdit, FaEye, FaTrash } from "react-icons/fa";
+import {
+  ChevronUp,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import axiosInstance from "../../../components/AxiosInstance";
 import Sidebar from "../../../components/Sidebar";
 import Topbar from "../../../components/TopBar";
 import HotelTitleBadge from "../../../components/HotelTitleBadge";
+
+// ---- Date-time picker with explicit Apply / Cancel --------------------
+// Mirrors the picker used by /hotel-actions/{id}/occupancy-and-minimumlength
+// so the three modals here (Hotel Availability, Block Checkin Checkout,
+// Stop Sale) show the same calendar + AM/PM time spinner UI instead of
+// the browser-native datetime-local input.
+const pad2 = (n) => String(n).padStart(2, "0");
+
+const parseLocalDateTime = (str) => {
+  if (!str) return null;
+  const [datePart, timePart = "00:00"] = str.split("T");
+  const [y, m, d] = datePart.split("-").map(Number);
+  const [hh, mm] = timePart.split(":").map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d, hh || 0, mm || 0);
+};
+
+const formatLocalDateTime = (date) => {
+  if (!date) return "";
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(
+    date.getDate(),
+  )}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+};
+
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const CURRENT_YEAR = new Date().getFullYear();
+const YEARS = Array.from({ length: 31 }, (_, i) => CURRENT_YEAR - 10 + i);
+
+const formatDisplay = (date) => {
+  if (!date) return "";
+  const h24 = date.getHours();
+  const ampm = h24 >= 12 ? "PM" : "AM";
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${pad2(date.getDate())}-${pad2(date.getMonth() + 1)}-${date.getFullYear()} ${pad2(
+    h12,
+  )}:${pad2(date.getMinutes())} ${ampm}`;
+};
+
+const sameDay = (a, b) =>
+  !!a &&
+  !!b &&
+  a.getFullYear() === b.getFullYear() &&
+  a.getMonth() === b.getMonth() &&
+  a.getDate() === b.getDate();
+
+const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+const buildCalendar = (view) => {
+  const first = new Date(view.getFullYear(), view.getMonth(), 1);
+  const start = new Date(first);
+  start.setDate(1 - first.getDay());
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return d;
+  });
+};
+
+const DateTimeApplyPicker = ({
+  value,
+  onApply,
+  disabled = false,
+  isInvalid = false,
+  minDate,
+  placeholder = "Select date & time",
+}) => {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(parseLocalDateTime(value));
+  const [viewDate, setViewDate] = useState(
+    parseLocalDateTime(value) || new Date(),
+  );
+  const wrapRef = useRef(null);
+  const popupRef = useRef(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const [hourText, setHourText] = useState("");
+  const [minuteText, setMinuteText] = useState("");
+
+  useEffect(() => {
+    setDraft(parseLocalDateTime(value));
+  }, [value]);
+
+  const computePos = () => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const W = 470;
+    const H = 360;
+    let left = r.left;
+    if (left + W > window.innerWidth - 8) {
+      left = Math.max(8, window.innerWidth - W - 8);
+    }
+    let top = r.bottom + 4;
+    if (top + H > window.innerHeight - 8) {
+      const above = r.top - H - 4;
+      top = above > 8 ? above : Math.max(8, window.innerHeight - H - 8);
+    }
+    setPos({ top, left });
+  };
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDocMouseDown = (e) => {
+      const inInput = wrapRef.current && wrapRef.current.contains(e.target);
+      const inPopup = popupRef.current && popupRef.current.contains(e.target);
+      if (!inInput && !inPopup) {
+        setDraft(parseLocalDateTime(value));
+        setOpen(false);
+      }
+    };
+    const onReflow = () => computePos();
+    document.addEventListener("mousedown", onDocMouseDown);
+    window.addEventListener("scroll", onReflow, true);
+    window.addEventListener("resize", onReflow);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      window.removeEventListener("scroll", onReflow, true);
+      window.removeEventListener("resize", onReflow);
+    };
+  }, [open, value]);
+
+  const openPicker = () => {
+    if (disabled) return;
+    const init = parseLocalDateTime(value) || new Date();
+    init.setSeconds(0, 0);
+    setDraft(init);
+    setViewDate(init);
+    computePos();
+    setOpen(true);
+  };
+
+  const handleApply = () => {
+    onApply(formatLocalDateTime(draft));
+    setOpen(false);
+  };
+
+  const handleCancel = () => {
+    setDraft(parseLocalDateTime(value));
+    setOpen(false);
+  };
+
+  const handleClear = () => {
+    setDraft(null);
+    onApply("");
+    setOpen(false);
+  };
+
+  const draftHour24 = draft ? draft.getHours() : 0;
+  const draftAmPm = draftHour24 >= 12 ? "PM" : "AM";
+  const draftHour12 = draftHour24 % 12 === 0 ? 12 : draftHour24 % 12;
+  const draftMinute = draft ? draft.getMinutes() : 0;
+
+  useEffect(() => {
+    setHourText(pad2(draftHour12));
+    setMinuteText(pad2(draftMinute));
+  }, [draftHour12, draftMinute]);
+
+  const ensureDraft = () => {
+    const base = draft ? new Date(draft) : new Date();
+    base.setSeconds(0, 0);
+    return base;
+  };
+
+  const stepHour = (delta) => {
+    const base = ensureDraft();
+    base.setHours((base.getHours() + delta + 24) % 24);
+    setDraft(base);
+  };
+
+  const stepMinute = (delta) => {
+    const base = ensureDraft();
+    base.setMinutes((base.getMinutes() + delta + 60) % 60);
+    setDraft(base);
+  };
+
+  const setAmPm = (ampm) => {
+    const base = ensureDraft();
+    const isPM = base.getHours() >= 12;
+    if (ampm === "PM" && !isPM) base.setHours(base.getHours() + 12);
+    if (ampm === "AM" && isPM) base.setHours(base.getHours() - 12);
+    setDraft(base);
+  };
+
+  const commitHour = () => {
+    const h = parseInt(hourText.replace(/\D/g, ""), 10);
+    if (Number.isNaN(h)) {
+      setHourText(pad2(draftHour12));
+      return;
+    }
+    const clamped = Math.min(12, Math.max(1, h));
+    const base = ensureDraft();
+    base.setHours((clamped % 12) + (draftAmPm === "PM" ? 12 : 0));
+    setDraft(base);
+  };
+
+  const commitMinute = () => {
+    const m = parseInt(minuteText.replace(/\D/g, ""), 10);
+    if (Number.isNaN(m)) {
+      setMinuteText(pad2(draftMinute));
+      return;
+    }
+    const clamped = Math.min(59, Math.max(0, m));
+    const base = ensureDraft();
+    base.setMinutes(clamped);
+    setDraft(base);
+  };
+
+  const setMonth = (m) =>
+    setViewDate((prev) => new Date(prev.getFullYear(), m, 1));
+  const setYear = (y) =>
+    setViewDate((prev) => new Date(y, prev.getMonth(), 1));
+
+  const selectDay = (day) => {
+    if (minDate && startOfDay(day) < startOfDay(minDate)) return;
+    const base = ensureDraft();
+    base.setFullYear(day.getFullYear(), day.getMonth(), day.getDate());
+    setDraft(base);
+  };
+
+  const gotoMonth = (delta) => {
+    setViewDate(
+      (prev) => new Date(prev.getFullYear(), prev.getMonth() + delta, 1),
+    );
+  };
+
+  const committed = parseLocalDateTime(value);
+  const days = buildCalendar(viewDate);
+
+  return (
+    <div className="cdt" ref={wrapRef}>
+      <input
+        type="text"
+        readOnly
+        value={formatDisplay(committed)}
+        placeholder={placeholder}
+        onClick={openPicker}
+        disabled={disabled}
+        className={`form-control ${isInvalid ? "is-invalid" : ""}`}
+        autoComplete="off"
+      />
+
+      {open &&
+        !disabled &&
+        createPortal(
+          <div
+            className="cdt-popup"
+            ref={popupRef}
+            style={{ top: pos.top, left: pos.left }}
+          >
+            <div className="cdt-body">
+              <div className="cdt-cal">
+                <div className="cdt-cal-head">
+                  <button
+                    type="button"
+                    className="cdt-nav"
+                    onClick={() => gotoMonth(-1)}
+                    aria-label="Previous month"
+                  >
+                    <ChevronLeft size={18} />
+                  </button>
+                  <div className="cdt-cal-selects">
+                    <select
+                      className="cdt-select"
+                      value={viewDate.getMonth()}
+                      onChange={(e) => setMonth(Number(e.target.value))}
+                    >
+                      {MONTHS.map((m, i) => (
+                        <option key={m} value={i}>
+                          {m}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="cdt-select"
+                      value={viewDate.getFullYear()}
+                      onChange={(e) => setYear(Number(e.target.value))}
+                    >
+                      {YEARS.map((y) => (
+                        <option key={y} value={y}>
+                          {y}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    className="cdt-nav"
+                    onClick={() => gotoMonth(1)}
+                    aria-label="Next month"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+                <div className="cdt-grid cdt-grid-dow">
+                  {WEEKDAYS.map((d) => (
+                    <span key={d} className="cdt-dow">
+                      {d}
+                    </span>
+                  ))}
+                </div>
+                <div className="cdt-grid">
+                  {days.map((day, i) => {
+                    const outside = day.getMonth() !== viewDate.getMonth();
+                    const isSel = sameDay(day, draft);
+                    const isDisabled =
+                      !!minDate && startOfDay(day) < startOfDay(minDate);
+                    return (
+                      <button
+                        type="button"
+                        key={i}
+                        disabled={isDisabled}
+                        onClick={() => selectDay(day)}
+                        className={`cdt-day${outside ? " cdt-day-out" : ""}${
+                          isSel ? " cdt-day-sel" : ""
+                        }${isDisabled ? " cdt-day-disabled" : ""}`}
+                      >
+                        {day.getDate()}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="cdt-time">
+                <div className="cdt-stepper">
+                  <button
+                    type="button"
+                    className="cdt-chev"
+                    onClick={() => stepHour(1)}
+                    aria-label="Hour up"
+                  >
+                    <ChevronUp size={18} />
+                  </button>
+                  <input
+                    className="cdt-num"
+                    inputMode="numeric"
+                    maxLength={2}
+                    value={hourText}
+                    onChange={(e) =>
+                      setHourText(e.target.value.replace(/\D/g, "").slice(0, 2))
+                    }
+                    onBlur={commitHour}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                    }}
+                    aria-label="Hour"
+                  />
+                  <button
+                    type="button"
+                    className="cdt-chev"
+                    onClick={() => stepHour(-1)}
+                    aria-label="Hour down"
+                  >
+                    <ChevronDown size={18} />
+                  </button>
+                </div>
+
+                <span className="cdt-sep">:</span>
+
+                <div className="cdt-stepper">
+                  <button
+                    type="button"
+                    className="cdt-chev"
+                    onClick={() => stepMinute(1)}
+                    aria-label="Minute up"
+                  >
+                    <ChevronUp size={18} />
+                  </button>
+                  <input
+                    className="cdt-num"
+                    inputMode="numeric"
+                    maxLength={2}
+                    value={minuteText}
+                    onChange={(e) =>
+                      setMinuteText(
+                        e.target.value.replace(/\D/g, "").slice(0, 2),
+                      )
+                    }
+                    onBlur={commitMinute}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") e.currentTarget.blur();
+                    }}
+                    aria-label="Minute"
+                  />
+                  <button
+                    type="button"
+                    className="cdt-chev"
+                    onClick={() => stepMinute(-1)}
+                    aria-label="Minute down"
+                  >
+                    <ChevronDown size={18} />
+                  </button>
+                </div>
+
+                <div className="cdt-ampm">
+                  <button
+                    type="button"
+                    className={`cdt-ampm-btn${draftAmPm === "AM" ? " active" : ""}`}
+                    onClick={() => setAmPm("AM")}
+                  >
+                    AM
+                  </button>
+                  <button
+                    type="button"
+                    className={`cdt-ampm-btn${draftAmPm === "PM" ? " active" : ""}`}
+                    onClick={() => setAmPm("PM")}
+                  >
+                    PM
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="cdt-footer">
+              <button type="button" className="cdt-clear" onClick={handleClear}>
+                Clear
+              </button>
+              <div className="cdt-foot-actions">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  onClick={handleCancel}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  onClick={handleApply}
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
+};
 
 const HotelAvailability = () => {
   const { id } = useParams();
@@ -1976,6 +2436,8 @@ const HotelAvailability = () => {
         size="lg"
         backdrop="static"
         keyboard={false}
+        enforceFocus={false}
+        restoreFocus={false}
       >
         <Modal.Header closeButton={!isLoading}>
           <Modal.Title>
@@ -2173,19 +2635,25 @@ const HotelAvailability = () => {
                         <Form.Label>
                           Validity From <span className="text-danger">*</span>
                         </Form.Label>
-                        <Form.Control
-                          type="datetime-local"
+                        <DateTimeApplyPicker
                           value={period.validityFrom || ""}
-                          onChange={(e) => {
+                          disabled={isViewMode}
+                          isInvalid={
+                            !!validationErrors[`validityFrom_${index}`]
+                          }
+                          onApply={(val) => {
                             const newValidityList = [
                               ...formData.availabilityValidities,
                             ];
-                            newValidityList[index].validityFrom =
-                              e.target.value;
+                            newValidityList[index].validityFrom = val;
 
-                            // Clear Validity To if it becomes invalid (before or equal to From date)
-                            const currentToDate = formData.availabilityValidities[index].validityTo;
-                            if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                            const currentToDate =
+                              formData.availabilityValidities[index].validityTo;
+                            if (
+                              currentToDate &&
+                              val &&
+                              new Date(currentToDate) <= new Date(val)
+                            ) {
                               newValidityList[index].validityTo = "";
                             }
 
@@ -2194,10 +2662,6 @@ const HotelAvailability = () => {
                               availabilityValidities: newValidityList,
                             });
                           }}
-                          disabled={isViewMode}
-                          isInvalid={
-                            !!validationErrors[`validityFrom_${index}`]
-                          }
                         />
                         {validationErrors[`validityFrom_${index}`] && (
                           <Form.Control.Feedback type="invalid">
@@ -2211,22 +2675,25 @@ const HotelAvailability = () => {
                         <Form.Label>
                           Validity To <span className="text-danger">*</span>
                         </Form.Label>
-                        <Form.Control
-                          type="datetime-local"
+                        <DateTimeApplyPicker
                           value={period.validityTo || ""}
-                          min={getMinValidityToDate(period.validityFrom)}
-                          onChange={(e) => {
+                          disabled={isViewMode}
+                          isInvalid={!!validationErrors[`validityTo_${index}`]}
+                          minDate={
+                            period.validityFrom
+                              ? parseLocalDateTime(period.validityFrom)
+                              : undefined
+                          }
+                          onApply={(val) => {
                             const newValidityList = [
                               ...formData.availabilityValidities,
                             ];
-                            newValidityList[index].validityTo = e.target.value;
+                            newValidityList[index].validityTo = val;
                             setFormData({
                               ...formData,
                               availabilityValidities: newValidityList,
                             });
                           }}
-                          disabled={isViewMode}
-                          isInvalid={!!validationErrors[`validityTo_${index}`]}
                         />
                         {validationErrors[`validityTo_${index}`] && (
                           <Form.Control.Feedback type="invalid">
@@ -2411,6 +2878,8 @@ const HotelAvailability = () => {
         size="lg"
         backdrop="static"
         keyboard={false}
+        enforceFocus={false}
+        restoreFocus={false}
       >
         <Modal.Header closeButton={!isLoadingBlock}>
           <Modal.Title>
@@ -2508,19 +2977,22 @@ const HotelAvailability = () => {
                         <Form.Label>
                           Validity From <span className="text-danger">*</span>
                         </Form.Label>
-                        <Form.Control
-                          type="datetime-local"
+                        <DateTimeApplyPicker
                           value={period.validityFrom || ""}
-                          onChange={(e) => {
+                          disabled={isViewModeBlock}
+                          onApply={(val) => {
                             const newValidityList = [
                               ...formDataBlock.validityList,
                             ];
-                            newValidityList[index].validityFrom =
-                              e.target.value;
+                            newValidityList[index].validityFrom = val;
 
-                            // Clear Validity To if it becomes invalid (before or equal to From date)
-                            const currentToDate = formDataBlock.validityList[index].validityTo;
-                            if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                            const currentToDate =
+                              formDataBlock.validityList[index].validityTo;
+                            if (
+                              currentToDate &&
+                              val &&
+                              new Date(currentToDate) <= new Date(val)
+                            ) {
                               newValidityList[index].validityTo = "";
                             }
 
@@ -2529,7 +3001,6 @@ const HotelAvailability = () => {
                               validityList: newValidityList,
                             });
                           }}
-                          disabled={isViewModeBlock}
                         />
                       </Form.Group>
                     </Col>
@@ -2538,21 +3009,24 @@ const HotelAvailability = () => {
                         <Form.Label>
                           Validity To <span className="text-danger">*</span>
                         </Form.Label>
-                        <Form.Control
-                          type="datetime-local"
+                        <DateTimeApplyPicker
                           value={period.validityTo || ""}
-                          min={getMinValidityToDate(period.validityFrom)}
-                          onChange={(e) => {
+                          disabled={isViewModeBlock}
+                          minDate={
+                            period.validityFrom
+                              ? parseLocalDateTime(period.validityFrom)
+                              : undefined
+                          }
+                          onApply={(val) => {
                             const newValidityList = [
                               ...formDataBlock.validityList,
                             ];
-                            newValidityList[index].validityTo = e.target.value;
+                            newValidityList[index].validityTo = val;
                             setFormDataBlock({
                               ...formDataBlock,
                               validityList: newValidityList,
                             });
                           }}
-                          disabled={isViewModeBlock}
                         />
                       </Form.Group>
                     </Col>
@@ -2689,6 +3163,8 @@ const HotelAvailability = () => {
         size="lg"
         backdrop="static"
         keyboard={false}
+        enforceFocus={false}
+        restoreFocus={false}
       >
         <Modal.Header closeButton={!isLoadingStopSale}>
           <Modal.Title>
@@ -2836,19 +3312,22 @@ const HotelAvailability = () => {
                         <Form.Label>
                           Validity From <span className="text-danger">*</span>
                         </Form.Label>
-                        <Form.Control
-                          type="datetime-local"
+                        <DateTimeApplyPicker
                           value={period.validityFrom || ""}
-                          onChange={(e) => {
+                          disabled={isViewModeStopSale}
+                          onApply={(val) => {
                             const newValidityList = [
                               ...formDataStopSale.validityList,
                             ];
-                            newValidityList[index].validityFrom =
-                              e.target.value;
+                            newValidityList[index].validityFrom = val;
 
-                            // Clear Validity To if it becomes invalid (before or equal to From date)
-                            const currentToDate = formDataStopSale.validityList[index].validityTo;
-                            if (currentToDate && e.target.value && new Date(currentToDate) <= new Date(e.target.value)) {
+                            const currentToDate =
+                              formDataStopSale.validityList[index].validityTo;
+                            if (
+                              currentToDate &&
+                              val &&
+                              new Date(currentToDate) <= new Date(val)
+                            ) {
                               newValidityList[index].validityTo = "";
                             }
 
@@ -2857,7 +3336,6 @@ const HotelAvailability = () => {
                               validityList: newValidityList,
                             });
                           }}
-                          disabled={isViewModeStopSale}
                         />
                       </Form.Group>
                     </Col>
@@ -2866,21 +3344,24 @@ const HotelAvailability = () => {
                         <Form.Label>
                           Validity To <span className="text-danger">*</span>
                         </Form.Label>
-                        <Form.Control
-                          type="datetime-local"
+                        <DateTimeApplyPicker
                           value={period.validityTo || ""}
-                          min={getMinValidityToDate(period.validityFrom)}
-                          onChange={(e) => {
+                          disabled={isViewModeStopSale}
+                          minDate={
+                            period.validityFrom
+                              ? parseLocalDateTime(period.validityFrom)
+                              : undefined
+                          }
+                          onApply={(val) => {
                             const newValidityList = [
                               ...formDataStopSale.validityList,
                             ];
-                            newValidityList[index].validityTo = e.target.value;
+                            newValidityList[index].validityTo = val;
                             setFormDataStopSale({
                               ...formDataStopSale,
                               validityList: newValidityList,
                             });
                           }}
-                          disabled={isViewModeStopSale}
                         />
                       </Form.Group>
                     </Col>
