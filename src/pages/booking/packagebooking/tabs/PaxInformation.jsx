@@ -1292,7 +1292,7 @@ const PaxInformation = forwardRef(({
           style={{ borderBottom: "none" }}
         >
           <Modal.Title className="fw-semibold d-flex align-items-center">
-            <FaPlaneDeparture className="me-2" /> Confirm Your Booking
+            <FaPlaneDeparture className="me-2" /> Confirm Your Booking 
           </Modal.Title>
         </Modal.Header>
         <Modal.Body className="px-3 py-2 bg-light">
