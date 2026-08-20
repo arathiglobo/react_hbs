@@ -15,6 +15,7 @@ import Hotels from "./pages/master/Hotels";
 import PrivateRoute from "./components/PrivateRoute";
 import AgentDashboard from "./pages/AgentDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
+import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import StaffDashboard from "./pages/StaffDashboard";
 import Test from "./pages/Test";
 import LandingPage from "./pages/LandingPage";
@@ -375,15 +376,15 @@ export default function App() {
   }
 />
 
-        {/* Super Admin dashboard — same landing surface as admin (reuses
-            AdminDashboard) so a SUPER_ADMIN login has every admin tool plus
-            the SUPER_ADMIN-only screens (Credential Vault, API Access) in
-            the sidebar. Backend guards do the actual permission enforcement. */}
+        {/* Super Admin dashboard — dedicated surface with super-admin-
+            appropriate content (governance, credentials, access control,
+            platform-wide metrics). Backend guards still enforce actual
+            permissions. */}
         <Route
           path="/superAdminDashboard"
           element={
             <PrivateRoute roles={["super_admin"]}>
-              <AdminDashboard />
+              <SuperAdminDashboard />
             </PrivateRoute>
           }
         />
