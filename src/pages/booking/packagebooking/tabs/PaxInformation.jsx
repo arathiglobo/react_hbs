@@ -1310,7 +1310,7 @@ const PaxInformation = forwardRef(({
               tourismDirham !== "" && !isNaN(Number(tourismDirham))
                 ? Number(tourismDirham)
                 : 0;
-            const payableTotal = Number(totalPrice || 0) + tdNum;
+            const payableTotal = Number(totalPrice || 0) + tdNum; 
             // Derived Payment Mode label + badge colour for the Order
             // Summary — mirrors what the row will ACTUALLY be paid as, not
             // the raw picker value. Matches the detail view's
