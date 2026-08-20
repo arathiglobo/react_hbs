@@ -2202,7 +2202,7 @@ export default function HotelSearch({
                         ariaLabel="Check-out date"
                         onChange={(newCheckOut) => {
                           setCheckOut(newCheckOut);
-                          if (newCheckOut) clearError("checkOut");
+                          if (newCheckOut) clearError("checkOut"); 
                         }}
                       />
                       {errors.checkOut && (
