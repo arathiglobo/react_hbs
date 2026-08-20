@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   FaHotel,
@@ -174,6 +174,18 @@ const ApiBookingPageForHotels = () => {
   // beforeunload guard so the operator can't navigate away while the
   // backend is still creating the paid-for booking.
   const [isFinalizingPayment, setIsFinalizingPayment] = useState(false);
+
+  // In-flight guard for Atharva HPreBooking — prevents a double POST to
+  // /api/hotel-booking/atharva/prebook when the operator clicks "Confirm
+  // Booking" twice in quick succession or React re-invokes the click
+  // handler under StrictMode. Without this guard, both invocations of
+  // ensureAtharvaPrebook see stale `bookingData` (with atharvaPrebooked
+  // still false because the first prebook's setBookingData hasn't
+  // flushed yet) and both fire HPreBooking, consuming two sets of
+  // single-use tokens against the same rate — the "prebooking called
+  // twice" symptom in the certification log. A ref (not state) is used
+  // so the guard flips synchronously without waiting for a re-render.
+  const atharvaPrebookInFlightRef = useRef(false);
 
   // ─────────────────────────── effects ────────────────────────────────
   useEffect(() => {
@@ -567,6 +579,21 @@ const ApiBookingPageForHotels = () => {
     // HKey.
     if (!isMultiRoom && firstRate.atharvaPrebooked) return true;
 
+    // In-flight de-dupe — a concurrent Confirm click (rapid re-tap,
+    // StrictMode double-invoke) would otherwise fire a second
+    // /atharva/prebook request against the SAME search-time tokens.
+    // Both would race, each consuming a set of single-use tokens at
+    // the vendor and producing the "prebook called twice" line in the
+    // certification log. Flip the ref synchronously and refuse the
+    // second call until the first finishes (the caller in
+    // openPolicyConsent treats false as "abort the modal opening",
+    // which is what we want — the first prebook's success path will
+    // open the modal itself).
+    if (atharvaPrebookInFlightRef.current) {
+      return false;
+    }
+    atharvaPrebookInFlightRef.current = true;
+
     // Always use SEARCH-time tokens for the prebook payload — per-room
     // `atharva*` fields might have been overwritten with fresh keys from
     // a partial modal-prebook (Room 1 opened, Room 2 not) and mixing
@@ -650,6 +677,12 @@ const ApiBookingPageForHotels = () => {
         "Atharva prebook request failed";
       toast.error(backendMsg);
       return false;
+    } finally {
+      // Always release the in-flight flag — whether the prebook
+      // succeeded, failed, or threw — so a legitimate retry (operator
+      // dismisses the toast and clicks Confirm again) is allowed to
+      // fire a fresh HPreBooking against the same search-time tokens.
+      atharvaPrebookInFlightRef.current = false;
     }
   };
 
@@ -1038,6 +1071,21 @@ const ApiBookingPageForHotels = () => {
 
       if (bookingResponse && isSuccess) {
         toast.success(bookingResponse.message);
+        // Clear the cached booking payload so a browser-back or stale tab
+        // can't resubmit the already-consumed Atharva tokenId / hKey /
+        // per-room rateKey — those are single-use at the supplier and
+        // sending them a second time re-fires HPreBooking + HCreateBooking
+        // against stale search results (Atharva certification bug #3,
+        // "for a new booking attempt, please perform a fresh search
+        // first"). Also clear the room-list payload so any further
+        // booking is forced to originate from a fresh HotelSearch →
+        // RoomList flow with newly-issued keys.
+        try {
+          sessionStorage.removeItem("bookingData");
+          sessionStorage.removeItem("roomListPayload");
+        } catch (_) {
+          /* sessionStorage may be blocked; navigation still proceeds. */
+        }
         // All suppliers land on the booking list after a successful confirm
         // (matches IWTX / X3 / ATHARVA / DARINA / JUMEIRAH / JUNIPER). GRN
         // used to route straight to its detail page instead but the client
