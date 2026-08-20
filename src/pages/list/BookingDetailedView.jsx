@@ -685,6 +685,22 @@ export default function BookingDetailedView() {
       ) {
         setShowCancelModal(false);
         setCancellationReason("");
+        // Atharva certification bug #3 (Case 3): once a booking has been
+        // created AND cancelled, the ORIGINAL search's session artefacts
+        // (tokenId / hKey / per-room rateKey) are stale — pricing and
+        // availability may have changed and the vendor expects a fresh
+        // search first. Clearing the cached booking + room-list payloads
+        // here ensures that a "back to booking flow" attempt cannot
+        // re-fire HPreBooking / HCreateBooking against the just-consumed
+        // artefacts. Belt-and-braces: the backend also blocks the reuse
+        // via its consumed-token guard, so this just gives the operator
+        // a clean UX instead of a "please repeat the search" error.
+        try {
+          sessionStorage.removeItem("bookingData");
+          sessionStorage.removeItem("roomListPayload");
+        } catch (_) {
+          /* sessionStorage may be blocked; not fatal. */
+        }
         toast.success(response.data.message || "Booking cancelled");
         await fetchBooking();
       } else {
