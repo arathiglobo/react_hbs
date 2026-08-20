@@ -2,6 +2,15 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom";
 import axiosInstance from "./AxiosInstance";
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+const MONTH_ABBR = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
 /**
  * Fare-calendar picker for hotel check-in / check-out.
  *
@@ -64,6 +73,11 @@ function RateCalendar({
   const [popupCoords, setPopupCoords] = useState({ top: 0, left: 0 });
   const anchorRef = useRef(null);
   const popupRef = useRef(null);
+  const [monthMenuOpen, setMonthMenuOpen] = useState(false);
+  const [yearMenuOpen, setYearMenuOpen] = useState(false);
+  const monthWrapRef = useRef(null);
+  const yearWrapRef = useRef(null);
+  const selectedYearRef = useRef(null);
 
   // ── compute (and keep updating) the fixed-position coords ──────────
   useEffect(() => {
@@ -118,6 +132,38 @@ function RateCalendar({
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
+
+  // ── close month/year dropdowns on outside click ────────────────────
+  useEffect(() => {
+    if (!monthMenuOpen && !yearMenuOpen) return undefined;
+    const onDocClick = (e) => {
+      if (
+        monthMenuOpen &&
+        monthWrapRef.current &&
+        !monthWrapRef.current.contains(e.target)
+      ) {
+        setMonthMenuOpen(false);
+      }
+      if (
+        yearMenuOpen &&
+        yearWrapRef.current &&
+        !yearWrapRef.current.contains(e.target)
+      ) {
+        setYearMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [monthMenuOpen, yearMenuOpen]);
+
+  // Open the year grid centered on whichever year is currently viewed —
+  // otherwise the operator sees the top of the list (2026) and has to
+  // hunt for 2050 every time.
+  useEffect(() => {
+    if (yearMenuOpen && selectedYearRef.current) {
+      selectedYearRef.current.scrollIntoView({ block: "center" });
+    }
+  }, [yearMenuOpen]);
 
   // ── fetch the visible month of rates whenever the window shifts ────
   useEffect(() => {
@@ -183,14 +229,57 @@ function RateCalendar({
     onChange(isoDate);
     setOpen(false);
   };
-  const prevMonth = () =>
-    setViewMonth(
-      (v) => new Date(v.getFullYear(), v.getMonth() - 1, 1),
-    );
-  const nextMonth = () =>
-    setViewMonth(
-      (v) => new Date(v.getFullYear(), v.getMonth() + 1, 1),
-    );
+
+  // ── month / year dropdown data ─────────────────────────────────────
+  // Month/year navigation happens through the two header dropdowns —
+  // operators pick the month name or year directly instead of stepping
+  // through with arrow buttons. The lists cover the range [min-year,
+  // min-year + 5] extended to always include the currently-viewed
+  // month/year, so a value set earlier still shows up as the highlighted
+  // entry even if it sits outside the default 6-year window.
+  const viewYear = viewMonth.getFullYear();
+  const viewMonthIdx = viewMonth.getMonth();
+  const minYear = min ? Number(min.slice(0, 4)) : new Date().getFullYear();
+  const startYear = Math.min(minYear, viewYear);
+  // Extend the year list well into the future so long-lead bookings
+  // (e.g. 2050) are reachable without arrow navigation. The list is at
+  // least 25 years long, always covers up to 2050, and always includes
+  // the currently-viewed year (which may sit further out if the caller
+  // pre-set a value beyond the default horizon).
+  const endYear = Math.max(startYear + 25, viewYear + 1, 2050);
+  const years = useMemo(() => {
+    const arr = [];
+    for (let y = startYear; y <= endYear; y++) arr.push(y);
+    return arr;
+  }, [startYear, endYear]);
+
+  // A month/year is unavailable when its last day already sits before `min` —
+  // nothing in it could be picked anyway. We still render it (dimmed) so
+  // operators see the full range and understand why it can't be chosen.
+  const parsedMin = useMemo(() => {
+    if (!min) return null;
+    const [y, m, d] = min.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }, [min]);
+  const isMonthDisabled = (mIdx) => {
+    if (!parsedMin) return false;
+    return new Date(viewYear, mIdx + 1, 0) < parsedMin;
+  };
+  const isYearDisabled = (y) => {
+    if (!parsedMin) return false;
+    return new Date(y, 11, 31) < parsedMin;
+  };
+
+  const pickMonth = (mIdx) => {
+    if (isMonthDisabled(mIdx)) return;
+    setViewMonth(new Date(viewYear, mIdx, 1));
+    setMonthMenuOpen(false);
+  };
+  const pickYear = (y) => {
+    if (isYearDisabled(y)) return;
+    setViewMonth(new Date(y, viewMonthIdx, 1));
+    setYearMenuOpen(false);
+  };
 
   // ── render ─────────────────────────────────────────────────────────
   const display = value ? formatDisplay(value) : "";
@@ -235,9 +324,89 @@ function RateCalendar({
           }}
         >
           <div style={HEADER_ROW}>
-            <button type="button" onClick={prevMonth} style={NAV_BTN} aria-label="Previous month">‹</button>
-            <div style={MONTH_TITLE}>{formatMonthTitle(monthA.date)}</div>
-            <button type="button" onClick={nextMonth} style={NAV_BTN} aria-label="Next month">›</button>
+            <div ref={monthWrapRef} style={{ position: "relative" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setMonthMenuOpen((o) => !o);
+                  setYearMenuOpen(false);
+                }}
+                style={DROPDOWN_TRIGGER}
+                aria-haspopup="listbox"
+                aria-expanded={monthMenuOpen}
+              >
+                {MONTH_NAMES[viewMonthIdx]}
+                <span aria-hidden="true" style={DROPDOWN_CARET}>▾</span>
+              </button>
+              {monthMenuOpen && (
+                <div role="listbox" style={MONTH_GRID_MENU}>
+                  {MONTH_ABBR.map((abbr, idx) => {
+                    const disabled = isMonthDisabled(idx);
+                    const selected = idx === viewMonthIdx;
+                    return (
+                      <button
+                        key={abbr}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => pickMonth(idx)}
+                        role="option"
+                        aria-selected={selected}
+                        aria-label={MONTH_NAMES[idx]}
+                        style={{
+                          ...GRID_CELL,
+                          ...(selected ? GRID_CELL_SELECTED : null),
+                          ...(disabled ? GRID_CELL_DISABLED : null),
+                        }}
+                      >
+                        {abbr}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div ref={yearWrapRef} style={{ position: "relative" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setYearMenuOpen((o) => !o);
+                  setMonthMenuOpen(false);
+                }}
+                style={DROPDOWN_TRIGGER}
+                aria-haspopup="listbox"
+                aria-expanded={yearMenuOpen}
+              >
+                {viewYear}
+                <span aria-hidden="true" style={DROPDOWN_CARET}>▾</span>
+              </button>
+              {yearMenuOpen && (
+                <div role="listbox" style={YEAR_GRID_MENU}>
+                  {years.map((y) => {
+                    const disabled = isYearDisabled(y);
+                    const selected = y === viewYear;
+                    return (
+                      <button
+                        key={y}
+                        ref={selected ? selectedYearRef : null}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => pickYear(y)}
+                        role="option"
+                        aria-selected={selected}
+                        style={{
+                          ...GRID_CELL,
+                          ...(selected ? GRID_CELL_SELECTED : null),
+                          ...(disabled ? GRID_CELL_DISABLED : null),
+                        }}
+                      >
+                        {y}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           <MonthGrid
@@ -357,9 +526,6 @@ function formatDisplay(isoStr) {
   const [y, m, d] = isoStr.split("-");
   return `${d}-${m}-${y}`;
 }
-function formatMonthTitle(d) {
-  return d.toLocaleString(undefined, { month: "long", year: "numeric" });
-}
 function buildMonth(firstOfMonth) {
   const year = firstOfMonth.getFullYear();
   const month = firstOfMonth.getMonth();
@@ -401,18 +567,81 @@ const POPUP_STYLE = {
 const HEADER_ROW = {
   display: "flex",
   alignItems: "center",
-  justifyContent: "space-between",
+  justifyContent: "center",
+  gap: 8,
   marginBottom: 10,
 };
-const NAV_BTN = {
-  width: 30, height: 30, borderRadius: "50%",
-  background: "#fff", border: "1px solid #e2dee6",
-  color: "#4a5163", fontSize: 14, cursor: "pointer",
-  display: "flex", alignItems: "center", justifyContent: "center",
+const DROPDOWN_TRIGGER = {
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  background: "#f7f6f9",
+  border: "1px solid #e2dee6",
+  borderRadius: 8,
+  padding: "6px 12px",
+  fontSize: 13.5,
+  fontWeight: 700,
+  color: "#1e2432",
+  cursor: "pointer",
+  lineHeight: 1,
 };
-const MONTH_TITLE = {
-  flex: 1, textAlign: "center",
-  fontWeight: 700, fontSize: 13.5, color: "#1e2432",
+const DROPDOWN_CARET = {
+  fontSize: 10,
+  color: "#8891a3",
+};
+const GRID_MENU_BASE = {
+  position: "absolute",
+  top: "calc(100% + 4px)",
+  background: "#fff",
+  border: "1px solid #ecebef",
+  borderRadius: 10,
+  boxShadow: "0 10px 24px rgba(30,36,50,0.16)",
+  padding: 8,
+  display: "grid",
+  gap: 6,
+  zIndex: 10,
+};
+const MONTH_GRID_MENU = {
+  // 3×4 grid of month pills — compact enough to overlay the header only,
+  // leaving the day grid visible behind it. Anchored to the month button.
+  ...GRID_MENU_BASE,
+  left: 0,
+  width: 210,
+  gridTemplateColumns: "repeat(3, 1fr)",
+};
+const YEAR_GRID_MENU = {
+  // 4-column grid; scrolls vertically because the range now reaches
+  // 2050+. Right-aligned so it doesn't spill past the popup's right
+  // edge — the year button sits close to the right side of the header.
+  ...GRID_MENU_BASE,
+  right: 0,
+  width: 220,
+  maxHeight: 240,
+  overflowY: "auto",
+  gridTemplateColumns: "repeat(4, 1fr)",
+};
+const GRID_CELL = {
+  padding: "8px 4px",
+  background: "#f7f6f9",
+  border: "1px solid transparent",
+  borderRadius: 6,
+  fontSize: 12.5,
+  fontWeight: 600,
+  color: "#1e2432",
+  cursor: "pointer",
+  textAlign: "center",
+  fontVariantNumeric: "tabular-nums",
+  lineHeight: 1.1,
+};
+const GRID_CELL_SELECTED = {
+  background: "#e91b5b",
+  color: "#fff",
+  border: "1px solid #e91b5b",
+};
+const GRID_CELL_DISABLED = {
+  opacity: 0.35,
+  cursor: "not-allowed",
+  background: "transparent",
 };
 const DOW_ROW = {
   display: "grid",
