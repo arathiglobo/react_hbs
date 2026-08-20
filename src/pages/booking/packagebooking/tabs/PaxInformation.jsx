@@ -2024,6 +2024,6 @@ const PaxInformation = forwardRef(({
 
     </div>
   );
-});
+}); 
 
 export default PaxInformation;
