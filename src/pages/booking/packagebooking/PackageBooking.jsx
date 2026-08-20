@@ -36,6 +36,13 @@ import HotelsTab from "./tabs/HotelsTab";
 import CabsTab from "./tabs/CabsTab";
 import ActivitiesTab from "./tabs/ActivitiesTab";
 import PaxInformation from "./tabs/PaxInformation";
+
+// Abandoned-package-search suggestion email — mirrors the hotel booking
+// flow's /api/search-history/{save,confirm} calls but talks to the
+// package-scoped endpoints. See src/utils/packageSearchHistory.js for the
+// helper; the /confirm side lives in PaxInformation.jsx (standard flow)
+// and PackageCheckout.jsx (CCAvenue paid flow).
+import { savePackageSearchHistorySnapshot } from "../../../utils/packageSearchHistory";
 // Basic Details step removed — package category is now resolved from the
 // occupancy chosen on the Package Search page, and Pax passport moved to the
 // Pax Info step. BasicDetails.jsx is intentionally no longer imported.
@@ -247,6 +254,44 @@ const PackageBooking = () => {
       }
     };
     if (id) fetchPackageDetails();
+  }, [id]);
+
+  // Abandoned-package-search snapshot. Posts once as soon as the page has
+  // an id and a searchContext (agent, dates, pax, rate, destination) so
+  // an accidentally-closed tab still leaves a row behind for the
+  // AbandonedPackageSuggestionScheduler to email. Same fire-and-forget
+  // contract HotelBookingPage.jsx uses; helper handles agent-only gating
+  // and dedupes on the packageBookingContext:{id} historyContextKey.
+  // Skipped in edit mode so amending an existing booking never
+  // resurrects it in the "abandoned" queue.
+  useEffect(() => {
+    if (!id || isEditMode) return;
+    savePackageSearchHistorySnapshot(id, {
+      agentId: Number(agentId) || null,
+      agentName: null,
+      packageName: searchContext.packageName || null,
+      packageType: searchContext.packageType || null,
+      countryId: Number(destinationCountryId) || null,
+      countryName: searchContext.destinationCountryName || null,
+      cityId: Number(searchContext.destinationCityId) || null,
+      cityName:
+        searchContext.destinationCityName ||
+        searchContext.destinationLabel ||
+        null,
+      nationalityId: Number(searchNationalityId) || null,
+      nationality: searchNationalityName || null,
+      arrivalDateTime: searchContext.arrivalDateTime || null,
+      departureDateTime: searchContext.departureDateTime || null,
+      noOfNights: searchContext.noOfNights || null,
+      adultCount: Number(searchAdultCount) || null,
+      childCount: Number(searchChildCount) || null,
+      sellingPrice:
+        searchRate != null && !Number.isNaN(Number(searchRate))
+          ? Number(searchRate)
+          : null,
+      currency: searchContext.searchCurrency || "AED",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   // Full package view — supplies the cancellation policy + Terms & Conditions

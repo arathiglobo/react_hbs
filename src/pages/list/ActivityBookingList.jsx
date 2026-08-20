@@ -34,11 +34,21 @@ const COLUMN_WIDTHS = {
   sn: "50px",
   agent: "100px",
   booking: "130px",
+  // Supplier-side confirmation number saved on the activity detail view
+  // via the "CONFIRMATION NO." button. Sourced from
+  // TourAndActivityBooking.confirmationNumber and returned by the real
+  // grouped-list mapper in TourAndActivityBookingService.toResponseDTO.
+  // Width tuned so the two-word header ("CONFIRMATION" / "NO") wraps at
+  // its space instead of splitting "CONFIRMATION" mid-letter.
+  confirmationNo: "130px",
   customer: "160px",
   activity: "220px",
   tourDate: "120px",
   pax: "110px",
   amount: "120px",
+  // Booking lifecycle badge (CONFIRMED / CANCELLED / …), rendered as a
+  // small coloured pill.
+  status: "110px",
   action: "80px",
 };
 
@@ -500,11 +510,28 @@ const ActivityBookingList = () => {
                             <th style={thStyle(COLUMN_WIDTHS.agent)}>Agent</th>
                           )}
                           <th style={thStyle(COLUMN_WIDTHS.booking)}>Booking</th>
+                          {/* Confirmation No — supplier's confirmation number
+                              from TourAndActivityBooking (populated via the
+                              "CONFIRMATION NO." button on the detail view).
+                              wordBreak / overflowWrap normal keep the two-word
+                              header wrapping only at its space, mirroring the
+                              other list pages. */}
+                          <th
+                            style={{
+                              ...thStyle(COLUMN_WIDTHS.confirmationNo),
+                              whiteSpace: "normal",
+                              wordBreak: "normal",
+                              overflowWrap: "normal",
+                            }}
+                          >
+                            Confirmation No
+                          </th>
                           <th style={thStyle(COLUMN_WIDTHS.customer)}>Customer</th>
                           <th style={thStyle(COLUMN_WIDTHS.activity)}>Activity</th>
                           <th style={thStyle(COLUMN_WIDTHS.tourDate)}>Tour Date</th>
                           <th style={thStyle(COLUMN_WIDTHS.pax)}>Pax</th>
                           <th style={thStyle(COLUMN_WIDTHS.amount)}>Amount</th>
+                          <th style={thStyle(COLUMN_WIDTHS.status)}>Status</th>
                           <th style={thStyle(COLUMN_WIDTHS.action)}>Action</th>
                         </tr>
                       </thead>
@@ -566,6 +593,30 @@ const ActivityBookingList = () => {
                                   {fmtDateLong(b.bookingDate)}
                                 </div>
                               </td>
+                              {/* Confirmation No cell — reads the field
+                                  now returned on ActivityBookingResponseDTO
+                                  (cross-looked-up from TourAndActivityBooking
+                                  on the backend). Muted "-" when the operator
+                                  hasn't saved a number yet; nowrap keeps a
+                                  present number atomic. */}
+                              <td
+                                style={{
+                                  ...baseCellStyle,
+                                  width: COLUMN_WIDTHS.confirmationNo,
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {b.confirmationNumber ? (
+                                  <span
+                                    className="fw-semibold text-dark"
+                                    style={{ fontSize: "0.85rem" }}
+                                  >
+                                    {b.confirmationNumber}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted">-</span>
+                                )}
+                              </td>
                               <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.customer }}>
                                 <span className="d-inline-flex align-items-center" style={{ gap: "0.3rem" }}>
                                   <FaUser style={{ color: "#6c757d", fontSize: "0.78rem", flexShrink: 0 }} />
@@ -610,6 +661,43 @@ const ActivityBookingList = () => {
                                 style={{ ...baseCellStyle, textAlign: "right", width: COLUMN_WIDTHS.amount, whiteSpace: "nowrap" }}
                               >
                                 {formatPrice(b.totalPrice)}
+                              </td>
+                              {/* Status cell — coloured pill for CONFIRMED /
+                                  CANCELLED / other lifecycle values sourced
+                                  from TourAndActivityBooking.status. Green for
+                                  CONFIRMED, red for CANCELLED, gray for
+                                  anything else so the value stays legible
+                                  even if a new status enum lands. */}
+                              <td
+                                style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.status, whiteSpace: "nowrap" }}
+                              >
+                                {(() => {
+                                  const raw = String(b.status || "").trim().toUpperCase();
+                                  if (!raw) return <span className="text-muted">-</span>;
+                                  const [bg, color] =
+                                    raw === "CONFIRMED"
+                                      ? ["#e6f7ea", "#0d7a2f"]
+                                      : raw === "CANCELLED"
+                                        ? ["#fdecea", "#b3241c"]
+                                        : ["#eef2f7", "#425466"];
+                                  const label =
+                                    raw.charAt(0) + raw.slice(1).toLowerCase();
+                                  return (
+                                    <span
+                                      style={{
+                                        backgroundColor: bg,
+                                        color,
+                                        padding: "3px 10px",
+                                        borderRadius: "999px",
+                                        fontSize: "0.72rem",
+                                        fontWeight: "600",
+                                        display: "inline-block",
+                                      }}
+                                    >
+                                      {label}
+                                    </span>
+                                  );
+                                })()}
                               </td>
                               <td
                                 style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.action }}

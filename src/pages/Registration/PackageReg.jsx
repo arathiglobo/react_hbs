@@ -3069,6 +3069,6 @@ const PackageReg = () => {
       </div>
     </div>
   );
-};
+}; 
 
 export default PackageReg;

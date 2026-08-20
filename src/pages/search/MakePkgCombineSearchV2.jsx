@@ -2310,7 +2310,10 @@ const [activeAccordion, setActiveAccordion] = useState({});
                             style={{
                               width: 36, height: 36,
                               borderRadius: "50%",
-                              background: "#6366f1",
+                              // Brand red — matches the platform's primary
+                              // CTA color (btn-search-modern etc.). Was
+                              // indigo #6366f1.
+                              background: "#EC0B43",
                               color: "#fff",
                               display: "inline-flex",
                               alignItems: "center",
@@ -2333,7 +2336,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
                         <div className="small text-muted" style={{ fontSize: "0.7rem" }}>
                           {nextStep ? "Up next" : "Final step"}
                         </div>
-                        <div className="small fw-semibold" style={{ color: "#6366f1" }}>
+                        <div className="small fw-semibold" style={{ color: "#EC0B43" }}>
                           {nextStep ? nextStep.label : "Proceed to Booking"}
                         </div>
                       </div>
@@ -2347,7 +2350,9 @@ const [activeAccordion, setActiveAccordion] = useState({});
                       <div style={{
                         width: `${pct}%`,
                         height: "100%",
-                        background: "linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)",
+                        // Brand red gradient — matches btn-search-modern.
+                        // Was indigo→violet #6366f1 → #8b5cf6.
+                        background: "linear-gradient(90deg, #EC0B43 0%, #C90939 100%)",
                         borderRadius: 999,
                         transition: "width 0.3s ease",
                       }} />
@@ -2823,7 +2828,13 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                                     {hotel.badge && (
                                                       <span
                                                         style={{
-                                                          backgroundColor: "#28a745",
+                                                          // Brand red — same
+                                                          // palette as the
+                                                          // wizard indicator
+                                                          // and Next button
+                                                          // above. Was
+                                                          // green #28a745.
+                                                          backgroundColor: "#EC0B43",
                                                           color: "white",
                                                           padding: "3px 8px",
                                                           borderRadius: "4px",
@@ -2862,6 +2873,17 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                                     <Button
                                                       className="btn-view-rooms"
                                                       size="sm"
+                                                      // Inline red override —
+                                                      // scoped to this page
+                                                      // only so the shared
+                                                      // .btn-view-rooms rule
+                                                      // (used by Individual
+                                                      // Hotel Search + MYOP
+                                                      // v1) stays green.
+                                                      style={{
+                                                        background: "linear-gradient(135deg, #EC0B43 0%, #C90939 100%)",
+                                                        border: "none",
+                                                      }}
                                                       onClick={() => handleViewRooms(hotel)}
                                                     >
                                                       {expandedHotels[hotel.id]
@@ -2974,7 +2996,12 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                                                         </div>
 
                                                                         <div className="rate-pricing mb-3 text-center">
-                                                                          <div className="current-price fs-4 fw-bold text-success">
+                                                                          {/* Room-rate price — black instead of the
+                                                                              default Bootstrap text-success green
+                                                                              (per request). Kept fs-4 + fw-bold so
+                                                                              the price still reads as the visual
+                                                                              anchor of the rate card. */}
+                                                                          <div className="current-price fs-4 fw-bold text-dark">
                                                                             {formatPrice(
                                                                               rate.totalRate
                                                                             )}
@@ -3463,14 +3490,24 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                                       >
                                                         <span className="d-inline-block">
                                                           <Button
-                                                            variant="success"
+                                                            // variant left off — inline red styling
+                                                            // takes over so this button matches the
+                                                            // brand-red View Rooms / Next / Rate
+                                                            // Available treatment elsewhere on this
+                                                            // page. Was variant="success" (green).
                                                             size="sm"
                                                             className="add-transfer-to-cart"
                                                             onClick={() =>
                                                               handleAddTransferToCart(cab, detail)
                                                             }
                                                             disabled={isAdding || !hasHotelInCart}
-                                                            style={{ minWidth: "120px", pointerEvents: !hasHotelInCart ? 'none' : 'auto' }}
+                                                            style={{
+                                                              minWidth: "120px",
+                                                              pointerEvents: !hasHotelInCart ? 'none' : 'auto',
+                                                              background: "#EC0B43",
+                                                              borderColor: "#EC0B43",
+                                                              color: "#fff",
+                                                            }}
                                                           >
                                                             {isAdding ? (
                                                               <>
@@ -3673,23 +3710,30 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                       </div>
                                     )}
 
-                                    <div
-                                      style={{
-                                        backgroundColor:
-                                          activity.totalRate > 0 ? "#28a745" : "#6c757d",
-                                        color: "white",
-                                        padding: "3px 8px",
-                                        borderRadius: "4px",
-                                        fontSize: "0.72rem",
-                                        fontWeight: "500",
-                                        display: "inline-block",
-                                        marginBottom: "10px",
-                                      }}
-                                    >
-                                      {activity.totalRate > 0
-                                        ? "Rate Available"
-                                        : "Rate on Request"}
-                                    </div>
+                                    {/* "Rate Available" badge dropped — the
+                                        actual price ("AED …") is rendered
+                                        right below, so the affirmative label
+                                        was redundant noise. The "Rate on
+                                        Request" case is kept because it
+                                        surfaces real info for the operator
+                                        (no bookable price on this activity
+                                        yet). */}
+                                    {activity.totalRate > 0 ? null : (
+                                      <div
+                                        style={{
+                                          backgroundColor: "#6c757d",
+                                          color: "white",
+                                          padding: "3px 8px",
+                                          borderRadius: "4px",
+                                          fontSize: "0.72rem",
+                                          fontWeight: "500",
+                                          display: "inline-block",
+                                          marginBottom: "10px",
+                                        }}
+                                      >
+                                        Rate on Request
+                                      </div>
+                                    )}
 
                                     <div
                                       style={{
@@ -3809,7 +3853,9 @@ const [activeAccordion, setActiveAccordion] = useState({});
                   ← Back
                 </Button>
                 <Button
-                  style={{ background: "#6366f1", borderColor: "#6366f1", minWidth: 180 }}
+                  // Brand red — matches btn-search-modern and the step
+                  // indicator above. Was indigo #6366f1.
+                  style={{ background: "#EC0B43", borderColor: "#EC0B43", minWidth: 180 }}
                   disabled={isProceeding}
                   onClick={async () => {
                     // ── Transfer step: pickup + dropoff are required

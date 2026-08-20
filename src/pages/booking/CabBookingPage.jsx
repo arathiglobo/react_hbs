@@ -119,7 +119,9 @@ async function reverseGeocode(lat, lon) {
 // ── New-tab booking hand-off ─────────────────────────────────────────────
 // The cab search "Select" button opens this page in a new browser tab. Router
 // state can't cross tabs, so the payload is stashed in localStorage under a
-// one-time `cabBookingDraft:<id>` key and the id is passed as ?draft=<id>.
+// one-time `cabBookingDraft:<id>` key. The URL stays clean (/cab-booking-page
+// with no query params) — instead the opener passes the id via the new tab's
+// `window.name` (set by `window.open(url, name)`), which we read below.
 // Parsed drafts are cached in-module so a React StrictMode double-mount (dev)
 // still resolves the payload after the localStorage key has been cleared.
 const cabBookingDraftCache = new Map();
@@ -146,29 +148,52 @@ const CabBookingPage = () => {
   // Resolve the incoming booking payload. In-app navigation delivers it via
   // router state; when the "Select" button opens this page in a NEW TAB the
   // payload is instead handed off through localStorage under a one-time
-  // ?draft=<id> key (router state can't cross a browser tab).
-  const draftId = useMemo(
-    () => new URLSearchParams(location.search).get("draft"),
-    [location.search],
-  );
+  // `cabBookingDraft:<id>` key. The id normally arrives via `window.name`
+  // (set by the opener's `window.open(url, name)`) so the address bar stays
+  // clean as /cab-booking-page. We also fall back to a `?draft=<id>` query
+  // param — a tolerance for older opener bundles that still use the URL
+  // form; new opens never populate it.
+  const draftId = useMemo(() => {
+    if (typeof window !== "undefined") {
+      const name = window.name || "";
+      if (name.startsWith("cabBookingDraft:")) {
+        return name.slice("cabBookingDraft:".length);
+      }
+    }
+    return new URLSearchParams(location.search).get("draft");
+  }, [location.search]);
   const { cab, selectedOption, searchCriteria } = useMemo(
     () => location.state || readCabBookingDraft(draftId) || {},
     [location.state, draftId],
   );
 
   // Clear the one-time draft hand-off once consumed so it can't leak into a
-  // later booking or accumulate in localStorage. The in-module cache still
-  // holds the parsed payload, so this is safe to run after the first render.
+  // later booking or accumulate in localStorage / window.name. The in-module
+  // cache still holds the parsed payload, so this is safe to run after the
+  // first render.
   useEffect(() => {
     if (draftId) {
       localStorage.removeItem(`cabBookingDraft:${draftId}`);
+      if (typeof window !== "undefined") window.name = "";
     }
   }, [draftId]);
+  // Agent-role logins have no explicit Agent picker on the search page
+  // (they ARE the agent), so makeYourOwnPackageAgentId is never populated
+  // for them. Detect that case here so we can fall back to the logged-in
+  // user's own userId — same resolution the search page's build now does.
+  const activeRoleOnLoad = (localStorage.getItem("currentActiveRole") || "")
+    .trim()
+    .toUpperCase();
+  const storedRolesOnLoad = (localStorage.getItem("userRole") || "").toUpperCase();
+  const isAgentRoleOnLoad = activeRoleOnLoad
+    ? activeRoleOnLoad === "AGENT"
+    : storedRolesOnLoad.includes("AGENT") && !storedRolesOnLoad.includes("ADMIN");
   const selectedAgentId =
     searchCriteria?.agentId != null && searchCriteria.agentId !== ""
       ? String(searchCriteria.agentId)
       : sessionStorage.getItem("makeYourOwnPackageAgentId") ||
         localStorage.getItem("makeYourOwnPackageAgentId") ||
+        (isAgentRoleOnLoad ? localStorage.getItem("userId") || "" : "") ||
         "";
 
   // If accessed directly without state, we should probably redirect or show an error
@@ -625,6 +650,14 @@ const CabBookingPage = () => {
   });
   const [tourismDirham, setTourismDirham] = useState("");
 
+  // ── ALL HOOKS BELOW MUST RUN BEFORE THE EARLY RETURN ────────────────
+  // Rules of Hooks: every hook must be called in the same order on every
+  // render, so any useMemo / useEffect that used to sit after the
+  // `if (!hasValidState) return …` block has been hoisted here. The
+  // derived value `totalRate` moved up with them because bookingPayable
+  // depends on it. All computations tolerate `hasValidState === false`
+  // (initialTotalRate is 0 in that case, so the numbers just cascade
+  // as 0 without crashing).
   const totalRate = parseFloat(prices.totalPrice) || initialTotalRate;
 
   // Payable used for the sufficiency check — matches the amount that
@@ -678,7 +711,8 @@ const CabBookingPage = () => {
     }
   }, [paymentModeOptions, paymentMode]);
 
-  // If no state, show prompt
+  // If no state, show prompt. All hooks above run first so the render
+  // order stays consistent whether we return early here or continue.
   if (!hasValidState) {
     return (
       <div className="min-vh-100 bg-light d-flex flex-column">
@@ -746,6 +780,23 @@ const CabBookingPage = () => {
       if (!lead.contactNumber || !lead.contactNumber.trim()) {
         errors[`guest_${leadIndex}_contactNumber`] = "Phone is required";
         hasErrors = true;
+      } else if (isIway) {
+        // i'way rejects anything that isn't strict E.164 (guide §12.4.2),
+        // and the backend normalizer refuses to guess a missing country
+        // code — so bar submit here rather than let the operator hit the
+        // "Check your phone number" 400 after the wallet is deducted.
+        const raw = lead.contactNumber.trim();
+        const hasIntlPrefix = raw.startsWith("+") || raw.startsWith("00");
+        const digits = raw.replace(/[^0-9]/g, "");
+        if (!hasIntlPrefix) {
+          errors[`guest_${leadIndex}_contactNumber`] =
+            "Include the country code (e.g. +971501234567) — i'way requires international format.";
+          hasErrors = true;
+        } else if (digits.length < 8 || digits.length > 15) {
+          errors[`guest_${leadIndex}_contactNumber`] =
+            "Phone number must be 8–15 digits including the country code.";
+          hasErrors = true;
+        }
       }
       // i'way's passengers[] entries require an email; the in-house flow
       // never collected one, so this only applies to i'way bookings.
@@ -838,6 +889,11 @@ const CabBookingPage = () => {
       iwayVehicleName: isIway ? (cab?.cabname ?? null) : null,
       iwayVehicleImage: isIway ? (cab?.cabpic ?? null) : null,
       iwayProviderName: isIway ? (cab?.cabProviderName ?? null) : null,
+      // flexible_tariff flag of the picked i'way offer (guide §11.6.2).
+      // The backend uses this to gate text_tablet on create-order — sent
+      // only when M&G is included in the price (flexible_tariff=false).
+      // Null on in-house rows.
+      iwayFlexibleTariff: isIway ? (cab?.iwayFlexibleTariff ?? null) : null,
       noOfCabs: cab.noOfCabs || 1,
       pickupDate: formatDateToDDMMYYYY(searchCriteria.pickupDate),
       dropOffDate: formatDateToDDMMYYYY(searchCriteria.dropoffDate || searchCriteria.pickupDate),
@@ -879,6 +935,14 @@ const CabBookingPage = () => {
           passportNo: g.passportNo || null,
           guestIndex: seatNumber,
           isLead: idx === leadIndex,
+          // Per-guest contact for i'way's passengers[] payload (guide §12.4.2).
+          // The Contact Details card writes the lead's values into
+          // guests[leadIndex], so today only the lead row carries these;
+          // non-lead rows send null and the backend falls back to the lead
+          // contact. If per-guest inputs are later added to the passenger
+          // table, no wiring change is needed here.
+          contactNumber: g.contactNumber || null,
+          emailId: g.emailId || null,
         };
       }),
       transporter: transporterDetails.transporter,
@@ -1243,7 +1307,11 @@ const CabBookingPage = () => {
                         <Form.Control
                           size="sm"
                           type="text"
-                          placeholder="Please enter phone number"
+                          placeholder={
+                            isIway
+                              ? "e.g. +971501234567 (include country code)"
+                              : "Please enter phone number"
+                          }
                           value={leadGuest.contactNumber || ""}
                           onChange={(e) =>
                             handleGuestChange(
@@ -1260,29 +1328,31 @@ const CabBookingPage = () => {
                           {validationErrors[`guest_${leadIndex}_contactNumber`]}
                         </Form.Control.Feedback>
                       </Col>
-                      {/* i'way's POST /orders needs a passenger email — the
-                          in-house flow never collected one, so this field is
-                          only shown (and required) for i'way bookings. */}
-                      {isIway && (
-                        <Col md={6}>
-                          <Form.Label className="small text-muted fw-semibold mb-1">
-                            Email <span className="text-danger">*</span>
-                          </Form.Label>
-                          <Form.Control
-                            size="sm"
-                            type="email"
-                            placeholder="Please enter email address"
-                            value={leadGuest.emailId || ""}
-                            onChange={(e) =>
-                              handleGuestChange(leadIndex, "emailId", e.target.value)
-                            }
-                            isInvalid={!!validationErrors[`guest_${leadIndex}_emailId`]}
-                          />
-                          <Form.Control.Feedback type="invalid">
-                            {validationErrors[`guest_${leadIndex}_emailId`]}
-                          </Form.Control.Feedback>
-                        </Col>
-                      )}
+                      {/* Email column — shown for BOTH in-house and i'way
+                          rows so operators can capture a contact address on
+                          every booking. Only i'way makes it required (guide
+                          §11.9 needs it in passengers[]); in-house keeps it
+                          optional so pre-existing flows without email don't
+                          suddenly fail validation. */}
+                      <Col md={6}>
+                        <Form.Label className="small text-muted fw-semibold mb-1">
+                          Email
+                          {isIway && <span className="text-danger"> *</span>}
+                        </Form.Label>
+                        <Form.Control
+                          size="sm"
+                          type="email"
+                          placeholder="Please enter email address"
+                          value={leadGuest.emailId || ""}
+                          onChange={(e) =>
+                            handleGuestChange(leadIndex, "emailId", e.target.value)
+                          }
+                          isInvalid={!!validationErrors[`guest_${leadIndex}_emailId`]}
+                        />
+                        <Form.Control.Feedback type="invalid">
+                          {validationErrors[`guest_${leadIndex}_emailId`]}
+                        </Form.Control.Feedback>
+                      </Col>
                       {/* i'way requires start_location.flight_number whenever
                           the pickup point is an airport (guide §12.4.5) —
                           there was no input for this anywhere on the page
@@ -2085,13 +2155,9 @@ const CabBookingPage = () => {
                   .filter(Boolean).join(" ") || "—"}
               </span>
             </Col>
-            <Col md={3}>
+            <Col md={6}>
               <small className="text-muted d-block">Phone</small>
               <span>{primaryGuest.contactNumber || "—"}</span>
-            </Col>
-            <Col md={3}>
-              <small className="text-muted d-block">LPO</small>
-              <span>{primaryGuest.lpo || "—"}</span>
             </Col>
             <Col md={6} className="mt-2">
               <small className="text-muted d-block">Email</small>

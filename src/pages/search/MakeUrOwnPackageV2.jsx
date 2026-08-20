@@ -1045,8 +1045,17 @@ export default function MakeUrOwnPackageV2() {
                   <Col className="d-flex justify-content-center">
                     <Button
                       type="submit"
-                      className="btn-warning btn-lg px-5 py-3 rounded-pill"
+                      // btn-search-modern is the shared red-pill CTA already
+                      // used by SEARCH LONG STAY / SEARCH DAY STAY / SEARCH
+                      // HOTEL / etc. — same red gradient (#EC0B43 → #C90939),
+                      // same pill shape, same padding + hover elevation. So
+                      // this page's primary CTA now visually rhymes with the
+                      // rest of the platform. Bootstrap's btn-lg/px-5/py-3/
+                      // rounded-pill are dropped since the shared class
+                      // already covers size and shape.
+                      className="btn-search-modern"
                       disabled={isLoading}
+                      size="lg"
                     >
                       {isLoading ? (
                         <>

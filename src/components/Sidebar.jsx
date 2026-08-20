@@ -553,6 +553,10 @@ export default function Sidebar() {
         { label: "Demand & ADR Forecast", to: "/ai/demand-forecast" },
         { label: "Agent Behavior", to: "/ai/agent-behavior" },
         { label: "No-show / Overbooking Risk", to: "/ai/no-show-risk" },
+        // Additive admin-only entry — the parent group is already
+        // restricted to roles: ["admin"], so AGENT / EXTRANET / STAFF /
+        // RESTAURANT_EXTRANET never see it.
+        { label: "Unbooked Opportunities", to: "/admin/unbooked-opportunities" },
       ],
     },
     {

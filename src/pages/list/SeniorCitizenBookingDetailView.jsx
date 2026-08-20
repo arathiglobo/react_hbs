@@ -468,32 +468,29 @@ export default function SeniorCitizenBookingDetailView() {
     // ── On Request breadcrumb chain (mirrors BookingDetailedView) ──
     // On Request senior-citizen bookings are created with confirmationStatus
     // "Confirmed", so without this override the badge would read a plain
-    // green "Confirmed". The chain grows as the operator acts:
-    //   created            → "On Request"                       (orange)
-    //   after step-1 Confirm → "On Request/Confirmed"            (orange)
-    //   after Reconfirm     → "On Request/Confirmed/Reconfirmed" (green)
-    //   cancelled at any point → chain + " / Cancelled" two-tone.
+    // green "Confirmed". The chain grows as the operator acts. Each segment
+    // carries the colour of the state it represents so the reader can see
+    // at a glance what has already landed:
+    //   "On Request"                        → orange (pending step-1)
+    //   "/Confirmed"                        → green  (step-1 done)
+    //   "/Reconfirmed"                      → green  (finalised)
+    //   " / Cancelled" appended at any step → red
     if (isOnRequestRoom) {
       const finalised =
         normalizedStatus === "RECONFIRMED" || normalizedStatus === "COMPLETED";
-      const chain = finalised
-        ? "On Request/Confirmed/Reconfirmed"
-        : booking?.onRequestConfirmed
-        ? "On Request/Confirmed"
-        : "On Request";
-      if (isCancelled) {
-        return (
-          <span style={base}>
-            <span style={{ color: finalised ? "#198754" : "#e67e22" }}>
-              {chain}
-            </span>
-            <span style={{ color: "#dc3545" }}> / Cancelled</span>
-          </span>
-        );
-      }
+      const showConfirmed = finalised || booking?.onRequestConfirmed;
       return (
-        <span style={{ ...base, color: finalised ? "#198754" : "#e67e22" }}>
-          {chain}
+        <span style={base}>
+          <span style={{ color: "#e67e22" }}>On Request</span>
+          {showConfirmed && (
+            <span style={{ color: "#198754" }}>/Confirmed</span>
+          )}
+          {finalised && (
+            <span style={{ color: "#198754" }}>/Reconfirmed</span>
+          )}
+          {isCancelled && (
+            <span style={{ color: "#dc3545" }}> / Cancelled</span>
+          )}
         </span>
       );
     }

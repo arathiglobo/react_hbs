@@ -40,6 +40,7 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
+import DateInput from "../../../components/DateInput";
 
 const SPACE_TYPES = [
   "",
@@ -322,12 +323,24 @@ export default function MeetAndSpaceSearch() {
   };
 
   // ── open the booking page in a new tab with criteria + ids ───────────
+  // The criteria used to be threaded via URL query params (spaceId,
+  // bookingDate, startTime, unitRate, agentId, nationalityId, …), which
+  // leaked pricing internals into the address bar and made the URL long
+  // and ugly. We now stash the payload in localStorage under a fixed
+  // key and open the target with a bare URL. The booking page reads the
+  // draft on mount (see MeetAndSpaceBookingPage.useQueryParams).
+  //
+  // Delete-on-read is intentionally NOT done in the booking page — a
+  // fresh "Book" click always overwrites the key, and React StrictMode
+  // in dev double-invokes useState initializers so a self-clearing
+  // reader would race with itself. Staleness is bounded to "the last
+  // criteria the same user clicked Book on" — acceptable.
   const handleBook = (space) => {
     const selectedAgent = agents.find(
       (a) => String(a.id) === String(agent)
     );
-    const params = new URLSearchParams({
-      spaceId: space.id,
+    const draft = {
+      spaceId: String(space.id),
       bookingDate,
       startTime,
       endTime,
@@ -335,16 +348,28 @@ export default function MeetAndSpaceSearch() {
       layout: layout || "",
       ratePlan: space.applicableRatePlan || ratePlan,
       rateType: space.applicableRateType || "Hourly",
-      unitRate: space.applicableRate ?? "",
-      agentId: agent || "",
+      unitRate: space.applicableRate != null ? String(space.applicableRate) : "",
+      agentId: agent ? String(agent) : "",
       agentName: selectedAgent?.companyName || "",
-      nationalityId: selectedNationality?.value || "",
+      nationalityId: selectedNationality?.value != null
+        ? String(selectedNationality.value)
+        : "",
       nationalityName: selectedNationality?.label || "",
-    });
-    window.open(
-      `/new-booking/meet-and-space/book?${params.toString()}`,
-      "_blank"
-    );
+    };
+    try {
+      localStorage.setItem("msBookingDraft", JSON.stringify(draft));
+    } catch (e) {
+      // Storage disabled / quota exceeded — fall back to param form so
+      // the flow at least still works. The booking page's URL-param
+      // path is preserved for exactly this case.
+      const params = new URLSearchParams(draft);
+      window.open(
+        `/new-booking/meet-and-space/book?${params.toString()}`,
+        "_blank"
+      );
+      return;
+    }
+    window.open("/new-booking/meet-and-space/book", "_blank");
   };
 
   const collapseSearch = hasSearched && !isEditingSearch;
@@ -543,25 +568,27 @@ export default function MeetAndSpaceSearch() {
                     </Form.Group>
                   </Col>
 
-                  {/* Booking date */}
+                  {/* Booking date — RateCalendar fetches per-day MS
+                       rate hints for the selected city from
+                       /api/meet-and-space-search/rate-calendar. Meet &
+                       Space is a single-date booking (start/end are
+                       hours-of-day, not separate days). */}
                   <Col lg={2} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         Booking Date
                       </Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        type="date"
+                      <DateInput
                         value={bookingDate}
-                        min={today()}
-                        onClick={(e) =>
-                          e.target.showPicker && e.target.showPicker()
-                        }
-                        onChange={(e) => {
-                          setBookingDate(e.target.value);
-                          if (e.target.value) clearError("bookingDate");
+                        onChange={(v) => {
+                          setBookingDate(v);
+                          if (v) clearError("bookingDate");
                         }}
+                        min={today()}
+                        stateId={selectedDestination?.value}
+                        endpoint="/api/meet-and-space-search/rate-calendar"
+                        ariaLabel="Meet and Space booking date"
+                        isInvalid={!!errors.bookingDate}
                       />
                       {errors.bookingDate && (
                         <div className="text-danger small mt-1">

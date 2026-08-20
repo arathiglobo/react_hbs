@@ -17,6 +17,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import AdvertisementCarousel from "../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../components/AgentCreditBalance";
+import DateInput from "../../components/DateInput";
 import { FaSearch, FaStar, FaMapMarkerAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
@@ -775,23 +776,23 @@ export default function LastMinuteBookingPage() {
                     </Col>
                   )}
 
-                  {/* 4. Check-In (clamped to today/+1/+2) */}
+                  {/* 4. Check-In (clamped to today/+1/+2) — RateCalendar
+                       fetches per-night LM rate hints for the selected city
+                       from /api/last-minute-hotel-search/rate-calendar. */}
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Check-in</Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        type="date"
+                      <DateInput
                         value={checkIn}
-                        min={today}
-                        max={maxCheckIn}
-                        onClick={(e) => e.target.showPicker && e.target.showPicker()}
-                        onChange={(e) => {
-                          const v = e.target.value;
+                        onChange={(v) => {
                           setCheckIn(v);
                           if (v) clearError("checkIn");
                         }}
+                        min={today}
+                        stateId={selectedDestination?.value}
+                        endpoint="/api/last-minute-hotel-search/rate-calendar"
+                        ariaLabel="Last-minute check-in date"
+                        isInvalid={!!errors.checkIn}
                       />
                       {errors.checkIn && <div className="text-danger small mt-1">{errors.checkIn}</div>}
                       <Badge bg="warning" text="dark" className="mt-2">
@@ -816,21 +817,21 @@ export default function LastMinuteBookingPage() {
                     </Form.Group>
                   </Col>
 
-                  {/* 6. Check-Out */}
+                  {/* 6. Check-Out — same LM calendar, min day is check-in + 1. */}
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">Check-out</Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        type="date"
+                      <DateInput
                         value={checkOut}
-                        min={checkIn ? formatDate(addDays(new Date(checkIn), 1)) : today}
-                        onClick={(e) => e.target.showPicker && e.target.showPicker()}
-                        onChange={(e) => {
-                          setCheckOut(e.target.value);
-                          if (e.target.value) clearError("checkOut");
+                        onChange={(v) => {
+                          setCheckOut(v);
+                          if (v) clearError("checkOut");
                         }}
+                        min={checkIn ? formatDate(addDays(new Date(checkIn), 1)) : today}
+                        stateId={selectedDestination?.value}
+                        endpoint="/api/last-minute-hotel-search/rate-calendar"
+                        ariaLabel="Last-minute check-out date"
+                        isInvalid={!!errors.checkOut}
                       />
                       {errors.checkOut && <div className="text-danger small mt-1">{errors.checkOut}</div>}
                     </Form.Group>

@@ -39,12 +39,24 @@ const COLUMN_WIDTHS = {
   agentName: "90px",
   customerName: "120px",
   bookingCode: "95px",
+  // Supplier-side confirmation number added on the DS booking detail view
+  // via the "CONFIRMATION NO." button. Sits next to Booking Code so the
+  // two identifiers (internal + supplier) read together. Cell renders
+  // blank for rows that don't have one yet. Width tuned so the two-word
+  // header ("CONFIRMATION" / "NO") wraps at its space instead of splitting
+  // the word "CONFIRMATION" mid-letter — mirrors hotel + LM + LS lists.
+  confirmationNo: "130px",
   bookDate: "90px",
-  bookingDetails: "230px",
+  // Slightly trimmed to fund the wider Payment Status + Notification
+  // columns below. Hotel names still wrap cleanly at word boundary.
+  bookingDetails: "210px",
   deadlineDate: "105px",
   paymentMode: "110px",
-  paymentStatus: "110px",
-  notification: "100px",
+  // Widened so "Payment Pending" stays on one line.
+  paymentStatus: "115px",
+  // Widened so "ReConfirmed" / "Confirmed" pills and the NOTIFICATION
+  // header word never split mid-letter — matches HotelBookingList.
+  notification: "120px",
   action: "110px",
 };
 
@@ -645,6 +657,25 @@ export default function DayStayBookingList() {
                           >
                             Booking Code
                           </th>
+                          {/* Confirmation No — supplier's confirmation number,
+                              populated via the "CONFIRMATION NO." button on
+                              the DS booking detail view. DayStayBookingDTO
+                              already exposes `confirmationNumber`, so no
+                              backend change is needed. Cell renders blank on
+                              rows that don't have one. wordBreak / overflowWrap
+                              normal keep the two-word header wrapping only at
+                              its space, mirroring the hotel + LS lists. */}
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.confirmationNo,
+                              whiteSpace: "normal",
+                              wordBreak: "normal",
+                              overflowWrap: "normal",
+                            }}
+                          >
+                            Confirmation No
+                          </th>
                           <th
                             style={{
                               ...baseHeaderStyle,
@@ -862,12 +893,38 @@ export default function DayStayBookingList() {
                                     {b.bookingCode || "-"}
                                   </span>
                                 </td>
+                                {/* Confirmation No cell — reads the field
+                                    already exposed by DayStayBookingDTO
+                                    (service impl setConfirmationNumber on the
+                                    DTO mapping). Renders blank when the
+                                    supplier hasn't stamped a number yet, per
+                                    the "empty means nothing shown" rule.
+                                    nowrap keeps the number atomic. */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.confirmationNo,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {b.confirmationNumber ? (
+                                    <span
+                                      className="fw-semibold text-dark"
+                                      style={{ fontSize: "0.85rem" }}
+                                    >
+                                      {b.confirmationNumber}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
+                                </td>
                                 <td
                                   className="text-muted"
                                   style={{
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     width: COLUMN_WIDTHS.bookDate,
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
                                   {/* Book Date — when the booking record
@@ -922,6 +979,8 @@ export default function DayStayBookingList() {
                                     textAlign: "center",
                                     fontFamily: "monospace",
                                     width: COLUMN_WIDTHS.deadlineDate,
+                                    // Keep the ISO date on one line.
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
                                   {/* Deadline Date — day-only ISO fragment. */}
@@ -961,6 +1020,10 @@ export default function DayStayBookingList() {
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     width: COLUMN_WIDTHS.paymentStatus,
+                                    // "Payment Pending" / "Un-Paid" / "Paid"
+                                    // are single labels — never break them
+                                    // mid-word.
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
                                   {(() => {
@@ -1000,6 +1063,12 @@ export default function DayStayBookingList() {
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     width: COLUMN_WIDTHS.notification,
+                                    // Keep "Confirmed" / "ReConfirmed" /
+                                    // "On Request" / "Cancelled" pills on
+                                    // one line — the widened column above
+                                    // has the room; nowrap protects it if
+                                    // the viewport ever gets narrower.
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
                                   {/* Notification — mirrors HotelBookingList's
@@ -1040,10 +1109,19 @@ export default function DayStayBookingList() {
                                     // bookings are CREATED as "Not Confirmed"
                                     // (flow REQUESTED), so key on the room
                                     // status, not on a Confirmed text match:
-                                    //   created            → "On Request"
-                                    //   after step-1 Confirm → "On Request/Confirmed"
-                                    // ReConfirmed / Cancelled / Rejected fall
-                                    // through to the standard pills below.
+                                    //   created            → orange "On Request"
+                                    //   after step-1 Confirm → green "Confirmed"
+                                    //
+                                    // Only the LATEST status is shown in the
+                                    // list; the compound "On Request/Confirmed"
+                                    // breadcrumb stays on the detail view.
+                                    // Once step-1 Confirm has happened the
+                                    // room is functionally Confirmed, so it
+                                    // gets the green Confirmed pill — same
+                                    // treatment a genuinely-confirmed row
+                                    // would receive. ReConfirmed / Cancelled /
+                                    // Rejected fall through to the standard
+                                    // pills below.
                                     const isRejected = norm === "rejected";
                                     if (
                                       isOnRequestRoom &&
@@ -1051,12 +1129,9 @@ export default function DayStayBookingList() {
                                       !isCancelled &&
                                       !isRejected
                                     ) {
-                                      return pill(
-                                        "#e67e22",
-                                        b.onRequestConfirmed
-                                          ? "On Request/Confirmed"
-                                          : "On Request",
-                                      );
+                                      return b.onRequestConfirmed
+                                        ? pill("#06a301", "Confirmed")
+                                        : pill("#e67e22", "On Request");
                                     }
                                     if (isConfirmed) return pill("#06a301", "Confirmed");
                                     if (isReconfirmed) return pill("#06a301", "ReConfirmed");

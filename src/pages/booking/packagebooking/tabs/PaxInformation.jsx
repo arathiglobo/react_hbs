@@ -14,6 +14,11 @@ import { useNavigate, useLocation } from "react-router-dom";
 // the "Select Payment Gateway" modal below — importing here keeps the modal
 // visually identical to Hotel/LastMinute/LongStay flows without a copy.
 import "../../../../styles/HotelBookingPage.css";
+// Abandoned-package-search follow-up email — flags the history row as
+// booked once the /book POST succeeds so the scheduler never emails the
+// agent about a booking they actually completed. Only called on the
+// booking-success path; failures are already fire-and-forget.
+import { markPackageSearchHistoryConfirmed } from "../../../../utils/packageSearchHistory";
 import {
   FaCheckCircle,
   FaClipboardList,
@@ -755,6 +760,13 @@ const PaxInformation = forwardRef(({
               : "Booking confirmed successfully!"),
         );
         setShowSummary(false);
+        // Flag the abandoned-search history row as booked so the
+        // scheduler stops considering it a follow-up candidate. Amend
+        // path skips this (editingBookingId set) — the history row for
+        // the original booking was already confirmed on its first create.
+        if (!editingBookingId) {
+          markPackageSearchHistoryConfirmed(searchParams?.packageId);
+        }
         // ADD NEW ITEM (sub-booking) flow: when a child of an existing
         // primary booking was just created, jump straight to the parent's
         // detail page so the user sees the newly-stamped "Related
@@ -1280,7 +1292,7 @@ const PaxInformation = forwardRef(({
           style={{ borderBottom: "none" }}
         >
           <Modal.Title className="fw-semibold d-flex align-items-center">
-            <FaPlaneDeparture className="me-2" /> Confirm Your Booking
+            <FaPlaneDeparture className="me-2" /> Confirm Your Booking 
           </Modal.Title>
         </Modal.Header>
         <Modal.Body className="px-3 py-2 bg-light">
@@ -2012,6 +2024,6 @@ const PaxInformation = forwardRef(({
 
     </div>
   );
-});
+}); 
 
 export default PaxInformation;

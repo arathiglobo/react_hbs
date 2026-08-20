@@ -7,6 +7,7 @@ import {
   Form,
   Pagination,
   Spinner,
+  FormControl,
 } from "react-bootstrap";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
@@ -16,6 +17,7 @@ import AgentCreditBalance from "../components/AgentCreditBalance";
 import axiosInstance from "../components/AxiosInstance";
 import AdvertisementCarousel from "../components/AdvertisementCarousel";
 import TimeApplyPicker from "../components/TimeApplyPicker";
+import DateInput from "../components/DateInput";
 import MapModal from "../components/map/MapModal";
 import { ENABLE_MAP_PREVIEW } from "../config/featureFlags";
 import { FaSearch, FaStar, FaInfoCircle } from "react-icons/fa";
@@ -2120,23 +2122,26 @@ export default function HotelSearch({
                     </Col>
                   )}
 
-                  {/* 4. Check-In */}
+                  {/* 4. Check-In — RateCalendar renders a picker that
+                       shows the "starting from" nightly rate under each day
+                       (from GET /api/hotel-search/rate-calendar). Same
+                       ISO yyyy-MM-dd contract in value/onChange as the
+                       previous <Form.Control type="date">, so all downstream
+                       consumers (nights sync, submit payload, sticky summary
+                       strip) work unchanged. */}
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         Check-In
                       </Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        type="date"
+                      <DateInput
                         value={checkIn}
                         min={today}
-                        onClick={(e) =>
-                          e.target.showPicker && e.target.showPicker()
-                        }
-                        onChange={(e) => {
-                          const newCheckIn = e.target.value;
+                        stateId={selectedDestination?.value}
+                        currency="AED"
+                        isInvalid={!!errors.checkIn}
+                        ariaLabel="Check-in date"
+                        onChange={(newCheckIn) => {
                           setCheckIn(newCheckIn);
                           if (newCheckIn) {
                             clearError("checkIn");
@@ -2178,24 +2183,26 @@ export default function HotelSearch({
                     </Form.Group>
                   </Col>
 
-                  {/* 6. Check-Out */}
+                  {/* 6. Check-Out — same RateCalendar treatment as Check-In.
+                       min={minCheckOutDate} keeps operators from picking a
+                       date before/equal to check-in (the picker greys those
+                       days out and refuses selection). */}
                   <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         Check-Out
                       </Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        className="form-control-modern"
-                        type="date"
+                      <DateInput
+                    
                         value={checkOut}
                         min={minCheckOutDate}
-                        onClick={(e) =>
-                          e.target.showPicker && e.target.showPicker()
-                        }
-                        onChange={(e) => {
-                          setCheckOut(e.target.value);
-                          if (e.target.value) clearError("checkOut");
+                        stateId={selectedDestination?.value}
+                        currency="AED"
+                        isInvalid={!!errors.checkOut}
+                        ariaLabel="Check-out date"
+                        onChange={(newCheckOut) => {
+                          setCheckOut(newCheckOut);
+                          if (newCheckOut) clearError("checkOut"); 
                         }}
                       />
                       {errors.checkOut && (

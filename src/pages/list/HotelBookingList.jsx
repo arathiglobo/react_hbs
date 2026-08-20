@@ -46,13 +46,24 @@ const COLUMN_WIDTHS = {
   agentName: "90px",
   customerName: "120px",
   bookingCode: "95px",
+  // Supplier-side confirmation number added on the booking detail view via
+  // the "CONFIRMATION NO." button. Sits next to Booking Code so the two
+  // identifiers (internal + supplier) read together. Cell renders blank
+  // for rows that don't have one yet. Width tuned so the two-word header
+  // ("CONFIRMATION" / "NO") wraps at its space instead of splitting the
+  // word "CONFIRMATION" mid-letter — this needs enough room for the
+  // longest word alone. The cell itself is `whiteSpace: nowrap` on rare
+  // longer values so the number never splits either.
+  confirmationNo: "130px",
   referenceCode: "160px",
   bookDate: "90px",
-  bookingDetails: "230px",
+  bookingDetails: "210px",
   deadlineDate: "105px",
   paymentMode: "110px",
-  paymentStatus: "110px",
-  notification: "100px",
+  paymentStatus: "115px",
+  // Widened so the "ReConfirmed" / "Confirmed" / "On Request" pill labels
+  // (and the "NOTIFICATION" header word) never wrap mid-word.
+  notification: "120px",
   action: "110px",
 };
 
@@ -93,13 +104,19 @@ const getPaymentModeLabel = (booking) => {
 // Resolve the Payment Status label from the booking's DISPLAYED status
 // (the Status / Notification column):
 //   Confirmed                      → Payment Pending
+//   On Request                     → Payment Pending
 //   ReConfirmed                    → Paid
 //   ReConfirmed/Cancelled          → Paid
 //   Confirmed/Cancelled            → Un-Paid
 //   On Request/Confirmed/Cancelled → Un-Paid
-// Anything else — an On Request room still awaiting confirmation, Not
-// Confirmed, or an unknown/empty status — has no defined mapping and
-// renders "-".
+// Anything else — Not Confirmed, or an unknown/empty status — has no
+// defined mapping and renders "-".
+//
+// On Request rooms are stamped confirmationStatus=CONFIRMED by the status
+// engine (see the Notification cell around line 2047) so they can follow
+// the reconfirm flow, but no money has been collected on them yet — so
+// they carry the same "Payment Pending" meaning as a genuinely Confirmed
+// row. The Notification cell handles the visual distinction on its own.
 //
 // A cancelled booking reports whether the money had already been
 // collected at the point of cancellation rather than the cancellation
@@ -154,12 +171,14 @@ const getPaymentStatusLabel = (booking) => {
   const normalizedStatus = effectiveStatus.replace(/\s+/g, "").toLowerCase();
 
   if (normalizedStatus === "confirmed") {
-    // Display-only override: an On Request room that has not been
-    // confirmed yet shows as "On Request", so it is not a Confirmed row.
-    const isOnRequestStillPending =
-      /^on\s*request$/i.test(String(booking?.roomStatus || "").trim()) &&
-      !booking?.onRequestConfirmed;
-    return isOnRequestStillPending ? "-" : "Payment Pending";
+    // Covers both display states:
+    //   • genuinely Confirmed (Notification cell → "Confirmed")
+    //   • On Request still awaiting reconfirm (Notification cell →
+    //     "On Request"; underlying confirmationStatus is still CONFIRMED
+    //     per the display-only override around line 2047)
+    // Neither has collected money yet, so both map to "Payment Pending"
+    // in this column.
+    return "Payment Pending";
   }
   if (normalizedStatus === "reconfirmed") return "Paid";
 
@@ -1578,6 +1597,31 @@ const HotelBookingList = ({
                           >
                             Booking Code
                           </th>
+                          {/* Confirmation No — supplier's confirmation number,
+                              populated via the "CONFIRMATION NO." button on
+                              the booking detail view (booking.confirmationNumber).
+                              Cell renders blank on rows that don't have one.
+                              wordBreak/overflowWrap are explicitly "normal" so
+                              the two-word header wraps only at its space (like
+                              PAYMENT MODE / BOOKING CODE / DEADLINE DATE) and
+                              never splits "CONFIRMATION" mid-word if the
+                              viewport briefly makes the column tight. */}
+                          <th
+                            style={{
+                              padding: "0.45rem 0.6rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              color: "#495057",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "normal",
+                              wordBreak: "normal",
+                              overflowWrap: "normal",
+                              lineHeight: 1.2,
+                              width: COLUMN_WIDTHS.confirmationNo,
+                            }}
+                          >
+                            Confirmation No
+                          </th>
                           {/* Reference Code column hidden by request. */}
                           <th
                             style={{
@@ -1873,6 +1917,40 @@ const HotelBookingList = ({
                                     {b.bookingCode || "-"}
                                   </span>
                                 </td>
+                                {/* Confirmation No cell — mirrors the detail
+                                    view's field resolution (booking.confirmationNumber
+                                    with a customer-nested fallback for older
+                                    payload shapes). Renders blank when the
+                                    supplier hasn't stamped a number yet, per
+                                    the requirement that empty means "nothing
+                                    shown here". */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.confirmationNo,
+                                    // Confirmation numbers are atomic identifiers —
+                                    // never break them at arbitrary character
+                                    // boundaries the way the base cell style would.
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {(() => {
+                                    const confNo =
+                                      b.confirmationNumber ||
+                                      b.customer?.confirmationNumber ||
+                                      "";
+                                    return confNo ? (
+                                      <span
+                                        className="fw-semibold text-dark"
+                                        style={{ fontSize: "0.85rem" }}
+                                      >
+                                        {confNo}
+                                      </span>
+                                    ) : (
+                                      <span className="text-muted">-</span>
+                                    );
+                                  })()}
+                                </td>
                                 {/* Reference Code cell hidden by request. */}
                                 <td
                                   className="text-muted"
@@ -1880,6 +1958,9 @@ const HotelBookingList = ({
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     width: COLUMN_WIDTHS.bookDate,
+                                    // A date is atomic — "12/08/2026" must
+                                    // never wrap to "12/08/202 6".
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
                                   {formatDate(b.bookingDate) || "-"}
@@ -1928,6 +2009,8 @@ const HotelBookingList = ({
                                     textAlign: "center",
                                     fontFamily: "monospace",
                                     width: COLUMN_WIDTHS.deadlineDate,
+                                    // Keep the ISO date on one line.
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
                                   {formatDeadlineDate(b.deadlineDate)}
@@ -1968,6 +2051,10 @@ const HotelBookingList = ({
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     width: COLUMN_WIDTHS.paymentStatus,
+                                    // "Payment Pending" / "Un-Paid" / "Paid"
+                                    // are single labels — never break them
+                                    // mid-word.
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
                                   {(() => {
@@ -2004,6 +2091,12 @@ const HotelBookingList = ({
                                     ...baseCellStyle,
                                     textAlign: "center",
                                     width: COLUMN_WIDTHS.notification,
+                                    // Keep the "ReConfirmed" / "Confirmed" /
+                                    // "On Request" / "Cancelled" pill on one
+                                    // line — the widened column above already
+                                    // has room; nowrap protects it against
+                                    // any narrower viewport too.
+                                    whiteSpace: "nowrap",
                                   }}
                                 >
                                   {(() => {

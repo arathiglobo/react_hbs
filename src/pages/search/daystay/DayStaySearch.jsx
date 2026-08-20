@@ -17,6 +17,7 @@ import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
+import DateInput from "../../../components/DateInput";
 import "../../../styles/HotelSearch.css";
 
 // ─────────────────────────────────────────────
@@ -937,21 +938,27 @@ export default function DayStaySearch() {
                     </Col>
                   )}
 
-                  {/* 4. Check-In Date */}
+                  {/* 4. Check-In Date — RateCalendar fetches per-day DS
+                       rate hints for the selected city from
+                       /api/day-stay-search/rate-calendar. Day-stay is a
+                       single-date booking (no check-out), so this is the
+                       only date field on the page. */}
                   <Col lg={4} md={6}>
                     <Form.Group>
                       <Form.Label className="fw-semibold text-dark">
                         Check-in Date
                       </Form.Label>
-                      <Form.Control
-                        style={{ height: "42px" }}
-                        type="date"
+                      <DateInput
                         value={checkInDate}
-                        min={today}
-                        onChange={(e) => {
-                          setCheckInDate(e.target.value);
-                          if (e.target.value) clearError("checkInDate");
+                        onChange={(v) => {
+                          setCheckInDate(v);
+                          if (v) clearError("checkInDate");
                         }}
+                        min={today}
+                        stateId={selectedDestination?.value}
+                        endpoint="/api/day-stay-search/rate-calendar"
+                        ariaLabel="Day-stay check-in date"
+                        isInvalid={!!errors.checkInDate}
                       />
                       {errors.checkInDate && (
                         <div className="text-danger small mt-1">
@@ -992,7 +999,16 @@ export default function DayStaySearch() {
                       </Button>
                       <Button
                         type="button"
-                        className="flex-grow-1 justify-content-center btn-add-room-premium"
+                        // hs-add-room-btn-red is the shared solid-red variant
+                        // already defined in HotelSearch.css alongside the
+                        // base .btn-add-room-premium pill. Matches the red
+                        // used by the SEARCH DAY STAY button below (#EC0B43
+                        // → #C90939). Same convention Hotel + Long Stay
+                        // searches use; other pages sharing btn-add-room-premium
+                        // (Student, GovEmployee, Meet & Space, etc.) don't
+                        // carry this modifier and keep their pink → violet
+                        // gradient unchanged.
+                        className="flex-grow-1 justify-content-center btn-add-room-premium hs-add-room-btn-red"
                         disabled={roomsOpen && rooms.length >= MAX_ROOMS}
                         onClick={() => {
                           if (!roomsOpen) {

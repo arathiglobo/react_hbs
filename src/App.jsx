@@ -15,6 +15,7 @@ import Hotels from "./pages/master/Hotels";
 import PrivateRoute from "./components/PrivateRoute";
 import AgentDashboard from "./pages/AgentDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
+import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import StaffDashboard from "./pages/StaffDashboard";
 import Test from "./pages/Test";
 import LandingPage from "./pages/LandingPage";
@@ -197,6 +198,10 @@ import AiDashboard from "./pages/ai/AiDashboard";
 import DemandForecast from "./pages/ai/DemandForecast";
 import AgentBehavior from "./pages/ai/AgentBehavior";
 import NoShowRisk from "./pages/ai/NoShowRisk";
+// Admin-only "Unbooked Opportunities" report — reads hotel_search_history
+// rows that never turned into a booking. Additive: no other page or
+// route is touched.
+import UnbookedOpportunities from "./pages/ai/UnbookedOpportunities";
 import { CabSearch } from "./pages/search/cab/CabSearch";
 import CabBookingPage from "./pages/booking/CabBookingPage";
 import ActivitySearch from "./pages/search/activity/ActivitySearch";
@@ -371,15 +376,15 @@ export default function App() {
   }
 />
 
-        {/* Super Admin dashboard — same landing surface as admin (reuses
-            AdminDashboard) so a SUPER_ADMIN login has every admin tool plus
-            the SUPER_ADMIN-only screens (Credential Vault, API Access) in
-            the sidebar. Backend guards do the actual permission enforcement. */}
+        {/* Super Admin dashboard — dedicated surface with super-admin-
+            appropriate content (governance, credentials, access control,
+            platform-wide metrics). Backend guards still enforce actual
+            permissions. */}
         <Route
           path="/superAdminDashboard"
           element={
             <PrivateRoute roles={["super_admin"]}>
-              <AdminDashboard />
+              <SuperAdminDashboard />
             </PrivateRoute>
           }
         />
@@ -599,6 +604,9 @@ export default function App() {
         <Route path="/ai/demand-forecast" element={<PrivateRoute><DemandForecast /></PrivateRoute>} />
         <Route path="/ai/agent-behavior" element={<PrivateRoute><AgentBehavior /></PrivateRoute>} />
         <Route path="/ai/no-show-risk" element={<PrivateRoute><NoShowRisk /></PrivateRoute>} />
+        {/* Admin-only report — sidebar hides it for non-admin roles; the
+            backend endpoint returns 403 for non-admins as a second gate. */}
+        <Route path="/admin/unbooked-opportunities" element={<PrivateRoute><UnbookedOpportunities /></PrivateRoute>} />
         <Route path="/api-booking-page-hotels" element={<PrivateRoute><ApiBookingPageForHotels /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package" element={<PrivateRoute><MakeUrOwnPackage /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package/booking-page" element={<PrivateRoute><MakePkgBookingPage /></PrivateRoute>} />

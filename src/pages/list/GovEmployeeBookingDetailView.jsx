@@ -473,6 +473,36 @@ export default function GovEmployeeBookingDetailView() {
       normalizedStatus === "COMPLETED";
     const base = { fontWeight: "700", fontSize: "0.85rem" };
 
+    // ── On Request breadcrumb chain (mirrors SeniorCitizenBookingDetailView) ──
+    // Gov-employee On Request bookings are created with confirmationStatus
+    // "Confirmed", so without this override the badge would read a plain
+    // green "Confirmed". The chain grows as the operator acts. Each segment
+    // carries the colour of the state it represents so the reader can see
+    // at a glance what has already landed:
+    //   "On Request"                        → orange (pending step-1)
+    //   "/Confirmed"                        → green  (step-1 done)
+    //   "/Reconfirmed"                      → green  (finalised)
+    //   " / Cancelled" appended at any step → red
+    if (isOnRequestRoom) {
+      const finalised =
+        normalizedStatus === "RECONFIRMED" || normalizedStatus === "COMPLETED";
+      const showConfirmed = finalised || booking?.onRequestConfirmed;
+      return (
+        <span style={base}>
+          <span style={{ color: "#e67e22" }}>On Request</span>
+          {showConfirmed && (
+            <span style={{ color: "#198754" }}>/Confirmed</span>
+          )}
+          {finalised && (
+            <span style={{ color: "#198754" }}>/Reconfirmed</span>
+          )}
+          {isCancelled && (
+            <span style={{ color: "#dc3545" }}> / Cancelled</span>
+          )}
+        </span>
+      );
+    }
+
     // Cancelled on top of a Confirmed/Reconfirmed booking → two-tone:
     // the original status in green, "/ Cancelled" in red.
     if (isCancelled && isConfirmedish) {

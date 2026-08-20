@@ -212,17 +212,38 @@ const formatDate = (value) => {
 // Confirmed / ReConfirmed (incl. "Confirm/ReConfirmed") → green, On Request →
 // orange, anything else → grey.
 const StatusBadge = ({ status }) => {
-  const p = String(status || "-").trim().toUpperCase();
-  const color = p.includes("CANCELLED")
-    ? "#dc2626"
-    : p.includes("CONFIRM")
-      ? "#16a34a"
-      : p === "ON REQUEST"
-        ? "#e67e22"
-        : "#888";
+  const raw = String(status ?? "-").trim();
+
+  // Per-token colour rule — matches the pre-change whole-string logic
+  // so isolated labels look identical.
+  const colorFor = (label) => {
+    const p = label.trim().toUpperCase();
+    if (p.includes("CANCELLED")) return "#dc2626";
+    if (p.includes("CONFIRM")) return "#16a34a";
+    if (p === "ON REQUEST") return "#e67e22";
+    return "#888";
+  };
+
+  // Combined labels like "ReConfirmed/Cancelled" render each part in its
+  // own colour so the operator sees the prior state (green) alongside
+  // the terminal one (red) at a glance. The slash separator stays muted.
+  if (raw.includes("/")) {
+    const parts = raw.split("/");
+    return (
+      <span style={{ fontWeight: "700", fontSize: "0.85rem" }}>
+        {parts.map((part, idx) => (
+          <span key={idx}>
+            {idx > 0 && <span style={{ color: "#888" }}>/</span>}
+            <span style={{ color: colorFor(part) }}>{part.trim()}</span>
+          </span>
+        ))}
+      </span>
+    );
+  }
+
   return (
-    <span style={{ fontWeight: "700", fontSize: "0.85rem", color }}>
-      {status ?? "-"}
+    <span style={{ fontWeight: "700", fontSize: "0.85rem", color: colorFor(raw) }}>
+      {raw}
     </span>
   );
 };
@@ -967,7 +988,20 @@ export default function CabBookingDetailView() {
   // Legacy raw values ("OK", "CONFIRMED", "PENDING_IWAY_PAYMENT") all fold
   // into the same "Reconfirmed" label so historic rows read consistently
   // with new ones. The underlying confirmationStatus in the DB is unchanged.
-  const displayStatus = isCancelled ? "Cancelled" : "Reconfirmed";
+  //
+  // Cancellations that happened AFTER a reconfirmation render as the
+  // combined "ReConfirmed/Cancelled" label so the operator sees both
+  // the booking's terminal state (Cancelled — red wins per the status
+  // renderer's rule) and the fact that it was fully committed before
+  // being cancelled. Cancellations from any other prior state (e.g. a
+  // pending booking cancelled before it ever confirmed) keep the plain
+  // "Cancelled" label so we don't imply a reconfirmation that never
+  // happened.
+  const wasReconfirmedBeforeCancel =
+    String(actionState.confirmationStatus || "").toUpperCase() === "RECONFIRMED";
+  const displayStatus = isCancelled
+    ? (wasReconfirmedBeforeCancel ? "ReConfirmed/Cancelled" : "Cancelled")
+    : "Reconfirmed";
 
   // Booking lifecycle events for the History modal — built from the row stub
   // already loaded (no extra API call), mirroring the Package / Hotel booking
@@ -1217,7 +1251,11 @@ export default function CabBookingDetailView() {
                   <Col md={6}>
                     <InfoRow
                       label="Phone"
-                      value={booking.customer?.contactNumber}
+                      value={
+                        booking.customer?.mobileNumber ||
+                        booking.customer?.contactNumber ||
+                        booking.customer?.phone
+                      }
                     />
                   </Col>
                 </Row>
@@ -1272,11 +1310,17 @@ export default function CabBookingDetailView() {
                         <td>{g.age ?? "—"}</td>
                         {/* We collect one phone per booking (lead only) — the
                             per-guest form has no phone field. Show the lead
-                            passenger's number on the lead row; blank otherwise. */}
+                            passenger's number on the lead row; blank otherwise.
+                            Backend serializes the customer's phone under the
+                            `mobileNumber` key; read the older aliases too so
+                            historical rows keep rendering. */}
                         <td>
                           {g.contactNumber ||
                             (g.isLead
-                              ? booking.customer?.contactNumber || "—"
+                              ? booking.customer?.mobileNumber ||
+                                booking.customer?.contactNumber ||
+                                booking.customer?.phone ||
+                                "—"
                               : "—")}
                         </td>
                       </tr>

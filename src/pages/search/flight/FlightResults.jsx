@@ -165,30 +165,56 @@ const resolveAirlineName = (name, code) => {
 
 // Module-level cache of logo URLs known to 404. Populated by the first
 // AirlineLogo card that tries a URL and fails; every subsequent card with
-// the same URL skips the <img> entirely and renders the monogram straight
-// away. Without this, a 49-row DXB→BOM result would produce dozens of
-// duplicate 404s in the network tab (one per row per carrier — AirHex
-// doesn't stock every IATA code).
+// the same URL skips the <img> entirely and renders the next fallback
+// straight away. Without this, a 49-row DXB→BOM result would produce
+// dozens of duplicate 404s in the network tab.
 const brokenLogoSrcs = new Set();
 
-// Fallback airline logo if the DB row has no logo_url — a monogram circle
-// built from the carrier code so the layout stays stable.
+// Public IATA-keyed airline logo CDN used as a second-chance fallback
+// when the backend didn't supply a logo_url (or that URL 404s). This is
+// the same CDN Kayak / Aviasales serve their airline logos from — it
+// stocks logos for virtually every IATA carrier code we'd see in
+// Amadeus results, so almost every carrier ends up with a real logo
+// even when our amadeus_airlines seed row has a blank logo_url.
+// 120×40 gives a clean fit inside our 56×56 tile with a bit of padding.
+const cdnLogoUrl = (code) =>
+  code ? `https://pics.avs.io/120/40/${encodeURIComponent(code.toUpperCase())}.png` : null;
+
+// Airline logo tile. Tries three sources in order:
+//   1. The backend-provided src (DB amadeus_airlines.logo_url)
+//   2. The public IATA CDN fallback (pics.avs.io) keyed on the carrier code
+//   3. A monogram circle with the carrier code — final layout-safe fallback
+// Each source that 404s is remembered in brokenLogoSrcs so a subsequent
+// row for the same carrier skips directly to the next fallback.
 const AirlineLogo = ({ src, code }) => {
-  // Ignore the src if we've already discovered it's broken in this
-  // session. First-time-broken paths still hit the img → onError → cache
-  // path below; second-and-later paths render the fallback immediately.
-  const known = src && brokenLogoSrcs.has(src);
-  const [broken, setBroken] = useState(known);
-  if (src && !broken) {
+  const cdn = cdnLogoUrl(code);
+  // Choose the first candidate that isn't known-broken.
+  const initial =
+    src && !brokenLogoSrcs.has(src) ? src :
+    cdn && !brokenLogoSrcs.has(cdn) ? cdn :
+    null;
+  const [current, setCurrent] = useState(initial);
+
+  const handleError = () => {
+    if (current) brokenLogoSrcs.add(current);
+    // Cascade to the next fallback that isn't itself known-broken.
+    if (current === src && cdn && !brokenLogoSrcs.has(cdn)) {
+      setCurrent(cdn);
+    } else {
+      setCurrent(null); // monogram
+    }
+  };
+
+  if (current) {
     return (
       <img
-        src={src}
+        src={current}
         alt={code || "airline"}
-        onError={() => {
-          brokenLogoSrcs.add(src);
-          setBroken(true);
+        onError={handleError}
+        style={{
+          width: 56, height: 56, objectFit: "contain", background: "#fff",
+          borderRadius: 8, padding: 4, border: "1px solid #eef1f5",
         }}
-        style={{ width: 56, height: 56, objectFit: "contain", background: "#fff", borderRadius: 8, padding: 4, border: "1px solid #eef1f5" }}
       />
     );
   }
@@ -396,7 +422,7 @@ const FlightCard = ({ rec, onSelect, convert }) => {
                         height: 2, background: "#dee2e6", position: "relative", margin: "6px 4px",
                       }}>
                         <FaPlaneDeparture style={{
-                          position: "absolute", right: -6, top: -8, color: "#0d6efd",
+                          position: "absolute", right: -6, top: -8, color: "#111827",
                         }} />
                       </div>
                       <div
@@ -439,7 +465,7 @@ const FlightCard = ({ rec, onSelect, convert }) => {
                 <div className="text-muted" style={{ fontSize: 12 }}>
                   Total ({totalConv.code || "AED"})
                 </div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: "#0d6efd" }}>
+                <div style={{ fontSize: 22, fontWeight: 700, color: "#111827" }}>
                   {fmtAmount(totalConv.amount, totalConv.code)}
                 </div>
                 <div className="text-muted" style={{ fontSize: 11 }}>
@@ -456,8 +482,8 @@ const FlightCard = ({ rec, onSelect, convert }) => {
                   {rec.pricing?.fareType || (rec.pricing?.refundable ? "Refundable" : "Non-refundable")}
                 </div>
               </div>
-              {/* Circular chevron toggle — matches the old project's
-                  blue arrow next to the Refundable label. Rotates 180°
+              {/* Circular chevron toggle — uses the storefront brand red
+                  so it lines up with the primary CTA below. Rotates 180°
                   when expanded so the arrow points up. */}
               <button
                 type="button"
@@ -469,14 +495,14 @@ const FlightCard = ({ rec, onSelect, convert }) => {
                   width: 34,
                   height: 34,
                   borderRadius: "50%",
-                  background: "#0d6efd",
+                  background: "#e11d48",
                   color: "#fff",
                   border: "none",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   cursor: "pointer",
-                  boxShadow: "0 2px 6px rgba(13, 110, 253, 0.35)",
+                  boxShadow: "0 2px 6px rgba(225, 29, 72, 0.35)",
                   transition: "transform 0.2s ease",
                   transform: open ? "rotate(180deg)" : "rotate(0deg)",
                   flexShrink: 0,
