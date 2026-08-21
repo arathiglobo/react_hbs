@@ -2989,14 +2989,31 @@ export default function HotelSearch({
                                           color: "#333",
                                         }}
                                       >
-                                        {hotel.price
-                                          ? `${displayCurrencyCode} ${convertFromAed(
-                                              hotel.price,
-                                            ).toLocaleString(undefined, {
-                                              minimumFractionDigits: 2,
-                                              maximumFractionDigits: 2,
-                                            })}`
-                                          : "Price on request"}
+                                        {(() => {
+                                          if (!hotel.price) return "Price on request";
+                                          // Operator rule: RateHawk rates ALWAYS
+                                          // render in AED, regardless of the
+                                          // currency toggle at the top of the
+                                          // search page. Every RateHawk price is
+                                          // already AED at the backend
+                                          // (RatehawkHotelSearchApiCaller converts
+                                          // amount_gross → AED before markup), so
+                                          // we skip the convertFromAed multiplier
+                                          // and force the "AED" label on this row.
+                                          const isRatehawk =
+                                            String(hotel.channelType || "").toLowerCase() ===
+                                            "ratehawk";
+                                          const code = isRatehawk
+                                            ? "AED"
+                                            : displayCurrencyCode;
+                                          const amount = isRatehawk
+                                            ? Number(hotel.price) || 0
+                                            : convertFromAed(hotel.price);
+                                          return `${code} ${amount.toLocaleString(undefined, {
+                                            minimumFractionDigits: 2,
+                                            maximumFractionDigits: 2,
+                                          })}`;
+                                        })()}
                                       </div>
 
                                       <div
@@ -3160,18 +3177,34 @@ export default function HotelSearch({
                                           // is the AED→target multiplier; rates
                                           // stay AED in every payload (display
                                           // only). AED → factor 1.
-                                          const currency = {
-                                            code: displayCurrencyCode,
-                                            factor:
-                                              selectedCurrency &&
-                                              Number.isFinite(
-                                                selectedCurrency.rate,
-                                              ) &&
-                                              aedBaseRate
-                                                ? selectedCurrency.rate /
+                                          // Operator rule: RateHawk hotels
+                                          // ALWAYS carry AED into the room
+                                          // list, ignoring the top-of-page
+                                          // display-currency toggle. Belt-
+                                          // and-suspenders with the same guard
+                                          // inside ExternalApiRoomList — either
+                                          // one alone would suffice, but pinning
+                                          // it at the navigation source too
+                                          // keeps sessionStorage consistent
+                                          // for any downstream reader.
+                                          const isRatehawkPick =
+                                            String(
+                                              hotel.channelType || "",
+                                            ).toLowerCase() === "ratehawk";
+                                          const currency = isRatehawkPick
+                                            ? { code: "AED", factor: 1 }
+                                            : {
+                                                code: displayCurrencyCode,
+                                                factor:
+                                                  selectedCurrency &&
+                                                  Number.isFinite(
+                                                    selectedCurrency.rate,
+                                                  ) &&
                                                   aedBaseRate
-                                                : 1,
-                                          };
+                                                    ? selectedCurrency.rate /
+                                                      aedBaseRate
+                                                    : 1,
+                                              };
                                           sessionStorage.setItem(
                                             "roomListPayload",
                                             JSON.stringify({ payload, meta, currency }),

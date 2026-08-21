@@ -1020,9 +1020,18 @@ const ApiBookingPageForHotels = () => {
         }
       }
 
+      // Per-request timeout override. The shared axiosInstance defaults to
+      // 30s, which is fine for most endpoints but too short for the API
+      // booking flow: the BE orchestrates supplier prebook → form → finish →
+      // status-poll, and the RateHawk poll alone budgets up to
+      // `app.ratehawk.booking.status-poll-timeout-seconds` (90s by default).
+      // 3 min gives comfortable headroom for the worst-case supplier
+      // round-trip without touching the global timeout that other endpoints
+      // rely on.
       const response = await axiosInstance.post(
         "/api/hotel-booking/create",
         effectivePayload,
+        { timeout: 180000 },
       );
       const bookingResponse = response.data;
 
@@ -1909,6 +1918,67 @@ const ApiBookingPageForHotels = () => {
                             </div>
                           </div>
                         )}
+                        {/* RateHawk certification: non-included taxes must be
+                            shown "in a place accessible to users, next to the
+                            price". Aggregates rate.taxes across every selected
+                            room slot (each carries its own tax_data breakdown
+                            after the BE prebook / room-search mapping) and
+                            renders one row per non-included charge, followed
+                            by a total. Silently omitted for suppliers that
+                            don't populate the field. */}
+                        {(() => {
+                          const nonIncluded = (selectedRate || [])
+                            .flatMap((r) => (Array.isArray(r?.taxes) ? r.taxes : []))
+                            .filter((t) => t && !t.includedByDefault);
+                          if (nonIncluded.length === 0) return null;
+                          const total = nonIncluded.reduce(
+                            (s, t) => s + Number(t.amount || 0),
+                            0,
+                          );
+                          return (
+                            <>
+                              <hr className="my-2" />
+                              <div className="hbp-summary-row">
+                                <div
+                                  className="hbp-summary-label fw-semibold text-danger"
+                                  style={{ fontSize: "0.85rem" }}
+                                >
+                                  Not included in price
+                                </div>
+                              </div>
+                              {nonIncluded.map((t, i) => (
+                                <div className="hbp-summary-row" key={i}>
+                                  <div
+                                    className="hbp-summary-label text-muted"
+                                    style={{ fontSize: "0.8rem" }}
+                                  >
+                                    {t.name || "tax"}
+                                  </div>
+                                  <div
+                                    className="hbp-summary-value text-muted"
+                                    style={{ fontSize: "0.8rem" }}
+                                  >
+                                    + {formatPrice(t.amount || 0)}
+                                  </div>
+                                </div>
+                              ))}
+                              <div className="hbp-summary-row">
+                                <div
+                                  className="hbp-summary-label text-muted fst-italic"
+                                  style={{ fontSize: "0.75rem" }}
+                                >
+                                  Paid at the hotel
+                                </div>
+                                <div
+                                  className="hbp-summary-value text-muted"
+                                  style={{ fontSize: "0.8rem" }}
+                                >
+                                  {formatPrice(total)}
+                                </div>
+                              </div>
+                            </>
+                          );
+                        })()}
                         <hr className="my-2" />
                         <div className="hbp-summary-row fw-bold">
                           <div className="hbp-summary-label text-danger">

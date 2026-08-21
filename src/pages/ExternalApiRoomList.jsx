@@ -218,6 +218,17 @@ const ExternalApiRoomList = () => {
   // into the booking payload. Non-GRN hotels ignore this state entirely.
   const [bundleMode, setBundleMode] = useState("bundled");
 
+  // Per-hotel "important information" bullet list for RateHawk hotels.
+  // Fetched from /api/ratehawk/hotel-important-info/{hotelId} after the
+  // room search resolves — the backend parses the hotel dump's
+  // metapolicy_extra_info + metapolicy_struct into a flat list of localized
+  // policy strings that the certification requires us to display next to
+  // the room list ("hotel rules or information about price for additional
+  // services"). Empty array for non-RateHawk hotels and for RateHawk hotels
+  // whose dump import hasn't populated the two columns yet — the render
+  // path then falls back to the generic disclaimer, matching prior UX.
+  const [hotelImportantInfo, setHotelImportantInfo] = useState([]);
+
   // Agent credit gate. Same pattern as Inhouse — soft warning, never
   // blocks; user clicks "OK, continue" and we resume the queued booking
   // handler with skipCreditCheck=true so downstream flow is unchanged.
@@ -659,12 +670,20 @@ const ExternalApiRoomList = () => {
           }
         }
 
-        if (currencyInfo) {
+        // RateHawk operator rule: always render RateHawk rates in AED
+        // ("The rate should be shown in AED from hotel shown list till
+        // hotel booking list"). The search-page currency toggle is
+        // ignored for RateHawk so a picked INR / USD / etc. never bleeds
+        // into a RateHawk room-list card. Other suppliers keep the
+        // operator's chosen display currency.
+        if (currencyInfo && Number(payload?.apiId) !== 14 /* RATEHAWK */) {
           setDisplayCurrency({
             code: currencyInfo.code || "AED",
             factor:
               Number(currencyInfo.factor) > 0 ? Number(currencyInfo.factor) : 1,
           });
+        } else {
+          setDisplayCurrency({ code: "AED", factor: 1 });
         }
 
         if (!payload) {
@@ -750,6 +769,40 @@ const ExternalApiRoomList = () => {
     return () => {
       cancelled = true;
     };
+  }, [roomData]);
+
+  // RateHawk certification — pull the hotel's important information from
+  // the dump and render it above the room list. Skips silently on any
+  // non-RateHawk supplier, on missing hotelId, and on any transport / 4xx /
+  // 5xx (the BE always returns 200 with an empty list on a miss, so a
+  // network-level failure is the only reason `.catch` fires here).
+  useEffect(() => {
+    const payloadApiId = Number(roomData?.payload?.apiId);
+    const firstHotel = roomData?.hotels?.[0];
+    const hotelId = firstHotel?.hotelId;
+    if (payloadApiId !== apiIdMapping.RATEHAWK || !hotelId) {
+      setHotelImportantInfo([]);
+      return;
+    }
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/ratehawk/hotel-important-info/${encodeURIComponent(hotelId)}`)
+      .then((res) => {
+        if (!cancelled) {
+          const list = Array.isArray(res?.data?.importantInfo)
+            ? res.data.importantInfo
+            : [];
+          setHotelImportantInfo(list);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setHotelImportantInfo([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // apiIdMapping is a stable literal; safe to omit from deps.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomData]);
 
   // Initialise one selection slot per requested room the first time (or
@@ -1261,6 +1314,115 @@ const ExternalApiRoomList = () => {
       return;
     }
 
+    // ─── RATEHAWK (apiId=14) live-rate re-check via /ratehawk/prebook.
+    //     Same "Fetching accurate rate…" spinner + "Room Details" confirm
+    //     modal the other suppliers use. RateHawk requires a prebook
+    //     between search and booking to lock in the fresh rate + returns
+    //     a fresh p-… book_hash that the downstream booking payload MUST
+    //     carry on rooms[0].roomTypeCode so RatehawkHotelBookingService
+    //     recognises the rate as already-prebooked (see the p- short-
+    //     circuit in that service). The response also refreshes the
+    //     non-included taxes strip on the booking page — the RateHawk
+    //     certification requires operators see the same "Not included in
+    //     price" wording against the freshly re-quoted amount.
+    if (currentApiId === apiIdMapping.RATEHAWK) {
+      setLoadingRate(true);
+      (async () => {
+        try {
+          const response = await axiosInstance.post(
+            "/api/hotel-booking/ratehawk/prebook",
+            {
+              agentId:
+                payload?.agentId != null ? String(payload.agentId) : undefined,
+              // Search-time book_hash — the BE stashes it on
+              // rate.roomTypeCode at search time (see
+              // RatehawkHotelRoomSearchService.mapToHotelResponses).
+              hash: rate.roomTypeCode,
+            },
+          );
+          const live = response?.data;
+          if (!live?.success) {
+            setLoadingRate(false);
+            alert(
+              live?.message ||
+                "RateHawk live-rate check failed. Please retry or reselect the rate.",
+            );
+            return;
+          }
+          const accurateRates = [
+            {
+              roomNo: 1,
+              hotelId: hotel.hotelId,
+              hotelName: hotel.hotelName,
+              hotelCode: payload.hotelCode || hotel.hotelId,
+              roomCategory: live.roomCategory || rate.roomCategory,
+              mealPlan: live.mealPlan || rate.mealPlan,
+              contractLabel: rate.contractLabel || "Live rate (RateHawk)",
+              nonRefundable:
+                live.nonRefundable != null
+                  ? live.nonRefundable
+                  : rate.nonRefundable,
+              rate: live.rate ?? rate.totalRate,
+              rateWithoutMarkup:
+                live.rateWithoutMarkup ?? rate.totalRateWithoutMarkup,
+              currency: live.currency || "AED",
+              // Replace the search-time h-… hash with the FRESH p-… hash
+              // from prebook. RatehawkHotelBookingService reads this off
+              // rooms[0].roomTypeCode and recognises the p- prefix as
+              // "already prebooked, skip the BE-side re-prebook to avoid
+              // RateHawk's 'invalid hash' rejection on p-… hashes."
+              roomTypeCode: live.bookHash || rate.roomTypeCode,
+              mealPlanCode: rate.mealPlanCode,
+              cancellationPolicy:
+                (live.cancellationPolicies?.length &&
+                  live.cancellationPolicies) ||
+                rate.cancellationPolicies,
+              deadlineDate: live.deadlineDate ?? rate.deadlineDate,
+              // RateHawk certification: per-rate non-included taxes.
+              // Prefer the fresh prebook breakdown; fall back to the
+              // search-time list so the Price Details card renders
+              // something even if prebook returned an empty taxes array.
+              taxes:
+                Array.isArray(live.taxes) && live.taxes.length
+                  ? live.taxes
+                  : rate.taxes,
+              // Occupancy — prebook doesn't echo pax; carry from the
+              // original search payload so the booking page's guest form
+              // renders the right number of adult / child rows.
+              adults: payload.rooms?.[0]?.adults,
+              children: payload.rooms?.[0]?.children,
+              childAges: payload.rooms?.[0]?.childAges,
+            },
+          ];
+          setSelectedRate(accurateRates);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+          // Soft warning when the supplier changed the price during
+          // prebook — operator UX beats a silent switch on the confirm
+          // modal.
+          if (live.priceChanged === true) {
+            toast(
+              "Rate changed at supplier — the price shown is the fresh live rate.",
+              { icon: "⚠️" },
+            );
+          }
+        } catch (err) {
+          console.error("RateHawk live-rate fetch failed:", err);
+          setLoadingRate(false);
+          const backendMsg =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message;
+          alert(
+            backendMsg
+              ? `Unable to fetch live rate: ${backendMsg}`
+              : "Unable to fetch live rate. Please try again.",
+          );
+        }
+      })();
+      return;
+    }
+
     if (currentApiId === 12 || currentApiId === 15) {
       // Accurate-rate re-fetch for IWTX / X3 — same request the current
       // code builds, just for a single room in this branch.
@@ -1584,6 +1746,126 @@ const ExternalApiRoomList = () => {
             backendMsg
               ? `Unable to fetch live rate: ${backendMsg}`
               : "Unable to fetch live rate. Please try again.",
+          );
+        }
+      })();
+      return;
+    }
+
+    // ─── RATEHAWK multi-room "Continue with Booking" live-rate re-check.
+    //     One /api/hotel-booking/ratehawk/prebook call per selected rate
+    //     (RateHawk's prebook is scoped to one book_hash), fanned out in
+    //     parallel like Darina. On success each fresh p-… book_hash is
+    //     written back onto rooms[i].roomTypeCode so the downstream
+    //     RatehawkHotelBookingService.createBooking recognises the rate
+    //     as already prebooked and skips the redundant BE-side re-prebook.
+    //     Fresh taxes[] flow through too, keeping the "Not included in
+    //     price" strip on the booking page in sync with the live prices
+    //     per the RateHawk certification.
+    if (currentApiId === apiIdMapping.RATEHAWK) {
+      const rates = selectedRooms.map((r) => r.selectedRate);
+      setLoadingRate(true);
+      (async () => {
+        try {
+          const results = await Promise.all(
+            rates.map((r) =>
+              axiosInstance
+                .post("/api/hotel-booking/ratehawk/prebook", {
+                  agentId:
+                    payload?.agentId != null
+                      ? String(payload.agentId)
+                      : undefined,
+                  hash: r?.roomTypeCode,
+                })
+                .then((res) => res?.data)
+                .catch((err) => ({
+                  success: false,
+                  message:
+                    err?.response?.data?.message ||
+                    err?.response?.data?.error ||
+                    err?.message ||
+                    "prebook_failed",
+                })),
+            ),
+          );
+          const firstFail = results.find((r) => !r?.success);
+          if (firstFail) {
+            setLoadingRate(false);
+            alert(
+              firstFail.message ||
+                "One of the selected RateHawk rates is no longer available. Please reselect.",
+            );
+            return;
+          }
+          const accurateRates = rates.map((r, i) => {
+            const live = results[i] || {};
+            return {
+              roomNo: i + 1,
+              hotelId: hotel.hotelId,
+              hotelName: hotel.hotelName,
+              hotelCode: payload.hotelCode || hotel.hotelId,
+              roomCategory: live.roomCategory || r.roomCategory,
+              mealPlan: live.mealPlan || r.mealPlan,
+              contractLabel: r.contractLabel || "Live rate (RateHawk)",
+              nonRefundable:
+                live.nonRefundable != null
+                  ? live.nonRefundable
+                  : r.nonRefundable,
+              rate: live.rate ?? r.totalRate,
+              rateWithoutMarkup:
+                live.rateWithoutMarkup ?? r.totalRateWithoutMarkup,
+              currency: live.currency || "AED",
+              // FRESH p-… book_hash — replaces the search-time h-… hash
+              // so RatehawkHotelBookingService.createBooking skips the
+              // redundant re-prebook (RateHawk's prebook only accepts
+              // search-issued h-… hashes; sending a p-… back triggers
+              // "invalid_params: invalid hash", which the BE avoids by
+              // detecting the p- prefix and short-circuiting).
+              roomTypeCode: live.bookHash || r.roomTypeCode,
+              mealPlanCode: r.mealPlanCode,
+              cancellationPolicy:
+                (live.cancellationPolicies?.length &&
+                  live.cancellationPolicies) ||
+                r.cancellationPolicies,
+              deadlineDate: live.deadlineDate ?? r.deadlineDate,
+              // RateHawk certification: per-rate non-included taxes.
+              // Prefer live prebook breakdown; fall back to search-time
+              // list so the Price Details card renders something even
+              // when prebook returned an empty taxes array.
+              taxes:
+                Array.isArray(live.taxes) && live.taxes.length
+                  ? live.taxes
+                  : r.taxes,
+              // Occupancy — carry from search payload; prebook doesn't
+              // echo pax and the booking page needs it for the guest
+              // form row count.
+              adults: payload.rooms?.[i]?.adults,
+              children: payload.rooms?.[i]?.children,
+              childAges: payload.rooms?.[i]?.childAges,
+            };
+          });
+          setSelectedRate(accurateRates);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+          // Soft warn if the supplier bumped any rate during prebook —
+          // beats a silent switch on the confirm modal.
+          if (results.some((live) => live?.priceChanged === true)) {
+            toast(
+              "One or more rates changed at the supplier — showing the fresh live prices.",
+              { icon: "⚠️" },
+            );
+          }
+        } catch (err) {
+          console.error("RateHawk multi-room live-rate fetch failed:", err);
+          setLoadingRate(false);
+          const backendMsg =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message;
+          alert(
+            backendMsg
+              ? `Unable to fetch live rates: ${backendMsg}`
+              : "Unable to fetch live rates. Please try again.",
           );
         }
       })();
@@ -2075,14 +2357,30 @@ const ExternalApiRoomList = () => {
                           <div className="mt-2">
                             <small className="text-muted">
                               <strong>Please note:</strong>{" "}
-                              <p className="someproperties">
-                                Some properties may collect additional charges
-                                such as city tax, resort fees, or security
-                                deposits during check-in. Policies such as
-                                check-in time, child accommodation, and
-                                cancellation rules can vary by room and
-                                provider.
-                              </p>
+                              {hotelImportantInfo.length > 0 ? (
+                                // RateHawk certification: display hotel-specific
+                                // "important information" from metapolicy_extra_info
+                                // + metapolicy_struct (hotel rules, price info for
+                                // additional services). Sourced from the RateHawk
+                                // hotel dump via /api/ratehawk/hotel-important-info.
+                                <ul
+                                  className="someproperties mb-0 mt-1 ps-3"
+                                  style={{ listStyleType: "disc" }}
+                                >
+                                  {hotelImportantInfo.map((line, idx) => (
+                                    <li key={idx}>{line}</li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <p className="someproperties">
+                                  Some properties may collect additional charges
+                                  such as city tax, resort fees, or security
+                                  deposits during check-in. Policies such as
+                                  check-in time, child accommodation, and
+                                  cancellation rules can vary by room and
+                                  provider.
+                                </p>
+                              )}
                             </small>
                           </div>
                         </div>
@@ -2637,6 +2935,50 @@ const ExternalApiRoomList = () => {
                                                   <div className="price-per-night small text-muted">
                                                     per night
                                                   </div>
+                                                  {/* RateHawk certification: non-included
+                                                      taxes shown next to the price. Iterates
+                                                      rate.taxes (populated by the backend
+                                                      RateHawk mapper from
+                                                      payment_types[].tax_data.taxes[]) and
+                                                      renders only entries the operator will
+                                                      be charged for at the hotel
+                                                      (includedByDefault === false). Silently
+                                                      omits itself for other suppliers /
+                                                      RateHawk rates that carry no tax_data. */}
+                                                  {Array.isArray(rate.taxes) &&
+                                                    rate.taxes.some(
+                                                      (t) => t && !t.includedByDefault,
+                                                    ) && (
+                                                      <div className="mt-2 pt-1 border-top">
+                                                        <div
+                                                          className="fw-semibold text-danger"
+                                                          style={{ fontSize: "0.7rem" }}
+                                                        >
+                                                          Not included in price
+                                                        </div>
+                                                        {rate.taxes
+                                                          .filter(
+                                                            (t) =>
+                                                              t && !t.includedByDefault,
+                                                          )
+                                                          .map((t, ti) => (
+                                                            <div
+                                                              key={ti}
+                                                              className="text-muted"
+                                                              style={{ fontSize: "0.7rem" }}
+                                                            >
+                                                              + {formatPrice(t.amount || 0)}{" "}
+                                                              {t.name || "tax"}
+                                                            </div>
+                                                          ))}
+                                                        <div
+                                                          className="text-muted fst-italic"
+                                                          style={{ fontSize: "0.65rem" }}
+                                                        >
+                                                          Paid at the hotel
+                                                        </div>
+                                                      </div>
+                                                    )}
                                                 </div>
 
                                                 <div className="rate-features small">
@@ -2931,6 +3273,46 @@ const ExternalApiRoomList = () => {
                                                   <div className="small text-muted">
                                                     per night
                                                   </div>
+                                                  {/* RateHawk certification: non-included
+                                                      taxes shown next to the price. Same
+                                                      shape as the grid-view block above so
+                                                      operators see the same "Not included in
+                                                      price / Paid at the hotel" wording on
+                                                      both layouts. */}
+                                                  {Array.isArray(rate.taxes) &&
+                                                    rate.taxes.some(
+                                                      (t) => t && !t.includedByDefault,
+                                                    ) && (
+                                                      <div className="mt-2 pt-1 border-top text-start">
+                                                        <div
+                                                          className="fw-semibold text-danger"
+                                                          style={{ fontSize: "0.7rem" }}
+                                                        >
+                                                          Not included in price
+                                                        </div>
+                                                        {rate.taxes
+                                                          .filter(
+                                                            (t) =>
+                                                              t && !t.includedByDefault,
+                                                          )
+                                                          .map((t, ti) => (
+                                                            <div
+                                                              key={ti}
+                                                              className="text-muted"
+                                                              style={{ fontSize: "0.7rem" }}
+                                                            >
+                                                              + {formatPrice(t.amount || 0)}{" "}
+                                                              {t.name || "tax"}
+                                                            </div>
+                                                          ))}
+                                                        <div
+                                                          className="text-muted fst-italic"
+                                                          style={{ fontSize: "0.65rem" }}
+                                                        >
+                                                          Paid at the hotel
+                                                        </div>
+                                                      </div>
+                                                    )}
                                                 </div>
 
                                                 <div className="flex-shrink-0">
@@ -3297,6 +3679,41 @@ const ExternalApiRoomList = () => {
               </Col>
             </Row>
           ))}
+
+          {/* Grand-total footer inside the modal body — mirrors the pattern
+              on the ATHARVA / IWTX confirm modal so the operator sees one
+              aggregated figure before they click Continue. Sums rate.rate
+              across every selectedRate entry (single-room falls back to
+              just that one row's total). formatPrice already respects the
+              display-currency guard — RateHawk stays AED, other suppliers
+              honour the operator's toggle. */}
+          {Array.isArray(selectedRate) && selectedRate.length > 0 && (
+            <div
+              className="mt-2 p-3 rounded"
+              style={{
+                background: "#fff5f7",
+                border: "1px solid #f9c9d3",
+              }}
+            >
+              <div className="d-flex justify-content-between align-items-center">
+                <h5 className="mb-0 fw-bold">Total Price</h5>
+                <h4 className="mb-0 fw-bold text-danger">
+                  {formatPrice(
+                    selectedRate.reduce(
+                      (sum, r) => sum + (Number(r?.rate) || 0),
+                      0,
+                    ),
+                  )}
+                </h4>
+              </div>
+              {selectedRate.length > 1 && (
+                <div className="text-muted small mt-1">
+                  Total for {selectedRate.length} rooms — sum of all room
+                  rates above.
+                </div>
+              )}
+            </div>
+          )}
         </Modal.Body>
         <Modal.Footer>
           <Button
