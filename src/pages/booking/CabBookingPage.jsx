@@ -509,6 +509,15 @@ const CabBookingPage = () => {
     terminal: "",
     departureTime: searchCriteria.dropoffTime || "",
   });
+
+  // i'way Toll Road opt-in (guide §12.3 / AIT §8.5). Boolean, i'way rows
+  // only. When true, the backend's IwayTollRoadResolver picks the offer's
+  // tollroad additional_service and appends it to POST /orders; when false
+  // (default) the payload is byte-identical to before this checkbox
+  // existed — so in-house bookings and un-ticked i'way bookings are
+  // completely unaffected. Silently no-ops on the backend when the class
+  // does not expose a tollroad entry (e.g. Business on CDG→Disneyland).
+  const [iwayIncludeTollRoad, setIwayIncludeTollRoad] = useState(false);
   // Hotel addresses auto-fetched from /api/hotels/lookup when the leg
   // type is HOTEL. We resolve by matching hotelName (case-insensitive),
   // scoped by destination cityId when known. Empty string falls back to
@@ -894,6 +903,12 @@ const CabBookingPage = () => {
       // only when M&G is included in the price (flexible_tariff=false).
       // Null on in-house rows.
       iwayFlexibleTariff: isIway ? (cab?.iwayFlexibleTariff ?? null) : null,
+      // AIT §8.5 opt-in — sends the toll_road additional_service ref only
+      // when the operator ticks the "Include Toll Road" checkbox above.
+      // Null on in-house rows and false on un-ticked i'way rows, both of
+      // which the backend treats as "don't add the ref" (payload wire
+      // shape unchanged from before this field existed).
+      iwayIncludeTollRoad: isIway ? Boolean(iwayIncludeTollRoad) : null,
       noOfCabs: cab.noOfCabs || 1,
       pickupDate: formatDateToDDMMYYYY(searchCriteria.pickupDate),
       dropOffDate: formatDateToDDMMYYYY(searchCriteria.dropoffDate || searchCriteria.pickupDate),
@@ -1406,6 +1421,42 @@ const CabBookingPage = () => {
                               setDropoffDetails((prev) => ({ ...prev, flightNo: v }));
                             }}
                           />
+                        </Col>
+                      )}
+                      {/* AIT §8.5 — Toll Road opt-in.
+                          i'way rows only; leaves the in-house booking card
+                          untouched. Extra fare (e.g. 29.93 AED on the CDG →
+                          Disneyland route) is added by i'way to the trip
+                          total; if the selected class doesn't offer toll
+                          road (e.g. Business on that route) the backend
+                          silently drops the ref so the booking still
+                          succeeds without it. */}
+                      {isIway && (
+                        <Col md={12}>
+                          <div className="d-flex align-items-start gap-2 p-2 border rounded-2 bg-light">
+                            <Form.Check
+                              type="checkbox"
+                              id="iway-include-toll-road"
+                              className="mt-0"
+                              checked={iwayIncludeTollRoad}
+                              onChange={(e) =>
+                                setIwayIncludeTollRoad(e.target.checked)
+                              }
+                              label={
+                                <span>
+                                  <span className="fw-semibold">
+                                    Include Toll Road
+                                  </span>
+                                  <span className="text-muted small ms-2">
+                                    Adds the route's toll fee to the trip
+                                    total (charged by i'way). Skipped
+                                    automatically if the selected vehicle
+                                    class doesn't offer it on this route.
+                                  </span>
+                                </span>
+                              }
+                            />
+                          </div>
                         </Col>
                       )}
                     </Row>
