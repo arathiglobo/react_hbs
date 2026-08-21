@@ -1149,6 +1149,39 @@ cursor: not-allowed;
 .cdt-day-disabled:hover {
 background: transparent;
 }
+/* Rate-hint variant — day cell keeps its shape but grows a touch taller
+   so a small rate line can sit under the day number without cropping. A
+   plain day (no rateMap match) still uses .cdt-day above. */
+.cdt-day-has-rate {
+display: inline-flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+height: 42px;
+width: 42px;
+border-radius: 8px;
+padding: 2px 0;
+line-height: 1;
+gap: 2px;
+}
+/* Inherits everything from the parent .cdt-day so a cell WITHOUT a
+   rate looks identical to how it did before this span existed. Only
+   the rate-bearing variant relies on the flex column stack in
+   .cdt-day-has-rate above. */
+.cdt-day-num {
+font: inherit;
+color: inherit;
+line-height: 1;
+}
+.cdt-day-rate {
+font-size: 0.65rem;
+color: #059669;
+font-variant-numeric: tabular-nums;
+}
+.cdt-day-sel .cdt-day-rate,
+.cdt-day-sel:hover .cdt-day-rate {
+color: #fff;
+}
 .cdt-time {
 display: flex;
 align-items: center;

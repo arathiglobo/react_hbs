@@ -281,6 +281,29 @@ const PackageSearch = () => {
   // flags packages whose itinerary is longer than this travel window.
   const [arrivalDateTime, setArrivalDateTime] = useState("");
   const [departureDateTime, setDepartureDateTime] = useState("");
+
+  // Per-day package rate hints, keyed by "yyyy-MM-dd", rendered under
+  // the day number inside the existing Arrival / Departure calendar
+  // popups. Populated by fetchPackageRates below whenever the
+  // destination changes or the user navigates the picker to a new
+  // month. Empty by default so the pickers behave exactly as before
+  // when no destination is selected or the endpoint returns nothing.
+  const [packageRateMap, setPackageRateMap] = useState({});
+  // Guard against overlapping fetches / stale writes when the operator
+  // clicks through months quickly. Cancels the older promise's setter
+  // by comparing this ref's value at fetch-return time.
+  const packageRateFetchIdRef = useRef(0);
+  // Remember which (countryId, yyyy-MM) pairs are already cached in
+  // packageRateMap so the effect below doesn't re-hit the API for a
+  // month we've already loaded. Merges instead of overwriting so a
+  // second month's fetch keeps the first month's keys visible.
+  const packageRateMonthsRef = useRef(new Set());
+  // Reset the accumulated cache whenever the destination changes —
+  // Country A's rates must never leak into Country B's popup.
+  useEffect(() => {
+    packageRateMonthsRef.current = new Set();
+    setPackageRateMap({});
+  }, [selectedDestination?.countryId]);
   const [isDestinationLoading, setIsDestinationLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -476,6 +499,45 @@ const PackageSearch = () => {
       }
     }, 300),
   ).current;
+
+  // ─────────────────────────────────────────────
+  // API: Package rate hints — fetched lazily by month as the Arrival /
+  // Departure picker navigates. Result is merged into packageRateMap so
+  // the DateTimeApplyPicker can render a small rate line under each
+  // day inside the existing calendar popup. Deliberately no-op when
+  // the destination has no countryId — the backend endpoint requires
+  // a country scope and we don't want a 400 on every open.
+  // ─────────────────────────────────────────────
+  const fetchPackageRatesForMonth = async (countryId, year, monthIndex) => {
+    if (!countryId) return;
+    const monthKey = `${countryId}:${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+    if (packageRateMonthsRef.current.has(monthKey)) return; // already loaded
+    packageRateMonthsRef.current.add(monthKey);
+
+    const monthStart = `${year}-${String(monthIndex + 1).padStart(2, "0")}-01`;
+    const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+    const monthEnd = `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+    const fetchId = ++packageRateFetchIdRef.current;
+    try {
+      const res = await axiosInstance.get("/api/package-search/rate-calendar", {
+        params: { stateId: countryId, monthStart, monthEnd, currency: "AED" },
+      });
+      if (fetchId !== packageRateFetchIdRef.current) return; // stale
+      const days = res?.data?.days || {};
+      // Merge into whatever's already loaded so a second month doesn't
+      // erase the first — matches how the picker renders any day that
+      // has a rate, regardless of which fetch supplied it.
+      setPackageRateMap((prev) => ({ ...prev, ...days }));
+    } catch (err) {
+      // Rate hints are optional. Swallow so a failure never breaks the
+      // date-time picker itself.
+      // eslint-disable-next-line no-console
+      console.warn("Package rate-calendar fetch failed — hint disabled.", err);
+      // Un-mark so a retry on the next month change can succeed.
+      packageRateMonthsRef.current.delete(monthKey);
+    }
+  };
 
   // ─────────────────────────────────────────────
   // API: Fetch Nationalities (Initial & Search)
@@ -1252,6 +1314,15 @@ const PackageSearch = () => {
                         value={arrivalDateTime}
                         isInvalid={!!errors.arrivalDateTime}
                         placeholder="Select arrival date & time"
+                        rateMap={packageRateMap}
+                        rateCurrency="AED"
+                        onViewMonthChange={({ year, monthIndex }) =>
+                          fetchPackageRatesForMonth(
+                            selectedDestination?.countryId,
+                            year,
+                            monthIndex,
+                          )
+                        }
                         onApply={(newArrival) => {
                           setArrivalDateTime(newArrival);
                           setErrors((prev) => ({
@@ -1318,6 +1389,15 @@ const PackageSearch = () => {
                           arrivalDateTime
                             ? parseLocalDateTime(arrivalDateTime)
                             : undefined
+                        }
+                        rateMap={packageRateMap}
+                        rateCurrency="AED"
+                        onViewMonthChange={({ year, monthIndex }) =>
+                          fetchPackageRatesForMonth(
+                            selectedDestination?.countryId,
+                            year,
+                            monthIndex,
+                          )
                         }
                         onApply={(newDep) => {
                           setDepartureDateTime(newDep);
