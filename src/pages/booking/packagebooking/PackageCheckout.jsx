@@ -17,6 +17,7 @@ import {
   FaHotel,
   FaMapMarkerAlt,
   FaMoon,
+  FaUtensils,
 } from "react-icons/fa";
 import PaxInformation from "./tabs/PaxInformation";
 // Abandoned-package-search follow-up email — flags the history row as
@@ -659,6 +660,24 @@ const PackageCheckout = () => {
                         </div>
                         <div className="hbp-summary-value">
                           {heroNationality}
+                        </div>
+                      </div>
+                      {/* Meal plan row — shows the board type picked on the
+                          Hotels step (BB / Half Board / Full Board / All
+                          Inclusive). Reads bookingData.selections.selectedMealPlan
+                          — the same source the Total Price sidebar below
+                          already uses — so no new source of truth and no
+                          impact on pricing, payload or validation. Renders
+                          "Not selected" when the operator skipped it, matching
+                          how the Package Preview modal treats the same field. */}
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaUtensils className="me-2 text-primary" />
+                          Meal Plan
+                        </div>
+                        <div className="hbp-summary-value">
+                          {bookingData.selections?.selectedMealPlan?.label ||
+                            "Not selected"}
                         </div>
                       </div>
                     </Card.Body>

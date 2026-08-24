@@ -102,11 +102,21 @@ const PackageRates = () => {
   const packageName = packageInfo.packageName || "Unknown Package";
   const packageCode = packageInfo.packageCode || "Unknown";
 
+  // Food-preference choices captured on the Package Rate create/edit
+  // modal. Values match the backend column (nullable String) so the
+  // enum can grow later without a schema change.
+  const FOOD_TYPES = [
+    { value: "VEG", label: "Veg" },
+    { value: "NON_VEG", label: "Non-Veg" },
+    { value: "BOTH", label: "Both" },
+  ];
+
   const [formData, setFormData] = useState({
     packageratesId: "",
     packageId: packageId,
     markettypeId: null,
     packagerateCode: "",
+    foodType: "",
     packageRateValidityDTO: [],
     packageAccommodationrateDTO: [],
     rates: {},
@@ -307,6 +317,7 @@ const PackageRates = () => {
     if (!data.packagerateCode?.trim())
       errors.packagerateCode = "Rate code is required";
     if (!data.markettypeId) errors.markettypeId = "Market type is required";
+    if (!data.foodType) errors.foodType = "Food type is required";
     if (!data.countryId) errors.countryId = "Country is required";
     if (!data.placeId) errors.placeId = "Place is required";
     if (!data.noOfNights) errors.noOfNights = "Number of nights is required";
@@ -351,6 +362,7 @@ const PackageRates = () => {
       packageId: packageId,
       markettypeId: null,
       packagerateCode: "",
+      foodType: "",
       packageRateValidityDTO: [],
       packageAccommodationrateDTO: [],
       rates: rates,
@@ -653,6 +665,7 @@ const PackageRates = () => {
         packageId: packageId,
         markettypeId: formData.markettypeId ? [formData.markettypeId] : [],
         packagerateCode: formData.packagerateCode,
+        foodType: formData.foodType || null,
         packageRateValidityDTO: packageRateValidityDTO,
         packageAccommodationrateDTO: packageAccommodationrateDTO,
       };
@@ -753,6 +766,7 @@ const PackageRates = () => {
         packageId: packageId,
         markettypeId: formData.markettypeId ? [formData.markettypeId] : [],
         packagerateCode: formData.packagerateCode,
+        foodType: formData.foodType || null,
         packageRateValidityDTO: packageRateValidityDTO,
         packageAccommodationrateDTO: packageAccommodationrateDTO,
       };
@@ -875,6 +889,7 @@ const PackageRates = () => {
       packageId: item.packageId || packageId,
       markettypeId: Array.isArray(item.markettypeId) ? item.markettypeId[0] : (item.markettypeId || null),
       packagerateCode: item.packagerateCode || "",
+      foodType: item.foodType || "",
       packageRateValidityDTO: item.packageRateValidityDTO || [],
       packageAccommodationrateDTO: item.packageAccommodationrateDTO || [],
       rates: rates,
@@ -1060,6 +1075,7 @@ const PackageRates = () => {
       packageId: packageId,
       markettypeId: item.markettypeId?.[0] || null,
       packagerateCode: `${item.packagerateCode}_COPY`,
+      foodType: item.foodType || "",
       packageRateValidityDTO: [],
       packageAccommodationrateDTO: [],
       rates: rates,
@@ -1802,6 +1818,47 @@ const PackageRates = () => {
                       {validationErrors.markettypeId && (
                         <Form.Control.Feedback type="invalid">
                           {validationErrors.markettypeId}
+                        </Form.Control.Feedback>
+                      )}
+                    </Form.Group>
+                  </Col>
+                </Row>
+
+                {/* Food Type — Veg / Non-Veg / Both. Nullable on the
+                    backend; existing rows created before this field
+                    keep loading (foodType = null → dropdown shows the
+                    placeholder). */}
+                <Row>
+                  <Col md={6}>
+                    <Form.Group className="mb-3">
+                      <Form.Label>
+                        Food Type <span className="text-danger">*</span>
+                      </Form.Label>
+                      <Form.Select
+                        value={formData.foodType || ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormData((prev) => ({ ...prev, foodType: val }));
+                          if (validationErrors.foodType) {
+                            setValidationErrors((prev) => ({
+                              ...prev,
+                              foodType: undefined,
+                            }));
+                          }
+                        }}
+                        isInvalid={!!validationErrors.foodType}
+                        disabled={viewMode}
+                      >
+                        <option value="">Select Food Type</option>
+                        {FOOD_TYPES.map((ft) => (
+                          <option key={ft.value} value={ft.value}>
+                            {ft.label}
+                          </option>
+                        ))}
+                      </Form.Select>
+                      {validationErrors.foodType && (
+                        <Form.Control.Feedback type="invalid">
+                          {validationErrors.foodType}
                         </Form.Control.Feedback>
                       )}
                     </Form.Group>

@@ -986,12 +986,59 @@ const PaxInformation = forwardRef(({
                     </Form.Label>
                     <Form.Control
                       className="form-control-sm"
-                      placeholder="+971 ..."
+                      type="tel"
+                      inputMode="tel"
+                      placeholder="+971..."
+                      // Digits only, with a single optional leading "+" for
+                      // the international country-code prefix (matches the
+                      // placeholder). Anything else the operator types or
+                      // pastes is silently dropped, so the field can never
+                      // hold non-numeric characters.
                       value={pax.mobile || ""}
                       disabled={isViewMode}
-                      onChange={(e) =>
-                        handleTravellerChange(index, "mobile", e.target.value)
-                      }
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const hasLeadingPlus = raw.trim().startsWith("+");
+                        const digits = raw.replace(/\D+/g, "");
+                        const sanitized = hasLeadingPlus
+                          ? `+${digits}`
+                          : digits;
+                        handleTravellerChange(index, "mobile", sanitized);
+                      }}
+                      onKeyDown={(e) => {
+                        // Block obvious non-number keys before they reach
+                        // the input so the operator sees no "flash" of a
+                        // rejected character. Editing / navigation keys and
+                        // modifier combos (Ctrl+V etc.) fall through so
+                        // copy/paste still works — pasted text is scrubbed
+                        // by the onChange handler above.
+                        if (e.ctrlKey || e.metaKey || e.altKey) return;
+                        const allowed = [
+                          "Backspace",
+                          "Delete",
+                          "Tab",
+                          "Enter",
+                          "Escape",
+                          "ArrowLeft",
+                          "ArrowRight",
+                          "ArrowUp",
+                          "ArrowDown",
+                          "Home",
+                          "End",
+                        ];
+                        if (allowed.includes(e.key)) return;
+                        // "+" is allowed only as the first character.
+                        if (
+                          e.key === "+" &&
+                          e.target.selectionStart === 0 &&
+                          !(pax.mobile || "").startsWith("+")
+                        ) {
+                          return;
+                        }
+                        if (!/^\d$/.test(e.key)) {
+                          e.preventDefault();
+                        }
+                      }}
                       isInvalid={!!validationErrors[`pax_${index}_mobile`]}
                     />
                     {validationErrors[`pax_${index}_mobile`] && (
@@ -1015,7 +1062,12 @@ const PaxInformation = forwardRef(({
           into the legacy `flightDetails` string for the voucher PDF.
           BOTH are required — validatePaxData() blocks submit when either is
           blank. */}
-      <p className="tab-section-title mt-3">Travel details</p>
+      <p className="tab-section-title mt-3 mb-1">
+        Travel details{" "}
+        <span className="text-muted small fw-normal">
+          (Format: Airline &amp; flight no, airport, date, time)
+        </span>
+      </p>
       <Row className="g-3 mb-2">
         {/* Free-text alphanumeric fields — each accepts a flight number,
             airport codes and times, e.g. "EK 503  LHR-DXB  21:45 / 06:50".
@@ -1028,7 +1080,7 @@ const PaxInformation = forwardRef(({
             </Form.Label>
             <Form.Control
               type="text"
-              placeholder=""
+              placeholder="e.g. Emirates EK532, DXB, 24 Aug 2026, 10:30 AM"
               value={bookingData?.programme?.arrivalFlightDetails || ""}
               disabled={isViewMode}
               onChange={(e) => {
@@ -1051,7 +1103,7 @@ const PaxInformation = forwardRef(({
             </Form.Label>
             <Form.Control
               type="text"
-              placeholder=""
+              placeholder="e.g. Emirates EK533, DXB, 30 Aug 2026, 08:00 PM"
               value={bookingData?.programme?.departureFlightDetails || ""}
               disabled={isViewMode}
               onChange={(e) => {
