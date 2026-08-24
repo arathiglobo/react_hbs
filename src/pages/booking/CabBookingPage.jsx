@@ -909,6 +909,26 @@ const CabBookingPage = () => {
       // which the backend treats as "don't add the ref" (payload wire
       // shape unchanged from before this field existed).
       iwayIncludeTollRoad: isIway ? Boolean(iwayIncludeTollRoad) : null,
+      // allowable_time (seconds) from the picked i'way offer. Forwarded
+      // for TripServiceImpl.checkTimeForMeetAndGreet (guide §11.10) so
+      // the backend can short-circuit obviously-too-soon pickups before
+      // touching the wallet. Prefer the value carried on searchCriteria
+      // (set on the search page); fall back to the cab row for older
+      // hand-offs that only stamped it there. Null on in-house rows.
+      iwayAllowableTime: isIway
+        ? (searchCriteria.iwayAllowableTime ?? cab?.iwayAllowableTime ?? null)
+        : null,
+      // Guide §11.6.2 Meet & Greet sign text. Only forwarded when the
+      // pickup is an airport (backend gates the write on that anyway); a
+      // blank value tells the backend to auto-fill with the lead
+      // passenger's name — which matches today's behaviour, so bookings
+      // whose operator doesn't touch the Greeting Sign input send the
+      // same text_tablet as before. Null on in-house rows and on i'way
+      // rows whose pickup isn't an airport.
+      iwayMeetGreetSign:
+        isIway && pickupIsAirport
+          ? ((pickupDetails.greetingSign || "").trim() || null)
+          : null,
       noOfCabs: cab.noOfCabs || 1,
       pickupDate: formatDateToDDMMYYYY(searchCriteria.pickupDate),
       dropOffDate: formatDateToDDMMYYYY(searchCriteria.dropoffDate || searchCriteria.pickupDate),
@@ -1419,6 +1439,34 @@ const CabBookingPage = () => {
                             onChange={(e) => {
                               const v = e.target.value;
                               setDropoffDetails((prev) => ({ ...prev, flightNo: v }));
+                            }}
+                          />
+                        </Col>
+                      )}
+                      {/* Guide §11.6.2 — Meet & Greet Sign text.
+                          Shown only for i'way airport-pickup offers whose
+                          selected class actually includes M&G in the price
+                          (iwayFlexibleTariff !== true). The useEffect at the
+                          top of the file pre-seeds greetingSign with the
+                          lead passenger's full name, so leaving this input
+                          untouched sends today's value; editing it forwards
+                          the operator's custom text, and clearing it lets
+                          the backend re-fall-back to the lead name. */}
+                      {isIway && pickupIsAirport && cab?.iwayFlexibleTariff !== true && (
+                        <Col md={6}>
+                          <Form.Label className="small text-muted fw-semibold mb-1">
+                            Meet &amp; Greet Sign{" "}
+                            <span className="text-muted small">(optional)</span>
+                          </Form.Label>
+                          <Form.Control
+                            size="sm"
+                            type="text"
+                            maxLength={60}
+                            placeholder="Leave empty to use lead passenger's name"
+                            value={pickupDetails.greetingSign || ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setPickupDetails((prev) => ({ ...prev, greetingSign: v }));
                             }}
                           />
                         </Col>

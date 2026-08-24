@@ -317,6 +317,22 @@ export default function CabBookingDetailView() {
   const location = useLocation();
   const booking = location.state?.booking || null;
 
+  // ── iWay trip-status refresh (guide §11.14) ────────────────────────
+  // Local snapshot so a "Refresh iWay status" click re-renders the badge
+  // in place without a full-page reload. Initialised from the row payload
+  // the list page passed in — null for in-house rows and for i'way rows
+  // that have never been refreshed. The two states behave differently:
+  //   * apiType !== "IWAY"     → the whole row is hidden
+  //   * apiType === "IWAY" and null status → shows "Not yet refreshed"
+  //     with an active Refresh button.
+  const [iwayTripStatus, setIwayTripStatus] = useState(
+    booking?.iwayTripStatus ?? null,
+  );
+  const [iwayStatusRefreshedAt, setIwayStatusRefreshedAt] = useState(
+    booking?.iwayStatusRefreshedAt ?? null,
+  );
+  const [iwayRefreshing, setIwayRefreshing] = useState(false);
+
   // Cancel modal
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -424,6 +440,73 @@ export default function CabBookingDetailView() {
   const [pdfPreview, setPdfPreview] = useState(null);
 
   const bookingId = booking?.custombookingId;
+
+  // Maps i'way trip-lifecycle status (guide §11.14, 0..5) to the
+  // operator-facing label + Bootstrap Badge variant used inside the
+  // Booking Information card. Business labels for 1 and 2 diverge from
+  // i'way's raw wording ("Processing" / "Accepted") — operators asked
+  // for "Confirmed" / "Reconfirmed" here.
+  const mapIwayStatus = (status) => {
+    switch (status) {
+      case 0:  return { label: "Pending processing",     variant: "secondary" };
+      case 1:  return { label: "Confirmed",              variant: "info"      };
+      case 2:  return { label: "Reconfirmed",            variant: "primary"   };
+      case 3:  return { label: "Completed",              variant: "success"   };
+      case 4:  return { label: "Cancelled",              variant: "danger"    };
+      case 5:  return { label: "Cancelled + penalty",    variant: "dark"      };
+      default: return { label: "Not yet refreshed",      variant: "light"     };
+    }
+  };
+
+  // Formats the last-refresh timestamp as "24 Aug 2026, 15:37" — kept
+  // locale-neutral so it renders the same in every operator's browser.
+  const formatIwayRefreshedAt = (ts) => {
+    if (!ts) return null;
+    try {
+      const d = new Date(typeof ts === "string" ? ts.replace(" ", "T") : ts);
+      if (isNaN(d.getTime())) return null;
+      return d.toLocaleString("en-GB", {
+        day:    "2-digit",
+        month:  "short",
+        year:   "numeric",
+        hour:   "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  // Fires PATCH /api/cab/{bookingId}/iway-refresh-status which calls
+  // GET https://sandbox.iway.io/transnextgen/v4/orders/{orderId} under
+  // the hood, updates the local snapshot, and returns the fresh values.
+  // Toast on success/failure so the operator gets audible feedback.
+  const handleRefreshIwayStatus = async () => {
+    if (!bookingId || iwayRefreshing) return;
+    try {
+      setIwayRefreshing(true);
+      const res = await axiosInstance.patch(
+        `/api/cab/${bookingId}/iway-refresh-status`,
+      );
+      const data = res?.data;
+      if (data && typeof data === "object" && data.tripStatus != null) {
+        setIwayTripStatus(data.tripStatus);
+        setIwayStatusRefreshedAt(data.refreshedAt || new Date().toISOString());
+        toast.success(`iWay status: ${data.tripStatusLabel || data.tripStatus}`);
+      } else {
+        toast.error("Empty response from iWay refresh");
+      }
+    } catch (err) {
+      const msg =
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.message ||
+        "Failed to refresh iWay status";
+      toast.error(msg);
+    } finally {
+      setIwayRefreshing(false);
+    }
+  };
 
   // Merge an action mutation's response DTO into the live action state so the
   // gating below re-derives without a full-page detail fetch.
@@ -1230,6 +1313,47 @@ export default function CabBookingDetailView() {
                       label="Status"
                       value={<StatusBadge status={displayStatus} />}
                     />
+                    {/* iWay trip-lifecycle status (guide §11.14).
+                        Hidden for in-house rows so the card stays
+                        identical to today for non-i'way bookings. Reads
+                        from the local snapshot which the list handed us,
+                        and updates in place when the operator clicks
+                        Refresh — no page reload needed. */}
+                    {booking.apiType === "IWAY" && (
+                      <InfoRow
+                        label="iWay Status"
+                        value={
+                          <div className="d-flex align-items-center flex-wrap gap-2">
+                            <Badge
+                              bg={mapIwayStatus(iwayTripStatus).variant}
+                              text={
+                                mapIwayStatus(iwayTripStatus).variant === "light"
+                                  ? "dark"
+                                  : undefined
+                              }
+                              className="px-3 py-2"
+                            >
+                              {mapIwayStatus(iwayTripStatus).label}
+                            </Badge>
+                            <Button
+                              size="sm"
+                              variant="outline-primary"
+                              onClick={handleRefreshIwayStatus}
+                              disabled={iwayRefreshing || !bookingId}
+                              title="Fetch latest status from i'way (guide §11.14)"
+                            >
+                              {iwayRefreshing ? "Refreshing…" : "Refresh iWay status"}
+                            </Button>
+                            {iwayStatusRefreshedAt && (
+                              <small className="text-muted">
+                                Last refreshed:{" "}
+                                {formatIwayRefreshedAt(iwayStatusRefreshedAt)}
+                              </small>
+                            )}
+                          </div>
+                        }
+                      />
+                    )}
                   </Col>
                 </Row>
               </SectionBody>
