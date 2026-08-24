@@ -981,6 +981,24 @@ const ApiBookingPageForHotels = () => {
         bookingDoneFor: bookingDoneFor.trim() || null,
         paymentMode,
         bookingConfirmation: bookingConfirmation || "Book & Voucher",
+        // ── Last Minute marker (Phase 6) ─────────────────────────────────
+        // Present only when the operator arrived from the Last Minute page's
+        // API-hotel branch (LastMinuteBookingPage.handleViewRooms stamps
+        // payload.lastMinuteBooking=true before navigating here). Every
+        // pre-existing caller — /new-booking/hotel's supplier flow — leaves
+        // this undefined, so nothing about their payload changes.
+        //
+        // The backend's BookingFlagStamper reads these two fields and, when
+        // hbs.last-minute.api-hotels.enabled is on, tags the freshly
+        // persisted hotel_booking row as LAST_MINUTE. With the property off
+        // the booking still succeeds; it is simply persisted as an ordinary
+        // hotel booking (see BookingFlagStamper's kill-switch handling).
+        lastMinuteBooking:
+          bookingData?.payload?.lastMinuteBooking === true ? true : undefined,
+        bookingType:
+          bookingData?.payload?.lastMinuteBooking === true
+            ? "LAST_MINUTE"
+            : undefined,
       };
 
       setPendingPayload(payload);
