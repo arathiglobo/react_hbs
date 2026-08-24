@@ -564,7 +564,7 @@ function MonthGrid({ monthData, rateMap, cheapestSet, min, todayIso, value, onSe
                     them, so a "starting from" hint is noise. The
                     minHeight above keeps the cell height uniform so
                     the grid doesn't jump between past and future rows. */}
-                {isPast ? "" : (rate && rate.minRate != null ? Number(rate.minRate) : "—")}
+                {isPast ? "" : (rate && rate.minRate != null ? Number(rate.minRate) : " ")}
               </div>
             </button>
           );

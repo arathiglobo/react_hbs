@@ -1527,7 +1527,11 @@ export default function HotelSearch({
         roomNo: index + 1,
         adultCount: String(room.adults || 1),
         childCount: String(room.children || 0),
-        childAges: room.childAges?.length ? room.childAges : [0],
+        // Only send childAges when the user actually picked at least one
+        // child. The old fallback of [0] was making some suppliers
+        // (e.g. GoGlobal) treat it as a real 1-year-old and charge for a
+        // phantom child. Empty array = truly no children.
+        childAges: room.childAges?.length ? room.childAges : [],
         adultAges: room.adultAges?.length ? room.adultAges : [25],
       }));
 

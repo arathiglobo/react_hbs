@@ -35,6 +35,7 @@ const CityMapping = () => {
     "Ratehawk",
     "Atharva",
     "Grn",
+    "Goglobal",
   ]);
 
   // Row-wise selections and status per platform in the overview table
@@ -135,6 +136,9 @@ const CityMapping = () => {
     Grn: {
       countries: "/api/grn/countrylist",
     },
+    Goglobal: {
+      countries: "/api/goglobal/countrylist",
+    },
   };
 
   const platformCityApis = {
@@ -158,6 +162,9 @@ const CityMapping = () => {
     },
     Grn: {
       cities: "/api/grn/citylist",
+    },
+    Goglobal: {
+      cities: "/api/goglobal/citylist",
     },
   };
 
@@ -370,6 +377,9 @@ const CityMapping = () => {
     // this entry the Platform Country/City AsyncSelects render as `undefined`
     // and the user can never pick a GRN city to map.
     Grn: { showCountry: true, showCity: true },
+    // GoGlobal same shape as the others — numeric CountryId picker
+    // then city picker paged from goglobal_destinations.
+    Goglobal: { showCountry: true, showCity: true },
     // add more platforms as needed
   };
 
