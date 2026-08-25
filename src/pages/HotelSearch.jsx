@@ -3059,6 +3059,16 @@ export default function HotelSearch({
                                             // 20 avoids colliding with the
                                             // existing Juniper booking's 17.
                                             grn: 20,
+                                            // GoGlobal (Yanolja Go Global).
+                                            // Room list backend routes apiId=21
+                                            // to GoGlobalHotelRoomSearchService
+                                            // (single-hotel availability).
+                                            // Without this entry the payload
+                                            // fell back to apiId 0 and the
+                                            // /api/hotel-rooms/search call was
+                                            // rejected with "API ID must be
+                                            // positive".
+                                            goglobal: 21,
                                           };
                                           const apiId =
                                             apiIdMapping[
