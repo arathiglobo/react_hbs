@@ -1729,7 +1729,7 @@ const PaxInformation = forwardRef(({
                     {activeUserRole === "ADMIN" && (
                       <div className="p-2 rounded bg-white border mt-2">
                         <div className="d-flex justify-content-between align-items-center">
-                          <h6 className="mb-0 text-muted">Selling Price</h6>
+                          <h6 className="mb-0 text-muted">AED</h6>
                           <h5 className="mb-0 text-success fw-bold">
                             {formatPrice(payableTotal)}
                           </h5>
@@ -1789,7 +1789,7 @@ const PaxInformation = forwardRef(({
                     </>
                   )}
                   <div className="d-flex justify-content-between">
-                    <span>Selling Price</span>
+                    <span>AED</span>
                     <span>{formatPrice(totalPrice)}</span>
                   </div>
                   {tdNum > 0 && (
@@ -1800,7 +1800,7 @@ const PaxInformation = forwardRef(({
                   )}
                   <hr className="my-1" />
                   <div className="d-flex justify-content-between fw-bold">
-                    <span>Total (Selling)</span>
+                    <span>Total</span>
                     <span>{formatPrice(payableTotal)}</span>
                   </div>
                 </div>

@@ -692,7 +692,7 @@ const PackageCheckout = () => {
                     <div className="price-sidebar-amount">
                       {formatPackageAmount(totalPrice)}
                     </div>
-                    <div className="price-sidebar-sub">AED · Selling price</div>
+                    <div className="price-sidebar-sub">AED</div>
                     {bookingData.selections?.selectedMealPlan && (
                       <div className="price-sidebar-mealplan">
                         +{" "}

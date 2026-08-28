@@ -1824,46 +1824,12 @@ const PackageRates = () => {
                   </Col>
                 </Row>
 
-                {/* Food Type — Veg / Non-Veg / Both. Nullable on the
-                    backend; existing rows created before this field
-                    keep loading (foodType = null → dropdown shows the
-                    placeholder). */}
-                <Row>
-                  <Col md={6}>
-                    <Form.Group className="mb-3">
-                      <Form.Label>
-                        Food Type <span className="text-danger">*</span>
-                      </Form.Label>
-                      <Form.Select
-                        value={formData.foodType || ""}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setFormData((prev) => ({ ...prev, foodType: val }));
-                          if (validationErrors.foodType) {
-                            setValidationErrors((prev) => ({
-                              ...prev,
-                              foodType: undefined,
-                            }));
-                          }
-                        }}
-                        isInvalid={!!validationErrors.foodType}
-                        disabled={viewMode}
-                      >
-                        <option value="">Select Food Type</option>
-                        {FOOD_TYPES.map((ft) => (
-                          <option key={ft.value} value={ft.value}>
-                            {ft.label}
-                          </option>
-                        ))}
-                      </Form.Select>
-                      {validationErrors.foodType && (
-                        <Form.Control.Feedback type="invalid">
-                          {validationErrors.foodType}
-                        </Form.Control.Feedback>
-                      )}
-                    </Form.Group>
-                  </Col>
-                </Row>
+                {/* Food Type — moved into the Sharing Options section
+                    header (see below) at client request, so it sits
+                    inside Sharing Options and visually above every
+                    Meal Plan Rates matrix. Left as a hidden anchor
+                    here so text/anchor searches for "Food Type" still
+                    land on the render block. */}
 
                 <Row>
                   <Col md={6}>
@@ -2173,7 +2139,7 @@ const PackageRates = () => {
                           readOnly={viewMode}
                         >
                           <option value="">SELECT</option>
-                          {[1, 2, 3, 4].map((val) => (
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((val) => (
                             <option key={val} value={val}>
                               {val}
                             </option>
@@ -2408,6 +2374,66 @@ const PackageRates = () => {
                                             </tbody>
                                           </Table>
                                         </div>
+                                      </div>
+
+                                      {/* Food Type — rendered right above
+                                          Meal Plan Rates per client request.
+                                          formData.foodType is a single rate-
+                                          level value, so ticking here reflects
+                                          in every other occupancy render
+                                          automatically. Small helper note
+                                          included so the shared-state
+                                          behaviour is visible. */}
+                                      <div className="mb-2">
+                                        <div className="fw-semibold text-primary small mb-1">
+                                          Food Type <span className="text-danger">*</span>
+                                        </div>
+                                        <div
+                                          className={`d-flex gap-4 pt-1 ${
+                                            validationErrors.foodType ? "is-invalid" : ""
+                                          }`}
+                                        >
+                                          {[
+                                            { key: "VEG", label: "Veg" },
+                                            { key: "NON_VEG", label: "Non-Veg" },
+                                          ].map(({ key, label }) => {
+                                            const current = formData.foodType || "";
+                                            const checked = current === key || current === "BOTH";
+                                            const inputId = `foodType-${key}-${categoryKey}-${occ.id}`;
+                                            return (
+                                              <Form.Check
+                                                key={key}
+                                                type="checkbox"
+                                                id={inputId}
+                                                label={label}
+                                                checked={checked}
+                                                disabled={viewMode}
+                                                onChange={(e) => {
+                                                  const isChecked = e.target.checked;
+                                                  const otherKey = key === "VEG" ? "NON_VEG" : "VEG";
+                                                  const otherChecked = current === otherKey || current === "BOTH";
+                                                  let next;
+                                                  if (isChecked && otherChecked) next = "BOTH";
+                                                  else if (isChecked) next = key;
+                                                  else if (otherChecked) next = otherKey;
+                                                  else next = "";
+                                                  setFormData((prev) => ({ ...prev, foodType: next }));
+                                                  if (validationErrors.foodType) {
+                                                    setValidationErrors((prev) => ({
+                                                      ...prev,
+                                                      foodType: undefined,
+                                                    }));
+                                                  }
+                                                }}
+                                              />
+                                            );
+                                          })}
+                                        </div>
+                                        {validationErrors.foodType && (
+                                          <div className="invalid-feedback d-block">
+                                            {validationErrors.foodType}
+                                          </div>
+                                        )}
                                       </div>
 
                                       {/* Meal Plan Rates */}

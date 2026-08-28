@@ -1248,7 +1248,7 @@ const PackageBooking = () => {
                 <div className="price-sidebar-amount">
                   {formatPackageAmount(totalPrice)}
                 </div>
-                <div className="price-sidebar-sub">AED · Selling price</div>
+                <div className="price-sidebar-sub">AED</div>
                 {/* Meal plan line — only shown once one is picked on the
                     Hotels tab, so the operator can see what's stacked on
                     top of the hotel rate at a glance. */}
