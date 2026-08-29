@@ -1094,11 +1094,18 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
             roomTypeCode: rate.roomTypeCode,
             mealPlanCode: rate.mealPlanCode,
             contractTokenId: rate.contractTokenId,
-            // ATHARVA per-room rate key. Prefers the prebook-refreshed
-            // value; falls back to the search-time key so a room whose
-            // prebook was skipped still round-trips. Ignored by other
-            // suppliers (RoomBookingRequest.rateKey is @Nullable).
-            rateKey: rate.atharvaRateKey || null,
+            // Per-room rate key. ATHARVA prefers the prebook-refreshed value;
+            // GoGlobal (apiId 21) carries its HotelSearchCode here (set by the
+            // valuation step as rate.hotelSearchCode) — GoGlobalHotelBookingService
+            // reads rooms[].rateKey as the HotelSearchCode for BOOKING_INSERT.
+            // Falls back to the search-time key so a room whose prebook was
+            // skipped still round-trips. Ignored by suppliers that don't use it
+            // (RoomBookingRequest.rateKey is @Nullable).
+            rateKey:
+              rate.atharvaRateKey ||
+              rate.hotelSearchCode ||
+              rate.rateKey ||
+              null,
             // Darina free-cancellation deadline shown to the customer at
             // rate-selection time (ISO yyyy-MM-dd). BE audits this in
             // DarinaHotelBookingService so we know exactly which cut-off
@@ -1584,6 +1591,73 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                                           | Free cancellation until{" "}
                                           {parseInt(d, 10)} {monthNames[idx]}{" "}
                                           {y}, 11:59 PM (UAE)
+                                        </span>
+                                      );
+                                    })()}
+                                  {/* GoGlobal (apiId 21) cancellation deadline.
+                                      slot.deadlineDate is either the availability
+                                      CxlDeadLine "dd/MMM/yyyy" (e.g. 18/Nov/2026)
+                                      or the valuation CancellationDeadline in ISO
+                                      yyyy-MM-dd — handle both. Rendered inline like
+                                      the other suppliers, static 11:59 PM (UAE). */}
+                                  {Number(bookingData?.payload?.apiId) === 21 &&
+                                    slot.deadlineDate &&
+                                    (() => {
+                                      const monthNames = [
+                                        "Jan",
+                                        "Feb",
+                                        "Mar",
+                                        "Apr",
+                                        "May",
+                                        "Jun",
+                                        "Jul",
+                                        "Aug",
+                                        "Sep",
+                                        "Oct",
+                                        "Nov",
+                                        "Dec",
+                                      ];
+                                      const raw = String(
+                                        slot.deadlineDate,
+                                      ).trim();
+                                      let d, monLabel, y;
+                                      if (raw.includes("/")) {
+                                        // dd/MMM/yyyy (availability CxlDeadLine)
+                                        const [dd, mon, yy] = raw.split("/");
+                                        if (!dd || !mon || !yy) return null;
+                                        d = parseInt(dd, 10);
+                                        monLabel = mon;
+                                        y = yy;
+                                      } else if (raw.includes("-")) {
+                                        const parts = raw.split("-");
+                                        if (parts.length !== 3) return null;
+                                        if (parts[0].length === 4) {
+                                          // ISO yyyy-MM-dd (valuation deadline)
+                                          const idx =
+                                            parseInt(parts[1], 10) - 1;
+                                          if (idx < 0 || idx > 11) return null;
+                                          d = parseInt(parts[2], 10);
+                                          monLabel = monthNames[idx];
+                                          y = parts[0];
+                                        } else {
+                                          // dd-MMM-yyyy
+                                          d = parseInt(parts[0], 10);
+                                          monLabel = parts[1];
+                                          y = parts[2];
+                                        }
+                                      } else {
+                                        return null;
+                                      }
+                                      if (Number.isNaN(d) || !monLabel || !y)
+                                        return null;
+                                      return (
+                                        <span
+                                          className="ms-2 small fw-normal"
+                                          style={{ opacity: 0.95 }}
+                                          title="Cancel by this date/time to avoid charges"
+                                        >
+                                          | Deadline: {d} {monLabel} {y}, 11:59
+                                          PM (UAE)
                                         </span>
                                       );
                                     })()}

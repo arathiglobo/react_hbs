@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import axiosInstance from "./AxiosInstance";
 
@@ -63,16 +63,24 @@ function RateCalendar({
   });
   const [rateMap, setRateMap] = useState({});  // { "yyyy-MM-dd": {minRate, currency} }
   const [loading, setLoading] = useState(false);
-  // Viewport-space coordinates for the popup — computed from the anchor's
-  // bounding rect on open + kept live on scroll/resize. Using explicit
+  // Viewport-space coordinates for the popup — seeded from the anchor's
+  // bounding rect in the click handler (so the first paint is already
+  // beside the field) and kept live on scroll/resize. Using explicit
   // {top, left} with `position: fixed` (below) means the popup floats
   // above ANY parent overflow / stacking-context / scroll region, which
   // is what stops the "Ready to Find…" section from clipping the popup
   // bottom. Rendered via React portal into document.body so the DOM
   // parentage doesn't matter either.
-  const [popupCoords, setPopupCoords] = useState({ top: 0, left: 0 });
+  //
+  // null means "not placed yet" — the popup is not rendered at all until
+  // this holds real coordinates, so it can never paint at the viewport's
+  // top-left corner the way the old {top:0,left:0} default could.
+  const [popupCoords, setPopupCoords] = useState(null);
   const anchorRef = useRef(null);
   const popupRef = useRef(null);
+  // Which side of the field the popup opened on. Frozen for the duration of
+  // one open so scrolling can't make it hop between above and below.
+  const sideRef = useRef(null);
   const [monthMenuOpen, setMonthMenuOpen] = useState(false);
   const [yearMenuOpen, setYearMenuOpen] = useState(false);
   const monthWrapRef = useRef(null);
@@ -80,27 +88,60 @@ function RateCalendar({
   const selectedYearRef = useRef(null);
 
   // ── compute (and keep updating) the fixed-position coords ──────────
-  useEffect(() => {
-    if (!open || !anchorRef.current) return undefined;
+  // The popup is a portal + position:fixed so it escapes parent overflow /
+  // stacking contexts, but it must still behave like a dropdown ATTACHED to
+  // the field: coords are re-derived from the anchor's rect on every scroll
+  // and resize, so the calendar travels WITH the Check-In / Check-Out input
+  // instead of sitting still on screen. When the field itself is no longer
+  // visible — scrolled past, or collapsed away by the Modify-Search strip —
+  // the picker closes instead of hanging over the results list.
+  //
+  // useLayoutEffect (not useEffect) so the first placement lands BEFORE the
+  // browser paints — with useEffect the popup showed for one frame at the
+  // *previous* open's coordinates and then jumped.
+  useLayoutEffect(() => {
+    if (!open) return undefined;
 
     const compute = () => {
-      const rect = anchorRef.current.getBoundingClientRect();
-      const popupWidth = 360;                     // matches POPUP_STYLE.width
-      const viewportW = window.innerWidth;
-      // Default: anchor to the button's left edge.
-      let left = rect.left;
-      // Flip when the popup would spill off the right side of the viewport.
-      if (rect.left + popupWidth > viewportW - 16) {
-        left = rect.right - popupWidth;
+      const anchor = anchorRef.current;
+      if (!anchor) return;
+      const rect = anchor.getBoundingClientRect();
+
+      // Nothing left to anchor to — the field scrolled out of view, or the
+      // Modify-Search strip collapsed it away. Close instead of leaving a
+      // detached panel hanging over the results list.
+      if (isAnchorHidden(rect)) {
+        setOpen(false);
+        return;
       }
-      // Never let the popup start before a 16 px left gutter.
-      left = Math.max(16, left);
-      setPopupCoords({ top: rect.bottom + 8, left });
+
+      // Measure the rendered popup instead of assuming a height — it varies
+      // with the month's row count and the footer text. The portal is in the
+      // DOM by the time this layout effect runs, so this is a real
+      // measurement that refines the click-time estimate before any paint.
+      const popupH = popupRef.current
+        ? popupRef.current.getBoundingClientRect().height
+        : POPUP_FALLBACK_HEIGHT;
+
+      // sideRef pins the popup to the side it opened on; passing it back in
+      // stops the panel hopping above/below the field mid-scroll.
+      const placement = computePlacement(rect, popupH, sideRef.current);
+      sideRef.current = placement.side;
+
+      // Bail out when nothing moved — scroll fires continuously and a fresh
+      // object every time would re-render the whole grid on each event.
+      setPopupCoords((prev) =>
+        prev && prev.top === placement.top && prev.left === placement.left
+          ? prev
+          : placement);
     };
 
     compute();
-    // useCapture=true catches scroll on ancestor scroll containers too,
-    // so the popup follows the anchor if the page scrolls under it.
+    // useCapture=true so scrolls inside ANY ancestor scroll container are
+    // caught too — scroll events don't bubble, so a bubble-phase listener on
+    // window only ever sees document-level scrolling. HotelSearch scrolls
+    // its own results column rather than the document, so without capture
+    // the popup would sit still while the field moved out from under it.
     window.addEventListener("scroll", compute, true);
     window.addEventListener("resize", compute);
     return () => {
@@ -224,6 +265,24 @@ function RateCalendar({
   const monthA = useMemo(() => buildMonth(viewMonth), [viewMonth]);
 
   // ── handlers ───────────────────────────────────────────────────────
+  /**
+   * Open the picker from a click on the field itself — the only path that
+   * ever sets open=true. Coordinates are seeded here from the field's live
+   * rect so the popup's FIRST render is already directly below the input;
+   * the layout effect then refines that placement with the popup's measured
+   * height before the browser paints. Without this seeding the first frame
+   * would use whatever was in popupCoords already.
+   */
+  const openPicker = () => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
+    sideRef.current = null;            // let the effect re-decide for this open
+    setPopupCoords(
+      computePlacement(anchor.getBoundingClientRect(), POPUP_FALLBACK_HEIGHT, "below"),
+    );
+    setOpen(true);
+  };
+
   const handleSelect = (isoDate, disabled) => {
     if (disabled) return;
     onChange(isoDate);
@@ -292,7 +351,7 @@ function RateCalendar({
         type="button"
         aria-label={ariaLabel || "Open date picker"}
         aria-expanded={open}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => (open ? setOpen(false) : openPicker())}
         className={`form-control form-control-modern${isInvalid ? " is-invalid" : ""}`}
         style={{
           height,
@@ -312,7 +371,9 @@ function RateCalendar({
         <span aria-hidden="true" style={{ color: "#8891a3" }}>📅</span>
       </button>
 
-      {open && createPortal(
+      {/* popupCoords guard: never render before the placement is known, so
+          the calendar cannot flash at the viewport's top-left corner. */}
+      {open && popupCoords && createPortal(
         <div
           ref={popupRef}
           role="dialog"
@@ -503,7 +564,7 @@ function MonthGrid({ monthData, rateMap, cheapestSet, min, todayIso, value, onSe
                     them, so a "starting from" hint is noise. The
                     minHeight above keeps the cell height uniform so
                     the grid doesn't jump between past and future rows. */}
-                {isPast ? "" : (rate && rate.minRate != null ? Number(rate.minRate) : "—")}
+                {isPast ? "" : (rate && rate.minRate != null ? Number(rate.minRate) : " ")}
               </div>
             </button>
           );
@@ -543,6 +604,74 @@ function buildMonth(firstOfMonth) {
   };
 }
 
+// ── placement ─────────────────────────────────────────────────────────
+/** Breathing room kept between the popup and the left/right viewport edge. */
+const EDGE_GAP = 16;
+/** Gap between the trigger field and the popup. */
+const ANCHOR_GAP = 8;
+/** Height estimate used for the click-time seed, before the popup exists to
+ *  measure. The layout effect re-runs with the real height straight after. */
+const POPUP_FALLBACK_HEIGHT = 420;
+
+/**
+ * Where the popup sits for a given anchor rect, in viewport coordinates.
+ *
+ * Kept as a module-scope pure function so the click handler (first paint)
+ * and the scroll/resize listener (every subsequent frame) run identical
+ * maths — if they drifted apart the popup would jump on the first scroll.
+ *
+ * The result is ALWAYS relative to the field and deliberately NOT clamped
+ * to the viewport: the calendar has to travel with the input when the page
+ * scrolls, and a clamp would peel it off and park it on screen instead.
+ *
+ * @param side  "below" | "above" to force a side (used to keep an already-
+ *              open popup on the side it started on), or null to pick from
+ *              the available space.
+ */
+function computePlacement(rect, popupH, side) {
+  const viewportW = window.innerWidth;
+  const viewportH = window.innerHeight;
+
+  // ── horizontal: align to the field's left edge ──
+  const popupWidth = 360;                     // matches POPUP_STYLE.width
+  let left = rect.left;
+  // Flip when the popup would spill off the right side of the viewport.
+  if (rect.left + popupWidth > viewportW - EDGE_GAP) {
+    left = rect.right - popupWidth;
+  }
+  // Never let the popup start before the left gutter.
+  left = Math.max(EDGE_GAP, left);
+
+  // ── vertical: directly below the field by preference ──
+  let chosen = side;
+  if (chosen == null) {
+    const spaceBelow = viewportH - rect.bottom - ANCHOR_GAP - EDGE_GAP;
+    const spaceAbove = rect.top - ANCHOR_GAP - EDGE_GAP;
+    // Only flip above when it genuinely won't fit below but will fit above.
+    chosen = popupH > spaceBelow && popupH <= spaceAbove ? "above" : "below";
+  }
+  const top = chosen === "above"
+    ? rect.top - ANCHOR_GAP - popupH
+    : rect.bottom + ANCHOR_GAP;
+
+  return { top, left, side: chosen };
+}
+
+/**
+ * True when the trigger field has nothing left to anchor to: a zero-size
+ * rect (display:none / unmounted — e.g. the Modify-Search strip collapsing
+ * the form away) or scrolled clean out of the viewport.
+ */
+function isAnchorHidden(rect) {
+  return (
+    (rect.width === 0 && rect.height === 0) ||
+    rect.bottom <= 0 ||
+    rect.top >= window.innerHeight ||
+    rect.right <= 0 ||
+    rect.left >= window.innerWidth
+  );
+}
+
 // ── styles (co-located; no external CSS file needed) ──────────────────
 const POPUP_STYLE = {
   // Fixed positioning + portal into document.body = escapes every parent
@@ -553,6 +682,12 @@ const POPUP_STYLE = {
   position: "fixed",
   width: 360,
   maxWidth: "calc(100vw - 32px)",
+  // Never taller than the viewport. The popup is pinned to the field and
+  // travels with it, so page scrolling can't reveal anything that hangs
+  // past the bottom of the screen — on a short window the calendar scrolls
+  // INSIDE itself instead.
+  maxHeight: "calc(100vh - 32px)",
+  overflowY: "auto",
   boxSizing: "border-box",
   background: "#fff",
   border: "1px solid #ecebef",

@@ -1,14 +1,20 @@
 import React, { useEffect, useState } from "react";
-import { Table, Form, Badge, Button } from "react-bootstrap";
+import { Table, Form, Badge, Button, Modal } from "react-bootstrap";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 
 /**
  * Supplier permission matrix — sibling of ApiClientPermissionMatrix.
  * Controls which upstream APIs (iwtx, atharva, jumeirah, ratehawk,
- * darina, x3, inhouse …) are aggregated when this client hits our
- * external endpoints. Pure allow-list: unticked supplier = never
+ * darina, x3, inhouse, goglobal, grn …) are aggregated when this client
+ * hits our external endpoints. Pure allow-list: unticked supplier = never
  * queried for this client.
+ *
+ * <p>Toggles now auto-save with a confirmation dialog. The old deferred
+ * "click Save later" flow was easy to forget — flipping a switch and
+ * closing the tab would silently lose the change. Every toggle now opens
+ * an "Are you sure?" modal; confirming pushes the change to the backend
+ * immediately, so unsaved dirty state cannot exist.</p>
  *
  * Rendered as a tab inside the client permission page — receives
  * clientId as a prop, has no own header (the parent supplies it).
@@ -19,7 +25,9 @@ export default function ApiClientSupplierMatrix({ clientId }) {
   const [matrix, setMatrix] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [dirty, setDirty] = useState({}); // { externalApiId: isEnabled }
+  // Pending confirmation. Shape:
+  //   { kind: 'single'|'bulk', target: boolean, rows: [row], label: string }
+  const [pending, setPending] = useState(null);
 
   const fetchMatrix = async () => {
     if (!clientId) return;
@@ -27,7 +35,6 @@ export default function ApiClientSupplierMatrix({ clientId }) {
     try {
       const res = await axiosInstance.get(BASE(clientId));
       setMatrix(res.data);
-      setDirty({});
     } catch {
       toast.error("Failed to load supplier matrix");
     } finally {
@@ -39,38 +46,48 @@ export default function ApiClientSupplierMatrix({ clientId }) {
 
   const rows = matrix?.rows || [];
 
-  const currentEnabled = (row) => {
-    if (Object.prototype.hasOwnProperty.call(dirty, row.externalApiId)) {
-      return !!dirty[row.externalApiId];
-    }
-    return !!row.isEnabled;
-  };
+  const currentEnabled = (row) => !!row.isEnabled;
 
-  const toggle = (row) => {
+  const requestToggle = (row) => {
     const next = !currentEnabled(row);
-    setDirty((d) => ({ ...d, [row.externalApiId]: next }));
+    setPending({
+      kind: "single",
+      target: next,
+      rows: [row],
+      label: row.apiName || row.apiCode,
+    });
   };
 
-  const setAll = (target) => {
-    const next = { ...dirty };
-    for (const row of rows) next[row.externalApiId] = !!target;
-    setDirty(next);
+  const requestBulkToggle = (target) => {
+    // Only send rows that actually need to flip — no-op rows create noise
+    // on the server and clutter the "N changes" message.
+    const changing = rows.filter((r) => currentEnabled(r) !== target);
+    if (changing.length === 0) return;
+    setPending({
+      kind: "bulk",
+      target,
+      rows: changing,
+      label: `${changing.length} supplier${changing.length === 1 ? "" : "s"}`,
+    });
   };
 
-  const dirtyCount = Object.keys(dirty).length;
+  const cancelPending = () => setPending(null);
 
-  const save = async () => {
-    if (dirtyCount === 0) return;
+  const confirmPending = async () => {
+    if (!pending || pending.rows.length === 0) return;
     setSaving(true);
     try {
-      const items = Object.entries(dirty).map(([externalApiId, isEnabled]) => ({
-        externalApiId: Number(externalApiId),
-        isEnabled: !!isEnabled,
+      const items = pending.rows.map((row) => ({
+        externalApiId: row.externalApiId,
+        isEnabled: !!pending.target,
       }));
       const res = await axiosInstance.put(BASE(clientId), { items });
       setMatrix(res.data);
-      setDirty({});
-      toast.success(`Saved ${items.length} change${items.length === 1 ? "" : "s"}`);
+      toast.success(
+        `${pending.target ? "Enabled" : "Disabled"} ${items.length} ` +
+          `supplier${items.length === 1 ? "" : "s"}`,
+      );
+      setPending(null);
     } catch (e) {
       const msg = e?.response?.data?.message || "Save failed";
       toast.error(typeof msg === "string" ? msg : "Save failed");
@@ -78,8 +95,6 @@ export default function ApiClientSupplierMatrix({ clientId }) {
       setSaving(false);
     }
   };
-
-  const revert = () => setDirty({});
 
   const enabledSummary = () => {
     const total = rows.length;
@@ -89,7 +104,7 @@ export default function ApiClientSupplierMatrix({ clientId }) {
   };
   const { total, on } = enabledSummary();
 
-  const allOn = rows.length > 0 && rows.every((r) => currentEnabled(r));
+  const allOn  = rows.length > 0 && rows.every((r) => currentEnabled(r));
   const noneOn = rows.length > 0 && rows.every((r) => !currentEnabled(r));
 
   return (
@@ -101,24 +116,26 @@ export default function ApiClientSupplierMatrix({ clientId }) {
             <span className="ms-2 badge bg-light text-dark">{rows.length}</span>
           </h6>
           <Badge bg={on > 0 ? "success" : "secondary"} pill>{on} / {total} enabled</Badge>
-          {dirtyCount > 0 && (
-            <Badge bg="warning" text="dark" pill>
-              {dirtyCount} unsaved change{dirtyCount === 1 ? "" : "s"}
-            </Badge>
-          )}
+          <span className="text-muted small">
+            Changes are saved on confirmation.
+          </span>
         </div>
         <div className="d-flex gap-2 flex-wrap">
-          <Button size="sm" variant="outline-success" onClick={() => setAll(true)} disabled={allOn}>
+          <Button
+            size="sm"
+            variant="outline-success"
+            onClick={() => requestBulkToggle(true)}
+            disabled={saving || allOn}
+          >
             Enable all
           </Button>
-          <Button size="sm" variant="outline-secondary" onClick={() => setAll(false)} disabled={noneOn}>
+          <Button
+            size="sm"
+            variant="outline-secondary"
+            onClick={() => requestBulkToggle(false)}
+            disabled={saving || noneOn}
+          >
             Disable all
-          </Button>
-          <Button size="sm" variant="outline-secondary" onClick={revert} disabled={saving || dirtyCount === 0}>
-            Revert
-          </Button>
-          <Button size="sm" className="btn-green" onClick={save} disabled={saving || dirtyCount === 0}>
-            {saving ? "Saving…" : "Save"}
           </Button>
         </div>
       </div>
@@ -151,15 +168,15 @@ export default function ApiClientSupplierMatrix({ clientId }) {
           <tbody>
             {rows.map((row) => {
               const isOn = currentEnabled(row);
-              const isDirty = Object.prototype.hasOwnProperty.call(dirty, row.externalApiId);
               return (
-                <tr key={row.externalApiId} className={isDirty ? "table-warning" : ""}>
+                <tr key={row.externalApiId}>
                   <td>
                     <Form.Check
                       type="switch"
                       id={`supp-${row.externalApiId}`}
                       checked={isOn}
-                      onChange={() => toggle(row)}
+                      disabled={saving}
+                      onChange={() => requestToggle(row)}
                       label={isOn ? "Enabled" : "Disabled"}
                     />
                   </td>
@@ -177,6 +194,40 @@ export default function ApiClientSupplierMatrix({ clientId }) {
           </tbody>
         </Table>
       )}
+
+      <Modal
+        show={!!pending}
+        onHide={cancelPending}
+        centered
+        backdrop={saving ? "static" : true}
+        keyboard={!saving}
+      >
+        <Modal.Header closeButton={!saving}>
+          <Modal.Title>Confirm supplier change</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {pending?.kind === "single" ? (
+            <>
+              Are you sure you want to{" "}
+              <b>{pending.target ? "enable" : "disable"}</b>{" "}
+              <b>{pending.label}</b> for this client?
+            </>
+          ) : pending?.kind === "bulk" ? (
+            <>
+              This will <b>{pending.target ? "enable" : "disable"}</b>{" "}
+              <b>{pending.label}</b> at once. Continue?
+            </>
+          ) : null}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={cancelPending} disabled={saving}>
+            Cancel
+          </Button>
+          <Button className="btn-green" onClick={confirmPending} disabled={saving}>
+            {saving ? "Saving…" : "OK, Save"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </div>
   );
 }

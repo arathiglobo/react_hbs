@@ -123,6 +123,35 @@ const renderAtharvaDeadlinePill = (deadlineDate) => {
 };
 
 /**
+ * GoGlobal (apiId 21) per-rate cancellation deadline pill. GoGlobal's
+ * availability offer carries CxlDeadLine as "dd/MMM/yyyy" (e.g. "18/Nov/2026"),
+ * surfaced on rate.deadlineDate. Rendered in red directly above the
+ * Cancellation Policies link so the operator sees the cut-off before opening
+ * the modal. Falls back to the raw string if the format is unexpected so a
+ * deadline is never silently hidden.
+ */
+const renderGoGlobalDeadlinePill = (deadlineDate) => {
+  if (!deadlineDate || typeof deadlineDate !== "string") return null;
+  const s = deadlineDate.trim();
+  if (!s) return null;
+  let label = s;
+  const parts = s.split("/");
+  if (parts.length === 3) {
+    const [d, mon, y] = parts;
+    const dd = parseInt(d, 10);
+    label = `${Number.isNaN(dd) ? d : dd} ${mon} ${y}`;
+  }
+  return (
+    <span
+      className="text-danger fw-semibold"
+      title="Cancel by this date to avoid charges"
+    >
+      Deadline Date: {label}
+    </span>
+  );
+};
+
+/**
  * Strip HTML markup out of a policy string so the modal shows plain text.
  * Some suppliers (RateHawk, ATHARVA remarks, etc.) return the cancellation
  * policy with embedded <div>, <p>, <br>, <ul>/<li>, <b> etc. We convert
@@ -266,6 +295,11 @@ const ExternalApiRoomList = () => {
     // Terms modal for a GRN rate — never on page load. apiId=20 avoids
     // colliding with the existing Juniper booking's apiId=17.
     GRN: 20,
+    // GoGlobal (Yanolja Go Global). Room list availability routes to
+    // GoGlobalHotelRoomSearchService (apiId=21). Its offers carry
+    // HotelSearchCode as the rateKey — GoGlobal's session handle for
+    // Booking Valuation / Booking Creation. No page-load recheck.
+    GOGLOBAL: 21,
   };
 
   const activeUserRole = localStorage.getItem("currentActiveRole");
@@ -466,6 +500,45 @@ const ExternalApiRoomList = () => {
     }
   };
 
+  /**
+   * GoGlobal Booking Valuation (OperationType 9) — the spec's mandatory
+   * "check for price and cancellation deadline changes as well as late
+   * remarks" step between availability and booking. Called from the RoomList
+   * "View Details / Select" click for GoGlobal rates (apiId=21) so the
+   * operator sees the latest rate + deadline in the confirm modal before the
+   * booking page. GoGlobal's HotelSearchCode rides on rate.rateKey (set by
+   * GoGlobalHotelRoomSearchService).
+   *
+   * <p>Returns a resolved object (never throws) so the caller can branch on
+   * .success. Response shape:
+   *   { success, message, hotelSearchCode, arrivalDate, cancellationDeadline,
+   *     remarks, priceChanged, currency, totalRate, totalRateWithoutMarkup,
+   *     previousTotalRate }
+   */
+  const fetchGoGlobalValuation = async (rate) => {
+    const payload = roomData?.payload || {};
+    const req = {
+      hotelSearchCode: rate?.rateKey,
+      arrivalDate: payload.checkInDate,
+      agentId: payload?.agentId != null ? String(payload.agentId) : null,
+      currentTotalRate: rate?.totalRate ?? null,
+    };
+    try {
+      const resp = await axiosInstance.post(
+        "/api/hotel-booking/goglobal/valuation",
+        req,
+      );
+      return resp?.data || { success: false, message: "Empty response" };
+    } catch (err) {
+      const backendMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Valuation request failed";
+      return { success: false, message: backendMsg };
+    }
+  };
+
   const openPoliciesModal = async (rate, hotelDetail) => {
     const label = [rate?.roomCategory, rate?.mealPlan]
       .filter(Boolean)
@@ -538,12 +611,17 @@ const ExternalApiRoomList = () => {
         : Array.isArray(hotelDetail?.cancellationPolicies)
           ? hotelDetail.cancellationPolicies
           : [];
+      // GoGlobal (apiId 21): also surface the CxlDeadLine at the top of the
+      // modal. The GoGlobal Remark is already part of cancellation[] (the BE
+      // appends it), so it renders in the policy list below the deadline.
+      const isGoGlobal = supplierApiId === apiIdMapping.GOGLOBAL;
       setPrebookError(null);
       setPoliciesModalData({
         cancellationPolicies: cancellation,
         termsAndConditions: inlineTerms,
         selectedRoomLabel: label,
         nonRefundable: isNonRefundable,
+        deadlineDate: isGoGlobal ? rate?.deadlineDate || null : null,
       });
       setShowPoliciesModal(true);
       return;
@@ -1317,6 +1395,83 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
       return;
     }
 
+    if (currentApiId === apiIdMapping.GOGLOBAL) {
+      // GoGlobal (apiId 21): run Booking Valuation before booking so the
+      // operator sees the latest price / cancellation deadline / late remarks
+      // (spec §7 — "Use valuation before making bookings"). Same "Fetching
+      // latest rate…" spinner + "Room Details" confirm modal as IWTX/X3/
+      // Darina/RateHawk. On Continue the confirm modal stores selectedRate
+      // verbatim, so the HotelSearchCode must ride on each element here.
+      setLoadingRate(true);
+      (async () => {
+        try {
+          const live = await fetchGoGlobalValuation(rate);
+          if (!live?.success) {
+            setLoadingRate(false);
+            alert(
+              live?.message ||
+                "GoGlobal valuation failed. Please retry or reselect the rate.",
+            );
+            return;
+          }
+          const valuatedTotal =
+            live.totalRate != null ? live.totalRate : rate.totalRate;
+          const valuatedNoMarkup =
+            live.totalRateWithoutMarkup != null
+              ? live.totalRateWithoutMarkup
+              : rate.totalRateWithoutMarkup;
+          const accurateRates = [
+            {
+              roomNo: 1,
+              hotelId: hotel.hotelId,
+              hotelName: hotel.hotelName,
+              hotelCode: payload.hotelCode || hotel.hotelId,
+              roomCategory: rate.roomCategory,
+              mealPlan: rate.mealPlan,
+              contractLabel: rate.contractLabel || "Valuated rate (GoGlobal)",
+              // Confirm modal renders the refund badge on === "Y".
+              nonRefundable: rate.nonRefundable ? "Y" : "N",
+              rate: valuatedTotal,
+              rateWithoutMarkup: valuatedNoMarkup,
+              roomRateBasedOnRoomCount: valuatedTotal,
+              roomRateBasedOnRoomCount_WithoutMarkup: valuatedNoMarkup,
+              roomStatus: "Available",
+              currency: "AED",
+              // GoGlobal session handle for Booking Creation (OperationType 2).
+              // MUST reach the create payload — carried as hotelSearchCode and
+              // read by the booking-page room map's rateKey fallback.
+              hotelSearchCode: rate.rateKey,
+              rateKey: rate.rateKey,
+              cancellationPolicy: rate.cancellationPolicies || [],
+              deadlineDate:
+                live.cancellationDeadline || rate.deadlineDate || null,
+              // Valuation outcome — surfaced in the confirm modal.
+              goglobalPriceChanged: !!live.priceChanged,
+              goglobalRemarks: live.remarks || null,
+              goglobalPreviousTotalRate:
+                live.previousTotalRate ?? rate.totalRate,
+            },
+          ];
+          setSelectedRate(accurateRates);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+        } catch (err) {
+          console.error("GoGlobal valuation fetch failed:", err);
+          setLoadingRate(false);
+          const backendMsg =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message;
+          alert(
+            backendMsg
+              ? `Unable to fetch latest rate: ${backendMsg}`
+              : "Unable to fetch latest rate. Please try again.",
+          );
+        }
+      })();
+      return;
+    }
+
     if (currentApiId === 12 || currentApiId === 15) {
       // Accurate-rate re-fetch for IWTX / X3 — same request the current
       // code builds, just for a single room in this branch.
@@ -1710,6 +1865,102 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
             backendMsg
               ? `Unable to fetch accurate rate: ${backendMsg}`
               : "Unable to fetch accurate rate. Please try again.",
+          );
+        }
+      })();
+      return;
+    }
+
+    if (currentApiId === apiIdMapping.GOGLOBAL) {
+      // GoGlobal multi-room: a GoGlobal offer's HotelSearchCode books the
+      // WHOLE search (all rooms) as one bundle, so we valuate the first
+      // pick's offer once and split its total across the selected rooms.
+      // The booking then sends N RoomTypes under that single HotelSearchCode.
+      const bundleRate = selectedRooms[0]?.selectedRate;
+      if (!bundleRate) {
+        alert("Please select a rate for each room before continuing.");
+        return;
+      }
+      setLoadingRate(true);
+      (async () => {
+        try {
+          const live = await fetchGoGlobalValuation(bundleRate);
+          if (!live?.success) {
+            setLoadingRate(false);
+            alert(
+              live?.message ||
+                "GoGlobal valuation failed. Please retry or reselect the rate.",
+            );
+            return;
+          }
+          const numRooms = selectedRooms.length;
+          const valuatedTotal =
+            live.totalRate != null
+              ? Number(live.totalRate)
+              : Number(bundleRate.totalRate || 0);
+          const valuatedNoMarkup =
+            live.totalRateWithoutMarkup != null
+              ? Number(live.totalRateWithoutMarkup)
+              : Number(
+                  bundleRate.totalRateWithoutMarkup ??
+                    bundleRate.totalRate ??
+                    0,
+                );
+          // Even split with the rounding remainder on the first room so the
+          // per-room rates always sum back to the exact valuated total.
+          const per = Math.round((valuatedTotal / numRooms) * 100) / 100;
+          const perNoMarkup =
+            Math.round((valuatedNoMarkup / numRooms) * 100) / 100;
+          const accurateRates = selectedRooms.map((sr, i) => {
+            const r = sr.selectedRate || {};
+            const isFirst = i === 0;
+            const thisRate = isFirst
+              ? Number((valuatedTotal - per * (numRooms - 1)).toFixed(2))
+              : per;
+            const thisNoMarkup = isFirst
+              ? Number(
+                  (valuatedNoMarkup - perNoMarkup * (numRooms - 1)).toFixed(2),
+                )
+              : perNoMarkup;
+            return {
+              roomNo: i + 1,
+              hotelId: hotel.hotelId,
+              hotelName: hotel.hotelName,
+              hotelCode: payload.hotelCode || hotel.hotelId,
+              roomCategory: r.roomCategory,
+              mealPlan: r.mealPlan,
+              contractLabel: r.contractLabel || "Valuated rate (GoGlobal)",
+              nonRefundable: r.nonRefundable ? "Y" : "N",
+              rate: thisRate,
+              rateWithoutMarkup: thisNoMarkup,
+              roomRateBasedOnRoomCount: thisRate,
+              roomRateBasedOnRoomCount_WithoutMarkup: thisNoMarkup,
+              roomStatus: "Available",
+              currency: "AED",
+              // Same HotelSearchCode on every room — one GoGlobal bundle.
+              hotelSearchCode: bundleRate.rateKey,
+              rateKey: bundleRate.rateKey,
+              cancellationPolicy: bundleRate.cancellationPolicies || [],
+              deadlineDate:
+                live.cancellationDeadline || bundleRate.deadlineDate || null,
+              goglobalPriceChanged: !!live.priceChanged,
+              goglobalRemarks: live.remarks || null,
+            };
+          });
+          setSelectedRate(accurateRates);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+        } catch (err) {
+          console.error("GoGlobal multi-room valuation fetch failed:", err);
+          setLoadingRate(false);
+          const backendMsg =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message;
+          alert(
+            backendMsg
+              ? `Unable to fetch latest rate: ${backendMsg}`
+              : "Unable to fetch latest rate. Please try again.",
           );
         }
       })();
@@ -2833,6 +3084,19 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                       </div>
                                                     )}
 
+                                                  {/* GoGlobal (apiId 21) cancellation deadline —
+                                                      CxlDeadLine (dd/MMM/yyyy) shown in red directly
+                                                      above the Cancellation Policies link. */}
+                                                  {resolveApiId(hotel) ===
+                                                    apiIdMapping.GOGLOBAL &&
+                                                    rate.deadlineDate && (
+                                                      <div className="feature-item">
+                                                        {renderGoGlobalDeadlinePill(
+                                                          rate.deadlineDate,
+                                                        )}
+                                                      </div>
+                                                    )}
+
                                                   <div className="feature-item">
                                                     <Button
                                                       variant="link"
@@ -3008,6 +3272,17 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                       rate.deadlineDate && (
                                                         <div className="feature-item d-flex align-items-center">
                                                           {renderDarinaDeadlinePill(
+                                                            rate.deadlineDate,
+                                                          )}
+                                                        </div>
+                                                      )}
+                                                    {/* GoGlobal (apiId 21) cancellation deadline —
+                                                        CxlDeadLine (dd/MMM/yyyy) in red above the link. */}
+                                                    {resolveApiId(hotel) ===
+                                                      apiIdMapping.GOGLOBAL &&
+                                                      rate.deadlineDate && (
+                                                        <div className="feature-item d-flex align-items-center">
+                                                          {renderGoGlobalDeadlinePill(
                                                             rate.deadlineDate,
                                                           )}
                                                         </div>
@@ -3377,6 +3652,40 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
             );
             return (
               <>
+                {/* GoGlobal (apiId 21) valuation banner — surfaces the
+                    Booking-Valuation outcome (price change / cancellation
+                    deadline / late remarks) before the operator commits.
+                    hotelSearchCode is a GoGlobal-only carrier, so this block
+                    never renders for other suppliers. */}
+                {selectedRate?.[0]?.hotelSearchCode && (
+                  <div
+                    className={`alert ${
+                      selectedRate[0].goglobalPriceChanged
+                        ? "alert-warning"
+                        : "alert-success"
+                    } py-2`}
+                    role="alert"
+                  >
+                    <div className="fw-semibold mb-1">
+                      {selectedRate[0].goglobalPriceChanged
+                        ? "Rate re-valuated — the price has changed since search. Please review before booking."
+                        : "Rate confirmed by GoGlobal — no price change since search."}
+                    </div>
+                    {selectedRate[0].deadlineDate && (
+                      <div className="small">
+                        Cancellation deadline:{" "}
+                        <span className="fw-semibold">
+                          {selectedRate[0].deadlineDate}
+                        </span>
+                      </div>
+                    )}
+                    {selectedRate[0].goglobalRemarks && (
+                      <div className="small mt-1">
+                        Remarks: {selectedRate[0].goglobalRemarks}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {selectedRate?.map((rate, index) => {
                   // Per-room stay total: rate.rate is the marked-up total for
                   // this room for the entire stay (see RatehawkHotelRoomSearchService,
@@ -3540,6 +3849,15 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
           {policiesModalData.selectedRoomLabel && (
             <div className="text-muted small mb-3">
               {policiesModalData.selectedRoomLabel}
+            </div>
+          )}
+
+          {/* GoGlobal (apiId 21) cancellation deadline — shown in red at the
+              top of the modal. Only GoGlobal sets policiesModalData.deadlineDate. */}
+          {policiesModalData.deadlineDate && (
+            <div className="alert alert-danger py-2 mb-3" role="alert">
+              <span className="fw-semibold">Cancellation deadline:</span>{" "}
+              {policiesModalData.deadlineDate}
             </div>
           )}
 
