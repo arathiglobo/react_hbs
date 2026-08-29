@@ -496,12 +496,20 @@ const ExternalApiRoomList = () => {
       const fallbackCancellation = Array.isArray(rate?.cancellationPolicies)
         ? rate.cancellationPolicies
         : [];
+      // other_inclusions from GRN's availability endpoint (search-time).
+      // Rendered as its own bulleted section in the modal. Use recheck's
+      // list when it comes back, falling back to search-time here so the
+      // modal shows something immediately instead of waiting on recheck.
+      const fallbackInclusions = Array.isArray(rate?.otherInclusions)
+        ? rate.otherInclusions
+        : [];
       setPrebookError(null);
       setPoliciesModalData({
         cancellationPolicies: fallbackCancellation,
         termsAndConditions: inlineTerms,
         selectedRoomLabel: label,
         nonRefundable: isNonRefundable,
+        otherInclusions: fallbackInclusions,
       });
       setShowPoliciesModal(true);
       setPrebookLoading(true);
@@ -527,6 +535,12 @@ const ExternalApiRoomList = () => {
               typeof recheck.nonRefundable === "boolean"
                 ? recheck.nonRefundable
                 : isNonRefundable,
+            // Prefer the recheck's inclusions (authoritative for booking),
+            // fall back to the availability list when recheck omitted it.
+            otherInclusions:
+              (Array.isArray(recheck.otherInclusions) && recheck.otherInclusions.length > 0)
+                ? recheck.otherInclusions
+                : fallbackInclusions,
           });
         } else {
           setPrebookError(recheck?.message || "Recheck failed.");
@@ -3740,6 +3754,38 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
             <p className="text-muted mb-4">
               No cancellation policies available.
             </p>
+          )}
+
+          {/* GRN other_inclusions — the rate.other_inclusions list from
+              the availability endpoint (free WiFi / breakfast add-ons /
+              parking / etc). Rendered only when populated so non-GRN
+              rates never show an empty section. Populated by
+              openPoliciesModal's GRN branch above; falls back to the
+              availability list when recheck omitted its own inclusions. */}
+          {policiesModalData.otherInclusions?.length > 0 && (
+            <>
+              <h6 className="text-success mb-2 pt-2 border-top">
+                <FaInfoCircle className="me-2" />
+                Other Inclusions
+              </h6>
+              <ul className="mb-4 ps-3">
+                {policiesModalData.otherInclusions.map((inc, idx) => {
+                  const text = stripHtmlTags(
+                    typeof inc === "string" ? inc : String(inc ?? ""),
+                  );
+                  if (!text) return null;
+                  return (
+                    <li
+                      key={idx}
+                      className="mb-2"
+                      style={{ whiteSpace: "pre-line" }}
+                    >
+                      {text}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
           )}
 
           <h6 className="text-secondary mb-2 pt-2 border-top">

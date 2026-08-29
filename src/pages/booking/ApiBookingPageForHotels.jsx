@@ -1628,6 +1628,69 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                                         </span>
                                       );
                                     })()}
+                                  {/* GRN (apiId 20) deadline — earliest
+                                      cancellationPolicy.fromDate on this slot,
+                                      shown as D minus 2 days (the "safe to
+                                      cancel without charge" cut-off, per the
+                                      operator's requested display rule; matches
+                                      how deadlineDate is computed for the
+                                      booking-create payload above). Hidden for
+                                      non-refundable rates — there is no free
+                                      cancellation window to communicate. */}
+                                  {Number(bookingData?.payload?.apiId) === 20 &&
+                                    !(
+                                      slot.nonRefundable === true ||
+                                      slot.nonRefundable === "true" ||
+                                      slot.nonRefundable === "Y"
+                                    ) &&
+                                    Array.isArray(slot.cancellationPolicy) &&
+                                    slot.cancellationPolicy.length > 0 &&
+                                    (() => {
+                                      const dates = slot.cancellationPolicy
+                                        .map((p) =>
+                                          p?.fromDate ? new Date(p.fromDate) : null,
+                                        )
+                                        .filter(
+                                          (dt) =>
+                                            dt !== null && !isNaN(dt.getTime()),
+                                        );
+                                      if (dates.length === 0) return null;
+                                      const earliest = new Date(
+                                        Math.min(
+                                          ...dates.map((dt) => dt.getTime()),
+                                        ),
+                                      );
+                                      const display = new Date(earliest);
+                                      display.setDate(
+                                        earliest.getDate() - 2,
+                                      );
+                                      const monthNames = [
+                                        "Jan",
+                                        "Feb",
+                                        "Mar",
+                                        "Apr",
+                                        "May",
+                                        "Jun",
+                                        "Jul",
+                                        "Aug",
+                                        "Sep",
+                                        "Oct",
+                                        "Nov",
+                                        "Dec",
+                                      ];
+                                      return (
+                                        <span
+                                          className="ms-2 small fw-normal"
+                                          style={{ opacity: 0.95 }}
+                                          title="Cancel by this date/time to avoid charges (supplier deadline minus 2 days)"
+                                        >
+                                          | Deadline: {display.getDate()}{" "}
+                                          {monthNames[display.getMonth()]}{" "}
+                                          {display.getFullYear()}, 11:59 PM
+                                          (UAE)
+                                        </span>
+                                      );
+                                    })()}
                                   {/* {slot.rate != null && (
                                     <span
                                       className="ms-auto small fw-normal"
