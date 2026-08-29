@@ -1340,6 +1340,47 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
     0,
   );
 
+  // ── GRN "Payable at Hotel" summary ──────────────────────────────
+  // Aggregate the guest-paid property charges across the picked rates
+  // (payableAtHotel* set from GRN's price_details.hotel_charges[]
+  // rows with included:false). Bundled bookings pass one rate;
+  // non-bundled multi-room bookings pass N rates whose charges sum.
+  // Returns null when no rate carries a charge — every non-GRN
+  // supplier ends up here, so their booking page stays unchanged.
+  //
+  // Currency handling: sums cleanly when every rate quoted its
+  // charge in the SAME currency (the common case); a mix leaves
+  // `amount` null with `description` still carrying the breakdown,
+  // so the panel shows a warning even when the amount can't be
+  // totalled into one number. Never combined into totalPrice: the
+  // hotel bills it directly, we don't.
+  const payableAtHotel = (() => {
+    const rows = selectedRate.filter(
+      (r) => r?.payableAtHotelAmount != null || r?.payableAtHotelDescription,
+    );
+    if (!rows.length) return null;
+    const currencies = new Set();
+    let sum = 0;
+    let summable = true;
+    const labels = new Set();
+    for (const r of rows) {
+      if (r.payableAtHotelDescription) labels.add(r.payableAtHotelDescription);
+      if (r.payableAtHotelAmount == null) {
+        summable = false;
+        continue;
+      }
+      const c = (r.payableAtHotelCurrency || "AED").toUpperCase();
+      currencies.add(c);
+      sum += Number(r.payableAtHotelAmount) || 0;
+    }
+    const oneCurrency = currencies.size <= 1;
+    return {
+      amount: summable && oneCurrency ? sum : null,
+      currency: oneCurrency ? [...currencies][0] || "AED" : null,
+      description: [...labels].join(", ") || null,
+    };
+  })();
+
   const isAdmin = activeUserRole === "ADMIN";
 
   // ── Payment Mode availability (mirrors Inhouse's 3-scenario logic) ──
@@ -2173,6 +2214,54 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                             {formatPrice(newTotal)}
                           </div>
                         </div>
+                        {/* GRN Payable-at-Hotel — the property collects this
+                            at check-in on top of the booking total. Rendered
+                            AFTER the New Total row (below the divider) so the
+                            operator cannot read it as part of the total.
+                            Formatted in the currency GRN quoted the charge in
+                            (usually AED, occasionally the property's local
+                            currency, which we then pass through untouched).
+                            Absent for every non-GRN supplier and for GRN
+                            rates that carry no property charge, so the
+                            existing sidebar is unchanged in those cases. */}
+                        {payableAtHotel && (
+                          <div
+                            className="mt-2 p-2 rounded"
+                            style={{
+                              background: "#fff4e5",
+                              border: "1px solid #f0c78a",
+                              color: "#7a4a00",
+                            }}
+                            title="Collected by the hotel at check-in. NOT part of the New Total shown above."
+                          >
+                            <div className="d-flex justify-content-between align-items-center small fw-bold">
+                              <span>
+                                Payable at Hotel
+                                {payableAtHotel.description
+                                  ? ` (${payableAtHotel.description})`
+                                  : ""}
+                              </span>
+                              <span>
+                                {payableAtHotel.amount != null
+                                  ? `${payableAtHotel.currency || "AED"} ${payableAtHotel.amount.toLocaleString(
+                                      undefined,
+                                      {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      },
+                                    )}`
+                                  : "See details"}
+                              </span>
+                            </div>
+                            <div
+                              className="small mt-1"
+                              style={{ opacity: 0.85 }}
+                            >
+                              Not included in the total &mdash; collected by
+                              the hotel at check-in.
+                            </div>
+                          </div>
+                        )}
                         {activeUserRole === "ADMIN" && (
                           <div className="hbp-summary-row mt-2">
                             <div className="hbp-summary-label text-muted small">
@@ -2683,6 +2772,41 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                           <span>Total (Selling)</span>
                           <span>{formatPrice(totalPrice)}</span>
                         </div>
+                        {payableAtHotel && (
+                          <>
+                            <hr className="my-1" />
+                            <div
+                              className="d-flex justify-content-between small mt-1"
+                              style={{ color: "#7a4a00" }}
+                              title="Collected by the hotel at check-in. NOT part of the total above."
+                            >
+                              <span>
+                                + Payable at Hotel
+                                {payableAtHotel.description
+                                  ? ` (${payableAtHotel.description})`
+                                  : ""}
+                              </span>
+                              <span className="fw-bold">
+                                {payableAtHotel.amount != null
+                                  ? `${payableAtHotel.currency || "AED"} ${payableAtHotel.amount.toLocaleString(
+                                      undefined,
+                                      {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      },
+                                    )}`
+                                  : "see details"}
+                              </span>
+                            </div>
+                            <div
+                              className="small"
+                              style={{ color: "#7a4a00", opacity: 0.8 }}
+                            >
+                              Collected by the hotel at check-in &mdash; not
+                              included in the total above.
+                            </div>
+                          </>
+                        )}
                       </div>
 
                       <div className="mt-1 p-2 bg-white border rounded d-flex align-items-center">

@@ -516,6 +516,13 @@ const ExternalApiRoomList = () => {
             // etc — surface any of them as the top-of-modal notice so the
             // guest sees GRN's own remarks before proceeding.
             remark: recheck.policyText || null,
+            // Payable-at-Hotel from the RECHECKED rate — GRN's guaranteed
+            // figure for what the property will collect at check-in. Stashed
+            // separately from remark/policyText so the modal can highlight
+            // it as its own line and never fold it into the booking total.
+            payableAtHotelAmount: recheck.payableAtHotelAmount ?? null,
+            payableAtHotelCurrency: recheck.payableAtHotelCurrency ?? null,
+            payableAtHotelDescription: recheck.payableAtHotelDescription ?? null,
             nonRefundable:
               typeof recheck.nonRefundable === "boolean"
                 ? recheck.nonRefundable
@@ -654,6 +661,53 @@ const ExternalApiRoomList = () => {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
+  };
+
+  // GRN "Payable at Hotel" pill — surfaces the guest-paid property
+  // charges (price_details.hotel_charges[] with included:false) that the
+  // backend now returns on GRN rates. Never part of totalRate, so it must
+  // read as a SEPARATE line and never be added into the total displayed
+  // above. Returns null for other suppliers and for GRN rates that carry
+  // no such charge, so nothing else's layout shifts.
+  //
+  // Currency handling mirrors what BookingCompletedServiceImpl does on the
+  // server: when GRN quoted the charge in the rate's base currency (AED)
+  // we convert with the same factor the rest of the page uses; when it's
+  // in some other currency (a property charging locally) we render it
+  // unconverted so an AED factor never touches the wrong quote.
+  const renderPayableAtHotelPill = (rate) => {
+    const amount = rate?.payableAtHotelAmount;
+    const label = rate?.payableAtHotelDescription;
+    if (amount == null && !label) return null;
+    let display = null;
+    if (amount != null) {
+      const chargeCurrency = (rate.payableAtHotelCurrency || "AED").toUpperCase();
+      const inBase = chargeCurrency === "AED";
+      display = inBase
+        ? formatPrice(amount)
+        : `${chargeCurrency} ${Number(amount).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}`;
+    }
+    return (
+      <div
+        className="feature-item"
+        title="Collected by the hotel at check-in. NOT part of the booking total shown above."
+        style={{
+          background: "#fff4e5",
+          color: "#7a4a00",
+          border: "1px solid #f0c78a",
+          borderRadius: 6,
+          padding: "4px 8px",
+          fontSize: "0.75rem",
+          fontWeight: 600,
+        }}
+      >
+        Payable at hotel{label ? ` (${label})` : ""}
+        {display ? `: ${display}` : ""}
+      </div>
+    );
   };
 
   const renderStars = (rating) =>
@@ -967,6 +1021,24 @@ const ExternalApiRoomList = () => {
       // holder. Booking page uses this to render the PAN input card.
       // Defaults to false; other suppliers just ignore this key.
       panRequired: grnRecheck?.panRequired === true,
+      // GRN-only carry: property-collected "Payable at Hotel" charges
+      // (from price_details.hotel_charges[] with included:false). Prefer
+      // the RECHECKED figure when available — it's GRN's guaranteed
+      // amount, sometimes updated between search and recheck. Falls back
+      // to the search-response value so the booking page still shows the
+      // charge on flows that skipped the modal. Null for every non-GRN
+      // supplier; ApiBookingPageForHotels only renders the row when at
+      // least one selected rate carries a value.
+      payableAtHotelAmount:
+        grnRecheck?.payableAtHotelAmount ?? rate?.payableAtHotelAmount ?? null,
+      payableAtHotelCurrency:
+        grnRecheck?.payableAtHotelCurrency ??
+        rate?.payableAtHotelCurrency ??
+        null,
+      payableAtHotelDescription:
+        grnRecheck?.payableAtHotelDescription ??
+        rate?.payableAtHotelDescription ??
+        null,
       // Darina (apiId 16) free-cancellation deadline (ISO yyyy-MM-dd). BE
       // emits it on rate.deadlineDate as the "Free cancellation until X"
       // band's toDate. Carried through so the booking page's accordion
@@ -2833,6 +2905,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                       </div>
                                                     )}
 
+                                                  {renderPayableAtHotelPill(rate)}
                                                   <div className="feature-item">
                                                     <Button
                                                       variant="link"
@@ -3012,6 +3085,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                           )}
                                                         </div>
                                                       )}
+                                                    {renderPayableAtHotelPill(rate)}
                                                     <div className="feature-item d-flex align-items-center">
                                                       <Button
                                                         variant="link"
@@ -3540,6 +3614,56 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
           {policiesModalData.selectedRoomLabel && (
             <div className="text-muted small mb-3">
               {policiesModalData.selectedRoomLabel}
+            </div>
+          )}
+
+          {/* GRN "Payable at Hotel" — set from the RECHECKED rate's
+              payableAtHotelAmount / _Currency / _Description. This is the
+              guaranteed figure the property will collect at check-in, so it
+              belongs at the top of the modal alongside the total. Rendered
+              in a separate coloured card so the operator can never confuse
+              it with the booking total. Hidden when GRN reports no such
+              charge (and always hidden for other suppliers, which don't
+              populate these fields). */}
+          {(policiesModalData.payableAtHotelAmount != null ||
+            policiesModalData.payableAtHotelDescription) && (
+            <div
+              className="p-2 mb-3 border rounded"
+              style={{ background: "#fff4e5", borderColor: "#f0c78a" }}
+            >
+              <div
+                className="fw-semibold small mb-1"
+                style={{ color: "#7a4a00" }}
+              >
+                Payable at Hotel
+                {policiesModalData.payableAtHotelDescription
+                  ? ` — ${policiesModalData.payableAtHotelDescription}`
+                  : ""}
+              </div>
+              <div className="small" style={{ color: "#7a4a00" }}>
+                {policiesModalData.payableAtHotelAmount != null ? (
+                  <>
+                    <strong>
+                      {(
+                        policiesModalData.payableAtHotelCurrency || "AED"
+                      ).toUpperCase()}{" "}
+                      {Number(
+                        policiesModalData.payableAtHotelAmount,
+                      ).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </strong>{" "}
+                    is collected by the property at check-in and is <u>not</u>{" "}
+                    part of the booking total.
+                  </>
+                ) : (
+                  <>
+                    The hotel will collect additional charges at check-in that
+                    are not part of the booking total.
+                  </>
+                )}
+              </div>
             </div>
           )}
 

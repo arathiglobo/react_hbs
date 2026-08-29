@@ -2026,6 +2026,65 @@ export default function BookingDetailedView() {
                       <span style={{ fontWeight: "600" }}>Refund Type: </span>
                       {booking.refundStatus || "-"}
                     </span>
+                    {/* Payable at Hotel — persisted from GRN's
+                        price_details.hotel_charges[] with included:false at
+                        booking time. Sits OUTSIDE Total Rate above because
+                        the hotel bills it directly. Hidden when the booking
+                        carries no such charge (every non-GRN supplier +
+                        GRN rates reporting none), so other bookings render
+                        unchanged. Currency handling mirrors the server-side
+                        rule in BookingCompletedServiceImpl: when the stored
+                        currency matches the booking currency, apply the
+                        same display-currency factor; otherwise render the
+                        supplier's own currency unconverted. */}
+                    {(booking.payableAtHotelAmount != null ||
+                      booking.payableAtHotelDescription) &&
+                      (() => {
+                        const stored = (
+                          booking.payableAtHotelCurrency || "AED"
+                        ).toUpperCase();
+                        const inBase = stored === "AED";
+                        const displayCode = inBase ? currencyCode : stored;
+                        const displayAmt =
+                          booking.payableAtHotelAmount != null
+                            ? inBase
+                              ? toDisplayAmount(booking.payableAtHotelAmount)
+                              : Number(booking.payableAtHotelAmount)
+                            : null;
+                        return (
+                          <span
+                            title="Collected by the hotel at check-in. NOT part of the Total Rate above."
+                            style={{
+                              background: "#fff4e5",
+                              color: "#7a4a00",
+                              border: "1px solid #f0c78a",
+                              borderRadius: 6,
+                              padding: "3px 8px",
+                              fontSize: "0.85rem",
+                            }}
+                          >
+                            <span style={{ fontWeight: 600 }}>
+                              Payable at Hotel
+                              {booking.payableAtHotelDescription
+                                ? ` (${booking.payableAtHotelDescription})`
+                                : ""}
+                              :{" "}
+                            </span>
+                            {displayAmt != null
+                              ? `${displayCode} ${displayAmt.toFixed(2)}`
+                              : "see details"}
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                fontSize: "0.7rem",
+                                opacity: 0.85,
+                              }}
+                            >
+                              (not included in the total above)
+                            </span>
+                          </span>
+                        );
+                      })()}
                   </div>
                 </div>
 
