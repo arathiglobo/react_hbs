@@ -215,6 +215,19 @@ const CabBookingPage = () => {
     searchCriteria?.dropoffType === "AIRPORT" ||
     !!searchCriteria?.destinationLocation?.code;
 
+  // Whether to surface the Pick-Up / Drop-Off Flight Number inputs on the
+  // Contact Details card. Mirrors the exact same branching the create-booking
+  // payload already uses (see pickupFlightNo / dropoffFlightNo below) so the
+  // input only appears when the payload would actually forward it: i'way uses
+  // the widened detection (covers i'way-native airports whose source is
+  // "IWAY" but whose location carries an IATA code); in-house keeps the
+  // strict AIRPORT pickupType/dropoffType check so non-airport in-house
+  // pickups don't grow a new input.
+  const showPickupFlightField =
+    isIway ? pickupIsAirport : searchCriteria?.pickupType === "AIRPORT";
+  const showDropoffFlightField =
+    isIway ? dropoffIsAirport : searchCriteria?.dropoffType === "AIRPORT";
+
   // Client location snapshot for the booking-history audit trail, resolved
   // once on page load and sent on the create payload. Location — browser
   // geolocation (GPS/WiFi) reverse-geocoded to a precise readable address;
@@ -1388,20 +1401,24 @@ const CabBookingPage = () => {
                           {validationErrors[`guest_${leadIndex}_emailId`]}
                         </Form.Control.Feedback>
                       </Col>
-                      {/* i'way requires start_location.flight_number whenever
-                          the pickup point is an airport (guide §12.4.5) —
-                          there was no input for this anywhere on the page
-                          before, so pickupDetails.flightNo always stayed
-                          empty. Shown for i'way bookings only; drop-off side
-                          is optional so it's collected but not required.
-                          pickupIsAirport also catches i'way-native airports
-                          whose pickupType is "IWAY" but whose originLocation
-                          carries an IATA code. */}
-                      {isIway && pickupIsAirport && (
+                      {/* Pick Up Flight Number — surfaced whenever the search's
+                          pickup point is an airport, regardless of i'way vs
+                          in-house (Airport → Hotel, Airport → City, etc.).
+                          i'way requires start_location.flight_number when the
+                          pickup is an airport (guide §12.4.5); the in-house
+                          side keeps it optional so pre-existing in-house
+                          Airport bookings that never captured a flight number
+                          continue to submit exactly as before. */}
+                      {showPickupFlightField && (
                         <Col md={6}>
                           <Form.Label className="small text-muted fw-semibold mb-1">
-                            Pickup Flight Number{" "}
-                            <span className="text-danger">*</span>
+                            Pickup Flight Number
+                            {isIway && (
+                              <>
+                                {" "}
+                                <span className="text-danger">*</span>
+                              </>
+                            )}
                           </Form.Label>
                           <Form.Control
                             size="sm"
@@ -1426,7 +1443,7 @@ const CabBookingPage = () => {
                           </Form.Control.Feedback>
                         </Col>
                       )}
-                      {isIway && dropoffIsAirport && (
+                      {showDropoffFlightField && (
                         <Col md={6}>
                           <Form.Label className="small text-muted fw-semibold mb-1">
                             Drop-off Flight Number
