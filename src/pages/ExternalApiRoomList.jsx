@@ -799,9 +799,23 @@ const ExternalApiRoomList = () => {
         // GRN-scoped on the backend and other suppliers ignore it.
         const isGrnMultiRoom =
           Number(payload?.apiId) === 20 && (payload?.rooms || []).length > 1;
-        const searchBody = isGrnMultiRoom
-          ? { ...payload, includeNonBundled: true }
-          : payload;
+        // GoGlobal (apiId 21) multi-room opt-in. When more than one room is
+        // requested, ask the backend to fan out to K parallel single-room
+        // HOTEL_SEARCH_REQUEST calls (spec §6) so each returned offer has
+        // its own HotelSearchCode covering exactly one physical room. The
+        // FE then filters offers per slot by roomSlotIndex and fires K
+        // valuations (§7) + K bookings (§8) under one BasketNumber.
+        // Single-room GoGlobal searches skip the flag → existing bundle
+        // path runs unchanged; other suppliers ignore the flag.
+        const isGoGlobalMultiRoomSearch =
+          Number(payload?.apiId) === 21 && (payload?.rooms || []).length > 1;
+        let searchBody = payload;
+        if (isGrnMultiRoom) {
+          searchBody = { ...searchBody, includeNonBundled: true };
+        }
+        if (isGoGlobalMultiRoomSearch) {
+          searchBody = { ...searchBody, goglobalPerRoomMode: true };
+        }
         const res = await axiosInstance.post("/api/hotel-rooms/search", searchBody);
 
         if (!res.data || res.data.success === false) {
@@ -1872,56 +1886,45 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
     }
 
     if (currentApiId === apiIdMapping.GOGLOBAL) {
-      // GoGlobal multi-room: a GoGlobal offer's HotelSearchCode books the
-      // WHOLE search (all rooms) as one bundle, so we valuate the first
-      // pick's offer once and split its total across the selected rooms.
-      // The booking then sends N RoomTypes under that single HotelSearchCode.
-      const bundleRate = selectedRooms[0]?.selectedRate;
-      if (!bundleRate) {
+      // GoGlobal multi-room per spec §7/§8: each picked offer's
+      // HotelSearchCode books exactly one physical room (because our
+      // per-room search fanned out to K single-room HOTEL_SEARCH_REQUEST
+      // calls — see the goglobalPerRoomMode search opt-in above). §7
+      // valuation accepts one HotelSearchCode at a time, so we fire K
+      // valuations in parallel — one per picked rate — and show the real
+      // per-room live totals in the confirm modal. §8 booking then sends
+      // K BOOKING_INSERT_REQUEST calls under one BasketNumber (backend
+      // dispatcher fans them out).
+      if (selectedRooms.some((sr) => !sr?.selectedRate)) {
         alert("Please select a rate for each room before continuing.");
         return;
       }
       setLoadingRate(true);
       (async () => {
         try {
-          const live = await fetchGoGlobalValuation(bundleRate);
-          if (!live?.success) {
+          const lives = await Promise.all(
+            selectedRooms.map((sr) => fetchGoGlobalValuation(sr.selectedRate)),
+          );
+          const failed = lives.findIndex((l) => !l?.success);
+          if (failed !== -1) {
             setLoadingRate(false);
             alert(
-              live?.message ||
-                "GoGlobal valuation failed. Please retry or reselect the rate.",
+              `Room ${failed + 1} valuation failed: ${lives[failed]?.message ||
+                "GoGlobal valuation failed. Please retry or reselect the rate."}`,
             );
             return;
           }
-          const numRooms = selectedRooms.length;
-          const valuatedTotal =
-            live.totalRate != null
-              ? Number(live.totalRate)
-              : Number(bundleRate.totalRate || 0);
-          const valuatedNoMarkup =
-            live.totalRateWithoutMarkup != null
-              ? Number(live.totalRateWithoutMarkup)
-              : Number(
-                  bundleRate.totalRateWithoutMarkup ??
-                    bundleRate.totalRate ??
-                    0,
-                );
-          // Even split with the rounding remainder on the first room so the
-          // per-room rates always sum back to the exact valuated total.
-          const per = Math.round((valuatedTotal / numRooms) * 100) / 100;
-          const perNoMarkup =
-            Math.round((valuatedNoMarkup / numRooms) * 100) / 100;
           const accurateRates = selectedRooms.map((sr, i) => {
             const r = sr.selectedRate || {};
-            const isFirst = i === 0;
-            const thisRate = isFirst
-              ? Number((valuatedTotal - per * (numRooms - 1)).toFixed(2))
-              : per;
-            const thisNoMarkup = isFirst
-              ? Number(
-                  (valuatedNoMarkup - perNoMarkup * (numRooms - 1)).toFixed(2),
-                )
-              : perNoMarkup;
+            const live = lives[i] || {};
+            const stayTotal =
+              live.totalRate != null
+                ? Number(live.totalRate)
+                : Number(r.totalRate || 0);
+            const stayTotalNoMarkup =
+              live.totalRateWithoutMarkup != null
+                ? Number(live.totalRateWithoutMarkup)
+                : Number(r.totalRateWithoutMarkup ?? r.totalRate ?? 0);
             return {
               roomNo: i + 1,
               hotelId: hotel.hotelId,
@@ -1931,18 +1934,20 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
               mealPlan: r.mealPlan,
               contractLabel: r.contractLabel || "Valuated rate (GoGlobal)",
               nonRefundable: r.nonRefundable ? "Y" : "N",
-              rate: thisRate,
-              rateWithoutMarkup: thisNoMarkup,
-              roomRateBasedOnRoomCount: thisRate,
-              roomRateBasedOnRoomCount_WithoutMarkup: thisNoMarkup,
+              rate: stayTotal,
+              rateWithoutMarkup: stayTotalNoMarkup,
+              roomRateBasedOnRoomCount: stayTotal,
+              roomRateBasedOnRoomCount_WithoutMarkup: stayTotalNoMarkup,
               roomStatus: "Available",
               currency: "AED",
-              // Same HotelSearchCode on every room — one GoGlobal bundle.
-              hotelSearchCode: bundleRate.rateKey,
-              rateKey: bundleRate.rateKey,
-              cancellationPolicy: bundleRate.cancellationPolicies || [],
-              deadlineDate:
-                live.cancellationDeadline || bundleRate.deadlineDate || null,
+              // Each slot carries its OWN HotelSearchCode — the K bookings
+              // in Phase 3 pick this up per slot. Same field name as the
+              // bundle path so ApiBookingPageForHotels stays supplier-agnostic.
+              hotelSearchCode: r.rateKey,
+              rateKey: r.rateKey,
+              roomSlotIndex: r.roomSlotIndex,
+              cancellationPolicy: r.cancellationPolicies || [],
+              deadlineDate: live.cancellationDeadline || r.deadlineDate || null,
               goglobalPriceChanged: !!live.priceChanged,
               goglobalRemarks: live.remarks || null,
             };
@@ -2758,6 +2763,16 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                 }
                                 return rate.roomSrNo === roomSlotIndex + 1;
                               })
+                              // GoGlobal (apiId=21) per-slot filter — REMOVED
+                              // per operator request. Rates from every slot's
+                              // fanout search now appear under every accordion,
+                              // matching the pre-fanout bundle display. NB per
+                              // spec §8, an offer's HotelSearchCode only books
+                              // the pax the search was made with, so picking a
+                              // rate under a slot whose pax doesn't match the
+                              // rate's source-slot pax will fail at booking
+                              // with a pax-mismatch — the operator picks at
+                              // their own risk in this display mode.
                               // For Atharva multi-room with FixedOption=true,
                               // once an EARLIER slot has picked a rate, this
                               // slot must be restricted to rates whose
@@ -3147,6 +3162,21 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                           hotel.hotelName,
                                                         )
                                                       }
+                                                      onClick={() => {
+                                                        // HTML radios don't fire onChange when
+                                                        // clicked while already checked, so
+                                                        // catch the unselect gesture here.
+                                                        // handleRateSelect toggles on same-rate
+                                                        // click, so this cleanly clears the pick.
+                                                        if (isSelectedForThisSlot) {
+                                                          handleRateSelect(
+                                                            roomSlotIndex,
+                                                            rate,
+                                                            hotel.hotelId,
+                                                            hotel.hotelName,
+                                                          );
+                                                        }
+                                                      }}
                                                     />
                                                     {isSelectedForThisSlot &&
                                                       linkedSlotNumbers.length >
@@ -3385,6 +3415,22 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                             hotel.hotelName,
                                                           )
                                                         }
+                                                        onClick={() => {
+                                                          // Catch the click-on-already-checked
+                                                          // gesture (HTML radios don't fire
+                                                          // onChange for it). Toggles the pick
+                                                          // off via handleRateSelect's same-rate
+                                                          // branch, so the operator can re-pick
+                                                          // a different rate freely.
+                                                          if (isSelectedForThisSlot) {
+                                                            handleRateSelect(
+                                                              roomSlotIndex,
+                                                              rate,
+                                                              hotel.hotelId,
+                                                              hotel.hotelName,
+                                                            );
+                                                          }
+                                                        }}
                                                         style={{
                                                           whiteSpace: "nowrap",
                                                         }}
