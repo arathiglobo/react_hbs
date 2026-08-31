@@ -165,11 +165,11 @@ export default function AgentIncentiveDashboard() {
     return Math.min(100, Math.max(0, Math.round(p)));
   }, [summary]);
 
+  // With amount-based accrual the reward is a fixed amount configured by
+  // admin; the backend puts it in summary.rewardAmount (0 until eligible).
   const calculatedAmount = useMemo(() => {
     if (!summary) return 0;
-    const pts = Number(summary.totalPointsEarned || 0);
-    const rate = Number(summary.ratePerPoint || 0);
-    return pts * rate;
+    return Number(summary.rewardAmount || 0);
   }, [summary]);
 
   const openClaimModal = () => {
@@ -308,17 +308,37 @@ export default function AgentIncentiveDashboard() {
               {!loading && summary && (
                 <>
                   <div className="row g-3 mb-3">
-                    <div className="col-md-3">
+                    <div className="col-6 col-md">
                       <Card className="h-100 border-0 shadow-sm">
                         <Card.Body>
-                          <div className="text-muted small">Claimable Points</div>
+                          <div className="text-muted small">Target Points</div>
+                          <div className="display-6 fw-semibold">
+                            {summary.targetPoints || 0}
+                          </div>
+                        </Card.Body>
+                      </Card>
+                    </div>
+                    <div className="col-6 col-md">
+                      <Card className="h-100 border-0 shadow-sm">
+                        <Card.Body>
+                          <div className="text-muted small">Current Points</div>
                           <div className="display-6 fw-semibold">
                             {summary.totalPointsEarned || 0}
                           </div>
                         </Card.Body>
                       </Card>
                     </div>
-                    <div className="col-md-3">
+                    <div className="col-6 col-md">
+                      <Card className="h-100 border-0 shadow-sm">
+                        <Card.Body>
+                          <div className="text-muted small">Claimed Points</div>
+                          <div className="display-6 fw-semibold">
+                            {summary.totalPointsClaimed || 0}
+                          </div>
+                        </Card.Body>
+                      </Card>
+                    </div>
+                    <div className="col-6 col-md">
                       <Card className="h-100 border-0 shadow-sm">
                         <Card.Body>
                           <div className="text-muted small">Lifetime Points</div>
@@ -328,28 +348,12 @@ export default function AgentIncentiveDashboard() {
                         </Card.Body>
                       </Card>
                     </div>
-                    <div className="col-md-3">
-                      <Card className="h-100 border-0 shadow-sm">
-                        <Card.Body>
-                          <div className="text-muted small">Target Points</div>
-                          <div className="display-6 fw-semibold">
-                            {summary.targetPoints || 0}
-                          </div>
-                          <div className="text-muted small">
-                            Rate: ₹{summary.ratePerPoint ?? 0} / point
-                          </div>
-                        </Card.Body>
-                      </Card>
-                    </div>
-                    <div className="col-md-3">
+                    <div className="col-6 col-md">
                       <Card className="h-100 border-0 shadow-sm bg-success-subtle">
                         <Card.Body>
                           <div className="text-muted small">Claimable Amount</div>
                           <div className="display-6 fw-semibold text-success">
                             ₹{summary.rewardAmount ?? 0}
-                          </div>
-                          <div className="text-muted small">
-                            {summary.totalPointsEarned || 0} × ₹{summary.ratePerPoint ?? 0}
                           </div>
                         </Card.Body>
                       </Card>
@@ -383,13 +387,12 @@ export default function AgentIncentiveDashboard() {
                         <th>Service</th>
                         <th className="text-end">Bookings</th>
                         <th className="text-end">Points</th>
-                        <th className="text-end">Per-Booking Rule</th>
                       </tr>
                     </thead>
                     <tbody>
                       {(!summary.breakdown || summary.breakdown.length === 0) && (
                         <tr>
-                          <td colSpan={4} className="text-center text-muted py-3">
+                          <td colSpan={3} className="text-center text-muted py-3">
                             No bookings counted yet.
                           </td>
                         </tr>
@@ -399,7 +402,6 @@ export default function AgentIncentiveDashboard() {
                           <td>{SERVICE_LABEL[b.serviceType] || b.serviceType}</td>
                           <td className="text-end">{b.bookingCount}</td>
                           <td className="text-end">{b.points}</td>
-                          <td className="text-end">{b.configuredPointsPerBooking ?? "-"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -459,8 +461,18 @@ export default function AgentIncentiveDashboard() {
             <Modal.Body>
               <div className="alert alert-info">
                 <div>
-                  <strong>{summary?.totalPointsEarned || 0}</strong> points × ₹
-                  <strong>{summary?.ratePerPoint || 0}</strong> per point
+                  <strong>{summary?.totalPointsEarned || 0}</strong> earned points
+                  {" "}—{" "}
+                  <strong>
+                    {summary?.targetPoints
+                      ? Math.floor(
+                          (summary?.totalPointsEarned || 0) /
+                            summary.targetPoints,
+                        )
+                      : 0}
+                  </strong>{" "}
+                  complete cycle(s) of{" "}
+                  <strong>{summary?.targetPoints || 0}</strong>.
                 </div>
                 <div className="display-6 fw-semibold text-success mt-1">
                   ₹{calculatedAmount.toFixed(2)}
