@@ -88,7 +88,7 @@
        --rl-accent) so the stepper progress and the primary CTA share the
        same brand palette. Falls back to concrete hex if the vars aren't
        defined on this subtree. */
-    background: linear-gradient(90deg, var(--rl-primary, #EC0B43), var(--rl-accent, #0ea5e9));
+    background: linear-gradient(90deg, var(--rl-primary, #F75E00), var(--rl-accent, #0ea5e9));
     border-radius: 2px;
     transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -120,15 +120,15 @@
 }
 
 .step-item.active .step-circle {
-    border-color: #EC0B43;
-    background: #EC0B43;
+    border-color: #F75E00;
+    background: #F75E00;
     color: white;
-    box-shadow: 0 0 0 4px rgba(236, 11, 67,0.12);
+    box-shadow: 0 0 0 4px rgba(247, 94, 0,0.12);
 }
 
 .step-item.completed .step-circle {
-    border-color: #EC0B43;
-    background: #EC0B43;
+    border-color: #F75E00;
+    background: #F75E00;
     color: white;
 }
 
@@ -143,7 +143,7 @@
 }
 
 .step-item.active .step-label {
-    color: #EC0B43;
+    color: #F75E00;
 }
 
 .step-item.completed .step-label {
@@ -197,9 +197,9 @@
 .form-control-modern:focus,
 .form-control:focus,
 .form-select:focus {
-    border-color: #EC0B43;
+    border-color: #F75E00;
     background: #fff;
-    box-shadow: 0 0 0 3px rgba(236, 11, 67,0.1);
+    box-shadow: 0 0 0 3px rgba(247, 94, 0,0.1);
 }
 
 .modern-select .react-select__control {
@@ -216,9 +216,9 @@
 }
 
 .modern-select .react-select__control--is-focused {
-    border-color: #EC0B43 !important;
+    border-color: #F75E00 !important;
     background: #fff;
-    box-shadow: 0 0 0 3px rgba(236, 11, 67,0.1) !important;
+    box-shadow: 0 0 0 3px rgba(247, 94, 0,0.1) !important;
 }
 
 /* ── Counter ── */
@@ -247,7 +247,7 @@
 
 .counter-btn:hover:not(:disabled) {
     background: #e2e8f0;
-    color: #EC0B43;
+    color: #F75E00;
 }
 
 .counter-btn:disabled {
@@ -297,14 +297,14 @@
     font-size: 0.85rem;
     font-weight: 600;
     border: none;
-    background: #EC0B43;
+    background: #F75E00;
     color: #fff;
     transition: all 0.2s;
-    box-shadow: 0 4px 12px rgba(236, 11, 67,0.3);
+    box-shadow: 0 4px 12px rgba(247, 94, 0,0.3);
 }
 
 .btn-nav-next:hover:not(:disabled) {
-    box-shadow: 0 6px 16px rgba(236, 11, 67,0.4);
+    box-shadow: 0 6px 16px rgba(247, 94, 0,0.4);
     transform: translateY(-1px);
 }
 
@@ -322,14 +322,14 @@
     font-size: 0.85rem;
     font-weight: 600;
     border: none;
-    background: linear-gradient(135deg, #EC0B43, #8b5cf6);
+    background: linear-gradient(135deg, #F75E00, #8b5cf6);
     color: #fff;
     transition: all 0.2s;
-    box-shadow: 0 4px 12px rgba(236, 11, 67,0.25);
+    box-shadow: 0 4px 12px rgba(247, 94, 0,0.25);
 }
 
 .btn-search-tab:hover:not(:disabled) {
-    box-shadow: 0 6px 16px rgba(236, 11, 67,0.38);
+    box-shadow: 0 6px 16px rgba(247, 94, 0,0.38);
     transform: translateY(-1px);
 }
 
@@ -395,7 +395,7 @@ margin: 1.25rem 0 0;
 
 .cab-card:hover {
     border-color: #F8C9D5;
-    box-shadow: 0 4px 20px rgba(236, 11, 67,0.08);
+    box-shadow: 0 4px 20px rgba(247, 94, 0,0.08);
 }
 
 .cab-image-box {
@@ -422,12 +422,12 @@ margin: 1.25rem 0 0;
 
 .option-row:hover {
     border-color: #a5b4fc;
-    background: #FDE7ED;
+    background: #FDECD6;
 }
 
 .option-row.selected {
-    border-color: #EC0B43;
-    background: #FDE7ED;
+    border-color: #F75E00;
+    background: #FDECD6;
 }
 
 .option-badge-private {
@@ -435,8 +435,8 @@ margin: 1.25rem 0 0;
     font-weight: 700;
     padding: 3px 10px;
     border-radius: 20px;
-    background: #FDE7ED;
-    color: #EC0B43;
+    background: #FDECD6;
+    color: #F75E00;
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
@@ -482,8 +482,8 @@ margin: 1.25rem 0 0;
     letter-spacing: 0.08em;
     padding: 3px 10px;
     border-radius: 20px;
-    background: #FDE7ED;
-    color: #EC0B43;
+    background: #FDECD6;
+    color: #F75E00;
     margin-bottom: 1rem;
 }
 
@@ -542,7 +542,7 @@ margin: 1.25rem 0 0;
     background: none;
     -webkit-background-clip: initial;
     background-clip: initial;
-    color: #EC0B43;
+    color: #F75E00;
 }
 
 .price-sidebar-sub {
@@ -556,7 +556,7 @@ margin: 1.25rem 0 0;
 .price-sidebar-mealplan {
     font-size: 0.78rem;
     font-weight: 600;
-    color: #EC0B43;
+    color: #F75E00;
     margin-top: 6px;
 }
 
@@ -615,9 +615,9 @@ margin: 1.25rem 0 0;
 }
 
 .hotel-selection-card.selected {
-    border-color: #EC0B43;
+    border-color: #F75E00;
     background: #f5f3ff;
-    box-shadow: 0 0 0 1px #EC0B43;
+    box-shadow: 0 0 0 1px #F75E00;
 }
 
 .hotel-thumb {

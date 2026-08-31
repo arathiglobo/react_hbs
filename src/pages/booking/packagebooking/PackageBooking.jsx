@@ -772,7 +772,7 @@ const PackageBooking = () => {
       `<div style="font-family:Arial,Helvetica,sans-serif;color:#0f172a;max-width:640px">`,
     );
     parts.push(
-      `<h2 style="margin:0 0 8px;font-size:20px;color:#EC0B43">${escapeHtml(
+      `<h2 style="margin:0 0 8px;font-size:20px;color:#F75E00">${escapeHtml(
         overviewPackageName,
       )}</h2>`,
     );
@@ -825,7 +825,7 @@ const PackageBooking = () => {
         );
         if (d.placeName) {
           parts.push(
-            `<div style="color:#EC0B43;font-size:12px;margin-bottom:6px">${escapeHtml(
+            `<div style="color:#F75E00;font-size:12px;margin-bottom:6px">${escapeHtml(
               d.placeName,
             )}</div>`,
           );
@@ -872,7 +872,7 @@ const PackageBooking = () => {
         `<h3 style="margin:16px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#64748b">Cancellation Policy</h3>`,
       );
       parts.push(
-        `<div style="border-left:3px solid #EC0B43;background:#fff5f7;padding:8px 12px;border-radius:0 6px 6px 0;color:#7f1d2e;font-size:13px">`,
+        `<div style="border-left:3px solid #F75E00;background:#fff5f7;padding:8px 12px;border-radius:0 6px 6px 0;color:#7f1d2e;font-size:13px">`,
       );
       overviewCancellation.forEach((x) =>
         parts.push(`<div style="margin-bottom:3px">${escapeHtml(x)}</div>`),
@@ -1425,7 +1425,7 @@ const PackageBooking = () => {
                   padding-top: 8px;
                   font-size: 0.95rem;
                 }
-                .pkg-overview-row.total .v { color: #EC0B43; }
+                .pkg-overview-row.total .v { color: #F75E00; }
                 /* Hero banner + itinerary day cards inside the Preview
                    modal. Same rounded-card language as the price sidebar
                    and the day accordion on the Hotels tab. */
@@ -1463,7 +1463,7 @@ const PackageBooking = () => {
                   padding: 0 8px;
                   border-radius: 999px;
                   background: #fff5f7;
-                  color: #EC0B43;
+                  color: #F75E00;
                   font-weight: 700;
                   font-size: 0.75rem;
                 }
@@ -1481,13 +1481,13 @@ const PackageBooking = () => {
                   display: block;
                 }
                 .pkg-overview-day-place {
-                  color: #EC0B43;
+                  color: #F75E00;
                   font-size: 0.78rem;
                   font-weight: 600;
                   margin-bottom: 4px;
                 }
                 .pkg-overview-cancel {
-                  border-left: 3px solid #EC0B43;
+                  border-left: 3px solid #F75E00;
                   background: #fff5f7;
                   border-radius: 0 6px 6px 0;
                   padding: 8px 12px;
@@ -1536,7 +1536,7 @@ const PackageBooking = () => {
                   width: 100%;
                   border: none;
                   background: transparent;
-                  color: #EC0B43;
+                  color: #F75E00;
                   font-weight: 700;
                   font-size: 0.82rem;
                   line-height: 1.35;
@@ -1690,7 +1690,7 @@ const PackageBooking = () => {
             font-weight: 700;
             color: #0f172a;
           }
-          .pkg-policy-title-icon { color: #EC0B43; font-size: 0.95rem; }
+          .pkg-policy-title-icon { color: #F75E00; font-size: 0.95rem; }
 
           .pkg-policy-body { padding: 4px 20px 16px; }
 
@@ -1733,7 +1733,7 @@ const PackageBooking = () => {
           .pkg-policy-note {
             margin: 10px 0 0;
             padding: 7px 12px;
-            border-left: 3px solid #EC0B43;
+            border-left: 3px solid #F75E00;
             background: #fff5f7;
             border-radius: 0 6px 6px 0;
             font-size: 0.82rem;
@@ -1871,7 +1871,7 @@ const PackageBooking = () => {
           {overviewExcludes.length > 0 && (
             <section className="pkg-overview-section">
               <div className="pkg-overview-label">
-                <FaTimesCircle className="me-1" style={{ color: "#EC0B43" }} />
+                <FaTimesCircle className="me-1" style={{ color: "#F75E00" }} />
                 Excludes
               </div>
               <ul className="pkg-policy-list">

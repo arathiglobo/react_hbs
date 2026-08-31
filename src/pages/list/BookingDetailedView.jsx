@@ -2421,8 +2421,8 @@ export default function BookingDetailedView() {
                         style={{
                           fontSize: "0.7rem",
                           fontWeight: 600,
-                          color: "#EC0B43",
-                          background: "#FDE7ED",
+                          color: "#F75E00",
+                          background: "#FDECD6",
                           borderRadius: "99px",
                           padding: "2px 9px",
                           marginLeft: 6,
@@ -2449,7 +2449,7 @@ export default function BookingDetailedView() {
                         <div
                           key={n.noteId}
                           style={{
-                            borderLeft: "3px solid #EC0B43",
+                            borderLeft: "3px solid #F75E00",
                             background: "#FAFAF8",
                             padding: "10px 12px",
                             marginBottom: 8,

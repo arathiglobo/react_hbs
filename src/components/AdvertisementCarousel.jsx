@@ -51,13 +51,13 @@ const ADS_CSS = `
 .hs-ads-nav {
   position: absolute; z-index: 5;
   top: 42%; transform: translateY(-50%);
-  border: none; background: rgba(255, 255, 255, 0.92); color: #EC0B43;
+  border: none; background: rgba(255, 255, 255, 0.92); color: #F75E00;
   width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
   transition: background .15s ease, color .15s ease;
 }
-.hs-ads-nav:hover { background: #EC0B43; color: #fff; }
+.hs-ads-nav:hover { background: #F75E00; color: #fff; }
 .hs-ads-nav.prev { left: 12px; }
 .hs-ads-nav.next { right: 12px; }
 

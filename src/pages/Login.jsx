@@ -581,12 +581,24 @@ const Login = () => {
             <span>Real-time performance analytics</span>
           </div>
           <div className="lg-feature">
+            <i className="fas fa-bed"></i>
+            <span>Real-time hotel availability</span>
+          </div>
+          <div className="lg-feature">
             <i className="fas fa-handshake"></i>
             <span>End-to-end contract management</span>
           </div>
           <div className="lg-feature">
+            <i className="fas fa-bolt"></i>
+            <span>Fast &amp; seamless bookings</span>
+          </div>
+          <div className="lg-feature">
             <i className="fas fa-globe"></i>
             <span>5000+ hotels across 150+ countries</span>
+          </div>
+          <div className="lg-feature">
+            <i className="fas fa-tags"></i>
+            <span>Manage rates &amp; reservations</span>
           </div>
         </div>
 
