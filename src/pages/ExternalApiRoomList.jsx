@@ -217,7 +217,13 @@ const ExternalApiRoomList = () => {
   const [searchPayload, setSearchPayload] = useState(null);
   const [loadingRate, setLoadingRate] = useState(false);
   const [showUnavailableModal, setShowUnavailableModal] = useState(false);
-  const [viewMode, setViewMode] = useState("grid");
+  // Default view for rate cards. Changed to "list" so the first render
+  // after clicking "View Details / Book" shows the vertical list layout
+  // (denser, easier scanning of rate details) rather than the grid tiles.
+  // Operator can still toggle to grid via the icon buttons in the
+  // "Available Room Categories" header. Mirrors the same default in
+  // RoomList.jsx so the two room-list pages behave identically.
+  const [viewMode, setViewMode] = useState("list");
   // `selectedRate` — array of rate rows used by the accurate-rate confirm
   // modal (apiId 12/15). Kept as an array because ApiBookingPageForHotels
   // reads bookingData.selectedRate via .map/.flatMap.

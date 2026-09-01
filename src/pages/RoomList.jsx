@@ -112,7 +112,12 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
   const [loadingRate, setLoadingRate] = useState(false);
   const [showUnavailableModal, setShowUnavailableModal] = useState(false);
   const [policyList, setPolicyList] = useState(null);
-  const [viewMode, setViewMode] = useState("grid");
+  // Default view for rate cards on the room-list page. Changed to "list"
+  // so the first render after clicking "View Details / Book" shows the
+  // vertical list layout (denser, easier scanning of rate details) rather
+  // than the grid tiles. Operator can still toggle to grid via the icon
+  // buttons in the "Available Room Categories" header.
+  const [viewMode, setViewMode] = useState("list");
   const [agentBalance, setAgentBalance] = useState(null);
   // Filter state
   const [refundFilter, setRefundFilter] = useState({
