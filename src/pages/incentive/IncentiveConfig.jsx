@@ -8,10 +8,14 @@ import { FaEdit, FaSync, FaSave } from "react-icons/fa";
 
 const SERVICE_TYPES = ["HOTEL", "CAB", "ACTIVITY", "PACKAGE", "RESTAURANT"];
 
+// Amount-based accrual (1 AED of booking = 1 point) — pointsPerBooking /
+// bonusThreshold / bonusPoints are no longer read by the backend but still
+// sent as 0/null so existing NOT-NULL columns stay happy. Only Active,
+// Min Booking Amount, and Description are editable in the modal now.
 const emptyForm = {
   id: null,
   serviceType: "HOTEL",
-  pointsPerBooking: 10,
+  pointsPerBooking: 0,
   minBookingAmount: "",
   bonusAmountThreshold: "",
   bonusPoints: 0,
@@ -28,11 +32,14 @@ export default function IncentiveConfig() {
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
-  // Global config (program-wide target points + rate per point)
+  // Global config (program-wide target points + fixed claim amount).
+  // ratePerPoint is kept in state for backward compat with the DB column
+  // but no longer shown in the UI or used by the backend summary.
   const [globalCfg, setGlobalCfg] = useState({
     id: null,
     globalTargetPoints: 0,
     ratePerPoint: 0,
+    claimAmount: 0,
     active: true,
     description: "",
   });
@@ -59,6 +66,7 @@ export default function IncentiveConfig() {
           id: res.data.id ?? null,
           globalTargetPoints: res.data.globalTargetPoints ?? 0,
           ratePerPoint: res.data.ratePerPoint ?? 0,
+          claimAmount: res.data.claimAmount ?? 0,
           active: res.data.active ?? true,
           description: res.data.description ?? "",
         });
@@ -94,20 +102,19 @@ export default function IncentiveConfig() {
   };
 
   const save = async () => {
-    if (form.pointsPerBooking === "" || Number(form.pointsPerBooking) < 0) {
-      toast.error("Points per booking must be a non-negative number");
-      return;
-    }
+    // Amount-based accrual — no per-service points/bonus validation.
     setSaving(true);
     try {
       const payload = {
         serviceType: form.serviceType,
-        pointsPerBooking: Number(form.pointsPerBooking),
+        // Legacy fields — kept in the payload as 0/null so the existing
+        // NOT-NULL columns accept the row. The backend no longer reads
+        // them (accrual is now bookingAmount → points).
+        pointsPerBooking: 0,
         minBookingAmount: form.minBookingAmount === "" ? null : Number(form.minBookingAmount),
-        bonusAmountThreshold:
-          form.bonusAmountThreshold === "" ? null : Number(form.bonusAmountThreshold),
-        bonusPoints: Number(form.bonusPoints || 0),
-        rewardAmount: form.rewardAmount === "" ? null : Number(form.rewardAmount),
+        bonusAmountThreshold: null,
+        bonusPoints: 0,
+        rewardAmount: null,
         active: !!form.active,
         description: form.description || null,
       };
@@ -149,15 +156,18 @@ export default function IncentiveConfig() {
       toast.error("Global target points must be a non-negative number");
       return;
     }
-    if (globalCfg.ratePerPoint === "" || Number(globalCfg.ratePerPoint) < 0) {
-      toast.error("Rate per point must be a non-negative number");
+    if (globalCfg.claimAmount === "" || Number(globalCfg.claimAmount) < 0) {
+      toast.error("Reward amount must be a non-negative number");
       return;
     }
     setSavingGlobal(true);
     try {
       const payload = {
         globalTargetPoints: Number(globalCfg.globalTargetPoints),
-        ratePerPoint: Number(globalCfg.ratePerPoint),
+        // ratePerPoint retained for backward-compat with the DB column
+        // but no longer read by the backend summary.
+        ratePerPoint: Number(globalCfg.ratePerPoint || 0),
+        claimAmount: Number(globalCfg.claimAmount),
         active: !!globalCfg.active,
         description: globalCfg.description || null,
       };
@@ -167,6 +177,7 @@ export default function IncentiveConfig() {
           id: res.data.id ?? null,
           globalTargetPoints: res.data.globalTargetPoints ?? 0,
           ratePerPoint: res.data.ratePerPoint ?? 0,
+          claimAmount: res.data.claimAmount ?? 0,
           active: res.data.active ?? true,
           description: res.data.description ?? "",
         });
@@ -226,16 +237,16 @@ export default function IncentiveConfig() {
                 </Col>
                 <Col md={3}>
                   <Form.Group>
-                    <Form.Label>Rate Per Point</Form.Label>
+                    <Form.Label>Reward Amount</Form.Label>
                     <Form.Control
                       type="number"
                       min={0}
                       step="0.01"
-                      value={globalCfg.ratePerPoint}
+                      value={globalCfg.claimAmount}
                       onChange={(e) =>
-                        setGlobalCfg({ ...globalCfg, ratePerPoint: e.target.value })
+                        setGlobalCfg({ ...globalCfg, claimAmount: e.target.value })
                       }
-                      placeholder="e.g. 20"
+                      placeholder="e.g. 150"
                     />
                   </Form.Group>
                 </Col>
@@ -283,9 +294,12 @@ export default function IncentiveConfig() {
                 </Col>
               </Row>
               <div className="text-muted small mt-2">
-                Claim amount = <strong>Total Earned Points × Rate Per Point</strong>.
-                Agents become eligible to claim once their lifetime points reach the
-                global target.
+                Every 1 AED of booking value earns the agent 1 point across all
+                services. Reward scales in whole target-cycles: every complete{" "}
+                <strong>Global Target Points</strong> block of earned points
+                unlocks one <strong>Reward Amount</strong> (e.g. target 1000 +
+                reward 150 → 2000 pts pays 300, 3000 pts pays 450). Cancelling
+                a booking voids its points on the next sync.
               </div>
             </Card.Body>
           </Card>
@@ -300,10 +314,7 @@ export default function IncentiveConfig() {
                 <thead>
                   <tr>
                     <th>Service</th>
-                    <th>Points / Booking</th>
                     <th>Min Booking Amt</th>
-                    <th>Bonus Threshold</th>
-                    <th>Bonus Points</th>
                     <th>Active</th>
                     <th>Description</th>
                     <th style={{ width: 80 }}>Action</th>
@@ -312,14 +323,14 @@ export default function IncentiveConfig() {
                 <tbody>
                   {isLoading && (
                     <tr>
-                      <td colSpan={8} className="text-center text-muted py-4">
+                      <td colSpan={5} className="text-center text-muted py-4">
                         <Spinner animation="border" size="sm" className="me-2" /> Loading...
                       </td>
                     </tr>
                   )}
                   {!isLoading && items.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="text-center text-muted py-4">
+                      <td colSpan={5} className="text-center text-muted py-4">
                         No configurations yet.
                       </td>
                     </tr>
@@ -331,10 +342,7 @@ export default function IncentiveConfig() {
                     .map((item) => (
                       <tr key={item.id}>
                         <td className="fw-semibold">{item.serviceType}</td>
-                        <td>{item.pointsPerBooking}</td>
                         <td>{item.minBookingAmount ?? "-"}</td>
-                        <td>{item.bonusAmountThreshold ?? "-"}</td>
-                        <td>{item.bonusPoints ?? 0}</td>
                         <td>
                           {item.active ? (
                             <span className="badge bg-success">Active</span>
@@ -391,15 +399,6 @@ export default function IncentiveConfig() {
                     />
                   </Form.Group>
                   <Form.Group className="mb-3 col-md-6">
-                    <Form.Label>Points per Booking</Form.Label>
-                    <Form.Control
-                      type="number"
-                      min={0}
-                      value={form.pointsPerBooking}
-                      onChange={(e) => setForm({ ...form, pointsPerBooking: e.target.value })}
-                    />
-                  </Form.Group>
-                  <Form.Group className="mb-3 col-md-6">
                     <Form.Label>Minimum Booking Amount (optional)</Form.Label>
                     <Form.Control
                       type="number"
@@ -409,26 +408,9 @@ export default function IncentiveConfig() {
                       onChange={(e) => setForm({ ...form, minBookingAmount: e.target.value })}
                       placeholder="No minimum"
                     />
-                  </Form.Group>
-                  <Form.Group className="mb-3 col-md-6">
-                    <Form.Label>Bonus Threshold (optional)</Form.Label>
-                    <Form.Control
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={form.bonusAmountThreshold}
-                      onChange={(e) => setForm({ ...form, bonusAmountThreshold: e.target.value })}
-                      placeholder="Booking > this earns bonus points"
-                    />
-                  </Form.Group>
-                  <Form.Group className="mb-3 col-md-6">
-                    <Form.Label>Bonus Points</Form.Label>
-                    <Form.Control
-                      type="number"
-                      min={0}
-                      value={form.bonusPoints}
-                      onChange={(e) => setForm({ ...form, bonusPoints: e.target.value })}
-                    />
+                    <Form.Text className="text-muted">
+                      Bookings below this AED value do not accrue points.
+                    </Form.Text>
                   </Form.Group>
                   <Form.Group className="mb-3 col-12">
                     <Form.Label>Description</Form.Label>
