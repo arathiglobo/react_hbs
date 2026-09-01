@@ -3566,12 +3566,12 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                               )}
                             </span>
                           </div>
-                          <div className="d-flex justify-content-between">
+                          {/* <div className="d-flex justify-content-between">
                             <span>Contract:</span>
                             <span className="small text-muted">
                               {rate.contractLabel}
                             </span>
-                          </div>
+                          </div> */}
                         </div>
                       </Col>
                     </Row>
