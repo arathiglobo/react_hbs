@@ -1993,7 +1993,7 @@ const MakePkgBookingPageV2 = () => {
              background uses the same soft-red gradient the platform's hero
              band uses (#FFE3EB → #FDF1F4). Was light-purple #f5f7ff → #faf5ff. */
           background: linear-gradient(135deg, #FFE3EB 0%, #FDF1F4 100%) !important;
-          color: #EC0B43 !important;
+          color: #F75E00 !important;
           border-bottom: 1px solid #e5e7eb;
         }
         .booking-accordion .accordion-button:not(.collapsed) h5,
@@ -2002,7 +2002,7 @@ const MakePkgBookingPageV2 = () => {
           /* Same brand red so section titles (Itinerary, Hotels, Tours &
              Activities, Guest Details, Selected Add-On Services) render
              red when their accordion is open, matching the header color. */
-          color: #EC0B43 !important;
+          color: #F75E00 !important;
         }
         .booking-accordion .accordion-button:focus { box-shadow: none !important; }
         .booking-accordion .accordion-button::after {
@@ -4148,14 +4148,14 @@ const MakePkgBookingPageV2 = () => {
                       // every other primary CTA on the MYOP v2 flow (Next
                       // wizard button, View Rooms, Add to Cart). Was near-
                       // black #111827.
-                      background: "linear-gradient(135deg, #EC0B43 0%, #C90939 100%)",
+                      background: "linear-gradient(135deg, #F75E00 0%, #D65100 100%)",
                       border: "none",
                       color: "#ffffff",
                       padding: "11px 26px",
                       borderRadius: 10,
                       fontSize: "0.95rem",
                       // Shadow retinted to the red family for coherence.
-                      boxShadow: "0 2px 6px rgba(236,11,67,0.25)",
+                      boxShadow: "0 2px 6px rgba(247, 94, 0,0.25)",
                     }}
                   >
                     Confirm Booking

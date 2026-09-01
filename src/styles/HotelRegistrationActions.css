@@ -84,7 +84,7 @@
 
 .horizontal-tabs .nav-link.active {
   /* subtle red → blue gradient at low opacity */
-  background: linear-gradient(135deg, rgba(236, 11, 67, 0.15) 0%, rgba(13, 110, 253, 0.15) 100%);
+  background: linear-gradient(135deg, rgba(247, 94, 0, 0.15) 0%, rgba(13, 110, 253, 0.15) 100%);
   color: #b00935;
   border-color: transparent;
   font-weight: 600;
@@ -98,7 +98,7 @@
   right: 0;
   height: 3px;
   /* matching red → blue accent underline */
-  background: linear-gradient(90deg, #EC0B43 0%, #0d6efd 100%);
+  background: linear-gradient(90deg, #F75E00 0%, #0d6efd 100%);
   opacity: 0.85;
 }
 

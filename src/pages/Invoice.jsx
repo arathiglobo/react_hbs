@@ -551,7 +551,7 @@ export default function Invoice() {
                 >
                   &lt;&lt; Back
                 </Button>
-                <h4 className="fw-bold mb-0" style={{ color: "#EC0B43" }}>TAX INVOICE LIST</h4>
+                <h4 className="fw-bold mb-0" style={{ color: "#F75E00" }}>TAX INVOICE LIST</h4>
                 {totalElements > 0 && (
                   <span className="ms-3 text-muted">
                     ({totalElements}{" "}
