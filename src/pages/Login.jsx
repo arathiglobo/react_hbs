@@ -578,7 +578,7 @@ const Login = () => {
         <div className="lg-features">
           <div className="lg-feature">
             <i className="fas fa-chart-line"></i>
-            <span>Real-time performance analytics</span>
+            <span>Real-time hotel availability</span>
           </div>
           <div className="lg-feature">
             <i className="fas fa-handshake"></i>

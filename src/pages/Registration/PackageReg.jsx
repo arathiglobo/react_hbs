@@ -288,6 +288,14 @@ const PackageReg = () => {
   const [customInclusions, setCustomInclusions] = useState([]);
   const [customExclusions, setCustomExclusions] = useState([]);
   const [customTerms, setCustomTerms] = useState([]);
+  // Admin-defined "Standard Package Details" that will be auto-attached
+  // to this package by the backend on save/edit. Populated whenever a
+  // country is selected via /api/master/termsAndCondition/mandatory,
+  // and rendered read-only in the Inclusions / Exclusions / Terms tabs
+  // so the supplier sees what's already covered by admin. Never sent
+  // in the save payload — the backend re-applies these unconditionally.
+  const [mandatoryStandards, setMandatoryStandards] = useState([]);
+  const [isLoadingMandatory, setIsLoadingMandatory] = useState(false);
   // Draft text bound to the "Add" textarea in each tab, before the user
   // clicks + Add. Kept per bucket so switching tabs doesn't lose the draft.
   const [inclusionDraft, setInclusionDraft] = useState("");
@@ -398,13 +406,18 @@ const PackageReg = () => {
 
     // Others validation — a package must have at least one non-deleted
     // entry across the three buckets (master OR custom). The user's
-    // typed-in inclusions/exclusions/terms count.
+    // typed-in inclusions/exclusions/terms count. Admin-defined
+    // "Standard Package Details" (mandatory master terms) for the
+    // selected country also count — they are auto-attached by the
+    // backend and cover the "at least one item" requirement even if the
+    // supplier doesn't add anything of their own.
     const hasMasterOthers = packageOthersDTOList.some((other) => !other.isDeleted);
     const hasCustomOthers =
       customInclusions.some((c) => !c.isDeleted && c.customText?.trim()) ||
       customExclusions.some((c) => !c.isDeleted && c.customText?.trim()) ||
       customTerms.some((c) => !c.isDeleted && c.customText?.trim());
-    if (!hasMasterOthers && !hasCustomOthers) {
+    const hasMandatoryStandards = (mandatoryStandards || []).length > 0;
+    if (!hasMasterOthers && !hasCustomOthers && !hasMandatoryStandards) {
       errors.others =
         "Please select or enter at least one item in Inclusion, Exclusion, or Terms & Conditions";
     }
@@ -833,6 +846,30 @@ const PackageReg = () => {
     }
   };
 
+  // Fetch admin-defined "Standard Package Details" for a country. These
+  // are Master Terms & Conditions rows the admin has flagged as
+  // mandatory — the backend auto-attaches them to every package for that
+  // country on save/edit, and this preview lets the supplier see them
+  // as read-only entries under Inclusions / Exclusions / Terms.
+  const loadMandatoryStandards = async (countryId) => {
+    if (!countryId) {
+      setMandatoryStandards([]);
+      return;
+    }
+    try {
+      setIsLoadingMandatory(true);
+      const response = await axiosInstance.get(
+        `/api/master/termsAndCondition/mandatory?countryId=${encodeURIComponent(countryId)}`
+      );
+      setMandatoryStandards(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.log("axios call error for mandatory standards : ", error);
+      setMandatoryStandards([]);
+    } finally {
+      setIsLoadingMandatory(false);
+    }
+  };
+
   const loadTermsAndConditions = async () => {
     try {
       setIsLoadingTerms(true);
@@ -904,6 +941,10 @@ const PackageReg = () => {
       if (value) {
         cityList(value);
       }
+
+      // Refresh the admin "Standard Package Details" panel for the new
+      // country. Clears the list when country is unset.
+      loadMandatoryStandards(value);
 
       // Clear validation errors
       if (validationErrors.countryId) {
@@ -996,6 +1037,7 @@ const PackageReg = () => {
     setInclusionDraft("");
     setExclusionDraft("");
     setTermsDraft("");
+    setMandatoryStandards([]);
     setActiveTab("basic");
   };
 
@@ -1028,6 +1070,12 @@ const PackageReg = () => {
         noOfNights: data.noOfNights || "1",
         packageInformation: data.packageInformation || "",
       });
+
+      // Preload admin-defined "Standard Package Details" for the
+      // package's country so the read-only panel is populated when the
+      // edit / view modal opens (the country-change handler covers the
+      // create flow instead).
+      loadMandatoryStandards(data.arriveCountry || data.countryId || "");
 
       // Load places for the selected country
       const countryId = data.arriveCountry || data.countryId;
@@ -1541,6 +1589,49 @@ const PackageReg = () => {
             )}
           </div>
         )}
+
+        {/* Admin-defined "Standard Package Details" (mandatory master
+            terms) for the selected country, bucketed by descriptionType.
+            READ-ONLY — the backend re-attaches these on save/edit so a
+            supplier cannot remove or alter them here. Rendered only when
+            there are rows for THIS bucket so empty tabs stay clean. */}
+        {(() => {
+          const standardsForBucket = (mandatoryStandards || []).filter(
+            (s) => s.descriptionType === bucketType
+          );
+          if (standardsForBucket.length === 0) return null;
+          return (
+            <div
+              className="mb-3 p-3 rounded border"
+              style={{ backgroundColor: "#f8fafc", borderColor: "#dbe4ef" }}
+            >
+              <div className="d-flex align-items-center gap-2 mb-2">
+                <span className="badge bg-secondary">Set by Admin</span>
+                <span className="fw-semibold small text-muted">
+                  Standard {heading} — auto-included on every package for the selected country
+                </span>
+              </div>
+              {isLoadingMandatory ? (
+                <div className="text-muted small">Loading standard {heading.toLowerCase()}…</div>
+              ) : (
+                <ul className="mb-0 ps-3">
+                  {standardsForBucket.map((s) => (
+                    <li
+                      key={`std-${bucketType}-${s.termsAndConditionsId}`}
+                      className="small text-dark"
+                      title={s.termsCode || ""}
+                    >
+                      {s.description}
+                      {s.termsCode ? (
+                        <span className="text-muted ms-2">({s.termsCode})</span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Custom entries — visible in view mode too so users can see
             what a package contains, but only editable when not viewing.

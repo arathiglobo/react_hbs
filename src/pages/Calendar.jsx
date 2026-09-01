@@ -212,7 +212,7 @@ export default function Calendar() {
         <main className="flex-grow-1 p-4">
           <Card className="shadow-sm rounded-xl">
             <Card.Header>
-              <span className="fw-semibold" style={{ color: "#EC0B43" }}>Calendar</span>
+              <span className="fw-semibold" style={{ color: "#F75E00" }}>Calendar</span>
             </Card.Header>
 
             {/* Calendar Display */}

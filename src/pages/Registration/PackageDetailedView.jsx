@@ -430,66 +430,77 @@ export default function PackageDetailedView() {
                 </div>
 
                 {/* ── Send by Email ──────────────────────────────────── */}
-                <Card style={{ ...card, marginTop: 16 }}>
-                  <div style={SECTION_HEADER}>Email Package Details</div>
-                  <div style={{ padding: "12px 16px" }}>
-                    <Row className="align-items-end g-2">
-                      <Col md={8}>
-                        <Form.Label
-                          style={{ fontSize: "0.82rem", fontWeight: 600 }}
-                        >
-                          Recipient Email
-                        </Form.Label>
-                        <Form.Control
-                          type="email"
-                          placeholder="Enter recipient email"
-                          value={email}
-                          onChange={(e) => {
-                            setEmail(e.target.value);
-                            if (emailError) setEmailError("");
-                          }}
-                          isInvalid={!!emailError}
-                          disabled={sending}
-                          size="sm"
-                        />
-                        {emailError && (
-                          <Form.Control.Feedback type="invalid">
-                            {emailError}
-                          </Form.Control.Feedback>
-                        )}
-                        <small className="text-muted">
-                          The package details will be sent as a PDF
-                          attachment.
-                        </small>
-                      </Col>
-                      <Col md={4}>
-                        <Button
-                          variant="success"
-                          onClick={handleSendEmail}
-                          disabled={sending}
-                          className="w-100"
-                          size="sm"
-                        >
-                          {sending ? (
-                            <>
-                              <Spinner
-                                animation="border"
-                                size="sm"
-                                className="me-2"
-                              />
-                              Sending...
-                            </>
-                          ) : (
-                            <>
-                              <FaPaperPlane className="me-2" />
-                              Send
-                            </>
+                {/* Hidden per product ask — the "Email Package Details"
+                    card (recipient email input + Send button + PDF-attachment
+                    helper text) is no longer surfaced on the package view.
+                    The supporting state (`email` / `setEmail` / `emailError` /
+                    `setEmailError` / `sending`), the handler
+                    `handleSendEmail`, and the backend endpoint it POSTs to
+                    are intentionally left in place so nothing else that may
+                    reference them breaks; only the visible block is gated
+                    off. Flip the guard back to `true` to restore. */}
+                {false && (
+                  <Card style={{ ...card, marginTop: 16 }}>
+                    <div style={SECTION_HEADER}>Email Package Details</div>
+                    <div style={{ padding: "12px 16px" }}>
+                      <Row className="align-items-end g-2">
+                        <Col md={8}>
+                          <Form.Label
+                            style={{ fontSize: "0.82rem", fontWeight: 600 }}
+                          >
+                            Recipient Email
+                          </Form.Label>
+                          <Form.Control
+                            type="email"
+                            placeholder="Enter recipient email"
+                            value={email}
+                            onChange={(e) => {
+                              setEmail(e.target.value);
+                              if (emailError) setEmailError("");
+                            }}
+                            isInvalid={!!emailError}
+                            disabled={sending}
+                            size="sm"
+                          />
+                          {emailError && (
+                            <Form.Control.Feedback type="invalid">
+                              {emailError}
+                            </Form.Control.Feedback>
                           )}
-                        </Button>
-                      </Col>
-                    </Row>
-                  </div>
-                </Card>
+                          <small className="text-muted">
+                            The package details will be sent as a PDF
+                            attachment.
+                          </small>
+                        </Col>
+                        <Col md={4}>
+                          <Button
+                            variant="success"
+                            onClick={handleSendEmail}
+                            disabled={sending}
+                            className="w-100"
+                            size="sm"
+                          >
+                            {sending ? (
+                              <>
+                                <Spinner
+                                  animation="border"
+                                  size="sm"
+                                  className="me-2"
+                                />
+                                Sending...
+                              </>
+                            ) : (
+                              <>
+                                <FaPaperPlane className="me-2" />
+                                Send
+                              </>
+                            )}
+                          </Button>
+                        </Col>
+                      </Row>
+                    </div>
+                  </Card>
+                )}
               </>
             )}
           </Container>

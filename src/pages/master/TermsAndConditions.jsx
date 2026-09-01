@@ -9,7 +9,11 @@ import Swal from "sweetalert2";
 import { FaEdit, FaTrash, FaTimes, FaCheck, FaUndo, FaEye } from "react-icons/fa";
 import BackButton from "../../components/BackButton";
 
-// Enhanced SearchableSelect Component with loading support
+// Enhanced SearchableSelect Component with loading support.
+// Optional `onSearchChange(term)` — when provided, fires (debounced 300ms)
+// whenever the user types, so the parent can refetch options from the
+// server. The client-side filter still runs on the returned options, so
+// server-side and client-side filtering coexist safely.
 const SearchableSelect = ({
   options,
   value,
@@ -20,6 +24,7 @@ const SearchableSelect = ({
   name,
   disabled = false,
   isLoading = false,
+  onSearchChange,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -43,6 +48,16 @@ const SearchableSelect = ({
       setFilteredOptions(options);
     }
   }, [searchTerm, options]);
+
+  // Debounced server-side search hook. Only fires when the parent
+  // opts in by passing onSearchChange (other consumers of this
+  // component are unaffected).
+  useEffect(() => {
+    if (!onSearchChange) return;
+    const t = setTimeout(() => onSearchChange(searchTerm), 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
 
   const handleSelect = (option) => {
     try {
@@ -178,7 +193,11 @@ export default function TermsAndConditions() {
     description: "",
     countryId: "",
     stateId: "",
-    tagline: ""
+    tagline: "",
+    // Admin-only "Standard package detail" flag. When true, every travel
+    // package for this row's country auto-picks this term (backend
+    // enforces on save/edit) and the supplier form renders it read-only.
+    isMandatory: false
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
@@ -254,7 +273,8 @@ export default function TermsAndConditions() {
       description: "",
       countryId: "",
       stateId: "",
-      tagline: ""
+      tagline: "",
+      isMandatory: false
     });
     setPlaces([]);
     setError("");
@@ -277,14 +297,15 @@ export default function TermsAndConditions() {
       description: item.description || "",
       countryId: countryId || "",
       stateId: stateId || "",
-      tagline: item.tagline || ""
+      tagline: item.tagline || "",
+      isMandatory: item.isMandatory === true || item.isMandatory === "true"
     });
-    
+
     // Load places for the selected country if available
     if (countryId) {
       cityList(countryId);
     }
-    
+
     setError("");
     setErrors({});
     setShowModal(true);
@@ -305,14 +326,15 @@ export default function TermsAndConditions() {
       description: item.description || "",
       countryId: countryId || "",
       stateId: stateId || "",
-      tagline: item.tagline || ""
+      tagline: item.tagline || "",
+      isMandatory: item.isMandatory === true || item.isMandatory === "true"
     });
-    
+
     // Load places for the selected country if available
     if (countryId) {
       cityList(countryId);
     }
-    
+
     setError("");
     setErrors({});
     setShowModal(true);
@@ -336,7 +358,8 @@ export default function TermsAndConditions() {
         description: String(formData.description).trim(),
         countryId: formData.countryId ? parseInt(formData.countryId) : null,
         stateId: formData.stateId ? parseInt(formData.stateId) : null,
-        tagline: String(formData.tagline).trim()
+        tagline: String(formData.tagline).trim(),
+        isMandatory: !!formData.isMandatory
       };
 
       const editRes = await axiosInstance.put(
@@ -369,7 +392,8 @@ export default function TermsAndConditions() {
       description: "",
       countryId: "",
       stateId: "",
-      tagline: ""
+      tagline: "",
+      isMandatory: false
     });
     setPlaces([]);
     setError("");
@@ -437,7 +461,8 @@ export default function TermsAndConditions() {
         description: String(formData.description).trim(),
         countryId: formData.countryId ? parseInt(formData.countryId) : null,
         stateId: formData.stateId ? parseInt(formData.stateId) : null,
-        tagline: String(formData.tagline).trim()
+        tagline: String(formData.tagline).trim(),
+        isMandatory: !!formData.isMandatory
       };
 
       const termsAndConditionSaveRes = await axiosInstance.post(
@@ -459,21 +484,54 @@ export default function TermsAndConditions() {
     }
   };
 
-  // Load countries list
+  // Load countries list. The backend endpoint pages by default (limit=50)
+  // and there are 246 countries in master_country, so UAE (id=235), UK
+  // (id=152) and US (id=244) fall off page 0. Pass an explicit high
+  // limit so the client-side SearchableSelect filter has the full
+  // dataset to search against — otherwise typing "United" or "Emirat"
+  // returns "No options found" even though the row exists. Scoped to
+  // this page only; the endpoint default is unchanged.
   const countryList = async () => {
     try {
-      const response = await axiosInstance.get("/api/country");
+      const response = await axiosInstance.get("/api/country?page=0&limit=500");
       setCountries(response.data);
     } catch (error) {
       console.log("error for country list :", error);
     }
   };
 
-  const cityList = async (countryId) => {
+  // Country-scoped city loader for the modal's City dropdown. Uses the
+  // province-by-country endpoint (which returns MasterState rows whose
+  // ids match the state_id column we persist onto master_terms_and_condition)
+  // with server-side search — the SearchableSelect debounces user typing
+  // and calls this again with the new term. Note we hit `/api/province/countryId`
+  // rather than the plain `/api/province`, because the latter silently
+  // ignores its countryId parameter and returns provinces from every country.
+  // Response rows use `stateName` for the label, so we normalise it to
+  // `name` (what SearchableSelect reads) here — nothing else on the page
+  // needs to change.
+  const cityList = async (countryId, searchTerm = "") => {
+    if (!countryId) {
+      setPlaces([]);
+      return;
+    }
     try {
       setIsLoadingPlaces(true);
-      const response = await axiosInstance.post(`/api/destination/getCitiesByCountryId/${countryId}`);
-      setPlaces(Array.isArray(response.data) ? response.data : []);
+      const params = new URLSearchParams({
+        countryId: String(countryId),
+        page: "0",
+        limit: "50",
+      });
+      if (searchTerm && searchTerm.trim()) {
+        params.append("search", searchTerm.trim());
+      }
+      const response = await axiosInstance.get(`/api/province/countryId?${params.toString()}`);
+      const rows = Array.isArray(response.data) ? response.data : [];
+      const normalised = rows.map((r) => ({
+        ...r,
+        name: r.name || r.stateName || "",
+      }));
+      setPlaces(normalised);
     } catch (error) {
       console.log("axios call error for city list : ", error);
       setPlaces([]);
@@ -639,6 +697,7 @@ export default function TermsAndConditions() {
                     <th style={{ width: 100 }}>S.N</th>
                     <th>Description</th>
                     <th>For</th>
+                    <th style={{ width: 120 }}>Standard</th>
                     <th style={{ width: 160 }}>Actions</th>
                   </tr>
                 </thead>
@@ -660,9 +719,18 @@ export default function TermsAndConditions() {
                       </td>
                       <td>
                         <div className="fw-semibold">
-                          {descriptionTypeOptions.find(dt => dt.id === item.descriptionType)?.name || 
+                          {descriptionTypeOptions.find(dt => dt.id === item.descriptionType)?.name ||
                            'Unknown Type'}
                         </div>
+                      </td>
+                      <td>
+                        {(item.isMandatory === true || item.isMandatory === "true") ? (
+                          <span className="badge bg-success" title="Auto-attached to every package for this country">
+                            Standard
+                          </span>
+                        ) : (
+                          <span className="text-muted small">—</span>
+                        )}
                       </td>
                       <td>
                         <div className="d-flex gap-2">
@@ -690,7 +758,7 @@ export default function TermsAndConditions() {
                   ))}
                   {isLoading && (
                     <tr>
-                      <td colSpan={4} className="text-center text-muted py-4">
+                      <td colSpan={5} className="text-center text-muted py-4">
                         <div
                           className="spinner-border spinner-border-sm me-2"
                           role="status"
@@ -703,7 +771,7 @@ export default function TermsAndConditions() {
                   )}
                   {items.length === 0 && !isLoading && (
                     <tr>
-                      <td colSpan={4} className="text-center text-muted py-4">
+                      <td colSpan={5} className="text-center text-muted py-4">
                         No terms and conditions found.
                       </td>
                     </tr>
@@ -793,11 +861,12 @@ export default function TermsAndConditions() {
                     </Col>
                     <Col md={6}>
                       <div className="mb-4">
-                        <h6 className="fw-bold text-primary mb-2">Place</h6>
+                        <h6 className="fw-bold text-primary mb-2">City</h6>
                         <div className="p-3 bg-light rounded border">
                           <span className="fw-semibold">
-                            {places.find(p => String(p.id) === String(formData.stateId))?.name || 
-                             places.find(p => String(p.id) === String(formData.stateId))?.cityName || 
+                            {places.find(p => String(p.id) === String(formData.stateId))?.name ||
+                             places.find(p => String(p.id) === String(formData.stateId))?.stateName ||
+                             places.find(p => String(p.id) === String(formData.stateId))?.cityName ||
                              'Not specified'}
                           </span>
                         </div>
@@ -825,6 +894,19 @@ export default function TermsAndConditions() {
                         <div className="p-3 bg-light rounded border" style={{ minHeight: '120px' }}>
                           <span className="fw-semibold">
                             {formData.description || 'Not specified'}
+                          </span>
+                        </div>
+                      </div>
+                    </Col>
+                  </Row>
+
+                  <Row>
+                    <Col md={12}>
+                      <div className="mb-4">
+                        <h6 className="fw-bold text-primary mb-2">Standard Package Detail</h6>
+                        <div className="p-3 bg-light rounded border">
+                          <span className="fw-semibold">
+                            {formData.isMandatory ? "Yes — auto-attached to every package for this country (supplier cannot remove it)" : "No"}
                           </span>
                         </div>
                       </div>
@@ -939,17 +1021,20 @@ export default function TermsAndConditions() {
                     <Col md={6}>
                       <Form.Group className="mb-3">
                         <Form.Label className="fw-semibold">
-                          Place
+                          City
                         </Form.Label>
                         <SearchableSelect
                           name="stateId"
                           value={formData.stateId}
                           onChange={handlePlaceChange}
-                          placeholder={isLoadingPlaces ? "Loading places..." : "SELECT"}
+                          placeholder={isLoadingPlaces ? "Loading cities..." : "SELECT"}
                           options={Array.isArray(places) ? places.map(place => ({ id: place.id, name: place.name })) : []}
                           isInvalid={!!errors.stateId}
                           disabled={!formData.countryId || isLoadingPlaces}
                           isLoading={isLoadingPlaces}
+                          onSearchChange={(term) => {
+                            if (formData.countryId) cityList(formData.countryId, term);
+                          }}
                         />
                         {errors.stateId && (
                           <Form.Control.Feedback type="invalid">
@@ -976,6 +1061,30 @@ export default function TermsAndConditions() {
                     <Form.Text className="text-muted">
                       {formData.tagline.length}/100 characters
                     </Form.Text>
+                  </Form.Group>
+
+                  {/* Admin-only mandatory / "Standard Package Detail" flag.
+                      When ticked, every travel package registered for this
+                      row's country auto-attaches this term (backend enforces
+                      on save/edit) and the supplier form renders it as
+                      read-only. Country is the scoping key. */}
+                  <Form.Group className="mb-3">
+                    <Form.Check
+                      type="checkbox"
+                      id="terms-is-mandatory"
+                      label={
+                        <span>
+                          <strong>Standard Package Detail</strong>
+                          <span className="text-muted ms-2 small">
+                            — auto-attached to every package for the selected country; supplier cannot remove it
+                          </span>
+                        </span>
+                      }
+                      checked={!!formData.isMandatory}
+                      onChange={(e) => {
+                        setFormData(prev => ({ ...prev, isMandatory: e.target.checked }));
+                      }}
+                    />
                   </Form.Group>
 
                   {error && (

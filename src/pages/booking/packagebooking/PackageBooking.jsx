@@ -299,6 +299,19 @@ const PackageBooking = () => {
   // the Total Price card. Same endpoint the Package Details step uses.
   const [packageView, setPackageView] = useState(null);
   const [showPolicyModal, setShowPolicyModal] = useState(false);
+  // Package Preview modal + its Send-to-Customer follow-on. Preview is
+  // read-only and builds its content from data already on the page
+  // (bookingData, priceBreakdown, packageData/packageView) so it never
+  // mutates booking state, pricing, validation or the submit payload. Send
+  // POSTs the rich-HTML overview to /api/v1/package-booking/send-overview
+  // (a new, isolated controller — no existing email service is touched).
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [showSendModal, setShowSendModal] = useState(false);
+  const [sendForm, setSendForm] = useState({ email: "" });
+  // Prevents a second click while the send POST is in flight — the button
+  // stays disabled and the label switches to "Sending…" until the backend
+  // responds.
+  const [isSending, setIsSending] = useState(false);
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
@@ -542,6 +555,41 @@ const PackageBooking = () => {
     ? packageView.exclusions
     : [];
   const cancellationParts = (() => {
+    // Preferred source — the per-tier ladder captured by the admin
+    // package form (PackageReg.jsx writes packageCancellationPolicyDTOList,
+    // now exposed on the view DTO as packageView.cancellationPolicies).
+    // Each tier renders as "Within N night(s) of travel: X% / AED Y".
+    const tiers = Array.isArray(packageView?.cancellationPolicies)
+      ? packageView.cancellationPolicies.filter(Boolean)
+      : [];
+    if (tiers.length > 0) {
+      return tiers.map((t) => {
+        const n = Number(t.noOfNights);
+        const feeRaw = t.cancellationFee;
+        const isPercent =
+          (t.cancellationFeeType || "").toLowerCase() === "percent";
+        const feeText =
+          feeRaw != null && String(feeRaw).trim() !== ""
+            ? isPercent
+              ? `${feeRaw}%`
+              : `AED ${feeRaw}`
+            : "";
+        const nightsText = Number.isFinite(n)
+          ? `Within ${n} night${n === 1 ? "" : "s"} of travel`
+          : "Cancellation charge";
+        return {
+          tone: "warn",
+          text: feeText
+            ? `${nightsText}: ${feeText} cancellation charge applies.`
+            : `${nightsText}: cancellation charge applies.`,
+        };
+      });
+    }
+    // Legacy fallback — older packages that still populated the four
+    // scalar fields on TravelPackage (cancellationDaysFree /
+    // cancellationDaysWithCharge / cancellationChargeType /
+    // cancellationChargeValue). Kept so those bookings continue to show
+    // their real policy instead of the supplier-confirmation placeholder.
     const free = packageView?.cancellationDaysFree;
     const withCharge = packageView?.cancellationDaysWithCharge;
     const type = packageView?.cancellationChargeType;
@@ -578,6 +626,337 @@ const PackageBooking = () => {
     }
     return parts;
   })();
+
+  // ── Package Overview (Preview + Send to Customer) ────────────────────
+  // Purely derived from data already rendered on the page so this block
+  // never introduces its own source of truth. `overviewSections` /
+  // `overviewItinerary` / `overviewIncludes` / `overviewExcludes` feed the
+  // Preview modal; `overviewHtml` is what the Send-to-Customer POST ships
+  // to /api/v1/package-booking/send-overview as the email body. A hotel
+  // selection is the gate that enables the sidebar action — matches "after
+  // selecting the Hotel and optional Meals".
+  const hasHotelSelected =
+    Array.isArray(bookingData.selections?.selectedHotels) &&
+    bookingData.selections.selectedHotels.length > 0;
+  const overviewPackageName =
+    packageData?.packageName || packageView?.packageName || "Package";
+  // Same URL-resolution HotelsTab and PackageSearch use — turns saved
+  // relative / Windows paths into absolute /api/files/{name} URLs so images
+  // render both inside the modal and inside the customer's mail client.
+  const resolveImageUrl = (imagePath) => {
+    if (!imagePath) return "";
+    if (imagePath.startsWith("http")) return imagePath;
+    const base = process.env.REACT_APP_API_BASE_URL || "";
+    const filename = imagePath.includes("\\")
+      ? imagePath.split("\\").pop()
+      : imagePath.split("/").pop();
+    return filename
+      ? `${base}/api/files/${filename}`
+      : `${base}/api/files/${imagePath}`;
+  };
+  // Hero image for the package — packageView / packageData may expose the
+  // banner under a few different keys; falls back to the first itinerary day
+  // that has an image so a package without a dedicated banner still opens
+  // with a photograph. Empty string when nothing is uploaded.
+  const overviewBannerUrl = (() => {
+    const raw =
+      packageView?.packageImage ||
+      packageData?.packageImage ||
+      packageView?.image ||
+      packageData?.image ||
+      (Array.isArray(packageView?.itineraries)
+        ? packageView.itineraries.find((it) => it?.packageItinearyImage)
+            ?.packageItinearyImage
+        : "");
+    return resolveImageUrl(raw);
+  })();
+  const overviewHotelLines = (bookingData.selections?.selectedHotels || [])
+    .map((h) => {
+      const name = h.hotelName || `Hotel #${h.hotelId || ""}`;
+      const rate = Number(h.totalRateWithMarkup || 0);
+      return rate > 0
+        ? `${name} — AED ${formatPackageAmount(rate)}`
+        : name;
+    });
+  const overviewMealPlanLabel =
+    bookingData.selections?.selectedMealPlan?.label || "";
+  const overviewItinerary = Array.isArray(packageView?.itineraries)
+    ? packageView.itineraries.map((it) => ({
+        day: it.day,
+        heading: it.heading || "",
+        placeName: it.placeName || "",
+        dayActivities: it.dayActivities || "",
+        imageUrl: resolveImageUrl(it.packageItinearyImage),
+      }))
+    : [];
+  const overviewIncludes = inclusions.map((x) => x.description).filter(Boolean);
+  const overviewExcludes = exclusions.map((x) => x.description).filter(Boolean);
+  const overviewCancellation = cancellationParts.map((p) => p.text);
+  const overviewSections = [
+    {
+      title: "Package",
+      rows: [
+        ["Name", overviewPackageName],
+        ["Type", heroPackageType || "—"],
+        ["Category", heroPackageCategory || "—"],
+        [
+          "Duration",
+          packageNights > 0
+            ? `${packageNights} Night${packageNights === 1 ? "" : "s"} / ${
+                packageNights + 1
+              } Days`
+            : "—",
+        ],
+        ["Destination", heroDestination || "—"],
+      ],
+    },
+    {
+      title: "Travel",
+      rows: [
+        ["Arrival date", formatDateForDisplay(heroCheckIn) || "—"],
+        ["Departure date", formatDateForDisplay(heroCheckOut) || "—"],
+        ["Guests", heroGuestSummary],
+        ["Nationality", heroNationality],
+      ],
+    },
+    {
+      title: "Selected Hotel",
+      rows:
+        overviewHotelLines.length > 0
+          ? overviewHotelLines.map((line) => ["•", line])
+          : [["", "No hotel selected yet"]],
+    },
+    {
+      title: "Meal Plan",
+      rows: [
+        [
+          "Plan",
+          overviewMealPlanLabel
+            ? `${overviewMealPlanLabel} — AED ${formatPackageAmount(
+                priceBreakdown.mealPlan,
+              )}`
+            : "Not selected",
+        ],
+      ],
+    },
+    {
+      title: "Pricing (AED)",
+      rows: [
+        ["Accommodation", formatPackageAmount(priceBreakdown.accommodation)],
+        ...(priceBreakdown.mealPlan > 0
+          ? [["Meal plan", formatPackageAmount(priceBreakdown.mealPlan)]]
+          : []),
+        ...(priceBreakdown.cab > 0
+          ? [["Cab", formatPackageAmount(priceBreakdown.cab)]]
+          : []),
+        ...(priceBreakdown.activity > 0
+          ? [["Activity", formatPackageAmount(priceBreakdown.activity)]]
+          : []),
+        ["Total", formatPackageAmount(totalPrice)],
+      ],
+    },
+  ];
+  // Rich-HTML email body — POSTed to /api/v1/package-booking/send-overview,
+  // which relays it via JavaMailSender to the customer's inbox. Kept
+  // self-contained with inline styles so it renders correctly in every
+  // mail client without a linked stylesheet.
+  const escapeHtml = (s) =>
+    String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  const overviewHtml = (() => {
+    const parts = [];
+    parts.push(
+      `<div style="font-family:Arial,Helvetica,sans-serif;color:#0f172a;max-width:640px">`,
+    );
+    parts.push(
+      `<h2 style="margin:0 0 8px;font-size:20px;color:#F75E00">${escapeHtml(
+        overviewPackageName,
+      )}</h2>`,
+    );
+    if (heroDestination) {
+      parts.push(
+        `<div style="color:#475569;font-size:13px;margin-bottom:12px">${escapeHtml(
+          heroDestination,
+        )}</div>`,
+      );
+    }
+    if (overviewBannerUrl) {
+      parts.push(
+        `<img src="${escapeHtml(
+          overviewBannerUrl,
+        )}" alt="${escapeHtml(overviewPackageName)}" style="width:100%;max-width:640px;border-radius:8px;margin-bottom:14px" />`,
+      );
+    }
+    overviewSections.forEach((s) => {
+      parts.push(
+        `<h3 style="margin:14px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#64748b">${escapeHtml(
+          s.title,
+        )}</h3>`,
+      );
+      parts.push(
+        `<table style="width:100%;border-collapse:collapse;font-size:14px">`,
+      );
+      s.rows.forEach(([k, v]) => {
+        parts.push(
+          `<tr><td style="padding:3px 0;color:#64748b;width:40%">${escapeHtml(
+            k,
+          )}</td><td style="padding:3px 0;color:#0f172a;font-weight:600">${escapeHtml(
+            v,
+          )}</td></tr>`,
+        );
+      });
+      parts.push(`</table>`);
+    });
+    if (overviewItinerary.length) {
+      parts.push(
+        `<h3 style="margin:16px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#64748b">Day-wise Itinerary</h3>`,
+      );
+      overviewItinerary.forEach((d) => {
+        parts.push(
+          `<div style="border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:10px">`,
+        );
+        parts.push(
+          `<div style="font-weight:700;color:#0f172a;margin-bottom:4px">Day ${escapeHtml(
+            String(d.day).padStart(2, "0"),
+          )}${d.heading ? ` – ${escapeHtml(d.heading)}` : ""}</div>`,
+        );
+        if (d.placeName) {
+          parts.push(
+            `<div style="color:#F75E00;font-size:12px;margin-bottom:6px">${escapeHtml(
+              d.placeName,
+            )}</div>`,
+          );
+        }
+        if (d.imageUrl) {
+          parts.push(
+            `<img src="${escapeHtml(
+              d.imageUrl,
+            )}" alt="Day ${escapeHtml(String(d.day))}" style="width:100%;max-width:600px;border-radius:6px;margin:4px 0 8px" />`,
+          );
+        }
+        if (d.dayActivities) {
+          parts.push(
+            `<div style="white-space:pre-line;color:#334155;font-size:13px">${escapeHtml(
+              d.dayActivities,
+            )}</div>`,
+          );
+        }
+        parts.push(`</div>`);
+      });
+    }
+    if (overviewIncludes.length) {
+      parts.push(
+        `<h3 style="margin:16px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#64748b">Includes</h3>`,
+      );
+      parts.push(`<ul style="margin:0;padding-left:18px;color:#334155">`);
+      overviewIncludes.forEach((x) =>
+        parts.push(`<li style="margin-bottom:3px">${escapeHtml(x)}</li>`),
+      );
+      parts.push(`</ul>`);
+    }
+    if (overviewExcludes.length) {
+      parts.push(
+        `<h3 style="margin:16px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#64748b">Excludes</h3>`,
+      );
+      parts.push(`<ul style="margin:0;padding-left:18px;color:#334155">`);
+      overviewExcludes.forEach((x) =>
+        parts.push(`<li style="margin-bottom:3px">${escapeHtml(x)}</li>`),
+      );
+      parts.push(`</ul>`);
+    }
+    if (overviewCancellation.length) {
+      parts.push(
+        `<h3 style="margin:16px 0 6px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#64748b">Cancellation Policy</h3>`,
+      );
+      parts.push(
+        `<div style="border-left:3px solid #F75E00;background:#fff5f7;padding:8px 12px;border-radius:0 6px 6px 0;color:#7f1d2e;font-size:13px">`,
+      );
+      overviewCancellation.forEach((x) =>
+        parts.push(`<div style="margin-bottom:3px">${escapeHtml(x)}</div>`),
+      );
+      parts.push(`</div>`);
+    }
+    parts.push(
+      `<p style="margin:16px 0 0;color:#94a3b8;font-size:12px;font-style:italic">This is a preview only. Booking is not yet confirmed — please review and reply to confirm.</p>`,
+    );
+    parts.push(`</div>`);
+    return parts.join("");
+  })();
+  // POSTs the selected package + pricing snapshot to
+  // /api/v1/package-booking/send-overview. The backend builds a transient
+  // (in-memory, unsaved) PackageBooking from these fields and hands it to
+  // the existing PackageBookingPdfService — the same PDF template used by
+  // the checkout / booking-voucher flow — then emails the PDF as an
+  // attachment. Purely additive on the backend: no existing controller,
+  // service, PDF template or booking table is touched, and no booking row
+  // is persisted for the preview send.
+  const handleSendToCustomer = async () => {
+    const email = sendForm.email.trim();
+    if (!email || !/^\S+@\S+\.\S+$/.test(email)) {
+      toast.error("Please enter a valid customer email address.");
+      return;
+    }
+    if (isSending) return;
+    setIsSending(true);
+    try {
+      // Selected-hotel snapshot for the PDF's Accommodation table. Rate
+      // reads from `totalRateWithMarkup` (what the Total Price sidebar
+      // shows) so the PDF number matches what the operator was seeing.
+      const pdfHotels = (bookingData.selections?.selectedHotels || [])
+        .map((h) => ({
+          hotelId: h?.hotelId ?? null,
+          hotelName: h?.hotelName || null,
+          hotelRate: Number(h?.totalRateWithMarkup) || 0,
+        }));
+      const payload = {
+        recipientEmail: email,
+        subject: `Package Overview — ${overviewPackageName}`,
+        packageId: Number(id) || null,
+        packageName: overviewPackageName,
+        agentId: Number(agentId) || null,
+        travelDate: bookingData.searchParams?.travelDate || null,
+        adultCount: Number(bookingData.searchParams?.adultCount) || 0,
+        childCount: Number(bookingData.searchParams?.childCount) || 0,
+        infantCount: Number(bookingData.searchParams?.infantCount) || 0,
+        currency: "AED",
+        totalPrice: Number(totalPrice) || 0,
+        hotels: pdfHotels,
+        cabName:
+          bookingData.selections?.selectedCab?.cabName ||
+          bookingData.selections?.selectedCab?.name ||
+          null,
+        cabRate: Number(bookingData.selections?.cabPrice) || 0,
+        activityName:
+          bookingData.selections?.selectedActivity?.activityName ||
+          bookingData.selections?.selectedActivity?.name ||
+          null,
+        activityRate: Number(bookingData.selections?.activityPrice) || 0,
+      };
+      const res = await axiosInstance.post(
+        "/api/v1/package-booking/send-overview",
+        payload,
+      );
+      if (res?.data?.success) {
+        toast.success("Package overview emailed to the customer.");
+        setShowSendModal(false);
+      } else {
+        toast.error(
+          res?.data?.message || "Could not send the email. Please try again.",
+        );
+      }
+    } catch (err) {
+      console.error("Send package overview failed:", err);
+      const msg =
+        err?.response?.data?.message ||
+        "Could not send the email. Please try again.";
+      toast.error(msg);
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   // Package Checkout (step-2) opens in a NEW BROWSER TAB per product spec —
   // /new-booking/package-checkout/{id}. Payload travels through localStorage
@@ -869,7 +1248,7 @@ const PackageBooking = () => {
                 <div className="price-sidebar-amount">
                   {formatPackageAmount(totalPrice)}
                 </div>
-                <div className="price-sidebar-sub">AED · Selling price</div>
+                <div className="price-sidebar-sub">AED</div>
                 {/* Meal plan line — only shown once one is picked on the
                     Hotels tab, so the operator can see what's stacked on
                     top of the hotel rate at a glance. */}
@@ -898,6 +1277,30 @@ const PackageBooking = () => {
                   </span>
                 </button>
               </div>
+
+              {/* Package Overview action — shown on step 1 once a hotel is
+                  picked (matches "after selecting the Hotel and optional
+                  Meals"). Opens a read-only Preview modal built from data
+                  already on this page; the modal's own footer offers the
+                  "Send to Customer" follow-on. Doesn't touch booking state,
+                  pricing, validation or the submit payload. */}
+              {currentStep === 1 && hasHotelSelected && (
+                <div className="sidebar-actions-card">
+                  <div className="sidebar-actions-title">
+                    <FaSuitcase className="me-2" />
+                    Package Actions
+                  </div>
+                  <div className="d-grid gap-2 mt-2">
+                    <Button
+                      size="sm"
+                      variant="outline-primary"
+                      onClick={() => setShowPreviewModal(true)}
+                    >
+                      Package Preview
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {/* Mode of payment card was moved OUT of the right sidebar
                   per product spec — it now lives inside the Pax Info step,
@@ -974,6 +1377,123 @@ const PackageBooking = () => {
                   box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
                   margin-top: 16px;
                 }
+                /* Package Actions card — same shell as the pay / policy
+                   cards so it stacks visually with them. Only rendered on
+                   step 1 after a hotel is picked. */
+                .sidebar-actions-card {
+                  border: 1px solid var(--rl-border, #e2e8f0);
+                  border-radius: 14px;
+                  padding: 14px 16px;
+                  background: var(--rl-card, #ffffff);
+                  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+                  margin-top: 16px;
+                }
+                .sidebar-actions-title {
+                  display: flex;
+                  align-items: center;
+                  font-weight: 600;
+                  font-size: 0.85rem;
+                  color: #1e293b;
+                  margin-bottom: 4px;
+                }
+                /* Overview modal — plain two-column key/value list, matches
+                   the Booking Summary card typography so the reader sees a
+                   familiar layout. */
+                .pkg-overview-section { padding: 12px 0; border-top: 1px solid #f1f3f5; }
+                .pkg-overview-section:first-child { border-top: 0; }
+                .pkg-overview-label {
+                  font-size: 0.72rem;
+                  font-weight: 700;
+                  letter-spacing: 0.07em;
+                  text-transform: uppercase;
+                  color: #64748b;
+                  margin-bottom: 6px;
+                }
+                .pkg-overview-row {
+                  display: flex;
+                  justify-content: space-between;
+                  gap: 12px;
+                  font-size: 0.87rem;
+                  color: #334155;
+                  padding: 3px 0;
+                }
+                .pkg-overview-row .k { color: #64748b; }
+                .pkg-overview-row .v { color: #0f172a; font-weight: 600; text-align: right; }
+                .pkg-overview-row.total {
+                  border-top: 1px dashed #e2e8f0;
+                  margin-top: 6px;
+                  padding-top: 8px;
+                  font-size: 0.95rem;
+                }
+                .pkg-overview-row.total .v { color: #F75E00; }
+                /* Hero banner + itinerary day cards inside the Preview
+                   modal. Same rounded-card language as the price sidebar
+                   and the day accordion on the Hotels tab. */
+                .pkg-overview-banner {
+                  width: 100%;
+                  max-height: 240px;
+                  object-fit: cover;
+                  border-radius: 10px;
+                  margin: 4px 0 10px;
+                  display: block;
+                }
+                .pkg-overview-days {
+                  display: flex;
+                  flex-direction: column;
+                  gap: 10px;
+                }
+                .pkg-overview-day {
+                  border: 1px solid #e2e8f0;
+                  border-radius: 10px;
+                  padding: 10px 12px;
+                  background: #fff;
+                }
+                .pkg-overview-day-head {
+                  display: flex;
+                  align-items: center;
+                  gap: 8px;
+                  margin-bottom: 6px;
+                }
+                .pkg-overview-day-num {
+                  display: inline-flex;
+                  align-items: center;
+                  justify-content: center;
+                  min-width: 28px;
+                  height: 24px;
+                  padding: 0 8px;
+                  border-radius: 999px;
+                  background: #fff5f7;
+                  color: #F75E00;
+                  font-weight: 700;
+                  font-size: 0.75rem;
+                }
+                .pkg-overview-day-title {
+                  font-weight: 600;
+                  font-size: 0.9rem;
+                  color: #0f172a;
+                }
+                .pkg-overview-day-image {
+                  width: 100%;
+                  max-height: 180px;
+                  object-fit: cover;
+                  border-radius: 8px;
+                  margin: 4px 0 8px;
+                  display: block;
+                }
+                .pkg-overview-day-place {
+                  color: #F75E00;
+                  font-size: 0.78rem;
+                  font-weight: 600;
+                  margin-bottom: 4px;
+                }
+                .pkg-overview-cancel {
+                  border-left: 3px solid #F75E00;
+                  background: #fff5f7;
+                  border-radius: 0 6px 6px 0;
+                  padding: 8px 12px;
+                  font-size: 0.85rem;
+                  color: #7f1d2e;
+                }
                 .sidebar-pay-title {
                   display: flex;
                   align-items: center;
@@ -1016,7 +1536,7 @@ const PackageBooking = () => {
                   width: 100%;
                   border: none;
                   background: transparent;
-                  color: #EC0B43;
+                  color: #F75E00;
                   font-weight: 700;
                   font-size: 0.82rem;
                   line-height: 1.35;
@@ -1170,7 +1690,7 @@ const PackageBooking = () => {
             font-weight: 700;
             color: #0f172a;
           }
-          .pkg-policy-title-icon { color: #EC0B43; font-size: 0.95rem; }
+          .pkg-policy-title-icon { color: #F75E00; font-size: 0.95rem; }
 
           .pkg-policy-body { padding: 4px 20px 16px; }
 
@@ -1213,7 +1733,7 @@ const PackageBooking = () => {
           .pkg-policy-note {
             margin: 10px 0 0;
             padding: 7px 12px;
-            border-left: 3px solid #EC0B43;
+            border-left: 3px solid #F75E00;
             background: #fff5f7;
             border-radius: 0 6px 6px 0;
             font-size: 0.82rem;
@@ -1226,6 +1746,241 @@ const PackageBooking = () => {
             padding: 10px 20px;
           }
         `}</style>
+      </Modal>
+
+      {/* ── Package Preview modal ──
+          Read-only summary of the package the operator is about to book:
+          the same package/hotel/meal/date/guest/price data already shown
+          around the page, gathered into one card so the operator can review
+          before hitting Continue. Nothing here mutates booking state. */}
+      <Modal
+        show={showPreviewModal}
+        onHide={() => setShowPreviewModal(false)}
+        centered
+        size="lg"
+        scrollable
+      >
+        <Modal.Header closeButton className="pkg-policy-head">
+          <Modal.Title className="pkg-policy-title">
+            <FaSuitcase className="pkg-policy-title-icon" />
+            Package Overview
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="pkg-policy-body">
+          {/* Hero image — draws the eye first so the customer sees the
+              destination before the details. Falls back to the first
+              itinerary photo when the package has no dedicated banner. */}
+          {overviewBannerUrl && (
+            <img
+              src={overviewBannerUrl}
+              alt={overviewPackageName}
+              className="pkg-overview-banner"
+              onError={(e) => {
+                e.target.style.display = "none";
+              }}
+            />
+          )}
+          {overviewSections.map((section) => (
+            <section key={section.title} className="pkg-overview-section">
+              <div className="pkg-overview-label">{section.title}</div>
+              {section.rows.map(([k, v], i) => {
+                const isTotal =
+                  section.title === "Pricing (AED)" && k === "Total";
+                return (
+                  <div
+                    key={`${section.title}-${i}`}
+                    className={`pkg-overview-row${isTotal ? " total" : ""}`}
+                  >
+                    <span className="k">{k}</span>
+                    <span className="v">{v}</span>
+                  </div>
+                );
+              })}
+            </section>
+          ))}
+
+          {/* Day-wise itinerary — each day is its own mini-card with the
+              day photo, heading, place and activities. Same data the
+              Hotels-tab itinerary accordion uses (packageView.itineraries),
+              rendered here in a flat, print-ready layout. */}
+          {overviewItinerary.length > 0 && (
+            <section className="pkg-overview-section">
+              <div className="pkg-overview-label">Day-wise Itinerary</div>
+              <div className="pkg-overview-days">
+                {overviewItinerary.map((d, i) => (
+                  <div key={`ov-day-${i}`} className="pkg-overview-day">
+                    <div className="pkg-overview-day-head">
+                      <span className="pkg-overview-day-num">
+                        {String(d.day).padStart(2, "0")}
+                      </span>
+                      <span className="pkg-overview-day-title">
+                        Day {String(d.day).padStart(2, "0")}
+                        {d.heading ? ` – ${d.heading}` : ""}
+                      </span>
+                    </div>
+                    {d.imageUrl && (
+                      <img
+                        src={d.imageUrl}
+                        alt={`Day ${d.day}`}
+                        className="pkg-overview-day-image"
+                        onError={(e) => {
+                          e.target.style.display = "none";
+                        }}
+                      />
+                    )}
+                    {d.placeName && (
+                      <div className="pkg-overview-day-place">
+                        <FaMapMarkerAlt size={11} className="me-1" />
+                        {d.placeName}
+                      </div>
+                    )}
+                    {d.dayActivities && (
+                      <p
+                        style={{
+                          whiteSpace: "pre-line",
+                          margin: 0,
+                          fontSize: "0.85rem",
+                          color: "#334155",
+                        }}
+                      >
+                        {d.dayActivities}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Includes / Excludes / Cancellation — same lists the
+              Cancellation & Terms popup shows, replayed here so a customer
+              sees the full picture without hunting. */}
+          {overviewIncludes.length > 0 && (
+            <section className="pkg-overview-section">
+              <div className="pkg-overview-label">
+                <FaCheckCircle className="me-1 text-success" />
+                Includes
+              </div>
+              <ul className="pkg-policy-list">
+                {overviewIncludes.map((x, i) => (
+                  <li key={`ov-inc-${i}`}>{x}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {overviewExcludes.length > 0 && (
+            <section className="pkg-overview-section">
+              <div className="pkg-overview-label">
+                <FaTimesCircle className="me-1" style={{ color: "#F75E00" }} />
+                Excludes
+              </div>
+              <ul className="pkg-policy-list">
+                {overviewExcludes.map((x, i) => (
+                  <li key={`ov-exc-${i}`}>{x}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {overviewCancellation.length > 0 && (
+            <section className="pkg-overview-section">
+              <div className="pkg-overview-label">
+                <FaShieldAlt className="me-1" />
+                Cancellation Policy
+              </div>
+              <div className="pkg-overview-cancel">
+                {overviewCancellation.map((t, i) => (
+                  <div key={`ov-can-${i}`} style={{ marginBottom: 4 }}>
+                    • {t}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </Modal.Body>
+        <Modal.Footer className="pkg-policy-foot">
+          <Button
+            size="sm"
+            variant="outline-secondary"
+            onClick={() => setShowPreviewModal(false)}
+          >
+            Close
+          </Button>
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={() => {
+              setShowPreviewModal(false);
+              setSendForm({ email: "" });
+              setShowSendModal(true);
+            }}
+          >
+            Send to Customer
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* ── Send to Customer modal ──
+          Single input — the customer's email — because the operator has
+          just reviewed the preview in the modal above. Clicking Send Email
+          POSTs the rich-HTML overview to /api/v1/package-booking/
+          send-overview (see PackageOverviewEmailController.java), which
+          relays it through the shared JavaMailSender. Purely additive on
+          the backend — no existing controller / service was modified, so
+          voucher / abandoned-search / booking-confirmation flows are
+          unaffected. */}
+      <Modal
+        show={showSendModal}
+        onHide={() => setShowSendModal(false)}
+        centered
+        size="lg"
+        scrollable
+      >
+        <Modal.Header closeButton className="pkg-policy-head">
+          <Modal.Title className="pkg-policy-title">
+            <FaSuitcase className="pkg-policy-title-icon" />
+            Send Package Overview to Customer
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="pkg-policy-body">
+          <Form.Group>
+            <Form.Label className="booking-field-label">
+              Customer email <span className="required-dot">*</span>
+            </Form.Label>
+            <Form.Control
+              type="email"
+              placeholder="e.g. customer@example.com"
+              value={sendForm.email}
+              disabled={isSending}
+              onChange={(e) =>
+                setSendForm((prev) => ({ ...prev, email: e.target.value }))
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleSendToCustomer();
+                }
+              }}
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer className="pkg-policy-foot">
+          <Button
+            size="sm"
+            variant="outline-secondary"
+            onClick={() => setShowSendModal(false)}
+            disabled={isSending}
+          >
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={handleSendToCustomer}
+            disabled={isSending}
+          >
+            {isSending ? "Sending…" : "Send Email"}
+          </Button>
+        </Modal.Footer>
       </Modal>
     </div>
   );

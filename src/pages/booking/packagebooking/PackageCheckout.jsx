@@ -17,6 +17,7 @@ import {
   FaHotel,
   FaMapMarkerAlt,
   FaMoon,
+  FaUtensils,
 } from "react-icons/fa";
 import PaxInformation from "./tabs/PaxInformation";
 // Abandoned-package-search follow-up email — flags the history row as
@@ -661,6 +662,24 @@ const PackageCheckout = () => {
                           {heroNationality}
                         </div>
                       </div>
+                      {/* Meal plan row — shows the board type picked on the
+                          Hotels step (BB / Half Board / Full Board / All
+                          Inclusive). Reads bookingData.selections.selectedMealPlan
+                          — the same source the Total Price sidebar below
+                          already uses — so no new source of truth and no
+                          impact on pricing, payload or validation. Renders
+                          "Not selected" when the operator skipped it, matching
+                          how the Package Preview modal treats the same field. */}
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaUtensils className="me-2 text-primary" />
+                          Meal Plan
+                        </div>
+                        <div className="hbp-summary-value">
+                          {bookingData.selections?.selectedMealPlan?.label ||
+                            "Not selected"}
+                        </div>
+                      </div>
                     </Card.Body>
                   </Card>
 
@@ -673,7 +692,7 @@ const PackageCheckout = () => {
                     <div className="price-sidebar-amount">
                       {formatPackageAmount(totalPrice)}
                     </div>
-                    <div className="price-sidebar-sub">AED · Selling price</div>
+                    <div className="price-sidebar-sub">AED</div>
                     {bookingData.selections?.selectedMealPlan && (
                       <div className="price-sidebar-mealplan">
                         +{" "}
@@ -818,7 +837,7 @@ const PackageCheckout = () => {
                     width: 100%;
                     border: none;
                     background: transparent;
-                    color: #EC0B43;
+                    color: #F75E00;
                     font-weight: 700;
                     font-size: 0.82rem;
                     line-height: 1.35;
@@ -941,7 +960,7 @@ const PackageCheckout = () => {
             className="d-flex align-items-center"
             style={{ fontSize: "1.05rem" }}
           >
-            <FaShieldAlt className="me-2" style={{ color: "#EC0B43" }} />
+            <FaShieldAlt className="me-2" style={{ color: "#F75E00" }} />
             Cancellation Policies &amp; Terms &amp; Conditions
           </Modal.Title>
         </Modal.Header>
