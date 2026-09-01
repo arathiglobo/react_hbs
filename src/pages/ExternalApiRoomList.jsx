@@ -576,6 +576,16 @@ const ExternalApiRoomList = () => {
       const fallbackInclusions = Array.isArray(rate?.otherInclusions)
         ? rate.otherInclusions
         : [];
+      // rate_comments from GRN's availability endpoint — { comments,
+      // mealplan, pax_comments, remarks, MandatoryTax }. Any of the five
+      // keys may be missing or blank; the modal renders only what's
+      // populated. Availability is the only source today (the recheck DTO
+      // doesn't carry them), so the same object survives into the
+      // post-recheck state below.
+      const fallbackRateComments =
+        rate?.rateComments && typeof rate.rateComments === "object"
+          ? rate.rateComments
+          : null;
       setPrebookError(null);
       setPoliciesModalData({
         cancellationPolicies: fallbackCancellation,
@@ -583,6 +593,7 @@ const ExternalApiRoomList = () => {
         selectedRoomLabel: label,
         nonRefundable: isNonRefundable,
         otherInclusions: fallbackInclusions,
+        rateComments: fallbackRateComments,
       });
       setShowPoliciesModal(true);
       setPrebookLoading(true);
@@ -614,6 +625,10 @@ const ExternalApiRoomList = () => {
               (Array.isArray(recheck.otherInclusions) && recheck.otherInclusions.length > 0)
                 ? recheck.otherInclusions
                 : fallbackInclusions,
+            // rate_comments come from the availability response only —
+            // preserve them through the recheck refresh so the modal
+            // keeps showing GRN's free-text notes.
+            rateComments: fallbackRateComments,
           });
         } else {
           setPrebookError(recheck?.message || "Recheck failed.");
@@ -1145,6 +1160,18 @@ const ExternalApiRoomList = () => {
         grnRecheck?.payableAtHotelDescription ??
         rate?.payableAtHotelDescription ??
         null,
+      // GRN-only carry: extras used by the booking-page Hotel Policies
+      // & Terms modal to mirror what the room-list Cancellation Policies
+      // modal shows. Both come from the availability response and stay
+      // valid through recheck, so no grnRecheck preference is needed —
+      // just forward as-is. Null on non-GRN suppliers.
+      otherInclusions: Array.isArray(rate?.otherInclusions)
+        ? rate.otherInclusions
+        : null,
+      rateComments:
+        rate?.rateComments && typeof rate.rateComments === "object"
+          ? rate.rateComments
+          : null,
       // Darina (apiId 16) free-cancellation deadline (ISO yyyy-MM-dd). BE
       // emits it on rate.deadlineDate as the "Free cancellation until X"
       // band's toDate. Carried through so the booking page's accordion
@@ -4151,6 +4178,60 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
               </ul>
             </>
           )}
+
+          {/* GRN rate_comments — { comments, mealplan, pax_comments,
+              remarks, MandatoryTax } from the availability endpoint. Any
+              of the five may be missing or blank; only populated ones
+              render. `remarks` frequently contains <br> tags — convert
+              those to newlines before stripping so multi-line notes stay
+              readable under whiteSpace: pre-line. Populated only by GRN;
+              non-GRN suppliers never carry this object. */}
+          {(() => {
+            const rc = policiesModalData.rateComments;
+            if (!rc || typeof rc !== "object") return null;
+            const entries = [
+              { key: "comments",     label: "Comments" },
+              { key: "mealplan",     label: "Meal Plan" },
+              { key: "pax_comments", label: "Pax Comments" },
+              { key: "remarks",      label: "Remarks" },
+              { key: "MandatoryTax", label: "Mandatory Tax" },
+            ]
+              .map(({ key, label }) => {
+                const raw = rc[key];
+                const rawStr =
+                  typeof raw === "string"
+                    ? raw
+                    : raw == null
+                    ? ""
+                    : String(raw);
+                if (!rawStr.trim()) return null;
+                const withBreaks = rawStr.replace(/<br\s*\/?\s*>/gi, "\n");
+                const text = stripHtmlTags(withBreaks).trim();
+                if (!text) return null;
+                return { key, label, text };
+              })
+              .filter(Boolean);
+            if (entries.length === 0) return null;
+            return (
+              <>
+                <h6 className="text-info mb-2 pt-2 border-top">
+                  <FaInfoCircle className="me-2" />
+                  Rate Comments
+                </h6>
+                <ul className="mb-4 ps-3">
+                  {entries.map(({ key, label, text }) => (
+                    <li
+                      key={key}
+                      className="mb-2"
+                      style={{ whiteSpace: "pre-line" }}
+                    >
+                      <strong>{label}:</strong> {text}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            );
+          })()}
 
           <h6 className="text-secondary mb-2 pt-2 border-top">
             <FaInfoCircle className="me-2" />

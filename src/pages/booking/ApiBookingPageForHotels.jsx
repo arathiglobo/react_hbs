@@ -2600,6 +2600,139 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                     })()}
                   </section>
 
+                  {/* ── GRN-only extras · mirrors /api-room-list policies
+                      modal (Payable at Hotel, Other Inclusions, Rate
+                      Comments). All three blocks read from the same rate
+                      fields that ExternalApiRoomList.jsx renders — the
+                      values ride on selectedRate[i] from the availability
+                      response and were preserved through the room-list →
+                      booking-page sessionStorage handoff. Rendered only
+                      for apiId=20 (GRN); each block skips itself when its
+                      source is empty, so a GRN rate with no
+                      inclusions/comments won't show empty headings. ── */}
+                  {Number(bookingData?.payload?.apiId) === 20 && (
+                    <>
+                      {/* Payable at Hotel — reuses the derived payableAtHotel
+                          summary already computed at the top of the file. */}
+                      {payableAtHotel && (
+                        <section className="policy-section">
+                          <h6 className="policy-section-title">
+                            Payable at Hotel
+                          </h6>
+                          <div className="policy-item">
+                            <div className="policy-text">
+                              {payableAtHotel.description
+                                ? `${payableAtHotel.description} `
+                                : ""}
+                              {payableAtHotel.amount != null && (
+                                <strong>
+                                  {payableAtHotel.currency || "AED"}{" "}
+                                  {Number(payableAtHotel.amount).toLocaleString(
+                                    undefined,
+                                    {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    },
+                                  )}
+                                </strong>
+                              )}
+                            </div>
+                          </div>
+                        </section>
+                      )}
+
+                      {/* Other Inclusions — free WiFi / breakfast add-ons /
+                          parking / etc from rate.other_inclusions. Deduped
+                          across all rooms so identical entries only render
+                          once. */}
+                      {(() => {
+                        const inclusions = new Set();
+                        (selectedRate || []).forEach((r) => {
+                          (r?.otherInclusions || []).forEach((inc) => {
+                            const text = stripPolicyHtml(
+                              typeof inc === "string" ? inc : String(inc ?? ""),
+                            ).trim();
+                            if (text) inclusions.add(text);
+                          });
+                        });
+                        if (inclusions.size === 0) return null;
+                        return (
+                          <section className="policy-section">
+                            <h6 className="policy-section-title">
+                              Other Inclusions
+                            </h6>
+                            {Array.from(inclusions).map((text, idx) => (
+                              <div key={idx} className="policy-item">
+                                <div
+                                  className="policy-text"
+                                  style={{ whiteSpace: "pre-line" }}
+                                >
+                                  {text}
+                                </div>
+                              </div>
+                            ))}
+                          </section>
+                        );
+                      })()}
+
+                      {/* Rate Comments — GRN's rate_comments object:
+                          comments, mealplan, pax_comments, remarks,
+                          MandatoryTax. Any of the five keys may be missing
+                          or blank; only populated ones render, and
+                          identical (label + value) pairs across rooms
+                          collapse to a single row. */}
+                      {(() => {
+                        const entryDefs = [
+                          { key: "comments", label: "Comments" },
+                          { key: "mealplan", label: "Meal Plan" },
+                          { key: "pax_comments", label: "Pax Comments" },
+                          { key: "remarks", label: "Remarks" },
+                          { key: "MandatoryTax", label: "Mandatory Tax" },
+                        ];
+                        const seen = new Map();
+                        (selectedRate || []).forEach((r) => {
+                          const rc = r?.rateComments;
+                          if (!rc || typeof rc !== "object") return;
+                          entryDefs.forEach(({ key, label }) => {
+                            const raw = rc[key];
+                            const rawStr =
+                              typeof raw === "string"
+                                ? raw
+                                : raw == null
+                                ? ""
+                                : String(raw);
+                            if (!rawStr.trim()) return;
+                            const text = stripPolicyHtml(rawStr).trim();
+                            if (!text) return;
+                            const dedupeKey = `${key}::${text}`;
+                            if (!seen.has(dedupeKey))
+                              seen.set(dedupeKey, { label, text });
+                          });
+                        });
+                        if (seen.size === 0) return null;
+                        return (
+                          <section className="policy-section">
+                            <h6 className="policy-section-title">
+                              Rate Comments
+                            </h6>
+                            {Array.from(seen.values()).map(
+                              ({ label, text }, idx) => (
+                                <div key={idx} className="policy-item">
+                                  <div
+                                    className="policy-text"
+                                    style={{ whiteSpace: "pre-line" }}
+                                  >
+                                    <strong>{label}:</strong> {text}
+                                  </div>
+                                </div>
+                              ),
+                            )}
+                          </section>
+                        );
+                      })()}
+                    </>
+                  )}
+
                   {/* Terms & Conditions — external suppliers don't return
                       T&C through the search response. Kept as a section so
                       the modal shape matches Inhouse; shows an "unspecified"

@@ -1,0 +1,81 @@
+server {
+    listen 80;
+    server_name desertbeds.com www.desertbeds.com;
+
+    return 301 https://desertbeds.com$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name desertbeds.com www.desertbeds.com;
+
+    ssl_certificate /etc/nginx/ssl/desertbeds/fullchain.pem;
+    ssl_certificate_key /etc/nginx/ssl/desertbeds/desertbeds.com.key;
+
+    root /var/www/hbs-frontend/build;
+    index index.html;
+
+    # ===================================
+    # REACT FRONTEND
+    # ===================================
+    location / {
+        try_files $uri /index.html;
+    }
+
+    # ===================================
+    # STATIC FILES
+    # ===================================
+    location /static/ {
+        root /var/www/hbs-frontend/build;
+        try_files $uri =404;
+    }
+
+    # ===================================
+    # IMAGES
+    # ===================================
+    location /images/ {
+        root /var/www/hbs-frontend/build;
+        try_files $uri @server_images;
+    }
+
+    location @server_images {
+        rewrite ^/images/(.*)$ /$1 break;
+        root /opt/hotelbookingsystem/images;
+    }
+
+    # ===================================
+    # GENERATED PDF FILES
+    # ===================================
+    location /files/ {
+        alias /opt/hotelbookingsystem/generated-pdfs/;
+        autoindex on;
+    }
+
+    # ===================================
+    # SPRING BOOT AUTH
+    # ===================================
+    location /auth/ {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Authorization $http_authorization;
+    }
+
+    # ===================================
+    # SPRING BOOT API
+    # ===================================
+    location /api/ {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_http_version 1.1;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Authorization $http_authorization;
+    }
+}
