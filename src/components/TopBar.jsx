@@ -793,8 +793,29 @@ export default function TopBar() {
     cursor: showQuickActionsOnThisPage ? "pointer" : undefined,
   }}
 >
-  <div className="logo-placeholder">GS</div>
-  <span className="fw-semibold">Globosoft</span>
+  {/* <div
+    className="logo-placeholder"
+    style={{ background: "#fff", padding: 3, overflow: "hidden" }}
+  >
+    <img
+      src={`${process.env.PUBLIC_URL}/images/logo-1.jpg`}
+      alt="Globosoft"
+      style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 6 }}
+    />
+  </div>
+  <span className="fw-semibold">Globosoft</span> */}
+
+  <div
+    className="logo-placeholder"
+    style={{ background: "#fff", padding: 3, overflow: "hidden" }}
+  >
+    <img
+      src={`${process.env.PUBLIC_URL}/images/desert.PNG`}
+      alt="Globosoft"
+      style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 6 }}
+    />
+  </div>
+  <span className="fw-semibold">desert beds</span>
 </Navbar.Brand>
          {showSidebarToggle && (
            <button
