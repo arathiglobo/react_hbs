@@ -13,7 +13,7 @@ import {
   Overlay,
   Popover,
 } from "react-bootstrap";
-import { FaArrowLeft, FaSave, FaPlus } from "react-icons/fa";
+import { FaArrowLeft, FaPlus } from "react-icons/fa";
 import {
   ChevronUp,
   ChevronDown,
@@ -940,21 +940,20 @@ export default function EditContractRate() {
         <Sidebar />
         <main className="flex-grow-1 p-4">
           <Container fluid>
+            {/* Header row — Back on the left, title next to it. The top-
+                right "Update" button was removed to avoid a duplicate action
+                (the Card footer at the bottom still has an Update button —
+                see near line 1324). justify-content-between kept for spacing
+                consistency with the rest of the app's page headers; without
+                a right-hand item the title naturally sits centre-right. */}
             <div className="d-flex justify-content-between align-items-center mb-4">
               <Button variant="outline-secondary" onClick={() => navigate(-1)}>
                 <FaArrowLeft className="me-2" /> Back
               </Button>
-              {/* Title row — HotelTitleBadge resolves the hotel id to
-                  its name so the operator can see at a glance which
-                  hotel this Contract Rate belongs to. Same component
-                  used on the action grid and the list pages. */}
               <h4 className="fw-semibold text-dark mb-0 d-flex align-items-center gap-2">
                 Edit Contract Rate
                 <HotelTitleBadge hotelId={id} />
               </h4>
-              <Button variant="success" onClick={handleUpdate}>
-                <FaSave className="me-1" /> Update
-              </Button>
             </div>
 
             <Card className="shadow-sm border-0 rounded-4 p-4">
@@ -1282,6 +1281,16 @@ export default function EditContractRate() {
                                                   e.target.value
                                                 )
                                               }
+                                              // Prevent accidental value changes from mouse-wheel
+                                              // scroll on the focused number input (browsers
+                                              // treat wheel-on-focused-number as increment /
+                                              // decrement, which quietly turned 950 into 949
+                                              // during data entry). Blurring on wheel stops the
+                                              // browser from adjusting the value AND lets the
+                                              // page continue scrolling normally. min/max, key-
+                                              // board arrows, onChange and onBlur handlers all
+                                              // continue to work unchanged.
+                                              onWheel={(e) => e.target.blur()}
                                             />
                                           </td>
                                         )

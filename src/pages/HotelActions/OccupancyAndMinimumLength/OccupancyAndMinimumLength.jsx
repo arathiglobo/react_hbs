@@ -1956,6 +1956,11 @@ const OccupancyAndMinimumLength = () => {
                                         hotelRooms: newRooms,
                                       });
                                     }}
+                                    // Prevent accidental value changes from
+                                    // mouse-wheel scroll on the focused number
+                                    // input. Same fix applied on the contract-
+                                    // rate pages — see EditContractRate.jsx.
+                                    onWheel={(e) => e.target.blur()}
                                     disabled={isViewModeOcc}
                                   />
                                 </Form.Group>
@@ -1980,6 +1985,8 @@ const OccupancyAndMinimumLength = () => {
                                         hotelRooms: newRooms,
                                       });
                                     }}
+                                    // Wheel-blur — see totalAdult sibling above.
+                                    onWheel={(e) => e.target.blur()}
                                     disabled={isViewModeOcc}
                                   />
                                 </Form.Group>
@@ -2004,6 +2011,8 @@ const OccupancyAndMinimumLength = () => {
                                         hotelRooms: newRooms,
                                       });
                                     }}
+                                    // Wheel-blur — see totalAdult sibling above.
+                                    onWheel={(e) => e.target.blur()}
                                     disabled={isViewModeOcc}
                                   />
                                 </Form.Group>
@@ -2028,6 +2037,8 @@ const OccupancyAndMinimumLength = () => {
                                         hotelRooms: newRooms,
                                       });
                                     }}
+                                    // Wheel-blur — see totalAdult sibling above.
+                                    onWheel={(e) => e.target.blur()}
                                     disabled={isViewModeOcc}
                                   />
                                 </Form.Group>
@@ -2631,6 +2642,8 @@ const OccupancyAndMinimumLength = () => {
                                       hotelRooms: newHotelRooms,
                                     });
                                   }}
+                                  // Wheel-blur — see totalAdult sibling above.
+                                  onWheel={(e) => e.target.blur()}
                                   placeholder="Enter minimum length"
                                   disabled={isViewModeMin}
                                   isInvalid={
