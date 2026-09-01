@@ -972,6 +972,29 @@ const ExternalApiRoomList = () => {
   const numRooms = (roomData?.payload?.rooms || []).length || 1;
   const isMultiRoom = numRooms > 1;
 
+  // Nights across the searched stay — derived once at the render scope so
+  // both the rate-card breakdown ("N nights × M rooms") and the Booking
+  // Summary sidebar (which shows "Nights: N") stay in sync with the confirm
+  // modal's own local stayNights computation. Defaults to 1 so a same-day
+  // search never divides or multiplies by zero.
+  const stayNights = (() => {
+    try {
+      const ci = roomData?.payload?.checkInDate
+        ? new Date(roomData.payload.checkInDate)
+        : null;
+      const co = roomData?.payload?.checkOutDate
+        ? new Date(roomData.payload.checkOutDate)
+        : null;
+      if (ci && co && !isNaN(ci) && !isNaN(co)) {
+        const diff = Math.round((co - ci) / (1000 * 60 * 60 * 24));
+        if (diff > 0) return diff;
+      }
+    } catch (e) {
+      /* fall through */
+    }
+    return 1;
+  })();
+
   useEffect(() => {
     setSelectedRooms((prev) => {
       if (prev.length === numRooms) return prev;
@@ -2609,6 +2632,19 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                               {payload.checkOutDate || hotel.checkOutDate}
                             </span>
                           </div>
+                          {/* Nights count — derived from check-in / check-out
+                              so it always matches whatever dates the operator
+                              searched. Same stayNights used by the rate-card
+                              breakdown above, so the two views never disagree. */}
+                          <div className="d-flex justify-content-between mb-2">
+                            <span>
+                              <FaCalendarAlt className="text-muted me-2" />
+                              Nights:
+                            </span>
+                            <span className="fw-semibold">
+                              {stayNights} {stayNights === 1 ? "night" : "nights"}
+                            </span>
+                          </div>
                           <div className="mb-2">
                             <div className="d-flex justify-content-between">
                               <span>
@@ -3130,19 +3166,16 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                             0,
                                                     )}
                                                   </div>
-                                                  {!isMultiRoom && (
-                                                    <div className="indivial-price-per-room-noofroom">
-                                                      <div className="text-muted small">
-                                                        {formatPrice(
-                                                          rate.totalRate || 0,
-                                                        )}{" "}
-                                                        × {rate.numberOfRooms || 1}{" "}
-                                                        rooms
-                                                      </div>
-                                                    </div>
-                                                  )}
+                                                  {/* Simplified per-operator request: drop the
+                                                      "rate × rooms × nights" breakdown line
+                                                      and just show "for N nights" beneath the
+                                                      total price. Single-night stays keep
+                                                      "per night" so nothing regresses for
+                                                      short searches. */}
                                                   <div className="price-per-night small text-muted">
-                                                    per night
+                                                    {stayNights > 1
+                                                      ? `for ${stayNights} nights`
+                                                      : "per night"}
                                                   </div>
                                                 </div>
 
@@ -3467,17 +3500,13 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                             0,
                                                     )}
                                                   </div>
-                                                  {!isMultiRoom && (
-                                                    <div className="text-muted small">
-                                                      {formatPrice(
-                                                        rate.totalRate || 0,
-                                                      )}{" "}
-                                                      × {rate.numberOfRooms || 1}{" "}
-                                                      rooms
-                                                    </div>
-                                                  )}
+                                                  {/* See sibling in the grid view above — same
+                                                      simplification: drop the multiplication
+                                                      breakdown, show only "for N nights". */}
                                                   <div className="small text-muted">
-                                                    per night
+                                                    {stayNights > 1
+                                                      ? `for ${stayNights} nights`
+                                                      : "per night"}
                                                   </div>
                                                 </div>
 
