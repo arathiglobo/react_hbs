@@ -72,38 +72,38 @@ export default function CCAvenueCheckoutPage() {
 
     (async () => {
       try {
-        const response = await axiosInstance.post(
-          "/api/payment/ccavenue/initiate",
-          {
-            billingName,
-            returnPath: returnTo,
-            // The backend re-derives the payable amount server-side either
-            // way (from the payload's room rates, the existing booking's
-            // stored total, or that create-flow's own pricing) and IGNORES
-            // any client-supplied amount — kept off the wire deliberately so
-            // a tampered client can't influence the charge.
-            //
-            // Precedence: an explicit flowType always wins over the legacy
-            // "reconfirmBookingId → RECONFIRM" shortcut, so a caller that
-            // passes BOTH (e.g. PACKAGE_RECONFIRM with the existing package
-            // bookingId) reaches the right backend arm. When flowType is
-            // absent, reconfirmBookingId still defaults to RECONFIRM (hotel)
-            // — every legacy hotel-detail caller keeps working unchanged.
-            ...(flowType
-              ? reconfirmBookingId
-                ? {
-                    flowType,
-                    existingBookingId: Number(reconfirmBookingId),
-                  }
-                : { flowType, bookingPayload }
-              : reconfirmBookingId
-                ? {
-                    flowType: "RECONFIRM",
-                    existingBookingId: Number(reconfirmBookingId),
-                  }
-                : { bookingPayload }),
-          },
-        );
+const response = await axiosInstance.post(
+  "/api/payment/ccavenue/initiate",
+  {
+    billingName,
+    returnPath: returnTo,
+    // The backend re-derives the payable amount server-side either
+    // way (from the payload's room rates, the existing booking's
+    // stored total, or that create-flow's own pricing) and IGNORES
+    // any client-supplied amount — kept off the wire deliberately so
+    // a tampered client can't influence the charge.
+    //
+    // Precedence: an explicit flowType always wins over the legacy
+    // "reconfirmBookingId → RECONFIRM" shortcut, so a caller that
+    // passes BOTH (e.g. PACKAGE_RECONFIRM with the existing package
+    // bookingId) reaches the right backend arm. When flowType is
+    // absent, reconfirmBookingId still defaults to RECONFIRM (hotel)
+    // — every legacy hotel-detail caller keeps working unchanged.
+    ...(flowType
+      ? reconfirmBookingId
+        ? {
+            flowType,
+            existingBookingId: Number(reconfirmBookingId),
+          }
+        : { flowType, bookingPayload }
+      : reconfirmBookingId
+        ? {
+            flowType: "RECONFIRM",
+            existingBookingId: Number(reconfirmBookingId),
+          }
+        : { bookingPayload }),
+  },
+);
         if (cancelled) return;
         const { gatewayUrl, accessCode, encRequest, payableAmount, currency } =
           response.data || {};

@@ -32,7 +32,7 @@
 }
 .register-page .register-header::before {
   content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
-  background: linear-gradient(90deg, #EC0B43 0%, #C90939 100%);
+  background: linear-gradient(90deg, #F75E00 0%, #D65100 100%);
 }
 .register-page .header-content { display: flex !important; justify-content: space-between !important; align-items: center !important; gap: 16px !important; flex-wrap: wrap !important; }
 
@@ -57,7 +57,7 @@
   transition: border-color .15s ease, color .15s ease, background .15s ease !important;
 }
 .register-page .back-button:hover {
-  background: #FDE7ED !important; border-color: #EC0B43 !important; color: #EC0B43 !important;
+  background: #FDECD6 !important; border-color: #F75E00 !important; color: #F75E00 !important;
 }
 
 /* ── Step indicator → clean circles, red active ── */
@@ -77,9 +77,9 @@
   transition: background .2s ease, color .2s ease, border-color .2s ease, transform .2s ease !important;
 }
 .register-page .step-circle.active {
-  background: #EC0B43 !important; color: #ffffff !important; border-color: #EC0B43 !important;
+  background: #F75E00 !important; color: #ffffff !important; border-color: #F75E00 !important;
   transform: scale(1.04) !important;
-  box-shadow: 0 8px 18px rgba(236, 11, 67, .28) !important;
+  box-shadow: 0 8px 18px rgba(247, 94, 0, .28) !important;
 }
 .register-page .step-label {
   font-size: 12.5px !important; font-weight: 600 !important; color: #3E3E3B !important;
@@ -88,7 +88,7 @@
 .register-page .step-connector {
   flex: 1 !important; height: 2px !important; background: #ECECE8 !important; margin: 0 6px !important; border-radius: 2px !important;
 }
-.register-page .step-connector.active { background: linear-gradient(90deg, #EC0B43, #C90939) !important; }
+.register-page .step-connector.active { background: linear-gradient(90deg, #F75E00, #D65100) !important; }
 @media (max-width: 720px) {
   .register-page .step-indicator { padding: 16px !important; flex-wrap: wrap !important; gap: 10px !important; }
   .register-page .step-connector { display: none !important; }
@@ -110,7 +110,7 @@
   display: flex !important; align-items: center !important; gap: 10px !important;
   font-size: 19px !important; font-weight: 700 !important; letter-spacing: -.02em !important; color: #15171C !important; margin: 0 !important;
 }
-.register-page .step-title .step-icon { color: #EC0B43 !important; }
+.register-page .step-title .step-icon { color: #F75E00 !important; }
 .register-page .step-description { color: #6B7280 !important; font-size: 13.5px !important; letter-spacing: -.006em !important; margin: 6px 0 0 !important; }
 
 /* ── Labels + fields ── */
@@ -119,7 +119,7 @@
   font-size: .72rem !important; font-weight: 600 !important; letter-spacing: .04em !important;
   text-transform: uppercase !important; color: #8A8A85 !important; margin-bottom: .42rem !important;
 }
-.register-page .required { color: #EC0B43 !important; font-weight: 700 !important; }
+.register-page .required { color: #F75E00 !important; font-weight: 700 !important; }
 .register-page .form-control,
 .register-page .form-select {
   border-radius: 11px !important; border: 1.5px solid #E5E5E1 !important; background-color: #FAFAF8 !important;
@@ -143,37 +143,37 @@
 }
 .register-page .form-control:focus,
 .register-page .form-select:focus {
-  border-color: #EC0B43 !important; background-color: #ffffff !important;
-  box-shadow: 0 0 0 4px rgba(236, 11, 67, .12) !important;
+  border-color: #F75E00 !important; background-color: #ffffff !important;
+  box-shadow: 0 0 0 4px rgba(247, 94, 0, .12) !important;
 }
 .register-page .form-control::placeholder { color: #A8A8A3 !important; font-weight: 400 !important; }
 .register-page .form-control.is-invalid,
-.register-page .form-select.is-invalid { border-color: #EC0B43 !important; }
-.register-page .invalid-feedback { color: #C90939 !important; }
+.register-page .form-select.is-invalid { border-color: #F75E00 !important; }
+.register-page .invalid-feedback { color: #D65100 !important; }
 
 /* ── Buttons (Next / Back / Submit) ── */
 .register-page .btn { border-radius: 11px !important; font-weight: 600 !important; letter-spacing: -.004em !important; }
 .register-page .btn-primary,
 .register-page .login-now-button {
-  background: #EC0B43 !important; border-color: #EC0B43 !important; color: #fff !important;
-  box-shadow: 0 10px 24px rgba(236, 11, 67, .22) !important;
+  background: #F75E00 !important; border-color: #F75E00 !important; color: #fff !important;
+  box-shadow: 0 10px 24px rgba(247, 94, 0, .22) !important;
   transition: transform .15s cubic-bezier(.16, 1, .3, 1), background .15s ease, box-shadow .15s ease !important;
 }
 .register-page .btn-primary:hover,
 .register-page .login-now-button:hover {
-  background: #C90939 !important; border-color: #C90939 !important; transform: translateY(-2px) !important;
-  box-shadow: 0 16px 34px rgba(236, 11, 67, .32) !important;
+  background: #D65100 !important; border-color: #D65100 !important; transform: translateY(-2px) !important;
+  box-shadow: 0 16px 34px rgba(247, 94, 0, .32) !important;
 }
 .register-page .btn-outline-secondary {
   color: #3E3E3B !important; border-color: #E5E5E1 !important; background: #ffffff !important;
 }
 .register-page .btn-outline-secondary:hover {
-  color: #EC0B43 !important; border-color: #EC0B43 !important; background: #FDE7ED !important;
+  color: #F75E00 !important; border-color: #F75E00 !important; background: #FDECD6 !important;
 }
 
 /* ── Success state ── */
-.register-page .success-icon { color: #EC0B43 !important; }
+.register-page .success-icon { color: #F75E00 !important; }
 .register-page .success-title { color: #15171C !important; font-weight: 700 !important; letter-spacing: -.025em !important; }
 .register-page .success-message { color: #6B7280 !important; letter-spacing: -.008em !important; }
 .register-page .redirect-message { color: #8A8A85 !important; font-size: 13px !important; margin-top: 12px !important; }
-.register-page .redirect-message strong { color: #EC0B43 !important; }
+.register-page .redirect-message strong { color: #F75E00 !important; }

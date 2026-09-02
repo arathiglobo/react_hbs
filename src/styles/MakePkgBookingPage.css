@@ -307,12 +307,12 @@
 
 .itinerary-modal-item-selected {
   background: linear-gradient(135deg, #e7f3ff 0%, #f0f8ff 100%) !important;
-  border-color: #EC0B43 !important;
-  box-shadow: 0 2px 8px rgba(236, 11, 67, 0.2);
+  border-color: #F75E00 !important;
+  box-shadow: 0 2px 8px rgba(247, 94, 0, 0.2);
 }
 
 .itinerary-modal-item-selected:hover {
-  box-shadow: 0 4px 16px rgba(236, 11, 67, 0.3);
+  box-shadow: 0 4px 16px rgba(247, 94, 0, 0.3);
 }
 
 /* Empty State */

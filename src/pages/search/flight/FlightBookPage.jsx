@@ -18,14 +18,24 @@ import {
   FaShoppingCart,
   FaArrowLeft,
   FaInfoCircle,
-  FaTable,
   FaUserTie,
+  FaCalendarAlt,
 } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
+// Reuses HotelBookingPage's right-sidebar classes (.hbp-sticky-summary,
+// .hbp-summary-row/-label/-value, .hbp-price-card, .hbp-action-bar) so the
+// flight and hotel booking pages' summary sidebars look like one product —
+// same pattern FlightSearch.jsx already uses for HotelSearch.css.
+import "../../../styles/HotelBookingPage.css";
+
+// Fixed localStorage key used by FlightBestPriceCheck to hand off the
+// selected fare payload across the new-tab boundary. MUST match the
+// constant of the same name in FlightBestPriceCheck.jsx.
+const FBP_PAYLOAD_STORAGE_KEY = "fbp:pendingPayload";
 
 /*
  * FlightBookPage — /new-booking/flightBookPage
@@ -121,13 +131,39 @@ const FlightBookPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const rec = location.state?.rec || null;
-  const fare = location.state?.fare || null;
-  const selectedFamily = location.state?.selectedFamily || null;
-  const pax = location.state?.pax || { adult: 1, children: 0, infant: 0 };
-  // agentId flows in via router state from Best Price Check — used to
-  // stamp the persisted flight_booking row for the agent booking list.
-  const agentId = location.state?.agentId || "";
+  // "Book Now" now opens this page in a NEW tab (see FlightBestPriceCheck),
+  // so the fare payload can't travel via React Router in-memory state —
+  // a fresh tab has no access to it. It's stashed in localStorage under a
+  // fixed key by the opener; we read it once on mount as a fallback for
+  // whichever field location.state doesn't have. The useEffect below
+  // removes the entry once so it doesn't leak into an unrelated visit.
+  const storedPayload = useMemo(() => {
+    try {
+      const raw = localStorage.getItem(FBP_PAYLOAD_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.removeItem(FBP_PAYLOAD_STORAGE_KEY);
+    } catch (e) {
+      /* ignore — nothing to clean up if storage is unavailable */
+    }
+  }, []);
+
+  const rec = location.state?.rec || storedPayload?.rec || null;
+  const fare = location.state?.fare || storedPayload?.fare || null;
+  const selectedFamily = location.state?.selectedFamily || storedPayload?.selectedFamily || null;
+  const pax = location.state?.pax || storedPayload?.pax || { adult: 1, children: 0, infant: 0 };
+  // agentId flows in via router state or the URL query — used to stamp
+  // the persisted flight_booking row for the agent booking list.
+  const searchParams = new URLSearchParams(location.search);
+  const agentId = location.state?.agentId
+    || storedPayload?.agentId
+    || searchParams.get("agentId")
+    || "";
 
   const adultCount = Math.max(1, Number(pax.adult ?? 1) || 1);
   const childrenCount = Math.max(0, Number(pax.children ?? 0) || 0);
@@ -206,6 +242,20 @@ const FlightBookPage = () => {
     }
   }, [rec, fare, navigate]);
 
+  // Auto-redirect to the Flight Bookings list once a confirmation lands,
+  // mirroring the hotel booking flow (HotelBookingPage → hotel-booking-list).
+  // Short delay so the agent still sees the PNR + e-ticket numbers in the
+  // success modal; the "View All Bookings" button remains for an immediate
+  // jump, and "New Search" cancels the pending navigation.
+  useEffect(() => {
+    if (!confirmation) return;
+    const t = setTimeout(
+      () => navigate("/booking-details/flight-booking-list"),
+      3500,
+    );
+    return () => clearTimeout(t);
+  }, [confirmation, navigate]);
+
   // ── Trip Summary helpers (from rec / selectedFamily / fare) ──────────
   const summary = useMemo(() => {
     if (!rec?.legs?.length) return null;
@@ -250,9 +300,13 @@ const FlightBookPage = () => {
   }, [rec, fare, selectedFamily]);
 
   const currency = fare?.currency || selectedFamily?.currency || "AED";
+  // Sell price (marked-up) is what the agent is actually charged — matches
+  // the price shown as "Total Price" on Best Price Check. Falls back to the
+  // raw totalFare only if the backend didn't compute markup.
   const total =
-    Number(fare?.totalFare ?? selectedFamily?.price ?? 0) *
-    (Number.isFinite(totalPax) && totalPax > 0 ? 1 : 1);
+    Number(
+      fare?.totalRateWithMarkup ?? fare?.totalFare ?? selectedFamily?.price ?? 0,
+    ) * (Number.isFinite(totalPax) && totalPax > 0 ? 1 : 1);
   // Note: fare.totalFare is already the total for all passengers on TIPNR
   // (Amadeus totals per recommendation), so we do NOT multiply by pax count.
 
@@ -534,8 +588,15 @@ const FlightBookPage = () => {
             fare.baseFare ?? fare.base ?? selectedFamily?.baseFare ?? null,
           taxAmount:
             fare.taxAmount ?? fare.tax ?? selectedFamily?.taxAmount ?? null,
+          // Sell price (marked-up) — the amount the customer actually
+          // agreed to pay, matching the "Total Price" shown on Best Price
+          // Check and the Trip Total on this page.
           totalFare:
-            fare.totalFare ?? fare.total ?? selectedFamily?.price ?? null,
+            fare.totalRateWithMarkup ??
+            fare.totalFare ??
+            fare.total ??
+            selectedFamily?.price ??
+            null,
           refundable:
             selectedFamily?.refundable ??
             fare.refundable ??
@@ -606,9 +667,14 @@ const FlightBookPage = () => {
     setSubmitting(true);
     try {
       const payload = buildPayload();
+      // Override AxiosInstance's global 30s timeout — bookFlight chains 6
+      // sequential Amadeus SOAP calls server-side (Sell, PNR Add, Price
+      // PNR, Create TST, Issue Ticket, End Transact) behind one HTTP
+      // request, so it needs the longest ceiling of any Amadeus call here.
       const res = await axiosInstance.post(
         "/custom/amadeus/bookFlight",
         payload,
+        { timeout: 120000 },
       );
       const data = res?.data || {};
       if (data.success && data.pnrRecordLocator) {
@@ -651,11 +717,7 @@ const FlightBookPage = () => {
       <div style={{ display: "flex", minHeight: "calc(100vh - 60px)" }}>
         <Sidebar />
         <main style={{ flex: 1, padding: "24px", background: "#f7f8fa" }}>
-          <div className="d-flex justify-content-between align-items-center mb-3">
-            <h4 style={{ margin: 0 }}>
-              <FaShoppingCart style={{ marginRight: 8, color: "#e11d48" }} />
-              Flight Booking
-            </h4>
+          <div className="d-flex align-items-center gap-3 mb-3">
             <Button
               variant="outline-secondary"
               size="sm"
@@ -665,124 +727,19 @@ const FlightBookPage = () => {
               <FaArrowLeft style={{ marginRight: 6 }} />
               Back
             </Button>
+            <h4 style={{ margin: 0 }}>
+              <FaShoppingCart style={{ marginRight: 8, color: "#e11d48" }} />
+              Flight Booking
+            </h4>
           </div>
 
           <Form onSubmit={onConfirm}>
             <Row className="g-4">
-              {/* ── Left column: Trip Summary + Passenger Details ── */}
+              {/* ── Left column: Passenger Details ──
+                  Trip Summary lives only in the right-side "Flight Summary"
+                  card now (see below) — no need to show the same itinerary
+                  twice on this page. */}
               <Col lg={8}>
-                {/* Trip Summary */}
-                {summary && (
-                  <Card className="mb-4 shadow-sm" style={{ borderRadius: 12 }}>
-                    <Card.Body>
-                      <div className="d-flex align-items-center mb-3">
-                        <div
-                          style={{
-                            width: 36,
-                            height: 36,
-                            borderRadius: 8,
-                            background: "#4f46e5",
-                            color: "#fff",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            marginRight: 10,
-                          }}
-                        >
-                          <FaPlaneDeparture />
-                        </div>
-                        <h5 className="mb-0">Trip Summary</h5>
-                      </div>
-
-                      <div className="d-flex justify-content-between align-items-center flex-wrap mb-2">
-                        <h6 className="mb-0" style={{ fontSize: 17 }}>
-                          {summary.fromCity ? `${summary.fromCity} ` : ""}
-                          ({summary.fromCode}) → {summary.toCity ? `${summary.toCity} ` : ""}
-                          ({summary.toCode})
-                        </h6>
-                        <Badge
-                          bg={summary.refundable ? "success" : "danger"}
-                          style={{ fontSize: 11 }}
-                        >
-                          {summary.refundable ? "Refundable" : "Non-Refundable"}
-                        </Badge>
-                      </div>
-
-                      <div className="text-muted mb-3" style={{ fontSize: 13 }}>
-                        <strong>{fmtWeekdayDate(summary.departure)}</strong>
-                        <span className="mx-2">·</span>
-                        {summary.stopsLabel}
-                        <span className="mx-2">·</span>
-                        {summary.duration}
-                      </div>
-
-                      <div className="text-muted mb-3" style={{ fontSize: 14 }}>
-                        <strong>{summary.airline}</strong>
-                        {summary.carrier ? ` · ${summary.carrier}${summary.flightNumber || ""}` : ""}
-                        {summary.equipment ? (
-                          <Badge bg="light" text="dark" className="ms-2" style={{ fontSize: 10 }}>
-                            {summary.equipment}
-                          </Badge>
-                        ) : null}
-                      </div>
-
-                      {/* Route timeline */}
-                      <Row className="align-items-center g-2 mb-3" style={{ fontSize: 14 }}>
-                        <Col xs={4}>
-                          <div style={{ fontSize: 18, fontWeight: 700 }}>
-                            {fmtTime(summary.departure)}
-                          </div>
-                          <div className="fw-semibold">
-                            {summary.fromCity || summary.fromCode}
-                          </div>
-                          <div className="text-muted" style={{ fontSize: 12 }}>
-                            {summary.fromCode}
-                            {summary.fromTerminal ? `, Terminal ${summary.fromTerminal}` : ""}
-                          </div>
-                        </Col>
-                        <Col xs={4} className="text-center text-muted">
-                          <div style={{ fontSize: 12 }}>{summary.duration}</div>
-                          <div
-                            style={{
-                              height: 2,
-                              background: "#dee2e6",
-                              margin: "6px 8px",
-                            }}
-                          />
-                          <div style={{ fontSize: 11 }}>{summary.stopsLabel}</div>
-                        </Col>
-                        <Col xs={4} className="text-end">
-                          <div style={{ fontSize: 18, fontWeight: 700 }}>
-                            {fmtTime(summary.arrival)}
-                          </div>
-                          <div className="fw-semibold">
-                            {summary.toCity || summary.toCode}
-                          </div>
-                          <div className="text-muted" style={{ fontSize: 12 }}>
-                            {summary.toCode}
-                            {summary.toTerminal ? `, Terminal ${summary.toTerminal}` : ""}
-                          </div>
-                        </Col>
-                      </Row>
-
-                      {/* Baggage strip */}
-                      <div
-                        className="d-flex flex-wrap gap-4 pt-2"
-                        style={{ borderTop: "1px solid #f1f3f5", fontSize: 13 }}
-                      >
-                        <span className="text-muted">
-                          <FaSuitcase className="me-2" style={{ opacity: 0.7 }} />
-                          <strong>Cabin Baggage:</strong> {summary.cabinBaggage}
-                        </span>
-                        <span className="text-muted">
-                          <FaSuitcase className="me-2" style={{ opacity: 0.7 }} />
-                          <strong>Check-In Baggage:</strong> {summary.checkinBaggage}
-                        </span>
-                      </div>
-                    </Card.Body>
-                  </Card>
-                )}
-
                 {/* Passenger Details */}
                 <Card className="shadow-sm" style={{ borderRadius: 12 }}>
                   <Card.Body>
@@ -792,7 +749,7 @@ const FlightBookPage = () => {
                           width: 36,
                           height: 36,
                           borderRadius: 8,
-                          background: "#4f46e5",
+                          background: "#e11d48",
                           color: "#fff",
                           display: "flex",
                           alignItems: "center",
@@ -867,84 +824,187 @@ const FlightBookPage = () => {
                 </div>
               </Col>
 
-              {/* ── Right column: Trip Total sidebar (sticky) ── */}
+              {/* ── Right column: Flight Summary + Price Details (sticky) ──
+                  Mirrors HotelBookingPage's right sidebar layout exactly:
+                  a "Booking Summary"-style card with a colored header bar
+                  and icon+label detail rows, a separate "Price Details"
+                  card with the total, then a sticky action bar — reusing
+                  HotelBookingPage.css's .hbp-* classes so both booking
+                  flows look like one product. */}
               <Col lg={4}>
-                <div style={{ position: "sticky", top: 20 }}>
-                  <Card className="shadow-sm mb-3" style={{ borderRadius: 12 }}>
-                    <Card.Body>
-                      <div className="d-flex align-items-center mb-3">
-                        <FaTable className="me-2" style={{ color: "#4f46e5" }} />
-                        <h6 className="mb-0">Trip Total</h6>
-                      </div>
-                      <div className="text-muted mb-2" style={{ fontSize: 14 }}>
-                        {totalPax} Passenger{totalPax !== 1 ? "s" : ""}
-                        {" ("}
-                        {adultCount > 0 && `${adultCount} Adult${adultCount !== 1 ? "s" : ""}`}
-                        {childrenCount > 0 && `, ${childrenCount} Child${childrenCount !== 1 ? "ren" : ""}`}
-                        {infantCount > 0 && `, ${infantCount} Infant${infantCount !== 1 ? "s" : ""}`}
-                        {")"}
-                      </div>
-                      <hr />
-                      <div className="d-flex justify-content-between align-items-center">
-                        <strong>Total:</strong>
-                        <div
-                          style={{
-                            fontSize: 22,
-                            fontWeight: 700,
-                            color: "#2b5fdd",
-                          }}
-                        >
-                          {currency} {fmtAmount(total)}
-                        </div>
-                      </div>
-                      {fare?.fareFamily && (
-                        <div className="text-muted mt-2" style={{ fontSize: 12 }}>
-                          Fare family: <strong>{fare.fareFamily}</strong>
+                <div className="hbp-sticky-summary">
+                  <Card className="shadow-sm rounded-3 mb-3 booking-summary-card border-0 overflow-hidden">
+                    <Card.Header className="bg-primary text-white py-2 rounded-top">
+                      <h6 className="mb-0 d-flex align-items-center">
+                        <FaPlaneDeparture className="me-2" /> Flight Summary
+                      </h6>
+                    </Card.Header>
+                    <Card.Body className="p-3">
+                      {summary && (
+                        <div className="mb-3">
+                          <div className="fw-bold text-primary mb-1">
+                            {summary.fromCity ? `${summary.fromCity} ` : ""}
+                            ({summary.fromCode}) → {summary.toCity ? `${summary.toCity} ` : ""}
+                            ({summary.toCode})
+                          </div>
+                          <div className="text-muted small mb-2">
+                            {summary.airline}
+                            {summary.carrier
+                              ? ` · ${summary.carrier}${summary.flightNumber || ""}`
+                              : ""}
+                            {summary.equipment ? ` · ${summary.equipment}` : ""}
+                          </div>
+                          <div className="d-flex flex-wrap align-items-center gap-2">
+                            <span className="badge bg-light text-dark border">
+                              {summary.stopsLabel}
+                            </span>
+                            <span className="badge bg-light text-dark border">
+                              {summary.duration}
+                            </span>
+                            <span
+                              className={`badge ${summary.refundable ? "bg-success" : "bg-danger"}`}
+                            >
+                              {summary.refundable ? "Refundable" : "Non-Refundable"}
+                            </span>
+                          </div>
                         </div>
                       )}
+
+                      <div className="hbp-summary-row align-items-start">
+                        <div className="hbp-summary-label">
+                          <FaCalendarAlt className="me-2 text-primary" />
+                          Departure
+                        </div>
+                        <div className="hbp-summary-value text-end">
+                          {summary
+                            ? `${fmtWeekdayDate(summary.departure)}, ${fmtTime(summary.departure)}`
+                            : "—"}
+                          {summary?.fromTerminal && (
+                            <div className="text-muted" style={{ fontSize: 11, fontWeight: 400 }}>
+                              {summary.fromCode}, Terminal {summary.fromTerminal}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="hbp-summary-row align-items-start">
+                        <div className="hbp-summary-label">
+                          <FaCalendarAlt className="me-2 text-primary" />
+                          Arrival
+                        </div>
+                        <div className="hbp-summary-value text-end">
+                          {summary
+                            ? `${fmtWeekdayDate(summary.arrival)}, ${fmtTime(summary.arrival)}`
+                            : "—"}
+                          {summary?.toTerminal && (
+                            <div className="text-muted" style={{ fontSize: 11, fontWeight: 400 }}>
+                              {summary.toCode}, Terminal {summary.toTerminal}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="hbp-summary-row align-items-start">
+                        <div className="hbp-summary-label">
+                          <FaUsers className="me-2 text-primary" />
+                          Passengers
+                        </div>
+                        <div className="hbp-summary-value text-end">
+                          {adultCount} Adult{adultCount !== 1 ? "s" : ""}
+                          {childrenCount
+                            ? `, ${childrenCount} Child${childrenCount !== 1 ? "ren" : ""}`
+                            : ""}
+                          {infantCount
+                            ? `, ${infantCount} Infant${infantCount !== 1 ? "s" : ""}`
+                            : ""}
+                        </div>
+                      </div>
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaSuitcase className="me-2 text-primary" />
+                          Cabin Baggage
+                        </div>
+                        <div className="hbp-summary-value text-end" style={{ fontSize: 12 }}>
+                          {summary?.cabinBaggage || "As per airline"}
+                        </div>
+                      </div>
+                      <div className="hbp-summary-row">
+                        <div className="hbp-summary-label">
+                          <FaSuitcase className="me-2 text-primary" />
+                          Check-In Baggage
+                        </div>
+                        <div className="hbp-summary-value text-end" style={{ fontSize: 12 }}>
+                          {summary?.checkinBaggage || "As per airline"}
+                        </div>
+                      </div>
                     </Card.Body>
                   </Card>
 
-                  <Button
-                    type="submit"
-                    disabled={submitting || noPaymentPathAvailable}
-                    className="w-100"
-                    style={{
-                      background: noPaymentPathAvailable
-                        ? "#9ca3af"
-                        : "linear-gradient(135deg, #EC0B43 0%, #C90939 100%)",
-                      border: "none",
-                      color: "#fff",
-                      fontWeight: 700,
-                      textTransform: "uppercase",
-                      padding: "12px",
-                      fontSize: 15,
-                      boxShadow: noPaymentPathAvailable
-                        ? "none"
-                        : "0 4px 12px rgba(236, 11, 67, 0.35)",
-                    }}
-                    title={
-                      noPaymentPathAvailable
-                        ? "No payment path available for this agent"
-                        : undefined
-                    }
-                  >
-                    {submitting ? (
-                      <>
-                        <Spinner size="sm" animation="border" className="me-2" />
-                        Booking…
-                      </>
-                    ) : (
-                      "Confirm Booking"
-                    )}
-                  </Button>
+                  <Card className="shadow-sm rounded-3 border-0 hbp-price-card">
+                    <Card.Header className="bg-light py-2">
+                      <h6 className="mb-0 fw-bold">Price Details</h6>
+                    </Card.Header>
+                    <Card.Body className="p-3">
+                      {fare?.totalFare != null && (
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">Net Fare</div>
+                          <div className="hbp-summary-value">
+                            {currency} {fmtAmount(fare.totalFare)}
+                          </div>
+                        </div>
+                      )}
+                      {fare?.fareFamily && (
+                        <div className="hbp-summary-row">
+                          <div className="hbp-summary-label">Fare Family</div>
+                          <div className="hbp-summary-value">{fare.fareFamily}</div>
+                        </div>
+                      )}
+                      <hr className="my-2" />
+                      <div className="hbp-summary-row fw-bold">
+                        <div className="hbp-summary-label text-danger">Total</div>
+                        <div className="hbp-summary-value text-danger" style={{ fontSize: 20 }}>
+                          {currency} {fmtAmount(total)}
+                        </div>
+                      </div>
+                    </Card.Body>
+                  </Card>
 
-                  <div
-                    className="text-muted text-center mt-2"
-                    style={{ fontSize: 11 }}
-                  >
-                    <FaInfoCircle className="me-1" />
-                    By confirming you agree to the fare rules of the selected fare.
+                  <div className="hbp-action-bar mt-3">
+                    <Button
+                      type="submit"
+                      disabled={submitting || noPaymentPathAvailable}
+                      className="w-100"
+                      style={{
+                        background: "#e11d48",
+                        border: "none",
+                        color: "#fff",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        padding: "12px",
+                        fontSize: 15,
+                        boxShadow: "0 4px 12px rgba(225, 29, 72, 0.35)",
+                      }}
+                      title={
+                        noPaymentPathAvailable
+                          ? "No payment path available for this agent"
+                          : undefined
+                      }
+                    >
+                      {submitting ? (
+                        <>
+                          <Spinner size="sm" animation="border" className="me-2" />
+                          Booking…
+                        </>
+                      ) : (
+                        "Confirm Booking"
+                      )}
+                    </Button>
+
+                    <div
+                      className="text-muted text-center mt-2"
+                      style={{ fontSize: 11 }}
+                    >
+                      <FaInfoCircle className="me-1" />
+                      By confirming you agree to the fare rules of the selected fare.
+                    </div>
                   </div>
                 </div>
               </Col>
@@ -1103,7 +1163,7 @@ const CustomerDetailsCard = ({ customer, setCustomerField, errors }) => {
                 width: 36,
                 height: 36,
                 borderRadius: 8,
-                background: "#4f46e5",
+                background: "#e11d48",
                 color: "#fff",
                 display: "flex",
                 alignItems: "center",
@@ -1282,16 +1342,16 @@ const PassengerCard = ({ idx, p, errors, setField, ordinal, isPrimary }) => {
     <Card
       className="mb-3"
       style={{
-        border: `1px solid ${isPrimary ? "#c7d2fe" : "#e5e7eb"}`,
+        border: `1px solid ${isPrimary ? "#fecdd3" : "#e5e7eb"}`,
         borderLeftWidth: 4,
-        borderLeftColor: isPrimary ? "#4f46e5" : "#c7d2fe",
+        borderLeftColor: isPrimary ? "#e11d48" : "#fecdd3",
         borderRadius: 10,
       }}
     >
       <Card.Body>
         <div className="d-flex justify-content-between align-items-center flex-wrap mb-3">
           <h6 className="mb-0" style={{ fontSize: 16, fontWeight: 600 }}>
-            <FaUsers className="me-2" style={{ color: "#4f46e5" }} />
+            <FaUsers className="me-2" style={{ color: "#e11d48" }} />
             {paxLabel(p.type, ordinal)}
             <Badge bg={badgeBg} className="ms-2" style={{ fontSize: 10 }}>
               {typeBadge}
@@ -1300,7 +1360,7 @@ const PassengerCard = ({ idx, p, errors, setField, ordinal, isPrimary }) => {
           {isPrimary && (
             <Badge
               style={{
-                background: "#4f46e5",
+                background: "#e11d48",
                 fontSize: 10,
                 padding: "6px 10px",
                 letterSpacing: 0.5,
@@ -1573,12 +1633,12 @@ const PaymentSection = ({
                     padding: "8px 14px",
                     borderRadius: 8,
                     border: active
-                      ? "2px solid #4f46e5"
+                      ? "2px solid #e11d48"
                       : "1px solid #d1d5db",
-                    background: active ? "#f5f3ff" : "#fff",
+                    background: active ? "#fff1f2" : "#fff",
                     fontSize: 13,
                     fontWeight: active ? 600 : 500,
-                    color: active ? "#4f46e5" : "#374151",
+                    color: active ? "#e11d48" : "#374151",
                     display: "flex",
                     alignItems: "center",
                     gap: 6,

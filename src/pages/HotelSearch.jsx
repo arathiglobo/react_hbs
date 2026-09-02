@@ -1527,7 +1527,11 @@ export default function HotelSearch({
         roomNo: index + 1,
         adultCount: String(room.adults || 1),
         childCount: String(room.children || 0),
-        childAges: room.childAges?.length ? room.childAges : [0],
+        // Only send childAges when the user actually picked at least one
+        // child. The old fallback of [0] was making some suppliers
+        // (e.g. GoGlobal) treat it as a real 1-year-old and charge for a
+        // phantom child. Empty array = truly no children.
+        childAges: room.childAges?.length ? room.childAges : [],
         adultAges: room.adultAges?.length ? room.adultAges : [25],
       }));
 
@@ -2202,7 +2206,7 @@ export default function HotelSearch({
                         ariaLabel="Check-out date"
                         onChange={(newCheckOut) => {
                           setCheckOut(newCheckOut);
-                          if (newCheckOut) clearError("checkOut");
+                          if (newCheckOut) clearError("checkOut"); 
                         }}
                       />
                       {errors.checkOut && (
@@ -2990,12 +2994,17 @@ export default function HotelSearch({
                                         }}
                                       >
                                         {hotel.price
-                                          ? `${displayCurrencyCode} ${convertFromAed(
-                                              hotel.price,
-                                            ).toLocaleString(undefined, {
-                                              minimumFractionDigits: 2,
-                                              maximumFractionDigits: 2,
-                                            })}`
+                                          ? hotel.channelType === "ratehawk"
+                                            ? `AED ${Number(hotel.price).toLocaleString(undefined, {
+                                                minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2,
+                                              })}`
+                                            : `${displayCurrencyCode} ${convertFromAed(
+                                                hotel.price,
+                                              ).toLocaleString(undefined, {
+                                                minimumFractionDigits: 2,
+                                                maximumFractionDigits: 2,
+                                              })}`
                                           : "Price on request"}
                                       </div>
 
@@ -3050,6 +3059,16 @@ export default function HotelSearch({
                                             // 20 avoids colliding with the
                                             // existing Juniper booking's 17.
                                             grn: 20,
+                                            // GoGlobal (Yanolja Go Global).
+                                            // Room list backend routes apiId=21
+                                            // to GoGlobalHotelRoomSearchService
+                                            // (single-hotel availability).
+                                            // Without this entry the payload
+                                            // fell back to apiId 0 and the
+                                            // /api/hotel-rooms/search call was
+                                            // rejected with "API ID must be
+                                            // positive".
+                                            goglobal: 21,
                                           };
                                           const apiId =
                                             apiIdMapping[
@@ -3160,18 +3179,27 @@ export default function HotelSearch({
                                           // is the AED→target multiplier; rates
                                           // stay AED in every payload (display
                                           // only). AED → factor 1.
-                                          const currency = {
-                                            code: displayCurrencyCode,
-                                            factor:
-                                              selectedCurrency &&
-                                              Number.isFinite(
-                                                selectedCurrency.rate,
-                                              ) &&
-                                              aedBaseRate
-                                                ? selectedCurrency.rate /
-                                                  aedBaseRate
-                                                : 1,
-                                          };
+                                          // RateHawk is always displayed in AED
+                                          // end-to-end (backend converts all
+                                          // supplier-native rates to AED at
+                                          // search time — RatehawkHotelRoomSearchService),
+                                          // so hardcode currency=AED/factor=1
+                                          // regardless of the picker.
+                                          const currency =
+                                            hotel.channelType === "ratehawk"
+                                              ? { code: "AED", factor: 1 }
+                                              : {
+                                                  code: displayCurrencyCode,
+                                                  factor:
+                                                    selectedCurrency &&
+                                                    Number.isFinite(
+                                                      selectedCurrency.rate,
+                                                    ) &&
+                                                    aedBaseRate
+                                                      ? selectedCurrency.rate /
+                                                        aedBaseRate
+                                                      : 1,
+                                                };
                                           sessionStorage.setItem(
                                             "roomListPayload",
                                             JSON.stringify({ payload, meta, currency }),

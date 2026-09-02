@@ -999,6 +999,24 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
   // console.log("roomdata ::::::::::::::::::", roomData);
   const hotel = roomData.hotels[0];
   const payload = roomData.payload || {};
+
+  // Stay length (nights) derived from the search-time payload so the
+  // rate cards can label the total as "for N nights" instead of "per
+  // night" for multi-night stays. Defaults to 1 so single-night stays
+  // continue to say "per night" exactly as before.
+  const stayNights = (() => {
+    try {
+      const ci = payload?.checkInDate ? new Date(payload.checkInDate) : null;
+      const co = payload?.checkOutDate ? new Date(payload.checkOutDate) : null;
+      if (ci && co && !isNaN(ci) && !isNaN(co)) {
+        const diff = Math.round((co - ci) / (1000 * 60 * 60 * 24));
+        if (diff > 0) return diff;
+      }
+    } catch (e) {
+      /* fall through */
+    }
+    return 1;
+  })();
   // console.log("selectedRate before bookingmodal:::", selectedRate);
 
   // Drives whether the static check-in/check-out row in the Hotel
@@ -1225,6 +1243,21 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                             </span>
                             <span className="fw-semibold">
                               {payload.checkOutDate || hotel.checkOutDate}
+                            </span>
+                          </div>
+                          {/* Nights count — derived from check-in / check-out
+                              so it always matches whatever dates the operator
+                              searched. Same stayNights used by the rate-card
+                              "for N nights" label above, so the two views
+                              never disagree. Mirrors the same row in
+                              ExternalApiRoomList.jsx's Booking Summary. */}
+                          <div className="d-flex justify-content-between mb-2">
+                            <span>
+                              <FaCalendarAlt className="text-muted me-2" />
+                              Nights:
+                            </span>
+                            <span className="fw-semibold">
+                              {stayNights} {stayNights === 1 ? "night" : "nights"}
                             </span>
                           </div>
                           <div className="mb-2">
@@ -1591,16 +1624,14 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                         </div>
                                       )} */}
 
-                                      {!isMultiRoom && (
-                                        <div className="indivial-price-per-room-noofroom">
-                                          <div className="text-muted small">
-                                            {formatPrice(rate.totalRate || 0)} ×{" "}
-                                            {rate.numberOfRooms || 1} rooms
-                                          </div>
-                                        </div>
-                                      )}
+                                      {/* Simplified per-operator request: drop the
+                                          "rate × N rooms" breakdown line and show
+                                          just "for N nights" beneath the total price
+                                          (or "per night" for single-night stays). */}
                                       <div className="price-per-night small text-muted">
-                                        per night
+                                        {stayNights > 1
+                                          ? `for ${stayNights} nights`
+                                          : "per night"}
                                       </div>
                                     </div>
 
@@ -1743,14 +1774,13 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                             : rate.roomRateBasedOnRoomCount,
                                         )}
                                       </div>
-                                      {!isMultiRoom && (
-                                        <div className="text-muted small">
-                                          {formatPrice(rate.totalRate || 0)} ×{" "}
-                                          {rate.numberOfRooms || 1} rooms
-                                        </div>
-                                      )}
+                                      {/* See sibling in the grid view above — same
+                                          simplification: drop the breakdown, show only
+                                          "for N nights" (or "per night" for K=1). */}
                                       <div className="small text-muted">
-                                        per night
+                                        {stayNights > 1
+                                          ? `for ${stayNights} nights`
+                                          : "per night"}
                                       </div>
                                     </div>
 

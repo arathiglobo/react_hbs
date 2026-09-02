@@ -124,7 +124,7 @@ export default function ApiEndpointCatalog() {
       text: "Clients will not be able to call this endpoint. Its permission rows are kept for audit.",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#EC0B43",
+      confirmButtonColor: "#F75E00",
       cancelButtonColor: "#6c757d",
       confirmButtonText: "Yes, deactivate",
     }).then((r) => {

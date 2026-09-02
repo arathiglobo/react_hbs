@@ -986,7 +986,7 @@ export default function Sidebar() {
             zIndex: 5,
             border: "1px solid var(--color-border, #e5e7eb)",
             background: "#fff",
-            color: "#EC0B43",
+            color: "#F75E00",
             width: 30,
             height: 30,
             borderRadius: 8,
@@ -1039,7 +1039,7 @@ export default function Sidebar() {
                       <span
                         className="ms-2 badge rounded-pill"
                         style={{
-                          background: "#EC0B43",
+                          background: "#F75E00",
                           color: "#fff",
                           fontSize: "0.65rem",
                           padding: "3px 7px",
@@ -1275,7 +1275,7 @@ export default function Sidebar() {
                       <span
                         className="ms-2 badge rounded-pill"
                         style={{
-                          background: "#EC0B43",
+                          background: "#F75E00",
                           color: "#fff",
                           fontSize: "0.65rem",
                           padding: "3px 7px",

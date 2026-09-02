@@ -23,7 +23,7 @@
   gap: 22px;
   padding: 40px 56px;
   overflow: hidden;
-  background: linear-gradient(150deg, #EC0B43 0%, #C90939 58%, #A60730 100%);
+  background: linear-gradient(150deg, #F75E00 0%, #D65100 58%, #A63A00 100%);
   color: #ffffff;
 }
 /* When the offer showcase is present, tighten the panel so the whole brand
@@ -77,14 +77,23 @@
 .lg-hero h1 {
   font-size: clamp(32px, 3.4vw, 50px);
   font-weight: 700; line-height: 1.08; letter-spacing: -.04em; margin: 0 0 18px;
+  color: #000;
 }
 .lg-hero p {
-  font-size: 16px; line-height: 1.65; letter-spacing: -.01em; opacity: .92;
+  font-size: 16px; line-height: 1.65; letter-spacing: -.01em; opacity: 1;
   margin: 0; max-width: 47ch;
+  color: #000;
 }
 
-.lg-features { display: flex; flex-direction: column; gap: 16px; }
-.lg-feature { display: flex; align-items: center; gap: 14px; font-size: 14.5px; font-weight: 500; letter-spacing: -.005em; }
+/* 2-column grid so the six feature lines lay out as 3 rows × 2 columns
+   inside the left brand panel. Falls back to a single column on very
+   narrow viewports so long labels don't get squashed. */
+.lg-features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 22px; row-gap: 14px; }
+.lg-feature { display: flex; align-items: center; gap: 14px; font-size: 14.5px; font-weight: 500; letter-spacing: -.005em; color: #000; min-width: 0; }
+.lg-feature span { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .lg-features { grid-template-columns: 1fr; }
+}
 .lg-feature i {
   width: 38px; height: 38px; flex-shrink: 0;
   display: grid; place-items: center; font-size: 15px;
@@ -102,7 +111,7 @@
   display: inline-flex; align-items: center; gap: 7px;
   padding: 6px 11px; border-radius: 99px;
   background: rgba(255, 255, 255, .96);
-  color: #C90939;
+  color: #D65100;
   font-size: 11.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
   box-shadow: 0 4px 12px rgba(0, 0, 0, .14);
 }
@@ -240,7 +249,7 @@
   display: flex; align-items: center; gap: 7px;
   font-size: 13px; font-weight: 600; letter-spacing: -.004em; color: #3E3E3B; margin-bottom: 8px;
 }
-.lg-field label i { color: #EC0B43; font-size: 13px; }
+.lg-field label i { color: #F75E00; font-size: 13px; }
 .lg-field input {
   width: 100%; padding: 13px 15px; font-family: inherit;
   border: 1.5px solid #E5E5E1; border-radius: 12px;
@@ -250,34 +259,34 @@
 }
 .lg-field input::placeholder { color: #A8A8A3; font-weight: 400; }
 .lg-field input:focus {
-  outline: none; border-color: #EC0B43; background: #fff;
-  box-shadow: 0 0 0 4px rgba(236, 11, 67, .12);
+  outline: none; border-color: #F75E00; background: #fff;
+  box-shadow: 0 0 0 4px rgba(247, 94, 0, .12);
 }
 
 .lg-error {
-  background: #FDECEF; color: #C90939; border: 1px solid #F8C9D5;
+  background: #FDECEF; color: #D65100; border: 1px solid #F8C9D5;
   border-radius: 10px; padding: 11px 14px; font-size: 13.5px; text-align: center; margin-bottom: 16px;
 }
 
 .lg-submit {
   width: 100%; margin-top: 6px; padding: 14px; font-family: inherit;
   border: none; border-radius: 12px; cursor: pointer;
-  background: #EC0B43; color: #fff; font-size: 15px; font-weight: 600; letter-spacing: .005em;
+  background: #F75E00; color: #fff; font-size: 15px; font-weight: 600; letter-spacing: .005em;
   display: flex; align-items: center; justify-content: center; gap: 9px;
-  box-shadow: 0 10px 26px rgba(236, 11, 67, .26);
+  box-shadow: 0 10px 26px rgba(247, 94, 0, .26);
   transition: transform .16s cubic-bezier(.16, 1, .3, 1), background .16s ease, box-shadow .16s ease;
 }
-.lg-submit:hover { transform: translateY(-2px); background: #C90939; box-shadow: 0 16px 34px rgba(236, 11, 67, .34); }
+.lg-submit:hover { transform: translateY(-2px); background: #D65100; box-shadow: 0 16px 34px rgba(247, 94, 0, .34); }
 .lg-submit:active { transform: translateY(0); }
 
 .lg-links { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; }
 .lg-link {
   display: inline-flex; align-items: center; gap: 6px;
   background: none; border: none; cursor: pointer; text-decoration: none; font-family: inherit;
-  color: #EC0B43; font-size: 13.5px; font-weight: 600; letter-spacing: -.004em;
+  color: #F75E00; font-size: 13.5px; font-weight: 600; letter-spacing: -.004em;
   padding: 6px 8px; border-radius: 8px; transition: background .15s ease, color .15s ease;
 }
-.lg-link:hover { background: rgba(236, 11, 67, .08); color: #C90939; }
+.lg-link:hover { background: rgba(247, 94, 0, .08); color: #D65100; }
 
 .lg-secure {
   display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -297,7 +306,7 @@
 @media (max-width: 900px) {
   .lg-shell {
     flex-direction: column;
-    background: linear-gradient(150deg, #EC0B43 0%, #C90939 58%, #A60730 100%);
+    background: linear-gradient(150deg, #F75E00 0%, #D65100 58%, #A63A00 100%);
   }
   .lg-brand { display: contents; }
   .lg-hero  { display: contents; }

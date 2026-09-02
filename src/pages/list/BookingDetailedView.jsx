@@ -1403,13 +1403,29 @@ export default function BookingDetailedView() {
   const bookingHistory = (() => {
     if (!booking) return [];
     const events = [];
+    // "Book & Voucher" reconfirms and vouchers inside the create call
+    // itself, so the backend stamps confirmedDate and reconfirmedDate at
+    // the very same instant. There was never a separate operator confirm
+    // step to report: emitting both rows would show a phantom "Booking
+    // Confirmed" for a booking that went straight to ReConfirmed.
+    // "Book & Voucher Later" is reconfirmed later by an operator, so its
+    // two timestamps differ — it is untouched by this and keeps the full
+    // Created → Confirmed → Reconfirmed timeline.
+    const confirmedTs = parseLocal(booking.confirmedDate)?.getTime();
+    const reconfirmedTs = parseLocal(booking.reconfirmedDate)?.getTime();
+    const bornReconfirmed =
+      confirmedTs != null && reconfirmedTs != null && confirmedTs === reconfirmedTs;
     // Each event carries the resulting booking status right after that
     // action ran — surfaced in the new "Status" column so the History
     // modal reads as a lifecycle timeline (Confirmed → ReConfirmed →
     // Cancelled) instead of a bare action log. "On Request" bookings keep
     // their prefix so the created row shows "On Request" (not the generic
     // engine "Confirmed" the backend actually stamps in that case).
-    const createdRowStatus = isOnRequestRoom ? "On Request" : "Confirmed";
+    const createdRowStatus = isOnRequestRoom
+      ? "On Request"
+      : bornReconfirmed
+        ? "ReConfirmed"
+        : "Confirmed";
     if (booking.bookingDate) {
       events.push({
         action: "Booking Created",
@@ -1421,7 +1437,10 @@ export default function BookingDetailedView() {
         ip: booking.ipAddress,
       });
     }
-    if (booking.confirmedDate) {
+    // Skipped for a born-reconfirmed booking (see bornReconfirmed above) —
+    // its confirm and reconfirm are the same event, reported once below as
+    // "Booking Reconfirmed".
+    if (booking.confirmedDate && !bornReconfirmed) {
       events.push({
         action: "Booking Confirmed",
         // For an On Request row the "Confirmed" action is the step-1
@@ -1443,9 +1462,22 @@ export default function BookingDetailedView() {
           ? "On Request/Confirmed/Reconfirmed"
           : "ReConfirmed",
         at: booking.reconfirmedDate,
-        by: booking.reconfirmedBy || "-",
-        location: booking.reconfirmedLocation,
-        ip: booking.reconfirmedIp,
+        // A born-reconfirmed booking ("Book & Voucher") was reconfirmed
+        // inside the create call itself, so this row IS the creation event:
+        // operator, location and IP are by definition the ones captured at
+        // create time. The backend now stamps the reconfirmed_* audit
+        // columns on that path, but rows written before it did have them
+        // null — inherit the create-time values so the two rows always
+        // agree instead of rendering "-".
+        // "Book & Voucher Later" is a genuine later operator action, so it
+        // keeps its own reconfirm audit and falls back to "-" as before.
+        by: booking.reconfirmedBy || (bornReconfirmed ? creatorLabel : "-"),
+        location:
+          booking.reconfirmedLocation ||
+          (bornReconfirmed ? booking.bookingLocation : undefined),
+        ip:
+          booking.reconfirmedIp ||
+          (bornReconfirmed ? booking.ipAddress : undefined),
       });
     }
     if (booking.cancelledAt) {
@@ -2026,6 +2058,65 @@ export default function BookingDetailedView() {
                       <span style={{ fontWeight: "600" }}>Refund Type: </span>
                       {booking.refundStatus || "-"}
                     </span>
+                    {/* Payable at Hotel — persisted from GRN's
+                        price_details.hotel_charges[] with included:false at
+                        booking time. Sits OUTSIDE Total Rate above because
+                        the hotel bills it directly. Hidden when the booking
+                        carries no such charge (every non-GRN supplier +
+                        GRN rates reporting none), so other bookings render
+                        unchanged. Currency handling mirrors the server-side
+                        rule in BookingCompletedServiceImpl: when the stored
+                        currency matches the booking currency, apply the
+                        same display-currency factor; otherwise render the
+                        supplier's own currency unconverted. */}
+                    {(booking.payableAtHotelAmount != null ||
+                      booking.payableAtHotelDescription) &&
+                      (() => {
+                        const stored = (
+                          booking.payableAtHotelCurrency || "AED"
+                        ).toUpperCase();
+                        const inBase = stored === "AED";
+                        const displayCode = inBase ? currencyCode : stored;
+                        const displayAmt =
+                          booking.payableAtHotelAmount != null
+                            ? inBase
+                              ? toDisplayAmount(booking.payableAtHotelAmount)
+                              : Number(booking.payableAtHotelAmount)
+                            : null;
+                        return (
+                          <span
+                            title="Collected by the hotel at check-in. NOT part of the Total Rate above."
+                            style={{
+                              background: "#fff4e5",
+                              color: "#7a4a00",
+                              border: "1px solid #f0c78a",
+                              borderRadius: 6,
+                              padding: "3px 8px",
+                              fontSize: "0.85rem",
+                            }}
+                          >
+                            <span style={{ fontWeight: 600 }}>
+                              Payable at Hotel
+                              {booking.payableAtHotelDescription
+                                ? ` (${booking.payableAtHotelDescription})`
+                                : ""}
+                              :{" "}
+                            </span>
+                            {displayAmt != null
+                              ? `${displayCode} ${displayAmt.toFixed(2)}`
+                              : "see details"}
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                fontSize: "0.7rem",
+                                opacity: 0.85,
+                              }}
+                            >
+                              (not included in the total above)
+                            </span>
+                          </span>
+                        );
+                      })()}
                   </div>
                 </div>
 
@@ -2362,8 +2453,8 @@ export default function BookingDetailedView() {
                         style={{
                           fontSize: "0.7rem",
                           fontWeight: 600,
-                          color: "#EC0B43",
-                          background: "#FDE7ED",
+                          color: "#F75E00",
+                          background: "#FDECD6",
                           borderRadius: "99px",
                           padding: "2px 9px",
                           marginLeft: 6,
@@ -2390,7 +2481,7 @@ export default function BookingDetailedView() {
                         <div
                           key={n.noteId}
                           style={{
-                            borderLeft: "3px solid #EC0B43",
+                            borderLeft: "3px solid #F75E00",
                             background: "#FAFAF8",
                             padding: "10px 12px",
                             marginBottom: 8,

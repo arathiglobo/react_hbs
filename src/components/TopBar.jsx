@@ -793,8 +793,29 @@ export default function TopBar() {
     cursor: showQuickActionsOnThisPage ? "pointer" : undefined,
   }}
 >
-  <div className="logo-placeholder">GS</div>
-  <span className="fw-semibold">Globosoft</span>
+  {/* <div
+    className="logo-placeholder"
+    style={{ background: "#fff", padding: 3, overflow: "hidden" }}
+  >
+    <img
+      src={`${process.env.PUBLIC_URL}/images/logo-1.jpg`}
+      alt="Globosoft"
+      style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 6 }}
+    />
+  </div>
+  <span className="fw-semibold">Globosoft</span> */}
+
+  <div
+    className="logo-placeholder"
+    style={{ background: "#fff", padding: 3, overflow: "hidden" }}
+  >
+    <img
+      src={`${process.env.PUBLIC_URL}/images/desert.PNG`}
+      alt="Globosoft"
+      style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 6 }}
+    />
+  </div>
+  <span className="fw-semibold">desert beds</span>
 </Navbar.Brand>
          {showSidebarToggle && (
            <button
@@ -1053,7 +1074,7 @@ const topbarQuickActionsCss = `
        reads as "glass" — a visible frosted edge (border + inner highlight +
        soft shadow) is what actually sells the effect, on top of a more
        transparent, slightly tinted fill. */
-    background: linear-gradient(135deg, rgba(255,255,255,.45) 0%, rgba(236,11,67,.06) 50%, rgba(20,184,166,.08) 100%);
+    background: linear-gradient(135deg, rgba(255,255,255,.45) 0%, rgba(247, 94, 0,.06) 50%, rgba(20,184,166,.08) 100%);
     backdrop-filter: blur(18px) saturate(1.6);
     -webkit-backdrop-filter: blur(18px) saturate(1.6);
     border: 1px solid rgba(255,255,255,.6);
@@ -1108,7 +1129,7 @@ const topbarQuickActionsCss = `
     font-size: 15px;
     flex-shrink: 0;
   }
-  .topbar-qa-icon.tone-pink   { background: #FDE7ED; color: #EC0B43; }
+  .topbar-qa-icon.tone-pink   { background: #FDECD6; color: #F75E00; }
   .topbar-qa-icon.tone-orange { background: #FFF1E0; color: #F59E0B; }
   .topbar-qa-icon.tone-purple { background: #F1EAFB; color: #8B5CF6; }
   .topbar-qa-icon.tone-blue   { background: #E7F3FE; color: #0EA5E9; }

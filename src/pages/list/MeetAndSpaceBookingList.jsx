@@ -36,6 +36,12 @@ const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 const COLUMN_WIDTHS = {
   sn: "40px",
   bookingCode: "110px",
+  // Supplier-side confirmation number, set via the "Confirmation No." button
+  // on the detail page (/booking-details/meet-and-space-booking/:id).
+  // MeetAndSpaceBookingResponse already exposes `confirmationNumber`, so no
+  // backend change is needed here. Cell renders blank on rows that don't
+  // have one yet — mirrors the LongStayBookingList pattern.
+  confirmationNo: "130px",
   bookDate: "95px",
   bookingDetails: "240px",
   customer: "170px",
@@ -454,6 +460,17 @@ export default function MeetAndSpaceBookingList() {
                           <th
                             style={{
                               ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.confirmationNo,
+                              whiteSpace: "normal",
+                              wordBreak: "normal",
+                              overflowWrap: "normal",
+                            }}
+                          >
+                            Confirmation No
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
                               textAlign: "center",
                               width: COLUMN_WIDTHS.bookDate,
                             }}
@@ -526,7 +543,7 @@ export default function MeetAndSpaceBookingList() {
                         {pageRows.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={10}
+                              colSpan={11}
                               className="text-center py-5 text-muted"
                               style={{
                                 border: "1px solid #dee2e6",
@@ -590,6 +607,24 @@ export default function MeetAndSpaceBookingList() {
                                   <span className="fw-bold text-primary">
                                     {r.bookingNumber || "-"}
                                   </span>
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.confirmationNo,
+                                    whiteSpace: "nowrap",
+                                  }}
+                                >
+                                  {r.confirmationNumber ? (
+                                    <span
+                                      className="fw-semibold text-dark"
+                                      style={{ fontSize: "0.85rem" }}
+                                    >
+                                      {r.confirmationNumber}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
                                 </td>
                                 <td
                                   className="text-muted"

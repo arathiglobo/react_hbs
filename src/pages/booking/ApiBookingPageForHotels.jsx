@@ -27,10 +27,12 @@ import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
 
-// Online-payment gateways shown when the agent's credit is short. Kept
-// as a single-item list today because CC Avenue is the only wired gateway;
-// mirrors the shape used by Inhouse HotelBookingPage so a second gateway
-// can be added later without further changes here.
+// Online-payment gateways offered when the agent's credit is short.
+// Mirrors the same list Inhouse HotelBookingPage.jsx uses (line 25) so
+// both booking pages present the same choices. Kept as a single-item list
+// today because CC Avenue is the only wired gateway; selecting it navigates
+// to /payment/ccavenue-redirect for the real hosted-page flow. A second
+// gateway can be added later without further changes here.
 const PAYMENT_GATEWAYS = [
   { id: "ccavenue", name: "CC Avenue", desc: "Cards, UPI, Net Banking" },
 ];
@@ -76,6 +78,123 @@ const stripPolicyHtml = (raw) => {
   return s.trim();
 };
 
+// Suppliers that support "Hold Room and Pay Later" on this page.
+//
+// ATHARVA (3) is NOT listed: it has a real supplier-side hold endpoint
+// (HCreateBooking VoucherBooking=false → status KK) and its own picker gate
+// further down, which stays exactly as it was.
+//
+// For the suppliers listed here there is no hold endpoint, so a hold is a
+// REAL booking whose agent-credit settlement is deferred to the operator's
+// Reconfirm click. That is only offered while the rate is still inside its
+// free-cancellation window, so the deadline job can release the room at the
+// supplier for free if nobody reconfirms. Add an apiId here only once its
+// backend create path honours bookingConfirmation="Hold & Book Later".
+const HOLD_CAPABLE_API_IDS = new Set([20]); // 20 = GRN
+
+/**
+ * The booking's overall free-cancellation deadline, as a Date at local
+ * midnight, or null when no deadline applies.
+ *
+ * Extracted verbatim from the create payload's own derivation so the
+ * "can this be held?" gate and the deadlineDate we persist can never
+ * disagree — a picker offered against one deadline and a booking saved
+ * against another is exactly how a hold ends up outside its window.
+ *
+ *   • Darina (16) carries a live cut-off on the rate — used as-is.
+ *   • Non-refundable rates have no window at all → null.
+ *   • Everything else: earliest cancellation-policy fromDate, minus 2 days.
+ *
+ * The overall deadline is the EARLIEST across the selected rates.
+ */
+const deriveDeadlineDate = (selectedRates, apiId) => {
+  const deadlines = (selectedRates || [])
+    .map((rate) => {
+      const nonRefundable =
+        rate.nonRefundable === true ||
+        rate.nonRefundable === "true" ||
+        rate.nonRefundable === "Y";
+
+      // Darina (apiId=16): rate.deadlineDate is the LIVE
+      // free-cancellation cut-off carried from
+      // CheckAvailabilityWithCancellation_NoCache_LiveCalculation
+      // (BE parses the "Free Cancellation" band's toDate). It is
+      // the deadline the operator sees in the room accordion.
+      // Use it verbatim — the generic "earliest cancellationPolicy
+      // fromDate minus 2 days" fallback below picks up the Free
+      // Cancellation band's FromDate instead of the cut-off, which
+      // reports a wildly earlier date (September vs December).
+      if (apiId === 16 && !nonRefundable && rate.deadlineDate) {
+        const iso = String(rate.deadlineDate).slice(0, 10);
+        const parts = iso.split("-");
+        if (parts.length === 3) {
+          const d = new Date(
+            Number(parts[0]),
+            Number(parts[1]) - 1,
+            Number(parts[2]),
+          );
+          if (!isNaN(d.getTime())) {
+            d.setHours(0, 0, 0, 0);
+            return d;
+          }
+        }
+      }
+
+      if (nonRefundable === true) {
+        // Non-refundable rates have no free-cancellation window, so
+        // no deadline applies — send nothing rather than a fabricated
+        // "today - 2 days" date (which always lands in the past and
+        // confuses anything that reads deadlineDate literally).
+        return null;
+      }
+      const policies = rate.cancellationPolicy || [];
+      if (policies.length === 0) return null;
+      const dates = policies
+        .map((p) => (p.fromDate ? new Date(p.fromDate) : null))
+        .filter((date) => date !== null && !isNaN(date.getTime()));
+      if (dates.length === 0) return null;
+      const earliestDate = new Date(Math.min(...dates.map((d) => d.getTime())));
+      const deadline = new Date(earliestDate);
+      deadline.setDate(earliestDate.getDate() - 2);
+      deadline.setHours(0, 0, 0, 0);
+      return deadline;
+    })
+    .filter((d) => d !== null);
+
+  if (deadlines.length === 0) return null;
+  return new Date(Math.min(...deadlines.map((d) => d.getTime())));
+};
+
+/** Format a Date as the LocalDateTime string the backend payload expects. */
+const toDeadlinePayloadString = (d) => {
+  if (!d) return null;
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}T00:00:00`;
+};
+
+/**
+ * May this booking be offered as "Hold Room and Pay Later"?
+ *
+ * True only for a hold-capable supplier whose selected rates still have a
+ * free-cancellation deadline in the future. A missing deadline (every rate
+ * non-refundable, or no cancellation policy at all) means there is no window
+ * to hold inside, so the picker stays hidden and the flow is untouched.
+ *
+ * The backend re-checks this before sending anything to the supplier, so a
+ * stale page cannot create a hold outside the window.
+ */
+const isHoldEligible = (bookingData) => {
+  const apiId = bookingData?.payload?.apiId;
+  if (!HOLD_CAPABLE_API_IDS.has(apiId)) return false;
+  const deadline = deriveDeadlineDate(bookingData?.selectedRate || [], apiId);
+  if (!deadline) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return deadline >= today;
+};
+
 /**
  * API booking page — visual shell restyled to match the Inhouse
  * HotelBookingPage (two-column sticky layout, .hbp-* classes,
@@ -86,10 +205,13 @@ const stripPolicyHtml = (raw) => {
  */
 const ApiBookingPageForHotels = () => {
   const navigate = useNavigate();
-  // CC Avenue's redirect back from its hosted page carries the outcome in
-  // the URL query string (React Router `state` never survives the
-  // cross-origin round trip). location.search is watched by the return-
-  // handling effect below to finalize the paid-for booking.
+  // useLocation drives the CC Avenue resume effect. CC Avenue's redirect
+  // back from its hosted page carries the outcome in the URL query string
+  // (React Router `state` never survives the cross-origin round trip) —
+  // the backend appends ?ccavenueOrderId= when it 302s the browser back to
+  // us. location.search is watched by the return-handling effect below to
+  // finalize the paid-for booking; the effect also strips the resume signal
+  // from history so reloads don't re-trigger the create.
   const location = useLocation();
 
   const activeUserRole = localStorage.getItem("currentActiveRole");
@@ -130,6 +252,16 @@ const ApiBookingPageForHotels = () => {
   const [paymentMode, setPaymentMode] = useState("CREDITLIMIT");
   const [agentAvailableBalance, setAgentAvailableBalance] = useState(null);
   const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
+
+  // Insufficient-credit → online-payment flow (RATEHAWK only, per the
+  // original design). The declarations for showInsufficientModal,
+  // showGatewayModal, insufficientAmount and selectedGateway now live in
+  // the merged block below (see "Online-payment flow" a few lines down),
+  // which also adds showNoPaymentPathModal and isFinalizingPayment for the
+  // Inhouse three-modal chain. Non-RateHawk suppliers still go through the
+  // existing toast-and-abort branch — no behaviour change for
+  // IWTX/X3/Inhouse/Atharva/Jumeirah/etc.
+
   // ATHARVA-only booking-mode picker. Starts unset so neither radio
   // is pre-selected on page load — the operator must explicitly
   // choose "Book and Pay Now" or "Hold Room and Pay Later" before
@@ -153,6 +285,15 @@ const ApiBookingPageForHotels = () => {
   // for corporate PANs. Only rendered when the selected rate is GRN AND
   // panRequired=true. Left empty for personal PANs (no impact on GRN).
   const [panCompanyName, setPanCompanyName] = useState("");
+
+  // RATEHAWK (apiId=14): primary-guest email + phone are required by the
+  // /hotel/order/booking/finish/ call — RateHawk rejects with a generic
+  // "invalid_params" otherwise. The FE otherwise never collects them (line
+  // 675/676 hardcode ""), so capture them here on a gated card. Same shape
+  // as the ATHARVA PAN gate above so all supplier-specific inputs follow
+  // one pattern.
+  const [ratehawkEmail, setRatehawkEmail] = useState("");
+  const [ratehawkPhone, setRatehawkPhone] = useState("");
 
   // ── Online-payment flow (fires when the agent's credit is short) ──
   // Same three-modal chain Inhouse HotelBookingPage exposes:
@@ -283,9 +424,15 @@ const ApiBookingPageForHotels = () => {
     axiosInstance
       .get(`/api/agent/${aId}`)
       .then((res) => {
-        if (!cancelled) {
-          setAgentCardPaymentEnabled(!!res?.data?.cardPaymentEnabled);
-        }
+        if (cancelled) return;
+        setAgentCardPaymentEnabled(!!res?.data?.cardPaymentEnabled);
+        // RateHawk (apiId=14) needs user.email / user.phone on
+        // booking/finish/. Instead of asking the operator to retype them,
+        // seed the payload from the chosen agent's registration record —
+        // personalEmail + mobileNumber are @NotBlank on the agent DTO, so
+        // they're always populated for a valid agent.
+        setRatehawkEmail(res?.data?.personalEmail || "");
+        setRatehawkPhone(res?.data?.mobileNumber || "");
       })
       .catch(() => {
         if (!cancelled) setAgentCardPaymentEnabled(false);
@@ -295,17 +442,24 @@ const ApiBookingPageForHotels = () => {
     };
   }, [bookingData]);
 
-  // ── CC Avenue return handling ──
-  //   CC Avenue's redirect is a real browser navigation away to their
-  //   domain and back (via the backend's /api/payment/ccavenue/response
-  //   redirect), so React Router `state` never survives the round trip.
-  //   The backend instead appends the outcome as a
-  //   ?ccavenueOrderId=&ccavenueStatus= query string when it 302s the
-  //   browser back to this page. The status query param is only a hint —
+  // ── CC Avenue return handling (RATEHAWK insufficient-credit flow) ──
+  //   Mirrors Inhouse HotelBookingPage.jsx's resume effect. CC Avenue's
+  //   redirect is a real browser navigation away to their domain and back
+  //   (via the backend's /api/payment/ccavenue/response redirect) — React
+  //   Router state doesn't survive the round trip, so the backend appends
+  //   the outcome as a ?ccavenueOrderId=&ccavenueStatus= query string when
+  //   it 302s the browser back here. The status query param is only a hint;
   //   before finalising anything we re-verify it against
   //   GET /api/payment/ccavenue/status/{orderId}, which reflects what the
   //   backend actually decrypted from CC Avenue, so a tampered/stale URL
-  //   can't force a booking through.
+  //   can't force a booking through. We then:
+  //     1. Strip the resume signal from history so a reload doesn't retry
+  //     2. Re-verify the payment status server-side (a tampered URL is
+  //        rejected)
+  //     3. Read back the pending payload from sessionStorage (persisted
+  //        just before we navigated away) and fire the create call, or
+  //        fall back to the backend-owned /api/payment/ccavenue/finalize
+  //        flow when nothing was persisted.
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const ccavenueOrderId = searchParams.get("ccavenueOrderId");
@@ -317,6 +471,61 @@ const ApiBookingPageForHotels = () => {
     // re-render can't race the effect.
     navigate(location.pathname, { replace: true, state: {} });
 
+    // ── Legacy resume path (HEAD) ──
+    // Reads the payload the older gateway modal persisted to
+    // sessionStorage under "hbpPendingCreatePayload" just before
+    // navigating to CC Avenue, and fires /api/hotel-booking/create with
+    // it. Kept for browser tabs that were opened against the older UI
+    // and still have a persisted payload waiting.
+    const readPendingPayload = () => {
+      const stored = sessionStorage.getItem("hbpPendingCreatePayload");
+      sessionStorage.removeItem("hbpPendingCreatePayload");
+      if (!stored) return null;
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        console.error("Malformed persisted create payload", e);
+        return null;
+      }
+    };
+
+    const finalizeCreate = async (payload) => {
+      try {
+        setIsSubmitting(true);
+        // RateHawk booking flow needs the extended 120s timeout (see
+        // confirmBooking above for the reasoning). The resume path hits
+        // the same endpoint so it needs the same override.
+        const response = await axiosInstance.post(
+          "/api/hotel-booking/create",
+          payload,
+          { timeout: 120000 },
+        );
+        const bookingResponse = response.data;
+        const statusUpper = String(bookingResponse?.status || "").toUpperCase();
+        const ok =
+          (statusUpper === "CONFIRMED" || statusUpper === "RECONFIRMED") &&
+          bookingResponse?.bookingId != 0;
+        if (ok) {
+          toast.success(
+            bookingResponse?.message || "Booking created after payment.",
+          );
+          navigate("/booking-details/hotel-booking-list");
+        } else {
+          toast.error(
+            bookingResponse?.message || "Booking submission failed. Please try again.",
+          );
+        }
+      } catch (err) {
+        const beMsg =
+          err?.response?.data?.message || err?.response?.data?.error || null;
+        console.error("Error finalising booking after payment:", err);
+        toast.error(beMsg || "Booking submission failed. Please try again.");
+      } finally {
+        setIsSubmitting(false);
+      }
+    };
+
+    // ── Backend-owned finalize (newer flow) ──
     // Real CC Avenue path — the backend owns the payload and the create
     // call. We just ask it to finalize. Idempotent: a second call for
     // the same orderId returns the already-created booking, so a
@@ -367,6 +576,7 @@ const ApiBookingPageForHotels = () => {
     (async () => {
       if (ccavenueStatus !== "success") {
         toast.error("Payment was not completed. Please try again.");
+        sessionStorage.removeItem("hbpPendingCreatePayload");
         return;
       }
       try {
@@ -378,6 +588,7 @@ const ApiBookingPageForHotels = () => {
             statusResponse.data?.statusMessage ||
               "Payment was not successful. Please try again.",
           );
+          sessionStorage.removeItem("hbpPendingCreatePayload");
           return;
         }
       } catch (err) {
@@ -387,7 +598,15 @@ const ApiBookingPageForHotels = () => {
         );
         return;
       }
-      finalizeAfterCCAvenue();
+      // Prefer the legacy sessionStorage payload if one exists (browser
+      // tab opened against the older UI). Otherwise fall through to the
+      // backend-owned finalize flow.
+      const payload = readPendingPayload();
+      if (payload) {
+        finalizeCreate(payload);
+      } else {
+        finalizeAfterCCAvenue();
+      }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
@@ -457,25 +676,33 @@ const ApiBookingPageForHotels = () => {
     return n === "IN" || n === "IND" || n === "INDIA";
   };
 
-  // GRN-only PAN requirement: rate's pan_required=true (set from the recheck
-  // response and carried through on each selectedRate). Independent of the
-  // guest's nationality — GRN flags per-rate, not per-nationality. When true,
-  // the same PAN input card renders (shared with Atharva) and the payload
-  // sends holder.pan_number / pan_company_name. Any selectedRate having the
-  // flag is sufficient — a mixed multi-room booking with even one
-  // pan_required rate needs PAN.
-  const requiresGrnPan = () => {
-    if (!bookingData) return false;
-    if (Number(bookingData?.payload?.apiId) !== 20) return false;
-    const rates = bookingData?.selectedRate || [];
-    return rates.some((r) => r?.panRequired === true);
-  };
+// RATEHAWK-only helper: does this booking need the primary-guest email +
+// phone card? RateHawk's booking/finish/ call requires user.email and
+// user.phone (rejects with "invalid_params" otherwise), and no other
+// supplier on this page asks for them via the FE.
+const requiresRatehawkContact = () => {
+  if (!bookingData) return false;
+  return Number(bookingData?.payload?.apiId) === 14;
+};
 
-  // Unified PAN-required check that either supplier can trigger. Kept as a
-  // helper so the PAN input card, validation, and payload builder all share
-  // one truth source and can't drift.
-  const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
+// GRN-only PAN requirement: rate's pan_required=true (set from the recheck
+// response and carried through on each selectedRate). Independent of the
+// guest's nationality — GRN flags per-rate, not per-nationality. When true,
+// the same PAN input card renders (shared with Atharva) and the payload
+// sends holder.pan_number / pan_company_name. Any selectedRate having the
+// flag is sufficient — a mixed multi-room booking with even one
+// pan_required rate needs PAN.
+const requiresGrnPan = () => {
+  if (!bookingData) return false;
+  if (Number(bookingData?.payload?.apiId) !== 20) return false;
+  const rates = bookingData?.selectedRate || [];
+  return rates.some((r) => r?.panRequired === true);
+};
 
+// Unified PAN-required check that either supplier can trigger. Kept as a
+// helper so the PAN input card, validation, and payload builder all share
+// one truth source and can't drift.
+const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
   const validateForm = () => {
     const errors = {};
     let hasErrors = false;
@@ -528,6 +755,35 @@ const ApiBookingPageForHotels = () => {
       }
       if (requiresAtharvaPan() && !panCardType) {
         errors.panCardType = "PAN Card Type is required.";
+        hasErrors = true;
+      }
+    }
+
+    // RATEHAWK (apiId=14): primary-guest email + phone are mandatory —
+    // vendor rejects /hotel/order/booking/finish/ with "invalid_params"
+    // when they're missing. Values come from the chosen agent's
+    // registration record (not from an input on this page), so if either
+    // is blank/malformed the fix is to update the agent, not the booking
+    // form. Format checks are lenient — enough to catch typos.
+    if (requiresRatehawkContact()) {
+      const emailTrim = (ratehawkEmail || "").trim();
+      if (!emailTrim) {
+        errors.ratehawkEmail =
+          "Selected agent has no email on file — update the agent's Personal Email before booking.";
+        hasErrors = true;
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+        errors.ratehawkEmail =
+          "Selected agent's Personal Email is invalid — please correct it on the agent record.";
+        hasErrors = true;
+      }
+      const phoneTrim = (ratehawkPhone || "").trim();
+      if (!phoneTrim) {
+        errors.ratehawkPhone =
+          "Selected agent has no mobile number on file — update the agent's Mobile Number before booking.";
+        hasErrors = true;
+      } else if (phoneTrim.replace(/\D/g, "").length < 7) {
+        errors.ratehawkPhone =
+          "Selected agent's Mobile Number is invalid — please correct it on the agent record.";
         hasErrors = true;
       }
     }
@@ -704,12 +960,15 @@ const ApiBookingPageForHotels = () => {
 
     const { errors, hasErrors } = validateForm();
 
-    // ATHARVA (apiId 3): the operator MUST pick a booking mode
-    // (Book and Pay Now / Hold Room and Pay Later) before we open the
-    // policy modal. Merges into the same validationErrors bag as the
-    // guest-detail errors so a single toast covers both cases.
+    // Whenever the booking-mode picker is on screen the operator MUST
+    // answer it before we open the policy modal — ATHARVA (apiId 3, its own
+    // supplier-side hold) and any hold-capable API whose rate is still
+    // inside its free-cancellation window. Merges into the same
+    // validationErrors bag as the guest-detail errors so a single toast
+    // covers both cases. Suppliers without a picker skip this entirely and
+    // submit exactly as they did before.
     if (
-      bookingData?.payload?.apiId === 3 &&
+      (bookingData?.payload?.apiId === 3 || isHoldEligible(bookingData)) &&
       bookingConfirmation !== "Book & Voucher" &&
       bookingConfirmation !== "Hold & Book Later"
     ) {
@@ -719,12 +978,14 @@ const ApiBookingPageForHotels = () => {
 
     if (hasErrors || errors.bookingMode) {
       setValidationErrors(errors);
-      // Priority order for the shared toast: PAN gate first (Atharva-only,
-      // most likely to bite operators mid-booking with a cryptic upstream
-      // failure otherwise), then booking-mode gate, then the generic message.
+      // Priority order for the shared toast: supplier-specific gates first
+      // (Atharva PAN, RateHawk contact) since they'd otherwise surface as
+      // cryptic upstream failures, then booking-mode gate, then generic.
       toast.error(
         errors.panCardNo ||
           errors.panCardType ||
+          errors.ratehawkEmail ||
+          errors.ratehawkPhone ||
           errors.bookingMode ||
           "Please fill in all required fields correctly.",
       );
@@ -831,84 +1092,26 @@ const ApiBookingPageForHotels = () => {
             ),
           ),
         ],
-        deadlineDate: (() => {
-          const deadlines = bookingData.selectedRate
-            .map((rate) => {
-              const nonRefundable =
-                rate.nonRefundable === true ||
-                rate.nonRefundable === "true" ||
-                rate.nonRefundable === "Y";
-
-              // Darina (apiId=16): rate.deadlineDate is the LIVE
-              // free-cancellation cut-off carried from
-              // CheckAvailabilityWithCancellation_NoCache_LiveCalculation
-              // (BE parses the "Free Cancellation" band's toDate). It is
-              // the deadline the operator sees in the room accordion.
-              // Use it verbatim — the generic "earliest cancellationPolicy
-              // fromDate minus 2 days" fallback below picks up the Free
-              // Cancellation band's FromDate instead of the cut-off, which
-              // reports a wildly earlier date (September vs December).
-              if (
-                bookingData?.payload?.apiId === 16 &&
-                !nonRefundable &&
-                rate.deadlineDate
-              ) {
-                const iso = String(rate.deadlineDate).slice(0, 10);
-                const parts = iso.split("-");
-                if (parts.length === 3) {
-                  const d = new Date(
-                    Number(parts[0]),
-                    Number(parts[1]) - 1,
-                    Number(parts[2]),
-                  );
-                  if (!isNaN(d.getTime())) {
-                    d.setHours(0, 0, 0, 0);
-                    return d;
-                  }
-                }
-              }
-
-              if (nonRefundable === true) {
-                // Non-refundable rates have no free-cancellation window, so
-                // no deadline applies — send nothing rather than a fabricated
-                // "today - 2 days" date (which always lands in the past and
-                // confuses anything that reads deadlineDate literally).
-                return null;
-              } else {
-                const policies = rate.cancellationPolicy || [];
-                if (policies.length === 0) return null;
-                const dates = policies
-                  .map((p) => (p.fromDate ? new Date(p.fromDate) : null))
-                  .filter((date) => date !== null && !isNaN(date.getTime()));
-                if (dates.length === 0) return null;
-                const earliestDate = new Date(
-                  Math.min(...dates.map((d) => d.getTime())),
-                );
-                const deadline = new Date(earliestDate);
-                deadline.setDate(earliestDate.getDate() - 2);
-                deadline.setHours(0, 0, 0, 0);
-                return deadline;
-              }
-            })
-            .filter((d) => d !== null);
-
-          if (deadlines.length === 0) return null;
-          const overallDeadline = new Date(
-            Math.min(...deadlines.map((d) => d.getTime())),
-          );
-          const year = overallDeadline.getFullYear();
-          const month = String(overallDeadline.getMonth() + 1).padStart(2, "0");
-          const day = String(overallDeadline.getDate()).padStart(2, "0");
-          return `${year}-${month}-${day}T00:00:00`;
-        })(),
+        // Same derivation the hold-eligibility gate uses — see
+        // deriveDeadlineDate at the top of this file.
+        deadlineDate: toDeadlinePayloadString(
+          deriveDeadlineDate(
+            bookingData.selectedRate,
+            bookingData?.payload?.apiId,
+          ),
+        ),
         isBookandVoucher: bookingConfirmation === "Book & Voucher",
         primaryGuest: {
           salutation: leadGuest.salutation || "",
           firstName: leadGuest.firstName || "",
           middleName: "",
           lastName: leadGuest.lastName || "",
-          email: "",
-          phone: "",
+          // RateHawk (apiId=14) requires user.email / user.phone on
+          // booking/finish/. Every other supplier ignores these fields, so
+          // gate the values on the same helper that drives the UI card —
+          // non-RateHawk payloads stay byte-for-byte identical to before.
+          email: requiresRatehawkContact() ? (ratehawkEmail || "").trim() : "",
+          phone: requiresRatehawkContact() ? (ratehawkPhone || "").trim() : "",
           passportNo: "",
           agentLpo: "",
           nativeCountry: bookingData.payload.nationality,
@@ -949,11 +1152,18 @@ const ApiBookingPageForHotels = () => {
             roomTypeCode: rate.roomTypeCode,
             mealPlanCode: rate.mealPlanCode,
             contractTokenId: rate.contractTokenId,
-            // ATHARVA per-room rate key. Prefers the prebook-refreshed
-            // value; falls back to the search-time key so a room whose
-            // prebook was skipped still round-trips. Ignored by other
-            // suppliers (RoomBookingRequest.rateKey is @Nullable).
-            rateKey: rate.atharvaRateKey || null,
+            // Per-room rate key. ATHARVA prefers the prebook-refreshed value;
+            // GoGlobal (apiId 21) carries its HotelSearchCode here (set by the
+            // valuation step as rate.hotelSearchCode) — GoGlobalHotelBookingService
+            // reads rooms[].rateKey as the HotelSearchCode for BOOKING_INSERT.
+            // Falls back to the search-time key so a room whose prebook was
+            // skipped still round-trips. Ignored by suppliers that don't use it
+            // (RoomBookingRequest.rateKey is @Nullable).
+            rateKey:
+              rate.atharvaRateKey ||
+              rate.hotelSearchCode ||
+              rate.rateKey ||
+              null,
             // Darina free-cancellation deadline shown to the customer at
             // rate-selection time (ISO yyyy-MM-dd). BE audits this in
             // DarinaHotelBookingService so we know exactly which cut-off
@@ -999,6 +1209,24 @@ const ApiBookingPageForHotels = () => {
           bookingData?.payload?.lastMinuteBooking === true
             ? "LAST_MINUTE"
             : undefined,
+
+        // Display-currency preference carried through from the search /
+        // room-list flow. Persisted on HotelBooking.displayCurrencyCode
+        // and HotelBooking.displayAmount so the Booking Detail page and
+        // Invoice PDF can render the SAME converted value the operator
+        // saw at booking time (matches Inhouse's behavior at
+        // InhouseHotelBookingService.java:964-971). Null when the
+        // operator kept the default AED display.
+        displayCurrencyCode:
+          displayCurrency?.code && displayCurrency.code !== "AED"
+            ? displayCurrency.code
+            : null,
+        displayCurrencyRate:
+          displayCurrency?.code && displayCurrency.code !== "AED"
+            && Number(displayCurrency.factor) > 0
+            ? Number(displayCurrency.factor)
+            : null,
+
       };
 
       setPendingPayload(payload);
@@ -1037,17 +1265,17 @@ const ApiBookingPageForHotels = () => {
         0,
       );
 
-      // ATHARVA Hold Room and Pay Later: docs say no balance is
-      // required — the booking is held until the time limit. Skip the
-      // client-side credit gate so the operator isn't blocked with
-      // "insufficient credit" for a valid hold. Backend still enforces
-      // its own rules. Guarded to apiId===3 so other suppliers are
-      // unaffected.
-      const isAtharvaHold =
-        effectivePayload.apiId === 3 &&
-        effectivePayload.isBookandVoucher === false;
+      // A hold takes no credit at create — ATHARVA holds the room at the
+      // supplier and vouchers later; a hold-capable API books the room now
+      // and settles the agent's credit on Reconfirm. Either way the
+      // client-side credit gate must not block a valid hold. Keyed off the
+      // explicit "Hold & Book Later" choice rather than isBookandVoucher,
+      // which is also false whenever the picker was never shown.
+      const isHoldMode =
+        (effectivePayload.apiId === 3 || isHoldEligible(bookingData)) &&
+        effectivePayload.bookingConfirmation === "Hold & Book Later";
 
-      if (!isAtharvaHold) {
+      if (!isHoldMode) {
         const creditResponse = await axiosInstance.get(
           `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentId}&requiredAmount=${requiredAmount}`,
         );
@@ -1055,25 +1283,49 @@ const ApiBookingPageForHotels = () => {
         if (creditResponse.data === false) {
           // ❌ Not enough credit — hand off to the online-payment chain
           // instead of a dead-end toast. Mirrors HotelBookingPage.jsx:
-          //   • Card mode disabled for this agent → block with the
+          //   • RateHawk (apiId=14) has a proper online-payment redirect
+          //     flow wired to CC Avenue, so we always open a payment
+          //     modal for it (never dead-end on a toast).
+          //   • Card mode disabled for the agent → block with the
           //     "Booking Cannot Be Completed" modal.
           //   • Card mode enabled                → open "Online Payment
           //     Required" (Pay/Cancel); Pay opens the gateway picker,
           //     which redirects to CC Avenue.
-          setInsufficientAmount(requiredAmount);
+          //   • Non-RateHawk suppliers with no card path fall back to the
+          //     existing toast-and-abort behaviour.
+          const isRatehawkFlow =
+            Number(bookingData?.payload?.apiId) === 14;
+          setInsufficientAmount(Number(requiredAmount) || 0);
           setShowConfirmModal(false);
           if (!agentCardPaymentEnabled) {
-            setShowNoPaymentPathModal(true);
-          } else {
-            setShowInsufficientModal(true);
+            if (isRatehawkFlow) {
+              setShowNoPaymentPathModal(true);
+              return;
+            }
+            toast.error(
+              "Insufficient credit. Please proceed with online payment.",
+            );
+            return;
           }
+          setShowInsufficientModal(true);
           return; // handled by the payment popup
         }
       }
 
+      // RateHawk (apiId=14) can legitimately take 60-120s end-to-end:
+      // prebook (docs recommend 60s timeout) + booking/form/ + booking/finish/
+      // + status polling (up to 90s per RateHawk contract). The shared
+      // AxiosInstance's 30s default is too short for that flow and would
+      // surface as a client-side "timeout of 30000ms exceeded" even when
+      // the booking is still legitimately in progress on the backend.
+      // Override the per-call timeout ONLY for RateHawk so no other
+      // supplier's flow is slowed down. 120s = generous headroom that
+      // still fits within the backend's worst-case budget.
+      const isRatehawk = Number(bookingData?.payload?.apiId) === 14;
       const response = await axiosInstance.post(
         "/api/hotel-booking/create",
         effectivePayload,
+        isRatehawk ? { timeout: 120000 } : undefined,
       );
       const bookingResponse = response.data;
 
@@ -1143,11 +1395,26 @@ const ApiBookingPageForHotels = () => {
     }
   };
 
-  const formatPrice = (price) =>
-    new Intl.NumberFormat("en-AE", {
-      style: "currency",
-      currency: "AED",
-    }).format(price);
+  // Honor the operator's display-currency preference carried through from
+  // the search/room-list flow via bookingData.displayCurrency ({ code,
+  // factor }). Rates in bookingData.selectedRate[i].rate are AED-native
+  // (per the FE contract — see the comment on formatPrice in
+  // ExternalApiRoomList.jsx); we multiply by the display factor and label
+  // with the display code so the "Selling Price / Total / Payable" values
+  // here match what the Room Details modal showed. Falls back to raw AED
+  // when no displayCurrency was passed (older sessionStorage payloads).
+  const displayCurrency = bookingData?.displayCurrency || { code: "AED", factor: 1 };
+  const formatPrice = (price) => {
+    const factor = Number(displayCurrency.factor) > 0
+      ? Number(displayCurrency.factor)
+      : 1;
+    const code = displayCurrency.code || "AED";
+    const converted = (Number(price) || 0) * factor;
+    return `${code} ${converted.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
 
   // Derived pricing — computed BEFORE the early return so the useMemo /
   // useEffect calls below stay in the same call order every render
@@ -1157,6 +1424,47 @@ const ApiBookingPageForHotels = () => {
     (sum, room) => sum + parseFloat(room.rate || 0),
     0,
   );
+
+  // ── GRN "Payable at Hotel" summary ──────────────────────────────
+  // Aggregate the guest-paid property charges across the picked rates
+  // (payableAtHotel* set from GRN's price_details.hotel_charges[]
+  // rows with included:false). Bundled bookings pass one rate;
+  // non-bundled multi-room bookings pass N rates whose charges sum.
+  // Returns null when no rate carries a charge — every non-GRN
+  // supplier ends up here, so their booking page stays unchanged.
+  //
+  // Currency handling: sums cleanly when every rate quoted its
+  // charge in the SAME currency (the common case); a mix leaves
+  // `amount` null with `description` still carrying the breakdown,
+  // so the panel shows a warning even when the amount can't be
+  // totalled into one number. Never combined into totalPrice: the
+  // hotel bills it directly, we don't.
+  const payableAtHotel = (() => {
+    const rows = selectedRate.filter(
+      (r) => r?.payableAtHotelAmount != null || r?.payableAtHotelDescription,
+    );
+    if (!rows.length) return null;
+    const currencies = new Set();
+    let sum = 0;
+    let summable = true;
+    const labels = new Set();
+    for (const r of rows) {
+      if (r.payableAtHotelDescription) labels.add(r.payableAtHotelDescription);
+      if (r.payableAtHotelAmount == null) {
+        summable = false;
+        continue;
+      }
+      const c = (r.payableAtHotelCurrency || "AED").toUpperCase();
+      currencies.add(c);
+      sum += Number(r.payableAtHotelAmount) || 0;
+    }
+    const oneCurrency = currencies.size <= 1;
+    return {
+      amount: summable && oneCurrency ? sum : null,
+      currency: oneCurrency ? [...currencies][0] || "AED" : null,
+      description: [...labels].join(", ") || null,
+    };
+  })();
 
   const isAdmin = activeUserRole === "ADMIN";
 
@@ -1402,6 +1710,137 @@ const ApiBookingPageForHotels = () => {
                                           | Free cancellation until{" "}
                                           {parseInt(d, 10)} {monthNames[idx]}{" "}
                                           {y}, 11:59 PM (UAE)
+                                        </span>
+                                      );
+                                    })()}
+                                  {/* GoGlobal (apiId 21) cancellation deadline.
+                                      slot.deadlineDate is either the availability
+                                      CxlDeadLine "dd/MMM/yyyy" (e.g. 18/Nov/2026)
+                                      or the valuation CancellationDeadline in ISO
+                                      yyyy-MM-dd — handle both. Rendered inline like
+                                      the other suppliers, static 11:59 PM (UAE). */}
+                                  {Number(bookingData?.payload?.apiId) === 21 &&
+                                    slot.deadlineDate &&
+                                    (() => {
+                                      const monthNames = [
+                                        "Jan",
+                                        "Feb",
+                                        "Mar",
+                                        "Apr",
+                                        "May",
+                                        "Jun",
+                                        "Jul",
+                                        "Aug",
+                                        "Sep",
+                                        "Oct",
+                                        "Nov",
+                                        "Dec",
+                                      ];
+                                      const raw = String(
+                                        slot.deadlineDate,
+                                      ).trim();
+                                      let d, monLabel, y;
+                                      if (raw.includes("/")) {
+                                        // dd/MMM/yyyy (availability CxlDeadLine)
+                                        const [dd, mon, yy] = raw.split("/");
+                                        if (!dd || !mon || !yy) return null;
+                                        d = parseInt(dd, 10);
+                                        monLabel = mon;
+                                        y = yy;
+                                      } else if (raw.includes("-")) {
+                                        const parts = raw.split("-");
+                                        if (parts.length !== 3) return null;
+                                        if (parts[0].length === 4) {
+                                          // ISO yyyy-MM-dd (valuation deadline)
+                                          const idx =
+                                            parseInt(parts[1], 10) - 1;
+                                          if (idx < 0 || idx > 11) return null;
+                                          d = parseInt(parts[2], 10);
+                                          monLabel = monthNames[idx];
+                                          y = parts[0];
+                                        } else {
+                                          // dd-MMM-yyyy
+                                          d = parseInt(parts[0], 10);
+                                          monLabel = parts[1];
+                                          y = parts[2];
+                                        }
+                                      } else {
+                                        return null;
+                                      }
+                                      if (Number.isNaN(d) || !monLabel || !y)
+                                        return null;
+                                      return (
+                                        <span
+                                          className="ms-2 small fw-normal"
+                                          style={{ opacity: 0.95 }}
+                                          title="Cancel by this date/time to avoid charges"
+                                        >
+                                          | Deadline: {d} {monLabel} {y}, 11:59
+                                          PM (UAE)
+                                        </span>
+                                      );
+                                    })()}
+
+                                  {/* GRN (apiId 20) deadline — earliest
+                                      cancellationPolicy.fromDate on this slot,
+                                      shown as D minus 2 days (the "safe to
+                                      cancel without charge" cut-off, per the
+                                      operator's requested display rule; matches
+                                      how deadlineDate is computed for the
+                                      booking-create payload above). Hidden for
+                                      non-refundable rates — there is no free
+                                      cancellation window to communicate. */}
+                                  {Number(bookingData?.payload?.apiId) === 20 &&
+                                    !(
+                                      slot.nonRefundable === true ||
+                                      slot.nonRefundable === "true" ||
+                                      slot.nonRefundable === "Y"
+                                    ) &&
+                                    Array.isArray(slot.cancellationPolicy) &&
+                                    slot.cancellationPolicy.length > 0 &&
+                                    (() => {
+                                      const dates = slot.cancellationPolicy
+                                        .map((p) =>
+                                          p?.fromDate ? new Date(p.fromDate) : null,
+                                        )
+                                        .filter(
+                                          (dt) =>
+                                            dt !== null && !isNaN(dt.getTime()),
+                                        );
+                                      if (dates.length === 0) return null;
+                                      const earliest = new Date(
+                                        Math.min(
+                                          ...dates.map((dt) => dt.getTime()),
+                                        ),
+                                      );
+                                      const display = new Date(earliest);
+                                      display.setDate(
+                                        earliest.getDate() - 2,
+                                      );
+                                      const monthNames = [
+                                        "Jan",
+                                        "Feb",
+                                        "Mar",
+                                        "Apr",
+                                        "May",
+                                        "Jun",
+                                        "Jul",
+                                        "Aug",
+                                        "Sep",
+                                        "Oct",
+                                        "Nov",
+                                        "Dec",
+                                      ];
+                                      return (
+                                        <span
+                                          className="ms-2 small fw-normal"
+                                          style={{ opacity: 0.95 }}
+                                          title="Cancel by this date/time to avoid charges (supplier deadline minus 2 days)"
+                                        >
+                                          | Deadline: {display.getDate()}{" "}
+                                          {monthNames[display.getMonth()]}{" "}
+                                          {display.getFullYear()}, 11:59 PM
+                                          (UAE)
                                         </span>
                                       );
                                     })()}
@@ -1749,6 +2188,13 @@ const ApiBookingPageForHotels = () => {
                     </Card>
                   )}
 
+                  {/* RATEHAWK (apiId=14): primary-guest email + phone are
+                      auto-sourced from the chosen agent's registration
+                      record (see the /api/agent/{id} fetch effect above),
+                      so there's no input card here anymore. The payload
+                      still emits these fields on RateHawk bookings via
+                      requiresRatehawkContact() (see line 1010/1011). */}
+
                   {/* Special Requests card — matches Inhouse
                       HotelBookingPage: optional Booking Done For text
                       (admin only) at the top, then the 11-chip preset
@@ -1984,6 +2430,54 @@ const ApiBookingPageForHotels = () => {
                             {formatPrice(newTotal)}
                           </div>
                         </div>
+                        {/* GRN Payable-at-Hotel — the property collects this
+                            at check-in on top of the booking total. Rendered
+                            AFTER the New Total row (below the divider) so the
+                            operator cannot read it as part of the total.
+                            Formatted in the currency GRN quoted the charge in
+                            (usually AED, occasionally the property's local
+                            currency, which we then pass through untouched).
+                            Absent for every non-GRN supplier and for GRN
+                            rates that carry no property charge, so the
+                            existing sidebar is unchanged in those cases. */}
+                        {payableAtHotel && (
+                          <div
+                            className="mt-2 p-2 rounded"
+                            style={{
+                              background: "#fff4e5",
+                              border: "1px solid #f0c78a",
+                              color: "#7a4a00",
+                            }}
+                            title="Collected by the hotel at check-in. NOT part of the New Total shown above."
+                          >
+                            <div className="d-flex justify-content-between align-items-center small fw-bold">
+                              <span>
+                                Payable at Hotel
+                                {payableAtHotel.description
+                                  ? ` (${payableAtHotel.description})`
+                                  : ""}
+                              </span>
+                              <span>
+                                {payableAtHotel.amount != null
+                                  ? `${payableAtHotel.currency || "AED"} ${payableAtHotel.amount.toLocaleString(
+                                      undefined,
+                                      {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      },
+                                    )}`
+                                  : "See details"}
+                              </span>
+                            </div>
+                            <div
+                              className="small mt-1"
+                              style={{ opacity: 0.85 }}
+                            >
+                              Not included in the total &mdash; collected by
+                              the hotel at check-in.
+                            </div>
+                          </div>
+                        )}
                         {activeUserRole === "ADMIN" && (
                           <div className="hbp-summary-row mt-2">
                             <div className="hbp-summary-label text-muted small">
@@ -2006,9 +2500,20 @@ const ApiBookingPageForHotels = () => {
                           "Hold Room and Pay Later" → VoucherBooking = false
                               (confirmed hold; no balance needed; auto-cancels
                                if not vouchered before the time limit)
-                        Guarded by apiId===3 so other suppliers on this page
-                        are untouched. */}
-                    {bookingData?.payload?.apiId === 3 && (
+                        ATHARVA is gated on apiId===3; hold-capable APIs (see
+                        HOLD_CAPABLE_API_IDS at the top of this file) get the
+                        same picker, but only while the selected rate is still
+                        inside its free-cancellation window. For those there is
+                        no supplier hold endpoint, so:
+                          "Book and Pay Now"        → books + deducts credit now
+                          "Hold Room and Pay Later" → books the room now, credit
+                              settles on the detail page's Reconfirm click; the
+                              deadline job cancels it at the supplier if nobody
+                              reconfirms in time.
+                        Every other supplier renders no picker and is
+                        untouched. */}
+                    {(bookingData?.payload?.apiId === 3 ||
+                      isHoldEligible(bookingData)) && (
                       <Card className="shadow-sm rounded-3 border-0 mt-3">
                         {/* <Card.Header className="bg-light py-2">
                           <h6 className="mb-0 fw-bold">Booking Mode</h6>
@@ -2183,6 +2688,139 @@ const ApiBookingPageForHotels = () => {
                       ));
                     })()}
                   </section>
+
+                  {/* ── GRN-only extras · mirrors /api-room-list policies
+                      modal (Payable at Hotel, Other Inclusions, Rate
+                      Comments). All three blocks read from the same rate
+                      fields that ExternalApiRoomList.jsx renders — the
+                      values ride on selectedRate[i] from the availability
+                      response and were preserved through the room-list →
+                      booking-page sessionStorage handoff. Rendered only
+                      for apiId=20 (GRN); each block skips itself when its
+                      source is empty, so a GRN rate with no
+                      inclusions/comments won't show empty headings. ── */}
+                  {Number(bookingData?.payload?.apiId) === 20 && (
+                    <>
+                      {/* Payable at Hotel — reuses the derived payableAtHotel
+                          summary already computed at the top of the file. */}
+                      {payableAtHotel && (
+                        <section className="policy-section">
+                          <h6 className="policy-section-title">
+                            Payable at Hotel
+                          </h6>
+                          <div className="policy-item">
+                            <div className="policy-text">
+                              {payableAtHotel.description
+                                ? `${payableAtHotel.description} `
+                                : ""}
+                              {payableAtHotel.amount != null && (
+                                <strong>
+                                  {payableAtHotel.currency || "AED"}{" "}
+                                  {Number(payableAtHotel.amount).toLocaleString(
+                                    undefined,
+                                    {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    },
+                                  )}
+                                </strong>
+                              )}
+                            </div>
+                          </div>
+                        </section>
+                      )}
+
+                      {/* Other Inclusions — free WiFi / breakfast add-ons /
+                          parking / etc from rate.other_inclusions. Deduped
+                          across all rooms so identical entries only render
+                          once. */}
+                      {(() => {
+                        const inclusions = new Set();
+                        (selectedRate || []).forEach((r) => {
+                          (r?.otherInclusions || []).forEach((inc) => {
+                            const text = stripPolicyHtml(
+                              typeof inc === "string" ? inc : String(inc ?? ""),
+                            ).trim();
+                            if (text) inclusions.add(text);
+                          });
+                        });
+                        if (inclusions.size === 0) return null;
+                        return (
+                          <section className="policy-section">
+                            <h6 className="policy-section-title">
+                              Other Inclusions
+                            </h6>
+                            {Array.from(inclusions).map((text, idx) => (
+                              <div key={idx} className="policy-item">
+                                <div
+                                  className="policy-text"
+                                  style={{ whiteSpace: "pre-line" }}
+                                >
+                                  {text}
+                                </div>
+                              </div>
+                            ))}
+                          </section>
+                        );
+                      })()}
+
+                      {/* Rate Comments — GRN's rate_comments object:
+                          comments, mealplan, pax_comments, remarks,
+                          MandatoryTax. Any of the five keys may be missing
+                          or blank; only populated ones render, and
+                          identical (label + value) pairs across rooms
+                          collapse to a single row. */}
+                      {(() => {
+                        const entryDefs = [
+                          { key: "comments", label: "Comments" },
+                          { key: "mealplan", label: "Meal Plan" },
+                          { key: "pax_comments", label: "Pax Comments" },
+                          { key: "remarks", label: "Remarks" },
+                          { key: "MandatoryTax", label: "Mandatory Tax" },
+                        ];
+                        const seen = new Map();
+                        (selectedRate || []).forEach((r) => {
+                          const rc = r?.rateComments;
+                          if (!rc || typeof rc !== "object") return;
+                          entryDefs.forEach(({ key, label }) => {
+                            const raw = rc[key];
+                            const rawStr =
+                              typeof raw === "string"
+                                ? raw
+                                : raw == null
+                                ? ""
+                                : String(raw);
+                            if (!rawStr.trim()) return;
+                            const text = stripPolicyHtml(rawStr).trim();
+                            if (!text) return;
+                            const dedupeKey = `${key}::${text}`;
+                            if (!seen.has(dedupeKey))
+                              seen.set(dedupeKey, { label, text });
+                          });
+                        });
+                        if (seen.size === 0) return null;
+                        return (
+                          <section className="policy-section">
+                            <h6 className="policy-section-title">
+                              Rate Comments
+                            </h6>
+                            {Array.from(seen.values()).map(
+                              ({ label, text }, idx) => (
+                                <div key={idx} className="policy-item">
+                                  <div
+                                    className="policy-text"
+                                    style={{ whiteSpace: "pre-line" }}
+                                  >
+                                    <strong>{label}:</strong> {text}
+                                  </div>
+                                </div>
+                              ),
+                            )}
+                          </section>
+                        );
+                      })()}
+                    </>
+                  )}
 
                   {/* Terms & Conditions — external suppliers don't return
                       T&C through the search response. Kept as a section so
@@ -2494,6 +3132,41 @@ const ApiBookingPageForHotels = () => {
                           <span>Total (Selling)</span>
                           <span>{formatPrice(totalPrice)}</span>
                         </div>
+                        {payableAtHotel && (
+                          <>
+                            <hr className="my-1" />
+                            <div
+                              className="d-flex justify-content-between small mt-1"
+                              style={{ color: "#7a4a00" }}
+                              title="Collected by the hotel at check-in. NOT part of the total above."
+                            >
+                              <span>
+                                + Payable at Hotel
+                                {payableAtHotel.description
+                                  ? ` (${payableAtHotel.description})`
+                                  : ""}
+                              </span>
+                              <span className="fw-bold">
+                                {payableAtHotel.amount != null
+                                  ? `${payableAtHotel.currency || "AED"} ${payableAtHotel.amount.toLocaleString(
+                                      undefined,
+                                      {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      },
+                                    )}`
+                                  : "see details"}
+                              </span>
+                            </div>
+                            <div
+                              className="small"
+                              style={{ color: "#7a4a00", opacity: 0.8 }}
+                            >
+                              Collected by the hotel at check-in &mdash; not
+                              included in the total above.
+                            </div>
+                          </>
+                        )}
                       </div>
 
                       <div className="mt-1 p-2 bg-white border rounded d-flex align-items-center">
@@ -2559,6 +3232,199 @@ const ApiBookingPageForHotels = () => {
                 </Modal.Footer>
               </Modal>
 
+{/* ── Insufficient credit → online payment required ──
+    RATEHAWK-only. Non-RateHawk flows never open this modal
+    (they still hit the toast in confirmBooking). Pay opens
+    the gateway picker; Cancel dismisses. */}
+<Modal
+  show={showInsufficientModal}
+  onHide={() => setShowInsufficientModal(false)}
+  centered
+>
+  <Modal.Header closeButton>
+    <Modal.Title>Online Payment Required</Modal.Title>
+  </Modal.Header>
+  <Modal.Body className="text-center py-4">
+    <p className="mb-2 text-muted">
+      The agent's available credit is insufficient for this
+      booking. You need to proceed with{" "}
+      <strong>online payment</strong>.
+    </p>
+    <div className="mt-3">
+      <div className="text-muted small">Payable amount</div>
+      <div className="fs-4 fw-bold text-dark">
+        {formatPrice(insufficientAmount)}
+      </div>
+    </div>
+  </Modal.Body>
+  <Modal.Footer className="justify-content-center border-0">
+    <Button
+      variant="danger"
+      onClick={() => setShowInsufficientModal(false)}
+    >
+      Cancel
+    </Button>
+    <Button
+      variant="success"
+      onClick={() => {
+        setShowInsufficientModal(false);
+        setSelectedGateway("");
+        setShowGatewayModal(true);
+      }}
+    >
+      Pay
+    </Button>
+  </Modal.Footer>
+</Modal>
+
+{/* ── Select payment gateway ──
+    Radios from PAYMENT_GATEWAYS. Proceed persists the
+    pending payload to sessionStorage under
+    "hbpPendingCreatePayload" (same key Inhouse uses so the
+    same CCAvenueCheckoutPage picks it up unchanged) and
+    navigates to /payment/ccavenue-redirect. */}
+<Modal
+  show={showGatewayModal}
+  onHide={() => setShowGatewayModal(false)}
+  centered
+>
+  <Modal.Header closeButton>
+    <Modal.Title>Select Payment Gateway</Modal.Title>
+  </Modal.Header>
+  <Modal.Body>
+    <p className="text-muted small mb-3">
+      Choose a gateway to enter your card details.
+    </p>
+
+    {PAYMENT_GATEWAYS.map((g) => (
+      <Form.Check
+        key={g.id}
+        type="radio"
+        name="payment-gateway"
+        id={`gw-${g.id}`}
+        className="mb-2"
+        checked={selectedGateway === g.id}
+        onChange={() => setSelectedGateway(g.id)}
+        label={
+          <span>
+            <span className="fw-semibold">{g.name}</span>
+            <span className="text-muted small ms-2">
+              {g.desc}
+            </span>
+          </span>
+        }
+      />
+    ))}
+  </Modal.Body>
+
+  <Modal.Footer className="border-0">
+    <Button
+      variant="secondary"
+      onClick={() => setShowGatewayModal(false)}
+    >
+      Cancel
+    </Button>
+
+    <Button
+      variant="success"
+      disabled={!selectedGateway}
+      onClick={() => {
+        setShowGatewayModal(false);
+
+        // Persist the payload for the resume flow to replay
+        // after the user returns from CC Avenue. React state
+        // is lost across the redirect so the resume effect
+        // above rebuilds the create call purely from this.
+        // paymentMode is flipped to "ONLINE" so the Booking
+        // List labels the row correctly (same convention as
+        // Inhouse — see HotelBookingPage.jsx line 2942).
+        try {
+          sessionStorage.setItem(
+            "hbpPendingCreatePayload",
+            JSON.stringify({
+              ...pendingPayload,
+              paymentMode: "ONLINE",
+            }),
+          );
+        } catch (e) {
+          console.error(
+            "Could not persist pending create payload",
+            e,
+          );
+        }
+
+        if (selectedGateway === "ccavenue") {
+          const guest = pendingPayload?.primaryGuest;
+
+          const billingName = guest
+            ? [guest.firstName, guest.lastName]
+                .filter(Boolean)
+                .join(" ")
+            : "";
+
+          navigate("/payment/ccavenue-redirect", {
+            state: {
+              amount: insufficientAmount,
+              amountLabel: formatPrice(insufficientAmount),
+              agentId: pendingPayload?.agentId || null,
+              billingName,
+              returnTo: location.pathname,
+            },
+          });
+        }
+      }}
+    >
+      Proceed to Pay
+    </Button>
+  </Modal.Footer>
+</Modal>
+
+{/* ── Duplicate-booking modal ──
+    Opened when the backend replies status="DUPLICATE"
+    (GRN error code 6000). Read-only acknowledgement; the
+    operator dismisses and goes to check the existing booking.
+    No retry action here on purpose. */}
+<Modal
+  show={showDuplicateModal}
+  onHide={() => setShowDuplicateModal(false)}
+  centered
+  backdrop="static"
+>
+  <Modal.Header closeButton>
+    <Modal.Title>
+      <i className="bi bi-exclamation-triangle-fill text-warning me-2"></i>
+      Duplicate Booking
+    </Modal.Title>
+  </Modal.Header>
+
+  <Modal.Body>
+    <p className="mb-2">{duplicateMessage}</p>
+
+    <p className="text-muted small mb-0">
+      Please check the Hotel Bookings list for the existing
+      reservation before retrying.
+    </p>
+  </Modal.Body>
+
+  <Modal.Footer>
+    <Button
+      variant="outline-secondary"
+      onClick={() => setShowDuplicateModal(false)}
+    >
+      Close
+    </Button>
+
+    <Button
+      variant="primary"
+      onClick={() => {
+        setShowDuplicateModal(false);
+        navigate("/booking-details/hotel-booking-list");
+      }}
+    >
+      View Bookings
+    </Button>
+  </Modal.Footer>
+</Modal>
               {/* ── Insufficient credit + card disabled → block booking ──
                   Shown when the agent has no available credit AND the
                   AgentView "Allow Card payment mode" toggle is off. There
