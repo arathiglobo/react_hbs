@@ -280,11 +280,27 @@ const ExternalApiRoomList = () => {
   const [prebookError, setPrebookError] = useState(null);
   // rateKey -> AtharvaPreBookResponseDTO (fresh tokenId/hKey/rateKey/policies)
   const [atharvaPrebookCache, setAtharvaPrebookCache] = useState({});
-  // rateKey -> GrnRecheckResponseDTO (fresh price/policy/grnSearchId).
-  // Populated the first time the guest opens the Cancellation Policies &
-  // Terms modal for a GRN rate; subsequent opens are instant and the
-  // booking payload will pull `grnSearchId` back out of here.
+  // cacheKey -> { data: GrnRecheckResponseDTO, at: epochMs }.
+  // Populated the first time a GRN rate is rechecked (Cancellation Policies
+  // modal, View Details / Select, or Continue with Booking); a repeat within
+  // the TTL is served from here so one operator interaction never fires two
+  // identical supplier calls.
+  //
+  // The key deliberately includes the SEARCH the rate belongs to, and entries
+  // expire. GRN reuses the same rate_key across search sessions, but a
+  // recheck is only valid for the search_id it ran under (the server-side sid
+  // TTL is 30 minutes). Keying on rate_key alone — and never expiring —
+  // let a recheck from an earlier search satisfy a later one, so no call went
+  // out and GRN rejected the booking with 1513 "TW Issue".
   const [grnRecheckCache, setGrnRecheckCache] = useState({});
+  const GRN_RECHECK_TTL_MS = 2 * 60 * 1000;
+  const grnRecheckKey = (rate) =>
+    [
+      roomData?.payload?.hotelCode,
+      roomData?.payload?.checkInDate,
+      roomData?.payload?.checkOutDate,
+      rate?.rateKey,
+    ].join("|");
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -388,8 +404,10 @@ const ExternalApiRoomList = () => {
         message: "GRN recheck: rate is missing rateKey — cannot verify policy.",
       };
     }
-    if (grnRecheckCache[rate.rateKey]) {
-      return grnRecheckCache[rate.rateKey];
+    const cacheKey = grnRecheckKey(rate);
+    const cached = grnRecheckCache[cacheKey];
+    if (cached && Date.now() - cached.at < GRN_RECHECK_TTL_MS) {
+      return cached.data;
     }
     const { payload } = roomData || {};
     const req = {
@@ -410,7 +428,10 @@ const ExternalApiRoomList = () => {
       );
       const data = resp?.data || {};
       if (data.success) {
-        setGrnRecheckCache((prev) => ({ ...prev, [rate.rateKey]: data }));
+        setGrnRecheckCache((prev) => ({
+          ...prev,
+          [cacheKey]: { data, at: Date.now() },
+        }));
       }
       return data;
     } catch (err) {
@@ -1104,7 +1125,9 @@ const ExternalApiRoomList = () => {
     // cached recheck response (populated when the operator opened the
     // Cancellation Policies modal). Falls back to false when recheck wasn't
     // run yet or the rate isn't GRN.
-    const grnRecheck = rate?.rateKey ? grnRecheckCache[rate.rateKey] : null;
+    const grnRecheck = rate?.rateKey
+      ? grnRecheckCache[grnRecheckKey(rate)]?.data
+      : null;
 
     return {
       roomNo,
@@ -1622,6 +1645,104 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
             backendMsg
               ? `Unable to fetch latest rate: ${backendMsg}`
               : "Unable to fetch latest rate. Please try again.",
+          );
+        }
+      })();
+      return;
+    }
+
+    // ─── GRN (apiId=20) single-room rate recheck. ──────────────────────
+    //    GRN returns search-time rates as rate_type="recheck" and refuses to
+    //    book them (error 1513 "TW Issue") until the mandatory recheck has
+    //    run for THIS search_id, which is what flips the rate to "bookable".
+    //
+    //    The multi-room "Continue with Booking" path already does this, and
+    //    so does the "Cancellation Policies & Terms" link. The single-room
+    //    "View Details / Select" click did not — it fell through to the
+    //    direct-navigation branch at the end of this handler, so a
+    //    single-room GRN booking reached the booking page carrying an
+    //    un-rechecked rate and was rejected at create time.
+    //
+    //    Shape matches the DARINA / RATEHAWK / GOGLOBAL branches above:
+    //    verify with the supplier, show the guaranteed values in the Room
+    //    Details modal, and let that modal's Continue button do the
+    //    checkout to /api-booking-page-hotels.
+    if (currentApiId === apiIdMapping.GRN) {
+      setLoadingRate(true);
+      (async () => {
+        try {
+          const recheck = await fetchGrnRecheck(rate);
+          if (!recheck?.success) {
+            setLoadingRate(false);
+            alert(
+              recheck?.message ||
+                "This rate is no longer available. Please reselect and try again.",
+            );
+            return;
+          }
+
+          // Overlay GRN's rechecked values onto the mapped rate so the modal
+          // and the downstream booking payload both use the guaranteed
+          // numbers rather than the search-time snapshot.
+          //
+          // panRequired / payableAtHotel* are taken straight off this
+          // response rather than left to mapRateForPayload's grnRecheckCache
+          // lookup: fetchGrnRecheck's setState has not committed yet in this
+          // tick, so that lookup still sees the pre-recheck cache and would
+          // report panRequired=false on a rate GRN actually demands a PAN
+          // for — which the supplier then rejects at booking.
+          const mapped = mapRateForPayload(rate, hotel, 1);
+          if (recheck.totalPriceWithMarkup != null) {
+            mapped.rate = recheck.totalPriceWithMarkup;
+          } else if (recheck.totalPrice != null) {
+            mapped.rate = recheck.totalPrice;
+          }
+          if (recheck.totalPrice != null) {
+            mapped.rateWithoutMarkup = recheck.totalPrice;
+          }
+          if (recheck.currency) {
+            mapped.currency = recheck.currency;
+          }
+          if (recheck.nonRefundable != null) {
+            mapped.nonRefundable = recheck.nonRefundable;
+          }
+          if (recheck.cancellationPolicies?.length) {
+            mapped.cancellationPolicy = recheck.cancellationPolicies;
+          }
+          mapped.panRequired = recheck.panRequired === true;
+          if (recheck.payableAtHotelAmount != null) {
+            mapped.payableAtHotelAmount = recheck.payableAtHotelAmount;
+            mapped.payableAtHotelCurrency = recheck.payableAtHotelCurrency;
+            mapped.payableAtHotelDescription =
+              recheck.payableAtHotelDescription;
+          }
+          // Recheck is authoritative for the booking key (docs: for a
+          // rate_type recheck/refetch rate, send the rate_key from the
+          // recheck response). This is the slot the booking page reads for
+          // rooms[].rateKey. GRN echoes the same value today, so it is a
+          // no-op in practice — it just stops a future key rotation from
+          // silently reintroducing 1513.
+          if (recheck.rateKey) {
+            mapped.atharvaRateKey = recheck.rateKey;
+          }
+          // Tells the operator the modal is showing supplier-verified data,
+          // matching Darina's "Live rate (...)" convention.
+          mapped.contractLabel = rate.contractLabel || "Verified rate (GRN)";
+
+          setSelectedRate([mapped]);
+          setLoadingRate(false);
+          setShowBookingModal(true);
+        } catch (err) {
+          console.error("GRN recheck fetch failed:", err);
+          setLoadingRate(false);
+          const backendMsg =
+            err?.response?.data?.message ||
+            err?.response?.data?.error ||
+            err?.message;
+          alert(
+            backendMsg
+              ? `Unable to verify rate: ${backendMsg}`
+              : "Unable to verify rate. Please try again.",
           );
         }
       })();
