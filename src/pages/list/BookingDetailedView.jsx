@@ -1462,9 +1462,22 @@ export default function BookingDetailedView() {
           ? "On Request/Confirmed/Reconfirmed"
           : "ReConfirmed",
         at: booking.reconfirmedDate,
-        by: booking.reconfirmedBy || "-",
-        location: booking.reconfirmedLocation,
-        ip: booking.reconfirmedIp,
+        // A born-reconfirmed booking ("Book & Voucher") was reconfirmed
+        // inside the create call itself, so this row IS the creation event:
+        // operator, location and IP are by definition the ones captured at
+        // create time. The backend now stamps the reconfirmed_* audit
+        // columns on that path, but rows written before it did have them
+        // null — inherit the create-time values so the two rows always
+        // agree instead of rendering "-".
+        // "Book & Voucher Later" is a genuine later operator action, so it
+        // keeps its own reconfirm audit and falls back to "-" as before.
+        by: booking.reconfirmedBy || (bornReconfirmed ? creatorLabel : "-"),
+        location:
+          booking.reconfirmedLocation ||
+          (bornReconfirmed ? booking.bookingLocation : undefined),
+        ip:
+          booking.reconfirmedIp ||
+          (bornReconfirmed ? booking.ipAddress : undefined),
       });
     }
     if (booking.cancelledAt) {

@@ -78,6 +78,123 @@ const stripPolicyHtml = (raw) => {
   return s.trim();
 };
 
+// Suppliers that support "Hold Room and Pay Later" on this page.
+//
+// ATHARVA (3) is NOT listed: it has a real supplier-side hold endpoint
+// (HCreateBooking VoucherBooking=false → status KK) and its own picker gate
+// further down, which stays exactly as it was.
+//
+// For the suppliers listed here there is no hold endpoint, so a hold is a
+// REAL booking whose agent-credit settlement is deferred to the operator's
+// Reconfirm click. That is only offered while the rate is still inside its
+// free-cancellation window, so the deadline job can release the room at the
+// supplier for free if nobody reconfirms. Add an apiId here only once its
+// backend create path honours bookingConfirmation="Hold & Book Later".
+const HOLD_CAPABLE_API_IDS = new Set([20]); // 20 = GRN
+
+/**
+ * The booking's overall free-cancellation deadline, as a Date at local
+ * midnight, or null when no deadline applies.
+ *
+ * Extracted verbatim from the create payload's own derivation so the
+ * "can this be held?" gate and the deadlineDate we persist can never
+ * disagree — a picker offered against one deadline and a booking saved
+ * against another is exactly how a hold ends up outside its window.
+ *
+ *   • Darina (16) carries a live cut-off on the rate — used as-is.
+ *   • Non-refundable rates have no window at all → null.
+ *   • Everything else: earliest cancellation-policy fromDate, minus 2 days.
+ *
+ * The overall deadline is the EARLIEST across the selected rates.
+ */
+const deriveDeadlineDate = (selectedRates, apiId) => {
+  const deadlines = (selectedRates || [])
+    .map((rate) => {
+      const nonRefundable =
+        rate.nonRefundable === true ||
+        rate.nonRefundable === "true" ||
+        rate.nonRefundable === "Y";
+
+      // Darina (apiId=16): rate.deadlineDate is the LIVE
+      // free-cancellation cut-off carried from
+      // CheckAvailabilityWithCancellation_NoCache_LiveCalculation
+      // (BE parses the "Free Cancellation" band's toDate). It is
+      // the deadline the operator sees in the room accordion.
+      // Use it verbatim — the generic "earliest cancellationPolicy
+      // fromDate minus 2 days" fallback below picks up the Free
+      // Cancellation band's FromDate instead of the cut-off, which
+      // reports a wildly earlier date (September vs December).
+      if (apiId === 16 && !nonRefundable && rate.deadlineDate) {
+        const iso = String(rate.deadlineDate).slice(0, 10);
+        const parts = iso.split("-");
+        if (parts.length === 3) {
+          const d = new Date(
+            Number(parts[0]),
+            Number(parts[1]) - 1,
+            Number(parts[2]),
+          );
+          if (!isNaN(d.getTime())) {
+            d.setHours(0, 0, 0, 0);
+            return d;
+          }
+        }
+      }
+
+      if (nonRefundable === true) {
+        // Non-refundable rates have no free-cancellation window, so
+        // no deadline applies — send nothing rather than a fabricated
+        // "today - 2 days" date (which always lands in the past and
+        // confuses anything that reads deadlineDate literally).
+        return null;
+      }
+      const policies = rate.cancellationPolicy || [];
+      if (policies.length === 0) return null;
+      const dates = policies
+        .map((p) => (p.fromDate ? new Date(p.fromDate) : null))
+        .filter((date) => date !== null && !isNaN(date.getTime()));
+      if (dates.length === 0) return null;
+      const earliestDate = new Date(Math.min(...dates.map((d) => d.getTime())));
+      const deadline = new Date(earliestDate);
+      deadline.setDate(earliestDate.getDate() - 2);
+      deadline.setHours(0, 0, 0, 0);
+      return deadline;
+    })
+    .filter((d) => d !== null);
+
+  if (deadlines.length === 0) return null;
+  return new Date(Math.min(...deadlines.map((d) => d.getTime())));
+};
+
+/** Format a Date as the LocalDateTime string the backend payload expects. */
+const toDeadlinePayloadString = (d) => {
+  if (!d) return null;
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}T00:00:00`;
+};
+
+/**
+ * May this booking be offered as "Hold Room and Pay Later"?
+ *
+ * True only for a hold-capable supplier whose selected rates still have a
+ * free-cancellation deadline in the future. A missing deadline (every rate
+ * non-refundable, or no cancellation policy at all) means there is no window
+ * to hold inside, so the picker stays hidden and the flow is untouched.
+ *
+ * The backend re-checks this before sending anything to the supplier, so a
+ * stale page cannot create a hold outside the window.
+ */
+const isHoldEligible = (bookingData) => {
+  const apiId = bookingData?.payload?.apiId;
+  if (!HOLD_CAPABLE_API_IDS.has(apiId)) return false;
+  const deadline = deriveDeadlineDate(bookingData?.selectedRate || [], apiId);
+  if (!deadline) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return deadline >= today;
+};
+
 /**
  * API booking page — visual shell restyled to match the Inhouse
  * HotelBookingPage (two-column sticky layout, .hbp-* classes,
@@ -843,12 +960,15 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
 
     const { errors, hasErrors } = validateForm();
 
-    // ATHARVA (apiId 3): the operator MUST pick a booking mode
-    // (Book and Pay Now / Hold Room and Pay Later) before we open the
-    // policy modal. Merges into the same validationErrors bag as the
-    // guest-detail errors so a single toast covers both cases.
+    // Whenever the booking-mode picker is on screen the operator MUST
+    // answer it before we open the policy modal — ATHARVA (apiId 3, its own
+    // supplier-side hold) and any hold-capable API whose rate is still
+    // inside its free-cancellation window. Merges into the same
+    // validationErrors bag as the guest-detail errors so a single toast
+    // covers both cases. Suppliers without a picker skip this entirely and
+    // submit exactly as they did before.
     if (
-      bookingData?.payload?.apiId === 3 &&
+      (bookingData?.payload?.apiId === 3 || isHoldEligible(bookingData)) &&
       bookingConfirmation !== "Book & Voucher" &&
       bookingConfirmation !== "Hold & Book Later"
     ) {
@@ -972,76 +1092,14 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
             ),
           ),
         ],
-        deadlineDate: (() => {
-          const deadlines = bookingData.selectedRate
-            .map((rate) => {
-              const nonRefundable =
-                rate.nonRefundable === true ||
-                rate.nonRefundable === "true" ||
-                rate.nonRefundable === "Y";
-
-              // Darina (apiId=16): rate.deadlineDate is the LIVE
-              // free-cancellation cut-off carried from
-              // CheckAvailabilityWithCancellation_NoCache_LiveCalculation
-              // (BE parses the "Free Cancellation" band's toDate). It is
-              // the deadline the operator sees in the room accordion.
-              // Use it verbatim — the generic "earliest cancellationPolicy
-              // fromDate minus 2 days" fallback below picks up the Free
-              // Cancellation band's FromDate instead of the cut-off, which
-              // reports a wildly earlier date (September vs December).
-              if (
-                bookingData?.payload?.apiId === 16 &&
-                !nonRefundable &&
-                rate.deadlineDate
-              ) {
-                const iso = String(rate.deadlineDate).slice(0, 10);
-                const parts = iso.split("-");
-                if (parts.length === 3) {
-                  const d = new Date(
-                    Number(parts[0]),
-                    Number(parts[1]) - 1,
-                    Number(parts[2]),
-                  );
-                  if (!isNaN(d.getTime())) {
-                    d.setHours(0, 0, 0, 0);
-                    return d;
-                  }
-                }
-              }
-
-              if (nonRefundable === true) {
-                // Non-refundable rates have no free-cancellation window, so
-                // no deadline applies — send nothing rather than a fabricated
-                // "today - 2 days" date (which always lands in the past and
-                // confuses anything that reads deadlineDate literally).
-                return null;
-              } else {
-                const policies = rate.cancellationPolicy || [];
-                if (policies.length === 0) return null;
-                const dates = policies
-                  .map((p) => (p.fromDate ? new Date(p.fromDate) : null))
-                  .filter((date) => date !== null && !isNaN(date.getTime()));
-                if (dates.length === 0) return null;
-                const earliestDate = new Date(
-                  Math.min(...dates.map((d) => d.getTime())),
-                );
-                const deadline = new Date(earliestDate);
-                deadline.setDate(earliestDate.getDate() - 2);
-                deadline.setHours(0, 0, 0, 0);
-                return deadline;
-              }
-            })
-            .filter((d) => d !== null);
-
-          if (deadlines.length === 0) return null;
-          const overallDeadline = new Date(
-            Math.min(...deadlines.map((d) => d.getTime())),
-          );
-          const year = overallDeadline.getFullYear();
-          const month = String(overallDeadline.getMonth() + 1).padStart(2, "0");
-          const day = String(overallDeadline.getDate()).padStart(2, "0");
-          return `${year}-${month}-${day}T00:00:00`;
-        })(),
+        // Same derivation the hold-eligibility gate uses — see
+        // deriveDeadlineDate at the top of this file.
+        deadlineDate: toDeadlinePayloadString(
+          deriveDeadlineDate(
+            bookingData.selectedRate,
+            bookingData?.payload?.apiId,
+          ),
+        ),
         isBookandVoucher: bookingConfirmation === "Book & Voucher",
         primaryGuest: {
           salutation: leadGuest.salutation || "",
@@ -1187,17 +1245,17 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         0,
       );
 
-      // ATHARVA Hold Room and Pay Later: docs say no balance is
-      // required — the booking is held until the time limit. Skip the
-      // client-side credit gate so the operator isn't blocked with
-      // "insufficient credit" for a valid hold. Backend still enforces
-      // its own rules. Guarded to apiId===3 so other suppliers are
-      // unaffected.
-      const isAtharvaHold =
-        effectivePayload.apiId === 3 &&
-        effectivePayload.isBookandVoucher === false;
+      // A hold takes no credit at create — ATHARVA holds the room at the
+      // supplier and vouchers later; a hold-capable API books the room now
+      // and settles the agent's credit on Reconfirm. Either way the
+      // client-side credit gate must not block a valid hold. Keyed off the
+      // explicit "Hold & Book Later" choice rather than isBookandVoucher,
+      // which is also false whenever the picker was never shown.
+      const isHoldMode =
+        (effectivePayload.apiId === 3 || isHoldEligible(bookingData)) &&
+        effectivePayload.bookingConfirmation === "Hold & Book Later";
 
-      if (!isAtharvaHold) {
+      if (!isHoldMode) {
         const creditResponse = await axiosInstance.get(
           `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentId}&requiredAmount=${requiredAmount}`,
         );
@@ -2422,9 +2480,20 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                           "Hold Room and Pay Later" → VoucherBooking = false
                               (confirmed hold; no balance needed; auto-cancels
                                if not vouchered before the time limit)
-                        Guarded by apiId===3 so other suppliers on this page
-                        are untouched. */}
-                    {bookingData?.payload?.apiId === 3 && (
+                        ATHARVA is gated on apiId===3; hold-capable APIs (see
+                        HOLD_CAPABLE_API_IDS at the top of this file) get the
+                        same picker, but only while the selected rate is still
+                        inside its free-cancellation window. For those there is
+                        no supplier hold endpoint, so:
+                          "Book and Pay Now"        → books + deducts credit now
+                          "Hold Room and Pay Later" → books the room now, credit
+                              settles on the detail page's Reconfirm click; the
+                              deadline job cancels it at the supplier if nobody
+                              reconfirms in time.
+                        Every other supplier renders no picker and is
+                        untouched. */}
+                    {(bookingData?.payload?.apiId === 3 ||
+                      isHoldEligible(bookingData)) && (
                       <Card className="shadow-sm rounded-3 border-0 mt-3">
                         {/* <Card.Header className="bg-light py-2">
                           <h6 className="mb-0 fw-bold">Booking Mode</h6>
