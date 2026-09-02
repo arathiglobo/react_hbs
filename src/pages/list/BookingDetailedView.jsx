@@ -1403,13 +1403,29 @@ export default function BookingDetailedView() {
   const bookingHistory = (() => {
     if (!booking) return [];
     const events = [];
+    // "Book & Voucher" reconfirms and vouchers inside the create call
+    // itself, so the backend stamps confirmedDate and reconfirmedDate at
+    // the very same instant. There was never a separate operator confirm
+    // step to report: emitting both rows would show a phantom "Booking
+    // Confirmed" for a booking that went straight to ReConfirmed.
+    // "Book & Voucher Later" is reconfirmed later by an operator, so its
+    // two timestamps differ — it is untouched by this and keeps the full
+    // Created → Confirmed → Reconfirmed timeline.
+    const confirmedTs = parseLocal(booking.confirmedDate)?.getTime();
+    const reconfirmedTs = parseLocal(booking.reconfirmedDate)?.getTime();
+    const bornReconfirmed =
+      confirmedTs != null && reconfirmedTs != null && confirmedTs === reconfirmedTs;
     // Each event carries the resulting booking status right after that
     // action ran — surfaced in the new "Status" column so the History
     // modal reads as a lifecycle timeline (Confirmed → ReConfirmed →
     // Cancelled) instead of a bare action log. "On Request" bookings keep
     // their prefix so the created row shows "On Request" (not the generic
     // engine "Confirmed" the backend actually stamps in that case).
-    const createdRowStatus = isOnRequestRoom ? "On Request" : "Confirmed";
+    const createdRowStatus = isOnRequestRoom
+      ? "On Request"
+      : bornReconfirmed
+        ? "ReConfirmed"
+        : "Confirmed";
     if (booking.bookingDate) {
       events.push({
         action: "Booking Created",
@@ -1421,7 +1437,10 @@ export default function BookingDetailedView() {
         ip: booking.ipAddress,
       });
     }
-    if (booking.confirmedDate) {
+    // Skipped for a born-reconfirmed booking (see bornReconfirmed above) —
+    // its confirm and reconfirm are the same event, reported once below as
+    // "Booking Reconfirmed".
+    if (booking.confirmedDate && !bornReconfirmed) {
       events.push({
         action: "Booking Confirmed",
         // For an On Request row the "Confirmed" action is the step-1
