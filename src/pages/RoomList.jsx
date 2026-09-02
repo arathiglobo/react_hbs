@@ -1538,8 +1538,11 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                         </div>
                       </Accordion.Header>
 
-                      <Accordion.Body className="room-rates-section">
-                        <Row>
+                      <Accordion.Body
+                        className="room-rates-section"
+                        style={{ padding: "0.5rem" }}
+                      >
+                        <Row className="g-2">
                           {filteredRates.map((rate, rateIndex) => {
                             // Highlight ONLY the card chosen for THIS room
                             // slot. Other slots' picks must not change the
@@ -1547,7 +1550,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                             const isSelectedForThisSlot = isMultiRoom &&
                               selectedRooms[roomSlotIndex]?.selectedRate === rate;
                             return (
-                            <Col key={rateIndex} lg={viewMode === "grid" ? 6 : 12} xl={viewMode === "grid" ? 4 : 12} className="mb-2">
+                            <Col key={rateIndex} lg={viewMode === "grid" ? 6 : 12} xl={viewMode === "grid" ? 4 : 12} className="mb-1">
                               <Card
                                 className={`rate-card h-100 shadow-sm${isSelectedForThisSlot ? " rate-card-selected" : ""}`}
                                 style={
@@ -1706,90 +1709,19 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                     )}
                                   </Card.Body>
                                 ) : (
-                                  <Card.Body className="p-3 py-2 d-flex flex-row align-items-center gap-3 flex-wrap flex-md-nowrap">
+                                  <Card.Body className="p-2 d-flex flex-row align-items-center gap-2 flex-wrap flex-md-nowrap">
                                     <div
-                                      className="d-flex flex-column flex-grow-1"
-                                      style={{ minWidth: 0 }}
+                                      className={
+                                        isMultiRoom
+                                          ? "flex-shrink-0 order-first ps-3"
+                                          : "flex-shrink-0"
+                                      }
+                                      style={
+                                        isMultiRoom
+                                          ? { minWidth: "170px" }
+                                          : undefined
+                                      }
                                     >
-                                      <div className="d-flex align-items-center flex-wrap gap-2 mb-2">
-                                        <div
-                                          className="d-flex align-items-center gap-2 flex-shrink-0"
-                                          style={{
-                                            whiteSpace: "nowrap",
-                                            minWidth: "200px",
-                                          }}
-                                        >
-                                          {getMealPlanIcon(rate.mealPlan)}
-                                          <span className="fw-semibold text-truncate">
-                                            {rate.mealPlan}
-                                          </span>
-                                        </div>
-                                        <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                                          {getRefundStatusBadgeInRoomList(
-                                            rate.nonRefundable,
-                                          )}
-                                          {rate.roomStatus === "On Request" ? (
-                                            <Badge
-                                              bg="warning"
-                                              text="dark"
-                                              className="px-2 py-1 fw-bold border border-warning"
-                                            >
-                                              On Request
-                                            </Badge>
-                                          ) : (
-                                            <Badge bg="success">Available</Badge>
-                                          )}
-                                        </div>
-                                      </div>
-                                      <div
-                                        className="rate-features small text-muted d-flex flex-wrap gap-3"
-                                        style={{ minWidth: 0 }}
-                                      >
-                                        <div className="feature-item d-flex align-items-center text-truncate">
-                                          <FaInfoCircle className="me-2 flex-shrink-0" />
-                                          <span className="text-truncate">
-                                            {rate.contractLabel}
-                                          </span>
-                                        </div>
-                                        <div className="feature-item d-flex align-items-center">
-                                          <Button
-                                            variant="link"
-                                            size="sm"
-                                            className="p-0 text-decoration-underline"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              openPoliciesModal(rate, hotel);
-                                            }}
-                                          >
-                                            <FaShieldAlt className="me-2" />
-                                            Cancellation Policies &amp; Terms &amp; Conditions
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    <div
-                                      className="text-end px-3 border-start border-end flex-shrink-0"
-                                      style={{ minWidth: "150px" }}
-                                    >
-                                      <div className="fs-5 fw-bold text-primary">
-                                        {formatPrice(
-                                          isMultiRoom
-                                            ? rate.totalRate || 0
-                                            : rate.roomRateBasedOnRoomCount,
-                                        )}
-                                      </div>
-                                      {/* See sibling in the grid view above — same
-                                          simplification: drop the breakdown, show only
-                                          "for N nights" (or "per night" for K=1). */}
-                                      <div className="small text-muted">
-                                        {stayNights > 1
-                                          ? `for ${stayNights} nights`
-                                          : "per night"}
-                                      </div>
-                                    </div>
-
-                                    <div className="flex-shrink-0">
                                       {isMultiRoom ? (
                                         <Form.Check
                                           type="radio"
@@ -1826,6 +1758,87 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                           View Details
                                         </Button>
                                       )}
+                                    </div>
+                                    <div
+                                      className="d-flex flex-column flex-grow-1"
+                                      style={{ minWidth: 0 }}
+                                    >
+                                      <div className="d-flex align-items-center flex-wrap gap-2 mb-1">
+                                        <div
+                                          className="d-flex align-items-center gap-2 flex-shrink-0"
+                                          style={{
+                                            whiteSpace: "nowrap",
+                                            minWidth: "200px",
+                                          }}
+                                        >
+                                          {getMealPlanIcon(rate.mealPlan)}
+                                          <span className="fw-semibold text-truncate">
+                                            {rate.mealPlan}
+                                          </span>
+                                        </div>
+                                        <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                                          {getRefundStatusBadgeInRoomList(
+                                            rate.nonRefundable,
+                                          )}
+                                          {rate.roomStatus === "On Request" ? (
+                                            <Badge
+                                              bg="warning"
+                                              text="dark"
+                                              className="px-2 py-1 fw-bold border border-warning"
+                                            >
+                                              On Request
+                                            </Badge>
+                                          ) : (
+                                            <Badge bg="success">Available</Badge>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div
+                                        className="rate-features small text-muted d-flex flex-column align-items-start gap-1"
+                                        style={{ minWidth: 0 }}
+                                      >
+                                        <div className="feature-item d-flex align-items-center text-truncate w-100">
+                                          <FaInfoCircle className="me-2 flex-shrink-0" />
+                                          <span className="text-truncate">
+                                            {rate.contractLabel}
+                                          </span>
+                                        </div>
+                                        <div className="feature-item d-flex align-items-center">
+                                          <Button
+                                            variant="link"
+                                            size="sm"
+                                            className="p-0 text-decoration-underline"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              openPoliciesModal(rate, hotel);
+                                            }}
+                                          >
+                                            <FaShieldAlt className="me-2" />
+                                            Cancellation Policies &amp; Terms &amp; Conditions
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div
+                                      className="text-end px-3 border-start flex-shrink-0"
+                                      style={{ minWidth: "150px" }}
+                                    >
+                                      <div className="fs-5 fw-bold text-primary">
+                                        {formatPrice(
+                                          isMultiRoom
+                                            ? rate.totalRate || 0
+                                            : rate.roomRateBasedOnRoomCount,
+                                        )}
+                                      </div>
+                                      {/* See sibling in the grid view above — same
+                                          simplification: drop the breakdown, show only
+                                          "for N nights" (or "per night" for K=1). */}
+                                      <div className="small text-muted">
+                                        {stayNights > 1
+                                          ? `for ${stayNights} nights`
+                                          : "per night"}
+                                      </div>
                                     </div>
                                   </Card.Body>
                                 )}

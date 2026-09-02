@@ -3052,8 +3052,11 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                   </div>
                                 </Accordion.Header>
 
-                                <Accordion.Body className="room-rates-section">
-                                  <Row>
+                                <Accordion.Body
+                                  className="room-rates-section"
+                                  style={{ padding: "0.5rem" }}
+                                >
+                                  <Row className="g-2">
                                     {filteredRates.map((rate, rateIndex) => {
                                       const isSelectedForThisSlot =
                                         isMultiRoom &&
@@ -3082,7 +3085,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                           key={rateIndex}
                                           lg={viewMode === "grid" ? 6 : 12}
                                           xl={viewMode === "grid" ? 4 : 12}
-                                          className="mb-2"
+                                          className="mb-1"
                                         >
                                           <Card
                                             className={`rate-card h-100 shadow-sm${
@@ -3364,12 +3367,12 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                 )}
                                               </Card.Body>
                                             ) : (
-                                              <Card.Body className="p-3 py-2 d-flex flex-row align-items-center gap-3 flex-wrap flex-md-nowrap">
+                                              <Card.Body className="p-2 d-flex flex-row align-items-center gap-2 flex-wrap flex-md-nowrap">
                                                 <div
                                                   className="d-flex flex-column flex-grow-1"
                                                   style={{ minWidth: 0 }}
                                                 >
-                                                  <div className="d-flex align-items-center flex-wrap gap-2 mb-2">
+                                                  <div className="d-flex align-items-center flex-wrap gap-2 mb-1">
                                                     <div
                                                       className="d-flex align-items-center gap-2 flex-shrink-0"
                                                       style={{
@@ -3424,15 +3427,17 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                     </div>
                                                   </div>
                                                   <div
-                                                    className="rate-features small text-muted d-flex flex-wrap gap-3"
+                                                    className="rate-features small text-muted d-flex flex-column align-items-start gap-1"
                                                     style={{ minWidth: 0 }}
                                                   >
-                                                    <div className="feature-item d-flex align-items-center text-truncate">
-                                                      <FaInfoCircle className="me-2 flex-shrink-0" />
-                                                      <span className="text-truncate">
-                                                        {rate.contractLabel}
-                                                      </span>
-                                                    </div>
+                                                    {rate.contractLabel && (
+                                                      <div className="feature-item d-flex align-items-center text-truncate w-100">
+                                                        <FaInfoCircle className="me-2 flex-shrink-0" />
+                                                        <span className="text-truncate">
+                                                          {rate.contractLabel}
+                                                        </span>
+                                                      </div>
+                                                    )}
                                                     {/* ATHARVA (apiId 3) per-rate DeadLineDate pill,
                                                         sourced from HSearchByHotelCode_V2. Guarded
                                                         on apiId now that Darina also populates
@@ -3441,6 +3446,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                       apiIdMapping.ATHARVA &&
                                                       rate.deadlineDate && (
                                                         <div className="feature-item d-flex align-items-center">
+                                                          <FaInfoCircle className="me-2 flex-shrink-0" />
                                                           {renderAtharvaDeadlinePill(
                                                             rate.deadlineDate,
                                                           )}
@@ -3454,6 +3460,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                       apiIdMapping.DARINA &&
                                                       rate.deadlineDate && (
                                                         <div className="feature-item d-flex align-items-center">
+                                                          <FaInfoCircle className="me-2 flex-shrink-0" />
                                                           {renderDarinaDeadlinePill(
                                                             rate.deadlineDate,
                                                           )}
@@ -3465,6 +3472,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                       apiIdMapping.GOGLOBAL &&
                                                       rate.deadlineDate && (
                                                         <div className="feature-item d-flex align-items-center">
+                                                          <FaInfoCircle className="me-2 flex-shrink-0" />
                                                           {renderGoGlobalDeadlinePill(
                                                             rate.deadlineDate,
                                                           )}
@@ -3494,7 +3502,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                 </div>
 
                                                 <div
-                                                  className="text-end px-3 border-start border-end flex-shrink-0"
+                                                  className="text-end px-3 border-start flex-shrink-0"
                                                   style={{ minWidth: "150px" }}
                                                 >
                                                   <div className="fs-5 fw-bold text-primary">
@@ -3516,7 +3524,18 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                   </div>
                                                 </div>
 
-                                                <div className="flex-shrink-0">
+                                                <div
+                                                  className={
+                                                    isMultiRoom
+                                                      ? "flex-shrink-0 order-first ps-3"
+                                                      : "flex-shrink-0"
+                                                  }
+                                                  style={
+                                                    isMultiRoom
+                                                      ? { minWidth: "170px" }
+                                                      : undefined
+                                                  }
+                                                >
                                                   {isMultiRoom ? (
                                                     <div>
                                                       {isNonBundledMode &&
