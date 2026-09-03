@@ -26,6 +26,13 @@ import {
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
+import {
+  GrnRefundBadge,
+  GrnDeadlinePill,
+  GrnPolicyBlock,
+  grnPolicyFromRate,
+  grnIsBundledSelection,
+} from "../../components/grn/GrnPolicy";
 
 // Online-payment gateways offered when the agent's credit is short.
 // Mirrors the same list Inhouse HotelBookingPage.jsx uses (line 25) so
@@ -163,6 +170,48 @@ const deriveDeadlineDate = (selectedRates, apiId) => {
 
   if (deadlines.length === 0) return null;
   return new Date(Math.min(...deadlines.map((d) => d.getTime())));
+};
+
+/**
+ * GRN (apiId 20): human-readable cancellation-policy lines for the create
+ * payload / Booking Details / voucher. Bundled rate (all rooms share one
+ * rate key) → one common set; non-bundled → one set per room, prefixed
+ * "Room N (category):" because each room's policy differs.
+ */
+const buildGrnPolicyLines = (selectedRates) => {
+  const rates = Array.isArray(selectedRates) ? selectedRates : [];
+  if (rates.length === 0) return [];
+  const linesFor = (rate) => {
+    const p = grnPolicyFromRate(rate);
+    if (!p) return [];
+    const out = [];
+    if (p.refundCategory === "FULLY_REFUNDABLE" && p.freeCancellationUntil) {
+      out.push(`Fully refundable: free cancellation until ${p.freeCancellationUntil}.`);
+    } else if (p.policyText) {
+      out.push(p.policyText);
+    } else if (p.nonRefundable) {
+      out.push("Non-refundable rate: 100% of the booking amount is charged on cancellation or no-show.");
+    }
+    p.rows.forEach((r) => {
+      if (r?.policyText) out.push(String(r.policyText));
+    });
+    if (p.noShowFeeText) out.push(`No-show fee: ${p.noShowFeeText}.`);
+    if (p.rows.length || p.freeCancellationUntil) {
+      out.push(`All dates and times are in ${p.policyTimezone} (Indian Standard Time).`);
+    }
+    return out;
+  };
+  if (grnIsBundledSelection(rates)) {
+    const out = [];
+    if (rates.length > 1) {
+      out.push(`The cancellation policy below applies to all ${rates.length} rooms (bundled rate).`);
+    }
+    return [...new Set([...out, ...linesFor(rates[0])])];
+  }
+  return rates.flatMap((rate, i) => {
+    const label = `Room ${i + 1}${rate?.roomCategory ? ` (${rate.roomCategory})` : ""}`;
+    return linesFor(rate).map((l) => `${label}: ${l}`);
+  });
 };
 
 /** Format a Date as the LocalDateTime string the backend payload expects. */
@@ -1085,13 +1134,20 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         // slot the Inhouse flow uses (bookingData.payload.employeeId).
         employeeId: bookingData.payload.employeeId || null,
         roomStatus: "Available",
-        cancellationPolicy: [
-          ...new Set(
-            bookingData.selectedRate.flatMap((rate) =>
-              (rate.cancellationPolicy || []).map((p) => p.policyText),
-            ),
-          ),
-        ],
+        cancellationPolicy:
+          Number(bookingData?.payload?.apiId) === 20
+            ? // GRN: full policy lines (category, "Free cancellation until …
+              // IST", windows, no-show fee) — per room for non-bundled rates.
+              // The backend rebuilds the same lines from GRN's own rechecked
+              // data when the rate is still cached; this is the fallback.
+              buildGrnPolicyLines(bookingData.selectedRate)
+            : [
+                ...new Set(
+                  bookingData.selectedRate.flatMap((rate) =>
+                    (rate.cancellationPolicy || []).map((p) => p.policyText),
+                  ),
+                ),
+              ],
         // Same derivation the hold-eligibility gate uses — see
         // deriveDeadlineDate at the top of this file.
         deadlineDate: toDeadlinePayloadString(
@@ -1170,6 +1226,23 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
             // was in effect when the booking was confirmed. Null / ignored
             // by other suppliers.
             cancellationDeadline: rate.deadlineDate || null,
+            // GRN (apiId 20): this room's rechecked cancellation policy,
+            // exactly as displayed on this page — persisted per room so
+            // Booking Details and the voucher show the accepted terms.
+            // Bundled → identical on every room; non-bundled → per room.
+            // Null on other suppliers.
+            ...(Number(bookingData?.payload?.apiId) === 20
+              ? {
+                  refundCategory: rate.refundCategory || null,
+                  refundStatus: rate.refundStatus || null,
+                  cancelByDate: rate.cancelByDate || null,
+                  freeCancellationUntil: rate.freeCancellationUntil || null,
+                  noShowFeeText: rate.noShowFeeText || null,
+                  policyTimezone: rate.policyTimezone || "IST",
+                  policyText: rate.policyText || null,
+                  cancellationPolicyLines: buildGrnPolicyLines([rate]),
+                }
+              : {}),
             guests: room.guests.map((guest) => ({
               salutation: guest.salutation,
               firstName: guest.firstName,
@@ -1781,69 +1854,20 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                                       );
                                     })()}
 
-                                  {/* GRN (apiId 20) deadline — earliest
-                                      cancellationPolicy.fromDate on this slot,
-                                      shown as D minus 2 days (the "safe to
-                                      cancel without charge" cut-off, per the
-                                      operator's requested display rule; matches
-                                      how deadlineDate is computed for the
-                                      booking-create payload above). Hidden for
-                                      non-refundable rates — there is no free
-                                      cancellation window to communicate. */}
-                                  {Number(bookingData?.payload?.apiId) === 20 &&
-                                    !(
-                                      slot.nonRefundable === true ||
-                                      slot.nonRefundable === "true" ||
-                                      slot.nonRefundable === "Y"
-                                    ) &&
-                                    Array.isArray(slot.cancellationPolicy) &&
-                                    slot.cancellationPolicy.length > 0 &&
-                                    (() => {
-                                      const dates = slot.cancellationPolicy
-                                        .map((p) =>
-                                          p?.fromDate ? new Date(p.fromDate) : null,
-                                        )
-                                        .filter(
-                                          (dt) =>
-                                            dt !== null && !isNaN(dt.getTime()),
-                                        );
-                                      if (dates.length === 0) return null;
-                                      const earliest = new Date(
-                                        Math.min(
-                                          ...dates.map((dt) => dt.getTime()),
-                                        ),
-                                      );
-                                      const display = new Date(earliest);
-                                      display.setDate(
-                                        earliest.getDate() - 2,
-                                      );
-                                      const monthNames = [
-                                        "Jan",
-                                        "Feb",
-                                        "Mar",
-                                        "Apr",
-                                        "May",
-                                        "Jun",
-                                        "Jul",
-                                        "Aug",
-                                        "Sep",
-                                        "Oct",
-                                        "Nov",
-                                        "Dec",
-                                      ];
-                                      return (
-                                        <span
-                                          className="ms-2 small fw-normal"
-                                          style={{ opacity: 0.95 }}
-                                          title="Cancel by this date/time to avoid charges (supplier deadline minus 2 days)"
-                                        >
-                                          | Deadline: {display.getDate()}{" "}
-                                          {monthNames[display.getMonth()]}{" "}
-                                          {display.getFullYear()}, 11:59 PM
-                                          (UAE)
-                                        </span>
-                                      );
-                                    })()}
+                                  {/* GRN (apiId 20): "Free cancellation until
+                                      dd MMM yyyy, hh:mm AM/PM IST" straight from
+                                      GRN's rechecked cancel_by_date (its policy
+                                      timestamps are Indian Standard Time), or the
+                                      Partially / Non-refundable summary. Per slot,
+                                      because non-bundled rooms differ. */}
+                                  {Number(bookingData?.payload?.apiId) === 20 && (
+                                    <span
+                                      className="ms-2 small fw-normal"
+                                      style={{ opacity: 0.95 }}
+                                    >
+                                      | <GrnDeadlinePill rate={slot} />
+                                    </span>
+                                  )}
                                   {/* {slot.rate != null && (
                                     <span
                                       className="ms-auto small fw-normal"
@@ -2332,12 +2356,18 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                                   <span className="fw-semibold text-dark">
                                     Room {i + 1}:
                                   </span>
-                                  {getRefundStatusBadge(
-                                    room.nonRefundable === true ||
-                                      room.nonRefundable === "true" ||
-                                      room.nonRefundable === "Y"
-                                      ? "NON REFUNDABLE"
-                                      : "FLEXIBLE",
+                                  {Number(bookingData?.payload?.apiId) === 20 ? (
+                                    // GRN: Fully / Partially / Non-refundable
+                                    // per room (non-bundled rooms differ).
+                                    <GrnRefundBadge rate={room} />
+                                  ) : (
+                                    getRefundStatusBadge(
+                                      room.nonRefundable === true ||
+                                        room.nonRefundable === "true" ||
+                                        room.nonRefundable === "Y"
+                                        ? "NON REFUNDABLE"
+                                        : "FLEXIBLE",
+                                    )
                                   )}
                                 </div>
                               ))}
@@ -2627,7 +2657,33 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                     <h6 className="policy-section-title">
                       Cancellation Policy
                     </h6>
-                    {(() => {
+                    {Number(bookingData?.payload?.apiId) === 20 ? (
+                      /* GRN: the VERIFIED (rechecked) policy per GRN's
+                         checklist — Fully / Partially / Non-refundable,
+                         "Free cancellation until … IST", penalty windows,
+                         no-show fee. Bundled rate → ONE policy for all
+                         rooms; non-bundled → one block PER ROOM, since
+                         each room carries its own policy. */
+                      grnIsBundledSelection(selectedRate) ? (
+                        <GrnPolicyBlock
+                          rate={selectedRate[0]}
+                          note={
+                            selectedRate.length > 1
+                              ? `Bundled rate — this cancellation policy applies to all ${selectedRate.length} rooms.`
+                              : null
+                          }
+                        />
+                      ) : (
+                        selectedRate.map((slot, i) => (
+                          <GrnPolicyBlock
+                            key={i}
+                            rate={slot}
+                            title={`Room ${i + 1}${slot?.roomCategory ? ` — ${slot.roomCategory}` : ""}`}
+                            note="Non-bundled rate — each room has its own cancellation policy."
+                          />
+                        ))
+                      )
+                    ) : (() => {
                       const anyNonRefundable = selectedRate.some(
                         (r) =>
                           r.nonRefundable === true ||

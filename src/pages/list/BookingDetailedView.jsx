@@ -1872,6 +1872,45 @@ export default function BookingDetailedView() {
                         Room {room.roomNo ?? idx + 1} -{" "}
                         <StatusBadge status={displayStatus} />
                       </div>
+                      {/* GRN per-room cancellation policy saved at booking
+                          time (bundled → same on every room; non-bundled →
+                          each room differs). Hidden when the room carries
+                          none (all other suppliers / flows). */}
+                      {(room.refundStatus ||
+                        (Array.isArray(room.cancellationPolicyLines) &&
+                          room.cancellationPolicyLines.length > 0)) && (
+                        <div
+                          style={{
+                            fontSize: "0.8rem",
+                            border: "1px solid #eee",
+                            borderRadius: 6,
+                            padding: "6px 10px",
+                            marginBottom: 6,
+                            background:
+                              room.refundCategory === "NON_REFUNDABLE"
+                                ? "#fdecec"
+                                : room.refundCategory === "PARTIALLY_REFUNDABLE"
+                                  ? "#fff8e1"
+                                  : "#e8f5ec",
+                          }}
+                        >
+                          <div style={{ fontWeight: 600, marginBottom: 2 }}>
+                            Cancellation policy: {room.refundStatus || "—"}
+                            {room.freeCancellationUntil
+                              ? ` · Free cancellation until ${room.freeCancellationUntil}`
+                              : ""}
+                          </div>
+                          {(room.cancellationPolicyLines || []).map((line, li) => (
+                            <div key={li} style={{ whiteSpace: "pre-line" }}>
+                              • {line}
+                            </div>
+                          ))}
+                          {room.noShowFeeText &&
+                            !(room.cancellationPolicyLines || []).some((l) =>
+                              /no-show/i.test(l),
+                            ) && <div>• No-show fee: {room.noShowFeeText}.</div>}
+                        </div>
+                      )}
                       {/* Per-room Rate cell already shows the room's
                           billable rate. Per spec the Tourism Dirham
                           captured on the booking now flows into Rate and
