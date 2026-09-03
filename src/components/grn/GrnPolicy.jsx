@@ -197,7 +197,9 @@ export const GrnPolicyBlock = ({ rate, policy, title, note, compact = false }) =
 
       {p.noShowFeeText && (
         <div className="small text-dark">
-          <strong>No-show fee:</strong> {p.noShowFeeText}.
+          <strong>No-show fee:</strong> {p.noShowFeeText}. Charged if the guest
+          does not arrive for check-in, and also if the booking is cancelled on
+          the check-in date.
         </div>
       )}
       {(p.rows.length > 0 || p.freeCancellationUntil) && (

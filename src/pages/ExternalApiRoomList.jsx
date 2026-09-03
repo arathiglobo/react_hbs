@@ -3444,9 +3444,21 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                       "per night" so nothing regresses for
                                                       short searches. */}
                                                   <div className="price-per-night small text-muted">
-                                                    {stayNights > 1
-                                                      ? `for ${stayNights} nights`
-                                                      : "per night"}
+                                                    {/* GRN bundled rate: GRN's price covers
+                                                        EVERY room in the rate (no_of_rooms=N),
+                                                        so say so — otherwise the same figure
+                                                        shown under Room 1 and Room 2 reads as
+                                                        two separate prices. */}
+                                                    {isGrnMultiRoomFlow &&
+                                                    Number(rate?.numberOfRooms) > 1
+                                                      ? `for ${rate.numberOfRooms} rooms · ${
+                                                          stayNights > 1
+                                                            ? `${stayNights} nights`
+                                                            : "per night"
+                                                        }`
+                                                      : stayNights > 1
+                                                        ? `for ${stayNights} nights`
+                                                        : "per night"}
                                                   </div>
                                                 </div>
 
@@ -3788,9 +3800,16 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                       simplification: drop the multiplication
                                                       breakdown, show only "for N nights". */}
                                                   <div className="small text-muted">
-                                                    {stayNights > 1
-                                                      ? `for ${stayNights} nights`
-                                                      : "per night"}
+                                                    {isGrnMultiRoomFlow &&
+                                                    Number(rate?.numberOfRooms) > 1
+                                                      ? `for ${rate.numberOfRooms} rooms · ${
+                                                          stayNights > 1
+                                                            ? `${stayNights} nights`
+                                                            : "per night"
+                                                        }`
+                                                      : stayNights > 1
+                                                        ? `for ${stayNights} nights`
+                                                        : "per night"}
                                                   </div>
                                                 </div>
 
@@ -4131,10 +4150,31 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
             } catch (e) {
               /* fall through with stayNights = 1 */
             }
-            const grandTotal = (selectedRate || []).reduce(
-              (sum, r) => sum + (Number(r?.rate) || 0),
-              0,
-            );
+            // GRN bundled multi-room: every slot carries the FULL bundle price
+            // under one shared rate key (the backend splits it per room on
+            // persist). Count each rate key once so a 2-room bundle shows the
+            // bundle price, not double. Non-bundled slots have distinct keys
+            // and add up. Other suppliers: plain per-slot sum as before.
+            // apiIdMapping.GRN is the NUMBER 20 — compare numerically.
+            const isGrnHere =
+              resolveApiId(hotel) === apiIdMapping.GRN ||
+              Number(payload?.apiId) === apiIdMapping.GRN;
+            const slotsPerKey = new Map();
+            if (isGrnHere) {
+              (selectedRate || []).forEach((r, i) => {
+                const k = r?.atharvaRateKey || r?.rateKey || `row-${i}`;
+                slotsPerKey.set(k, (slotsPerKey.get(k) || 0) + 1);
+              });
+            }
+            const seenKeys = new Set();
+            const grandTotal = (selectedRate || []).reduce((sum, r, i) => {
+              if (isGrnHere) {
+                const k = r?.atharvaRateKey || r?.rateKey || `row-${i}`;
+                if (seenKeys.has(k)) return sum;
+                seenKeys.add(k);
+              }
+              return sum + (Number(r?.rate) || 0);
+            }, 0);
             return (
               <>
                 {/* GoGlobal (apiId 21) valuation banner — surfaces the
@@ -4177,8 +4217,17 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                   // IwtxResponseMapper, DarinaHotelRoomSearchService — same
                   // convention across suppliers). Fall back to rate.totalRate
                   // for safety if a supplier ever populates only that.
+                  // GRN bundled: rate.rate is the whole-bundle price; show
+                  // this room's share so the per-room rows add up to the
+                  // grand total. Non-bundled / other suppliers: unchanged.
+                  const bundleShareCount = isGrnHere
+                    ? slotsPerKey.get(
+                        rate?.atharvaRateKey || rate?.rateKey || `row-${index}`,
+                      ) || 1
+                    : 1;
                   const perRoomStayTotal =
-                    Number(rate?.rate) || Number(rate?.totalRate) || 0;
+                    (Number(rate?.rate) || Number(rate?.totalRate) || 0) /
+                    bundleShareCount;
                   const perNight = perRoomStayTotal / stayNights;
                   return (
                     <Row key={index} className="g-4 mb-4">
@@ -4238,8 +4287,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                           <div className="d-flex justify-content-between mb-2">
                             <span>Refund Status:</span>
                             <span>
-                              {String(roomData?.payload?.apiId || "") ===
-                              apiIdMapping.GRN ? (
+                              {Number(roomData?.payload?.apiId) === apiIdMapping.GRN ? (
                                 <GrnRefundBadge rate={rate} />
                               ) : (
                                 getRefundStatusBadge(
@@ -4256,8 +4304,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                               (rechecked just now). Non-bundled → each room
                               shows its own; bundled → identical on every
                               room. */}
-                          {String(roomData?.payload?.apiId || "") ===
-                            apiIdMapping.GRN && (
+                          {Number(roomData?.payload?.apiId) === apiIdMapping.GRN && (
                             <GrnPolicyBlock
                               rate={rate}
                               compact

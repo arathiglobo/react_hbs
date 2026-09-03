@@ -1493,10 +1493,27 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
   // useEffect calls below stay in the same call order every render
   // (rules-of-hooks). Safe access resolves a null bookingData to 0.
   const selectedRate = bookingData?.selectedRate || [];
-  const totalPrice = selectedRate.reduce(
-    (sum, room) => sum + parseFloat(room.rate || 0),
-    0,
-  );
+  // GRN (apiId 20) bundled multi-room: ONE rate key covers every room and
+  // every room row carries the FULL bundle price (the backend splits it per
+  // room on persist — see applyBundleSplit). Summing per room doubled the
+  // checkout total and the client-side credit prediction for a 2-room
+  // bundle, so count each rate key once. Non-bundled rooms have distinct
+  // keys and still add up. Other suppliers are untouched.
+  const totalPrice = (() => {
+    if (Number(bookingData?.payload?.apiId) === 20) {
+      const seen = new Set();
+      return selectedRate.reduce((sum, room, i) => {
+        const key = room?.atharvaRateKey || room?.rateKey || `row-${i}`;
+        if (seen.has(key)) return sum;
+        seen.add(key);
+        return sum + parseFloat(room?.rate || 0);
+      }, 0);
+    }
+    return selectedRate.reduce(
+      (sum, room) => sum + parseFloat(room.rate || 0),
+      0,
+    );
+  })();
 
   // ── GRN "Payable at Hotel" summary ──────────────────────────────
   // Aggregate the guest-paid property charges across the picked rates
@@ -1513,10 +1530,23 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
   // totalled into one number. Never combined into totalPrice: the
   // hotel bills it directly, we don't.
   const payableAtHotel = (() => {
-    const rows = selectedRate.filter(
+    const allRows = selectedRate.filter(
       (r) => r?.payableAtHotelAmount != null || r?.payableAtHotelDescription,
     );
-    if (!rows.length) return null;
+    if (!allRows.length) return null;
+    // Count each GRN RATE once, not each room. A bundled rate covers every
+    // room with ONE hotel_charges[] figure, and every room row carries that
+    // same bundle-level value — summing per room doubled it for a 2-room
+    // booking (GRN said 20, the page showed 40). Non-bundled rooms carry
+    // distinct rate keys, so their charges still add up — the same rule
+    // the backend applies (one charge per picked rate).
+    const seenKeys = new Set();
+    const rows = allRows.filter((r, i) => {
+      const key = r?.atharvaRateKey || r?.rateKey || `row-${i}`;
+      if (seenKeys.has(key)) return false;
+      seenKeys.add(key);
+      return true;
+    });
     const currencies = new Set();
     let sum = 0;
     let summable = true;
@@ -3054,7 +3084,35 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                             Payment Mode badge sits in a paired md=6 column so
                             the two read as one row (deadline left, mode right)
                             on tablet+, and stack cleanly on mobile. */}
-                        {isNonRefundableRate ? (
+                        {Number(bookingData?.payload?.apiId) === 20 ? (
+                          /* GRN: show the VERIFIED policy PER ROOM. A
+                             non-bundled booking can mix a non-refundable
+                             Room 1 with a fully refundable Room 2 — the
+                             old any-room flag showed only "Non-refundable"
+                             for the whole booking. Bundled → one block. */
+                          <Col xs={12} md={6}>
+                            {grnIsBundledSelection(selectedRate) ? (
+                              <GrnPolicyBlock
+                                rate={selectedRate[0]}
+                                compact
+                                note={
+                                  selectedRate.length > 1
+                                    ? `Applies to all ${selectedRate.length} rooms (bundled rate).`
+                                    : null
+                                }
+                              />
+                            ) : (
+                              selectedRate.map((slot, i) => (
+                                <GrnPolicyBlock
+                                  key={i}
+                                  rate={slot}
+                                  compact
+                                  title={`Room ${i + 1}${slot?.roomCategory ? ` — ${slot.roomCategory}` : ""}`}
+                                />
+                              ))
+                            )}
+                          </Col>
+                        ) : isNonRefundableRate ? (
                           <Col xs={12} md={6}>
                             <div
                               className="p-2 rounded border"
@@ -3120,7 +3178,9 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                             deadline / non-refundable notice. Shown for either
                             refundable branch so the user re-confirms which
                             method will be used before submitting. */}
-                        {(isNonRefundableRate || cancellationDeadline) && (
+                        {(isNonRefundableRate ||
+                          cancellationDeadline ||
+                          Number(bookingData?.payload?.apiId) === 20) && (
                           <Col
                             xs={12}
                             md={6}
