@@ -8,7 +8,7 @@ import axiosInstance from "../../../components/AxiosInstance";
  * Behaviour and visual layout deliberately mirror FlightLocationSelect
  * (the From/To picker) so the two fields feel identical to the user:
  *   - Fetches on empty focus so the top-25 default list appears immediately
- *     (backend /custom/amadeus/countries already returns an alphabetical
+ *     (backend /api/amadeus/countries already returns an alphabetical
  *     top-25 for a blank/short query).
  *   - Two-line row: bigger blue main line with a location pin + "Name (CODE)"
  *     display, small gray meta line "Country · CODE" underneath.
@@ -57,7 +57,7 @@ const CountrySelect = ({
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await axiosInstance.get("/custom/amadeus/countries", {
+        const res = await axiosInstance.get("/api/amadeus/countries", {
           params: q ? { q } : {},
           signal: controller.signal,
         });

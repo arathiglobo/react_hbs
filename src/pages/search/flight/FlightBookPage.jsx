@@ -52,7 +52,7 @@ const FBP_PAYLOAD_STORAGE_KEY = "fbp:pendingPayload";
  * the contact/email fields — those are always collected on the primary
  * (first adult) guest per booking convention.
  *
- * Submit → POST /custom/amadeus/bookFlight. On success: modal shows the
+ * Submit → POST /api/amadeus/bookFlight. On success: modal shows the
  * PNR record locator. On failure: inline alert with the Amadeus error.
  */
 
@@ -672,7 +672,7 @@ const FlightBookPage = () => {
       // PNR, Create TST, Issue Ticket, End Transact) behind one HTTP
       // request, so it needs the longest ceiling of any Amadeus call here.
       const res = await axiosInstance.post(
-        "/custom/amadeus/bookFlight",
+        "/api/amadeus/bookFlight",
         payload,
         { timeout: 120000 },
       );

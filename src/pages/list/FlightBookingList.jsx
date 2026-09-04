@@ -28,7 +28,7 @@ import axiosInstance from "../../components/AxiosInstance";
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
 
 /**
- * Agent-facing list of flight bookings persisted by /custom/amadeus/bookFlight.
+ * Agent-facing list of flight bookings persisted by /api/amadeus/bookFlight.
  *
  * <p>Mirrors the shape of {@code HotelBookingList} but scaled down —
  * client-side search + pagination is enough for a single agent's
@@ -69,7 +69,7 @@ const FlightBookingList = () => {
       try {
         const params = {};
         if (!isAdmin && userId) params.agentId = userId;
-        const res = await axiosInstance.get("/custom/amadeus/flight-bookings", {
+        const res = await axiosInstance.get("/api/amadeus/flight-bookings", {
           params,
         });
         setBookings(Array.isArray(res.data) ? res.data : []);
@@ -136,7 +136,7 @@ const FlightBookingList = () => {
     if (!cancelTarget) return;
     setCancelBusy(true);
     try {
-      const res = await axiosInstance.post("/custom/amadeus/cancelBooking", {
+      const res = await axiosInstance.post("/api/amadeus/cancelBooking", {
         pnrRecordLocator: cancelTarget.pnrRecordLocator,
         cancellationReason: cancelReason?.trim() || null,
         cancelledBy: userId || "AGENT",

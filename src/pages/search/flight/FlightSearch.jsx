@@ -201,7 +201,7 @@ const FlightSearch = () => {
       // airlines), well past the 30s default but still under the
       // backend's own 60s Amadeus read-timeout. Without this the frontend
       // gives up on a search that was about to succeed.
-      const res = await axiosInstance.post("/custom/amadeus/search", payload, {
+      const res = await axiosInstance.post("/api/amadeus/search", payload, {
         timeout: 90000,
       });
       const data = Array.isArray(res.data) ? res.data : res.data ? [res.data] : [];

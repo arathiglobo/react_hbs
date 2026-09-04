@@ -56,7 +56,7 @@ const FBP_PAYLOAD_STORAGE_KEY = "fbp:pendingPayload";
  * Baggage / Flexibility / Seats-Meals sections plus FARE RULE + BOOK NOW
  * CTAs.
  *
- * Backend contract today: /custom/amadeus/fareInformationPrice returns a
+ * Backend contract today: /api/amadeus/fareInformationPrice returns a
  * flat FareInformationPriceResponse (one fare family — TIPNR is a single-
  * recommendation operation). To keep the carousel N-family ready for when
  * the Best Pricing (TIBFPWQ) call lands, this page wraps the single fare
@@ -416,7 +416,7 @@ const FlightBestPriceCheck = () => {
     // usually fast (1-2s), but under load it's a real Amadeus SOAP call
     // like search, so it gets the same generous ceiling.
     axiosInstance
-      .post("/custom/amadeus/fareInformationPrice", payload, { timeout: 90000 })
+      .post("/api/amadeus/fareInformationPrice", payload, { timeout: 90000 })
       .then((res) => {
         if (cancelled) return;
         const priced = res.data || null;
@@ -434,7 +434,7 @@ const FlightBestPriceCheck = () => {
         setRulesError(null);
         axiosInstance
           .post(
-            "/custom/amadeus/fareCheckRules",
+            "/api/amadeus/fareCheckRules",
             {
               sessionToken: token,
               fareReference: 1,

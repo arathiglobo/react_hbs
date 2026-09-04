@@ -297,7 +297,7 @@ const FlightCard = ({ rec, onSelect, convert }) => {
     setInfoError(null);
     setInfoLoading(true);
     axiosInstance
-      .post("/custom/amadeus/flightInfo", {
+      .post("/api/amadeus/flightInfo", {
         origin: segment.departureAirportCode || segment.from,
         destination: segment.arrivalAirportCode || segment.to,
         marketingCarrier: segment.marketingCarrier,

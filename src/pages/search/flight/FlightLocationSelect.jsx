@@ -4,7 +4,7 @@ import axiosInstance from "../../../components/AxiosInstance";
 
 /*
  * Reusable searchable location select used by both From and To on
- * /new-booking/flight. Debounces user input, hits GET /custom/amadeus/locations,
+ * /new-booking/flight. Debounces user input, hits GET /api/amadeus/locations,
  * shows a dropdown of matches and calls onChange(suggestion) once the user
  * picks one. The parent supplies label + placeholder + the currently-selected
  * suggestion so the caller controls the value entirely.
@@ -85,7 +85,7 @@ const FlightLocationSelect = ({
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await axiosInstance.get("/custom/amadeus/locations", {
+        const res = await axiosInstance.get("/api/amadeus/locations", {
           params: q ? { q } : {},
           signal: controller.signal,
         });
