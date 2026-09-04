@@ -1119,6 +1119,14 @@ export const CabSearch = () => {
     // rows — the backend treats null as "M&G included" (safe default).
     iwayFlexibleTariff:
       cab.flexibleTariff != null ? Boolean(cab.flexibleTariff) : null,
+    // allowable_time (seconds) from the i'way price offer — carried
+    // through so CabBookingPage can forward it to /api/cab/book, where
+    // TripServiceImpl.checkTimeForMeetAndGreet uses it to enforce guide
+    // §11.10 locally (pickup_time - now >= allowable_time + 20 min). Null
+    // on in-house rows and on any i'way row whose search response omitted
+    // the field — the backend then no-ops the check for backwards compat.
+    iwayAllowableTime:
+      cab.allowableTime != null ? Number(cab.allowableTime) : null,
     searchCabDetailsDTO: Array.isArray(cab.searchCabDetailsDTO)
       ? cab.searchCabDetailsDTO.map((d) => ({
           ...d,
@@ -1564,6 +1572,11 @@ export const CabSearch = () => {
         apiType: isIway ? "IWAY" : null,
         iwayPriceId: isIway ? (cab?.iwayPriceId ?? null) : null,
         iwayPriceUid: isIway ? (cab?.iwayPriceUid ?? null) : null,
+        // Guide §11.10 pre-order time check on the backend needs the
+        // offer's allowable_time. Carried on searchCriteria so
+        // CabBookingPage doesn't have to re-read it off the cab row.
+        // Null on in-house rows and on i'way rows whose offer omitted it.
+        iwayAllowableTime: isIway ? (cab?.iwayAllowableTime ?? null) : null,
         originLocation: isIway ? toTransferLocation(pickupItem, "AIRPORT") : null,
         destinationLocation: isIway ? toTransferLocation(dropoffItem, "HOTEL") : null,
       },

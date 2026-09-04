@@ -105,6 +105,12 @@ const buildCalendar = (view) => {
   });
 };
 
+// yyyy-MM-dd for looking up rateMap entries — matches the key format the
+// backend rate-calendar endpoints emit. Kept module-scoped so the day
+// grid can call it without allocating per render.
+const isoDateKey = (d) =>
+  `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+
 const DateTimeApplyPicker = ({
   value,
   onApply,
@@ -112,6 +118,17 @@ const DateTimeApplyPicker = ({
   isInvalid = false,
   minDate,
   placeholder = "Select date & time",
+  // Optional per-day rate hint. `rateMap` is a { "yyyy-MM-dd":
+  // { minRate, currency } } object; when a day matches, the number is
+  // rendered as a small line under the day number inside the existing
+  // calendar cell. Nothing else about the picker's date+time format,
+  // popup shape, or OK/Cancel flow changes when these are absent.
+  // `onViewMonthChange({ year, monthIndex })` fires when the user
+  // navigates the calendar so a parent can lazily fetch the next
+  // month's rates.
+  rateMap,
+  rateCurrency,
+  onViewMonthChange,
 }) => {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(parseLocalDateTime(value));
@@ -286,6 +303,17 @@ const DateTimeApplyPicker = ({
   const committed = parseLocalDateTime(value);
   const days = buildCalendar(viewDate);
 
+  // Notify the parent when the visible month changes so it can fetch
+  // rate data for that window on demand. Guarded by onViewMonthChange
+  // so pickers that don't care (default use) pay no cost.
+  useEffect(() => {
+    if (!onViewMonthChange) return;
+    onViewMonthChange({
+      year: viewDate.getFullYear(),
+      monthIndex: viewDate.getMonth(),
+    });
+  }, [viewDate, onViewMonthChange]);
+
   return (
     <div className="cdt" ref={wrapRef}>
       <input
@@ -365,17 +393,43 @@ const DateTimeApplyPicker = ({
                     const isSel = sameDay(day, draft);
                     const isDisabled =
                       !!minDate && startOfDay(day) < startOfDay(minDate);
+                    // Optional per-day rate hint. Only render when a rate
+                    // exists for this day and the cell belongs to the
+                    // currently-viewed month, so outside-month spillover
+                    // days don't gain a stray number. Selected /
+                    // disabled days keep the same visual language they
+                    // had before rateMap existed.
+                    const rateEntry =
+                      rateMap && !outside
+                        ? rateMap[isoDateKey(day)]
+                        : null;
+                    const rateVal =
+                      rateEntry && rateEntry.minRate != null
+                        ? Number(rateEntry.minRate)
+                        : null;
                     return (
                       <button
                         type="button"
                         key={i}
                         disabled={isDisabled}
                         onClick={() => selectDay(day)}
+                        title={
+                          rateVal != null
+                            ? `From ${rateVal}${
+                                rateCurrency ? " " + rateCurrency : ""
+                              }`
+                            : undefined
+                        }
                         className={`cdt-day${outside ? " cdt-day-out" : ""}${
                           isSel ? " cdt-day-sel" : ""
-                        }${isDisabled ? " cdt-day-disabled" : ""}`}
+                        }${isDisabled ? " cdt-day-disabled" : ""}${
+                          rateVal != null ? " cdt-day-has-rate" : ""
+                        }`}
                       >
-                        {day.getDate()}
+                        <span className="cdt-day-num">{day.getDate()}</span>
+                        {rateVal != null && (
+                          <span className="cdt-day-rate">{rateVal}</span>
+                        )}
                       </button>
                     );
                   })}

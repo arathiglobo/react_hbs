@@ -47,8 +47,8 @@ body {
 
 /* Header Section */
 .login-header {
-  background: linear-gradient(135deg, #EC0B43 0%, #C90939 100%);
-  border-bottom: 1px solid #C90939;
+  background: linear-gradient(135deg, #F75E00 0%, #D65100 100%);
+  border-bottom: 1px solid #D65100;
   padding: 20px 0;
   position: relative;
   z-index: 10;
@@ -256,7 +256,7 @@ body {
 
 .value-feature i {
   font-size: 20px;
-  color: #EC0B43;
+  color: #F75E00;
   opacity: 0.9;
 }
 
@@ -390,7 +390,7 @@ body {
   left: 0;
   right: 0;
   height: 4px;
-  background: linear-gradient(90deg, #EC0B43, #C90939);
+  background: linear-gradient(90deg, #F75E00, #D65100);
   border-radius: 24px 24px 0 0;
 }
 
@@ -482,7 +482,7 @@ body {
 .login-button {
   width: 100%;
   padding: 16px;
-  background: linear-gradient(135deg, #EC0B43 0%, #C90939 100%);
+  background: linear-gradient(135deg, #F75E00 0%, #D65100 100%);
   color: white;
   border: none;
   border-radius: 12px;
@@ -495,12 +495,12 @@ body {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  box-shadow: 0 8px 24px rgba(236, 11, 67, 0.3);
+  box-shadow: 0 8px 24px rgba(247, 94, 0, 0.3);
 }
 
 .login-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 32px rgba(236, 11, 67, 0.4);
+  box-shadow: 0 12px 32px rgba(247, 94, 0, 0.4);
 }
 
 .form-links {
@@ -512,7 +512,7 @@ body {
 
 .register-link,
 .forgot-password-btn {
-  color: #EC0B43;
+  color: #F75E00;
   text-decoration: none;
   background: none;
   border: none;
@@ -529,8 +529,8 @@ body {
 
 .register-link:hover,
 .forgot-password-btn:hover {
-  color: #C90939;
-  background: rgba(236, 11, 67, 0.1);
+  color: #D65100;
+  background: rgba(247, 94, 0, 0.1);
   transform: translateY(-1px);
 }
 
@@ -584,7 +584,7 @@ body {
 
 /* Login's forgot-password modal icon → brand red (scoped to login) */
 .login-container .modal-title i {
-  color: #EC0B43;
+  color: #F75E00;
 }
 
 .modal-body {
@@ -682,7 +682,7 @@ body {
   display: block;
   font-size: 36px;
   font-weight: 900;
-  color: #EC0B43;
+  color: #F75E00;
 }
 
 .stat-label {
@@ -750,16 +750,16 @@ body {
 }
 
 .login-form .form-group label i {
-  color: #EC0B43 !important;
+  color: #F75E00 !important;
   font-size: 16px !important;
 }
 
 /* Login input focus — red ring (scoped to the login form only) */
 .login-form .form-group input:focus {
   outline: none;
-  border-color: #EC0B43 !important;
+  border-color: #F75E00 !important;
   background: #fff !important;
-  box-shadow: 0 0 0 4px rgba(236, 11, 67, 0.12) !important;
+  box-shadow: 0 0 0 4px rgba(247, 94, 0, 0.12) !important;
 }
 
 .login-form .form-group input {
@@ -1011,7 +1011,7 @@ body {
    ════════════════════════════════════════════════════════════════════════════ */
 
 /* ── Header band — sleeker, stronger lift ── */
-.login-container .login-header { padding: 16px 0 !important; box-shadow: 0 8px 28px rgba(236, 11, 67, .20) !important; }
+.login-container .login-header { padding: 16px 0 !important; box-shadow: 0 8px 28px rgba(247, 94, 0, .20) !important; }
 .login-container .company-name { font-size: 23px !important; font-weight: 700 !important; letter-spacing: -.03em !important; }
 .login-container .company-tagline { letter-spacing: -.004em !important; font-weight: 500 !important; }
 .login-container .feature-item { font-weight: 600 !important; letter-spacing: -.004em !important; }
@@ -1025,7 +1025,7 @@ body {
   padding: 40px 36px !important;
   box-shadow: 0 1px 3px rgba(17, 19, 24, .05), 0 30px 64px rgba(17, 19, 24, .11) !important;
 }
-.login-container .login-form::before { height: 5px !important; background: linear-gradient(90deg, #EC0B43, #C90939) !important; }
+.login-container .login-form::before { height: 5px !important; background: linear-gradient(90deg, #F75E00, #D65100) !important; }
 
 .login-container .form-header { margin-bottom: 26px !important; }
 .login-container .form-header h3 {
@@ -1044,7 +1044,7 @@ body {
   font-size: 13px !important; font-weight: 600 !important; letter-spacing: -.004em !important;
   color: #3E3E3B !important; line-height: 1.3 !important;
 }
-.login-container .login-form .form-group label i { color: #EC0B43 !important; font-size: 14px !important; }
+.login-container .login-form .form-group label i { color: #F75E00 !important; font-size: 14px !important; }
 .login-container .login-form .form-group input {
   width: 100% !important; padding: 14px 16px !important;
   border: 1.5px solid #E5E5E1 !important; border-radius: 12px !important;
@@ -1053,20 +1053,20 @@ body {
   transition: border-color .18s ease, box-shadow .18s ease, background .18s ease !important;
 }
 .login-container .login-form .form-group input:focus {
-  border-color: #EC0B43 !important; background: #ffffff !important;
-  box-shadow: 0 0 0 4px rgba(236, 11, 67, .12) !important; transform: none !important;
+  border-color: #F75E00 !important; background: #ffffff !important;
+  box-shadow: 0 0 0 4px rgba(247, 94, 0, .12) !important; transform: none !important;
 }
 
 /* ── Primary button ── */
 .login-container .login-button {
   padding: 15px !important; border-radius: 12px !important;
   font-size: 15px !important; font-weight: 600 !important; letter-spacing: .005em !important;
-  background: #EC0B43 !important; box-shadow: 0 10px 26px rgba(236, 11, 67, .28) !important;
+  background: #F75E00 !important; box-shadow: 0 10px 26px rgba(247, 94, 0, .28) !important;
   transition: transform .16s cubic-bezier(.16, 1, .3, 1), box-shadow .16s ease, background .16s ease !important;
 }
 .login-container .login-button:hover {
-  transform: translateY(-2px) !important; background: #C90939 !important;
-  box-shadow: 0 16px 36px rgba(236, 11, 67, .36) !important;
+  transform: translateY(-2px) !important; background: #D65100 !important;
+  box-shadow: 0 16px 36px rgba(247, 94, 0, .36) !important;
 }
 
 /* ── Secondary links ── */
@@ -1081,6 +1081,6 @@ body {
 .login-container .value-proposition p,
 .login-container .offers-section p,
 .login-container .partners-section p { letter-spacing: -.01em !important; line-height: 1.65 !important; color: #5A5A56 !important; }
-.login-container .stat-number { letter-spacing: -.04em !important; font-weight: 800 !important; color: #EC0B43 !important; }
+.login-container .stat-number { letter-spacing: -.04em !important; font-weight: 800 !important; color: #F75E00 !important; }
 .login-container .stat-label { letter-spacing: -.004em !important; }
 

@@ -1405,8 +1405,8 @@ export default function LongStaySearch() {
                         // hs-add-room-btn-red is the shared solid-red variant
                         // already defined in HotelSearch.css alongside the
                         // base .btn-add-room-premium pill. Matches the red
-                        // used by the SEARCH LONG STAY button below (#EC0B43
-                        // → #C90939). Same convention HotelSearch uses; other
+                        // used by the SEARCH LONG STAY button below (#F75E00
+                        // → #D65100). Same convention HotelSearch uses; other
                         // search pages sharing btn-add-room-premium (Student,
                         // GovEmployee, etc.) don't carry this modifier and
                         // keep their pink→violet gradient.

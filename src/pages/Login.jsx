@@ -581,12 +581,24 @@ const Login = () => {
             <span>Real-time performance analytics</span>
           </div>
           <div className="lg-feature">
+            <i className="fas fa-bed"></i>
+            <span>Real-time hotel availability</span>
+          </div>
+          <div className="lg-feature">
             <i className="fas fa-handshake"></i>
             <span>End-to-end contract management</span>
           </div>
           <div className="lg-feature">
+            <i className="fas fa-bolt"></i>
+            <span>Fast &amp; seamless bookings</span>
+          </div>
+          <div className="lg-feature">
             <i className="fas fa-globe"></i>
             <span>5000+ hotels across 150+ countries</span>
+          </div>
+          <div className="lg-feature">
+            <i className="fas fa-tags"></i>
+            <span>Manage rates &amp; reservations</span>
           </div>
         </div>
 
@@ -599,13 +611,19 @@ const Login = () => {
       <main className="lg-main">
         <div className="lg-card">
           <div className="lg-brand-top lg-brand-top--card">
-            <img
+            {/* <img
               src={`${process.env.PUBLIC_URL}/images/logo-1.jpg`}
               alt="Globosoft"
               className="lg-logo"
+            /> */}
+            <img
+              src={`${process.env.PUBLIC_URL}/images/desert.PNG`}
+              alt="Desertbeds"
+              className="lg-logo"
             />
             <div>
-              <div className="lg-brand-name">Globosoft</div>
+              {/* <div className="lg-brand-name">Globosoft</div> */}
+              <div className="lg-brand-name">desert beds</div>
               <div className="lg-brand-sub">Global Contracting Solutions</div>
             </div>
           </div>

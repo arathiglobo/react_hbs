@@ -1706,9 +1706,9 @@ const handleAmenityChange = (e) => {
           .nav-tabs .nav-link.active {
             background-color: #fff;
             border-color: #dee2e6 #dee2e6 #fff;
-            color: #EC0B43;
+            color: #F75E00;
             font-weight: 600;
-            box-shadow: inset 0 2px 0 #EC0B43;
+            box-shadow: inset 0 2px 0 #F75E00;
           }
           .nav-tabs .nav-link:hover {
             border-color: #dee2e6 #dee2e6 #fff;
@@ -1759,7 +1759,7 @@ const handleAmenityChange = (e) => {
               <div className="text-end">
                 <Badge
                   className="fs-6 px-3 py-2"
-                  style={{ backgroundColor: isEditMode ? "#2F3E53" : "#EC0B43" }}
+                  style={{ backgroundColor: isEditMode ? "#2F3E53" : "#F75E00" }}
                 >
                   <FaCheckCircle className="me-1" />
                   {isEditMode ? "Edit Mode" : "New Hotel"}
@@ -1791,7 +1791,7 @@ const handleAmenityChange = (e) => {
                 className="text-white border-0 rounded-top-4"
                 style={{
                   background:
-                    "linear-gradient(135deg, #EC0B43 0%, #C90939 100%)",
+                    "linear-gradient(135deg, #F75E00 0%, #D65100 100%)",
                 }}
               >
                 <div className="d-flex flex-wrap gap-2 justify-content-between align-items-center">
@@ -3237,11 +3237,11 @@ const handleAmenityChange = (e) => {
                     <Row className="align-items-center">
                       <Col md={8}>
                         <div className="d-flex align-items-center">
-                          <div className="text-white rounded-circle p-3 me-3" style={{ background: "#EC0B43" }}>
+                          <div className="text-white rounded-circle p-3 me-3" style={{ background: "#F75E00" }}>
                             <FaCheckCircle size={24} />
                           </div>
                           <div>
-                            <h5 className="mb-1" style={{ color: "#EC0B43", fontWeight: 700, letterSpacing: "-0.02em" }}>
+                            <h5 className="mb-1" style={{ color: "#F75E00", fontWeight: 700, letterSpacing: "-0.02em" }}>
                               {activeTab === "terms-conditions"
                                 ? "Ready to Register Hotel"
                                 : "Continue Registration"}

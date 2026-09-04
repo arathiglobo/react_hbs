@@ -71,7 +71,8 @@ const BUTTON_STYLE = {
 // padding / radius / white text); only the background colour changes. No
 // handler, guard, or disabled state is affected.
 const BTN_SUCCESS = { ...BUTTON_STYLE, backgroundColor: "#16a34a" }; // Email Voucher
-const BTN_TEAL = { ...BUTTON_STYLE, backgroundColor: "#0d9488" }; // Reconfirm
+const BTN_TEAL = { ...BUTTON_STYLE, backgroundColor: "#0d9488" }; // Reconfirm (i'way status=1)
+const BTN_CONFIRM = { ...BUTTON_STYLE, backgroundColor: "#0d6efd" }; // Confirm (i'way status=0)
 const BTN_DANGER = { ...BUTTON_STYLE, backgroundColor: "#dc2626" }; // Cancel
 const BTN_SKY = { ...BUTTON_STYLE, backgroundColor: "#3ba2e8" }; // Add Agent Reference
 const BTN_INDIGO = { ...BUTTON_STYLE, backgroundColor: "#6366f1" }; // Confirmation No.
@@ -317,6 +318,21 @@ export default function CabBookingDetailView() {
   const location = useLocation();
   const booking = location.state?.booking || null;
 
+  // ── iWay trip-status workflow (guide §11.14) ────────────────────────
+  // Local snapshot so a Confirm/Reconfirm click re-renders the badge in
+  // place without a full-page reload. Initialised from the row payload the
+  // list page passed in (mapToGroupedCabBookingResponseDTO) — null for
+  // in-house rows and for i'way rows never checked since creation.
+  // mapIwayStatus treats null the same as 0, so a never-checked i'way row
+  // still renders a real status ("On Request"), never a placeholder.
+  const [iwayTripStatus, setIwayTripStatus] = useState(
+    booking?.iwayTripStatus ?? null,
+  );
+  const [iwayStatusRefreshedAt, setIwayStatusRefreshedAt] = useState(
+    booking?.iwayStatusRefreshedAt ?? null,
+  );
+  const [iwayRefreshing, setIwayRefreshing] = useState(false);
+
   // Cancel modal
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -424,6 +440,85 @@ export default function CabBookingDetailView() {
   const [pdfPreview, setPdfPreview] = useState(null);
 
   const bookingId = booking?.custombookingId;
+
+  // Maps i'way trip-lifecycle status (guide §11.14, 0..5) to the
+  // operator-facing label + Bootstrap Badge variant. Business labels for
+  // 0/1/2 diverge from i'way's raw wording ("Pending processing" /
+  // "Processing" / "Accepted") per the i'way trip-status workflow —
+  // On Request / Confirmed / Reconfirmed. null/undefined (booking created
+  // but never refreshed) is treated the same as 0 — "On Request" is the
+  // correct label for "nothing has happened on i'way's side yet", not a
+  // "no data" placeholder, so the badge is never hardcoded and never reads
+  // "Not yet refreshed" for an i'way row.
+  const mapIwayStatus = (status) => {
+    const effective = status == null ? 0 : status;
+    switch (effective) {
+      case 0:  return { label: "On Request",              variant: "secondary" };
+      case 1:  return { label: "Confirmed",               variant: "info"      };
+      case 2:  return { label: "Reconfirmed",             variant: "primary"   };
+      case 3:  return { label: "Completed",               variant: "success"   };
+      case 4:  return { label: "Cancelled",               variant: "danger"    };
+      case 5:  return { label: "Cancelled + penalty",     variant: "dark"      };
+      default: return { label: `Unknown (${status})`,     variant: "light"     };
+    }
+  };
+
+  // Formats the last-refresh timestamp as "24 Aug 2026, 15:37" — kept
+  // locale-neutral so it renders the same in every operator's browser.
+  const formatIwayRefreshedAt = (ts) => {
+    if (!ts) return null;
+    try {
+      const d = new Date(typeof ts === "string" ? ts.replace(" ", "T") : ts);
+      if (isNaN(d.getTime())) return null;
+      return d.toLocaleString("en-GB", {
+        day:    "2-digit",
+        month:  "short",
+        year:   "numeric",
+        hour:   "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  // Backs BOTH the Confirm button (shown at iway_trip_status = 0/null) and
+  // the Reconfirm button (shown at iway_trip_status = 1) — there's no
+  // standalone Refresh icon/button any more, its functionality now lives
+  // entirely inside this single click handler per the i'way trip-status
+  // workflow. Fires PATCH /api/cab/{bookingId}/iway-refresh-status which
+  // calls GET https://sandbox.iway.io/transnextgen/v4/orders/{orderId}
+  // under the hood, updates the local snapshot, and returns the fresh
+  // values — the Status badge re-renders from the new iwayTripStatus with
+  // no page reload. On failure the local snapshot is left untouched (only
+  // a toast fires) so a supplier-side/transport error can never flip the
+  // displayed HBS status incorrectly.
+  const handleIwayStatusAction = async () => {
+    if (!bookingId || iwayRefreshing) return;
+    try {
+      setIwayRefreshing(true);
+      const res = await axiosInstance.patch(
+        `/api/cab/${bookingId}/iway-refresh-status`,
+      );
+      const data = res?.data;
+      if (data && typeof data === "object" && data.tripStatus != null) {
+        setIwayTripStatus(data.tripStatus);
+        setIwayStatusRefreshedAt(data.refreshedAt || new Date().toISOString());
+        toast.success(`iWay status: ${data.tripStatusLabel || data.tripStatus}`);
+      } else {
+        toast.error("Empty response from iWay status check");
+      }
+    } catch (err) {
+      const msg =
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.message ||
+        "Failed to update iWay status";
+      toast.error(msg);
+    } finally {
+      setIwayRefreshing(false);
+    }
+  };
 
   // Merge an action mutation's response DTO into the live action state so the
   // gating below re-derives without a full-page detail fetch.
@@ -1003,6 +1098,27 @@ export default function CabBookingDetailView() {
     ? (wasReconfirmedBeforeCancel ? "ReConfirmed/Cancelled" : "Cancelled")
     : "Reconfirmed";
 
+  // For iWay bookings, i'way's own trip-lifecycle status (iway_trip_status)
+  // is ALWAYS the source of truth for the Status badge — per the i'way
+  // trip-status workflow the displayed status must never be the hardcoded
+  // confirmationStatus. mapIwayStatus treats a null/never-refreshed
+  // iwayTripStatus the same as 0 ("On Request"), so this applies from the
+  // very first render, not only after the operator has taken an action.
+  // A local cancel (cancelStatus) still wins so the combined
+  // "ReConfirmed/Cancelled" label survives. Falls back to the pre-existing
+  // displayStatus only for non-iWay bookings, which are unaffected by this
+  // workflow.
+  const iwayMappedStatus =
+    booking.apiType === "IWAY" ? mapIwayStatus(iwayTripStatus) : null;
+  const effectiveStatus = isCancelled
+    ? displayStatus
+    : (iwayMappedStatus ? iwayMappedStatus.label : displayStatus);
+
+  // Numeric i'way status driving the Confirm/Reconfirm button below —
+  // null/never-refreshed treated as 0, same rule as mapIwayStatus.
+  const effectiveIwayTripStatus =
+    booking.apiType === "IWAY" ? (iwayTripStatus ?? 0) : null;
+
   // Booking lifecycle events for the History modal — built from the row stub
   // already loaded (no extra API call), mirroring the Package / Hotel booking
   // detail views. The cab booking DTO only carries a real `bookingDate`
@@ -1139,7 +1255,7 @@ export default function CabBookingDetailView() {
                   </span>
                 )}
                 <span style={{ marginLeft: "12px" }}>
-                  <StatusBadge status={displayStatus} />
+                  <StatusBadge status={effectiveStatus} />
                 </span>
               </span>
             </div>
@@ -1226,9 +1342,31 @@ export default function CabBookingDetailView() {
                         booking.voucherIssued || booking.voucher ? "Yes" : "No"
                       }
                     />
+                    {/* Status — for i'way bookings the badge reflects
+                        i'way's own live trip status (iway_trip_status),
+                        never a hardcoded value. No refresh icon here any
+                        more — per the i'way trip-status workflow, pulling
+                        a fresh status is done via the Confirm/Reconfirm
+                        action button below, not a separate control. The
+                        last-refresh timestamp that used to live in the
+                        icon's tooltip is kept as plain text so that
+                        context isn't lost. */}
                     <InfoRow
                       label="Status"
-                      value={<StatusBadge status={displayStatus} />}
+                      value={
+                        <span className="d-inline-flex align-items-center gap-2">
+                          <StatusBadge status={effectiveStatus} />
+                          {booking.apiType === "IWAY" && iwayStatusRefreshedAt && (
+                            <span
+                              className="text-muted"
+                              style={{ fontSize: "0.72rem" }}
+                              title="Last i'way status check"
+                            >
+                              (as of {formatIwayRefreshedAt(iwayStatusRefreshedAt)})
+                            </span>
+                          )}
+                        </span>
+                      }
                     />
                   </Col>
                 </Row>
@@ -1278,14 +1416,24 @@ export default function CabBookingDetailView() {
                 </span>
               </SectionHeader>
               {Array.isArray(booking.guests) && booking.guests.length > 0 ? (
-                <Table size="sm" hover className="mb-0 align-middle">
+                // Full card width (matches every other section on this page)
+                // with tableLayout: "fixed" + percentage widths, so Age gets
+                // a genuinely wide column and sits centered within it — a
+                // fixed pixel-width table left dead blank space on the right
+                // of the card, which read as "not centered" relative to the
+                // card even though Age was centered within its own column.
+                <Table
+                  size="sm"
+                  hover
+                  className="mb-0 align-middle"
+                  style={{ tableLayout: "fixed" }}
+                >
                   <thead style={{ backgroundColor: "#f8f9fa" }}>
                     <tr>
-                      <th style={{ width: 50 }}>#</th>
-                      <th style={{ width: 90 }}>Type</th>
-                      <th>Name</th>
-                      <th style={{ width: 80 }}>Age</th>
-                      <th>Phone</th>
+                      <th style={{ width: "8%" }}>#</th>
+                      <th style={{ width: "15%" }}>Type</th>
+                      <th style={{ width: "42%" }}>Name</th>
+                      <th style={{ width: "35%", textAlign: "center" }}>Age</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1307,22 +1455,7 @@ export default function CabBookingDetailView() {
                             .filter(Boolean)
                             .join(" ") || "—"}
                         </td>
-                        <td>{g.age ?? "—"}</td>
-                        {/* We collect one phone per booking (lead only) — the
-                            per-guest form has no phone field. Show the lead
-                            passenger's number on the lead row; blank otherwise.
-                            Backend serializes the customer's phone under the
-                            `mobileNumber` key; read the older aliases too so
-                            historical rows keep rendering. */}
-                        <td>
-                          {g.contactNumber ||
-                            (g.isLead
-                              ? booking.customer?.mobileNumber ||
-                                booking.customer?.contactNumber ||
-                                booking.customer?.phone ||
-                                "—"
-                              : "—")}
-                        </td>
+                        <td style={{ textAlign: "center" }}>{g.age ?? "—"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1568,12 +1701,42 @@ export default function CabBookingDetailView() {
                 </button>
               )}
 
-              {/* Manual RECONFIRM removed — every successful booking is
-                  auto-reconfirmed at save time (TripServiceImpl.placeIwayOrder
-                  → confirmationStatus = "RECONFIRMED"), so this button had no
-                  new state to move to. The Reconfirm handler + modal remain
-                  in the file for potential future use / audit backfill but
-                  are no longer reachable from the UI. */}
+              {/* Local confirmation-status RECONFIRM (the generic, non-iWay
+                  modal below via confirmBooking/openConfirmModal) stays
+                  removed — every successful booking is auto-reconfirmed at
+                  save time (TripServiceImpl.placeIwayOrder →
+                  confirmationStatus = "RECONFIRMED"), so it had no new
+                  state to move to. Its handler + modal remain in the file
+                  for potential future use / audit backfill but are not
+                  reachable from the UI.
+
+                  i'way trip-status Confirm/Reconfirm — this IS reachable:
+                  it replaces the old standalone Refresh icon. Confirm shows
+                  at iway_trip_status 0 (or never-refreshed), Reconfirm at 1;
+                  both call handleIwayStatusAction (GET the live trip status
+                  from i'way) and the badge above re-renders from the result.
+                  Hidden once status reaches 2 (Reconfirmed) — the i'way
+                  trip-status workflow's terminal state — or once cancelled. */}
+              {!isCancelled && booking.apiType === "IWAY" && effectiveIwayTripStatus === 0 && (
+                <button
+                  style={BTN_CONFIRM}
+                  onClick={handleIwayStatusAction}
+                  disabled={iwayRefreshing || !bookingId}
+                  title="Check i'way for the latest trip status"
+                >
+                  {iwayRefreshing ? "CHECKING..." : "CONFIRM"}
+                </button>
+              )}
+              {!isCancelled && booking.apiType === "IWAY" && effectiveIwayTripStatus === 1 && (
+                <button
+                  style={BTN_TEAL}
+                  onClick={handleIwayStatusAction}
+                  disabled={iwayRefreshing || !bookingId}
+                  title="Check i'way for the latest trip status"
+                >
+                  {iwayRefreshing ? "CHECKING..." : "RECONFIRM"}
+                </button>
+              )}
 
               {!showsFinalDocs ? (
                 <>

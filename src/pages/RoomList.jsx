@@ -112,7 +112,12 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
   const [loadingRate, setLoadingRate] = useState(false);
   const [showUnavailableModal, setShowUnavailableModal] = useState(false);
   const [policyList, setPolicyList] = useState(null);
-  const [viewMode, setViewMode] = useState("grid");
+  // Default view for rate cards on the room-list page. Changed to "list"
+  // so the first render after clicking "View Details / Book" shows the
+  // vertical list layout (denser, easier scanning of rate details) rather
+  // than the grid tiles. Operator can still toggle to grid via the icon
+  // buttons in the "Available Room Categories" header.
+  const [viewMode, setViewMode] = useState("list");
   const [agentBalance, setAgentBalance] = useState(null);
   // Filter state
   const [refundFilter, setRefundFilter] = useState({
@@ -999,6 +1004,24 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
   // console.log("roomdata ::::::::::::::::::", roomData);
   const hotel = roomData.hotels[0];
   const payload = roomData.payload || {};
+
+  // Stay length (nights) derived from the search-time payload so the
+  // rate cards can label the total as "for N nights" instead of "per
+  // night" for multi-night stays. Defaults to 1 so single-night stays
+  // continue to say "per night" exactly as before.
+  const stayNights = (() => {
+    try {
+      const ci = payload?.checkInDate ? new Date(payload.checkInDate) : null;
+      const co = payload?.checkOutDate ? new Date(payload.checkOutDate) : null;
+      if (ci && co && !isNaN(ci) && !isNaN(co)) {
+        const diff = Math.round((co - ci) / (1000 * 60 * 60 * 24));
+        if (diff > 0) return diff;
+      }
+    } catch (e) {
+      /* fall through */
+    }
+    return 1;
+  })();
   // console.log("selectedRate before bookingmodal:::", selectedRate);
 
   // Drives whether the static check-in/check-out row in the Hotel
@@ -1225,6 +1248,21 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                             </span>
                             <span className="fw-semibold">
                               {payload.checkOutDate || hotel.checkOutDate}
+                            </span>
+                          </div>
+                          {/* Nights count — derived from check-in / check-out
+                              so it always matches whatever dates the operator
+                              searched. Same stayNights used by the rate-card
+                              "for N nights" label above, so the two views
+                              never disagree. Mirrors the same row in
+                              ExternalApiRoomList.jsx's Booking Summary. */}
+                          <div className="d-flex justify-content-between mb-2">
+                            <span>
+                              <FaCalendarAlt className="text-muted me-2" />
+                              Nights:
+                            </span>
+                            <span className="fw-semibold">
+                              {stayNights} {stayNights === 1 ? "night" : "nights"}
                             </span>
                           </div>
                           <div className="mb-2">
@@ -1500,8 +1538,11 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                         </div>
                       </Accordion.Header>
 
-                      <Accordion.Body className="room-rates-section">
-                        <Row>
+                      <Accordion.Body
+                        className="room-rates-section"
+                        style={{ padding: "0.5rem" }}
+                      >
+                        <Row className="g-2">
                           {filteredRates.map((rate, rateIndex) => {
                             // Highlight ONLY the card chosen for THIS room
                             // slot. Other slots' picks must not change the
@@ -1509,7 +1550,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                             const isSelectedForThisSlot = isMultiRoom &&
                               selectedRooms[roomSlotIndex]?.selectedRate === rate;
                             return (
-                            <Col key={rateIndex} lg={viewMode === "grid" ? 6 : 12} xl={viewMode === "grid" ? 4 : 12} className="mb-2">
+                            <Col key={rateIndex} lg={viewMode === "grid" ? 6 : 12} xl={viewMode === "grid" ? 4 : 12} className="mb-1">
                               <Card
                                 className={`rate-card h-100 shadow-sm${isSelectedForThisSlot ? " rate-card-selected" : ""}`}
                                 style={
@@ -1591,16 +1632,14 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                         </div>
                                       )} */}
 
-                                      {!isMultiRoom && (
-                                        <div className="indivial-price-per-room-noofroom">
-                                          <div className="text-muted small">
-                                            {formatPrice(rate.totalRate || 0)} ×{" "}
-                                            {rate.numberOfRooms || 1} rooms
-                                          </div>
-                                        </div>
-                                      )}
+                                      {/* Simplified per-operator request: drop the
+                                          "rate × N rooms" breakdown line and show
+                                          just "for N nights" beneath the total price
+                                          (or "per night" for single-night stays). */}
                                       <div className="price-per-night small text-muted">
-                                        per night
+                                        {stayNights > 1
+                                          ? `for ${stayNights} nights`
+                                          : "per night"}
                                       </div>
                                     </div>
 
@@ -1670,91 +1709,19 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                     )}
                                   </Card.Body>
                                 ) : (
-                                  <Card.Body className="p-3 py-2 d-flex flex-row align-items-center gap-3 flex-wrap flex-md-nowrap">
+                                  <Card.Body className="p-2 d-flex flex-row align-items-center gap-2 flex-wrap flex-md-nowrap">
                                     <div
-                                      className="d-flex flex-column flex-grow-1"
-                                      style={{ minWidth: 0 }}
+                                      className={
+                                        isMultiRoom
+                                          ? "flex-shrink-0 order-first ps-3"
+                                          : "flex-shrink-0"
+                                      }
+                                      style={
+                                        isMultiRoom
+                                          ? { minWidth: "170px" }
+                                          : undefined
+                                      }
                                     >
-                                      <div className="d-flex align-items-center flex-wrap gap-2 mb-2">
-                                        <div
-                                          className="d-flex align-items-center gap-2 flex-shrink-0"
-                                          style={{
-                                            whiteSpace: "nowrap",
-                                            minWidth: "200px",
-                                          }}
-                                        >
-                                          {getMealPlanIcon(rate.mealPlan)}
-                                          <span className="fw-semibold text-truncate">
-                                            {rate.mealPlan}
-                                          </span>
-                                        </div>
-                                        <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                                          {getRefundStatusBadgeInRoomList(
-                                            rate.nonRefundable,
-                                          )}
-                                          {rate.roomStatus === "On Request" ? (
-                                            <Badge
-                                              bg="warning"
-                                              text="dark"
-                                              className="px-2 py-1 fw-bold border border-warning"
-                                            >
-                                              On Request
-                                            </Badge>
-                                          ) : (
-                                            <Badge bg="success">Available</Badge>
-                                          )}
-                                        </div>
-                                      </div>
-                                      <div
-                                        className="rate-features small text-muted d-flex flex-wrap gap-3"
-                                        style={{ minWidth: 0 }}
-                                      >
-                                        <div className="feature-item d-flex align-items-center text-truncate">
-                                          <FaInfoCircle className="me-2 flex-shrink-0" />
-                                          <span className="text-truncate">
-                                            {rate.contractLabel}
-                                          </span>
-                                        </div>
-                                        <div className="feature-item d-flex align-items-center">
-                                          <Button
-                                            variant="link"
-                                            size="sm"
-                                            className="p-0 text-decoration-underline"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              openPoliciesModal(rate, hotel);
-                                            }}
-                                          >
-                                            <FaShieldAlt className="me-2" />
-                                            Cancellation Policies &amp; Terms &amp; Conditions
-                                          </Button>
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    <div
-                                      className="text-end px-3 border-start border-end flex-shrink-0"
-                                      style={{ minWidth: "150px" }}
-                                    >
-                                      <div className="fs-5 fw-bold text-primary">
-                                        {formatPrice(
-                                          isMultiRoom
-                                            ? rate.totalRate || 0
-                                            : rate.roomRateBasedOnRoomCount,
-                                        )}
-                                      </div>
-                                      {!isMultiRoom && (
-                                        <div className="text-muted small">
-                                          {formatPrice(rate.totalRate || 0)} ×{" "}
-                                          {rate.numberOfRooms || 1} rooms
-                                        </div>
-                                      )}
-                                      <div className="small text-muted">
-                                        per night
-                                      </div>
-                                    </div>
-
-                                    <div className="flex-shrink-0">
                                       {isMultiRoom ? (
                                         <Form.Check
                                           type="radio"
@@ -1791,6 +1758,87 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                           View Details
                                         </Button>
                                       )}
+                                    </div>
+                                    <div
+                                      className="d-flex flex-column flex-grow-1"
+                                      style={{ minWidth: 0 }}
+                                    >
+                                      <div className="d-flex align-items-center flex-wrap gap-2 mb-1">
+                                        <div
+                                          className="d-flex align-items-center gap-2 flex-shrink-0"
+                                          style={{
+                                            whiteSpace: "nowrap",
+                                            minWidth: "200px",
+                                          }}
+                                        >
+                                          {getMealPlanIcon(rate.mealPlan)}
+                                          <span className="fw-semibold text-truncate">
+                                            {rate.mealPlan}
+                                          </span>
+                                        </div>
+                                        <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                                          {getRefundStatusBadgeInRoomList(
+                                            rate.nonRefundable,
+                                          )}
+                                          {rate.roomStatus === "On Request" ? (
+                                            <Badge
+                                              bg="warning"
+                                              text="dark"
+                                              className="px-2 py-1 fw-bold border border-warning"
+                                            >
+                                              On Request
+                                            </Badge>
+                                          ) : (
+                                            <Badge bg="success">Available</Badge>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div
+                                        className="rate-features small text-muted d-flex flex-column align-items-start gap-1"
+                                        style={{ minWidth: 0 }}
+                                      >
+                                        <div className="feature-item d-flex align-items-center text-truncate w-100">
+                                          <FaInfoCircle className="me-2 flex-shrink-0" />
+                                          <span className="text-truncate">
+                                            {rate.contractLabel}
+                                          </span>
+                                        </div>
+                                        <div className="feature-item d-flex align-items-center">
+                                          <Button
+                                            variant="link"
+                                            size="sm"
+                                            className="p-0 text-decoration-underline"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              openPoliciesModal(rate, hotel);
+                                            }}
+                                          >
+                                            <FaShieldAlt className="me-2" />
+                                            Cancellation Policies &amp; Terms &amp; Conditions
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div
+                                      className="text-end px-3 border-start flex-shrink-0"
+                                      style={{ minWidth: "150px" }}
+                                    >
+                                      <div className="fs-5 fw-bold text-primary">
+                                        {formatPrice(
+                                          isMultiRoom
+                                            ? rate.totalRate || 0
+                                            : rate.roomRateBasedOnRoomCount,
+                                        )}
+                                      </div>
+                                      {/* See sibling in the grid view above — same
+                                          simplification: drop the breakdown, show only
+                                          "for N nights" (or "per night" for K=1). */}
+                                      <div className="small text-muted">
+                                        {stayNights > 1
+                                          ? `for ${stayNights} nights`
+                                          : "per night"}
+                                      </div>
                                     </div>
                                   </Card.Body>
                                 )}

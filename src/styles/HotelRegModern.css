@@ -38,7 +38,7 @@
 }
 .hreg-page .nav-tabs .nav-link:hover { background: #F6F6F4 !important; color: #15171C !important; }
 .hreg-page .nav-tabs .nav-link.active {
-  background: #FDE7ED !important; color: #EC0B43 !important; font-weight: 600 !important; box-shadow: none !important;
+  background: #FDECD6 !important; color: #F75E00 !important; font-weight: 600 !important; box-shadow: none !important;
 }
 .hreg-page .tab-content { border: none !important; padding: 24px 2px 6px !important; }
 
@@ -56,7 +56,7 @@
 }
 .hreg-page .form-control:focus,
 .hreg-page .form-select:focus {
-  border-color: #EC0B43 !important; background: #fff !important; box-shadow: 0 0 0 4px rgba(236, 11, 67, .12) !important;
+  border-color: #F75E00 !important; background: #fff !important; box-shadow: 0 0 0 4px rgba(247, 94, 0, .12) !important;
 }
 .hreg-page .form-control::placeholder { color: #A8A8A3 !important; font-weight: 400 !important; }
 
@@ -78,10 +78,10 @@
 
 /* ── Buttons ── */
 .hreg-page .btn { border-radius: 11px !important; font-weight: 600 !important; letter-spacing: -.004em; }
-.hreg-page .btn-primary { background: #EC0B43 !important; border-color: #EC0B43 !important; }
-.hreg-page .btn-primary:hover { background: #C90939 !important; border-color: #C90939 !important; }
-.hreg-page .btn-outline-primary { color: #EC0B43 !important; border-color: #EC0B43 !important; }
-.hreg-page .btn-outline-primary:hover { background: #EC0B43 !important; color: #fff !important; }
+.hreg-page .btn-primary { background: #F75E00 !important; border-color: #F75E00 !important; }
+.hreg-page .btn-primary:hover { background: #D65100 !important; border-color: #D65100 !important; }
+.hreg-page .btn-outline-primary { color: #F75E00 !important; border-color: #F75E00 !important; }
+.hreg-page .btn-outline-primary:hover { background: #F75E00 !important; color: #fff !important; }
 
 /* ── Week-days panel ── */
 .hreg-page .week-days-container { background: #fff !important; border: 1px solid #ECECE8 !important; border-radius: 14px !important; }

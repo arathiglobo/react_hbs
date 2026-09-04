@@ -215,6 +215,19 @@ const CabBookingPage = () => {
     searchCriteria?.dropoffType === "AIRPORT" ||
     !!searchCriteria?.destinationLocation?.code;
 
+  // Whether to surface the Pick-Up / Drop-Off Flight Number inputs on the
+  // Contact Details card. Mirrors the exact same branching the create-booking
+  // payload already uses (see pickupFlightNo / dropoffFlightNo below) so the
+  // input only appears when the payload would actually forward it: i'way uses
+  // the widened detection (covers i'way-native airports whose source is
+  // "IWAY" but whose location carries an IATA code); in-house keeps the
+  // strict AIRPORT pickupType/dropoffType check so non-airport in-house
+  // pickups don't grow a new input.
+  const showPickupFlightField =
+    isIway ? pickupIsAirport : searchCriteria?.pickupType === "AIRPORT";
+  const showDropoffFlightField =
+    isIway ? dropoffIsAirport : searchCriteria?.dropoffType === "AIRPORT";
+
   // Client location snapshot for the booking-history audit trail, resolved
   // once on page load and sent on the create payload. Location — browser
   // geolocation (GPS/WiFi) reverse-geocoded to a precise readable address;
@@ -509,6 +522,15 @@ const CabBookingPage = () => {
     terminal: "",
     departureTime: searchCriteria.dropoffTime || "",
   });
+
+  // i'way Toll Road opt-in (guide §12.3 / AIT §8.5). Boolean, i'way rows
+  // only. When true, the backend's IwayTollRoadResolver picks the offer's
+  // tollroad additional_service and appends it to POST /orders; when false
+  // (default) the payload is byte-identical to before this checkbox
+  // existed — so in-house bookings and un-ticked i'way bookings are
+  // completely unaffected. Silently no-ops on the backend when the class
+  // does not expose a tollroad entry (e.g. Business on CDG→Disneyland).
+  const [iwayIncludeTollRoad, setIwayIncludeTollRoad] = useState(false);
   // Hotel addresses auto-fetched from /api/hotels/lookup when the leg
   // type is HOTEL. We resolve by matching hotelName (case-insensitive),
   // scoped by destination cityId when known. Empty string falls back to
@@ -894,6 +916,32 @@ const CabBookingPage = () => {
       // only when M&G is included in the price (flexible_tariff=false).
       // Null on in-house rows.
       iwayFlexibleTariff: isIway ? (cab?.iwayFlexibleTariff ?? null) : null,
+      // AIT §8.5 opt-in — sends the toll_road additional_service ref only
+      // when the operator ticks the "Include Toll Road" checkbox above.
+      // Null on in-house rows and false on un-ticked i'way rows, both of
+      // which the backend treats as "don't add the ref" (payload wire
+      // shape unchanged from before this field existed).
+      iwayIncludeTollRoad: isIway ? Boolean(iwayIncludeTollRoad) : null,
+      // allowable_time (seconds) from the picked i'way offer. Forwarded
+      // for TripServiceImpl.checkTimeForMeetAndGreet (guide §11.10) so
+      // the backend can short-circuit obviously-too-soon pickups before
+      // touching the wallet. Prefer the value carried on searchCriteria
+      // (set on the search page); fall back to the cab row for older
+      // hand-offs that only stamped it there. Null on in-house rows.
+      iwayAllowableTime: isIway
+        ? (searchCriteria.iwayAllowableTime ?? cab?.iwayAllowableTime ?? null)
+        : null,
+      // Guide §11.6.2 Meet & Greet sign text. Only forwarded when the
+      // pickup is an airport (backend gates the write on that anyway); a
+      // blank value tells the backend to auto-fill with the lead
+      // passenger's name — which matches today's behaviour, so bookings
+      // whose operator doesn't touch the Greeting Sign input send the
+      // same text_tablet as before. Null on in-house rows and on i'way
+      // rows whose pickup isn't an airport.
+      iwayMeetGreetSign:
+        isIway && pickupIsAirport
+          ? ((pickupDetails.greetingSign || "").trim() || null)
+          : null,
       noOfCabs: cab.noOfCabs || 1,
       pickupDate: formatDateToDDMMYYYY(searchCriteria.pickupDate),
       dropOffDate: formatDateToDDMMYYYY(searchCriteria.dropoffDate || searchCriteria.pickupDate),
@@ -1143,7 +1191,7 @@ const CabBookingPage = () => {
                         >
                           <FaArrowLeft /> Back
                         </Button>
-                        <FaUsers className="me-2" style={{ color: "#EC0B43" }} />
+                        <FaUsers className="me-2" style={{ color: "#F75E00" }} />
                         <span className="fw-bold text-dark">Passenger Details</span>
                         <span className="text-muted small ms-2">
                           ({totalAdults} Adult{totalAdults !== 1 ? "s" : ""}
@@ -1353,20 +1401,24 @@ const CabBookingPage = () => {
                           {validationErrors[`guest_${leadIndex}_emailId`]}
                         </Form.Control.Feedback>
                       </Col>
-                      {/* i'way requires start_location.flight_number whenever
-                          the pickup point is an airport (guide §12.4.5) —
-                          there was no input for this anywhere on the page
-                          before, so pickupDetails.flightNo always stayed
-                          empty. Shown for i'way bookings only; drop-off side
-                          is optional so it's collected but not required.
-                          pickupIsAirport also catches i'way-native airports
-                          whose pickupType is "IWAY" but whose originLocation
-                          carries an IATA code. */}
-                      {isIway && pickupIsAirport && (
+                      {/* Pick Up Flight Number — surfaced whenever the search's
+                          pickup point is an airport, regardless of i'way vs
+                          in-house (Airport → Hotel, Airport → City, etc.).
+                          i'way requires start_location.flight_number when the
+                          pickup is an airport (guide §12.4.5); the in-house
+                          side keeps it optional so pre-existing in-house
+                          Airport bookings that never captured a flight number
+                          continue to submit exactly as before. */}
+                      {showPickupFlightField && (
                         <Col md={6}>
                           <Form.Label className="small text-muted fw-semibold mb-1">
-                            Pickup Flight Number{" "}
-                            <span className="text-danger">*</span>
+                            Pickup Flight Number
+                            {isIway && (
+                              <>
+                                {" "}
+                                <span className="text-danger">*</span>
+                              </>
+                            )}
                           </Form.Label>
                           <Form.Control
                             size="sm"
@@ -1391,7 +1443,7 @@ const CabBookingPage = () => {
                           </Form.Control.Feedback>
                         </Col>
                       )}
-                      {isIway && dropoffIsAirport && (
+                      {showDropoffFlightField && (
                         <Col md={6}>
                           <Form.Label className="small text-muted fw-semibold mb-1">
                             Drop-off Flight Number
@@ -1406,6 +1458,70 @@ const CabBookingPage = () => {
                               setDropoffDetails((prev) => ({ ...prev, flightNo: v }));
                             }}
                           />
+                        </Col>
+                      )}
+                      {/* Guide §11.6.2 — Meet & Greet Sign text.
+                          Shown only for i'way airport-pickup offers whose
+                          selected class actually includes M&G in the price
+                          (iwayFlexibleTariff !== true). The useEffect at the
+                          top of the file pre-seeds greetingSign with the
+                          lead passenger's full name, so leaving this input
+                          untouched sends today's value; editing it forwards
+                          the operator's custom text, and clearing it lets
+                          the backend re-fall-back to the lead name. */}
+                      {isIway && pickupIsAirport && cab?.iwayFlexibleTariff !== true && (
+                        <Col md={6}>
+                          <Form.Label className="small text-muted fw-semibold mb-1">
+                            Meet &amp; Greet Sign{" "}
+                            <span className="text-muted small">(optional)</span>
+                          </Form.Label>
+                          <Form.Control
+                            size="sm"
+                            type="text"
+                            maxLength={60}
+                            placeholder="Leave empty to use lead passenger's name"
+                            value={pickupDetails.greetingSign || ""}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setPickupDetails((prev) => ({ ...prev, greetingSign: v }));
+                            }}
+                          />
+                        </Col>
+                      )}
+                      {/* AIT §8.5 — Toll Road opt-in.
+                          i'way rows only; leaves the in-house booking card
+                          untouched. Extra fare (e.g. 29.93 AED on the CDG →
+                          Disneyland route) is added by i'way to the trip
+                          total; if the selected class doesn't offer toll
+                          road (e.g. Business on that route) the backend
+                          silently drops the ref so the booking still
+                          succeeds without it. */}
+                      {isIway && (
+                        <Col md={12}>
+                          <div className="d-flex align-items-start gap-2 p-2 border rounded-2 bg-light">
+                            <Form.Check
+                              type="checkbox"
+                              id="iway-include-toll-road"
+                              className="mt-0"
+                              checked={iwayIncludeTollRoad}
+                              onChange={(e) =>
+                                setIwayIncludeTollRoad(e.target.checked)
+                              }
+                              label={
+                                <span>
+                                  <span className="fw-semibold">
+                                    Include Toll Road
+                                  </span>
+                                  <span className="text-muted small ms-2">
+                                    Adds the route's toll fee to the trip
+                                    total (charged by i'way). Skipped
+                                    automatically if the selected vehicle
+                                    class doesn't offer it on this route.
+                                  </span>
+                                </span>
+                              }
+                            />
+                          </div>
                         </Col>
                       )}
                     </Row>
@@ -1531,7 +1647,7 @@ const CabBookingPage = () => {
                     className="py-3 px-4 border-bottom d-flex align-items-center"
                     style={cardHeaderStyle}
                   >
-                    <FaCreditCard className="me-2" style={{ color: "#EC0B43" }} />
+                    <FaCreditCard className="me-2" style={{ color: "#F75E00" }} />
                     <span className="fw-bold text-dark">Payment Mode</span>
                     <span className="text-danger ms-2">*</span>
                   </Card.Header>
@@ -1794,7 +1910,7 @@ const CabBookingPage = () => {
                               </div>
                               <div
                                 className="fw-bold"
-                                style={{ color: "#EC0B43", fontSize: "1.1rem" }}
+                                style={{ color: "#F75E00", fontSize: "1.1rem" }}
                               >
                                 {formatPrice(grandTotal)}
                               </div>

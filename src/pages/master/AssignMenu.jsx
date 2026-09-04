@@ -155,7 +155,7 @@ export default function AssignMenu() {
         .am-role-item:hover { background: #f3f4f6; }
         .am-role-item.on {
           background: #ffffff; color: #0f172a; font-weight: 600;
-          border-left-color: #EC0B43;
+          border-left-color: #F75E00;
         }
         .am-role-item input { display: none; }
         .am-role-count {
@@ -163,7 +163,7 @@ export default function AssignMenu() {
           font-size: 11px; font-weight: 500; color: #9ca3af;
           background: #f3f4f6; padding: 1px 8px; border-radius: 999px;
         }
-        .am-role-item.on .am-role-count { background: #fde7ed; color: #EC0B43; }
+        .am-role-item.on .am-role-count { background: #FDECD6; color: #F75E00; }
 
         /* Toolbar (search + count above tree) */
         .am-toolbar {
@@ -182,8 +182,8 @@ export default function AssignMenu() {
         }
         .am-search input:focus {
           outline: none;
-          border-color: #EC0B43;
-          box-shadow: 0 0 0 3px rgba(236,11,67,0.10);
+          border-color: #F75E00;
+          box-shadow: 0 0 0 3px rgba(247, 94, 0,0.10);
         }
         .am-search-icon {
           position: absolute; top: 50%; left: 10px; transform: translateY(-50%);
@@ -219,7 +219,7 @@ export default function AssignMenu() {
           color: #6b7280; transition: transform .15s ease, background .12s ease;
           font-size: 10px;
         }
-        .am-group.open .am-caret { transform: rotate(90deg); color: #EC0B43; background: #fde7ed; }
+        .am-group.open .am-caret { transform: rotate(90deg); color: #F75E00; background: #FDECD6; }
         .am-parent-label { font-size: 14px; font-weight: 600; color: #0f172a; }
         .am-leaf-count {
           margin-left: 6px; font-size: 11px; font-weight: 500;
@@ -257,8 +257,8 @@ export default function AssignMenu() {
         .am-inherited { color: #9ca3af; font-size: 11px; margin-left: 6px; }
         .am-dirty-dot {
           display: inline-block; width: 6px; height: 6px; border-radius: 999px;
-          background: #EC0B43; margin-left: 6px;
-          box-shadow: 0 0 0 3px rgba(236,11,67,.15);
+          background: #F75E00; margin-left: 6px;
+          box-shadow: 0 0 0 3px rgba(247, 94, 0,.15);
         }
 
         .am-empty {

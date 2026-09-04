@@ -119,6 +119,8 @@ const AgentView = () => {
   const [statusUpdating, setStatusUpdating] = useState(false);
   // Card-payment-mode toggle in-flight flag.
   const [cardPaymentUpdating, setCardPaymentUpdating] = useState(false);
+  // Agent-incentive-program toggle in-flight flag.
+  const [incentiveUpdating, setIncentiveUpdating] = useState(false);
   /* Lightbox state — when the user clicks the agent photo on the header,
      the full image is shown enlarged inside a clean Bootstrap Modal. */
   const [showPhotoModal, setShowPhotoModal] = useState(false);
@@ -346,6 +348,35 @@ const AgentView = () => {
         ),
       )
       .finally(() => setCardPaymentUpdating(false));
+  };
+
+  // ===================================================================
+  // Agent-incentive toggle — flips the per-agent Agent Incentive Program
+  // gate. When disabled the backend incentive-sync job skips this agent
+  // so no new points accrue; historical rows already in agent_incentive
+  // stay untouched so re-enabling later is safe.
+  // ===================================================================
+  const handleToggleIncentive = (e) => {
+    const enabled = !!e?.target?.checked;
+    setIncentiveUpdating(true);
+    axiosInstance
+      .patch(`/api/agent/${id}/incentive`, { enabled })
+      .then((res) => {
+        toast.success(
+          res.data?.message ||
+            `Agent incentive ${enabled ? "enabled" : "disabled"}`,
+        );
+        setAgent((prev) =>
+          prev ? { ...prev, incentiveEnabled: enabled } : prev,
+        );
+      })
+      .catch((err) =>
+        toast.error(
+          err.response?.data?.message ||
+            "Failed to update agent incentive setting",
+        ),
+      )
+      .finally(() => setIncentiveUpdating(false));
   };
 
   // ===================================================================
@@ -1211,7 +1242,7 @@ const AgentView = () => {
                   onMouseEnter={(e) => {
                     e.currentTarget.style.transform = "translateY(-2px)";
                     e.currentTarget.style.boxShadow = "0 10px 24px rgba(17, 19, 24, .12)";
-                    e.currentTarget.style.borderColor = "#EC0B43";
+                    e.currentTarget.style.borderColor = "#F75E00";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.transform = "";
@@ -1227,8 +1258,8 @@ const AgentView = () => {
                     height: 96,
                     display: "grid",
                     placeItems: "center",
-                    background: "#FDE7ED",
-                    color: "#EC0B43",
+                    background: "#FDECD6",
+                    color: "#F75E00",
                     border: "1px solid #F8C9D5",
                     borderRadius: "16px",
                     fontWeight: 700,
@@ -1498,6 +1529,53 @@ const AgentView = () => {
             )}
           </Section>
           )}
+
+          {/* ------------ Agent Incentive toggle -------------------- */}
+          <div
+            className="d-flex justify-content-end align-items-center gap-3 mb-2 px-3 py-2 rounded"
+            style={{
+              background: "#e8f5e9",
+              border: "1px solid #66bb6a",
+            }}
+          >
+            <span
+              className="fw-bold"
+              style={{ fontSize: "1.05rem", color: "#1b5e20" }}
+            >
+              Agent Incentive
+            </span>
+            <div
+              className="d-flex align-items-center gap-3 fw-semibold"
+              style={{ fontSize: "1rem" }}
+              title="When Yes, this agent participates in the Agent Incentive Program and earns points on new bookings. Disabling stops new accruals; historical points remain."
+            >
+              <Form.Check
+                inline
+                type="radio"
+                id={`agent-incentive-yes-${id}`}
+                name={`agent-incentive-${id}`}
+                label="Yes"
+                checked={Boolean(agent?.incentiveEnabled)}
+                onChange={() => handleToggleIncentive({ target: { checked: true } })}
+                disabled={incentiveUpdating}
+                className="mb-0"
+              />
+              <Form.Check
+                inline
+                type="radio"
+                id={`agent-incentive-no-${id}`}
+                name={`agent-incentive-${id}`}
+                label="No"
+                checked={!agent?.incentiveEnabled}
+                onChange={() => handleToggleIncentive({ target: { checked: false } })}
+                disabled={incentiveUpdating}
+                className="mb-0"
+              />
+              {incentiveUpdating && (
+                <span className="text-muted">Updating…</span>
+              )}
+            </div>
+          </div>
 
           {/* ------------ Allow Card payment toggle ----------------- */}
           <div

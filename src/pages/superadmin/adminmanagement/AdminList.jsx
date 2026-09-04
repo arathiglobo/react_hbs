@@ -181,7 +181,7 @@ export default function AdminList() {
         "Any agents this admin already created will keep working.",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#EC0B43",
+      confirmButtonColor: "#F75E00",
       cancelButtonColor: "#6c757d",
       confirmButtonText: "Yes, delete",
     }).then(async (r) => {

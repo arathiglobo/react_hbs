@@ -87,7 +87,7 @@ export default function CredentialGroupDetail() {
       html: "The decrypted plaintext will be shown in a modal. This action is <b>logged</b> under your username. Continue?",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#EC0B43",
+      confirmButtonColor: "#F75E00",
       cancelButtonColor: "#6c757d",
       confirmButtonText: "Reveal",
     }).then(async (r) => {
@@ -116,7 +116,7 @@ export default function CredentialGroupDetail() {
       text: "The encrypted value will be removed permanently.",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#EC0B43",
+      confirmButtonColor: "#F75E00",
       cancelButtonColor: "#6c757d",
       confirmButtonText: "Yes, delete",
     }).then(async (r) => {

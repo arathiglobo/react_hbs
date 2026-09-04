@@ -1047,7 +1047,7 @@ export default function MakeUrOwnPackageV2() {
                       type="submit"
                       // btn-search-modern is the shared red-pill CTA already
                       // used by SEARCH LONG STAY / SEARCH DAY STAY / SEARCH
-                      // HOTEL / etc. — same red gradient (#EC0B43 → #C90939),
+                      // HOTEL / etc. — same red gradient (#F75E00 → #D65100),
                       // same pill shape, same padding + hover elevation. So
                       // this page's primary CTA now visually rhymes with the
                       // rest of the platform. Bootstrap's btn-lg/px-5/py-3/

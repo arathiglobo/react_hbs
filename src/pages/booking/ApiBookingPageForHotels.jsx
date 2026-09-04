@@ -26,6 +26,13 @@ import {
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
+import {
+  GrnRefundBadge,
+  GrnDeadlinePill,
+  GrnPolicyBlock,
+  grnPolicyFromRate,
+  grnIsBundledSelection,
+} from "../../components/grn/GrnPolicy";
 
 // Online-payment gateways offered when the agent's credit is short.
 // Mirrors the same list Inhouse HotelBookingPage.jsx uses (line 25) so
@@ -76,6 +83,165 @@ const stripPolicyHtml = (raw) => {
     .replace(/&#39;/gi, "'");
   s = s.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
   return s.trim();
+};
+
+// Suppliers that support "Hold Room and Pay Later" on this page.
+//
+// ATHARVA (3) is NOT listed: it has a real supplier-side hold endpoint
+// (HCreateBooking VoucherBooking=false → status KK) and its own picker gate
+// further down, which stays exactly as it was.
+//
+// For the suppliers listed here there is no hold endpoint, so a hold is a
+// REAL booking whose agent-credit settlement is deferred to the operator's
+// Reconfirm click. That is only offered while the rate is still inside its
+// free-cancellation window, so the deadline job can release the room at the
+// supplier for free if nobody reconfirms. Add an apiId here only once its
+// backend create path honours bookingConfirmation="Hold & Book Later".
+const HOLD_CAPABLE_API_IDS = new Set([20]); // 20 = GRN
+
+/**
+ * The booking's overall free-cancellation deadline, as a Date at local
+ * midnight, or null when no deadline applies.
+ *
+ * Extracted verbatim from the create payload's own derivation so the
+ * "can this be held?" gate and the deadlineDate we persist can never
+ * disagree — a picker offered against one deadline and a booking saved
+ * against another is exactly how a hold ends up outside its window.
+ *
+ *   • Darina (16) carries a live cut-off on the rate — used as-is.
+ *   • Non-refundable rates have no window at all → null.
+ *   • Everything else: earliest cancellation-policy fromDate, minus 2 days.
+ *
+ * The overall deadline is the EARLIEST across the selected rates.
+ */
+const deriveDeadlineDate = (selectedRates, apiId) => {
+  const deadlines = (selectedRates || [])
+    .map((rate) => {
+      const nonRefundable =
+        rate.nonRefundable === true ||
+        rate.nonRefundable === "true" ||
+        rate.nonRefundable === "Y";
+
+      // Darina (apiId=16): rate.deadlineDate is the LIVE
+      // free-cancellation cut-off carried from
+      // CheckAvailabilityWithCancellation_NoCache_LiveCalculation
+      // (BE parses the "Free Cancellation" band's toDate). It is
+      // the deadline the operator sees in the room accordion.
+      // Use it verbatim — the generic "earliest cancellationPolicy
+      // fromDate minus 2 days" fallback below picks up the Free
+      // Cancellation band's FromDate instead of the cut-off, which
+      // reports a wildly earlier date (September vs December).
+      if (apiId === 16 && !nonRefundable && rate.deadlineDate) {
+        const iso = String(rate.deadlineDate).slice(0, 10);
+        const parts = iso.split("-");
+        if (parts.length === 3) {
+          const d = new Date(
+            Number(parts[0]),
+            Number(parts[1]) - 1,
+            Number(parts[2]),
+          );
+          if (!isNaN(d.getTime())) {
+            d.setHours(0, 0, 0, 0);
+            return d;
+          }
+        }
+      }
+
+      if (nonRefundable === true) {
+        // Non-refundable rates have no free-cancellation window, so
+        // no deadline applies — send nothing rather than a fabricated
+        // "today - 2 days" date (which always lands in the past and
+        // confuses anything that reads deadlineDate literally).
+        return null;
+      }
+      const policies = rate.cancellationPolicy || [];
+      if (policies.length === 0) return null;
+      const dates = policies
+        .map((p) => (p.fromDate ? new Date(p.fromDate) : null))
+        .filter((date) => date !== null && !isNaN(date.getTime()));
+      if (dates.length === 0) return null;
+      const earliestDate = new Date(Math.min(...dates.map((d) => d.getTime())));
+      const deadline = new Date(earliestDate);
+      deadline.setDate(earliestDate.getDate() - 2);
+      deadline.setHours(0, 0, 0, 0);
+      return deadline;
+    })
+    .filter((d) => d !== null);
+
+  if (deadlines.length === 0) return null;
+  return new Date(Math.min(...deadlines.map((d) => d.getTime())));
+};
+
+/**
+ * GRN (apiId 20): human-readable cancellation-policy lines for the create
+ * payload / Booking Details / voucher. Bundled rate (all rooms share one
+ * rate key) → one common set; non-bundled → one set per room, prefixed
+ * "Room N (category):" because each room's policy differs.
+ */
+const buildGrnPolicyLines = (selectedRates) => {
+  const rates = Array.isArray(selectedRates) ? selectedRates : [];
+  if (rates.length === 0) return [];
+  const linesFor = (rate) => {
+    const p = grnPolicyFromRate(rate);
+    if (!p) return [];
+    const out = [];
+    if (p.refundCategory === "FULLY_REFUNDABLE" && p.freeCancellationUntil) {
+      out.push(`Fully refundable: free cancellation until ${p.freeCancellationUntil}.`);
+    } else if (p.policyText) {
+      out.push(p.policyText);
+    } else if (p.nonRefundable) {
+      out.push("Non-refundable rate: 100% of the booking amount is charged on cancellation or no-show.");
+    }
+    p.rows.forEach((r) => {
+      if (r?.policyText) out.push(String(r.policyText));
+    });
+    if (p.noShowFeeText) out.push(`No-show fee: ${p.noShowFeeText}.`);
+    if (p.rows.length || p.freeCancellationUntil) {
+      out.push(`All dates and times are in ${p.policyTimezone} (Indian Standard Time).`);
+    }
+    return out;
+  };
+  if (grnIsBundledSelection(rates)) {
+    const out = [];
+    if (rates.length > 1) {
+      out.push(`The cancellation policy below applies to all ${rates.length} rooms (bundled rate).`);
+    }
+    return [...new Set([...out, ...linesFor(rates[0])])];
+  }
+  return rates.flatMap((rate, i) => {
+    const label = `Room ${i + 1}${rate?.roomCategory ? ` (${rate.roomCategory})` : ""}`;
+    return linesFor(rate).map((l) => `${label}: ${l}`);
+  });
+};
+
+/** Format a Date as the LocalDateTime string the backend payload expects. */
+const toDeadlinePayloadString = (d) => {
+  if (!d) return null;
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}T00:00:00`;
+};
+
+/**
+ * May this booking be offered as "Hold Room and Pay Later"?
+ *
+ * True only for a hold-capable supplier whose selected rates still have a
+ * free-cancellation deadline in the future. A missing deadline (every rate
+ * non-refundable, or no cancellation policy at all) means there is no window
+ * to hold inside, so the picker stays hidden and the flow is untouched.
+ *
+ * The backend re-checks this before sending anything to the supplier, so a
+ * stale page cannot create a hold outside the window.
+ */
+const isHoldEligible = (bookingData) => {
+  const apiId = bookingData?.payload?.apiId;
+  if (!HOLD_CAPABLE_API_IDS.has(apiId)) return false;
+  const deadline = deriveDeadlineDate(bookingData?.selectedRate || [], apiId);
+  if (!deadline) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return deadline >= today;
 };
 
 /**
@@ -843,12 +1009,15 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
 
     const { errors, hasErrors } = validateForm();
 
-    // ATHARVA (apiId 3): the operator MUST pick a booking mode
-    // (Book and Pay Now / Hold Room and Pay Later) before we open the
-    // policy modal. Merges into the same validationErrors bag as the
-    // guest-detail errors so a single toast covers both cases.
+    // Whenever the booking-mode picker is on screen the operator MUST
+    // answer it before we open the policy modal — ATHARVA (apiId 3, its own
+    // supplier-side hold) and any hold-capable API whose rate is still
+    // inside its free-cancellation window. Merges into the same
+    // validationErrors bag as the guest-detail errors so a single toast
+    // covers both cases. Suppliers without a picker skip this entirely and
+    // submit exactly as they did before.
     if (
-      bookingData?.payload?.apiId === 3 &&
+      (bookingData?.payload?.apiId === 3 || isHoldEligible(bookingData)) &&
       bookingConfirmation !== "Book & Voucher" &&
       bookingConfirmation !== "Hold & Book Later"
     ) {
@@ -965,83 +1134,28 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         // slot the Inhouse flow uses (bookingData.payload.employeeId).
         employeeId: bookingData.payload.employeeId || null,
         roomStatus: "Available",
-        cancellationPolicy: [
-          ...new Set(
-            bookingData.selectedRate.flatMap((rate) =>
-              (rate.cancellationPolicy || []).map((p) => p.policyText),
-            ),
+        cancellationPolicy:
+          Number(bookingData?.payload?.apiId) === 20
+            ? // GRN: full policy lines (category, "Free cancellation until …
+              // IST", windows, no-show fee) — per room for non-bundled rates.
+              // The backend rebuilds the same lines from GRN's own rechecked
+              // data when the rate is still cached; this is the fallback.
+              buildGrnPolicyLines(bookingData.selectedRate)
+            : [
+                ...new Set(
+                  bookingData.selectedRate.flatMap((rate) =>
+                    (rate.cancellationPolicy || []).map((p) => p.policyText),
+                  ),
+                ),
+              ],
+        // Same derivation the hold-eligibility gate uses — see
+        // deriveDeadlineDate at the top of this file.
+        deadlineDate: toDeadlinePayloadString(
+          deriveDeadlineDate(
+            bookingData.selectedRate,
+            bookingData?.payload?.apiId,
           ),
-        ],
-        deadlineDate: (() => {
-          const deadlines = bookingData.selectedRate
-            .map((rate) => {
-              const nonRefundable =
-                rate.nonRefundable === true ||
-                rate.nonRefundable === "true" ||
-                rate.nonRefundable === "Y";
-
-              // Darina (apiId=16): rate.deadlineDate is the LIVE
-              // free-cancellation cut-off carried from
-              // CheckAvailabilityWithCancellation_NoCache_LiveCalculation
-              // (BE parses the "Free Cancellation" band's toDate). It is
-              // the deadline the operator sees in the room accordion.
-              // Use it verbatim — the generic "earliest cancellationPolicy
-              // fromDate minus 2 days" fallback below picks up the Free
-              // Cancellation band's FromDate instead of the cut-off, which
-              // reports a wildly earlier date (September vs December).
-              if (
-                bookingData?.payload?.apiId === 16 &&
-                !nonRefundable &&
-                rate.deadlineDate
-              ) {
-                const iso = String(rate.deadlineDate).slice(0, 10);
-                const parts = iso.split("-");
-                if (parts.length === 3) {
-                  const d = new Date(
-                    Number(parts[0]),
-                    Number(parts[1]) - 1,
-                    Number(parts[2]),
-                  );
-                  if (!isNaN(d.getTime())) {
-                    d.setHours(0, 0, 0, 0);
-                    return d;
-                  }
-                }
-              }
-
-              if (nonRefundable === true) {
-                // Non-refundable rates have no free-cancellation window, so
-                // no deadline applies — send nothing rather than a fabricated
-                // "today - 2 days" date (which always lands in the past and
-                // confuses anything that reads deadlineDate literally).
-                return null;
-              } else {
-                const policies = rate.cancellationPolicy || [];
-                if (policies.length === 0) return null;
-                const dates = policies
-                  .map((p) => (p.fromDate ? new Date(p.fromDate) : null))
-                  .filter((date) => date !== null && !isNaN(date.getTime()));
-                if (dates.length === 0) return null;
-                const earliestDate = new Date(
-                  Math.min(...dates.map((d) => d.getTime())),
-                );
-                const deadline = new Date(earliestDate);
-                deadline.setDate(earliestDate.getDate() - 2);
-                deadline.setHours(0, 0, 0, 0);
-                return deadline;
-              }
-            })
-            .filter((d) => d !== null);
-
-          if (deadlines.length === 0) return null;
-          const overallDeadline = new Date(
-            Math.min(...deadlines.map((d) => d.getTime())),
-          );
-          const year = overallDeadline.getFullYear();
-          const month = String(overallDeadline.getMonth() + 1).padStart(2, "0");
-          const day = String(overallDeadline.getDate()).padStart(2, "0");
-          return `${year}-${month}-${day}T00:00:00`;
-        })(),
+        ),
         isBookandVoucher: bookingConfirmation === "Book & Voucher",
         primaryGuest: {
           salutation: leadGuest.salutation || "",
@@ -1094,17 +1208,41 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
             roomTypeCode: rate.roomTypeCode,
             mealPlanCode: rate.mealPlanCode,
             contractTokenId: rate.contractTokenId,
-            // ATHARVA per-room rate key. Prefers the prebook-refreshed
-            // value; falls back to the search-time key so a room whose
-            // prebook was skipped still round-trips. Ignored by other
-            // suppliers (RoomBookingRequest.rateKey is @Nullable).
-            rateKey: rate.atharvaRateKey || null,
+            // Per-room rate key. ATHARVA prefers the prebook-refreshed value;
+            // GoGlobal (apiId 21) carries its HotelSearchCode here (set by the
+            // valuation step as rate.hotelSearchCode) — GoGlobalHotelBookingService
+            // reads rooms[].rateKey as the HotelSearchCode for BOOKING_INSERT.
+            // Falls back to the search-time key so a room whose prebook was
+            // skipped still round-trips. Ignored by suppliers that don't use it
+            // (RoomBookingRequest.rateKey is @Nullable).
+            rateKey:
+              rate.atharvaRateKey ||
+              rate.hotelSearchCode ||
+              rate.rateKey ||
+              null,
             // Darina free-cancellation deadline shown to the customer at
             // rate-selection time (ISO yyyy-MM-dd). BE audits this in
             // DarinaHotelBookingService so we know exactly which cut-off
             // was in effect when the booking was confirmed. Null / ignored
             // by other suppliers.
             cancellationDeadline: rate.deadlineDate || null,
+            // GRN (apiId 20): this room's rechecked cancellation policy,
+            // exactly as displayed on this page — persisted per room so
+            // Booking Details and the voucher show the accepted terms.
+            // Bundled → identical on every room; non-bundled → per room.
+            // Null on other suppliers.
+            ...(Number(bookingData?.payload?.apiId) === 20
+              ? {
+                  refundCategory: rate.refundCategory || null,
+                  refundStatus: rate.refundStatus || null,
+                  cancelByDate: rate.cancelByDate || null,
+                  freeCancellationUntil: rate.freeCancellationUntil || null,
+                  noShowFeeText: rate.noShowFeeText || null,
+                  policyTimezone: rate.policyTimezone || "IST",
+                  policyText: rate.policyText || null,
+                  cancellationPolicyLines: buildGrnPolicyLines([rate]),
+                }
+              : {}),
             guests: room.guests.map((guest) => ({
               salutation: guest.salutation,
               firstName: guest.firstName,
@@ -1126,6 +1264,25 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         bookingDoneFor: bookingDoneFor.trim() || null,
         paymentMode,
         bookingConfirmation: bookingConfirmation || "Book & Voucher",
+        // ── Last Minute marker (Phase 6) ─────────────────────────────────
+        // Present only when the operator arrived from the Last Minute page's
+        // API-hotel branch (LastMinuteBookingPage.handleViewRooms stamps
+        // payload.lastMinuteBooking=true before navigating here). Every
+        // pre-existing caller — /new-booking/hotel's supplier flow — leaves
+        // this undefined, so nothing about their payload changes.
+        //
+        // The backend's BookingFlagStamper reads these two fields and, when
+        // hbs.last-minute.api-hotels.enabled is on, tags the freshly
+        // persisted hotel_booking row as LAST_MINUTE. With the property off
+        // the booking still succeeds; it is simply persisted as an ordinary
+        // hotel booking (see BookingFlagStamper's kill-switch handling).
+        lastMinuteBooking:
+          bookingData?.payload?.lastMinuteBooking === true ? true : undefined,
+        bookingType:
+          bookingData?.payload?.lastMinuteBooking === true
+            ? "LAST_MINUTE"
+            : undefined,
+
         // Display-currency preference carried through from the search /
         // room-list flow. Persisted on HotelBooking.displayCurrencyCode
         // and HotelBooking.displayAmount so the Booking Detail page and
@@ -1142,6 +1299,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
             && Number(displayCurrency.factor) > 0
             ? Number(displayCurrency.factor)
             : null,
+
       };
 
       setPendingPayload(payload);
@@ -1180,17 +1338,17 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         0,
       );
 
-      // ATHARVA Hold Room and Pay Later: docs say no balance is
-      // required — the booking is held until the time limit. Skip the
-      // client-side credit gate so the operator isn't blocked with
-      // "insufficient credit" for a valid hold. Backend still enforces
-      // its own rules. Guarded to apiId===3 so other suppliers are
-      // unaffected.
-      const isAtharvaHold =
-        effectivePayload.apiId === 3 &&
-        effectivePayload.isBookandVoucher === false;
+      // A hold takes no credit at create — ATHARVA holds the room at the
+      // supplier and vouchers later; a hold-capable API books the room now
+      // and settles the agent's credit on Reconfirm. Either way the
+      // client-side credit gate must not block a valid hold. Keyed off the
+      // explicit "Hold & Book Later" choice rather than isBookandVoucher,
+      // which is also false whenever the picker was never shown.
+      const isHoldMode =
+        (effectivePayload.apiId === 3 || isHoldEligible(bookingData)) &&
+        effectivePayload.bookingConfirmation === "Hold & Book Later";
 
-      if (!isAtharvaHold) {
+      if (!isHoldMode) {
         const creditResponse = await axiosInstance.get(
           `/api/agent-credit-limit/check-sufficient-credit?agentId=${agentId}&requiredAmount=${requiredAmount}`,
         );
@@ -1335,10 +1493,81 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
   // useEffect calls below stay in the same call order every render
   // (rules-of-hooks). Safe access resolves a null bookingData to 0.
   const selectedRate = bookingData?.selectedRate || [];
-  const totalPrice = selectedRate.reduce(
-    (sum, room) => sum + parseFloat(room.rate || 0),
-    0,
-  );
+  // GRN (apiId 20) bundled multi-room: ONE rate key covers every room and
+  // every room row carries the FULL bundle price (the backend splits it per
+  // room on persist — see applyBundleSplit). Summing per room doubled the
+  // checkout total and the client-side credit prediction for a 2-room
+  // bundle, so count each rate key once. Non-bundled rooms have distinct
+  // keys and still add up. Other suppliers are untouched.
+  const totalPrice = (() => {
+    if (Number(bookingData?.payload?.apiId) === 20) {
+      const seen = new Set();
+      return selectedRate.reduce((sum, room, i) => {
+        const key = room?.atharvaRateKey || room?.rateKey || `row-${i}`;
+        if (seen.has(key)) return sum;
+        seen.add(key);
+        return sum + parseFloat(room?.rate || 0);
+      }, 0);
+    }
+    return selectedRate.reduce(
+      (sum, room) => sum + parseFloat(room.rate || 0),
+      0,
+    );
+  })();
+
+  // ── GRN "Payable at Hotel" summary ──────────────────────────────
+  // Aggregate the guest-paid property charges across the picked rates
+  // (payableAtHotel* set from GRN's price_details.hotel_charges[]
+  // rows with included:false). Bundled bookings pass one rate;
+  // non-bundled multi-room bookings pass N rates whose charges sum.
+  // Returns null when no rate carries a charge — every non-GRN
+  // supplier ends up here, so their booking page stays unchanged.
+  //
+  // Currency handling: sums cleanly when every rate quoted its
+  // charge in the SAME currency (the common case); a mix leaves
+  // `amount` null with `description` still carrying the breakdown,
+  // so the panel shows a warning even when the amount can't be
+  // totalled into one number. Never combined into totalPrice: the
+  // hotel bills it directly, we don't.
+  const payableAtHotel = (() => {
+    const allRows = selectedRate.filter(
+      (r) => r?.payableAtHotelAmount != null || r?.payableAtHotelDescription,
+    );
+    if (!allRows.length) return null;
+    // Count each GRN RATE once, not each room. A bundled rate covers every
+    // room with ONE hotel_charges[] figure, and every room row carries that
+    // same bundle-level value — summing per room doubled it for a 2-room
+    // booking (GRN said 20, the page showed 40). Non-bundled rooms carry
+    // distinct rate keys, so their charges still add up — the same rule
+    // the backend applies (one charge per picked rate).
+    const seenKeys = new Set();
+    const rows = allRows.filter((r, i) => {
+      const key = r?.atharvaRateKey || r?.rateKey || `row-${i}`;
+      if (seenKeys.has(key)) return false;
+      seenKeys.add(key);
+      return true;
+    });
+    const currencies = new Set();
+    let sum = 0;
+    let summable = true;
+    const labels = new Set();
+    for (const r of rows) {
+      if (r.payableAtHotelDescription) labels.add(r.payableAtHotelDescription);
+      if (r.payableAtHotelAmount == null) {
+        summable = false;
+        continue;
+      }
+      const c = (r.payableAtHotelCurrency || "AED").toUpperCase();
+      currencies.add(c);
+      sum += Number(r.payableAtHotelAmount) || 0;
+    }
+    const oneCurrency = currencies.size <= 1;
+    return {
+      amount: summable && oneCurrency ? sum : null,
+      currency: oneCurrency ? [...currencies][0] || "AED" : null,
+      description: [...labels].join(", ") || null,
+    };
+  })();
 
   const isAdmin = activeUserRole === "ADMIN";
 
@@ -1587,6 +1816,88 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                                         </span>
                                       );
                                     })()}
+                                  {/* GoGlobal (apiId 21) cancellation deadline.
+                                      slot.deadlineDate is either the availability
+                                      CxlDeadLine "dd/MMM/yyyy" (e.g. 18/Nov/2026)
+                                      or the valuation CancellationDeadline in ISO
+                                      yyyy-MM-dd — handle both. Rendered inline like
+                                      the other suppliers, static 11:59 PM (UAE). */}
+                                  {Number(bookingData?.payload?.apiId) === 21 &&
+                                    slot.deadlineDate &&
+                                    (() => {
+                                      const monthNames = [
+                                        "Jan",
+                                        "Feb",
+                                        "Mar",
+                                        "Apr",
+                                        "May",
+                                        "Jun",
+                                        "Jul",
+                                        "Aug",
+                                        "Sep",
+                                        "Oct",
+                                        "Nov",
+                                        "Dec",
+                                      ];
+                                      const raw = String(
+                                        slot.deadlineDate,
+                                      ).trim();
+                                      let d, monLabel, y;
+                                      if (raw.includes("/")) {
+                                        // dd/MMM/yyyy (availability CxlDeadLine)
+                                        const [dd, mon, yy] = raw.split("/");
+                                        if (!dd || !mon || !yy) return null;
+                                        d = parseInt(dd, 10);
+                                        monLabel = mon;
+                                        y = yy;
+                                      } else if (raw.includes("-")) {
+                                        const parts = raw.split("-");
+                                        if (parts.length !== 3) return null;
+                                        if (parts[0].length === 4) {
+                                          // ISO yyyy-MM-dd (valuation deadline)
+                                          const idx =
+                                            parseInt(parts[1], 10) - 1;
+                                          if (idx < 0 || idx > 11) return null;
+                                          d = parseInt(parts[2], 10);
+                                          monLabel = monthNames[idx];
+                                          y = parts[0];
+                                        } else {
+                                          // dd-MMM-yyyy
+                                          d = parseInt(parts[0], 10);
+                                          monLabel = parts[1];
+                                          y = parts[2];
+                                        }
+                                      } else {
+                                        return null;
+                                      }
+                                      if (Number.isNaN(d) || !monLabel || !y)
+                                        return null;
+                                      return (
+                                        <span
+                                          className="ms-2 small fw-normal"
+                                          style={{ opacity: 0.95 }}
+                                          title="Cancel by this date/time to avoid charges"
+                                        >
+                                          | Deadline: {d} {monLabel} {y}, 11:59
+                                          PM (UAE)
+                                        </span>
+                                      );
+                                    })()}
+
+                                  {/* GRN (apiId 20): "Free cancellation until
+                                      dd MMM yyyy, hh:mm AM/PM IST" straight from
+                                      GRN's rechecked cancel_by_date (its policy
+                                      timestamps are Indian Standard Time), or the
+                                      Partially / Non-refundable summary. Per slot,
+                                      because non-bundled rooms differ. */}
+                                  {Number(bookingData?.payload?.apiId) === 20 && (
+                                    <span
+                                      className="ms-2 small fw-normal"
+                                      style={{ opacity: 0.95 }}
+                                    >
+                                      | <GrnDeadlinePill rate={slot} />
+                                    </span>
+                                  )}
                                   {/* {slot.rate != null && (
                                     <span
                                       className="ms-auto small fw-normal"
@@ -2075,12 +2386,18 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                                   <span className="fw-semibold text-dark">
                                     Room {i + 1}:
                                   </span>
-                                  {getRefundStatusBadge(
-                                    room.nonRefundable === true ||
-                                      room.nonRefundable === "true" ||
-                                      room.nonRefundable === "Y"
-                                      ? "NON REFUNDABLE"
-                                      : "FLEXIBLE",
+                                  {Number(bookingData?.payload?.apiId) === 20 ? (
+                                    // GRN: Fully / Partially / Non-refundable
+                                    // per room (non-bundled rooms differ).
+                                    <GrnRefundBadge rate={room} />
+                                  ) : (
+                                    getRefundStatusBadge(
+                                      room.nonRefundable === true ||
+                                        room.nonRefundable === "true" ||
+                                        room.nonRefundable === "Y"
+                                        ? "NON REFUNDABLE"
+                                        : "FLEXIBLE",
+                                    )
                                   )}
                                 </div>
                               ))}
@@ -2173,6 +2490,54 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                             {formatPrice(newTotal)}
                           </div>
                         </div>
+                        {/* GRN Payable-at-Hotel — the property collects this
+                            at check-in on top of the booking total. Rendered
+                            AFTER the New Total row (below the divider) so the
+                            operator cannot read it as part of the total.
+                            Formatted in the currency GRN quoted the charge in
+                            (usually AED, occasionally the property's local
+                            currency, which we then pass through untouched).
+                            Absent for every non-GRN supplier and for GRN
+                            rates that carry no property charge, so the
+                            existing sidebar is unchanged in those cases. */}
+                        {payableAtHotel && (
+                          <div
+                            className="mt-2 p-2 rounded"
+                            style={{
+                              background: "#fff4e5",
+                              border: "1px solid #f0c78a",
+                              color: "#7a4a00",
+                            }}
+                            title="Collected by the hotel at check-in. NOT part of the New Total shown above."
+                          >
+                            <div className="d-flex justify-content-between align-items-center small fw-bold">
+                              <span>
+                                Payable at Hotel
+                                {payableAtHotel.description
+                                  ? ` (${payableAtHotel.description})`
+                                  : ""}
+                              </span>
+                              <span>
+                                {payableAtHotel.amount != null
+                                  ? `${payableAtHotel.currency || "AED"} ${payableAtHotel.amount.toLocaleString(
+                                      undefined,
+                                      {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      },
+                                    )}`
+                                  : "See details"}
+                              </span>
+                            </div>
+                            <div
+                              className="small mt-1"
+                              style={{ opacity: 0.85 }}
+                            >
+                              Not included in the total &mdash; collected by
+                              the hotel at check-in.
+                            </div>
+                          </div>
+                        )}
                         {activeUserRole === "ADMIN" && (
                           <div className="hbp-summary-row mt-2">
                             <div className="hbp-summary-label text-muted small">
@@ -2195,9 +2560,20 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                           "Hold Room and Pay Later" → VoucherBooking = false
                               (confirmed hold; no balance needed; auto-cancels
                                if not vouchered before the time limit)
-                        Guarded by apiId===3 so other suppliers on this page
-                        are untouched. */}
-                    {bookingData?.payload?.apiId === 3 && (
+                        ATHARVA is gated on apiId===3; hold-capable APIs (see
+                        HOLD_CAPABLE_API_IDS at the top of this file) get the
+                        same picker, but only while the selected rate is still
+                        inside its free-cancellation window. For those there is
+                        no supplier hold endpoint, so:
+                          "Book and Pay Now"        → books + deducts credit now
+                          "Hold Room and Pay Later" → books the room now, credit
+                              settles on the detail page's Reconfirm click; the
+                              deadline job cancels it at the supplier if nobody
+                              reconfirms in time.
+                        Every other supplier renders no picker and is
+                        untouched. */}
+                    {(bookingData?.payload?.apiId === 3 ||
+                      isHoldEligible(bookingData)) && (
                       <Card className="shadow-sm rounded-3 border-0 mt-3">
                         {/* <Card.Header className="bg-light py-2">
                           <h6 className="mb-0 fw-bold">Booking Mode</h6>
@@ -2311,7 +2687,33 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                     <h6 className="policy-section-title">
                       Cancellation Policy
                     </h6>
-                    {(() => {
+                    {Number(bookingData?.payload?.apiId) === 20 ? (
+                      /* GRN: the VERIFIED (rechecked) policy per GRN's
+                         checklist — Fully / Partially / Non-refundable,
+                         "Free cancellation until … IST", penalty windows,
+                         no-show fee. Bundled rate → ONE policy for all
+                         rooms; non-bundled → one block PER ROOM, since
+                         each room carries its own policy. */
+                      grnIsBundledSelection(selectedRate) ? (
+                        <GrnPolicyBlock
+                          rate={selectedRate[0]}
+                          note={
+                            selectedRate.length > 1
+                              ? `Bundled rate — this cancellation policy applies to all ${selectedRate.length} rooms.`
+                              : null
+                          }
+                        />
+                      ) : (
+                        selectedRate.map((slot, i) => (
+                          <GrnPolicyBlock
+                            key={i}
+                            rate={slot}
+                            title={`Room ${i + 1}${slot?.roomCategory ? ` — ${slot.roomCategory}` : ""}`}
+                            note="Non-bundled rate — each room has its own cancellation policy."
+                          />
+                        ))
+                      )
+                    ) : (() => {
                       const anyNonRefundable = selectedRate.some(
                         (r) =>
                           r.nonRefundable === true ||
@@ -2372,6 +2774,139 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                       ));
                     })()}
                   </section>
+
+                  {/* ── GRN-only extras · mirrors /api-room-list policies
+                      modal (Payable at Hotel, Other Inclusions, Rate
+                      Comments). All three blocks read from the same rate
+                      fields that ExternalApiRoomList.jsx renders — the
+                      values ride on selectedRate[i] from the availability
+                      response and were preserved through the room-list →
+                      booking-page sessionStorage handoff. Rendered only
+                      for apiId=20 (GRN); each block skips itself when its
+                      source is empty, so a GRN rate with no
+                      inclusions/comments won't show empty headings. ── */}
+                  {Number(bookingData?.payload?.apiId) === 20 && (
+                    <>
+                      {/* Payable at Hotel — reuses the derived payableAtHotel
+                          summary already computed at the top of the file. */}
+                      {payableAtHotel && (
+                        <section className="policy-section">
+                          <h6 className="policy-section-title">
+                            Payable at Hotel
+                          </h6>
+                          <div className="policy-item">
+                            <div className="policy-text">
+                              {payableAtHotel.description
+                                ? `${payableAtHotel.description} `
+                                : ""}
+                              {payableAtHotel.amount != null && (
+                                <strong>
+                                  {payableAtHotel.currency || "AED"}{" "}
+                                  {Number(payableAtHotel.amount).toLocaleString(
+                                    undefined,
+                                    {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    },
+                                  )}
+                                </strong>
+                              )}
+                            </div>
+                          </div>
+                        </section>
+                      )}
+
+                      {/* Other Inclusions — free WiFi / breakfast add-ons /
+                          parking / etc from rate.other_inclusions. Deduped
+                          across all rooms so identical entries only render
+                          once. */}
+                      {(() => {
+                        const inclusions = new Set();
+                        (selectedRate || []).forEach((r) => {
+                          (r?.otherInclusions || []).forEach((inc) => {
+                            const text = stripPolicyHtml(
+                              typeof inc === "string" ? inc : String(inc ?? ""),
+                            ).trim();
+                            if (text) inclusions.add(text);
+                          });
+                        });
+                        if (inclusions.size === 0) return null;
+                        return (
+                          <section className="policy-section">
+                            <h6 className="policy-section-title">
+                              Other Inclusions
+                            </h6>
+                            {Array.from(inclusions).map((text, idx) => (
+                              <div key={idx} className="policy-item">
+                                <div
+                                  className="policy-text"
+                                  style={{ whiteSpace: "pre-line" }}
+                                >
+                                  {text}
+                                </div>
+                              </div>
+                            ))}
+                          </section>
+                        );
+                      })()}
+
+                      {/* Rate Comments — GRN's rate_comments object:
+                          comments, mealplan, pax_comments, remarks,
+                          MandatoryTax. Any of the five keys may be missing
+                          or blank; only populated ones render, and
+                          identical (label + value) pairs across rooms
+                          collapse to a single row. */}
+                      {(() => {
+                        const entryDefs = [
+                          { key: "comments", label: "Comments" },
+                          { key: "mealplan", label: "Meal Plan" },
+                          { key: "pax_comments", label: "Pax Comments" },
+                          { key: "remarks", label: "Remarks" },
+                          { key: "MandatoryTax", label: "Mandatory Tax" },
+                        ];
+                        const seen = new Map();
+                        (selectedRate || []).forEach((r) => {
+                          const rc = r?.rateComments;
+                          if (!rc || typeof rc !== "object") return;
+                          entryDefs.forEach(({ key, label }) => {
+                            const raw = rc[key];
+                            const rawStr =
+                              typeof raw === "string"
+                                ? raw
+                                : raw == null
+                                ? ""
+                                : String(raw);
+                            if (!rawStr.trim()) return;
+                            const text = stripPolicyHtml(rawStr).trim();
+                            if (!text) return;
+                            const dedupeKey = `${key}::${text}`;
+                            if (!seen.has(dedupeKey))
+                              seen.set(dedupeKey, { label, text });
+                          });
+                        });
+                        if (seen.size === 0) return null;
+                        return (
+                          <section className="policy-section">
+                            <h6 className="policy-section-title">
+                              Rate Comments
+                            </h6>
+                            {Array.from(seen.values()).map(
+                              ({ label, text }, idx) => (
+                                <div key={idx} className="policy-item">
+                                  <div
+                                    className="policy-text"
+                                    style={{ whiteSpace: "pre-line" }}
+                                  >
+                                    <strong>{label}:</strong> {text}
+                                  </div>
+                                </div>
+                              ),
+                            )}
+                          </section>
+                        );
+                      })()}
+                    </>
+                  )}
 
                   {/* Terms & Conditions — external suppliers don't return
                       T&C through the search response. Kept as a section so
@@ -2549,7 +3084,35 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                             Payment Mode badge sits in a paired md=6 column so
                             the two read as one row (deadline left, mode right)
                             on tablet+, and stack cleanly on mobile. */}
-                        {isNonRefundableRate ? (
+                        {Number(bookingData?.payload?.apiId) === 20 ? (
+                          /* GRN: show the VERIFIED policy PER ROOM. A
+                             non-bundled booking can mix a non-refundable
+                             Room 1 with a fully refundable Room 2 — the
+                             old any-room flag showed only "Non-refundable"
+                             for the whole booking. Bundled → one block. */
+                          <Col xs={12} md={6}>
+                            {grnIsBundledSelection(selectedRate) ? (
+                              <GrnPolicyBlock
+                                rate={selectedRate[0]}
+                                compact
+                                note={
+                                  selectedRate.length > 1
+                                    ? `Applies to all ${selectedRate.length} rooms (bundled rate).`
+                                    : null
+                                }
+                              />
+                            ) : (
+                              selectedRate.map((slot, i) => (
+                                <GrnPolicyBlock
+                                  key={i}
+                                  rate={slot}
+                                  compact
+                                  title={`Room ${i + 1}${slot?.roomCategory ? ` — ${slot.roomCategory}` : ""}`}
+                                />
+                              ))
+                            )}
+                          </Col>
+                        ) : isNonRefundableRate ? (
                           <Col xs={12} md={6}>
                             <div
                               className="p-2 rounded border"
@@ -2615,7 +3178,9 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                             deadline / non-refundable notice. Shown for either
                             refundable branch so the user re-confirms which
                             method will be used before submitting. */}
-                        {(isNonRefundableRate || cancellationDeadline) && (
+                        {(isNonRefundableRate ||
+                          cancellationDeadline ||
+                          Number(bookingData?.payload?.apiId) === 20) && (
                           <Col
                             xs={12}
                             md={6}
@@ -2683,6 +3248,41 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                           <span>Total (Selling)</span>
                           <span>{formatPrice(totalPrice)}</span>
                         </div>
+                        {payableAtHotel && (
+                          <>
+                            <hr className="my-1" />
+                            <div
+                              className="d-flex justify-content-between small mt-1"
+                              style={{ color: "#7a4a00" }}
+                              title="Collected by the hotel at check-in. NOT part of the total above."
+                            >
+                              <span>
+                                + Payable at Hotel
+                                {payableAtHotel.description
+                                  ? ` (${payableAtHotel.description})`
+                                  : ""}
+                              </span>
+                              <span className="fw-bold">
+                                {payableAtHotel.amount != null
+                                  ? `${payableAtHotel.currency || "AED"} ${payableAtHotel.amount.toLocaleString(
+                                      undefined,
+                                      {
+                                        minimumFractionDigits: 2,
+                                        maximumFractionDigits: 2,
+                                      },
+                                    )}`
+                                  : "see details"}
+                              </span>
+                            </div>
+                            <div
+                              className="small"
+                              style={{ color: "#7a4a00", opacity: 0.8 }}
+                            >
+                              Collected by the hotel at check-in &mdash; not
+                              included in the total above.
+                            </div>
+                          </>
+                        )}
                       </div>
 
                       <div className="mt-1 p-2 bg-white border rounded d-flex align-items-center">

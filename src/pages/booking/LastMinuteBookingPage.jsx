@@ -21,6 +21,12 @@ import DateInput from "../../components/DateInput";
 import { FaSearch, FaStar, FaMapMarkerAlt } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-hot-toast";
+import {
+  fetchApiHotelsEnabled,
+  buildApiSearchPayload,
+  searchApiHotels,
+  apiIdForApiType,
+} from "../../utils/lastMinuteApiHotels";
 import "../../styles/HotelSearch.css";
 
 // Default placeholder when the hotel has no image.
@@ -238,6 +244,27 @@ export default function LastMinuteBookingPage() {
       .catch(() => {
         // silent — fall back to the default of 2 days
       });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ── Supplier API hotels in Last Minute ────────────────────────────────────
+  // Driven by hbs.last-minute.api-hotels.enabled on the backend. While false
+  // (the default) this page behaves exactly as it always has: one request to
+  // /api/last-minute-hotel-search/search and nothing else. The helper fails
+  // closed, so a backend that predates this endpoint also leaves the page in
+  // its original inhouse-only state.
+  const [apiHotelsEnabled, setApiHotelsEnabled] = useState(false);
+  // Separate from `searching` on purpose — inhouse results render as soon as
+  // they land, while supplier hotels are still streaming in behind them.
+  const [apiSearching, setApiSearching] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchApiHotelsEnabled().then((enabled) => {
+      if (!cancelled) setApiHotelsEnabled(enabled);
+    });
     return () => {
       cancelled = true;
     };
@@ -533,6 +560,11 @@ export default function LastMinuteBookingPage() {
     try {
       setSearching(true);
       setResults(null);
+
+      // ── Source 1: inhouse last-minute contract rates (unchanged) ──────────
+      // Awaited first so the page paints as soon as these land. This request,
+      // its payload and its error handling are exactly as they were before
+      // supplier hotels existed.
       const res = await axiosInstance.post(
         "/api/last-minute-hotel-search/search",
         payload
@@ -542,6 +574,39 @@ export default function LastMinuteBookingPage() {
       } else {
         toast.error(res.data?.message || "Search failed");
         setResults({ ...(res.data || {}), hotels: [] });
+      }
+
+      // ── Source 2: supplier API hotels (opt-in) ────────────────────────────
+      // Fired only when the backend flag is on. Runs AFTER the inhouse render
+      // and merges rows in as each supplier replies, so a slow supplier can
+      // never delay or blank the inhouse list. searchApiHotels never throws.
+      if (apiHotelsEnabled) {
+        setApiSearching(true);
+        const apiPayload = buildApiSearchPayload({
+          nationalityId: selectedNationality?.value,
+          nationalityCode: selectedNationality?.code,
+          destinationCityId: selectedDestination?.value,
+          destinationCountryId: selectedDestination?.countryId,
+          checkIn,
+          checkOut,
+          rooms,
+          agentId: (isAgentRole ? selfAgentId : agent) || 1,
+        });
+
+        // Merge helper: inhouse rows are keyed by numeric hotelId, API rows by
+        // the "API-<TYPE>-<code>" synthetic id, so the two can never collide.
+        const mergeApiRows = (apiRows) => {
+          setResults((prev) => {
+            const inhouse = (prev?.hotels || []).filter((h) => h.source !== "API");
+            return { ...(prev || {}), hotels: [...inhouse, ...apiRows] };
+          });
+        };
+
+        try {
+          await searchApiHotels(apiPayload, mergeApiRows);
+        } finally {
+          setApiSearching(false);
+        }
       }
     } catch (err) {
       const msg = err?.response?.data?.message || "Search failed";
@@ -931,6 +996,8 @@ export default function LastMinuteBookingPage() {
           ) : results ? (
             <ResultsWithFilters
               results={results}
+              apiHotelsEnabled={apiHotelsEnabled}
+              apiSearching={apiSearching}
               isAgentRole={isAgentRole}
               currencyOptions={currencyOptions}
               selectedCurrency={selectedCurrency}
@@ -954,6 +1021,10 @@ export default function LastMinuteBookingPage() {
                 // Display currency chosen on the search page — flows through to
                 // the room list / booking form / create payload. Rates stay AED.
                 currency: displayCurrency,
+                // Extras used by the API-hotel branch of handleViewRooms — see
+                // Phase 5. Ignored by the inhouse branch.
+                destinationLabel: selectedDestination?.label || "",
+                loggedInAgentName,
               }}
             />
           ) : (
@@ -1008,6 +1079,8 @@ const PAGE_SIZE = 10;
 function ResultsWithFilters({
   results,
   searchContext,
+  apiHotelsEnabled = false,
+  apiSearching = false,
   isAgentRole = false,
   currencyOptions = [],
   selectedCurrency = null,
@@ -1052,11 +1125,29 @@ function ResultsWithFilters({
       });
     }
 
-    // Channel — last-minute is single-source ("inhouse"). When the user
-    // checks Inhouse, we keep everything; when they check something else,
-    // we'd return nothing. So treat empty/inhouse-only as no-op.
-    if (channelType.length > 0 && !channelType.some((c) => c.value === "inhouse")) {
-      list = [];
+    // Channel filter.
+    //
+    // With API hotels OFF, Last Minute is single-source ("inhouse"): checking
+    // Inhouse keeps everything, checking anything else would match nothing, so
+    // empty/inhouse-only is a no-op. That original behaviour is preserved
+    // untouched on the else branch.
+    //
+    // With API hotels ON, rows carry a real channel — "inhouse" for contract
+    // rates, the lower-cased apiType ("grn", "ratehawk", …) for supplier rows —
+    // so this becomes a genuine per-supplier selection.
+    if (channelType.length > 0) {
+      if (apiHotelsEnabled) {
+        const wanted = new Set(
+          channelType.map((c) => String(c.value).toLowerCase())
+        );
+        list = list.filter((h) =>
+          wanted.has(
+            h.source === "API" ? String(h.apiType || "").toLowerCase() : "inhouse"
+          )
+        );
+      } else if (!channelType.some((c) => c.value === "inhouse")) {
+        list = [];
+      }
     }
 
     // Sort
@@ -1065,7 +1156,7 @@ function ResultsWithFilters({
     else if (sortBy === "priceDesc") list.sort((a, b) => cheapest(b) - cheapest(a));
 
     return list;
-  }, [results, hotelSearchTerm, starRating, hotelType, channelType, sortBy]);
+  }, [results, hotelSearchTerm, starRating, hotelType, channelType, sortBy, apiHotelsEnabled]);
 
   // Pagination
   const totalElements = filteredAndSorted.length;
@@ -1081,8 +1172,89 @@ function ResultsWithFilters({
     return pages;
   }, [totalPages]);
 
-  // View Rooms handler — same sessionStorage handoff as before.
+  // View Rooms handler.
+  //
+  // Inhouse rows keep the original path unchanged: sessionStorage
+  // "lastMinuteRoomListPayload" and the Last Minute room list page.
+  //
+  // API rows re-use the SAME room list / booking pages the normal hotel
+  // search already uses for supplier hotels — /api-room-list, backed by
+  // ExternalApiRoomList + ApiBookingPageForHotels. That is the whole point
+  // of the "reuse the already-integrated search-to-book flow" rule for this
+  // feature: we do NOT re-integrate suppliers into the inhouse Last Minute
+  // room list. We hand the row off to the code path that already knows how
+  // to talk to every supplier — with one small addition:
+  //
+  //   payload.lastMinuteBooking = true
+  //
+  // which flows through ApiBookingPageForHotels into /api/hotel-booking/create,
+  // where the Phase-1 BookingFlagStamper stamps the row as LAST_MINUTE so the
+  // Last Minute booking list picks it up.
   const handleViewRooms = (hotel) => {
+    if (hotel?.source === "API") {
+      const apiId = apiIdForApiType(hotel.apiType);
+      if (!apiId) {
+        toast.error(`Unknown supplier "${hotel.apiType || ""}" — cannot open rooms.`);
+        return;
+      }
+
+      // Shape mirrors what HotelSearch.jsx builds for /api-room-list
+      // (~line 3087). Fields ExternalApiRoomList / ApiBookingPageForHotels
+      // read from `payload` must be populated; the rest we can leave null.
+      const sc = searchContext || {};
+      const nationalityCode = (sc.nationality?.code || "").length === 2
+        ? sc.nationality.code
+        : " ";
+      const roomsPayload = (sc.rooms || []).map((r) => ({
+        adults: r.adults || 1,
+        children: r.children || 0,
+        childAges: r.childAges || [],
+        adultAges: Array.from({ length: r.adults || 1 }, () => 30),
+      }));
+
+      const payload = {
+        checkInDate: sc.checkIn,
+        checkOutDate: sc.checkOut,
+        hotelCode: hotel.hotelCode || "",
+        nationality: nationalityCode,
+        agentId: String(sc.agent || ""),
+        agentName: sc.loggedInAgentName || "",
+        destinationLabel: sc.destinationLabel || "",
+        nationalityLabel: sc.nationality?.label || "",
+        employeeName: null,
+        nightsCount: Number(results?.nights) || 0,
+        apiId,
+        rooms: roomsPayload,
+        parentBookingCode: null,
+        employeeId: sc.employeeId || null,
+        // Marker read by ApiBookingPageForHotels when it builds the
+        // /api/hotel-booking/create payload — see Phase 6.
+        lastMinuteBooking: true,
+        // 24-hour flags are irrelevant here but ApiBookingPageForHotels
+        // has never read them for supplier hotels, so leave them off.
+      };
+      const meta = {
+        hotelName: hotel.hotelName,
+        address: hotel.address || hotel.cityName,
+        starRating: hotel.starRating || 0,
+        phone: hotel.contactNumber || "",
+        hotelImage: hotel.hotelImage,
+      };
+      const currency = sc.currency || { code: "AED", factor: 1 };
+
+      try {
+        sessionStorage.setItem(
+          "roomListPayload",
+          JSON.stringify({ payload, meta, currency })
+        );
+      } catch (e) {
+        console.error("Failed to write sessionStorage:", e);
+      }
+      window.open("/api-room-list", "_blank");
+      return;
+    }
+
+    // Original inhouse path — unchanged.
     const payload = { hotel, results: { ...results }, searchContext };
     try {
       sessionStorage.setItem("lastMinuteRoomListPayload", JSON.stringify(payload));
@@ -1263,6 +1435,15 @@ function ResultsWithFilters({
             <small className="text-muted fw-semibold">
               Showing {startEntry} to {endEntry} of {totalElements} entries
             </small>
+            {/* Supplier hotels stream in after the inhouse list has already
+                painted, so the count above grows while this is showing.
+                Without it the list appears to change on its own. */}
+            {apiSearching && (
+              <small className="text-muted d-flex align-items-center gap-2">
+                <Spinner animation="border" size="sm" />
+                Loading supplier hotels…
+              </small>
+            )}
           </div>
 
           <Row className="g-4">
@@ -1388,15 +1569,19 @@ function HotelCard({ hotel: h, onViewRooms, currencyCode = "AED", currencyFactor
             >
               <FaStar className="text-warning" />
               {h.starRating != null ? h.starRating : "—"}
+              {/* Source badge. Was hard-coded INHOUSE while Last Minute was
+                  single-source; now that contract rates and live supplier
+                  rates can appear in one list, the operator has to be able to
+                  tell them apart at a glance. Inhouse rows are unchanged. */}
               <span
                 style={{
                   marginLeft: "5px",
-                  backgroundColor: "#6c757d",
+                  backgroundColor: h.source === "API" ? "#0d6efd" : "#6c757d",
                   padding: "2px 6px",
                   borderRadius: "10px",
                 }}
               >
-                INHOUSE
+                {h.source === "API" ? h.apiType || "API" : "INHOUSE"}
               </span>
             </div>
           </div>

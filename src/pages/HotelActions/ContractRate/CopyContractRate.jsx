@@ -469,6 +469,16 @@ export default function CopyContractRate() {
                                             e.target.value
                                           )
                                         }
+                                        // Prevent accidental value changes from mouse-wheel
+                                        // scroll on the focused number input (browsers treat
+                                        // wheel-on-focused-number as increment / decrement,
+                                        // which quietly turned 950 into 949 during data entry).
+                                        // Blurring on wheel stops the browser from adjusting
+                                        // the value AND lets the page continue scrolling
+                                        // normally. min/max, keyboard arrows, onChange and
+                                        // onBlur handlers all continue to work unchanged.
+                                        // Same fix applied on Create/Edit contract-rate pages.
+                                        onWheel={(e) => e.target.blur()}
                                       />
                                     </td>
                                   ))}

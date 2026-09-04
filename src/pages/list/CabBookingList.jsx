@@ -67,6 +67,29 @@ const STATUS_META = {
   ONREQUEST:  { label: "On Request", color: "#e67e22" },
 };
 
+// i'way trip-status (iway_trip_status, 0..5 — see IwayOrderStatusResponse
+// on the backend) → the bucket key used by both bucketMeta (Status column)
+// and the status-filter dropdown below, so the two never disagree. Missing
+// on the row entirely (fetched before this field existed) OR null (booking
+// created but never refreshed) is treated the same as 0 — "On Request" is
+// the correct label for "nothing has happened yet on i'way's side", it's
+// not a "no data" placeholder. Only cab rows with apiType "IWAY" carry a
+// real iway_trip_status; in-house rows return null here and fall back to
+// the pre-existing generic bucketing untouched.
+const IWAY_BUCKET_BY_STATUS = {
+  0: "onrequest",
+  1: "confirmed",
+  2: "reconfirmed",
+  3: "completed",
+  4: "cancelled",
+  5: "cancelled",
+};
+const iwayBucketFor = (b) => {
+  if (b.apiType !== "IWAY") return null;
+  const s = b.iwayTripStatus == null ? 0 : b.iwayTripStatus;
+  return IWAY_BUCKET_BY_STATUS[s] || "reconfirmed";
+};
+
 // Notification cell — bare colored+bold text span, matching the exact
 // shape HotelBookingList's `renderColoredStatus` uses for its Cancelled /
 // Confirmed labels. Deliberately minimal: no padding, no border-radius,
@@ -158,6 +181,7 @@ const CabBookingList = () => {
       { value: "completed", label: "Completed" },
       { value: "cancelled", label: "Cancelled" },
       { value: "onrequest", label: "On Request" },
+      { value: "confirmed", label: "Confirmed" },
       { value: "reconfirmed", label: "Reconfirmed" },
       { value: "invoiced", label: "Invoiced" },
     ],
@@ -301,13 +325,30 @@ const CabBookingList = () => {
       if (status === "completed" && (isCancelled || bucket !== "completed")) return false;
       if (status === "onrequest") {
         if (isCancelled) return false;
-        const s = normStatus(b.bookingStatus || b.confirmationStatus);
-        if (s !== "pending" && s !== "onrequest") return false;
+        const ib = iwayBucketFor(b);
+        if (ib != null) {
+          if (ib !== "onrequest") return false;
+        } else {
+          const s = normStatus(b.bookingStatus || b.confirmationStatus);
+          if (s !== "pending" && s !== "onrequest") return false;
+        }
+      }
+      if (status === "confirmed") {
+        // Only i'way rows can sit in the "Confirmed" (iway_trip_status=1)
+        // bucket today — in-house cab bookings jump straight from
+        // On Request to Reconfirmed, same as before this change.
+        if (isCancelled) return false;
+        if (iwayBucketFor(b) !== "confirmed") return false;
       }
       if (status === "reconfirmed") {
         if (isCancelled) return false;
-        const cs = normStatus(b.confirmationStatus);
-        if (cs !== "reconfirmed") return false;
+        const ib = iwayBucketFor(b);
+        if (ib != null) {
+          if (ib !== "reconfirmed") return false;
+        } else {
+          const cs = normStatus(b.confirmationStatus);
+          if (cs !== "reconfirmed") return false;
+        }
       }
       if (status === "invoiced") {
         if (isCancelled) return false;
@@ -416,22 +457,29 @@ const CabBookingList = () => {
     lineHeight: 1.2,
   };
 
-  // Mirror the cab detail view's `displayStatus` exactly (Cancelled → red,
-  // everything else → "Reconfirmed" green) so the list's Notification
-  // column and the detail page's Status field stay in sync. Rationale
-  // (per the detail view): any booking that survived create-order +
-  // approve + wallet deduction is fully committed on both sides, and
-  // the operator no longer has to press RECONFIRM manually — so legacy
-  // raw values ("OK", "CONFIRMED", "PENDING_IWAY_PAYMENT", null, etc.)
-  // all fold into the same Reconfirmed label. The DB's underlying
-  // confirmationStatus is unchanged.
+  // i'way rows: Status mirrors the live iway_trip_status via iwayBucketFor
+  // (0 → On Request, 1 → Confirmed, 2 → Reconfirmed, ...) so this column
+  // always matches the detail page's badge — never hardcoded.
+  //
+  // Non-iWay (in-house) rows keep the pre-existing behaviour unchanged:
+  // any booking that survived create + approve + wallet deduction is fully
+  // committed, so legacy raw values ("OK", "CONFIRMED", null, etc.) all
+  // fold into the same "Reconfirmed" label.
   const bucketMeta = (b) => {
     const isCancelled =
       b.__bucket === "cancelled" ||
       normStatus(b.bookingStatus) === "cancelled" ||
       b.cancelStatus === true;
     if (isCancelled) return STATUS_META.CANCELLED;
-    return STATUS_META.RECONFIRMED;
+    const iwayBucket = iwayBucketFor(b);
+    switch (iwayBucket) {
+      case "onrequest":   return STATUS_META.ONREQUEST;
+      case "confirmed":   return STATUS_META.CONFIRMED;
+      case "reconfirmed": return STATUS_META.RECONFIRMED;
+      case "completed":   return STATUS_META.COMPLETED;
+      case "cancelled":   return STATUS_META.CANCELLED;
+      default:            return STATUS_META.RECONFIRMED;
+    }
   };
 
   return (

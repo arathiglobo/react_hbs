@@ -262,7 +262,7 @@ export default function ApiClientList() {
       text: "Their API key will stop working immediately.",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#EC0B43",
+      confirmButtonColor: "#F75E00",
       cancelButtonColor: "#6c757d",
       confirmButtonText: "Yes, deactivate",
     }).then((r) => { if (r.isConfirmed) toggleActive(row); });
@@ -303,7 +303,7 @@ export default function ApiClientList() {
       html: "The current key becomes invalid <b>immediately</b>. You must share the new key with the client.",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#EC0B43",
+      confirmButtonColor: "#F75E00",
       cancelButtonColor: "#6c757d",
       confirmButtonText: "Yes, regenerate",
     }).then(async (r) => {

@@ -102,11 +102,21 @@ const PackageRates = () => {
   const packageName = packageInfo.packageName || "Unknown Package";
   const packageCode = packageInfo.packageCode || "Unknown";
 
+  // Food-preference choices captured on the Package Rate create/edit
+  // modal. Values match the backend column (nullable String) so the
+  // enum can grow later without a schema change.
+  const FOOD_TYPES = [
+    { value: "VEG", label: "Veg" },
+    { value: "NON_VEG", label: "Non-Veg" },
+    { value: "BOTH", label: "Both" },
+  ];
+
   const [formData, setFormData] = useState({
     packageratesId: "",
     packageId: packageId,
     markettypeId: null,
     packagerateCode: "",
+    foodType: "",
     packageRateValidityDTO: [],
     packageAccommodationrateDTO: [],
     rates: {},
@@ -307,6 +317,7 @@ const PackageRates = () => {
     if (!data.packagerateCode?.trim())
       errors.packagerateCode = "Rate code is required";
     if (!data.markettypeId) errors.markettypeId = "Market type is required";
+    if (!data.foodType) errors.foodType = "Food type is required";
     if (!data.countryId) errors.countryId = "Country is required";
     if (!data.placeId) errors.placeId = "Place is required";
     if (!data.noOfNights) errors.noOfNights = "Number of nights is required";
@@ -351,6 +362,7 @@ const PackageRates = () => {
       packageId: packageId,
       markettypeId: null,
       packagerateCode: "",
+      foodType: "",
       packageRateValidityDTO: [],
       packageAccommodationrateDTO: [],
       rates: rates,
@@ -653,6 +665,7 @@ const PackageRates = () => {
         packageId: packageId,
         markettypeId: formData.markettypeId ? [formData.markettypeId] : [],
         packagerateCode: formData.packagerateCode,
+        foodType: formData.foodType || null,
         packageRateValidityDTO: packageRateValidityDTO,
         packageAccommodationrateDTO: packageAccommodationrateDTO,
       };
@@ -753,6 +766,7 @@ const PackageRates = () => {
         packageId: packageId,
         markettypeId: formData.markettypeId ? [formData.markettypeId] : [],
         packagerateCode: formData.packagerateCode,
+        foodType: formData.foodType || null,
         packageRateValidityDTO: packageRateValidityDTO,
         packageAccommodationrateDTO: packageAccommodationrateDTO,
       };
@@ -875,6 +889,7 @@ const PackageRates = () => {
       packageId: item.packageId || packageId,
       markettypeId: Array.isArray(item.markettypeId) ? item.markettypeId[0] : (item.markettypeId || null),
       packagerateCode: item.packagerateCode || "",
+      foodType: item.foodType || "",
       packageRateValidityDTO: item.packageRateValidityDTO || [],
       packageAccommodationrateDTO: item.packageAccommodationrateDTO || [],
       rates: rates,
@@ -1060,6 +1075,7 @@ const PackageRates = () => {
       packageId: packageId,
       markettypeId: item.markettypeId?.[0] || null,
       packagerateCode: `${item.packagerateCode}_COPY`,
+      foodType: item.foodType || "",
       packageRateValidityDTO: [],
       packageAccommodationrateDTO: [],
       rates: rates,
@@ -1808,6 +1824,13 @@ const PackageRates = () => {
                   </Col>
                 </Row>
 
+                {/* Food Type — moved into the Sharing Options section
+                    header (see below) at client request, so it sits
+                    inside Sharing Options and visually above every
+                    Meal Plan Rates matrix. Left as a hidden anchor
+                    here so text/anchor searches for "Food Type" still
+                    land on the render block. */}
+
                 <Row>
                   <Col md={6}>
                     <div className="mb-3">
@@ -2116,7 +2139,7 @@ const PackageRates = () => {
                           readOnly={viewMode}
                         >
                           <option value="">SELECT</option>
-                          {[1, 2, 3, 4].map((val) => (
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((val) => (
                             <option key={val} value={val}>
                               {val}
                             </option>
@@ -2351,6 +2374,66 @@ const PackageRates = () => {
                                             </tbody>
                                           </Table>
                                         </div>
+                                      </div>
+
+                                      {/* Food Type — rendered right above
+                                          Meal Plan Rates per client request.
+                                          formData.foodType is a single rate-
+                                          level value, so ticking here reflects
+                                          in every other occupancy render
+                                          automatically. Small helper note
+                                          included so the shared-state
+                                          behaviour is visible. */}
+                                      <div className="mb-2">
+                                        <div className="fw-semibold text-primary small mb-1">
+                                          Food Type <span className="text-danger">*</span>
+                                        </div>
+                                        <div
+                                          className={`d-flex gap-4 pt-1 ${
+                                            validationErrors.foodType ? "is-invalid" : ""
+                                          }`}
+                                        >
+                                          {[
+                                            { key: "VEG", label: "Veg" },
+                                            { key: "NON_VEG", label: "Non-Veg" },
+                                          ].map(({ key, label }) => {
+                                            const current = formData.foodType || "";
+                                            const checked = current === key || current === "BOTH";
+                                            const inputId = `foodType-${key}-${categoryKey}-${occ.id}`;
+                                            return (
+                                              <Form.Check
+                                                key={key}
+                                                type="checkbox"
+                                                id={inputId}
+                                                label={label}
+                                                checked={checked}
+                                                disabled={viewMode}
+                                                onChange={(e) => {
+                                                  const isChecked = e.target.checked;
+                                                  const otherKey = key === "VEG" ? "NON_VEG" : "VEG";
+                                                  const otherChecked = current === otherKey || current === "BOTH";
+                                                  let next;
+                                                  if (isChecked && otherChecked) next = "BOTH";
+                                                  else if (isChecked) next = key;
+                                                  else if (otherChecked) next = otherKey;
+                                                  else next = "";
+                                                  setFormData((prev) => ({ ...prev, foodType: next }));
+                                                  if (validationErrors.foodType) {
+                                                    setValidationErrors((prev) => ({
+                                                      ...prev,
+                                                      foodType: undefined,
+                                                    }));
+                                                  }
+                                                }}
+                                              />
+                                            );
+                                          })}
+                                        </div>
+                                        {validationErrors.foodType && (
+                                          <div className="invalid-feedback d-block">
+                                            {validationErrors.foodType}
+                                          </div>
+                                        )}
                                       </div>
 
                                       {/* Meal Plan Rates */}

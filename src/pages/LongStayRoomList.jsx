@@ -310,12 +310,12 @@ function RoomCardGrid({
             <div className="current-price fw-bold text-primary" style={{ fontSize: "1.4rem" }}>
               {formatPrice(estPrice)}
             </div>
-            {(() => {
+            {/* {(() => {
               const line = buildBreakdown(contract, room, totalNights, extraAdults, extraChildren);
               return line ? (
                 <div className="small text-muted mt-1">{line}</div>
               ) : null;
-            })()}
+            })()} */}
             <div className="price-per-night small text-muted mt-1">
               Final amount confirmed at booking
             </div>
@@ -369,10 +369,10 @@ function RoomCardGrid({
             </Button>
           )}
 
-          <div className="small text-muted text-center">
+          {/* <div className="small text-muted text-center">
             <FaShieldAlt className="me-1" />
             Room ID #{room.longStayRoomId}
-          </div>
+          </div> */}
         </Card.Body>
       </Card>
     </Col>
