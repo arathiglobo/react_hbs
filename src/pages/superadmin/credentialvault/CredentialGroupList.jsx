@@ -95,7 +95,7 @@ export default function CredentialGroupList() {
       html: "All encrypted entries in this group will be <b>permanently removed</b>. This cannot be undone.",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#F75E00",
+      confirmButtonColor: "#EC0B43",
       cancelButtonColor: "#6c757d",
       confirmButtonText: "Yes, delete",
     }).then(async (r) => {

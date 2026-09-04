@@ -7,9 +7,9 @@ $font-family-base: $font-family-sans-serif;
  * native component (.btn-primary, links, focus rings, pagination,
  * nav-pills, form-check, badges, etc.) in one place.
  * ────────────────────────────────────────────────────────────── */
-$brand-red:       #F75E00;
-$brand-red-hover: #D65100;
-$brand-red-tint:  #FDECD6;
+$brand-red:       #EC0B43;
+$brand-red-hover: #C90939;
+$brand-red-tint:  #FDE7ED;
 $primary:         $brand-red;
 
 /* IMPORTANT: Bootstrap must be imported AFTER font + brand variables */
@@ -451,7 +451,7 @@ top: auto;
 .input-with-icon .date-control{ padding-left: 2rem; border-radius: .75rem; }
 
 /* Big centered search button */
-.btn-search-large{ background: $brand-red; color: #fff; border: none; padding: .9rem 2.5rem; border-radius: .75rem; box-shadow: 0 6px 14px rgba(247, 94, 0,.2); }
+.btn-search-large{ background: $brand-red; color: #fff; border: none; padding: .9rem 2.5rem; border-radius: .75rem; box-shadow: 0 6px 14px rgba(236, 11, 67,.2); }
 .btn-search-large:hover{ background: $brand-red-hover; color: #fff; }
 
 /* Booking list table compact styles */
@@ -597,7 +597,7 @@ top: auto;
     }
     
     &.active {
-      box-shadow: 0 4px 12px rgba(247, 94, 0, 0.25);
+      box-shadow: 0 4px 12px rgba(236, 11, 67, 0.25);
     }
   }
   
@@ -608,7 +608,7 @@ top: auto;
     
     &:focus {
       border-color: $brand-red;
-      box-shadow: 0 0 0 3px rgba(247, 94, 0, 0.1);
+      box-shadow: 0 0 0 3px rgba(236, 11, 67, 0.1);
     }
   }
   
@@ -627,7 +627,7 @@ top: auto;
       &.active {
         background-color: $brand-red;
         color: white;
-        box-shadow: 0 4px 12px rgba(247, 94, 0, 0.25);
+        box-shadow: 0 4px 12px rgba(236, 11, 67, 0.25);
       }
     }
   }
@@ -877,7 +877,7 @@ top: auto;
   
   &:focus {
     border-color: $brand-red !important;
-    box-shadow: 0 0 0 0.2rem rgba(247, 94, 0, 0.25) !important;
+    box-shadow: 0 0 0 0.2rem rgba(236, 11, 67, 0.25) !important;
   }
 }
 
@@ -894,7 +894,7 @@ top: auto;
     }
     
     &:focus {
-      box-shadow: 0 0 0 0.2rem rgba(247, 94, 0, 0.25) !important;
+      box-shadow: 0 0 0 0.2rem rgba(236, 11, 67, 0.25) !important;
     }
   }
   
@@ -1029,7 +1029,7 @@ top: auto;
  * highlight without needing a container-level clip. */
 
 /* ── Misc brand accents ── */
-.btn-search-large{ box-shadow: 0 6px 14px rgba(247, 94, 0,.2); }
+.btn-search-large{ box-shadow: 0 6px 14px rgba(236, 11, 67,.2); }
 
 /* Guarantee white label text on the solid red brand buttons, even if a
    page-level stylesheet or a Bootstrap variant tries to darken it. */

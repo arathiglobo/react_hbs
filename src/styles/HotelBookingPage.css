@@ -205,12 +205,12 @@
 .guest-row .form-control-sm:focus,
 .guest-row .form-select-sm:focus {
   border-color: #86b7fe;
-  box-shadow: 0 0 0 0.25rem rgba(247, 94, 0, 0.25);
+  box-shadow: 0 0 0 0.25rem rgba(236, 11, 67, 0.25);
 }
 
 /* Room header styling */
 .bg-primary {
-  background-color: #F75E00 !important;
+  background-color: #EC0B43 !important;
 }
 
 /* Guest label styling */
@@ -242,7 +242,7 @@
 
 /* Booking Summary Enhancements */
 .bg-gradient-primary {
-  background: linear-gradient(135deg, #F75E00 0%, #6610f2 100%) !important;
+  background: linear-gradient(135deg, #EC0B43 0%, #6610f2 100%) !important;
 }
 
 .bg-gradient-success {
@@ -250,7 +250,7 @@
 }
 
 .hotel-info-card {
-  border-left: 4px solid #F75E00;
+  border-left: 4px solid #EC0B43;
   transition: transform 0.2s ease-in-out;
 }
 
@@ -366,7 +366,7 @@
   background: #fff;
 }
 .guest-details-accordion .accordion-button {
-  background: #FDECD6 !important;
+  background: #FDE7ED !important;
   color: #1e3a8a !important;
   font-weight: 600;
   box-shadow: none !important;
@@ -497,7 +497,7 @@
   font-weight: 700 !important;
   letter-spacing: -.038em !important;
   line-height: 1.12 !important;
-  color: #F75E00 !important;
+  color: #EC0B43 !important;
   margin: 0 !important;
 }
 @keyframes hsPageHeadingSlide {
@@ -535,9 +535,9 @@
 }
 .pg-option-selected,
 .pg-option-selected:hover {
-  border-color: #F75E00;
-  background: #FDECD6;
-  box-shadow: 0 0 0 3px rgba(247, 94, 0, 0.10);
+  border-color: #EC0B43;
+  background: #FDE7ED;
+  box-shadow: 0 0 0 3px rgba(236, 11, 67, 0.10);
 }
 .pg-option-input {
   position: absolute;
@@ -562,18 +562,18 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #F75E00;
+  background: #EC0B43;
   transform: scale(0);
   transition: transform .16s ease;
 }
 .pg-option-input:checked ~ .pg-option-radio {
-  border-color: #F75E00;
+  border-color: #EC0B43;
 }
 .pg-option-input:checked ~ .pg-option-radio::after {
   transform: scale(1);
 }
 .pg-option-input:focus-visible ~ .pg-option-radio {
-  outline: 2px solid #F75E00;
+  outline: 2px solid #EC0B43;
   outline-offset: 2px;
 }
 .pg-option-logo {

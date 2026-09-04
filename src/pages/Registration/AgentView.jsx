@@ -1242,7 +1242,7 @@ const AgentView = () => {
                   onMouseEnter={(e) => {
                     e.currentTarget.style.transform = "translateY(-2px)";
                     e.currentTarget.style.boxShadow = "0 10px 24px rgba(17, 19, 24, .12)";
-                    e.currentTarget.style.borderColor = "#F75E00";
+                    e.currentTarget.style.borderColor = "#EC0B43";
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.transform = "";
@@ -1258,8 +1258,8 @@ const AgentView = () => {
                     height: 96,
                     display: "grid",
                     placeItems: "center",
-                    background: "#FDECD6",
-                    color: "#F75E00",
+                    background: "#FDE7ED",
+                    color: "#EC0B43",
                     border: "1px solid #F8C9D5",
                     borderRadius: "16px",
                     fontWeight: 700,

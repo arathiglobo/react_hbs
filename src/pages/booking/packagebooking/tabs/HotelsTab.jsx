@@ -666,7 +666,7 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         .prg-hero-eyebrow {
           font-size: 0.7rem;
           letter-spacing: 0.18em;
-          color: #F75E00;
+          color: #EC0B43;
           font-weight: 700;
           text-transform: uppercase;
         }
@@ -712,8 +712,8 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         }
         .prg-hero-input-row:focus-within {
           background: #ffffff;
-          border-color: #F75E00;
-          box-shadow: 0 0 0 3px rgba(247, 94, 0, 0.10);
+          border-color: #EC0B43;
+          box-shadow: 0 0 0 3px rgba(236, 11, 67, 0.10);
         }
         .prg-hero-input-icon {
           width: 32px;
@@ -722,8 +722,8 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          background: #FDECD6;
-          color: #F75E00;
+          background: #FDE7ED;
+          color: #EC0B43;
           flex-shrink: 0;
         }
         .prg-hero-input-body {
@@ -819,7 +819,7 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         }
         .prg-day.open {
           border-color: #F8C9D5;
-          box-shadow: 0 0 0 3px rgba(247, 94, 0, 0.12);
+          box-shadow: 0 0 0 3px rgba(236, 11, 67, 0.12);
         }
         .prg-day-head {
           display: flex;
@@ -833,7 +833,7 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           cursor: pointer;
           transition: background 0.12s;
         }
-        .prg-day-head:hover { background: #FFF5EC; }
+        .prg-day-head:hover { background: #FFF5F8; }
         .prg-day-num {
           width: 34px;
           height: 34px;
@@ -866,7 +866,7 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           color: #94a3b8;
           transition: transform 0.18s;
         }
-        .prg-day.open .prg-day-chev { transform: rotate(180deg); color: #F75E00; }
+        .prg-day.open .prg-day-chev { transform: rotate(180deg); color: #EC0B43; }
         .prg-day-body {
           padding: 0 14px 12px 58px;
           font-size: 0.83rem;
@@ -991,11 +991,11 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           font-size: 0.86rem;
         }
         .pkg-mealplan-row:hover {
-          border-color: #F75E00;
+          border-color: #EC0B43;
         }
         .pkg-mealplan-row.active {
-          border-color: #F75E00;
-          background: #FDECD6;
+          border-color: #EC0B43;
+          background: #FDE7ED;
         }
 
         /* === BULLETS === */
@@ -1173,7 +1173,7 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
         }
         .prg-hotel-card:hover {
           border-color: #F8C9D5;
-          box-shadow: 0 8px 20px rgba(247, 94, 0, 0.10);
+          box-shadow: 0 8px 20px rgba(236, 11, 67, 0.10);
           transform: translateY(-2px);
         }
         .prg-hotel-card:focus-visible {
@@ -1216,7 +1216,7 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
           font-size: 0.78rem;
           font-weight: 600;
           color: #C11049;
-          background: #FFF5EC;
+          background: #FFF5F8;
           border: 1px dashed #F8C9D5;
           border-radius: 999px;
           padding: 6px 14px;
@@ -1335,10 +1335,10 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
            and the sidebar info card — Includes/Excludes keep their own
            green/orange headers. */
         .prg-section:not(.prg-section-ok):not(.prg-section-warn) > .prg-section-head > svg {
-          color: #F75E00;
+          color: #EC0B43;
         }
         .prg-info-title > svg {
-          color: #F75E00;
+          color: #EC0B43;
         }
         .prg-info-link {
           transition: color 0.15s ease, transform 0.15s ease;

@@ -837,7 +837,7 @@ const PackageCheckout = () => {
                     width: 100%;
                     border: none;
                     background: transparent;
-                    color: #F75E00;
+                    color: #EC0B43;
                     font-weight: 700;
                     font-size: 0.82rem;
                     line-height: 1.35;
@@ -960,7 +960,7 @@ const PackageCheckout = () => {
             className="d-flex align-items-center"
             style={{ fontSize: "1.05rem" }}
           >
-            <FaShieldAlt className="me-2" style={{ color: "#F75E00" }} />
+            <FaShieldAlt className="me-2" style={{ color: "#EC0B43" }} />
             Cancellation Policies &amp; Terms &amp; Conditions
           </Modal.Title>
         </Modal.Header>

@@ -2313,7 +2313,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
                               // Brand red — matches the platform's primary
                               // CTA color (btn-search-modern etc.). Was
                               // indigo #6366f1.
-                              background: "#F75E00",
+                              background: "#EC0B43",
                               color: "#fff",
                               display: "inline-flex",
                               alignItems: "center",
@@ -2336,7 +2336,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
                         <div className="small text-muted" style={{ fontSize: "0.7rem" }}>
                           {nextStep ? "Up next" : "Final step"}
                         </div>
-                        <div className="small fw-semibold" style={{ color: "#F75E00" }}>
+                        <div className="small fw-semibold" style={{ color: "#EC0B43" }}>
                           {nextStep ? nextStep.label : "Proceed to Booking"}
                         </div>
                       </div>
@@ -2352,7 +2352,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
                         height: "100%",
                         // Brand red gradient — matches btn-search-modern.
                         // Was indigo→violet #6366f1 → #8b5cf6.
-                        background: "linear-gradient(90deg, #F75E00 0%, #D65100 100%)",
+                        background: "linear-gradient(90deg, #EC0B43 0%, #C90939 100%)",
                         borderRadius: 999,
                         transition: "width 0.3s ease",
                       }} />
@@ -2834,7 +2834,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                                           // and Next button
                                                           // above. Was
                                                           // green #28a745.
-                                                          backgroundColor: "#F75E00",
+                                                          backgroundColor: "#EC0B43",
                                                           color: "white",
                                                           padding: "3px 8px",
                                                           borderRadius: "4px",
@@ -2881,7 +2881,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                                       // Hotel Search + MYOP
                                                       // v1) stays green.
                                                       style={{
-                                                        background: "linear-gradient(135deg, #F75E00 0%, #D65100 100%)",
+                                                        background: "linear-gradient(135deg, #EC0B43 0%, #C90939 100%)",
                                                         border: "none",
                                                       }}
                                                       onClick={() => handleViewRooms(hotel)}
@@ -3504,8 +3504,8 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                                             style={{
                                                               minWidth: "120px",
                                                               pointerEvents: !hasHotelInCart ? 'none' : 'auto',
-                                                              background: "#F75E00",
-                                                              borderColor: "#F75E00",
+                                                              background: "#EC0B43",
+                                                              borderColor: "#EC0B43",
                                                               color: "#fff",
                                                             }}
                                                           >
@@ -3855,7 +3855,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
                 <Button
                   // Brand red — matches btn-search-modern and the step
                   // indicator above. Was indigo #6366f1.
-                  style={{ background: "#F75E00", borderColor: "#F75E00", minWidth: 180 }}
+                  style={{ background: "#EC0B43", borderColor: "#EC0B43", minWidth: 180 }}
                   disabled={isProceeding}
                   onClick={async () => {
                     // ── Transfer step: pickup + dropoff are required

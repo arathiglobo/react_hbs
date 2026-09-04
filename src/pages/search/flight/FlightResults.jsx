@@ -1094,7 +1094,7 @@ const FlightResults = ({ loading, error, searched, results, onSelect }) => {
     return (
       <div className="text-center p-5">
         <Spinner animation="border" variant="primary" />
-        <div className="text-muted mt-3">Searching Amadeus for the best fares…</div>
+        <div className="text-muted mt-3">Searching Flights for the best fares…</div>
       </div>
     );
   }

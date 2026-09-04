@@ -58,19 +58,13 @@ const SelectRole = () => {
       <div className="role-header">
         <div className="header-content">
           <div className="company-info">
-            {/* <img
+            <img
               src={`${process.env.PUBLIC_URL}/images/logo-1.jpg`}
               alt="Globosoft Logo"
               className="company-logo"
-            /> */}
-             <img
-              src={`${process.env.PUBLIC_URL}/images/desert.PNG`}
-              alt="desert beds Logo"
-              className="company-logo"
             />
             <div className="company-details">
-              {/* <h1 className="company-name">Globosoft</h1> */}
-               <h1 className="company-name">desert beds</h1>
+              <h1 className="company-name">Globosoft</h1>
               <p className="company-tagline">Global Contracting Solutions</p>
             </div>
           </div>

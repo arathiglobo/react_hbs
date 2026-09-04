@@ -76,7 +76,7 @@ export default function StaffDashboard() {
               <div className="kpi-grid">
                 <KpiCard title="Total Bookings"   icon="booking" color="#6366f1" value={formatNumber(kpiData.totalBookings)} />
                 <KpiCard title="Today's Bookings" icon="booking" color="#0ea5e9" value={formatNumber(kpiData.todaysBookings)} />
-                <KpiCard title="Total Revenue"    icon="account" color="#F75E00" value={`AED ${formatNumber(kpiData.totalRevenue)}`} />
+                <KpiCard title="Total Revenue"    icon="account" color="#EC0B43" value={`AED ${formatNumber(kpiData.totalRevenue)}`} />
                 <KpiCard title="Active Agents"    icon="agent"   color="#f59e0b" value={formatNumber(kpiData.activeAgents)} />
                 <KpiCard title="Hotels Listed"    icon="hotel"   color="#8b5cf6" value={formatNumber(kpiData.hotelsListed)} />
                 <KpiCard title="API Bookings"     icon="tour"    color="#10b981" value={formatNumber(kpiData.apiBookings)} />

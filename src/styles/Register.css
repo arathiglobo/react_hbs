@@ -93,9 +93,9 @@
 }
 
 .step-circle.active {
-  background: #F75E00;
+  background: #EC0B43;
   color: white;
-  box-shadow: 0 4px 12px rgba(247, 94, 0, 0.3);
+  box-shadow: 0 4px 12px rgba(236, 11, 67, 0.3);
 }
 
 .step-label {
@@ -114,7 +114,7 @@
 }
 
 .step-connector.active {
-  background: #F75E00;
+  background: #EC0B43;
 }
 
 /* Form Container */
@@ -166,7 +166,7 @@
 }
 
 .step-icon {
-  color: #F75E00;
+  color: #EC0B43;
   flex-shrink: 0;
 }
 
@@ -200,8 +200,8 @@
 }
 
 .form-input:focus {
-  border-color: #F75E00;
-  box-shadow: 0 0 0 3px rgba(247, 94, 0, 0.1);
+  border-color: #EC0B43;
+  box-shadow: 0 0 0 3px rgba(236, 11, 67, 0.1);
   background: white;
   outline: none;
 }
@@ -245,8 +245,8 @@ select.form-input {
 
 .form-select:focus {
   background-color: white !important;
-  border-color: #F75E00;
-  box-shadow: 0 0 0 3px rgba(247, 94, 0, 0.1);
+  border-color: #EC0B43;
+  box-shadow: 0 0 0 3px rgba(236, 11, 67, 0.1);
   color: #2d3748 !important;
 }
 
@@ -261,7 +261,7 @@ select.form-input {
 }
 
 .form-select option:checked {
-  background-color: #F75E00 !important;
+  background-color: #EC0B43 !important;
   color: white !important;
 }
 
@@ -302,7 +302,7 @@ select.form-input {
 }
 
 .submit-button {
-  background: #F75E00;
+  background: #EC0B43;
   border: none;
   border-radius: 12px;
   padding: 1rem 2rem;
@@ -310,13 +310,13 @@ select.form-input {
   font-size: 1rem;
   color: white;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(247, 94, 0, 0.3);
+  box-shadow: 0 4px 12px rgba(236, 11, 67, 0.3);
   min-width: 180px;
 }
 
 .submit-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(247, 94, 0, 0.4);
+  box-shadow: 0 8px 20px rgba(236, 11, 67, 0.4);
   background: #5a67d8;
 }
 
@@ -324,7 +324,7 @@ select.form-input {
   opacity: 0.7;
   cursor: not-allowed;
   transform: none;
-  box-shadow: 0 4px 12px rgba(247, 94, 0, 0.2);
+  box-shadow: 0 4px 12px rgba(236, 11, 67, 0.2);
 }
 
 .nav-button {
@@ -526,7 +526,7 @@ select.form-input {
 /* Focus styles for keyboard navigation */
 .form-input:focus-visible,
 .submit-button:focus-visible {
-  outline: 2px solid #F75E00;
+  outline: 2px solid #EC0B43;
   outline-offset: 2px;
 }
 
@@ -567,8 +567,8 @@ select.form-input {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
   background: white !important;
-  border-color: #F75E00;
-  color: #F75E00;
+  border-color: #EC0B43;
+  color: #EC0B43;
 }
 
 /* Success Screen */
@@ -603,7 +603,7 @@ select.form-input {
 }
 
 .login-now-button {
-  background: #F75E00;
+  background: #EC0B43;
   border: none;
   border-radius: 12px;
   padding: 1rem 2rem;
@@ -611,13 +611,13 @@ select.form-input {
   font-size: 1rem;
   color: white;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(247, 94, 0, 0.3);
+  box-shadow: 0 4px 12px rgba(236, 11, 67, 0.3);
   min-width: 200px;
 }
 
 .login-now-button:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(247, 94, 0, 0.4);
+  box-shadow: 0 8px 20px rgba(236, 11, 67, 0.4);
   background: #5a67d8;
 }
 
@@ -628,7 +628,7 @@ select.form-input {
 }
 
 .redirect-message strong {
-  color: #F75E00;
+  color: #EC0B43;
   font-weight: 600;
 }
 
@@ -658,6 +658,6 @@ select.form-input {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
   background: white !important;
-  border-color: #F75E00;
-  color: #F75E00;
+  border-color: #EC0B43;
+  color: #EC0B43;
 }

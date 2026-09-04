@@ -400,7 +400,7 @@ export default function AdvertisementDetailedView() {
                     <Row className="text-center">
                       <Col>
                         <div className="text-muted small">Views</div>
-                        <div className="fw-bold fs-5" style={{ color: "#F75E00" }}>
+                        <div className="fw-bold fs-5" style={{ color: "#EC0B43" }}>
                           {ad.viewCount ?? 0}
                         </div>
                         <div

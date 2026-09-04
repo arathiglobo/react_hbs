@@ -23,7 +23,7 @@
   gap: 22px;
   padding: 40px 56px;
   overflow: hidden;
-  background: linear-gradient(150deg, #F75E00 0%, #D65100 58%, #A63A00 100%);
+  background: linear-gradient(150deg, #EC0B43 0%, #C90939 58%, #A60730 100%);
   color: #ffffff;
 }
 /* When the offer showcase is present, tighten the panel so the whole brand
@@ -111,7 +111,7 @@
   display: inline-flex; align-items: center; gap: 7px;
   padding: 6px 11px; border-radius: 99px;
   background: rgba(255, 255, 255, .96);
-  color: #D65100;
+  color: #C90939;
   font-size: 11.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
   box-shadow: 0 4px 12px rgba(0, 0, 0, .14);
 }
@@ -249,7 +249,7 @@
   display: flex; align-items: center; gap: 7px;
   font-size: 13px; font-weight: 600; letter-spacing: -.004em; color: #3E3E3B; margin-bottom: 8px;
 }
-.lg-field label i { color: #F75E00; font-size: 13px; }
+.lg-field label i { color: #EC0B43; font-size: 13px; }
 .lg-field input {
   width: 100%; padding: 13px 15px; font-family: inherit;
   border: 1.5px solid #E5E5E1; border-radius: 12px;
@@ -259,34 +259,34 @@
 }
 .lg-field input::placeholder { color: #A8A8A3; font-weight: 400; }
 .lg-field input:focus {
-  outline: none; border-color: #F75E00; background: #fff;
-  box-shadow: 0 0 0 4px rgba(247, 94, 0, .12);
+  outline: none; border-color: #EC0B43; background: #fff;
+  box-shadow: 0 0 0 4px rgba(236, 11, 67, .12);
 }
 
 .lg-error {
-  background: #FDECEF; color: #D65100; border: 1px solid #F8C9D5;
+  background: #FDECEF; color: #C90939; border: 1px solid #F8C9D5;
   border-radius: 10px; padding: 11px 14px; font-size: 13.5px; text-align: center; margin-bottom: 16px;
 }
 
 .lg-submit {
   width: 100%; margin-top: 6px; padding: 14px; font-family: inherit;
   border: none; border-radius: 12px; cursor: pointer;
-  background: #F75E00; color: #fff; font-size: 15px; font-weight: 600; letter-spacing: .005em;
+  background: #EC0B43; color: #fff; font-size: 15px; font-weight: 600; letter-spacing: .005em;
   display: flex; align-items: center; justify-content: center; gap: 9px;
-  box-shadow: 0 10px 26px rgba(247, 94, 0, .26);
+  box-shadow: 0 10px 26px rgba(236, 11, 67, .26);
   transition: transform .16s cubic-bezier(.16, 1, .3, 1), background .16s ease, box-shadow .16s ease;
 }
-.lg-submit:hover { transform: translateY(-2px); background: #D65100; box-shadow: 0 16px 34px rgba(247, 94, 0, .34); }
+.lg-submit:hover { transform: translateY(-2px); background: #C90939; box-shadow: 0 16px 34px rgba(236, 11, 67, .34); }
 .lg-submit:active { transform: translateY(0); }
 
 .lg-links { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; }
 .lg-link {
   display: inline-flex; align-items: center; gap: 6px;
   background: none; border: none; cursor: pointer; text-decoration: none; font-family: inherit;
-  color: #F75E00; font-size: 13.5px; font-weight: 600; letter-spacing: -.004em;
+  color: #EC0B43; font-size: 13.5px; font-weight: 600; letter-spacing: -.004em;
   padding: 6px 8px; border-radius: 8px; transition: background .15s ease, color .15s ease;
 }
-.lg-link:hover { background: rgba(247, 94, 0, .08); color: #D65100; }
+.lg-link:hover { background: rgba(236, 11, 67, .08); color: #C90939; }
 
 .lg-secure {
   display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -306,7 +306,7 @@
 @media (max-width: 900px) {
   .lg-shell {
     flex-direction: column;
-    background: linear-gradient(150deg, #F75E00 0%, #D65100 58%, #A63A00 100%);
+    background: linear-gradient(150deg, #EC0B43 0%, #C90939 58%, #A60730 100%);
   }
   .lg-brand { display: contents; }
   .lg-hero  { display: contents; }

@@ -426,14 +426,14 @@ export const dashboardCss = `
 ══════════════════════════════════════════ */
 .rw-dashboard {
   /* Bootstrap component vars — local override only */
-  --bs-primary: #F75E00;
+  --bs-primary: #EC0B43;
   --bs-primary-rgb: 247, 94, 0;
-  --bs-link-color: #F75E00;
-  --bs-link-hover-color: #D65100;
+  --bs-link-color: #EC0B43;
+  --bs-link-hover-color: #C90939;
   /* brand tokens */
-  --color-primary: #F75E00;
-  --color-primary-hover: #D65100;
-  --color-primary-tint: #FDECD6;
+  --color-primary: #EC0B43;
+  --color-primary-hover: #C90939;
+  --color-primary-tint: #FDE7ED;
   --color-secondary: #2F3E53;
   --color-bg: #FFFFFF;
   --color-bg-muted: #F5F6F7;
@@ -457,7 +457,7 @@ export const dashboardCss = `
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .04em;
-  box-shadow: 0 1px 3px rgba(247, 94, 0,.28);
+  box-shadow: 0 1px 3px rgba(236, 11, 67,.28);
 }
 .rw-dashboard .qa-btn:hover:not(:disabled) { background: var(--color-primary-hover); }
 .rw-dashboard .btn-indigo,
@@ -551,7 +551,7 @@ export const dashboardCss = `
 .rw-dashboard .form-control:focus,
 .rw-dashboard .pdd-toggle:focus {
   border-color: var(--color-primary) !important;
-  box-shadow: 0 0 0 .2rem rgba(247, 94, 0,.25) !important;
+  box-shadow: 0 0 0 .2rem rgba(236, 11, 67,.25) !important;
 }
 
 /* ── Footer — red brand band, dashboard only ── */

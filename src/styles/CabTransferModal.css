@@ -6,7 +6,7 @@
    mirrors the package detail modal (PackageSearch.css) but every
    class is scoped with a `ctm-` prefix so this stylesheet is fully
    self-contained and cannot collide with other pages' global CSS.
-   Brand red: #F75E00
+   Brand red: #EC0B43
    ============================================================ */
 
 .ctm-modal .modal-content {
@@ -23,7 +23,7 @@
 .ctm-header {
     border-bottom: none;
     padding: 0.85rem 1.25rem;
-    background: linear-gradient(135deg, #F75E00 0%, #D65100 100%);
+    background: linear-gradient(135deg, #EC0B43 0%, #C90939 100%);
     color: #fff;
 }
 
@@ -59,7 +59,7 @@
     width: 100%;
     height: 220px;
     overflow: hidden;
-    background: linear-gradient(135deg, #F75E00 0%, #7a0521 100%);
+    background: linear-gradient(135deg, #EC0B43 0%, #7a0521 100%);
 }
 
 .ctm-hero-fallback {
@@ -104,7 +104,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    background: rgba(247, 94, 0, 0.95);
+    background: rgba(236, 11, 67, 0.95);
     color: #fff;
     padding: 3px 10px;
     border-radius: 50px;
@@ -167,7 +167,7 @@
     height: 38px;
     border-radius: 10px;
     background: linear-gradient(135deg, #fde2e9 0%, #fbd0db 100%);
-    color: #F75E00;
+    color: #EC0B43;
     padding: 10px;
     flex-shrink: 0;
 }
@@ -189,7 +189,7 @@
 }
 
 .ctm-highlight-value.ctm-price {
-    color: #F75E00;
+    color: #EC0B43;
 }
 
 /* --- Feature chips --- */
@@ -214,7 +214,7 @@
 }
 
 .ctm-chip svg {
-    color: #F75E00;
+    color: #EC0B43;
 }
 
 .ctm-chip.ctm-chip-type {
@@ -269,20 +269,20 @@
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    border: 3px solid #F75E00;
+    border: 3px solid #EC0B43;
     background: #fff;
     flex-shrink: 0;
 }
 
 .ctm-route-pin.ctm-route-pin-end {
-    background: #F75E00;
+    background: #EC0B43;
 }
 
 .ctm-route-line {
     flex: 1;
     width: 2px;
     background: repeating-linear-gradient(
-        #F75E00 0 4px,
+        #EC0B43 0 4px,
         transparent 4px 8px
     );
     margin: 2px 0;
@@ -362,7 +362,7 @@
     border-radius: 9px;
     background: #fff;
     border: 1px solid #f1d4dc;
-    color: #F75E00;
+    color: #EC0B43;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -400,7 +400,7 @@
     padding-top: 8px;
     font-size: 1.05rem;
     font-weight: 800;
-    color: #F75E00;
+    color: #EC0B43;
 }
 
 /* --- Disclaimer --- */

@@ -30,7 +30,7 @@
   transition: box-shadow .18s ease, border-color .18s ease;
 }
 .hbl-modern .input-group:focus-within {
-  box-shadow: 0 0 0 4px rgba(247, 94, 0, .12);
+  box-shadow: 0 0 0 4px rgba(236, 11, 67, .12);
 }
 .hbl-modern .input-group .input-group-text {
   background: #FFFFFF !important;
@@ -130,16 +130,16 @@
 .hbl-modern tbody td svg {
   transition: transform .15s ease, color .15s ease, opacity .15s ease;
 }
-.hbl-modern tbody td .text-primary { color: #F75E00 !important; }
+.hbl-modern tbody td .text-primary { color: #EC0B43 !important; }
 .hbl-modern tbody td .text-info { color: #2F3E53 !important; }
 .hbl-modern tbody td svg:hover { transform: translateY(-2px); }
 
 /* ── Buttons ── */
 .hbl-modern .btn { border-radius: 11px !important; font-weight: 600 !important; letter-spacing: -.004em; }
-.hbl-modern .btn-primary { background: #F75E00 !important; border-color: #F75E00 !important; }
-.hbl-modern .btn-primary:hover { background: #D65100 !important; border-color: #D65100 !important; }
-.hbl-modern .btn-outline-primary { color: #F75E00 !important; border-color: #F75E00 !important; }
-.hbl-modern .btn-outline-primary:hover { background: #F75E00 !important; color: #fff !important; }
+.hbl-modern .btn-primary { background: #EC0B43 !important; border-color: #EC0B43 !important; }
+.hbl-modern .btn-primary:hover { background: #C90939 !important; border-color: #C90939 !important; }
+.hbl-modern .btn-outline-primary { color: #EC0B43 !important; border-color: #EC0B43 !important; }
+.hbl-modern .btn-outline-primary:hover { background: #EC0B43 !important; color: #fff !important; }
 
 /* ── Pagination — refined chips ── */
 .hbl-modern .pagination { gap: 4px; }
@@ -154,13 +154,13 @@
   transition: background .12s ease, color .12s ease, border-color .12s ease;
 }
 .hbl-modern .page-link:hover {
-  border-color: #F75E00 !important;
-  color: #F75E00 !important;
-  background: #FDECD6 !important;
+  border-color: #EC0B43 !important;
+  color: #EC0B43 !important;
+  background: #FDE7ED !important;
 }
 .hbl-modern .page-item.active .page-link {
-  background: #F75E00 !important;
-  border-color: #F75E00 !important;
+  background: #EC0B43 !important;
+  border-color: #EC0B43 !important;
   color: #fff !important;
 }
 .hbl-modern .page-item.disabled .page-link {
@@ -188,9 +188,9 @@
 }
 .hbl-modern .card .form-select:focus,
 .hbl-modern .card .form-control:focus {
-  border-color: #F75E00 !important;
+  border-color: #EC0B43 !important;
   background: #fff !important;
-  box-shadow: 0 0 0 4px rgba(247, 94, 0, .12) !important;
+  box-shadow: 0 0 0 4px rgba(236, 11, 67, .12) !important;
 }
 .hbl-modern .card .form-label,
 .hbl-modern .card label {

@@ -242,7 +242,7 @@ export default function ExtranetCalendar() {
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex align-items-center justify-content-between flex-wrap gap-2">
               <div className="d-flex align-items-center gap-3 flex-wrap">
-                <span className="fw-semibold" style={{ color: "#F75E00" }}>
+                <span className="fw-semibold" style={{ color: "#EC0B43" }}>
                   My Bookings
                 </span>
                 {hotelId && <HotelTitleBadge hotelId={hotelId} />}
@@ -362,7 +362,7 @@ export default function ExtranetCalendar() {
               closeVariant="white"
               style={{
                 background:
-                  "linear-gradient(135deg, #F75E00 0%, #D65100 100%)",
+                  "linear-gradient(135deg, #EC0B43 0%, #C90939 100%)",
                 color: "#fff",
                 borderBottom: "none",
               }}
@@ -417,7 +417,7 @@ export default function ExtranetCalendar() {
                     <Col xs={6} md={3}>
                       <div className="bg-white rounded-3 border p-3 h-100">
                         <div className="text-muted small d-flex align-items-center gap-2 mb-1">
-                          <FaCalendarTimes color="#F75E00" /> Check-Out
+                          <FaCalendarTimes color="#EC0B43" /> Check-Out
                         </div>
                         <div className="fw-semibold">
                           {prettyDate(details?.checkOutDate)}
@@ -451,7 +451,7 @@ export default function ExtranetCalendar() {
                     <Col md={7}>
                       <Card className="border-0 shadow-sm h-100">
                         <Card.Header className="bg-white fw-semibold d-flex align-items-center gap-2 py-2">
-                          <FaUser color="#F75E00" /> Guest Information
+                          <FaUser color="#EC0B43" /> Guest Information
                         </Card.Header>
                         <Card.Body className="py-3">
                           <Field

@@ -197,8 +197,8 @@ const ExtranetHotelDashboard = () => {
                         width: 52,
                         height: 52,
                         borderRadius: 13,
-                        background: "#FDECD6",
-                        color: "#F75E00",
+                        background: "#FDE7ED",
+                        color: "#EC0B43",
                         display: "grid",
                         placeItems: "center",
                         flexShrink: 0,
@@ -213,7 +213,7 @@ const ExtranetHotelDashboard = () => {
                           fontWeight: 600,
                           letterSpacing: ".06em",
                           textTransform: "uppercase",
-                          color: "#F75E00",
+                          color: "#EC0B43",
                           marginBottom: 2,
                         }}
                       >
@@ -240,7 +240,7 @@ const ExtranetHotelDashboard = () => {
                             gap: 7,
                           }}
                         >
-                          <FaMapMarkerAlt color="#F75E00" /> {locationBits}
+                          <FaMapMarkerAlt color="#EC0B43" /> {locationBits}
                         </div>
                       )}
                     </div>
@@ -289,7 +289,7 @@ const ExtranetHotelDashboard = () => {
               ) : (
                 <div className="kpi-grid">
                   <KpiCard title="Total Bookings"  icon="booking"  color="#6366f1" value={formatNumber(stats.totalBookings)} />
-                  <KpiCard title="Cancellations"   icon="cancel"   color="#F75E00" value={formatNumber(stats.cancellations)} />
+                  <KpiCard title="Cancellations"   icon="cancel"   color="#EC0B43" value={formatNumber(stats.cancellations)} />
                   <KpiCard title="Check-In Today"  icon="calendar" color="#10b981" value={formatNumber(stats.checkInToday)} />
                   <KpiCard title="Check-Out Today" icon="check"    color="#f59e0b" value={formatNumber(stats.checkOutToday)} />
                 </div>

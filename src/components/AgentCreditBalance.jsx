@@ -64,13 +64,13 @@ export default function AgentCreditBalance() {
           display: "inline-flex",
           alignItems: "center",
           gap: 7,
-          background: "#FDECD6",
+          background: "#FDE7ED",
           border: "1px solid #F8C9D5",
           borderRadius: 999,
           padding: "5px 14px",
           fontSize: 13,
           fontWeight: 700,
-          color: "#F75E00",
+          color: "#EC0B43",
           whiteSpace: "nowrap",
         }}
       >

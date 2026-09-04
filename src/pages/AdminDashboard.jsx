@@ -324,7 +324,7 @@ export default function AdminDashboard() {
                 <div className="adm-charts">
                   <div className="adm-card">
                     <div className="adm-card-head">
-                      <span className="adm-dot" style={{ background: '#F75E00' }} />
+                      <span className="adm-dot" style={{ background: '#EC0B43' }} />
                       <h3 className="adm-card-title">Bookings over time</h3>
                       <span className="adm-badge">Last 5 days</span>
                     </div>
@@ -348,7 +348,7 @@ export default function AdminDashboard() {
             <p className="adm-section-label">Listing</p>
             <div className="adm-card">
               <div className="adm-card-head">
-                <span className="adm-dot" style={{ background: '#F75E00' }} />
+                <span className="adm-dot" style={{ background: '#EC0B43' }} />
                 <h3 className="adm-card-title">Top agents by revenue</h3>
                 <button className="adm-badge" style={{ cursor: 'pointer' }} onClick={() => navigate('/registration/agent')}>
                   View all

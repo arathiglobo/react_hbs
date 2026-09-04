@@ -611,19 +611,14 @@ const Login = () => {
       <main className="lg-main">
         <div className="lg-card">
           <div className="lg-brand-top lg-brand-top--card">
-            {/* <img
+            <img
               src={`${process.env.PUBLIC_URL}/images/logo-1.jpg`}
               alt="Globosoft"
               className="lg-logo"
-            /> */}
-            <img
-              src={`${process.env.PUBLIC_URL}/images/desert.PNG`}
-              alt="Desertbeds"
-              className="lg-logo"
             />
+        
             <div>
-              {/* <div className="lg-brand-name">Globosoft</div> */}
-              <div className="lg-brand-name">desert beds</div>
+              <div className="lg-brand-name">Globosoft</div>
               <div className="lg-brand-sub">Global Contracting Solutions</div>
             </div>
           </div>

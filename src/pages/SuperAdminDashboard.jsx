@@ -227,7 +227,7 @@ export default function SuperAdminDashboard() {
                 <div className="adm-charts">
                   <div className="adm-card">
                     <div className="adm-card-head">
-                      <span className="adm-dot" style={{ background: '#F75E00' }} />
+                      <span className="adm-dot" style={{ background: '#EC0B43' }} />
                       <h3 className="adm-card-title">Bookings across platform</h3>
                       <span className="adm-badge">Last 5 days</span>
                     </div>
@@ -250,7 +250,7 @@ export default function SuperAdminDashboard() {
             <p className="adm-section-label">Tenant Leaderboard</p>
             <div className="adm-card">
               <div className="adm-card-head">
-                <span className="adm-dot" style={{ background: '#F75E00' }} />
+                <span className="adm-dot" style={{ background: '#EC0B43' }} />
                 <h3 className="adm-card-title">Top revenue-generating agents (platform-wide)</h3>
                 <button className="adm-badge" style={{ cursor: 'pointer' }} onClick={() => navigate('/registration/agent')}>
                   View all

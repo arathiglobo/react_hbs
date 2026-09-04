@@ -266,7 +266,7 @@ export default function AgentDashboard() {
           font-size: 13px;
           flex-shrink: 0;
         }
-        .agent-overview-icon.tone-pink   { background: #FDECD6; color: #F75E00; }
+        .agent-overview-icon.tone-pink   { background: #FDE7ED; color: #EC0B43; }
         .agent-overview-icon.tone-green  { background: #E8F8EE; color: #10B981; }
         .agent-overview-icon.tone-orange { background: #FFF1E0; color: #F59E0B; }
         .agent-overview-icon.tone-blue   { background: #E7F3FE; color: #0EA5E9; }
@@ -344,7 +344,7 @@ export default function AgentDashboard() {
         .agent-qa-tile:active { transform: translateY(0); }
         .agent-qa-tile .agent-qa-icon { transition: transform .15s; }
         .agent-qa-tile:hover .agent-qa-icon { transform: scale(1.1); }
-        .agent-qa-tile.tone-pink:hover   { background: #FFF3F5; border-color: #F7BCC8; box-shadow: 0 10px 20px rgba(247, 94, 0,.18); }
+        .agent-qa-tile.tone-pink:hover   { background: #FFF3F5; border-color: #F7BCC8; box-shadow: 0 10px 20px rgba(236, 11, 67,.18); }
         .agent-qa-tile.tone-orange:hover { background: #FFF9EF; border-color: #FBD9A0; box-shadow: 0 10px 20px rgba(245,158,11,.18); }
         .agent-qa-tile.tone-purple:hover { background: #FAF6FE; border-color: #D9C7FA; box-shadow: 0 10px 20px rgba(139,92,246,.18); }
         .agent-qa-tile.tone-blue:hover   { background: #F2F9FE; border-color: #B9E0FB; box-shadow: 0 10px 20px rgba(14,165,233,.18); }
@@ -358,7 +358,7 @@ export default function AgentDashboard() {
           font-size: 15px;
           flex-shrink: 0;
         }
-        .agent-qa-icon.tone-pink   { background: #FDECD6; color: #F75E00; }
+        .agent-qa-icon.tone-pink   { background: #FDE7ED; color: #EC0B43; }
         .agent-qa-icon.tone-orange { background: #FFF1E0; color: #F59E0B; }
         .agent-qa-icon.tone-purple { background: #F1EAFB; color: #8B5CF6; }
         .agent-qa-icon.tone-blue   { background: #E7F3FE; color: #0EA5E9; }
@@ -386,7 +386,7 @@ export default function AgentDashboard() {
           transition: transform .15s, box-shadow .15s;
         }
         .agent-manage-card:hover { transform: translateY(-1px); box-shadow: 0 8px 18px rgba(0,0,0,.14); }
-        .agent-manage-card.tone-pink   { background: linear-gradient(135deg, #F75E00 0%, #D65100 100%); }
+        .agent-manage-card.tone-pink   { background: linear-gradient(135deg, #EC0B43 0%, #C90939 100%); }
         .agent-manage-card.tone-purple { background: linear-gradient(135deg, #8B6CF7 0%, #6D4CE0 100%); }
         .agent-manage-card.tone-teal   { background: linear-gradient(135deg, #2DD4BF 0%, #0D9488 100%); }
         .agent-manage-dots {
@@ -410,7 +410,7 @@ export default function AgentDashboard() {
           background: #fff;
           box-shadow: 0 2px 6px rgba(0,0,0,.10);
         }
-        .agent-manage-card.tone-pink .agent-manage-arrow   { color: #F75E00; }
+        .agent-manage-card.tone-pink .agent-manage-arrow   { color: #EC0B43; }
         .agent-manage-card.tone-purple .agent-manage-arrow { color: #6D4CE0; }
         .agent-manage-card.tone-teal .agent-manage-arrow   { color: #0D9488; }
 
@@ -424,11 +424,11 @@ export default function AgentDashboard() {
           gap: 12px 22px;
           margin-top: 14px;
           padding: 13px 16px;
-          border: 1px solid rgba(247, 94, 0, .20);
+          border: 1px solid rgba(236, 11, 67, .20);
           border-left: 4px solid var(--color-primary);
           background: linear-gradient(135deg, #FFF1F5 0%, #FFFFFF 65%);
           border-radius: 12px;
-          box-shadow: 0 2px 10px rgba(247, 94, 0, .07);
+          box-shadow: 0 2px 10px rgba(236, 11, 67, .07);
           font-size: 15px;
         }
         .agent-credit-compact .acc-dot {
@@ -464,7 +464,7 @@ export default function AgentDashboard() {
           box-shadow: 0 1px 3px rgba(0,0,0,.05);
           transition: border-color .15s ease, box-shadow .15s ease;
         }
-        .agent-analytics-toggle:hover { border-color: var(--color-primary-tint); box-shadow: 0 6px 16px rgba(247, 94, 0,.10); }
+        .agent-analytics-toggle:hover { border-color: var(--color-primary-tint); box-shadow: 0 6px 16px rgba(236, 11, 67,.10); }
         .agent-analytics-toggle[aria-expanded="true"] { border-color: var(--color-primary-tint); }
         .agent-acc-icon {
           width: 34px; height: 34px; border-radius: 10px;
@@ -545,7 +545,7 @@ export default function AgentDashboard() {
                         fontWeight: 700,
                         letterSpacing: ".06em",
                         textTransform: "uppercase",
-                        color: "#F75E00",
+                        color: "#EC0B43",
                         marginBottom: 6,
                       }}
                     >
@@ -636,8 +636,8 @@ export default function AgentDashboard() {
                             width: 52,
                             height: 52,
                             borderRadius: 13,
-                            background: "#FDECD6",
-                            color: "#F75E00",
+                            background: "#FDE7ED",
+                            color: "#EC0B43",
                             display: "grid",
                             placeItems: "center",
                             flexShrink: 0,
@@ -653,7 +653,7 @@ export default function AgentDashboard() {
                             fontWeight: 600,
                             letterSpacing: ".06em",
                             textTransform: "uppercase",
-                            color: "#F75E00",
+                            color: "#EC0B43",
                             marginBottom: 2,
                           }}
                         >
@@ -680,7 +680,7 @@ export default function AgentDashboard() {
                               gap: 7,
                             }}
                           >
-                            <FaMapMarkerAlt color="#F75E00" /> {locationBits}
+                            <FaMapMarkerAlt color="#EC0B43" /> {locationBits}
                           </div>
                         )}
                       </div>

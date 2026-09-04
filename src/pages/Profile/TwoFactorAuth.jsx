@@ -351,7 +351,7 @@ const TwoFactorAuth = () => {
                     href="https://ente.io/auth"
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ color: "#F75E00", textDecoration: "none", fontWeight: 600 }}
+                    style={{ color: "#EC0B43", textDecoration: "none", fontWeight: 600 }}
                   >
                     https://ente.io/auth
                   </a>

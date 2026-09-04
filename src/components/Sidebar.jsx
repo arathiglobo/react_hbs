@@ -538,10 +538,10 @@ export default function Sidebar() {
         },
 
          // Flight flow 
-        // {
-        //   label: "Flight",
-        //   to: "/new-booking/flight",
-        // },
+        {
+          label: "Flight",
+          to: "/new-booking/flight",
+        },
       ],
     },
     {
@@ -574,7 +574,7 @@ export default function Sidebar() {
         // Dedicated Religious booking list — same page wrapped with
         // religiousOnly so only isReligiousBooking=true rows are shown.
         { code: "bl_religious",   label: "Religious",     to: "/booking-details/religious-booking-list" },
-        // { code: "bl_flight",   label: "Flight",     to: "/booking-details/flight-booking-list" },
+        { code: "bl_flight",   label: "Flight",     to: "/booking-details/flight-booking-list" },
 
         { code: "bl_last_minute", label: "Last Minute",   to: "/booking-details/last-minute-booking-list" },
         { code: "bl_long_stay",   label: "Long Stay",     to: "/booking-details/long-stay-booking-list" },
@@ -986,7 +986,7 @@ export default function Sidebar() {
             zIndex: 5,
             border: "1px solid var(--color-border, #e5e7eb)",
             background: "#fff",
-            color: "#F75E00",
+            color: "#EC0B43",
             width: 30,
             height: 30,
             borderRadius: 8,
@@ -1039,7 +1039,7 @@ export default function Sidebar() {
                       <span
                         className="ms-2 badge rounded-pill"
                         style={{
-                          background: "#F75E00",
+                          background: "#EC0B43",
                           color: "#fff",
                           fontSize: "0.65rem",
                           padding: "3px 7px",
@@ -1275,7 +1275,7 @@ export default function Sidebar() {
                       <span
                         className="ms-2 badge rounded-pill"
                         style={{
-                          background: "#F75E00",
+                          background: "#EC0B43",
                           color: "#fff",
                           fontSize: "0.65rem",
                           padding: "3px 7px",

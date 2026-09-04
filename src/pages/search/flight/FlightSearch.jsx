@@ -347,7 +347,7 @@ const FlightSearch = () => {
                   <Row className="g-3 align-items-end mt-2" key={idx}>
                     <Col md={3}>
                       <FlightLocationSelect
-                        label="From"
+                        label="Departure Airport"
                         icon={<FaPlaneDeparture style={{ marginRight: 4 }} />}
                         placeholder="City or airport (e.g. CDG, Paris)"
                         value={leg.fromLoc}
@@ -367,7 +367,7 @@ const FlightSearch = () => {
                     </Col>
                     <Col md={3}>
                       <FlightLocationSelect
-                        label="To"
+                        label="Arrival Airport"
                         icon={<FaPlaneArrival style={{ marginRight: 4 }} />}
                         placeholder="City or airport (e.g. FRA, Frankfurt)"
                         value={leg.toLoc}
@@ -446,7 +446,7 @@ const FlightSearch = () => {
                       size="lg"
                       disabled={loading}
                       style={{
-                        background: "linear-gradient(135deg, #F75E00 0%, #D65100 100%)",
+                        background: "linear-gradient(135deg, #EC0B43 0%, #C90939 100%)",
                         border: "none",
                         borderRadius: 50,
                         padding: "14px 40px",
@@ -454,7 +454,7 @@ const FlightSearch = () => {
                         fontWeight: 600,
                         letterSpacing: "0.02em",
                         color: "#fff",
-                        boxShadow: "0 4px 15px rgba(247, 94, 0, 0.3)",
+                        boxShadow: "0 4px 15px rgba(236, 11, 67, 0.3)",
                       }}
                     >
                       {loading ? (

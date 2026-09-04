@@ -1191,7 +1191,7 @@ const CabBookingPage = () => {
                         >
                           <FaArrowLeft /> Back
                         </Button>
-                        <FaUsers className="me-2" style={{ color: "#F75E00" }} />
+                        <FaUsers className="me-2" style={{ color: "#EC0B43" }} />
                         <span className="fw-bold text-dark">Passenger Details</span>
                         <span className="text-muted small ms-2">
                           ({totalAdults} Adult{totalAdults !== 1 ? "s" : ""}
@@ -1647,7 +1647,7 @@ const CabBookingPage = () => {
                     className="py-3 px-4 border-bottom d-flex align-items-center"
                     style={cardHeaderStyle}
                   >
-                    <FaCreditCard className="me-2" style={{ color: "#F75E00" }} />
+                    <FaCreditCard className="me-2" style={{ color: "#EC0B43" }} />
                     <span className="fw-bold text-dark">Payment Mode</span>
                     <span className="text-danger ms-2">*</span>
                   </Card.Header>
@@ -1910,7 +1910,7 @@ const CabBookingPage = () => {
                               </div>
                               <div
                                 className="fw-bold"
-                                style={{ color: "#F75E00", fontSize: "1.1rem" }}
+                                style={{ color: "#EC0B43", fontSize: "1.1rem" }}
                               >
                                 {formatPrice(grandTotal)}
                               </div>

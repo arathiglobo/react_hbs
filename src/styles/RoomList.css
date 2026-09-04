@@ -89,9 +89,9 @@
   /* slate-900 */
   --rl-text-muted: #475569;
   /* slate-600 */
-  --rl-primary: #F75E00;
+  --rl-primary: #EC0B43;
   /* blue-600 */
-  --rl-primary-strong: #D65100;
+  --rl-primary-strong: #C90939;
   /* blue-700 */
   --rl-accent: #0ea5e9;
   /* sky-500 */
@@ -101,7 +101,7 @@
   /* red-600 */
   --rl-warning: #d97706;
   /* amber-600 */
-  --rl-glow: 0 8px 24px rgba(247, 94, 0, 0.15);
+  --rl-glow: 0 8px 24px rgba(236, 11, 67, 0.15);
 }
 
 .room-list-container {
@@ -221,7 +221,7 @@
 
 .room-category-item:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 28px rgba(247, 94, 0, 0.18);
+  box-shadow: 0 12px 28px rgba(236, 11, 67, 0.18);
 }
 
 .room-category-header {
@@ -330,7 +330,7 @@
 
 .rate-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 14px 28px rgba(247, 94, 0, 0.18);
+  box-shadow: 0 14px 28px rgba(236, 11, 67, 0.18);
 }
 
 .rate-header {
@@ -397,7 +397,7 @@
 
 .book-now-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 10px 24px rgba(247, 94, 0, 0.25);
+  box-shadow: 0 10px 24px rgba(236, 11, 67, 0.25);
 }
 
 /* New Rate Selection Card Styles */
@@ -411,14 +411,14 @@
 
 .rate-selection-card:hover {
   border-color: var(--rl-primary);
-  box-shadow: 0 8px 20px rgba(247, 94, 0, 0.1);
+  box-shadow: 0 8px 20px rgba(236, 11, 67, 0.1);
   transform: translateY(-3px);
 }
 
 .selected-rate-card {
   border: 2px solid var(--rl-primary) !important;
-  background: rgba(247, 94, 0, 0.02) !important;
-  box-shadow: 0 10px 25px rgba(247, 94, 0, 0.15) !important;
+  background: rgba(236, 11, 67, 0.02) !important;
+  box-shadow: 0 10px 25px rgba(236, 11, 67, 0.15) !important;
 }
 
 .rate-radio-input {
@@ -480,7 +480,7 @@
 }
 
 .modal-header {
-  background: linear-gradient(135deg, #F75E00 0%, #D65100 100%);
+  background: linear-gradient(135deg, #EC0B43 0%, #C90939 100%);
   color: white;
   border-radius: 12px 12px 0 0;
   border-bottom: none;
@@ -612,7 +612,7 @@
 }
 
 .loader-ring span:nth-child(1) {
-  border-top-color: #F75E00;
+  border-top-color: #EC0B43;
 }
 
 .loader-ring span:nth-child(2) {
@@ -649,7 +649,7 @@
 
 /* Icon Colors */
 .text-primary {
-  color: #F75E00 !important;
+  color: #EC0B43 !important;
 }
 
 .text-success {
@@ -739,7 +739,7 @@
   font-weight: 700 !important;
   letter-spacing: -.038em !important;
   line-height: 1.12 !important;
-  color: #F75E00 !important;
+  color: #EC0B43 !important;
   margin: 0 !important;
 }
 @keyframes hsPageHeadingSlide {

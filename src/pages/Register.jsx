@@ -1265,10 +1265,10 @@ const Register = () => {
                                     minHeight: 44,
                                     borderRadius: 11,
                                     borderWidth: 1.5,
-                                    borderColor: errors.timezone ? "#F75E00" : (state.isFocused ? "#F75E00" : "#E5E5E1"),
+                                    borderColor: errors.timezone ? "#EC0B43" : (state.isFocused ? "#EC0B43" : "#E5E5E1"),
                                     backgroundColor: state.isFocused ? "#fff" : "#FAFAF8",
                                     boxShadow: state.isFocused
-                                      ? "0 0 0 4px rgba(247, 94, 0, .12)"
+                                      ? "0 0 0 4px rgba(236, 11, 67, .12)"
                                       : "none",
                                     fontSize: "0.92rem",
                                     fontFamily: "inherit",
@@ -1279,9 +1279,9 @@ const Register = () => {
                                   option: (b, s) => ({
                                     ...b,
                                     backgroundColor: s.isSelected
-                                      ? "#F75E00"
+                                      ? "#EC0B43"
                                       : s.isFocused
-                                        ? "#FDECD6"
+                                        ? "#FDE7ED"
                                         : "#fff",
                                     color: s.isSelected ? "#fff" : "#15171C",
                                     fontSize: "0.92rem",
@@ -1366,9 +1366,9 @@ const Register = () => {
                                     minHeight: 44,
                                     borderRadius: 11,
                                     borderWidth: 1.5,
-                                    borderColor: errors.countryId ? "#F75E00" : (state.isFocused ? "#F75E00" : "#E5E5E1"),
+                                    borderColor: errors.countryId ? "#EC0B43" : (state.isFocused ? "#EC0B43" : "#E5E5E1"),
                                     backgroundColor: state.isFocused ? "#fff" : "#FAFAF8",
-                                    boxShadow: state.isFocused ? "0 0 0 4px rgba(247, 94, 0, .12)" : "none",
+                                    boxShadow: state.isFocused ? "0 0 0 4px rgba(236, 11, 67, .12)" : "none",
                                     fontSize: "0.92rem",
                                     fontFamily: "inherit",
                                   }),
@@ -1376,7 +1376,7 @@ const Register = () => {
                                   menu: (b) => ({ ...b, borderRadius: 11, overflow: "hidden", zIndex: 30 }),
                                   option: (b, s) => ({
                                     ...b,
-                                    backgroundColor: s.isSelected ? "#F75E00" : (s.isFocused ? "#FDECD6" : "#fff"),
+                                    backgroundColor: s.isSelected ? "#EC0B43" : (s.isFocused ? "#FDE7ED" : "#fff"),
                                     color: s.isSelected ? "#fff" : "#15171C",
                                     fontSize: "0.92rem",
                                   }),
@@ -1440,13 +1440,13 @@ const Register = () => {
                                     borderRadius: 11,
                                     borderWidth: 1.5,
                                     borderColor: errors.provinceId
-                                      ? "#F75E00"
+                                      ? "#EC0B43"
                                       : state.isFocused
-                                      ? "#F75E00"
+                                      ? "#EC0B43"
                                       : "#E5E5E1",
                                     backgroundColor: state.isFocused ? "#fff" : "#FAFAF8",
                                     boxShadow: state.isFocused
-                                      ? "0 0 0 4px rgba(247, 94, 0, .12)"
+                                      ? "0 0 0 4px rgba(236, 11, 67, .12)"
                                       : "none",
                                     fontSize: "0.92rem",
                                     fontFamily: "inherit",
@@ -1465,9 +1465,9 @@ const Register = () => {
                                   option: (b, s) => ({
                                     ...b,
                                     backgroundColor: s.isSelected
-                                      ? "#F75E00"
+                                      ? "#EC0B43"
                                       : s.isFocused
-                                      ? "#FDECD6"
+                                      ? "#FDE7ED"
                                       : "#fff",
                                     color: s.isSelected ? "#fff" : "#15171C",
                                     fontSize: "0.92rem",
