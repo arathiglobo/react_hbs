@@ -3175,9 +3175,9 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
 
                                 <Accordion.Body
                                   className="room-rates-section"
-                                  style={{ padding: "0.5rem" }}
+                                  style={isMultiRoom ? { padding: "0.5rem" } : undefined}
                                 >
-                                  <Row className="g-2">
+                                  <Row className={isMultiRoom ? "g-2" : ""}>
                                     {filteredRates.map((rate, rateIndex) => {
                                       const isSelectedForThisSlot =
                                         isMultiRoom &&
@@ -3206,7 +3206,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                           key={rateIndex}
                                           lg={viewMode === "grid" ? 6 : 12}
                                           xl={viewMode === "grid" ? 4 : 12}
-                                          className="mb-1"
+                                          className={isMultiRoom ? "mb-1" : "mb-2"}
                                         >
                                           <Card
                                             className={`rate-card h-100 shadow-sm${
@@ -3488,12 +3488,12 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                 )}
                                               </Card.Body>
                                             ) : (
-                                              <Card.Body className="p-2 d-flex flex-row align-items-center gap-2 flex-wrap flex-md-nowrap">
+                                              <Card.Body className={isMultiRoom ? "p-2 d-flex flex-row align-items-center gap-2 flex-wrap flex-md-nowrap" : "p-3 py-2 d-flex flex-row align-items-center gap-3 flex-wrap flex-md-nowrap"}>
                                                 <div
                                                   className="d-flex flex-column flex-grow-1"
                                                   style={{ minWidth: 0 }}
                                                 >
-                                                  <div className="d-flex align-items-center flex-wrap gap-2 mb-1">
+                                                  <div className={`d-flex align-items-center flex-wrap gap-2 ${isMultiRoom ? "mb-1" : "mb-2"}`}>
                                                     <div
                                                       className="d-flex align-items-center gap-2 flex-shrink-0"
                                                       style={{
@@ -3548,11 +3548,11 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                     </div>
                                                   </div>
                                                   <div
-                                                    className="rate-features small text-muted d-flex flex-column align-items-start gap-1"
+                                                    className={isMultiRoom ? "rate-features small text-muted d-flex flex-column align-items-start gap-1" : "rate-features small text-muted d-flex flex-wrap gap-3"}
                                                     style={{ minWidth: 0 }}
                                                   >
                                                     {rate.contractLabel && (
-                                                      <div className="feature-item d-flex align-items-center text-truncate w-100">
+                                                      <div className={`feature-item d-flex align-items-center text-truncate ${isMultiRoom ? "w-100" : ""}`}>
                                                         <FaInfoCircle className="me-2 flex-shrink-0" />
                                                         <span className="text-truncate">
                                                           {rate.contractLabel}
@@ -3623,7 +3623,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                 </div>
 
                                                 <div
-                                                  className="text-end px-3 border-start flex-shrink-0"
+                                                  className={`text-end px-3 flex-shrink-0 ${isMultiRoom ? "border-start" : "border-start border-end"}`}
                                                   style={{ minWidth: "150px" }}
                                                 >
                                                   <div className="fs-5 fw-bold text-primary">

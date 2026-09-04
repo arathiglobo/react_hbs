@@ -1540,9 +1540,9 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
 
                       <Accordion.Body
                         className="room-rates-section"
-                        style={{ padding: "0.5rem" }}
+                        style={isMultiRoom ? { padding: "0.5rem" } : undefined}
                       >
-                        <Row className="g-2">
+                        <Row className={isMultiRoom ? "g-2" : ""}>
                           {filteredRates.map((rate, rateIndex) => {
                             // Highlight ONLY the card chosen for THIS room
                             // slot. Other slots' picks must not change the
@@ -1550,7 +1550,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                             const isSelectedForThisSlot = isMultiRoom &&
                               selectedRooms[roomSlotIndex]?.selectedRate === rate;
                             return (
-                            <Col key={rateIndex} lg={viewMode === "grid" ? 6 : 12} xl={viewMode === "grid" ? 4 : 12} className="mb-1">
+                            <Col key={rateIndex} lg={viewMode === "grid" ? 6 : 12} xl={viewMode === "grid" ? 4 : 12} className={isMultiRoom ? "mb-1" : "mb-2"}>
                               <Card
                                 className={`rate-card h-100 shadow-sm${isSelectedForThisSlot ? " rate-card-selected" : ""}`}
                                 style={
@@ -1709,20 +1709,12 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                     )}
                                   </Card.Body>
                                 ) : (
-                                  <Card.Body className="p-2 d-flex flex-row align-items-center gap-2 flex-wrap flex-md-nowrap">
-                                    <div
-                                      className={
-                                        isMultiRoom
-                                          ? "flex-shrink-0 order-first ps-3"
-                                          : "flex-shrink-0"
-                                      }
-                                      style={
-                                        isMultiRoom
-                                          ? { minWidth: "170px" }
-                                          : undefined
-                                      }
-                                    >
-                                      {isMultiRoom ? (
+                                  <Card.Body className={isMultiRoom ? "p-2 d-flex flex-row align-items-center gap-2 flex-wrap flex-md-nowrap" : "p-3 py-2 d-flex flex-row align-items-center gap-3 flex-wrap flex-md-nowrap"}>
+                                    {isMultiRoom && (
+                                      <div
+                                        className="flex-shrink-0 order-first ps-3"
+                                        style={{ minWidth: "170px" }}
+                                      >
                                         <Form.Check
                                           type="radio"
                                           id={`rate-radio-list-${roomSlotIndex}-${index}-${rateIndex}`}
@@ -1747,23 +1739,13 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                           }
                                           style={{ whiteSpace: "nowrap" }}
                                         />
-                                      ) : (
-                                        <Button
-                                          variant="primary"
-                                          className="book-now-btn px-3 py-2"
-                                          onClick={() => handleBooking(rate)}
-                                          style={{ whiteSpace: "nowrap" }}
-                                        >
-                                          <FaMoneyBillWave className="me-2" />
-                                          View Details
-                                        </Button>
-                                      )}
-                                    </div>
+                                      </div>
+                                    )}
                                     <div
                                       className="d-flex flex-column flex-grow-1"
                                       style={{ minWidth: 0 }}
                                     >
-                                      <div className="d-flex align-items-center flex-wrap gap-2 mb-1">
+                                      <div className={`d-flex align-items-center flex-wrap gap-2 ${isMultiRoom ? "mb-1" : "mb-2"}`}>
                                         <div
                                           className="d-flex align-items-center gap-2 flex-shrink-0"
                                           style={{
@@ -1794,10 +1776,10 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                         </div>
                                       </div>
                                       <div
-                                        className="rate-features small text-muted d-flex flex-column align-items-start gap-1"
+                                        className={isMultiRoom ? "rate-features small text-muted d-flex flex-column align-items-start gap-1" : "rate-features small text-muted d-flex flex-wrap gap-3"}
                                         style={{ minWidth: 0 }}
                                       >
-                                        <div className="feature-item d-flex align-items-center text-truncate w-100">
+                                        <div className={`feature-item d-flex align-items-center text-truncate ${isMultiRoom ? "w-100" : ""}`}>
                                           <FaInfoCircle className="me-2 flex-shrink-0" />
                                           <span className="text-truncate">
                                             {rate.contractLabel}
@@ -1821,7 +1803,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                     </div>
 
                                     <div
-                                      className="text-end px-3 border-start flex-shrink-0"
+                                      className={`text-end px-3 flex-shrink-0 ${isMultiRoom ? "border-start" : "border-start border-end"}`}
                                       style={{ minWidth: "150px" }}
                                     >
                                       <div className="fs-5 fw-bold text-primary">
@@ -1840,6 +1822,20 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                           : "per night"}
                                       </div>
                                     </div>
+
+                                    {!isMultiRoom && (
+                                      <div className="flex-shrink-0">
+                                        <Button
+                                          variant="primary"
+                                          className="book-now-btn px-3 py-2"
+                                          onClick={() => handleBooking(rate)}
+                                          style={{ whiteSpace: "nowrap" }}
+                                        >
+                                          <FaMoneyBillWave className="me-2" />
+                                          View Details
+                                        </Button>
+                                      </div>
+                                    )}
                                   </Card.Body>
                                 )}
                               </Card>

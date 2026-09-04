@@ -2000,11 +2000,13 @@ export default function HotelSearch({
                           }),
                           option: (base, state) => ({
                             ...base,
-                            backgroundColor: state.isFocused
-                              ? "#f8f9fa"
-                              : "white",
+                            backgroundColor: state.isSelected
+                              ? "#F75E00"
+                              : state.isFocused
+                                ? "#FFE8D8"
+                                : "white",
                             color: state.isSelected ? "white" : "#212529",
-                            "&:active": { backgroundColor: "#0d6efd" },
+                            "&:active": { backgroundColor: "#F75E00", color: "white" },
                           }),
                           clearIndicator: (base) => ({
                             ...base,
