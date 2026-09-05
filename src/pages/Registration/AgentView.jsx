@@ -1372,6 +1372,8 @@ const AgentView = () => {
                     label={
                       approvalInfo.status === "REJECTED"
                         ? "Rejected On"
+                        : approvalInfo.status === "CANCELLED"
+                        ? "Cancelled On"
                         : "Approved On"
                     }
                     value={
@@ -1386,6 +1388,8 @@ const AgentView = () => {
                     label={
                       approvalInfo.status === "REJECTED"
                         ? "Rejected By"
+                        : approvalInfo.status === "CANCELLED"
+                        ? "Cancelled By"
                         : "Approved By"
                     }
                     value={approvalInfo.reviewedBy || "-"}

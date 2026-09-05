@@ -1,351 +1,898 @@
 /* ============================================================================
-   LOGIN · MODERN SPLIT-SCREEN  (Globosoft red/white · Lexend)
-   Fills the viewport, no page scroll. Left brand panel + right sign-in card.
-   Self-contained under .lg-shell so it can't affect the rest of the app.
+   LOGIN · DESERT BEDS B2B PORTAL
+   Hero photo + brand copy on the left, sign-in card floating over it, a rail
+   of hotel-brand logos down the right, a four-up value strip beneath the hero
+   and a slim contact bar at the very bottom.
+
+   Everything is scoped under .lg-shell so it can never leak into the rest of
+   the app (the legacy Login.css is still loaded for the Bootstrap
+   forgot-password modal).
    ============================================================================ */
 
 .lg-shell {
-  display: flex;
-  min-height: 100vh;
-  width: 100%;
-  background: #ffffff;
-  font-family: 'Lexend', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: #15171C;
-}
+  --lg-orange: #f75e00;
+  --lg-orange-dark: #d65100;
+  --lg-orange-soft: rgba(247, 94, 0, 0.1);
+  --lg-navy: #1b2a4a;
+  --lg-body: #5a6478;
+  --lg-muted: #8a93a3;
+  --lg-line: #e6e8ee;
+  --lg-field: #f7f8fa;
 
-/* ── Left · brand panel ──────────────────────────────────────────────────── */
-.lg-brand {
-  flex: 1 1 54%;
-  position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 22px;
-  padding: 40px 56px;
+  /* One fixed screen: the desktop layout never scrolls. Vertical rhythm below
+     is expressed in vh-aware clamps so the card, value strip and contact bar
+     always fit. The stacked layout under 980px restores normal document flow. */
+  height: 100vh;
   overflow: hidden;
-  background: linear-gradient(150deg, #F75E00 0%, #D65100 58%, #A63A00 100%);
-  color: #ffffff;
-}
-/* When the offer showcase is present, tighten the panel so the whole brand
-   column (logo → offer → hero → features → foot) still fits within 100vh on
-   a typical desktop viewport. The full-bleed offer image is taller than the
-   previous in-padding frame, so the gap shrinks too. */
-.lg-brand:has(.lg-offers) {
-    gap: 18px;
-    padding-top: 15px;
-    padding-bottom: 25px;
-}
-
-.lg-brand:has(.lg-offers) .lg-hero h1 {
-    font-size: 28px;
-    margin-bottom: 10px;
-    font-weight: 500;
-    line-height: 36px;
-}
-.lg-brand:has(.lg-offers) .lg-hero p { font-size: 14.5px; line-height: 1.55; }
-.lg-brand:has(.lg-offers) .lg-features { gap: 10px; }
-.lg-brand:has(.lg-offers) .lg-feature { font-size: 13.5px; }
-.lg-brand::before {
-  content: '';
-  position: absolute; inset: 0; pointer-events: none;
-  background:
-    radial-gradient(620px 620px at 82% -12%, rgba(255, 255, 255, .14), transparent 60%),
-    radial-gradient(520px 520px at -12% 112%, rgba(255, 255, 255, .10), transparent 60%);
-}
-.lg-brand > * { position: relative; }
-
-.lg-brand-top { display: flex; align-items: center; gap: 14px; }
-.lg-logo {
-  width: 50px; height: 50px; border-radius: 13px;
-  background: #fff; object-fit: contain; padding: 4px;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, .18);
-}
-.lg-brand-name { font-size: 20px; font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
-.lg-brand-sub { font-size: 12.5px; opacity: .85; letter-spacing: .01em; margin-top: 2px; }
-
-/* Brand block placed inside the white sign-in card (above "Welcome back").
-   Needs dark text since it no longer sits on the red brand panel. */
-.lg-brand-top--card { margin-bottom: 22px; }
-.lg-brand-top--card .lg-brand-name { color: #15171C; }
-.lg-brand-top--card .lg-brand-sub { color: #6B7280; opacity: 1; }
-.lg-brand-top--card .lg-logo {
-  box-shadow: 0 6px 16px rgba(0, 0, 0, .12);
-  border: 1px solid rgba(0, 0, 0, .06);
-}
-
-.lg-hero { max-width: 540px; }
-.lg-hero h1 {
-  font-size: clamp(32px, 3.4vw, 50px);
-  font-weight: 700; line-height: 1.08; letter-spacing: -.04em; margin: 0 0 18px;
-  color: #000;
-}
-.lg-hero p {
-  font-size: 16px; line-height: 1.65; letter-spacing: -.01em; opacity: 1;
-  margin: 0; max-width: 47ch;
-  color: #000;
-}
-
-/* 2-column grid so the six feature lines lay out as 3 rows × 2 columns
-   inside the left brand panel. Falls back to a single column on very
-   narrow viewports so long labels don't get squashed. */
-.lg-features { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 22px; row-gap: 14px; }
-.lg-feature { display: flex; align-items: center; gap: 14px; font-size: 14.5px; font-weight: 500; letter-spacing: -.005em; color: #000; min-width: 0; }
-.lg-feature span { min-width: 0; overflow-wrap: anywhere; }
-@media (max-width: 480px) {
-  .lg-features { grid-template-columns: 1fr; }
-}
-.lg-feature i {
-  width: 38px; height: 38px; flex-shrink: 0;
-  display: grid; place-items: center; font-size: 15px;
-  background: rgba(255, 255, 255, .15); border: 1px solid rgba(255, 255, 255, .12); border-radius: 11px;
-}
-
-.lg-brand-foot { font-size: 12.5px; opacity: .72; letter-spacing: -.004em; }
-
-/* ── Offer images · promo showcase on the brand panel ────────────────────── */
-.lg-offers { display: flex; flex-direction: column; gap: 14px; }
-
-/* Heading row · OFFER pill + supporting copy */
-.lg-offers-head { display: flex; align-items: center; gap: 12px; }
-.lg-offer-pill {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 6px 11px; border-radius: 99px;
-  background: rgba(255, 255, 255, .96);
-  color: #D65100;
-  font-size: 11.5px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, .14);
-}
-.lg-offer-pill i { font-size: 10.5px; }
-.lg-offers-title {
-  font-size: 13.5px; font-weight: 500; letter-spacing: -.006em; opacity: .92;
-}
-
-/* Image frame · 16:9 showcase, white card.
-   The image uses object-fit: contain so the FULL uploaded image is visible
-   without cropping — important for offer banners that often carry text or
-   logos near the edges. When the uploaded image isn't 16:9, the white frame
-   background naturally fills the letterbox area, giving a poster / card
-   feel that reads cleanly against the red brand panel. */
-.lg-offer-frame {
-  position: relative;
-  /* Full-bleed: break out of the brand panel's 56px horizontal padding so
-     the offer banner spans the entire panel width edge-to-edge, the way a
-     hero image normally does on a landing page. The OFFER pill / title
-     stay in the padded area above. */
-  width: calc(100% + 112px);
-  margin-left: -56px;
-  margin-right: -56px;
-  /* Taller banner ratio so the offer image gets more vertical room while
-     the full-bleed frame still spans the panel width. */
-  aspect-ratio: 20 / 9;
-  border-radius: 0;
-  overflow: hidden;
+  width: 100%;
   background: #ffffff;
-  border-top: 1px solid rgba(255, 255, 255, .2);
-  border-bottom: 1px solid rgba(255, 255, 255, .2);
-  box-shadow: 0 14px 32px rgba(0, 0, 0, .22);
+  font-family: "Lexend", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  color: var(--lg-navy);
+  overflow-x: hidden;
 }
-.lg-offer-img {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  /* Fill the rectangle as a banner — the image crops to fit the frame
-     instead of being letter-boxed with white bars. Most offer creatives
-     have their key content centred, which `object-position: center` keeps
-     visible across most aspect ratios. */
+
+.lg-shell *,
+.lg-shell *::before,
+.lg-shell *::after {
+  box-sizing: border-box;
+}
+
+/* Row 1 · everything except the bottom contact bar. */
+.lg-row {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+
+/* Left column · hero stage stacked on top of the value strip. */
+.lg-col {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Hero stage ──────────────────────────────────────────────────────────── */
+.lg-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+  /* Both banners are semi-transparent mid-crossfade, so something has to sit
+     behind them — otherwise the swap flashes the page white. */
+  background: #e9edf2;
+}
+
+/* Every banner is rendered and stacked; only the active one is faded up. That
+   keeps each image decoded before it is shown, so the rotation never flashes a
+   half-loaded frame the way swapping a single src would. */
+.lg-stage-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   object-position: center;
+  z-index: 0;
   opacity: 0;
-  transform: scale(1.02);
-  transition: opacity .55s ease, transform 6s ease;
+  transition: opacity 0.7s ease;
 }
-.lg-offer-img.is-active { opacity: 1; transform: scale(1); }
 
-/* Bottom gradient shade for indicator + caption legibility */
-.lg-offer-shade {
-  position: absolute; inset: auto 0 0 0; height: 62%;
-  background: linear-gradient(to top, rgba(17, 19, 24, .82), rgba(17, 19, 24, 0));
+.lg-stage-photo.is-active {
+  opacity: 1;
+}
+
+/* White wash that fades left→right: the copy column sits on near-white so the
+   navy headline reads, while the right half keeps the photography visible
+   behind the sign-in card. */
+.lg-stage-wash {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
   pointer-events: none;
+  background: linear-gradient(
+    95deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(255, 255, 255, 0.88) 24%,
+    rgba(255, 255, 255, 0.52) 44%,
+    rgba(255, 255, 255, 0.12) 64%,
+    rgba(255, 255, 255, 0) 82%
+  );
 }
 
-/* Details overlay · description + validity for OfferZone banners.
-   Sits bottom-left over the gradient shade; leaves room for the centred
-   dots below. Only rendered for slides that actually carry copy. */
-.lg-offer-caption {
-  position: absolute; left: 28px; right: 28px; bottom: 26px;
-  max-width: 78%;
+/* "B2B Portal" tab, pinned to the top-right of the stage. */
+.lg-portal {
+  position: absolute;
+  z-index: 3;
+  top: 22px;
+  right: 36px;
+  padding: 6px 14px 5px;
+  border-radius: 8px;
+  /* Whatever photo sits behind this corner, the frosted chip keeps the
+     label legible without turning into a hard box. */
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(6px);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--lg-navy);
+  border-bottom: 2.5px solid var(--lg-orange);
+}
+
+.lg-stage-inner {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 40px;
+  padding: clamp(18px, 4.2vh, 44px) clamp(28px, 4vw, 60px);
+}
+
+/* ── Brand copy ──────────────────────────────────────────────────────────── */
+.lg-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 520px;
+}
+
+.lg-logo-wrap {
+  width: fit-content;
+  margin-bottom: clamp(12px, 3.6vh, 40px);
+}
+
+/* The asset is trimmed to the wordmark (no transparent margin), so this width
+   is the mark itself — and it centres the tagline exactly underneath. */
+.lg-logo {
+  display: block;
+  width: clamp(240px, min(34vw, 54vh), 470px);
+  height: auto;
+}
+
+.lg-logo-tag {
+  margin-top: clamp(3px, 0.8vh, 9px);
+  text-align: center;
+  font-size: clamp(13px, min(1.9vw, 2.9vh), 26px);
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  color: #3a3a3a;
+}
+
+/* Deliberately a step below the wordmark — the logo leads, the headline
+   follows. */
+.lg-title {
+  margin: 0 0 clamp(9px, 1.9vh, 16px);
+  font-size: clamp(24px, min(2.9vw, 4.5vh), 40px);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+  color: var(--lg-navy);
+}
+
+/* "Partner" always drops to its own line, as in the reference design. */
+.lg-title span {
+  display: block;
+  color: var(--lg-orange);
+}
+
+.lg-sub {
+  margin: 0;
+  max-width: 34ch;
+  font-size: clamp(13.5px, 1.05vw, 15.5px);
+  font-weight: 400;
+  line-height: 1.65;
+  color: var(--lg-body);
+}
+
+/* ── Offer strip · caption + controls for the hero banner carousel ───────── */
+/* Pinned to the bottom-left of the stage rather than sitting in the flow of
+   the copy column. Only some banners carry a caption, so in-flow this block
+   grew and shrank by ~130px on every rotation — and because the column is
+   vertically centred, that nudged the logo and headline every four seconds.
+   Out of flow, the caption can come and go without moving anything else. */
+.lg-offerbar {
+  position: absolute;
+  left: clamp(28px, 4vw, 60px);
+  bottom: clamp(18px, 4.2vh, 44px);
+  z-index: 3;
+  /* Caption and controls sit side by side, so the block is only as tall as the
+     caption. Stacked, a full caption reached up into the sub-copy on a 720px
+     screen. */
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 12px;
+  max-width: min(540px, 52%);
+}
+
+/* Frosted card so the caption stays readable whatever banner is behind it. */
+.lg-offerbar-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 9px 13px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 10px 26px rgba(16, 24, 40, 0.1);
+}
+
+.lg-offerbar-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 99px;
+  background: var(--lg-orange);
   color: #fff;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, .55);
-  pointer-events: none;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
-.lg-offer-caption-title {
-  font-size: 16px; font-weight: 700; letter-spacing: -.01em;
-  margin-bottom: 4px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+
+.lg-offerbar-pill i {
+  font-size: 8.5px;
 }
-.lg-offer-caption-desc {
-  margin: 0 0 7px; font-size: 12.5px; line-height: 1.45; opacity: .96;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+
+.lg-offerbar-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--lg-navy);
+}
+
+.lg-offerbar-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--lg-body);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.lg-offer-caption-validity {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 4px 10px; border-radius: 99px;
-  background: rgba(255, 255, 255, .16);
-  border: 1px solid rgba(255, 255, 255, .28);
-  backdrop-filter: blur(4px);
-  font-size: 11.5px; font-weight: 600; letter-spacing: .01em;
-}
-.lg-offer-caption-validity i { font-size: 10.5px; opacity: .9; }
 
-/* Indicator dots · overlaid bottom-centre */
-.lg-offer-dots {
-  position: absolute; left: 0; right: 0; bottom: 12px;
-  display: flex; justify-content: center; gap: 6px;
+.lg-offerbar-validity {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--lg-orange-dark);
 }
-.lg-offer-dot {
-  width: 7px; height: 7px; padding: 0;
-  border: none; border-radius: 99px; cursor: pointer;
-  background: rgba(255, 255, 255, .55);
-  transition: background .2s ease, width .2s ease;
-}
-.lg-offer-dot.is-active { background: #ffffff; width: 22px; }
 
-/* Prev / next arrows · glass chips, only visible on hover */
-.lg-offer-nav {
-  position: absolute; top: 50%; transform: translateY(-50%);
-  width: 34px; height: 34px; padding: 0;
-  display: grid; place-items: center;
-  border: 1px solid rgba(255, 255, 255, .35);
+/* Carousel controls. Shown on their own when the banners carry no copy. */
+.lg-offerbar-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lg-offerbar-arrow {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(16, 24, 40, 0.08);
   border-radius: 99px;
-  background: rgba(17, 19, 24, .35);
-  color: #fff; font-size: 12px;
-  cursor: pointer;
-  opacity: 0;
+  background: rgba(255, 255, 255, 0.86);
   backdrop-filter: blur(6px);
-  transition: opacity .18s ease, background .18s ease, transform .18s ease;
+  color: var(--lg-navy);
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
-.lg-offer-nav:hover { background: rgba(17, 19, 24, .55); }
-.lg-offer-nav--prev { left: 12px; }
-.lg-offer-nav--next { right: 12px; }
-.lg-offer-frame:hover .lg-offer-nav { opacity: 1; }
 
-/* ── Right · sign-in card ────────────────────────────────────────────────── */
-.lg-main {
-  flex: 1 1 46%;
-  /* Anchor the card toward the top (instead of vertically centred) so the
-     logo + "Welcome back" sit higher up the panel. */
-  display: flex; align-items: flex-start; justify-content: center;
-  padding: 72px 36px 40px;
+.lg-offerbar-arrow:hover {
+  background: var(--lg-orange);
+  color: #fff;
+}
+
+.lg-offerbar-dots {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.lg-offerbar-dot {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: none;
+  border-radius: 99px;
+  cursor: pointer;
+  background: rgba(16, 24, 40, 0.22);
+  transition: width 0.2s ease, background 0.2s ease;
+}
+
+.lg-offerbar-dot.is-active {
+  width: 20px;
+  background: var(--lg-orange);
+}
+
+/* ── Sign-in card ────────────────────────────────────────────────────────── */
+.lg-card {
+  flex: 0 0 clamp(340px, 30vw, 420px);
+  max-width: 100%;
+  padding: clamp(18px, 3.4vh, 34px) clamp(22px, 2.4vw, 34px);
+  border-radius: 16px;
   background: #ffffff;
+  box-shadow: 0 24px 60px rgba(16, 24, 40, 0.16),
+    0 2px 6px rgba(16, 24, 40, 0.04);
 }
-.lg-card { width: 100%; max-width: 396px; }
 
-.lg-head { margin-bottom: 30px; }
-.lg-head h2 { font-size: 30px; font-weight: 700; letter-spacing: -.035em; line-height: 1.1; margin: 0 0 8px; color: #15171C; }
-.lg-head p { font-size: 15px; color: #6B7280; letter-spacing: -.01em; margin: 0; }
+.lg-card-title {
+  margin: 0 0 clamp(5px, 1.2vh, 10px);
+  font-size: clamp(23px, 1.95vw, 27px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--lg-navy);
+}
 
-.lg-field { margin-bottom: 18px; }
-.lg-field label {
-  display: flex; align-items: center; gap: 7px;
-  font-size: 13px; font-weight: 600; letter-spacing: -.004em; color: #3E3E3B; margin-bottom: 8px;
+.lg-card-title span {
+  color: var(--lg-orange);
 }
-.lg-field label i { color: #F75E00; font-size: 13px; }
-.lg-field input {
-  width: 100%; padding: 13px 15px; font-family: inherit;
-  border: 1.5px solid #E5E5E1; border-radius: 12px;
-  font-size: 15px; font-weight: 500; letter-spacing: -.006em;
-  color: #15171C; background: #FAFAF8;
-  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+
+.lg-card-sub {
+  margin: 0 0 clamp(12px, 2.8vh, 24px);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--lg-body);
 }
-.lg-field input::placeholder { color: #A8A8A3; font-weight: 400; }
-.lg-field input:focus {
-  outline: none; border-color: #F75E00; background: #fff;
-  box-shadow: 0 0 0 4px rgba(247, 94, 0, .12);
+
+/* Inputs · icon on the left, optional eye toggle on the right. */
+.lg-input {
+  position: relative;
+  margin-bottom: clamp(8px, 1.6vh, 13px);
+}
+
+.lg-input-ico {
+  position: absolute;
+  top: 50%;
+  left: 15px;
+  transform: translateY(-50%);
+  font-size: 13.5px;
+  color: var(--lg-muted);
+  pointer-events: none;
+  transition: color 0.18s ease;
+}
+
+.lg-input input {
+  width: 100%;
+  height: clamp(40px, 5.6vh, 48px);
+  padding: 0 44px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--lg-navy);
+  background: var(--lg-field);
+  border: 1px solid var(--lg-line);
+  border-radius: 9px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease,
+    background 0.18s ease;
+}
+
+.lg-input input::placeholder {
+  color: #a2aab8;
+}
+
+.lg-input input:focus {
+  outline: none;
+  background: #fff;
+  border-color: var(--lg-orange);
+  box-shadow: 0 0 0 3px var(--lg-orange-soft);
+}
+
+.lg-input:focus-within .lg-input-ico {
+  color: var(--lg-orange);
+}
+
+.lg-eye {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--lg-muted);
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.lg-eye:hover {
+  color: var(--lg-navy);
+  background: #eef0f4;
 }
 
 .lg-error {
-  background: #FDECEF; color: #D65100; border: 1px solid #F8C9D5;
-  border-radius: 10px; padding: 11px 14px; font-size: 13.5px; text-align: center; margin-bottom: 16px;
+  margin: 4px 0 12px;
+  padding: 10px 13px;
+  border: 1px solid #f6ccc0;
+  border-radius: 9px;
+  background: #fdf0eb;
+  color: #b03a12;
+  font-size: 12.5px;
+  text-align: center;
 }
 
+/* Remember me · Forgot password row. */
+.lg-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px 0 clamp(11px, 2.4vh, 20px);
+}
+
+.lg-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--lg-body);
+  cursor: pointer;
+  user-select: none;
+}
+
+.lg-check input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.lg-check-ui {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid #c8cedb;
+  border-radius: 4px;
+  background: #fff;
+  color: #fff;
+  font-size: 8.5px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.lg-check-ui i {
+  opacity: 0;
+  transform: scale(0.6);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.lg-check input:checked + .lg-check-ui {
+  background: var(--lg-orange);
+  border-color: var(--lg-orange);
+}
+
+.lg-check input:checked + .lg-check-ui i {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.lg-check input:focus-visible + .lg-check-ui {
+  box-shadow: 0 0 0 3px var(--lg-orange-soft);
+}
+
+.lg-forgot {
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--lg-orange);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.lg-forgot:hover {
+  color: var(--lg-orange-dark);
+  text-decoration: underline;
+}
+
+/* Primary button — also reused by the forgot-password modal. */
 .lg-submit {
-  width: 100%; margin-top: 6px; padding: 14px; font-family: inherit;
-  border: none; border-radius: 12px; cursor: pointer;
-  background: #F75E00; color: #fff; font-size: 15px; font-weight: 600; letter-spacing: .005em;
-  display: flex; align-items: center; justify-content: center; gap: 9px;
-  box-shadow: 0 10px 26px rgba(247, 94, 0, .26);
-  transition: transform .16s cubic-bezier(.16, 1, .3, 1), background .16s ease, box-shadow .16s ease;
+  width: 100%;
+  height: clamp(40px, 5.6vh, 48px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  color: #fff;
+  background: var(--lg-orange);
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(247, 94, 0, 0.28);
+  transition: background 0.16s ease, box-shadow 0.16s ease,
+    transform 0.16s ease;
 }
-.lg-submit:hover { transform: translateY(-2px); background: #D65100; box-shadow: 0 16px 34px rgba(247, 94, 0, .34); }
-.lg-submit:active { transform: translateY(0); }
 
-.lg-links { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; }
-.lg-link {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: none; border: none; cursor: pointer; text-decoration: none; font-family: inherit;
-  color: #F75E00; font-size: 13.5px; font-weight: 600; letter-spacing: -.004em;
-  padding: 6px 8px; border-radius: 8px; transition: background .15s ease, color .15s ease;
+.lg-submit i {
+  font-size: 12.5px;
+  transition: transform 0.18s ease;
 }
-.lg-link:hover { background: rgba(247, 94, 0, .08); color: #D65100; }
 
-.lg-secure {
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  margin-top: 28px; padding-top: 18px; border-top: 1px solid #EFEFEC;
-  color: #9CA3AF; font-size: 12.5px; letter-spacing: -.004em;
+.lg-submit:hover:not(:disabled) {
+  background: var(--lg-orange-dark);
+  box-shadow: 0 12px 26px rgba(247, 94, 0, 0.34);
 }
-.lg-secure i { color: #1E9E6A; }
 
-/* ── Responsive · stack; order = heading → form → promo block ────────────────
-   On mobile we flatten BOTH the brand panel and the hero with `display:
-   contents`, so the hero heading, hero description, offer showcase, features
-   and footer all become direct flex items of the shell. That lets us put just
-   the big "Manage hotel contracts…" HEADING at the very top (above the form),
-   then the white sign-in card, then a promo block below it (offer image +
-   description + features + footer). The red gradient moves onto the shell
-   because the brand panel no longer generates its own box. */
-@media (max-width: 900px) {
+.lg-submit:hover:not(:disabled) i {
+  transform: translateX(3px);
+}
+
+.lg-submit:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.lg-submit:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* "New to Desert Beds?" rule. */
+.lg-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: clamp(12px, 2.6vh, 22px) 0 clamp(9px, 1.9vh, 16px);
+  color: var(--lg-muted);
+  font-size: 12px;
+}
+
+.lg-divider::before,
+.lg-divider::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--lg-line);
+}
+
+/* Outlined secondary button. */
+.lg-ghost {
+  width: 100%;
+  height: clamp(38px, 5.2vh, 46px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 1.5px solid var(--lg-orange);
+  border-radius: 9px;
+  background: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--lg-orange);
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+.lg-ghost i {
+  font-size: 13px;
+}
+
+.lg-ghost:hover {
+  background: var(--lg-orange);
+  color: #fff;
+}
+
+/* ── Value strip ─────────────────────────────────────────────────────────── */
+.lg-usp {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 26px;
+  padding: clamp(12px, 2.8vh, 24px) clamp(28px, 4vw, 60px);
+  background: #ffffff;
+  border-top: 1px solid #eef0f4;
+}
+
+.lg-usp-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  min-width: 0;
+}
+
+.lg-usp-item > i {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  font-size: 19px;
+  color: var(--lg-orange);
+}
+
+.lg-usp-title {
+  margin-bottom: 3px;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--lg-navy);
+}
+
+.lg-usp-desc {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--lg-muted);
+}
+
+/* ── Hotel-brand rail ────────────────────────────────────────────────────── */
+.lg-rail {
+  flex: 0 0 clamp(150px, 14.5vw, 210px);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(44px, 1fr);
+  align-content: stretch;
+  gap: 10px 6px;
+  padding: 20px 12px;
+  background: #ffffff;
+  border-left: 1px solid #eef0f4;
+  overflow: hidden;
+}
+
+.lg-rail-cell {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  padding: 2px;
+}
+
+/* One uniform silhouette per brand. Left in their own colours the wall reads
+   unevenly — Accor, Taj, Holiday Inn and Hyatt all sit above 110 average
+   luminance and look washed out next to near-black Hilton and IHG — so every
+   mark is rendered solid. The assets in mono/ carry the alpha channel this
+   depends on; drop the filter line to get the brand colours back. */
+.lg-rail-cell img {
+  max-width: 100%;
+  max-height: clamp(24px, 4.4vh, 36px);
+  object-fit: contain;
+  filter: brightness(0);
+}
+
+/* ── Bottom contact bar ──────────────────────────────────────────────────── */
+.lg-footbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: clamp(8px, 1.6vh, 13px) clamp(20px, 3vw, 40px);
+  border-top: 1px solid #eef0f4;
+  background: #ffffff;
+  font-size: 11.5px;
+  color: var(--lg-muted);
+}
+
+.lg-footbar-mid {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  font-weight: 500;
+  color: var(--lg-body);
+}
+
+.lg-footbar-mid a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.lg-footbar-mid a:hover {
+  color: var(--lg-orange);
+}
+
+.lg-footbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lg-footbar-right span + span::before {
+  content: "|";
+  margin-right: 10px;
+  color: #d6dae2;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+/* Tight desktops · shrink the rail before dropping it. */
+@media (max-width: 1280px) {
+  .lg-rail {
+    gap: 8px 4px;
+  }
+  .lg-rail-cell img {
+    max-height: clamp(22px, 3.6vh, 30px);
+  }
+}
+
+/* Laptop / tablet landscape · the logo rail is decorative, so it goes first. */
+@media (max-width: 1140px) {
+  .lg-rail {
+    display: none;
+  }
+}
+
+/* Short desktop windows. The hero band shrinks faster than the copy inside it,
+   so the pinned offer caption starts creeping up into the sub-copy. Step it
+   down rather than let it collide: first the description goes, then the whole
+   caption, leaving just the carousel controls. */
+@media (min-width: 981px) and (max-height: 700px) {
+  .lg-offerbar-desc {
+    display: none;
+  }
+}
+
+@media (min-width: 981px) and (max-height: 620px) {
+  .lg-offerbar-copy {
+    display: none;
+  }
+}
+
+/* Safety valve. The vh clamps keep the whole screen inside the viewport down to
+   roughly 520px of height; below that the card would start getting clipped, and
+   a reachable form beats a fixed one, so scrolling comes back. */
+@media (min-width: 981px) and (max-height: 520px) {
   .lg-shell {
-    flex-direction: column;
-    background: linear-gradient(150deg, #F75E00 0%, #D65100 58%, #A63A00 100%);
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
   }
-  .lg-brand { display: contents; }
-  .lg-hero  { display: contents; }
-
-  .lg-hero h1    { order: 1; padding: 30px 30px 0; font-size: 28px; }
-  .lg-main       { order: 2; flex: none; padding: 26px 24px 22px; background: #ffffff; }
-  .lg-offers     { order: 3; padding: 24px 30px 0; }
-  .lg-hero p     { order: 4; padding: 20px 30px 0; font-size: 14.5px; max-width: none; }
-  .lg-features   { order: 5; padding: 18px 30px 0; gap: 12px; }
-  .lg-brand-foot { order: 6; padding: 18px 30px 28px; }
-
-  /* The full-bleed offer frame breaks out by the showcase's 30px padding so it
-     spans edge-to-edge without overflowing. */
-  .lg-offer-frame {
-    width: calc(100% + 60px);
-    margin-left: -30px;
-    margin-right: -30px;
-    aspect-ratio: 16 / 9;
-  }
-  /* No hover on touch — keep the prev/next arrows always visible. */
-  .lg-offer-nav { opacity: 1; }
-  /* The banner is shorter on mobile, so the caption rises into the brighter
-     upper part of the image — extend the dark shade so the text stays legible. */
-  .lg-offer-shade { height: 80%; }
 }
-@media (max-width: 480px) {
-  .lg-hero h1    { padding: 26px 22px 0; font-size: 25px; }
-  .lg-main       { padding: 24px 20px 20px; }
-  .lg-offers     { padding: 20px 22px 0; }
-  .lg-hero p     { padding: 18px 22px 0; }
-  .lg-features   { padding: 16px 22px 0; }
-  .lg-brand-foot { padding: 16px 22px 24px; }
-  .lg-head h2 { font-size: 26px; }
 
-  .lg-offer-frame {
-    width: calc(100% + 44px);
-    margin-left: -22px;
-    margin-right: -22px;
+/* Tablet portrait and below · stack the copy above the card. */
+@media (max-width: 980px) {
+  /* Stacked content genuinely exceeds one screen, so hand scrolling back to
+     the document here. */
+  .lg-shell {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
   }
-  /* Caption can crowd a small banner — keep it readable. */
-  .lg-offer-caption { left: 18px; right: 18px; bottom: 20px; max-width: 88%; }
+
+  .lg-stage {
+    min-height: 0;
+  }
+
+  .lg-stage-wash {
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.95) 0%,
+      rgba(255, 255, 255, 0.9) 46%,
+      rgba(255, 255, 255, 0.94) 100%
+    );
+  }
+
+  .lg-stage-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 26px;
+    /* Extra headroom clears the absolutely-positioned portal chip, which now
+       sits above the centred logo rather than beside it. */
+    padding: 62px 26px 34px;
+  }
+
+  .lg-portal {
+    top: 16px;
+    right: 22px;
+  }
+
+  .lg-copy {
+    max-width: none;
+    text-align: center;
+  }
+
+  .lg-logo-wrap {
+    margin: 0 auto 18px;
+  }
+
+  .lg-sub {
+    max-width: 46ch;
+    margin: 0 auto;
+  }
+
+  /* Stacked layout has no hero to pin against — back into the flow. */
+  .lg-offerbar {
+    position: static;
+    flex-direction: column;
+    max-width: none;
+    margin: clamp(14px, 2.6vh, 22px) auto 0;
+    align-items: center;
+  }
+
+  .lg-offerbar-copy {
+    align-items: center;
+    text-align: center;
+  }
+
+  .lg-card {
+    flex: none;
+    width: 100%;
+    max-width: 430px;
+    margin: 0 auto;
+  }
+
+  .lg-usp {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    padding: 22px 26px;
+  }
+
+  .lg-footbar {
+    flex-direction: column;
+    gap: 8px;
+    text-align: center;
+    padding: 14px 20px;
+  }
+
+  .lg-footbar-mid {
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
+/* Phones. */
+@media (max-width: 560px) {
+  .lg-title {
+    font-size: 25px;
+  }
+
+  .lg-logo {
+    width: 250px;
+  }
+
+  .lg-logo-tag {
+    font-size: 14px;
+  }
+
+  .lg-stage-inner {
+    padding: 56px 18px 30px;
+  }
+
+  .lg-portal {
+    top: 12px;
+    right: 16px;
+    padding: 5px 11px 4px;
+    font-size: 12px;
+  }
+
+  .lg-card {
+    padding: 22px 20px;
+  }
+
+  .lg-offerbar {
+    max-width: none;
+  }
+
+  .lg-usp {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 20px 18px;
+  }
 }
