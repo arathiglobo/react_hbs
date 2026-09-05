@@ -7,6 +7,7 @@ import LineChart from '../components/LineChart';
 import BarChart from '../components/BarChart';
 import axiosInstance from '../components/AxiosInstance';
 import { Icon, formatNumber } from './dashboardSkin';
+import FooterLegalLinks from '../components/FooterLegalLinks';
 import { Collapse } from 'react-bootstrap';
 import { FaChartLine, FaChevronDown } from 'react-icons/fa';
 import '../styles/AdminDashboardModern.css';
@@ -388,6 +389,8 @@ export default function AdminDashboard() {
 
       <footer className="adm-foot">
         <span>© {new Date().getFullYear()} <strong>Globosoft</strong>. All rights reserved.</span>
+        {/* Middle child of a space-between row, so it centres itself. */}
+        <FooterLegalLinks />
         <span>Admin Dashboard</span>
       </footer>
     </div>

@@ -58,11 +58,86 @@ const LOGIN_USPS = [
   },
 ];
 
+// ── About us ────────────────────────────────────────────────────────────────
+// Company profile behind the footer link. Held as data rather than inline JSX
+// so the modal stays one readable layout and the copy is easy to edit.
+const ABOUT_INTRO = [
+  "Desert Beds LLC is a UAE-based Online Travel Agency (OTA), B2B Bedbank and Destination Management Company (DMC) focused on connecting travel professionals with quality accommodation and travel services worldwide.",
+  "Built around technology, global connectivity and strong destination expertise, Desert Beds provides travel agencies, tour operators, and other travel professionals with access to a comprehensive portfolio of hotels, resorts, apartments, transfers, tours, excursions and destination services through a single B2B platform.",
+];
+
+const ABOUT_USP_LEAD =
+  "At Desert Beds LLC, we believe the future of travel is not built around a single product. It is built around choice, personalization, flexibility and seamless access to multiple travel solutions through one platform. Desert Beds brings together a diverse portfolio of accommodation, travel experiences, lifestyle products and specialized travel solutions designed to meet the evolving requirements of today’s travel industry and the next generation of travellers.";
+
+const ABOUT_PRODUCTS = [
+  "Hotels & Resorts",
+  "Apartments & Villas",
+  "Student Travel",
+  "Airline, Government, Hotelier & Institutional Accommodation",
+  "Senior Citizen Travel",
+  "Last-Minute Deals",
+  "Honeymoon & Romance",
+  "Holiday Packages",
+  "Build Your Own Package",
+  "Meetings & Event Spaces",
+  "Ayurveda & Wellness",
+  "Religious & Faith-Based Travel",
+  "24-Hour Stay",
+  "Long Stay & Extended Stay",
+  "Day Stay",
+  "Chauffeur & Limousine Services",
+  "Tours & Activities",
+  "Restaurant Reservations",
+];
+
+const ABOUT_PLATFORM =
+  "Our platform is designed to simplify the way travel businesses search, compare, book and manage travel products, offering competitive rates, real-time availability and efficient booking solutions. Through API connectivity and direct as well as strategic supplier partnerships, we aim to deliver reliable inventory and seamless distribution to our B2B partners.";
+
+const ABOUT_SERVICES = [
+  {
+    title: "B2B Bedbank",
+    desc: "Global hotel and accommodation inventory with competitive wholesale rates and flexible booking solutions.",
+  },
+  {
+    title: "Online Travel Agency (OTA)",
+    desc: "A technology-driven platform enabling travel professionals to search and book accommodation and travel services efficiently.",
+  },
+  {
+    title: "Destination Management Company (DMC)",
+    desc: "Local destination expertise, including transfers, tours, excursions, sightseeing, activities and tailor-made travel arrangements.",
+  },
+  {
+    title: "API & Connectivity",
+    desc: "Technology solutions enabling travel agencies, tour operators and online platforms to connect directly with our inventory and services.",
+  },
+];
+
+const ABOUT_VISION =
+  "To become a trusted global travel distribution and technology partner, connecting suppliers and travel sellers through one efficient ecosystem.";
+
+const ABOUT_MISSION =
+  "To make travel distribution simpler, smarter and more accessible to everyone, across generations and markets, by combining innovative technology, competitive pricing, global inventory and deep destination expertise.";
+
+const ABOUT_WHY = [
+  { emoji: "\u{1F30D}", label: "Global Accommodation & Travel Inventory" },
+  { emoji: "\u{1F4BC}", label: "Dedicated B2B Solutions" },
+  { emoji: "\u{1F517}", label: "API & Technology Connectivity" },
+  { emoji: "\u{1F4B0}", label: "Competitive Wholesale Rates" },
+  { emoji: "\u26A1", label: "Fast & Efficient Booking" },
+  { emoji: "\u{1F91D}", label: "Strong Supplier & Partner Network" },
+  { emoji: "\u{1F5FA}\uFE0F", label: "Destination Expertise" },
+  { emoji: "\u{1F4DE}", label: "Professional B2B Support" },
+];
+
+const ABOUT_CLOSING =
+  "At Desert Beds, we believe the future of travel distribution is built on technology, connectivity and trust. Our goal is not simply to provide hotel rooms, but to create a complete travel ecosystem that helps our partners grow their business and deliver better experiences to their customers.";
+
 const Login = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [forgetEmail, setForgetEmail] = useState("");
@@ -110,6 +185,17 @@ const Login = () => {
   const [offerIdx, setOfferIdx] = useState(0);
   const navigate = useNavigate();
 
+  // Escape closes the About panel. Bound only while it is open so the page
+  // isn't listening for keys it has no use for the rest of the time.
+  useEffect(() => {
+    if (!showAbout) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") setShowAbout(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showAbout]);
+
   // Restore the "Remember me" username on mount. Only the username is ever
   // persisted — the password is never written to storage.
   useEffect(() => {
@@ -144,14 +230,27 @@ const Login = () => {
         // bannerImagePah is already a full /images/ URL served publicly.
         if (Array.isArray(offerRes.data)) {
           offerRes.data.forEach((offer) => {
-            if (!offer.bannerImagePah) return;
-            next.push({
-              key: `offer-${offer.offerId}`,
-              url: offer.bannerImagePah,
-              title: offer.title,
-              description: offer.description,
-              validityFrom: offer.validityFrom,
-              validityTo: offer.validityTo,
+            // An offer can carry several banners now, and each one becomes its
+            // own hero slide sharing that offer’s caption. Rows written before
+            // the list existed only have the single bannerImagePah.
+            const urls =
+              Array.isArray(offer.bannerImagePaths) &&
+              offer.bannerImagePaths.length > 0
+                ? offer.bannerImagePaths
+                : offer.bannerImagePah
+                ? [offer.bannerImagePah]
+                : [];
+
+            urls.forEach((url, i) => {
+              if (!url) return;
+              next.push({
+                key: `offer-${offer.offerId}-${i}`,
+                url,
+                title: offer.title,
+                description: offer.description,
+                validityFrom: offer.validityFrom,
+                validityTo: offer.validityTo,
+              });
             });
           });
         }
@@ -576,7 +675,7 @@ const Login = () => {
                 over the photo while the right half keeps the imagery. */}
             <div className="lg-stage-wash" aria-hidden="true" />
 
-            <div className="lg-portal">B2B Portal</div>
+            <div className="lg-portal">B2B Portal &amp; DMC</div>
 
             <div className="lg-stage-inner">
               {/* ── Brand copy ── */}
@@ -592,7 +691,7 @@ const Login = () => {
 
                 <h1 className="lg-title">
                   Your Global Travel
-                  <span> Partner</span>
+                   Partner
                 </h1>
 
                 <p className="lg-sub">
@@ -646,48 +745,6 @@ const Login = () => {
                       );
                     })()}
 
-                    {slides.length > 1 && (
-                      <div className="lg-offerbar-nav">
-                        <button
-                          type="button"
-                          className="lg-offerbar-arrow"
-                          aria-label="Previous offer"
-                          onClick={() =>
-                            setOfferIdx(
-                              (i) => (i - 1 + slides.length) % slides.length,
-                            )
-                          }
-                        >
-                          <i className="fas fa-chevron-left"></i>
-                        </button>
-
-                        <div className="lg-offerbar-dots">
-                          {slides.map((slide, i) => (
-                            <button
-                              key={slide.key}
-                              type="button"
-                              aria-label={`Show offer ${i + 1}`}
-                              aria-current={i === offerIdx}
-                              className={`lg-offerbar-dot${
-                                i === offerIdx ? " is-active" : ""
-                              }`}
-                              onClick={() => setOfferIdx(i)}
-                            />
-                          ))}
-                        </div>
-
-                        <button
-                          type="button"
-                          className="lg-offerbar-arrow"
-                          aria-label="Next offer"
-                          onClick={() =>
-                            setOfferIdx((i) => (i + 1) % slides.length)
-                          }
-                        >
-                          <i className="fas fa-chevron-right"></i>
-                        </button>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -801,6 +858,26 @@ const Login = () => {
                 </button>
               </div>
             </div>
+
+            {/* Carousel dots, centred along the bottom of the hero. A sibling of
+                the content column rather than a child of the caption, so they
+                centre on the banner instead of on whatever copy sits bottom-left. */}
+            {slides.length > 1 && (
+              <div className="lg-stage-dots">
+                {slides.map((slide, i) => (
+                  <button
+                    key={slide.key}
+                    type="button"
+                    aria-label={`Show offer ${i + 1}`}
+                    aria-current={i === offerIdx}
+                    className={`lg-stage-dot${
+                      i === offerIdx ? " is-active" : ""
+                    }`}
+                    onClick={() => setOfferIdx(i)}
+                  />
+                ))}
+              </div>
+            )}
           </section>
 
           {/* ── Value strip ── */}
@@ -819,18 +896,23 @@ const Login = () => {
 
         {/* ── Hotel-brand rail ── */}
         <aside className="lg-rail" aria-label="Hotel brands we work with">
-          {BRAND_LOGOS.map((file) => (
-            <div className="lg-rail-cell" key={file}>
-              <img
-                src={encodeURI(
-                  `${process.env.PUBLIC_URL}/images/marqueeImages/mono/${file}`,
-                )}
-                alt=""
-                aria-hidden="true"
-                loading="lazy"
-              />
-            </div>
-          ))}
+          {/* The list is rendered twice so the marquee can loop without a seam:
+              the track scrolls by exactly one copy, then restarts. Cells are a
+              fixed height for that reason — with uneven cells, half the track
+              would not line up with one copy and the loop would jump. */}
+          <div className="lg-rail-track">
+            {[...BRAND_LOGOS, ...BRAND_LOGOS].map((file, i) => (
+              <div className="lg-rail-cell" key={`${file}-${i}`}>
+                <img
+                  src={encodeURI(
+                    `${process.env.PUBLIC_URL}/images/marqueeImages/mono/${file}`,
+                  )}
+                  alt=""
+                  aria-hidden="true"
+                />
+              </div>
+            ))}
+          </div>
         </aside>
       </div>
 
@@ -840,6 +922,13 @@ const Login = () => {
           © {new Date().getFullYear()} Desert Beds. All rights reserved.
         </div>
         <div className="lg-footbar-mid">
+          <button
+            type="button"
+            className="lg-footbar-link"
+            onClick={() => setShowAbout(true)}
+          >
+            About us
+          </button>
           <span>
             Contact : <a href="tel:+971563269000">+971 56 326 9000</a>
           </span>
@@ -853,6 +942,91 @@ const Login = () => {
           <span>India</span>
         </div>
       </footer>
+
+      {/* ── About us ── */}
+      {showAbout && (
+        <div
+          className="lg-about-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="lg-about-title"
+          onClick={() => setShowAbout(false)}
+        >
+          <div className="lg-about" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="lg-about-close"
+              onClick={() => setShowAbout(false)}
+              aria-label="Close"
+            >
+              <i className="fas fa-times"></i>
+            </button>
+
+            <header className="lg-about-head">
+              <p className="lg-about-eyebrow">Desert Beds LLC</p>
+              <h2 id="lg-about-title">About Us</h2>
+              <p className="lg-about-tagline">
+                Your Global B2B Accommodation &amp; Travel Distribution Partner
+              </p>
+            </header>
+
+            <div className="lg-about-body">
+              {ABOUT_INTRO.map((para) => (
+                <p key={para.slice(0, 32)}>{para}</p>
+              ))}
+
+              <h3>Our unique selling proposition</h3>
+              <p className="lg-about-lede">A complete travel ecosystem.</p>
+              <p>{ABOUT_USP_LEAD}</p>
+
+              <ul className="lg-about-chips">
+                {ABOUT_PRODUCTS.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+
+              <p>{ABOUT_PLATFORM}</p>
+
+              <h3>Our services</h3>
+              <div className="lg-about-services">
+                {ABOUT_SERVICES.map((svc) => (
+                  <div className="lg-about-service" key={svc.title}>
+                    <div className="lg-about-service-title">{svc.title}</div>
+                    <p>{svc.desc}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="lg-about-split">
+                <section>
+                  <h3>Our vision</h3>
+                  <p>{ABOUT_VISION}</p>
+                </section>
+                <section>
+                  <h3>Our mission</h3>
+                  <p>{ABOUT_MISSION}</p>
+                </section>
+              </div>
+
+              <h3>Why Desert Beds?</h3>
+              <ul className="lg-about-why">
+                {ABOUT_WHY.map((item) => (
+                  <li key={item.label}>
+                    <span aria-hidden="true">{item.emoji}</span>
+                    {item.label}
+                  </li>
+                ))}
+              </ul>
+
+              <p>{ABOUT_CLOSING}</p>
+
+              <p className="lg-about-signoff">
+                Desert Beds LLC &mdash; Destinations Worldwide.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Role Selection Modal ── */}
       {showRoleModal && (

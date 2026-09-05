@@ -1,5 +1,6 @@
 import React from 'react';
 import RegionalClock from '../components/RegionalClock';
+import FooterLegalLinks from '../components/FooterLegalLinks';
 
 /* ══════════════════════════════════════════════════════════════
    SHARED DASHBOARD SKIN
@@ -133,6 +134,8 @@ export function DashboardFooter({ label }) {
       <span className="dash-footer-copy">
         © {new Date().getFullYear()} Globosoft. All rights reserved.
       </span>
+      {/* Middle child of a space-between row, so it centres itself. */}
+      <FooterLegalLinks />
       <span className="dash-footer-meta">
         {label} · Powered by Globosoft
       </span>
