@@ -179,8 +179,11 @@
 @keyframes admShim { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
 /* ── FOOTER ──────────────────────────────────────────────────────────────── */
+/* Orange brand band, matching the Agent / Staff / Extranet footers. Those use
+   var(--color-primary), but that token is declared on .rw-dashboard and this
+   shell is .adm-shell — so the brand values are literal here. */
 .adm-foot {
-  padding: 16px 32px; border-top: 1px solid #ECECE8; background: #fff; color: #6B7280; font-size: 13px;
+  padding: 16px 32px; border-top: 1px solid #D65100; background: #F75E00; color: rgba(255, 255, 255, 0.82); font-size: 13px;
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
 }
-.adm-foot strong { color: #15171C; font-weight: 600; }
+.adm-foot strong { color: #ffffff; font-weight: 600; }

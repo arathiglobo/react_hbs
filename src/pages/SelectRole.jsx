@@ -57,22 +57,17 @@ const SelectRole = () => {
       {/* Header */}
       <div className="role-header">
         <div className="header-content">
+          {/* Wordmark on its own white plate, matching the TopBar treatment,
+              with the tagline stacked directly beneath it. desert-logo.png is
+              the transparent cut of the mark, so the plate edges stay clean. */}
           <div className="company-info">
-            {/* <img
-              src={`${process.env.PUBLIC_URL}/images/logo-1.jpg`}
-              alt="Globosoft Logo"
-              className="company-logo"
-            /> */}
-             <img
-              src={`${process.env.PUBLIC_URL}/images/desert.PNG`}
-              alt="desert beds Logo"
-              className="company-logo"
-            />
-            <div className="company-details">
-              {/* <h1 className="company-name">Globosoft</h1> */}
-               <h1 className="company-name">desert beds</h1>
-              <p className="company-tagline">Global Contracting Solutions</p>
+            <div className="company-logo-plate">
+              <img
+                src={`${process.env.PUBLIC_URL}/images/desert-logo.png`}
+                alt="Desert Beds"
+              />
             </div>
+            <p className="company-tagline">destinations worldwide</p>
           </div>
           <div className="header-features">
             <div className="feature-item">

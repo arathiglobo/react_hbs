@@ -61,20 +61,33 @@ body {
   align-items: center;
 }
 
-.company-info {
+/* Wordmark stacked over its tagline, scoped to this header so the shared
+   .company-* names in Login.css are left alone. */
+.role-header .company-info {
   display: flex;
-  align-items: center;
-  gap: 20px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
 }
 
-.company-logo {
-  width: 60px;
-  height: 60px;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-  object-fit: contain;
-  object-position: center;
-  background: white;
+.role-header .company-logo-plate {
+  display: block;
+  padding: 7px 14px;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.14);
+}
+
+.role-header .company-logo-plate img {
+  display: block;
+  width: clamp(120px, 14vw, 168px);
+  height: auto;
+}
+
+.role-header .company-tagline {
+  padding-left: 14px;
+  font-size: 13px;
+  letter-spacing: 0.06em;
 }
 
 .company-name {

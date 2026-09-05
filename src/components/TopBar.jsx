@@ -811,11 +811,11 @@ export default function TopBar() {
   >
     <img
       src={`${process.env.PUBLIC_URL}/images/desert.PNG`}
-      alt="Globosoft"
+      alt="desertbeds"
       style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 6 }}
     />
   </div>
-  <span className="fw-semibold">desert beds</span>
+  {/* <span className="fw-semibold">desert beds</span> */}
 </Navbar.Brand>
          {showSidebarToggle && (
            <button

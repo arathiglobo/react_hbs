@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 // NOTE: do NOT import bootstrap/dist/css/bootstrap.min.css here — it is global
 // and re-introduces the default blue theme on top of the red SCSS build.
 import "bootstrap/dist/js/bootstrap.bundle.min";
@@ -10,10 +10,135 @@ import DashboardRedirections from "../components/DashboardRedirections";
 import axiosInstance from "../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 
+// Hotel-brand logos shown in the right-hand rail. These are the normalised
+// copies in public/images/marqueeImages/mono/ — same artwork as the originals
+// alongside them, but downscaled, given a real alpha channel and trimmed to
+// the mark so every logo fills its cell evenly. The rail renders them as
+// silhouettes, which is why the white plates had to come out first.
+// Add, remove or reorder freely; the rail lays them out two per row.
+const BRAND_LOGOS = [
+  "Marriott-logo.png",
+  "Hilton-logo.png",
+  "Hyatt-Logo.png",
+  "Sheraton-logo.png",
+  "Four-Seasons-Logo.png",
+  "IHG-Logo.png",
+  "Crowne-Plaza-logo.png",
+  "Holiday-Inn-logo.png",
+  "Accor-logo.png",
+  // ASCII filename: the ö-spelled original 404s through the dev server.
+  "Movenpick-Logo.png",
+  "jumeirah-logo-png_seeklogo.png",
+  "Atlantis.png",
+  "Taj.png",
+  "Best-Western-logo.png",
+];
+
+// Value props in the strip beneath the hero.
+const LOGIN_USPS = [
+  {
+    icon: "fa-globe",
+    title: "WorldWide Inventory",
+    desc: "Hotels, apartments, tours, transfers, car rentals and more.",
+  },
+  {
+    icon: "fa-shield-alt",
+    title: "Reliable & Secure",
+    desc: "Trusted by thousands of travel professionals globally.",
+  },
+  {
+    icon: "fa-headset",
+    title: "Dedicated Support",
+    desc: "Our team is here to help you, always.",
+  },
+  {
+    icon: "fa-chart-line",
+    title: "Grow Your Business",
+    desc: "More choice. Better rates. Greater opportunities.",
+  },
+];
+
+// ── About us ────────────────────────────────────────────────────────────────
+// Company profile behind the footer link. Held as data rather than inline JSX
+// so the modal stays one readable layout and the copy is easy to edit.
+const ABOUT_INTRO = [
+  "Desert Beds LLC is a UAE-based Online Travel Agency (OTA), B2B Bedbank and Destination Management Company (DMC) focused on connecting travel professionals with quality accommodation and travel services worldwide.",
+  "Built around technology, global connectivity and strong destination expertise, Desert Beds provides travel agencies, tour operators, and other travel professionals with access to a comprehensive portfolio of hotels, resorts, apartments, transfers, tours, excursions and destination services through a single B2B platform.",
+];
+
+const ABOUT_USP_LEAD =
+  "At Desert Beds LLC, we believe the future of travel is not built around a single product. It is built around choice, personalization, flexibility and seamless access to multiple travel solutions through one platform. Desert Beds brings together a diverse portfolio of accommodation, travel experiences, lifestyle products and specialized travel solutions designed to meet the evolving requirements of today’s travel industry and the next generation of travellers.";
+
+const ABOUT_PRODUCTS = [
+  "Hotels & Resorts",
+  "Apartments & Villas",
+  "Student Travel",
+  "Airline, Government, Hotelier & Institutional Accommodation",
+  "Senior Citizen Travel",
+  "Last-Minute Deals",
+  "Honeymoon & Romance",
+  "Holiday Packages",
+  "Build Your Own Package",
+  "Meetings & Event Spaces",
+  "Ayurveda & Wellness",
+  "Religious & Faith-Based Travel",
+  "24-Hour Stay",
+  "Long Stay & Extended Stay",
+  "Day Stay",
+  "Chauffeur & Limousine Services",
+  "Tours & Activities",
+  "Restaurant Reservations",
+];
+
+const ABOUT_PLATFORM =
+  "Our platform is designed to simplify the way travel businesses search, compare, book and manage travel products, offering competitive rates, real-time availability and efficient booking solutions. Through API connectivity and direct as well as strategic supplier partnerships, we aim to deliver reliable inventory and seamless distribution to our B2B partners.";
+
+const ABOUT_SERVICES = [
+  {
+    title: "B2B Bedbank",
+    desc: "Global hotel and accommodation inventory with competitive wholesale rates and flexible booking solutions.",
+  },
+  {
+    title: "Online Travel Agency (OTA)",
+    desc: "A technology-driven platform enabling travel professionals to search and book accommodation and travel services efficiently.",
+  },
+  {
+    title: "Destination Management Company (DMC)",
+    desc: "Local destination expertise, including transfers, tours, excursions, sightseeing, activities and tailor-made travel arrangements.",
+  },
+  {
+    title: "API & Connectivity",
+    desc: "Technology solutions enabling travel agencies, tour operators and online platforms to connect directly with our inventory and services.",
+  },
+];
+
+const ABOUT_VISION =
+  "To become a trusted global travel distribution and technology partner, connecting suppliers and travel sellers through one efficient ecosystem.";
+
+const ABOUT_MISSION =
+  "To make travel distribution simpler, smarter and more accessible to everyone, across generations and markets, by combining innovative technology, competitive pricing, global inventory and deep destination expertise.";
+
+const ABOUT_WHY = [
+  { emoji: "\u{1F30D}", label: "Global Accommodation & Travel Inventory" },
+  { emoji: "\u{1F4BC}", label: "Dedicated B2B Solutions" },
+  { emoji: "\u{1F517}", label: "API & Technology Connectivity" },
+  { emoji: "\u{1F4B0}", label: "Competitive Wholesale Rates" },
+  { emoji: "\u26A1", label: "Fast & Efficient Booking" },
+  { emoji: "\u{1F91D}", label: "Strong Supplier & Partner Network" },
+  { emoji: "\u{1F5FA}\uFE0F", label: "Destination Expertise" },
+  { emoji: "\u{1F4DE}", label: "Professional B2B Support" },
+];
+
+const ABOUT_CLOSING =
+  "At Desert Beds, we believe the future of travel distribution is built on technology, connectivity and trust. Our goal is not simply to provide hotel rooms, but to create a complete travel ecosystem that helps our partners grow their business and deliver better experiences to their customers.";
+
 const Login = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [forgetEmail, setForgetEmail] = useState("");
   const [forgetUsername, setForgetUsername] = useState("");
@@ -60,6 +185,31 @@ const Login = () => {
   const [offerIdx, setOfferIdx] = useState(0);
   const navigate = useNavigate();
 
+  // Escape closes the About panel. Bound only while it is open so the page
+  // isn't listening for keys it has no use for the rest of the time.
+  useEffect(() => {
+    if (!showAbout) return undefined;
+    const onKey = (e) => {
+      if (e.key === "Escape") setShowAbout(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showAbout]);
+
+  // Restore the "Remember me" username on mount. Only the username is ever
+  // persisted — the password is never written to storage.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("rememberedUsername");
+      if (saved) {
+        setUsername(saved);
+        setRememberMe(true);
+      }
+    } catch (storageErr) {
+      /* storage unavailable (private mode) — nothing to restore */
+    }
+  }, []);
+
   // Fetch both public sources once on mount and flatten them into a single
   // ordered list of slide objects ({ url, title?, description?, validity* }).
   useEffect(() => {
@@ -80,14 +230,27 @@ const Login = () => {
         // bannerImagePah is already a full /images/ URL served publicly.
         if (Array.isArray(offerRes.data)) {
           offerRes.data.forEach((offer) => {
-            if (!offer.bannerImagePah) return;
-            next.push({
-              key: `offer-${offer.offerId}`,
-              url: offer.bannerImagePah,
-              title: offer.title,
-              description: offer.description,
-              validityFrom: offer.validityFrom,
-              validityTo: offer.validityTo,
+            // An offer can carry several banners now, and each one becomes its
+            // own hero slide sharing that offer’s caption. Rows written before
+            // the list existed only have the single bannerImagePah.
+            const urls =
+              Array.isArray(offer.bannerImagePaths) &&
+              offer.bannerImagePaths.length > 0
+                ? offer.bannerImagePaths
+                : offer.bannerImagePah
+                ? [offer.bannerImagePah]
+                : [];
+
+            urls.forEach((url, i) => {
+              if (!url) return;
+              next.push({
+                key: `offer-${offer.offerId}-${i}`,
+                url,
+                title: offer.title,
+                description: offer.description,
+                validityFrom: offer.validityFrom,
+                validityTo: offer.validityTo,
+              });
             });
           });
         }
@@ -214,6 +377,18 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+    setSubmitting(true);
+
+    // Remember-me only ever persists the username, never the password.
+    try {
+      if (rememberMe) {
+        localStorage.setItem("rememberedUsername", username);
+      } else {
+        localStorage.removeItem("rememberedUsername");
+      }
+    } catch (storageErr) {
+      /* storage unavailable — remember-me just won't stick */
+    }
 
     try {
       const loginRequest = { username: `${username}`, password: `${password}` };
@@ -258,6 +433,8 @@ const Login = () => {
       await completeLogin(response.data);
     } catch (err) {
       setError("Invalid username or password");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -457,264 +634,399 @@ const Login = () => {
 
   return (
     <div className="lg-shell">
-      {/* ── Left · brand panel ── */}
-      <aside className="lg-brand">
-        {/* ── Offer showcase (from /upload-offer-image) ──
-            Sits directly under the brand logo so it's the first visual the
-            user sees. Section is conditional — when no offers are uploaded
-            it disappears completely and the original layout shows. */}
-        {slides.length > 0 && (
-          <div className="lg-offers">
-            <div className="lg-offers-head">
-              <span className="lg-offer-pill">
-                <i className="fas fa-tag"></i> Offer
-              </span>
-              <span className="lg-offers-title">Limited-time promotions</span>
-            </div>
+      {/* ── Main row · hero stage (left) + hotel-brand rail (right) ── */}
+      <div className="lg-row">
+        <div className="lg-col">
+          {/* ── Stage · hero photo, brand copy and the sign-in card ── */}
+          <section className="lg-stage">
+            {/* Hero backdrop · the banners published on /offer (and
+                /upload-offer-image), cross-fading every few seconds. All of
+                them are stacked and toggled by opacity rather than swapping a
+                single src, so the browser has each one decoded before it is
+                shown and the transition can't flash.
 
-            <div className="lg-offer-frame">
-              {slides.map((slide, i) => (
+                The bundled photo is only the empty state: it shows while
+                nothing is published (or while the fetch is in flight) so the
+                page never renders on a blank stage. */}
+            {slides.length > 0 ? (
+              slides.map((slide, i) => (
                 <img
                   key={slide.key}
                   src={slide.url}
                   alt={slide.title || `Offer ${i + 1}`}
-                  className={`lg-offer-img${i === offerIdx ? " is-active" : ""}`}
+                  className={`lg-stage-photo${
+                    i === offerIdx ? " is-active" : ""
+                  }`}
                 />
-              ))}
-              <div className="lg-offer-shade" aria-hidden="true" />
-
-              {/* Details overlay for the active slide — only banners coming
-                  from OfferZone carry a description / validity window. */}
-              {(() => {
-                const active = slides[offerIdx];
-                if (
-                  !active ||
-                  (!active.description &&
-                    !active.validityFrom &&
-                    !active.validityTo)
-                ) {
-                  return null;
-                }
-                return (
-                  <div className="lg-offer-caption">
-                    {active.title && (
-                      <div className="lg-offer-caption-title">
-                        {active.title}
-                      </div>
-                    )}
-                    {active.description && (
-                      <p className="lg-offer-caption-desc">
-                        {active.description}
-                      </p>
-                    )}
-                    {(active.validityFrom || active.validityTo) && (
-                      <div className="lg-offer-caption-validity">
-                        <i className="fas fa-calendar-alt"></i>
-                        <span>
-                          {active.validityFrom && active.validityTo
-                            ? `${formatOfferDate(
-                                active.validityFrom,
-                              )} – ${formatOfferDate(active.validityTo)}`
-                            : active.validityFrom
-                            ? `From ${formatOfferDate(active.validityFrom)}`
-                            : `Until ${formatOfferDate(active.validityTo)}`}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {slides.length > 1 && (
-                <>
-                  <button
-                    type="button"
-                    aria-label="Previous offer"
-                    className="lg-offer-nav lg-offer-nav--prev"
-                    onClick={() =>
-                      setOfferIdx(
-                        (i) => (i - 1 + slides.length) % slides.length,
-                      )
-                    }
-                  >
-                    <i className="fas fa-chevron-left"></i>
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Next offer"
-                    className="lg-offer-nav lg-offer-nav--next"
-                    onClick={() => setOfferIdx((i) => (i + 1) % slides.length)}
-                  >
-                    <i className="fas fa-chevron-right"></i>
-                  </button>
-
-                  <div className="lg-offer-dots">
-                    {slides.map((slide, i) => (
-                      <button
-                        key={slide.key}
-                        type="button"
-                        aria-label={`Show offer ${i + 1}`}
-                        className={`lg-offer-dot${
-                          i === offerIdx ? " is-active" : ""
-                        }`}
-                        onClick={() => setOfferIdx(i)}
-                      />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div className="lg-hero">
-          <h1>Manage hotel contracts with confidence.</h1>
-          <p>
-            One platform to manage contracts, track performance, and grow your
-            relationships with leading hotel chains worldwide.
-          </p>
-        </div>
-
-        <div className="lg-features">
-          <div className="lg-feature">
-            <i className="fas fa-chart-line"></i>
-            <span>Real-time performance analytics</span>
-          </div>
-          <div className="lg-feature">
-            <i className="fas fa-bed"></i>
-            <span>Real-time hotel availability</span>
-          </div>
-          <div className="lg-feature">
-            <i className="fas fa-handshake"></i>
-            <span>End-to-end contract management</span>
-          </div>
-          <div className="lg-feature">
-            <i className="fas fa-bolt"></i>
-            <span>Fast &amp; seamless bookings</span>
-          </div>
-          <div className="lg-feature">
-            <i className="fas fa-globe"></i>
-            <span>5000+ hotels across 150+ countries</span>
-          </div>
-          <div className="lg-feature">
-            <i className="fas fa-tags"></i>
-            <span>Manage rates &amp; reservations</span>
-          </div>
-        </div>
-
-        <div className="lg-brand-foot">
-          © {new Date().getFullYear()} Globosoft. All rights reserved.
-        </div>
-      </aside>
-
-      {/* ── Right · sign-in card ── */}
-      <main className="lg-main">
-        <div className="lg-card">
-          <div className="lg-brand-top lg-brand-top--card">
-            {/* <img
-              src={`${process.env.PUBLIC_URL}/images/logo-1.jpg`}
-              alt="Globosoft"
-              className="lg-logo"
-            /> */}
-            <img
-              src={`${process.env.PUBLIC_URL}/images/desert.PNG`}
-              alt="Desertbeds"
-              className="lg-logo"
-            />
-            <div>
-              {/* <div className="lg-brand-name">Globosoft</div> */}
-              <div className="lg-brand-name">desert beds</div>
-              <div className="lg-brand-sub">Global Contracting Solutions</div>
-            </div>
-          </div>
-
-          <div className="lg-head">
-            <h2>Welcome back</h2>
-            <p>Sign in to your contracting dashboard</p>
-          </div>
-
-          <form onSubmit={handleSubmit}>
-            <div className="lg-field">
-              <label htmlFor="username">
-                <i className="fas fa-user"></i> Username
-              </label>
-              <input
-                id="username"
-                type="text"
-                placeholder="Enter your username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
+              ))
+            ) : (
+              <img
+                src={`${process.env.PUBLIC_URL}/images/login-hero.jpg`}
+                alt=""
+                aria-hidden="true"
+                className="lg-stage-photo is-active"
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = `${process.env.PUBLIC_URL}/images/main-slider.jpg`;
+                }}
               />
-            </div>
+            )}
+            {/* Left-to-right white wash so the navy headline stays readable
+                over the photo while the right half keeps the imagery. */}
+            <div className="lg-stage-wash" aria-hidden="true" />
 
-            <div className="lg-field">
-              <label htmlFor="password">
-                <i className="fas fa-lock"></i> Password
-              </label>
-              <div style={{ position: "relative" }}>
-                <input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  style={{ width: "100%", paddingRight: 40 }}
-                />
+            <div className="lg-portal">B2B Portal &amp; DMC</div>
+
+            <div className="lg-stage-inner">
+              {/* ── Brand copy ── */}
+              <div className="lg-copy">
+                <div className="lg-logo-wrap">
+                  <img
+                    src={`${process.env.PUBLIC_URL}/images/desert-logo.png`}
+                    alt="Desert Beds"
+                    className="lg-logo"
+                  />
+                  <div className="lg-logo-tag">destinations worldwide</div>
+                </div>
+
+                <h1 className="lg-title">
+                  Your Global Travel
+                   Partner
+                </h1>
+
+                <p className="lg-sub">
+                  Access worldwide hotels, transfers, tours, attractions and
+                  more — all in one place.
+                </p>
+
+                {/* ── Offer strip ──
+                    The banners themselves are the hero backdrop above; this is
+                    just the caption for whichever one is showing plus the
+                    carousel controls. Hidden entirely when nothing is
+                    published. */}
+                {slides.length > 0 && (
+                  <div className="lg-offerbar">
+                    {(() => {
+                      const active = slides[offerIdx] || {};
+                      const hasCopy =
+                        active.title ||
+                        active.description ||
+                        active.validityFrom ||
+                        active.validityTo;
+                      if (!hasCopy) return null;
+                      return (
+                        <div className="lg-offerbar-copy">
+                          <span className="lg-offerbar-pill">
+                            <i className="fas fa-tag"></i> Offer
+                          </span>
+                          {active.title && (
+                            <span className="lg-offerbar-title">
+                              {active.title}
+                            </span>
+                          )}
+                          {active.description && (
+                            <p className="lg-offerbar-desc">
+                              {active.description}
+                            </p>
+                          )}
+                          {(active.validityFrom || active.validityTo) && (
+                            <span className="lg-offerbar-validity">
+                              <i className="fas fa-calendar-alt"></i>
+                              {active.validityFrom && active.validityTo
+                                ? `${formatOfferDate(
+                                    active.validityFrom,
+                                  )} – ${formatOfferDate(active.validityTo)}`
+                                : active.validityFrom
+                                ? `From ${formatOfferDate(active.validityFrom)}`
+                                : `Until ${formatOfferDate(active.validityTo)}`}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                  </div>
+                )}
+              </div>
+
+              {/* ── Sign-in card ── */}
+              <div className="lg-card">
+                <h2 className="lg-card-title">
+                  <span>B2B</span> Login
+                </h2>
+                <p className="lg-card-sub">
+                  Sign In to your account to access our global travel inventory
+                  and exclusive rates.
+                </p>
+
+                <form onSubmit={handleSubmit} autoComplete="on">
+                  <div className="lg-input">
+                    <i className="fas fa-user lg-input-ico"></i>
+                    <input
+                      id="username"
+                      type="text"
+                      placeholder="Username"
+                      aria-label="Username"
+                      autoComplete="username"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="lg-input">
+                    <i className="fas fa-lock lg-input-ico"></i>
+                    <input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Password"
+                      aria-label="Password"
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="lg-eye"
+                      onClick={() => setShowPassword((s) => !s)}
+                      aria-label={
+                        showPassword ? "Hide password" : "Show password"
+                      }
+                    >
+                      <i
+                        className={
+                          showPassword ? "fas fa-eye-slash" : "fas fa-eye"
+                        }
+                      ></i>
+                    </button>
+                  </div>
+
+                  {error && <div className="lg-error">{error}</div>}
+
+                  <div className="lg-meta">
+                    <label className="lg-check">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
+                      />
+                      <span className="lg-check-ui" aria-hidden="true">
+                        <i className="fas fa-check"></i>
+                      </span>
+                      <span>Remember me</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      className="lg-forgot"
+                      data-bs-toggle="modal"
+                      data-bs-target="#exampleModal"
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="lg-submit"
+                    disabled={submitting}
+                  >
+                    {submitting ? (
+                      "Signing in…"
+                    ) : (
+                      <>
+                        Log In <i className="fas fa-arrow-right"></i>
+                      </>
+                    )}
+                  </button>
+                </form>
+
+                <div className="lg-divider">
+                  <span>New to Desert Beds?</span>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => setShowPassword((s) => !s)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  style={{
-                    position: "absolute",
-                    top: "50%",
-                    right: 12,
-                    transform: "translateY(-50%)",
-                    border: "none",
-                    background: "none",
-                    color: "#6c757d",
-                    cursor: "pointer",
-                    padding: 0,
-                    lineHeight: 1,
+                  className="lg-ghost"
+                  onClick={() => {
+                    setSelectedRole("Agent");
+                    setShowRoleModal(true);
                   }}
                 >
-                  <i className={showPassword ? "fas fa-eye-slash" : "fas fa-eye"}></i>
+                  <i className="fas fa-user-plus"></i> Create Account
                 </button>
               </div>
             </div>
 
-            {error && <div className="lg-error">{error}</div>}
+            {/* Carousel dots, centred along the bottom of the hero. A sibling of
+                the content column rather than a child of the caption, so they
+                centre on the banner instead of on whatever copy sits bottom-left. */}
+            {slides.length > 1 && (
+              <div className="lg-stage-dots">
+                {slides.map((slide, i) => (
+                  <button
+                    key={slide.key}
+                    type="button"
+                    aria-label={`Show offer ${i + 1}`}
+                    aria-current={i === offerIdx}
+                    className={`lg-stage-dot${
+                      i === offerIdx ? " is-active" : ""
+                    }`}
+                    onClick={() => setOfferIdx(i)}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
 
-            <button type="submit" className="lg-submit">
-              <i className="fas fa-sign-in-alt"></i> Sign In
-            </button>
-
-            <div className="lg-links">
-              <button
-                type="button"
-                className="lg-link"
-                onClick={() => { setSelectedRole("Agent"); setShowRoleModal(true); }}
-              >
-                <i className="fas fa-user-plus"></i> Create Account
-              </button>
-              <button
-                type="button"
-                className="lg-link"
-                data-bs-toggle="modal"
-                data-bs-target="#exampleModal"
-              >
-                <i className="fas fa-key"></i> Forgot Password?
-              </button>
-            </div>
-          </form>
-
-          <div className="lg-secure">
-            <i className="fas fa-shield-alt"></i>
-            <span>Protected with enterprise-grade security</span>
+          {/* ── Value strip ── */}
+          <div className="lg-usp">
+            {LOGIN_USPS.map((usp) => (
+              <div className="lg-usp-item" key={usp.title}>
+                <i className={`fas ${usp.icon}`}></i>
+                <div>
+                  <div className="lg-usp-title">{usp.title}</div>
+                  <p className="lg-usp-desc">{usp.desc}</p>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-      </main>
+
+        {/* ── Hotel-brand rail ── */}
+        <aside className="lg-rail" aria-label="Hotel brands we work with">
+          {/* The list is rendered twice so the marquee can loop without a seam:
+              the track scrolls by exactly one copy, then restarts. Cells are a
+              fixed height for that reason — with uneven cells, half the track
+              would not line up with one copy and the loop would jump. */}
+          <div className="lg-rail-track">
+            {[...BRAND_LOGOS, ...BRAND_LOGOS].map((file, i) => (
+              <div className="lg-rail-cell" key={`${file}-${i}`}>
+                <img
+                  src={encodeURI(
+                    `${process.env.PUBLIC_URL}/images/marqueeImages/mono/${file}`,
+                  )}
+                  alt=""
+                  aria-hidden="true"
+                />
+              </div>
+            ))}
+          </div>
+        </aside>
+      </div>
+
+      {/* ── Bottom bar ── */}
+      <footer className="lg-footbar">
+        <div className="lg-footbar-left">
+          © {new Date().getFullYear()} Desert Beds. All rights reserved.
+        </div>
+        <div className="lg-footbar-mid">
+          <button
+            type="button"
+            className="lg-footbar-link"
+            onClick={() => setShowAbout(true)}
+          >
+            About us
+          </button>
+          <span>
+            Contact : <a href="tel:+971563269000">+971 56 326 9000</a>
+          </span>
+          <span>
+            email : <a href="mailto:info@desertbeds.com">info@desertbeds.com</a>
+          </span>
+        </div>
+        <div className="lg-footbar-right">
+          <span>UAE</span>
+          <span>UK</span>
+          <span>India</span>
+        </div>
+      </footer>
+
+      {/* ── About us ── */}
+      {showAbout && (
+        <div
+          className="lg-about-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="lg-about-title"
+          onClick={() => setShowAbout(false)}
+        >
+          <div className="lg-about" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="lg-about-close"
+              onClick={() => setShowAbout(false)}
+              aria-label="Close"
+            >
+              <i className="fas fa-times"></i>
+            </button>
+
+            <header className="lg-about-head">
+              <p className="lg-about-eyebrow">Desert Beds LLC</p>
+              <h2 id="lg-about-title">About Us</h2>
+              <p className="lg-about-tagline">
+                Your Global B2B Accommodation &amp; Travel Distribution Partner
+              </p>
+            </header>
+
+            <div className="lg-about-body">
+              {ABOUT_INTRO.map((para) => (
+                <p key={para.slice(0, 32)}>{para}</p>
+              ))}
+
+              <h3>Our unique selling proposition</h3>
+              <p className="lg-about-lede">A complete travel ecosystem.</p>
+              <p>{ABOUT_USP_LEAD}</p>
+
+              <ul className="lg-about-chips">
+                {ABOUT_PRODUCTS.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+
+              <p>{ABOUT_PLATFORM}</p>
+
+              <h3>Our services</h3>
+              <div className="lg-about-services">
+                {ABOUT_SERVICES.map((svc) => (
+                  <div className="lg-about-service" key={svc.title}>
+                    <div className="lg-about-service-title">{svc.title}</div>
+                    <p>{svc.desc}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="lg-about-split">
+                <section>
+                  <h3>Our vision</h3>
+                  <p>{ABOUT_VISION}</p>
+                </section>
+                <section>
+                  <h3>Our mission</h3>
+                  <p>{ABOUT_MISSION}</p>
+                </section>
+              </div>
+
+              <h3>Why Desert Beds?</h3>
+              <ul className="lg-about-why">
+                {ABOUT_WHY.map((item) => (
+                  <li key={item.label}>
+                    <span aria-hidden="true">{item.emoji}</span>
+                    {item.label}
+                  </li>
+                ))}
+              </ul>
+
+              <p>{ABOUT_CLOSING}</p>
+
+              <p className="lg-about-signoff">
+                Desert Beds LLC &mdash; Destinations Worldwide.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Role Selection Modal ── */}
       {showRoleModal && (
