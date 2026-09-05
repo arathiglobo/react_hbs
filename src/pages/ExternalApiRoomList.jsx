@@ -4016,8 +4016,12 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                       </div>
                     )}
                     {selectedRate[0].goglobalRemarks && (
-                      <div className="small mt-1">
-                        Remarks: {selectedRate[0].goglobalRemarks}
+                      <div
+                        className="small mt-1"
+                        style={{ whiteSpace: "pre-wrap" }}
+                      >
+                        <span className="fw-semibold">Remarks:</span>{" "}
+                        {stripHtmlTags(selectedRate[0].goglobalRemarks)}
                       </div>
                     )}
                   </div>
