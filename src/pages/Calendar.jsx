@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { Card, Button, Row, Col, Modal, Badge, Spinner, Table } from "react-bootstrap";
+import { useNavigate } from "react-router-dom";
+import { Card, Button, Row, Col, Modal, Badge, Spinner, Table, Form } from "react-bootstrap";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/TopBar";
 import axiosInstance from "../components/AxiosInstance";
@@ -18,10 +19,43 @@ import {
   FaCar,
   FaHotel,
   FaStar,
+  FaBolt,
+  FaBuilding,
+  FaBriefcase,
+  FaUsers,
+  FaGraduationCap,
 } from "react-icons/fa";
 import "../styles/Calendar.css";
 
+/* Booking types offered on the date-range picker. Each entry names the
+ * route the picker navigates to; the checkIn/checkOut are passed as URL
+ * query params (?checkIn=YYYY-MM-DD&checkOut=YYYY-MM-DD) so the target
+ * search page can prefill them without any router state coupling. */
+const BOOKING_TYPES = [
+  { key: "hotel",          label: "Hotel",          route: "/new-booking/hotel",                    Icon: FaHotel },
+  { key: "long-stay",      label: "Long Stay",      route: "/new-booking/long-stay",                Icon: FaBed },
+  { key: "last-minute",    label: "Last Minute",    route: "/new-booking/last-minute-booking",      Icon: FaBolt },
+  { key: "day-stay",       label: "Day Stay",       route: "/new-booking/day-stay",                 Icon: FaClock },
+  { key: "package",        label: "Package",        route: "/new-booking/make-your-own-package-v3", Icon: FaMapMarkerAlt },
+  { key: "meet-and-space", label: "Meet and Space", route: "/new-booking/meet-and-space",           Icon: FaBuilding },
+  { key: "gov-employee",   label: "Government",     route: "/new-booking/gov-employee",             Icon: FaBriefcase },
+  { key: "senior-citizen", label: "Senior Citizen", route: "/new-booking/senior-citizen",           Icon: FaUsers },
+  { key: "student",        label: "Student",        route: "/new-booking/student",                  Icon: FaGraduationCap },
+];
+
+const formatYmd = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+const formatDisplayDate = (d) =>
+  d ? d.toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" }) : "";
+
 export default function Calendar() {
+  const navigate = useNavigate();
+
   // Calendar state
   const [currentDate, setCurrentDate] = useState(new Date());
   const [events, setEvents] = useState([]);
@@ -33,6 +67,18 @@ export default function Calendar() {
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [bookingDetails, setBookingDetails] = useState(null);
   const [loadingBookingDetails, setLoadingBookingDetails] = useState(false);
+
+  // Date-range selection state (additive — does not affect existing
+  // booking-click behaviour). rangeStart is set on the first click of an
+  // empty future date; rangeEnd on the second click; both null = idle.
+  const [rangeStart, setRangeStart] = useState(null);
+  const [rangeEnd, setRangeEnd] = useState(null);
+  const [showPicker, setShowPicker] = useState(false);
+  // Which booking type radio is currently selected in the picker modal.
+  // Defaults to "hotel" so the Continue button is enabled on first open;
+  // reset every time the picker closes so a subsequent selection starts
+  // fresh rather than remembering the last choice.
+  const [selectedBookingType, setSelectedBookingType] = useState("hotel");
 
   // Fetch bookings from API
   useEffect(() => {
@@ -201,6 +247,112 @@ export default function Calendar() {
     setBookingDetails(null);
   };
 
+  // ---------- Date-range selection helpers ----------
+  const sameDay = (a, b) =>
+    a && b && a.toDateString() === b.toDateString();
+
+  const isRangeStartDay = (day) => sameDay(day, rangeStart);
+  const isRangeEndDay = (day) => sameDay(day, rangeEnd);
+  const startOfDay = (d) => {
+    const c = new Date(d);
+    c.setHours(0, 0, 0, 0);
+    return c;
+  };
+  const isInRange = (day) => {
+    if (!day || !rangeStart) return false;
+    if (!rangeEnd) return sameDay(day, rangeStart);
+    const d = startOfDay(day);
+    return d >= startOfDay(rangeStart) && d <= startOfDay(rangeEnd);
+  };
+
+  const isPastDay = (day) => {
+    if (!day) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const d = new Date(day);
+    d.setHours(0, 0, 0, 0);
+    return d < today;
+  };
+
+  const clearRange = () => {
+    setRangeStart(null);
+    setRangeEnd(null);
+  };
+
+  const closePicker = () => {
+    setShowPicker(false);
+    setSelectedBookingType("hotel");
+    clearRange();
+  };
+
+  // Called when the user clicks Continue on the picker modal.
+  // Looks up the selected radio value in BOOKING_TYPES and delegates to
+  // the existing handlePickBookingType (which already handles the
+  // URL-param navigation + range-cleanup exactly as before).
+  const handleConfirmBookingType = () => {
+    const bt = BOOKING_TYPES.find((b) => b.key === selectedBookingType);
+    if (bt) handlePickBookingType(bt);
+  };
+
+  /* Click handler for the empty area of a day cell. Ignores past days
+   * and days that carry booking events (those keep their existing
+   * click-to-open-details behaviour via the pill's own handler). */
+  const handleDayCellClick = (day, hasEvents) => {
+    if (!day || isPastDay(day) || hasEvents) return;
+
+    if (!rangeStart) {
+      setRangeStart(new Date(day));
+      setRangeEnd(null);
+      return;
+    }
+    if (!rangeEnd) {
+      const start = new Date(rangeStart);
+      start.setHours(0, 0, 0, 0);
+      const clicked = new Date(day);
+      clicked.setHours(0, 0, 0, 0);
+      if (clicked < start) {
+        // clicked an earlier date — restart with this as new start
+        setRangeStart(new Date(day));
+        return;
+      }
+      if (sameDay(clicked, start)) {
+        // same day clicked twice — treat as 1-night default
+        const next = new Date(day);
+        next.setDate(next.getDate() + 1);
+        setRangeEnd(next);
+        setShowPicker(true);
+        return;
+      }
+      setRangeEnd(new Date(day));
+      setShowPicker(true);
+      return;
+    }
+    // Both already set — restart selection with this as new start
+    setRangeStart(new Date(day));
+    setRangeEnd(null);
+  };
+
+  const nightsBetween = (a, b) => {
+    if (!a || !b) return 0;
+    const ms = new Date(b).setHours(0, 0, 0, 0) - new Date(a).setHours(0, 0, 0, 0);
+    return Math.max(0, Math.round(ms / (1000 * 60 * 60 * 24)));
+  };
+
+  const handlePickBookingType = (bt) => {
+    if (!rangeStart || !rangeEnd) return;
+    setShowPicker(false);
+    // Dates are handed to the target search page via React Router's
+    // navigation state (location.state) instead of a URL query string —
+    // keeps the URL clean while still prefilling the form.
+    navigate(bt.route, {
+      state: {
+        checkIn: formatYmd(rangeStart),
+        checkOut: formatYmd(rangeEnd),
+      },
+    });
+    clearRange();
+  };
+
   const days = getDaysInMonth(currentDate);
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -269,13 +421,35 @@ export default function Calendar() {
                       const dayEvents = getEventsForDate(day);
                       const isToday =
                         day && day.toDateString() === new Date().toDateString();
+                      const hasEvents = dayEvents.length > 0;
+                      const past = isPastDay(day);
+                      const selectable = day && !past && !hasEvents;
+                      const inRange = isInRange(day);
+                      const rangeStartCell = isRangeStartDay(day);
+                      const rangeEndCell = isRangeEndDay(day);
 
                       return (
                         <div
                           key={index}
                           className={`calendar-day ${
                             day ? "bg-white" : "bg-light"
-                          } ${isToday ? "today" : ""}`}
+                          } ${isToday ? "today" : ""} ${
+                            selectable ? "selectable" : ""
+                          } ${inRange ? "in-range" : ""} ${
+                            rangeStartCell ? "range-start" : ""
+                          } ${rangeEndCell ? "range-end" : ""} ${
+                            past ? "past-day" : ""
+                          }`}
+                          onClick={() => handleDayCellClick(day, hasEvents)}
+                          title={
+                            selectable
+                              ? !rangeStart
+                                ? "Click to start a new booking on this date"
+                                : !rangeEnd
+                                ? "Click check-out date"
+                                : ""
+                              : ""
+                          }
                         >
                           {day && (
                             <>
@@ -285,7 +459,10 @@ export default function Calendar() {
                                   <div
                                     key={eventIndex}
                                     className="event-item"
-                                    onClick={() => handleBookingClick(event.id)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleBookingClick(event.id);
+                                    }}
                                     style={{ cursor: "pointer" }}
                                     title="Click to view booking details"
                                   >
@@ -306,6 +483,53 @@ export default function Calendar() {
                       );
                     })}
                   </div>
+
+                  {/* Range hint bar — appears only when a range is being selected.
+                      Non-modal so the user can keep clicking the calendar. */}
+                  {rangeStart && (
+                    <div className="range-hint-bar d-flex align-items-center justify-content-between px-3 py-2">
+                      <div>
+                        <FaCalendarAlt className="me-2 text-primary" />
+                        <strong className="me-2">Check-in:</strong>
+                        {formatDisplayDate(rangeStart)}
+                        {rangeEnd && (
+                          <>
+                            <span className="mx-2">→</span>
+                            <strong className="me-2">Check-out:</strong>
+                            {formatDisplayDate(rangeEnd)}
+                            <span className="ms-2 text-muted">
+                              ({nightsBetween(rangeStart, rangeEnd)} night
+                              {nightsBetween(rangeStart, rangeEnd) === 1 ? "" : "s"})
+                            </span>
+                          </>
+                        )}
+                        {!rangeEnd && (
+                          <span className="ms-2 text-muted">
+                            Click a later date to pick check-out
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        {rangeEnd && (
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            className="me-2"
+                            onClick={() => setShowPicker(true)}
+                          >
+                            Choose booking type
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="outline-secondary"
+                          onClick={clearRange}
+                        >
+                          Clear
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </Card.Body>
@@ -639,6 +863,67 @@ export default function Calendar() {
             <Modal.Footer style={{ backgroundColor: "#f8f9fa", borderTop: "1px solid #dee2e6" }}>
               <Button variant="secondary" onClick={closeBookingModal}>
                 Close
+              </Button>
+            </Modal.Footer>
+          </Modal>
+
+          {/* Booking-type picker — opens when a check-in / check-out range
+              is selected. Navigates to the chosen search page with the
+              dates as URL query params (?checkIn=YYYY-MM-DD&checkOut=...) */}
+          <Modal
+            show={showPicker}
+            onHide={closePicker}
+            centered
+            size="md"
+            className="premium-modal booking-picker-modal"
+          >
+            <Modal.Header closeButton className="bg-primary text-white py-2" style={{ borderBottom: "none" }}>
+              <Modal.Title className="fw-bold" style={{ fontSize: "1rem" }}>
+                What would you like to book?
+              </Modal.Title>
+            </Modal.Header>
+            <Modal.Body className="px-4 py-3">
+              <div className="mb-3 p-2 bg-light rounded border" style={{ fontSize: "0.82rem", lineHeight: 1.35 }}>
+                <div>
+                  <strong>Check-in:</strong> {formatDisplayDate(rangeStart)}
+                </div>
+                <div>
+                  <strong>Check-out:</strong> {formatDisplayDate(rangeEnd)}
+                </div>
+                <div className="text-muted">
+                  {nightsBetween(rangeStart, rangeEnd)} night
+                  {nightsBetween(rangeStart, rangeEnd) === 1 ? "" : "s"}
+                </div>
+              </div>
+              <Form className="booking-type-radio-list">
+                {BOOKING_TYPES.map((bt) => (
+                  <Form.Check
+                    key={bt.key}
+                    type="radio"
+                    name="calendarBookingType"
+                    id={`calendar-bt-${bt.key}`}
+                    className="booking-type-radio"
+                    checked={selectedBookingType === bt.key}
+                    onChange={() => setSelectedBookingType(bt.key)}
+                    label={bt.label}
+                  />
+                ))}
+              </Form>
+              <p className="text-muted mb-0 mt-2" style={{ fontSize: "0.75rem" }}>
+                The chosen dates will be pre-filled on the booking page.
+              </p>
+            </Modal.Body>
+            <Modal.Footer className="py-2 px-3" style={{ backgroundColor: "#f8f9fa", borderTop: "1px solid #dee2e6" }}>
+              <Button size="sm" variant="secondary" onClick={closePicker}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={handleConfirmBookingType}
+                disabled={!selectedBookingType}
+              >
+                Continue
               </Button>
             </Modal.Footer>
           </Modal>
