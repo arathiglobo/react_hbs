@@ -995,21 +995,112 @@ export default function HotelSearch({
       availableDeals, featureFlagsMap,
       is24HourCheckin, twentyFourHourMap]);
 
-  // "Explore on Map" markers — one per currently-visible (filtered) hotel.
-  // MapModal itself drops any entry whose lat/lng isn't a finite number, so
-  // no need to pre-filter here.
-  const mapMarkers = useMemo(
-    () =>
-      filteredResults.map((hotel) => ({
-        id: hotel.id,
-        name: hotel.name,
-        lat: hotel.latitude,
-        lng: hotel.longitude,
-        address: hotel.address,
-        contactNumber: hotel.contactNumber,
-      })),
-    [filteredResults],
-  );
+  // Shared "View Rooms" handler — used by both the row-level button on the
+  // hotel card and the "View Rooms" action inside the Explore-on-Map
+  // popup. Builds the roomListPayload from the current search-page state
+  // for the given hotel, stashes it in sessionStorage, and opens the
+  // right room-list route in a new tab. Kept here (not memoized) because
+  // it closes over most of the page's state and doesn't need reference
+  // stability — the map popup only reads it on click.
+  const openRoomListForHotel = (hotel) => {
+    setClickedHotelIds((prev) => [...prev, hotel.id]);
+    const nationalityCode =
+      (selectedNationality?.code || "").length === 2
+        ? selectedNationality.code
+        : " ";
+    const roomsPayload = rooms.map((r) => ({
+      adults: r.adults || 1,
+      children: r.children || 0,
+      childAges: r.childAges || [],
+      adultAges: Array.from({ length: r.adults || 1 }, () => 30),
+    }));
+    const apiIdMapping = {
+      jumeirah: 10,
+      iwtx: 12,
+      x3: 15,
+      inhouse: 1,
+      ratehawk: 14,
+      darina: 16,
+      atharva: 3,
+      grn: 20,
+      goglobal: 21,
+    };
+    const apiId = apiIdMapping[hotel.channelType?.toLowerCase()] || 0;
+
+    const pickedAgentId = String(isAgentRole ? selfAgentId : agent);
+    const pickedAgent = (Array.isArray(agents) ? agents : []).find(
+      (a) => String(a?.id) === pickedAgentId,
+    );
+    const agentName = isAgentRole
+      ? localStorage.getItem("UserName") ||
+        sessionStorage.getItem("UserName") ||
+        ""
+      : pickedAgent
+        ? pickedAgent.companyName ||
+          pickedAgent.name ||
+          `${pickedAgent.firstName || ""} ${pickedAgent.lastName || ""}`.trim()
+        : "";
+
+    const payload = {
+      checkInDate: checkIn,
+      checkOutDate: checkOut,
+      hotelCode:
+        hotel.hotelCode ||
+        hotel.id?.split("-").slice(1).join("-") ||
+        "",
+      nationality: nationalityCode,
+      agentId: String(isAgentRole ? selfAgentId : agent),
+      agentName,
+      destinationLabel: selectedDestination?.label || "",
+      nationalityLabel: selectedNationality?.label || "",
+      employeeName: isAgentRole
+        ? agentName || null
+        : selectedEmployee?.label || null,
+      nightsCount: nights,
+      apiId,
+      rooms: roomsPayload,
+      parentBookingCode: parentBookingCode || null,
+      employeeId: isAgentRole ? null : selectedEmployee?.value || null,
+      is24HourCheckin: !!is24HourCheckin,
+      checkInTime: is24HourCheckin ? checkInTime24 : null,
+      checkOutTime: is24HourCheckin ? checkOutTime24 : null,
+      twentyFourHourPercentage: hotel._twentyFourHourPercentage || null,
+    };
+    const meta = {
+      hotelName: hotel.name,
+      address: hotel.address || hotel.city,
+      starRating: hotel.rating || 0,
+      phone: "",
+      hotelImage: hotel.image,
+    };
+    const currency =
+      hotel.channelType === "ratehawk"
+        ? { code: "AED", factor: 1 }
+        : {
+            code: displayCurrencyCode,
+            factor:
+              selectedCurrency &&
+              Number.isFinite(selectedCurrency.rate) &&
+              aedBaseRate
+                ? selectedCurrency.rate / aedBaseRate
+                : 1,
+          };
+    sessionStorage.setItem(
+      "roomListPayload",
+      JSON.stringify({ payload, meta, currency }),
+    );
+    setTimeout(() => {
+      const route =
+        religiousMode && apiId === 1
+          ? "/religious-room-list"
+          : force24Hour
+            ? "/room-list-24hr"
+            : apiId === 1
+              ? "/room-list"
+              : "/api-room-list";
+      window.open(route, "_blank");
+    }, 50);
+  };
 
   // Union of active feature labels across hotels currently in view. Order
   // mirrors the backend's canonical ordering (Long Stay → 24 Hour Check-In
@@ -1295,6 +1386,50 @@ export default function HotelSearch({
         : aedBaseRate;
     return Number(aedPrice) * (targetRate / aedBaseRate);
   };
+
+  // "Explore on Map" markers — one per currently-visible (filtered) hotel.
+  // MapModal itself drops any entry whose lat/lng isn't a finite number, so
+  // no need to pre-filter here. Enriched with the same fields the row-level
+  // card shows (image, rating, channel badge, price, deal chips) so the
+  // in-map popup gives the operator a real preview of the hotel instead of
+  // just a name and address.
+  const mapMarkers = useMemo(
+    () =>
+      filteredResults.map((hotel) => {
+        const priceLabel = hotel.price
+          ? hotel.channelType === "ratehawk"
+            ? `AED ${Number(hotel.price).toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}`
+            : `${displayCurrencyCode} ${convertFromAed(hotel.price).toLocaleString(
+                undefined,
+                { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+              )}`
+          : null;
+        return {
+          id: hotel.id,
+          name: hotel.name,
+          lat: hotel.latitude,
+          lng: hotel.longitude,
+          address: hotel.address,
+          contactNumber: hotel.contactNumber,
+          image: hotel.image || null,
+          rating: Number(hotel.rating) || 0,
+          channelType: hotel.channelType || null,
+          hotelType: hotel.type || hotel.hotelType || null,
+          priceLabel,
+          dealLabels: getHotelFeatureLabels(hotel),
+        };
+      }),
+    [
+      filteredResults,
+      displayCurrencyCode,
+      selectedCurrency,
+      aedBaseRate,
+      featureFlagsMap,
+    ],
+  );
 
   useEffect(() => {
     setPageIndex(0);
@@ -1998,13 +2133,28 @@ export default function HotelSearch({
                             zIndex: 9999,
                             maxHeight: "200px",
                           }),
+                          // Brand-aligned option styling: the selected row
+                          // uses the brand red so it stays clearly visible
+                          // when the menu is reopened (react-select's
+                          // default bright blue clashes with the app's
+                          // #EC0B43 theme); the focused row gets a soft
+                          // pink to match. Text color is set alongside the
+                          // background so we never regress into the
+                          // white-on-white bug the earlier override had.
                           option: (base, state) => ({
                             ...base,
-                            backgroundColor: state.isFocused
-                              ? "#f8f9fa"
-                              : "white",
+                            cursor: "pointer",
+                            backgroundColor: state.isSelected
+                              ? "#EC0B43"
+                              : state.isFocused
+                                ? "#fff0f3"
+                                : "white",
                             color: state.isSelected ? "white" : "#212529",
-                            "&:active": { backgroundColor: "#0d6efd" },
+                            "&:active": {
+                              backgroundColor: state.isSelected
+                                ? "#EC0B43"
+                                : "#f8c1cf",
+                            },
                           }),
                           clearIndicator: (base) => ({
                             ...base,
@@ -3023,209 +3173,9 @@ export default function HotelSearch({
                                             ? "secondary"
                                             : "primary"
                                         }
-                                        onClick={() => {
-                                          setClickedHotelIds((prev) => [
-                                            ...prev,
-                                            hotel.id,
-                                          ]);
-                                          const nationalityCode =
-                                            (selectedNationality?.code || "")
-                                              .length === 2
-                                              ? selectedNationality.code
-                                              : " ";
-                                          const roomsPayload = rooms.map(
-                                            (r) => ({
-                                              adults: r.adults || 1,
-                                              children: r.children || 0,
-                                              childAges: r.childAges || [],
-                                              adultAges: Array.from(
-                                                { length: r.adults || 1 },
-                                                () => 30,
-                                              ),
-                                            }),
-                                          );
-                                          const apiIdMapping = {
-                                            jumeirah: 10,
-                                            iwtx: 12,
-                                            x3: 15,
-                                            inhouse: 1,
-                                            ratehawk: 14,
-                                            darina: 16,
-                                            atharva: 3,
-                                            // GRN Connect. Room list backend
-                                            // routes apiId=20 to the new
-                                            // GrnHotelRoomSearchService which
-                                            // returns bundled rates only.
-                                            // 20 avoids colliding with the
-                                            // existing Juniper booking's 17.
-                                            grn: 20,
-                                            // GoGlobal (Yanolja Go Global).
-                                            // Room list backend routes apiId=21
-                                            // to GoGlobalHotelRoomSearchService
-                                            // (single-hotel availability).
-                                            // Without this entry the payload
-                                            // fell back to apiId 0 and the
-                                            // /api/hotel-rooms/search call was
-                                            // rejected with "API ID must be
-                                            // positive".
-                                            goglobal: 21,
-                                          };
-                                          const apiId =
-                                            apiIdMapping[
-                                              hotel.channelType?.toLowerCase()
-                                            ] || 0;
-                                         
-                                          // Display labels for values the
-                                          // payload otherwise carries only
-                                          // as ids/codes. Additive — they
-                                          // ride through RoomList into the
-                                          // booking page, which posts them
-                                          // to /api/search-history/save so
-                                          // the admin "Hotel Booking
-                                          // History" report can show the
-                                          // search context even if the
-                                          // booking tab is closed before
-                                          // the booking is created.
-                                          const pickedAgentId = String(
-                                            isAgentRole ? selfAgentId : agent,
-                                          );
-                                          const pickedAgent = (
-                                            Array.isArray(agents) ? agents : []
-                                          ).find(
-                                            (a) => String(a?.id) === pickedAgentId,
-                                          );
-                                          const agentName = isAgentRole
-                                            ? localStorage.getItem("UserName") ||
-                                              sessionStorage.getItem("UserName") ||
-                                              ""
-                                            : pickedAgent
-                                              ? pickedAgent.companyName ||
-                                                pickedAgent.name ||
-                                                `${pickedAgent.firstName || ""} ${pickedAgent.lastName || ""}`.trim()
-                                              : "";
-                                          const payload = {
-                                            checkInDate: checkIn,
-                                            checkOutDate: checkOut,
-                                            hotelCode:
-                                              hotel.hotelCode ||
-                                              hotel.id
-                                                ?.split("-")
-                                                .slice(1)
-                                                .join("-") ||
-                                              "",
-                                            nationality: nationalityCode,
-                                            agentId: String(
-                                              isAgentRole ? selfAgentId : agent
-                                            ),
-                                            agentName,
-                                            destinationLabel:
-                                              selectedDestination?.label || "",
-                                            nationalityLabel:
-                                              selectedNationality?.label || "",
-                                            // Agent logins: booking is done by
-                                            // the logged-in agent, so carry the
-                                            // agent's own name (no staff
-                                            // employee is picked). Admin/staff:
-                                            // the selected employee's label.
-                                            employeeName: isAgentRole
-                                              ? agentName || null
-                                              : selectedEmployee?.label || null,
-                                            nightsCount: nights,
-                                            apiId,
-                                            rooms: roomsPayload,
-                                            parentBookingCode:
-                                              parentBookingCode || null,
-                                            // Optional "Booking Done By"
-                                            // selection — null when the
-                                            // user skipped the dropdown.
-                                            // Flows through RoomList ->
-                                            // HotelBookingPage unchanged
-                                            // (those layers spread payload
-                                            // through transparently). Agent
-                                            // logins never pick a staff
-                                            // employee, so this stays null.
-                                            employeeId: isAgentRole
-                                              ? null
-                                              : selectedEmployee?.value || null,
-                                            // 24 Hour Check-In flags — only
-                                            // populated when the user opted
-                                            // in. RoomList / HotelBookingPage
-                                            // forward these to the create-
-                                            // booking endpoint, which stamps
-                                            // them onto the new HotelBooking
-                                            // row (additive, non-breaking).
-                                            is24HourCheckin: !!is24HourCheckin,
-                                            checkInTime: is24HourCheckin
-                                              ? checkInTime24
-                                              : null,
-                                            checkOutTime: is24HourCheckin
-                                              ? checkOutTime24
-                                              : null,
-                                            twentyFourHourPercentage:
-                                              hotel._twentyFourHourPercentage ||
-                                              null,
-                                          };
-                                          const meta = {
-                                            hotelName: hotel.name,
-                                            address:
-                                              hotel.address || hotel.city,
-                                            starRating: hotel.rating || 0,
-                                            phone: "",
-                                            hotelImage: hotel.image,
-                                          };
-                                          // Carry the chosen display currency
-                                          // into the room list so it shows
-                                          // rates in the same currency. `factor`
-                                          // is the AED→target multiplier; rates
-                                          // stay AED in every payload (display
-                                          // only). AED → factor 1.
-                                          // RateHawk is always displayed in AED
-                                          // end-to-end (backend converts all
-                                          // supplier-native rates to AED at
-                                          // search time — RatehawkHotelRoomSearchService),
-                                          // so hardcode currency=AED/factor=1
-                                          // regardless of the picker.
-                                          const currency =
-                                            hotel.channelType === "ratehawk"
-                                              ? { code: "AED", factor: 1 }
-                                              : {
-                                                  code: displayCurrencyCode,
-                                                  factor:
-                                                    selectedCurrency &&
-                                                    Number.isFinite(
-                                                      selectedCurrency.rate,
-                                                    ) &&
-                                                    aedBaseRate
-                                                      ? selectedCurrency.rate /
-                                                        aedBaseRate
-                                                      : 1,
-                                                };
-                                          sessionStorage.setItem(
-                                            "roomListPayload",
-                                            JSON.stringify({ payload, meta, currency }),
-                                          );
-                                          setTimeout(() => {
-                                            // Dedicated 24-hour route in
-                                            // 24-hour mode so the
-                                            // downstream room list and
-                                            // booking page can render
-                                            // 24-hour-specific UI without
-                                            // touching the inhouse
-                                            // /room-list flow.
-                                            // religiousMode > force24Hour > apiId — religious
-                                            // is only supported for the inhouse flow (apiId 1);
-                                            // it never touches /api-room-list.
-                                            const route =
-                                              religiousMode && apiId === 1
-                                                ? "/religious-room-list"
-                                                : force24Hour
-                                                  ? "/room-list-24hr"
-                                                  : apiId === 1
-                                                    ? "/room-list"
-                                                    : "/api-room-list";
-                                            window.open(route, "_blank");
-                                          }, 50);
-                                        }}
+                                        onClick={() =>
+                                          openRoomListForHotel(hotel)
+                                        }
                                       >
                                         View Rooms
                                       </Button>
@@ -3312,6 +3262,16 @@ export default function HotelSearch({
               onHide={() => setShowMapModal(false)}
               markers={mapMarkers}
               title="Explore on Map"
+              onHotelSelect={(hotelId) => {
+                // Map popup's "View Rooms" — resolve the marker back to
+                // the full hotel object (markers only carry a light
+                // subset) and reuse the shared handler so the payload
+                // and route match the row-level button exactly.
+                const hotel = filteredResults.find(
+                  (h) => h.id === hotelId,
+                );
+                if (hotel) openRoomListForHotel(hotel);
+              }}
             />
           )}
         </main>
