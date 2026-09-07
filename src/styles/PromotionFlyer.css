@@ -1,0 +1,936 @@
+/* ============================================================================
+   PROMOTION FLYER
+   Page chrome (.pf-page-*) plus the five flyer designs (.pf-t1 … .pf-t5).
+
+   Every design draws onto the same fixed 794x1123 canvas — A4 at 96dpi — and
+   the page scales it with a transform. Sizes here are therefore absolute px on
+   purpose: they must NOT respond to the viewport, or a thumbnail and the full
+   preview would lay out differently.
+   ============================================================================ */
+
+/* ── shared canvas ───────────────────────────────────────────────────────── */
+
+.pf-canvas-scaler {
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.pf-canvas {
+  width: 794px;
+  height: 1123px;
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+  font-family: "Lexend", system-ui, sans-serif;
+  color: #1c2230;
+  /* The canvas is a fixed-size artboard; nothing inside may reflow with the
+     page, so line heights and boxes are all stated explicitly below. */
+  line-height: 1.4;
+}
+
+.pf-canvas * {
+  box-sizing: border-box;
+}
+
+/* ══ 1. ROYAL WAVE ═══════════════════════════════════════════════════════ */
+
+.pf-t1 {
+  background: #f4e3b8;
+}
+
+.pf-t1-logo {
+  position: absolute;
+  top: 34px;
+  left: 46px;
+  z-index: 4;
+  font-size: 27px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #1c2230;
+}
+
+.pf-t1-hero {
+  position: absolute;
+  top: 96px;
+  left: 0;
+  width: 794px;
+  height: 430px;
+}
+
+.pf-t1-hero img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pf-t1-hero-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.62) 100%);
+}
+
+.pf-t1-wave-top,
+.pf-t1-wave-bottom {
+  position: absolute;
+  left: 0;
+  width: 794px;
+  fill: #f4e3b8;
+}
+
+.pf-t1-wave-top {
+  top: -1px;
+  height: 120px;
+}
+
+.pf-t1-wave-bottom {
+  bottom: -1px;
+  height: 130px;
+}
+
+.pf-t1-hero-copy {
+  position: absolute;
+  left: 46px;
+  right: 60px;
+  bottom: 96px;
+  z-index: 3;
+  color: #fff;
+}
+
+.pf-t1-hero-copy h1 {
+  margin: 0 0 10px;
+  font-size: 46px;
+  font-weight: 800;
+  line-height: 1.06;
+  letter-spacing: -0.015em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+}
+
+.pf-t1-hero-copy p {
+  margin: 0;
+  max-width: 470px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.93);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
+}
+
+.pf-t1-circles {
+  position: absolute;
+  top: 470px;
+  left: 0;
+  width: 794px;
+  height: 190px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 52px;
+  z-index: 4;
+}
+
+.pf-t1-circles span {
+  display: block;
+  width: 176px;
+  height: 176px;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+  border: 7px solid #f4e3b8;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+}
+
+/* The middle circle sits lower, which is what gives the row its arc. */
+.pf-t1-circles span:nth-child(2) {
+  width: 154px;
+  height: 154px;
+  transform: translateY(46px);
+}
+
+.pf-t1-cols {
+  position: absolute;
+  top: 690px;
+  left: 52px;
+  right: 52px;
+  display: flex;
+  gap: 44px;
+}
+
+.pf-t1-cols > div {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.pf-t1-cols h2 {
+  margin: 0 0 12px;
+  font-size: 31px;
+  font-weight: 800;
+  color: #b8791b;
+  letter-spacing: -0.01em;
+}
+
+.pf-t1-cols p {
+  margin: 0 0 14px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #2b3242;
+}
+
+.pf-t1-cols ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-t1-cols li {
+  position: relative;
+  padding-left: 24px;
+  margin-bottom: 9px;
+  font-size: 15px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.pf-t1-cols li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #b8791b;
+}
+
+.pf-t1-price {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pf-t1-price strong {
+  font-size: 34px;
+  font-weight: 800;
+  color: #1c2230;
+}
+
+.pf-t1-price span {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.pf-t1-valid {
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #b8791b;
+}
+
+.pf-t1-foot {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 794px;
+  height: 132px;
+  padding: 24px 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #efd79c;
+}
+
+.pf-t1-foot h3 {
+  margin: 0 0 6px;
+  font-size: 21px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
+.pf-t1-foot p {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #2b3242;
+}
+
+.pf-t1-foot-right {
+  text-align: right;
+}
+
+/* ══ 2. BOLD SPLIT ═══════════════════════════════════════════════════════ */
+
+.pf-t2 {
+  background: #123244;
+}
+
+.pf-t2-photo {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  /* Diagonal edge — the panel below covers the rest. */
+  clip-path: polygon(0 0, 100% 0, 100% 34%, 0 52%);
+}
+
+.pf-t2-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 380px;
+  bottom: 96px;
+  padding: 54px 56px 0;
+  color: #fff;
+}
+
+.pf-t2-logo {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  color: #7fd4c1;
+  margin-bottom: 18px;
+}
+
+.pf-t2-panel h1 {
+  margin: 0;
+  font-size: 52px;
+  font-weight: 800;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  max-width: 560px;
+}
+
+.pf-t2-rule {
+  width: 92px;
+  height: 5px;
+  background: #7fd4c1;
+  margin: 22px 0;
+}
+
+.pf-t2-panel h2 {
+  margin: 0 0 12px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #7fd4c1;
+}
+
+.pf-t2-panel p {
+  margin: 0 0 26px;
+  max-width: 470px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.pf-t2-services {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 24px;
+  max-width: 520px;
+}
+
+.pf-t2-services li {
+  position: relative;
+  padding-left: 26px;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.pf-t2-services li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 14px;
+  height: 8px;
+  border-left: 2.5px solid #7fd4c1;
+  border-bottom: 2.5px solid #7fd4c1;
+  transform: rotate(-45deg);
+}
+
+.pf-t2-badge {
+  position: absolute;
+  top: 300px;
+  right: 56px;
+  width: 168px;
+  height: 168px;
+  border-radius: 50%;
+  background: #7fd4c1;
+  color: #0d2733;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+  z-index: 3;
+}
+
+.pf-t2-badge span {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.pf-t2-badge strong {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.pf-t2-foot {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 794px;
+  height: 96px;
+  padding: 0 56px;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  flex-wrap: wrap;
+  background: #0d2733;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pf-t2-valid {
+  color: #7fd4c1;
+}
+
+/* ══ 3. MINIMAL FRAME ════════════════════════════════════════════════════ */
+
+.pf-t3 {
+  background: #fbfaf7;
+  padding: 34px;
+}
+
+.pf-t3-frame {
+  height: 100%;
+  border: 1px solid #d8d2c4;
+  padding: 46px 54px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pf-t3-logo {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  color: #9a8f78;
+  margin-bottom: 34px;
+}
+
+.pf-t3-kicker {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #b08a3e;
+  margin-bottom: 14px;
+}
+
+.pf-t3-frame h1 {
+  margin: 0;
+  font-size: 44px;
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  line-height: 1.16;
+  color: #22262e;
+  max-width: 560px;
+}
+
+.pf-t3-hr {
+  width: 78px;
+  height: 2px;
+  background: #b08a3e;
+  margin: 26px 0;
+  flex: 0 0 auto;
+}
+
+.pf-t3-hr-thin {
+  width: 250px;
+  height: 1px;
+  background: #ded8ca;
+  margin: 26px 0 20px;
+}
+
+.pf-t3-photo {
+  width: 100%;
+  height: 340px;
+  background-size: cover;
+  background-position: center;
+  flex: 0 0 auto;
+}
+
+.pf-t3-desc {
+  margin: 30px 0 0;
+  max-width: 500px;
+  font-size: 14px;
+  line-height: 1.75;
+  color: #555c68;
+}
+
+.pf-t3-price {
+  margin-top: 28px;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.pf-t3-price strong {
+  font-size: 46px;
+  font-weight: 300;
+  color: #22262e;
+}
+
+.pf-t3-price span {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9a8f78;
+}
+
+.pf-t3-valid {
+  margin-top: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #b08a3e;
+}
+
+.pf-t3-services {
+  margin-top: 22px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #4a5160;
+}
+
+.pf-t3-services i {
+  color: #c3bba8;
+  font-style: normal;
+}
+
+.pf-t3-contact {
+  display: flex;
+  gap: 22px;
+  font-size: 12.5px;
+  color: #6d7482;
+}
+
+/* ══ 4. DARK LUXE ════════════════════════════════════════════════════════ */
+
+.pf-t4 {
+  background: #10131a;
+  color: #ece7dc;
+}
+
+.pf-t4-photo {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 794px;
+  height: 470px;
+}
+
+.pf-t4-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: saturate(0.85) brightness(0.82);
+}
+
+.pf-t4-fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(16, 19, 26, 0.25) 0%, rgba(16, 19, 26, 0.55) 55%, #10131a 100%);
+}
+
+.pf-t4-body {
+  position: absolute;
+  top: 392px;
+  left: 58px;
+  right: 58px;
+}
+
+.pf-t4-logo {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  color: #c9a227;
+  margin-bottom: 26px;
+}
+
+.pf-t4-kicker {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(236, 231, 220, 0.6);
+  margin-bottom: 10px;
+}
+
+.pf-t4-body h1 {
+  margin: 0;
+  font-size: 50px;
+  font-weight: 300;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  color: #f3efe6;
+  max-width: 600px;
+}
+
+.pf-t4-rule {
+  width: 88px;
+  height: 1.5px;
+  background: #c9a227;
+  margin: 24px 0;
+}
+
+.pf-t4-body p {
+  margin: 0;
+  max-width: 520px;
+  font-size: 14px;
+  line-height: 1.75;
+  color: rgba(236, 231, 220, 0.72);
+}
+
+.pf-t4-price {
+  margin-top: 30px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 14px 26px;
+  border: 1px solid #c9a227;
+}
+
+.pf-t4-price strong {
+  font-size: 34px;
+  font-weight: 400;
+  color: #c9a227;
+}
+
+.pf-t4-price span {
+  font-size: 12.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(236, 231, 220, 0.65);
+}
+
+.pf-t4-valid {
+  margin-top: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(236, 231, 220, 0.55);
+}
+
+.pf-t4-services {
+  margin: 32px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 30px;
+  max-width: 540px;
+}
+
+.pf-t4-services li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 14px;
+  letter-spacing: 0.03em;
+  color: rgba(236, 231, 220, 0.85);
+}
+
+.pf-t4-services li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 7px;
+  height: 7px;
+  transform: rotate(45deg);
+  background: #c9a227;
+}
+
+.pf-t4-foot {
+  position: absolute;
+  left: 58px;
+  right: 58px;
+  bottom: 46px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(201, 162, 39, 0.35);
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: rgba(236, 231, 220, 0.7);
+}
+
+/* ══ 5. COASTAL BRIGHT ═══════════════════════════════════════════════════ */
+
+.pf-t5 {
+  background: #fdfbf6;
+  padding: 44px 46px;
+}
+
+.pf-t5-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+.pf-t5-logo {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.24em;
+  color: #14776b;
+}
+
+.pf-t5-valid {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #e6f2ef;
+  color: #14776b;
+}
+
+.pf-t5-photo {
+  position: relative;
+  height: 360px;
+  border-radius: 26px;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 16px 34px rgba(20, 119, 107, 0.18);
+}
+
+.pf-t5-pill {
+  position: absolute;
+  right: 26px;
+  bottom: -30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 152px;
+  padding: 16px 26px;
+  border-radius: 999px;
+  background: #fdfbf6;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14);
+}
+
+.pf-t5-pill strong {
+  font-size: 30px;
+  font-weight: 800;
+  color: #14776b;
+  line-height: 1.1;
+}
+
+.pf-t5-pill span {
+  font-size: 12px;
+  color: #7b8794;
+}
+
+.pf-t5 h1 {
+  margin: 56px 0 0;
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: #16202b;
+  max-width: 600px;
+}
+
+.pf-t5-kicker {
+  margin-top: 10px;
+  font-size: 17px;
+  font-weight: 700;
+  color: #e0791b;
+}
+
+.pf-t5-desc {
+  margin: 16px 0 0;
+  max-width: 560px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #55606e;
+}
+
+.pf-t5-chips {
+  margin-top: 22px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.pf-t5-chips span {
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: #f1ece0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4a5563;
+}
+
+.pf-t5-thumbs {
+  margin-top: 24px;
+  display: flex;
+  gap: 16px;
+}
+
+.pf-t5-thumbs span {
+  flex: 1 1 0;
+  height: 152px;
+  border-radius: 18px;
+  background-size: cover;
+  background-position: center;
+}
+
+.pf-t5-foot {
+  position: absolute;
+  left: 46px;
+  right: 46px;
+  bottom: 44px;
+  padding: 22px 28px;
+  border-radius: 20px;
+  background: #14776b;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pf-t5-foot b {
+  display: block;
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: 3px;
+}
+
+.pf-t5-foot span {
+  display: block;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.pf-t5-foot-right {
+  text-align: right;
+}
+
+/* ══ PAGE CHROME ═════════════════════════════════════════════════════════ */
+
+/* Template chooser */
+.pf-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 16px;
+}
+
+.pf-pick {
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 10px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+
+.pf-pick:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.pf-pick.is-active {
+  border-color: var(--bs-primary, #ec0b43);
+  box-shadow: 0 8px 20px rgba(236, 11, 67, 0.16);
+}
+
+.pf-pick-thumb {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #eef0f4;
+  margin-bottom: 9px;
+  /* Centres the scaled canvas, which is narrower than the tile. */
+  display: flex;
+  justify-content: center;
+  background: #f7f8fa;
+}
+
+.pf-pick-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.pf-pick-blurb {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #6b7280;
+}
+
+/* Live preview beside the form */
+.pf-preview-pane {
+  position: sticky;
+  top: 76px;
+  display: flex;
+  justify-content: center;
+  padding: 14px;
+  border-radius: 12px;
+  background: #eef0f4;
+  border: 1px solid #e0e3e9;
+}
+
+.pf-preview-pane .pf-canvas-scaler {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+
+/* List thumbnails */
+.pf-row-thumb {
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: center;
+  background: #f7f8fa;
+}
+
+/* Services editor */
+.pf-service-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #f1f3f7;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.pf-service-chip button {
+  border: none;
+  background: none;
+  padding: 0;
+  line-height: 1;
+  color: #9aa3af;
+  cursor: pointer;
+}
+
+.pf-service-chip button:hover {
+  color: #dc2626;
+}
