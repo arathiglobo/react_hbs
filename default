@@ -1,0 +1,247 @@
+##
+# You should look at the following URL's in order to grasp a solid understanding
+# of Nginx configuration files in order to fully unleash the power of Nginx.
+# https://www.nginx.com/resources/wiki/start/
+# https://www.nginx.com/resources/wiki/start/topics/tutorials/config_pitfalls/
+# https://wiki.debian.org/Nginx/DirectoryStructure
+#
+# In most cases, administrators will remove this file from sites-enabled/ and
+# leave it as reference inside of sites-available where it will continue to be
+# updated by the nginx packaging team.
+#
+# This file will automatically load configuration files provided by other
+# applications, such as Drupal or Wordpress. These applications will be made
+# available underneath a path with that package name, such as /drupal8.
+#
+# Please see /usr/share/doc/nginx-doc/examples/ for more detailed examples.
+##
+
+# Default server configuration
+#
+server {
+	listen 80;
+	return 301 https://$host$request_uri;
+}
+
+
+# Virtual Host configuration for example.com
+#
+# You can move that to a different file under sites-available/ and symlink that
+# to sites-enabled/ to enable it.
+#
+server {
+	listen 443 ssl;
+#	listen [::]:443;
+	
+	server_name b2b.choosenfly.com;
+#	ssl_certificate /etc/nginx/ssl/b2b.choosenfly.com.crt;
+	
+#	ssl_certificate /etc/nginx/ssl/ssl-bundle.crt;
+	
+	#Enabled
+        #ssl_certificate /etc/nginx/ssl/b2b.choosenfly.com.chain.crt;
+
+	# ssl_certificate_key /etc/nginx/ssl/b2b.choosenfly.com.key;
+	ssl_certificate /etc/nginx/ssl/b2b.choosenfly.com.crt;
+	ssl_certificate_key /etc/nginx/ssl/b2b.choosenfly.com.key;
+#	ssl_prefer_server_ciphers on;
+
+#	 ssl_trusted_certificate /etc/nginx/ssl/new_ca_bundle_b2b.choosenfly.com.crt;	
+#        SSLCertificateChainFile /etc/nginx/ssl/b2b.choosenfly.com.chain.crt;
+#        ssl_certificate_chain_file /etc/nginx/ssl/b2b.choosenfly.com.chain.crt;
+
+	 # Other SSL settings
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_prefer_server_ciphers on;
+        ssl_ciphers 'HIGH:!aNULL:!MD5';
+	
+	client_max_body_size 100M;
+	root /var/www/html;
+        index index.html index.htm index.nginx-debian.html;
+
+
+	location /app/ {
+		add_header Access-Control-Allow-Origin *;
+	        proxy_pass http://localhost:8080/app/;
+	 }
+	location /apitest/ {
+                add_header Access-Control-Allow-Origin *;
+                proxy_pass http://localhost:8080/apitest/;
+        }
+        location /viatortest/ {
+                add_header Access-Control-Allow-Origin *;
+                proxy_pass http://localhost:8080/viatortest/;
+        }
+        location /apidev/ {
+                proxy_pass http://localhost:8080/apidev/;
+                add_header Access-Control-Allow-Origin *;
+        }
+         location /sandbox/ {
+                add_header Access-Control-Allow-Origin *;
+                proxy_pass http://localhost:8080/sandbox/;
+        }
+         location /ratehawktest/ {
+                add_header Access-Control-Allow-Origin *;
+                proxy_pass http://localhost:8080/ratehawktest/;
+        }
+         location /ratehawk-out/ {
+                add_header Access-Control-Allow-Origin *;
+                proxy_pass http://localhost:8081/ratehawk-out/;
+        }
+
+        location /hotelpms/ {
+                add_header Access-Control-Allow-Origin *;
+                proxy_pass http://localhost:8080/hotelpms/;
+        }
+        
+        location = /ratehawk-out/rateHawk/out/search {
+               add_header Access-Control-Allow-Origin *;
+               limit_req zone=ratehawk_search burst=5 nodelay;
+               limit_req_status 429;
+               proxy_connect_timeout 120s;
+               proxy_send_timeout 120s;
+               proxy_read_timeout 120s;
+               send_timeout 120s;
+               proxy_pass http://localhost:8081/ratehawk-out/rateHawk/out/search;
+        }
+
+        location ~ ^/ratehawk-out/rateHawk/out/search/([^/]+)$ {
+              rewrite ^/ratehawk-out/rateHawk/out/search/([^/]+)$ /ratehawk-out/rateHawk/out/search/$1 break;
+              add_header Access-Control-Allow-Origin *;
+              limit_req zone=ratehawk_search burst=5 nodelay;
+              limit_req_status 429;
+              proxy_ignore_client_abort on;
+              proxy_connect_timeout 120s;
+              proxy_send_timeout 120s;
+              proxy_read_timeout 120s;
+              send_timeout 120s;
+              proxy_pass http://localhost:8081;
+}
+
+	location = /login {
+              return 401;
+        }
+        location /assets/ {
+                proxy_pass http://localhost:8080/assets/;
+        }
+
+}
+
+server {
+        listen 443 ssl;
+#       listen [::]:443;
+
+        server_name api.choosenfly.com;
+        ssl_certificate /etc/nginx/ssl/b2b.choosenfly.com.crt;
+        ssl_certificate_key /etc/nginx/ssl/b2b.choosenfly.com.key;
+
+        root /var/www/html;
+        #index1.html;
+	index index1.html;
+
+
+        location /app/ {
+                add_header Access-Control-Allow-Origin *;
+                proxy_pass http://localhost:8080/app/;
+        }
+
+        location /rest-api/ {
+                add_header Access-Control-Allow-Origin *;
+                proxy_pass http://localhost:8080/rest-api/;
+        }
+
+        location /login {
+	      return 401;
+		  
+	       rewrite ^/login(.*)$ /app/login redirect;
+        }
+        location /assets/ {
+                proxy_pass http://localhost:8080/assets/;
+        }
+
+
+
+
+      location ~* ^/CNFAT- {
+        # Correctly capture the part of the URL after the next / following CNFAT-
+        rewrite ^/CNFAT-[^/]*/(.*)$ https://cdn.xconnect.in/images/hotels/$1 permanent;
+      }
+
+
+      location ~* ^/CNFJM- {
+        # Capture the part of the URL after CNFJM- and redirect
+        rewrite ^/CNFJM-[^/]*/(.*)$ https://cdn.jumeirah.com/-/mediadh/dh/hospitality/jumeirah/hotels/$1 permanent;
+      }
+
+      location ~* ^/CNFIX- {
+        # Capture the part of the URL after CNFJM- and redirect
+        rewrite ^/CNFIX-[^/]*/(.*)$ https://cdn.worldota.net/$1 permanent;
+      }
+
+      location ~* ^/IXXI- {
+        # Capture the part of the URL after CNFJM- and redirect
+        rewrite ^/IXXI-[^/]*/(.*)$ https://iolx.azureedge.net/iolx/$1 permanent;
+      }
+
+      location ~* ^/CNFIN- {
+        # Capture the part of the URL after CNFJM- and redirect
+        rewrite ^/CNFIN-[^/]*/(.*)$ https://b2b.choosenfly.com/assets/details/profilepic/hotel/$1 permanent;
+      }
+
+}
+
+server {
+        listen 443 ssl;
+#       listen [::]:443;
+
+        server_name test.choosenfly.com;
+        ssl_certificate /etc/nginx/ssl/b2b.choosenfly.com.crt;
+        ssl_certificate_key /etc/nginx/ssl/b2b.choosenfly.com.key;
+
+        root /var/www/html/test.choosenfly.com;
+        #index1.html;
+        index index.php server.php;
+
+        location / {
+                try_files $uri $uri/ /public/index.php?$query_string;
+        }
+
+	location ~ \.php$ {
+             include snippets/fastcgi-php.conf;
+             fastcgi_pass unix:/run/php/php7.4-fpm.sock; # Adjust path to your PHP-FPM socket
+             fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+             include fastcgi_params;
+        }
+
+    location ~ /\.ht {
+        deny all;
+    }
+
+}
+
+server {
+    listen 443 ssl;
+    server_name finance.choosenfly.com;
+    ssl_certificate /etc/nginx/ssl/b2b.choosenfly.com.crt;
+    ssl_certificate_key /etc/nginx/ssl/b2b.choosenfly.com.key;
+    root /var/www/html/finance.choosenfly.com;
+
+    index index.php index.html index.htm;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location /offline/ {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/run/php/php7.4-fpm.sock; # Adjust path to your PHP-FPM socket
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+}
+

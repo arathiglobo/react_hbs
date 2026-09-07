@@ -216,7 +216,7 @@ export default function AgentDashboard() {
     {
       label: "Calendar",
       desc: "View & manage calendar events",
-      tone: "teal",
+      tone: "gray",
       icon: <FaCalendarAlt />,
       onClick: () => navigate("/calendar"),
     },
@@ -389,6 +389,7 @@ export default function AgentDashboard() {
         .agent-manage-card.tone-pink   { background: linear-gradient(135deg, #F75E00 0%, #D65100 100%); }
         .agent-manage-card.tone-purple { background: linear-gradient(135deg, #8B6CF7 0%, #6D4CE0 100%); }
         .agent-manage-card.tone-teal   { background: linear-gradient(135deg, #2DD4BF 0%, #0D9488 100%); }
+        .agent-manage-card.tone-gray   { background: linear-gradient(135deg, #8A93A3 0%, #5B6472 100%); }
         .agent-manage-dots {
           position: absolute; top: 8px; right: 10px; width: 40px; height: 40px;
           background-image: radial-gradient(currentColor 1.2px, transparent 1.2px);
@@ -413,6 +414,7 @@ export default function AgentDashboard() {
         .agent-manage-card.tone-pink .agent-manage-arrow   { color: #F75E00; }
         .agent-manage-card.tone-purple .agent-manage-arrow { color: #6D4CE0; }
         .agent-manage-card.tone-teal .agent-manage-arrow   { color: #0D9488; }
+        .agent-manage-card.tone-gray .agent-manage-arrow   { color: #5B6472; }
 
         /* ── Credit Overview — highlighted brand-tinted card so the
             limit / used / available figures stand out from the rest of
@@ -878,7 +880,7 @@ export default function AgentDashboard() {
           </main>
         </div>
 
-        <DashboardFooter label="Agent Dashboard" />
+        <DashboardFooter />
       </div>
     </>
   );

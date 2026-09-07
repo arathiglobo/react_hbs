@@ -24,6 +24,40 @@ import {
   FaUndo,
 } from "react-icons/fa";
 
+// An offer can carry this many banners. The backend enforces the same number,
+// so raising it here alone will only move the rejection server-side.
+const MAX_IMAGES = 10;
+
+// Per-image ceiling. Matches MAX_IMAGE_BYTES in OfferdetailsServiceImpl; the
+// container is configured a little higher again (12MB) so a file in between is
+// refused with a proper message instead of a dropped connection.
+const MAX_IMAGE_MB = 10;
+const MAX_IMAGE_BYTES = MAX_IMAGE_MB * 1024 * 1024;
+
+const formatMb = (bytes) => (bytes / (1024 * 1024)).toFixed(1);
+
+// For the preview chips, where a perfectly ordinary 40KB logo would otherwise
+// read as a baffling "0.0 MB".
+const formatSize = (bytes) =>
+  bytes < 1024 * 1024
+    ? `${Math.max(1, Math.round(bytes / 1024))} KB`
+    : `${formatMb(bytes)} MB`;
+
+// The offer endpoints answer a rejected upload with an ErrorResponse carrying a
+// usable `message` ("banner.png is 14.2 MB. Each image must be under 10 MB."),
+// so show that rather than a blanket "failed to save" the user cannot act on.
+// A request that dies before any response — connection dropped mid-upload — has
+// no body at all, hence the explicit network case.
+const serverMessage = (err, fallback) => {
+  const data = err?.response?.data;
+  if (typeof data === "string" && data.trim()) return data;
+  if (data?.message) return data.message;
+  if (!err?.response) {
+    return "The upload did not reach the server. Check your connection and try again.";
+  }
+  return fallback;
+};
+
 export default function OfferZone() {
   const [items, setItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -44,6 +78,10 @@ export default function OfferZone() {
   // and what to delete.
   const [newImages, setNewImages] = useState([]);
   const [existingImages, setExistingImages] = useState([]);
+  // Rejections raised the moment files are picked (too big, too many, not an
+  // image), shown in red under the file input. Kept apart from `error` so a
+  // failed save never reads as "the file you chose is bad", and vice versa.
+  const [imageErrors, setImageErrors] = useState([]);
   const [description, setDescription] = useState("");
   const [validityFrom, setValidityFrom] = useState("");
   const [validityTo, setValidityTo] = useState("");
@@ -52,6 +90,28 @@ export default function OfferZone() {
     () => Math.max(0, ...items.map((i) => i.id)) + 1,
     [items]
   );
+
+  // Blob URLs for the freshly-picked files. Built once per selection instead of
+  // inline in the JSX, and revoked when the selection changes: calling
+  // URL.createObjectURL() during render leaked another copy of every picked
+  // image on each keystroke elsewhere in the form, which with 10 multi-megabyte
+  // banners is a lot of memory to hold on to.
+  const newPreviews = useMemo(
+    () => newImages.map((file) => URL.createObjectURL(file)),
+    [newImages]
+  );
+  useEffect(
+    () => () => newPreviews.forEach((url) => URL.revokeObjectURL(url)),
+    [newPreviews]
+  );
+
+  const totalImages = existingImages.length + newImages.length;
+  const remainingSlots = Math.max(0, MAX_IMAGES - totalImages);
+
+  // Offers saved before the cap existed can hold more than MAX_IMAGES. The
+  // backend refuses to write one of those back, so say so up front rather than
+  // letting the user fill in the form and hit a rejection on save.
+  const overLimit = totalImages > MAX_IMAGES;
 
   const openCreate = () => {
     setEditing(null);
@@ -62,6 +122,7 @@ export default function OfferZone() {
     setValidityFrom("");
     setValidityTo("");
     setError("");
+    setImageErrors([]);
     setShowModal(true);
   };
 
@@ -106,6 +167,7 @@ export default function OfferZone() {
     setValidityFrom(fromDate);
     setValidityTo(toDate);
     setError("");
+    setImageErrors([]);
     setShowModal(true);
   };
 
@@ -146,6 +208,10 @@ export default function OfferZone() {
           headers: {
             "Content-Type": "multipart/form-data",
           },
+          // Overrides the shared 30s axios timeout: several images take much
+          // longer to upload than a JSON call, and giving up early left the
+          // server still writing while the UI reported a failure.
+          timeout: 300000,
         }
       );
 
@@ -154,9 +220,10 @@ export default function OfferZone() {
         await fetchOfferList(page, search);
         closeModal();
       }
-    } catch (error) {
-      setError("Failed to update offer");
-      toast.error("Failed to update offer");
+    } catch (err) {
+      const message = serverMessage(err, "Failed to update offer");
+      setError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -172,6 +239,7 @@ export default function OfferZone() {
     setValidityFrom("");
     setValidityTo("");
     setError("");
+    setImageErrors([]);
   };
 
   const fetchOfferList = async (pageNum = 0, searchTerm = search) => {
@@ -245,6 +313,8 @@ export default function OfferZone() {
           headers: {
             "Content-Type": "multipart/form-data",
           },
+          // Same reasoning as the edit call above.
+          timeout: 300000,
         }
       );
 
@@ -253,9 +323,10 @@ export default function OfferZone() {
         await fetchOfferList(page, search);
         closeModal();
       }
-    } catch (error) {
-      setError("Sorry! Data not saved to db..");
-      toast.error("Failed to save offer data");
+    } catch (err) {
+      const message = serverMessage(err, "Sorry! Data not saved to db..");
+      setError(message);
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }
@@ -269,6 +340,7 @@ export default function OfferZone() {
     setValidityFrom("");
     setValidityTo("");
     setError("");
+    setImageErrors([]);
   };
 
   useEffect(() => {
@@ -325,25 +397,62 @@ export default function OfferZone() {
     });
   };
 
+  // Validates the moment files are chosen instead of waiting for the save to
+  // come back from the server: anything oversized, not an image, or beyond the
+  // MAX_IMAGES ceiling is listed in red under the input straight away. Valid
+  // picks are still accepted, so one bad file in a batch of ten does not throw
+  // the whole selection away.
+  //
   // Appends rather than replaces, so images can be added across several picks.
   // The input is cleared afterwards so choosing the same file again still fires.
   const handleImageChange = (e) => {
-    const picked = Array.from(e.target.files || []).filter((f) =>
-      f.type.startsWith("image/")
-    );
-    if (picked.length > 0) {
-      setNewImages((prev) => [...prev, ...picked]);
+    const picked = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (picked.length === 0) return;
+
+    const accepted = [];
+    const rejected = [];
+    let free = remainingSlots;
+
+    picked.forEach((file) => {
+      const name = file.name || "image";
+
+      if (!file.type.startsWith("image/")) {
+        rejected.push(`${name} — not an image file`);
+        return;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        rejected.push(
+          `${name} — ${formatMb(file.size)} MB, over the ${MAX_IMAGE_MB} MB limit`
+        );
+        return;
+      }
+      if (free === 0) {
+        rejected.push(`${name} — an offer can hold only ${MAX_IMAGES} images`);
+        return;
+      }
+
+      accepted.push(file);
+      free -= 1;
+    });
+
+    if (accepted.length > 0) {
+      setNewImages((prev) => [...prev, ...accepted]);
       setError("");
     }
-    e.target.value = "";
+    setImageErrors(rejected);
   };
 
   const removeNewImage = (index) => {
     setNewImages((prev) => prev.filter((_, i) => i !== index));
+    // Dropping an image can free up the slot that caused a "too many" warning,
+    // so the stale complaint goes with it.
+    setImageErrors([]);
   };
 
   const removeExistingImage = (url) => {
     setExistingImages((prev) => prev.filter((u) => u !== url));
+    setImageErrors([]);
   };
 
   return (
@@ -577,38 +686,77 @@ export default function OfferZone() {
                 <Row>
                   <Col md={12}>
                     <Form.Group className="mb-3">
-                      <Form.Label>
-                        <span className="text-danger">*</span> Banner Images
+                      <Form.Label className="d-flex justify-content-between align-items-center">
+                        <span>
+                          <span className="text-danger">*</span> Banner Images
+                        </span>
+                        <span
+                          className={
+                            totalImages >= MAX_IMAGES
+                              ? "small fw-semibold text-danger"
+                              : "small text-muted"
+                          }
+                        >
+                          {totalImages} / {MAX_IMAGES} selected
+                        </span>
                       </Form.Label>
                       <Form.Control
                         type="file"
                         accept="image/*"
                         multiple
                         onChange={handleImageChange}
-                        isInvalid={!!error}
+                        // Red the instant a pick is refused, or when the form is
+                        // submitted with no image at all.
+                        isInvalid={imageErrors.length > 0 || overLimit || !!error}
+                        disabled={isLoading || remainingSlots === 0}
                       />
-                      {error && (
-                        <Form.Control.Feedback type="invalid">
-                          {error}
-                        </Form.Control.Feedback>
+
+                      {/* The pick-time complaints, one line per rejected file so
+                          it is obvious WHICH image was the problem. */}
+                      {imageErrors.length > 0 && (
+                        <div className="invalid-feedback d-block">
+                          {imageErrors.map((msg, i) => (
+                            <div key={i}>{msg}</div>
+                          ))}
+                        </div>
                       )}
+                      {overLimit && (
+                        <div className="invalid-feedback d-block">
+                          This offer holds {totalImages} images. Remove{" "}
+                          {totalImages - MAX_IMAGES} before saving — the limit is{" "}
+                          {MAX_IMAGES}.
+                        </div>
+                      )}
+                      {error && (
+                        <div className="invalid-feedback d-block">{error}</div>
+                      )}
+
                       <Form.Text className="text-muted">
-                        Pick several at once, or add more in a second go. Every
-                        image here becomes a slide in the login page banner.
+                        {remainingSlots === 0 ? (
+                          <>
+                            All {MAX_IMAGES} slots are used. Remove an image
+                            below to add a different one.
+                          </>
+                        ) : (
+                          <>
+                            Pick several at once, or add more in a second go — up
+                            to {MAX_IMAGES} per offer, each under {MAX_IMAGE_MB}{" "}
+                            MB. Every image here becomes a slide in the login
+                            page banner.
+                          </>
+                        )}
                       </Form.Text>
 
                       {/* Previews · saved images first, then the ones picked in
                           this session. Removing a saved one only takes effect
                           once the offer is saved. */}
-                      {(existingImages.length > 0 || newImages.length > 0) && (
+                      {totalImages > 0 && (
                         <div className="mt-3">
                           <div className="d-flex align-items-center mb-2">
                             <FaImage className="me-2 text-primary" />
                             <span className="fw-semibold">
-                              {existingImages.length + newImages.length} image
-                              {existingImages.length + newImages.length === 1
-                                ? ""
-                                : "s"}
+                              {totalImages} image
+                              {totalImages === 1 ? "" : "s"}
                             </span>
                           </div>
                           <div className="d-flex flex-wrap gap-2">
@@ -648,12 +796,12 @@ export default function OfferZone() {
                             ))}
                             {newImages.map((file, i) => (
                               <div
-                                key={`${file.name}-${i}`}
+                                key={`${file.name}-${file.size}-${i}`}
                                 className="border rounded position-relative"
                                 style={{ width: 132, padding: 4 }}
                               >
                                 <img
-                                  src={URL.createObjectURL(file)}
+                                  src={newPreviews[i]}
                                   alt={file.name}
                                   className="rounded"
                                   style={{
@@ -662,6 +810,13 @@ export default function OfferZone() {
                                     objectFit: "cover",
                                   }}
                                 />
+                                <div
+                                  className="text-muted text-truncate"
+                                  style={{ fontSize: 10 }}
+                                  title={file.name}
+                                >
+                                  {formatSize(file.size)}
+                                </div>
                                 <Button
                                   size="sm"
                                   variant="danger"
@@ -747,7 +902,8 @@ export default function OfferZone() {
               <Button
                 className="btn-success d-flex align-items-center"
                 onClick={editing ? handleEdit : saveOffer}
-                disabled={isLoading}
+                // No point posting a batch the server is going to refuse.
+                disabled={isLoading || overLimit}
               >
                 {isLoading ? (
                   <>

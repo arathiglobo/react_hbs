@@ -299,7 +299,7 @@ const ExtranetHotelDashboard = () => {
           </main>
         </div>
 
-        <DashboardFooter label="Hotel Dashboard" />
+        <DashboardFooter />
       </div>
     </>
   );

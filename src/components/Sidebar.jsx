@@ -31,6 +31,22 @@ import axiosInstance from "./AxiosInstance";
 
 let labelForDashboard = " ";
 
+/**
+ * Menus whose flyout opens UPWARDS (`.submenu-up` — bottom anchored to the top
+ * of the row) because they sit low enough in the sidebar that a downward panel
+ * would run off the bottom of the screen.
+ *
+ * "Report" belongs here rather than in the `submenu-center` group: that variant
+ * anchors the panel at `top: 0` of its row, and with Report near the foot of
+ * the admin menu its 22rem panel was being cut off by the viewport.
+ */
+const SUBMENU_UP = new Set([
+  "Inhouse Accounts",
+  "Agent Incentive",
+  "Marketing",
+  "Report",
+]);
+
 export default function Sidebar() {
   const [show, setShow] = useState(false);
   const handleClose = () => setShow(false);
@@ -683,14 +699,20 @@ export default function Sidebar() {
       label: "Report",
       to: "/report",
       roles: ["admin", "agent"],
+      // Agents see ONLY the three daily-sales reports here. Everything else is
+      // marked admin-only rather than the menu being split in two, so the list
+      // stays one definition — and roleAllows() lets super_admin through any
+      // roles:["admin"] entry, so their Report menu is unchanged.
       children: [
         {
           label: "Booking",
           to: "/report/booking",
+          roles: ["admin"],
         },
         {
           label: "Cancellation",
           to: "/report/cancellation",
+          roles: ["admin"],
         },
         // {
         //   label: "Inventory",
@@ -699,47 +721,59 @@ export default function Sidebar() {
         {
           label: "Hotel Wise",
           to: "/report/hotel-wise",
+          roles: ["admin"],
         },
         {
           label: "Accounts",
           to: "/report/accounts",
+          roles: ["admin"],
         },
         {
           label: "Day Wise",
           to: "/report/day-wise",
+          roles: ["admin"],
         },
         {
           label: "Monthly Wise",
           to: "/report/monthly-wise",
+          roles: ["admin"],
         },
         {
           label: "Comparison",
           to: "/report/comparison",
+          roles: ["admin"],
         },
         {
           label: "Agent Wise",
           to: "/report/agent-wise",
+          roles: ["admin"],
         },
         {
           label: "Contract Expiry",
           to: "/report/contract-expiry",
+          roles: ["admin"],
         },
         {
           label: "Contract Rate",
           to: "/report/contract-rate",
+          roles: ["admin"],
         },
         {
           label: "User Report",
           to: "/report/user-report",
+          roles: ["admin"],
         },
         {
           label: "Stop Sale",
           to: "/report/stop-sale",
+          roles: ["admin"],
         },
         {
           label: "User Logins",
           to: "/report/user-logins",
+          roles: ["admin"],
         },
+        // ── The agent's whole Report menu ──
         {
           label: "Offline Daily Sales",
           to: "/report/offline-daily-sales",
@@ -956,10 +990,14 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Sidebar for large screens */}
+      {/* Sidebar for large screens.
+          d-lg-flex, not d-lg-block: Bootstrap's display utilities carry
+          !important, so d-lg-block was silently beating the `display: flex`
+          that .sidebar has always declared. The column layout is what lets the
+          menu take the scrolling and the Globosoft mark stay pinned below it. */}
       {!collapsed && (
       <aside
-        className="sidebar d-none d-lg-block"
+        className="sidebar d-none d-lg-flex"
         ref={sidebarRef}
         style={{
           position: "sticky",
@@ -1001,7 +1039,25 @@ export default function Sidebar() {
         >
           «
         </button>
-        <Nav className="flex-column" style={{ paddingTop: 6 }}>
+        {/* Two constraints here, both learned the hard way:
+
+            1. NO `overflow` value. The submenus are flyout panels
+               (`position: absolute; left: 100%`, see
+               .nav-item-has-children .submenu) that sit entirely outside this
+               element's right edge; any overflow but `visible` turns this into
+               a clipping container and cuts them off on click.
+            2. `flex: 0 0 auto` + `nowrap`, never `1 1 auto`. Bootstrap's .nav
+               is `flex-wrap: wrap`, so the moment this box is allowed to
+               shrink below its content the last menu items WRAP INTO A SECOND
+               COLUMN beside the sidebar and float over the page. Letting the
+               box keep its content height is what keeps the menu one column.
+
+            .sidebar-globo below still pins to the bottom via margin-top:auto
+            whenever the menu leaves room for it. */}
+        <Nav
+          className="flex-column"
+          style={{ paddingTop: 6, flex: "0 0 auto", flexWrap: "nowrap" }}
+        >
           {filteredItems.map((item) => {
             const hasChildren =
               Array.isArray(item.children) && item.children.length > 0;
@@ -1011,7 +1067,7 @@ export default function Sidebar() {
             return (
               <Nav.Item
                 key={item.label}
-                className={`nav-item-custom ${hasChildren || hasGroups ? "nav-item-has-children" : ""} ${(item.label === "Inhouse Accounts" || item.label === "Agent Incentive" || item.label === "Marketing") ? "submenu-up" : ""} ${item.label === "Booking List" || item.label === "New Booking" || item.label === "Report" || (item.label === "Registration" && (item.children?.length ?? 0) > 4) ? "submenu-center" : ""}`}
+                className={`nav-item-custom ${hasChildren || hasGroups ? "nav-item-has-children" : ""} ${SUBMENU_UP.has(item.label) ? "submenu-up" : ""} ${item.label === "Booking List" || item.label === "New Booking" || (item.label === "Registration" && (item.children?.length ?? 0) > 4) ? "submenu-center" : ""}`}
               >
                 <Nav.Link
                   as={hasChildren || hasGroups ? "div" : Link}
@@ -1233,6 +1289,15 @@ export default function Sidebar() {
             );
           })}
         </Nav>
+
+        {/* Pinned to the foot of the sidebar. Red cut, because this column is
+            white — the white lockups would disappear here. */}
+        <div className="sidebar-globo">
+          <img
+            src={`${process.env.PUBLIC_URL}/images/globo-red-logo-with-text.png`}
+            alt="Globosoft"
+          />
+        </div>
       </aside>
       )}
 

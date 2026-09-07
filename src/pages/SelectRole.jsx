@@ -2,6 +2,7 @@ import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/SelectRole.css";
 import DashboardRedirections from "../components/DashboardRedirections";
+import GloboFooterMarks from "../components/GloboFooterMarks";
 
 const SelectRole = () => {
   const { state } = useLocation();
@@ -57,17 +58,18 @@ const SelectRole = () => {
       {/* Header */}
       <div className="role-header">
         <div className="header-content">
-          {/* Wordmark on its own white plate, matching the TopBar treatment,
-              with the tagline stacked directly beneath it. desert-logo.png is
-              the transparent cut of the mark, so the plate edges stay clean. */}
+          {/* Same lockup as the TopBar: the background-free cut of the mark
+              sitting straight on the orange band, tagline directly beneath.
+              No plate — the white "desert" reads against the orange on its
+              own, which is the whole point of the knocked-out asset. */}
           <div className="company-info">
             <div className="company-logo-plate">
               <img
-                src={`${process.env.PUBLIC_URL}/images/desert-logo.png`}
+                src={`${process.env.PUBLIC_URL}/images/desert-on-orange.png`}
                 alt="Desert Beds"
               />
+              <p className="company-tagline">destinations worldwide</p>
             </div>
-            <p className="company-tagline">destinations worldwide</p>
           </div>
           <div className="header-features">
             <div className="feature-item">
@@ -122,6 +124,16 @@ const SelectRole = () => {
           </div>
         </div>
       </div>
+
+      {/* Right-hand mark only — tone="light" because this bar is white, so it
+          uses the red cut. The left slot is deliberately empty; the copyright
+          keeps its place via the bar's space-between. */}
+      <footer className="role-globo-bar">
+        <span className="role-globo-copy">
+          © {new Date().getFullYear()} Globosoft. All rights reserved.
+        </span>
+        <GloboFooterMarks side="right" tone="light" label="Powered by" />
+      </footer>
     </div>
   );
 };

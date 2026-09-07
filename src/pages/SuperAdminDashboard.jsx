@@ -6,8 +6,7 @@ import RegionalClock from '../components/RegionalClock';
 import LineChart from '../components/LineChart';
 import BarChart from '../components/BarChart';
 import axiosInstance from '../components/AxiosInstance';
-import { Icon, formatNumber } from './dashboardSkin';
-import FooterLegalLinks from '../components/FooterLegalLinks';
+import { Icon, formatNumber, DashboardFooter } from './dashboardSkin';
 import { Collapse } from 'react-bootstrap';
 import { FaChartLine, FaChevronDown } from 'react-icons/fa';
 import '../styles/AdminDashboardModern.css';
@@ -289,12 +288,9 @@ export default function SuperAdminDashboard() {
         </main>
       </div>
 
-      <footer className="adm-foot">
-        <span>© {new Date().getFullYear()} <strong>Globosoft</strong>. All rights reserved.</span>
-        {/* Middle child of a space-between row, so it centres itself. */}
-        <FooterLegalLinks />
-        <span>Super Admin Console</span>
-      </footer>
+      {/* Shared with every other dashboard — see DashboardFooter. className
+          keeps this shell's own orange band. */}
+      <DashboardFooter className="adm-foot" />
     </div>
   );
 }

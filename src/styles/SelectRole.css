@@ -13,11 +13,17 @@ body {
 }
 
 /* Main Container */
+/* A fixed, non-scrolling screen: header band, the card, then the Globosoft
+   bar, sized to fit exactly one viewport. Everything inside is expressed in vh
+   clamps so the three bands always add up to 100vh instead of overflowing —
+   see the height guard at the bottom of this file for the short-window case. */
 .select-role-page {
-  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
   background: white;
   position: relative;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .select-role-page::before {
@@ -33,9 +39,10 @@ body {
 
 /* Header Section */
 .role-header {
+  flex: 0 0 auto;
   background: linear-gradient(135deg, #F75E00 0%, #D65100 100%);
   border-bottom: 1px solid #D65100;
-  padding: 20px 0;
+  padding: clamp(10px, 1.8vh, 20px) 0;
   position: relative;
   z-index: 10;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
@@ -48,8 +55,10 @@ body {
 .role-header .feature-item i {
   color: #ffffff !important;
 }
+/* Black, matching the "beds" half of the wordmark above it — the surrounding
+   .role-header rule paints its other children white, so this has to win. */
 .role-header .company-tagline {
-  color: rgba(255, 255, 255, 0.85) !important;
+  color: #000000 !important;
 }
 
 .header-content {
@@ -70,12 +79,13 @@ body {
   gap: 6px;
 }
 
+/* Just a wrapper now — no plate, no fill, no shadow. desert-on-orange.png is
+   the background-free cut of the mark, so it sits straight on the header band.
+   The asset is trimmed to the ink, which makes this width the wordmark itself
+   and lets the tagline centre exactly under it. */
 .role-header .company-logo-plate {
   display: block;
-  padding: 7px 14px;
-  border-radius: 10px;
-  background: #ffffff;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.14);
+  width: fit-content;
 }
 
 .role-header .company-logo-plate img {
@@ -85,9 +95,13 @@ body {
 }
 
 .role-header .company-tagline {
-  padding-left: 14px;
-  font-size: 13px;
-  letter-spacing: 0.06em;
+  margin: 5px 0 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .company-name {
@@ -127,18 +141,23 @@ body {
 }
 
 /* Main Content */
+/* Takes whatever height is left between the header band and the Globosoft bar,
+   and never scrolls — min-height:0 is what allows a flex child to shrink below
+   its content instead of pushing the page taller. */
 .role-main-content {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: calc(100vh - 100px);
-  padding: 40px 20px;
+  padding: clamp(12px, 2.4vh, 40px) 20px;
+  overflow: hidden;
 }
 
 .role-container {
   background: white;
   border-radius: 24px;
-  padding: 40px;
+  padding: clamp(18px, 3.2vh, 40px);
   box-shadow:
     0 32px 64px rgba(0, 0, 0, 0.08),
     0 16px 32px rgba(0, 0, 0, 0.05);
@@ -147,6 +166,7 @@ body {
   overflow: hidden;
   max-width: 900px;
   width: 100%;
+  max-height: 100%;
 }
 
 .role-container::before {
@@ -163,38 +183,40 @@ body {
 /* Header Section */
 .role-header-section {
   text-align: center;
-  margin-bottom: 40px;
+  margin-bottom: clamp(14px, 2.8vh, 40px);
 }
 
 .role-title-main {
-  font-size: 32px;
+  font-size: clamp(21px, 3.2vh, 32px);
   font-weight: 800;
   color: #1a202c;
-  margin-bottom: 12px;
+  margin-bottom: clamp(4px, 1.1vh, 12px);
   letter-spacing: -1px;
 }
 
 .role-subtitle {
   color: #718096;
-  font-size: 18px;
+  font-size: clamp(13px, 1.8vh, 18px);
   margin: 0;
   font-weight: 500;
   line-height: 1.5;
 }
 
 /* Role Grid */
+/* 200px rather than 280px so three or four roles sit on one row — wrapping to
+   a second row is what used to push this page past the viewport. */
 .role-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 24px;
-  margin-bottom: 40px;
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+  gap: clamp(10px, 1.8vh, 24px);
+  margin-bottom: clamp(12px, 2.4vh, 40px);
 }
 
 /* Role Cards */
 .role-card {
   background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
   border-radius: 16px;
-  padding: 32px 24px;
+  padding: clamp(14px, 2.6vh, 32px) clamp(12px, 1.6vw, 24px);
   border: 2px solid #e2e8f0;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
@@ -225,15 +247,15 @@ body {
 }
 
 .role-icon {
-  width: 80px;
-  height: 80px;
-  margin: 0 auto 24px;
+  width: clamp(46px, 7.4vh, 80px);
+  height: clamp(46px, 7.4vh, 80px);
+  margin: 0 auto clamp(10px, 2vh, 24px);
   background: white;
   border-radius: 50%;
   display: flex;
   justify-content: center;
   align-items: center;
-  font-size: 32px;
+  font-size: clamp(19px, 3vh, 32px);
   color: var(--role-color, #3182ce);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
@@ -245,18 +267,18 @@ body {
 }
 
 .role-name {
-  font-size: 20px;
+  font-size: clamp(15px, 2.2vh, 20px);
   font-weight: 700;
   color: #1a202c;
-  margin-bottom: 12px;
+  margin-bottom: clamp(5px, 1.1vh, 12px);
   text-transform: capitalize;
 }
 
 .role-description {
   color: #4a5568;
-  font-size: 14px;
-  line-height: 1.6;
-  margin-bottom: 20px;
+  font-size: clamp(11.5px, 1.6vh, 14px);
+  line-height: 1.5;
+  margin-bottom: clamp(8px, 1.8vh, 20px);
   font-weight: 500;
 }
 
@@ -277,7 +299,7 @@ body {
 /* Footer */
 .role-footer {
   text-align: center;
-  padding-top: 24px;
+  padding-top: clamp(10px, 1.9vh, 24px);
   border-top: 1px solid #e2e8f0;
 }
 
@@ -287,8 +309,30 @@ body {
   justify-content: center;
   gap: 8px;
   color: #718096;
-  font-size: 14px;
+  font-size: clamp(12px, 1.6vh, 14px);
   font-weight: 500;
+}
+
+/* ── Globosoft bar, pinned to the foot of the screen ─────────────────────── */
+.role-globo-bar {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: clamp(7px, 1.3vh, 12px) clamp(16px, 3vw, 32px);
+  border-top: 1px solid #eef0f4;
+  background: #ffffff;
+  /* The "Powered by" lockup sizes itself to match every other footer — see
+     GloboFooterMarks.css. */
+}
+
+.role-globo-copy {
+  font-size: clamp(11px, 1.5vh, 12.5px);
+  color: #718096;
+  text-align: center;
 }
 
 .security-notice i {
@@ -428,3 +472,33 @@ body {
 .select-role-page .role-name { font-weight: 700 !important; letter-spacing: -.02em !important; color: #15171C !important; }
 .select-role-page .role-description { color: #6B7280 !important; letter-spacing: -.006em !important; }
 .select-role-page .role-select-indicator { color: #F75E00 !important; }
+
+/* ── Height guard ─────────────────────────────────────────────────────────
+   The one-screen layout above holds while there is room for three bands. On a
+   short window, or on the ≤768px breakpoint where the role grid drops to a
+   single column, there is no honest way to fit them — so hand normal scrolling
+   back rather than crushing the cards to illegibility. */
+@media (max-height: 560px), (max-width: 768px) {
+  .select-role-page {
+    height: auto;
+    min-height: 100vh;
+    overflow-x: hidden;
+    overflow-y: visible;
+  }
+
+  .role-main-content {
+    overflow: visible;
+  }
+
+  .role-container {
+    max-height: none;
+  }
+}
+
+/* Stack the Globosoft bar once the row would crowd. */
+@media (max-width: 560px) {
+  .role-globo-bar {
+    flex-direction: column;
+    gap: 10px;
+  }
+}

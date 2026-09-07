@@ -7,6 +7,7 @@ import "@fortawesome/fontawesome-free/css/all.min.css";
 import "../styles/Login.css";
 import "../styles/LoginModern.css";
 import DashboardRedirections from "../components/DashboardRedirections";
+import GloboFooterMarks from "../components/GloboFooterMarks";
 import axiosInstance from "../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 
@@ -682,7 +683,7 @@ const Login = () => {
               <div className="lg-copy">
                 <div className="lg-logo-wrap">
                   <img
-                    src={`${process.env.PUBLIC_URL}/images/desert-logo.png`}
+                    src={`${process.env.PUBLIC_URL}/images/desert-white.PNG`}
                     alt="Desert Beds"
                     className="lg-logo"
                   />
@@ -919,7 +920,9 @@ const Login = () => {
       {/* ── Bottom bar ── */}
       <footer className="lg-footbar">
         <div className="lg-footbar-left">
-          © {new Date().getFullYear()} Desert Beds. All rights reserved.
+          <span>
+            © {new Date().getFullYear()} Globosoft. All rights reserved.
+          </span>
         </div>
         <div className="lg-footbar-mid">
           <button
@@ -935,11 +938,19 @@ const Login = () => {
           <span>
             email : <a href="mailto:info@desertbeds.com">info@desertbeds.com</a>
           </span>
+          {/* Moved out of the right-hand corner to free it for the Globosoft
+              wordmark; the pipe separators came along with them. */}
+          <span className="lg-footbar-regions">
+            <span>UAE</span>
+            <span>UK</span>
+            <span>India</span>
+          </span>
         </div>
+        {/* "Powered by" + the red wordmark. tone="light" because this bar is
+            white; the left-hand mark is deliberately gone, so the attribution
+            sits alone in the right corner. */}
         <div className="lg-footbar-right">
-          <span>UAE</span>
-          <span>UK</span>
-          <span>India</span>
+          <GloboFooterMarks side="right" tone="light" label="Powered by" />
         </div>
       </footer>
 

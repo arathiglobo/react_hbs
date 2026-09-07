@@ -111,6 +111,50 @@ body{
   justify-content: center;
   font-weight: 700;
 }
+
+/* ── Desert Beds brand lockup ───────────────────────────────────────────────
+   Wordmark over its tagline, sitting straight on the orange bar — no badge,
+   no plate, no white ring. That works because desert-on-orange.png is the
+   knocked-out cut of the mark: white "desert", black "beds", everything else
+   transparent. It is trimmed to the ink, so the width below IS the wordmark
+   rather than the wordmark plus its old orange margin.
+
+   Only use this asset on the brand orange (or another dark ground) — the
+   "desert" half is white and vanishes on a light surface. desert-white.PNG is
+   the cut to reach for there. */
+.db-brand-chip{
+  display: inline-block;
+  line-height: 0;
+}
+
+/* 175px puts the lockup at ~43px tall, which is about as large as it goes
+   inside the 60px .topbar while keeping a little air above and below. */
+.db-brand-mark{
+  display: block;
+  width: 175px;
+  height: auto;
+}
+
+.db-brand-tag{
+  display: block;
+  margin-top: 4px;
+  color: #000;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.055em;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* The topbar paints every .navbar-brand span white, and the dashboard skin
+   repeats that rule with an extra class. Both are !important, so the tagline
+   can only stay black by out-specifying them — hence the full chains rather
+   than a bare .db-brand-tag override. */
+.topbar .navbar-brand .db-brand-tag,
+.rw-dashboard .topbar .navbar-brand .db-brand-tag{
+  color: #000 !important;
+}
 .sidebar-toggle-btn{
   width: 32px;
   height: 32px;
@@ -147,6 +191,27 @@ body{
   flex-direction: column;
   min-width: 13rem !important;
   max-width: 13rem;
+}
+
+/* ── Globosoft mark pinned to the foot of the sidebar ───────────────────────
+   margin-top:auto holds it against the bottom of the column however short the
+   menu is, and the nav above it takes the scrolling so the mark never scrolls
+   out of view. The sidebar is white, so the red cut is the right one here. */
+.sidebar-globo{
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding: 0.7rem 0.25rem 0.15rem;
+  border-top: 1px solid #eef0f4;
+  text-align: center;
+}
+
+.sidebar-globo img{
+  display: block;
+  width: 100%;
+  max-width: 140px;
+  height: auto;
+  margin: 0 auto;
+  opacity: 0.9;
 }
 
 /* Removed sidebar brand heading per request */
@@ -206,6 +271,16 @@ top: auto;
   bottom: 100%;
   left: 100%;
   transform: none;
+
+  /* Capped so an upward panel cannot run off the TOP of the screen. The limit
+     is set by the tightest real case rather than by taste: a row's distance
+     from the top is fixed by how many items sit above it (it does not shrink
+     with the viewport), and the smallest gap among the items using this
+     variant is agent → Report at 267px of clear space below the 60px topbar.
+     250px leaves a margin on that and is comfortable everywhere else — the
+     inline overflow-y on .submenu scrolls anything that does not fit.
+     Re-derive this if a menu gains items above one of the up-opening rows. */
+  max-height: 250px !important;
 }
 
 /* Flyout panel for the tall menus (Booking List / New Booking /

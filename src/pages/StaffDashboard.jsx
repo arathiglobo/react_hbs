@@ -99,7 +99,7 @@ export default function StaffDashboard() {
           </main>
         </div>
 
-        <DashboardFooter label="Staff Dashboard" />
+        <DashboardFooter />
       </div>
     </>
   );

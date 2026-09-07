@@ -6,8 +6,7 @@ import RegionalClock from '../components/RegionalClock';
 import LineChart from '../components/LineChart';
 import BarChart from '../components/BarChart';
 import axiosInstance from '../components/AxiosInstance';
-import { Icon, formatNumber } from './dashboardSkin';
-import FooterLegalLinks from '../components/FooterLegalLinks';
+import { Icon, formatNumber, DashboardFooter } from './dashboardSkin';
 import { Collapse } from 'react-bootstrap';
 import { FaChartLine, FaChevronDown } from 'react-icons/fa';
 import '../styles/AdminDashboardModern.css';
@@ -193,7 +192,7 @@ export default function AdminDashboard() {
     { label: 'Transfer',           icon: 'transfer', to: '/new-booking/cab',                  primary: true },
     { label: 'Tours & Activities', icon: 'tour',     to: '/new-booking/tours-and-activities', primary: true },
     { label: 'Agent Account',      icon: 'account',  to: '/incentive/config',                 primary: true },
-    { label: 'Flight',             icon: 'flight',   to: '/new-booking/flight',               primary: true },
+    // { label: 'Flight',             icon: 'flight',   to: '/new-booking/flight',               primary: true },
   ];
 
   return (
@@ -387,12 +386,11 @@ export default function AdminDashboard() {
         </main>
       </div>
 
-      <footer className="adm-foot">
-        <span>© {new Date().getFullYear()} <strong>Globosoft</strong>. All rights reserved.</span>
-        {/* Middle child of a space-between row, so it centres itself. */}
-        <FooterLegalLinks />
-        <span>Admin Dashboard</span>
-      </footer>
+      {/* tone="brand": this band is the orange #F75E00, so both marks use
+          their white cuts — the red wordmark would barely read on it. */}
+      {/* Shared with every other dashboard — see DashboardFooter. className
+          keeps this shell's own orange band. */}
+      <DashboardFooter className="adm-foot" />
     </div>
   );
 }

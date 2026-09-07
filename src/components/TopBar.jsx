@@ -805,17 +805,17 @@ export default function TopBar() {
   </div>
   <span className="fw-semibold">Globosoft</span> */}
 
-  <div
-    className="logo-placeholder"
-    style={{ background: "#fff", padding: 3, overflow: "hidden" }}
-  >
+  {/* Wordmark over its tagline, straight on the orange bar — same lockup the
+      role picker header uses. desert-on-orange.png is the background-free cut
+      of the mark, so no plate or ring is needed to separate it from the bar. */}
+  <div className="db-brand-chip">
     <img
-      src={`${process.env.PUBLIC_URL}/images/desert.PNG`}
-      alt="desertbeds"
-      style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 6 }}
+      className="db-brand-mark"
+      src={`${process.env.PUBLIC_URL}/images/desert-on-orange.png`}
+      alt="Desert Beds"
     />
+    <span className="db-brand-tag">destinations worldwide</span>
   </div>
-  {/* <span className="fw-semibold">desert beds</span> */}
 </Navbar.Brand>
          {showSidebarToggle && (
            <button
