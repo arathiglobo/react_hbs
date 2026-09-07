@@ -2760,15 +2760,15 @@ export default function HotelSearch({
                                       padding: "10px",
                                     }}
                                   >
+                                    {/* hs-hotel-img makes the photo follow the
+                                        card's height instead of setting it —
+                                        see HotelSearch.css. LazyImage takes
+                                        only src/alt/className, so a `style`
+                                        prop here would be silently dropped. */}
                                     <LazyImage
                                       src={hotel.image}
                                       alt={hotel.name}
-                                      style={{
-                                        width: "100%",
-                                        height: "100%",
-                                        objectFit: "cover",
-                                        borderRadius: "9px",
-                                      }}
+                                      className="hs-hotel-img"
                                     />
                                     <div
                                       style={{

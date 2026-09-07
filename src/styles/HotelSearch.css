@@ -1466,3 +1466,29 @@
     justify-content: center;
   }
 }
+
+/* ── Search-result hotel photo ─────────────────────────────────────────────
+   LazyImage renders a Bootstrap `.ratio` box, whose ::before spacer
+   (padding-top: 66.25% of the width) gives the image a FIXED height set by the
+   column width alone. That height was taller than the text beside it for API
+   hotels — the ones with no "Also Available Deals" row — so the rate line
+   (margin-top: auto) was pushed to the bottom of a box the content never
+   filled, leaving dead space under the hotel name.
+
+   Dropping the spacer and filling the column instead inverts that: the card is
+   sized by its text, and the photo follows. Inhouse hotels are unaffected —
+   their deals row already made the text the taller side. The image is
+   absolutely positioned inside this box by Bootstrap's `.ratio > *` and uses
+   object-fit: cover, so it crops rather than distorts at any height.
+
+   The floor is a guard for pathological cases (missing name and address); the
+   normal API card's text runs ~145px, so it does not come into play. */
+.hs-hotel-img.ratio {
+  height: 100%;
+  min-height: 120px;
+  border-radius: 9px;
+}
+
+.hs-hotel-img.ratio::before {
+  padding-top: 0;
+}
