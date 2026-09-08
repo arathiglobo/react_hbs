@@ -37,6 +37,11 @@ import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/RoomList.css";
 import axiosInstance from "../components/AxiosInstance";
 import { formatFlexibleDate } from "../utils/dateUtils";
+import {
+  RateDeadlinePill,
+  resolveInhouseDeadline,
+  DEADLINE_TIME_2PM,
+} from "../utils/rateDeadline";
 
 /**
  * Builds the "Valid: <from> - <to>" label for a policy validity period.
@@ -698,19 +703,6 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
     }
   };
 
-  const sampleGallery = [
-    "/images/01.png",
-    "/images/02.png",
-    "/images/03.png",
-    "/images/04.jpg",
-    "/images/04.png",
-    "/images/05.jpg",
-    "/images/06.png",
-    "/images/07.png",
-    "/images/main-slider.jpg",
-    "/images/small-img.jpg",
-  ];
-
   const getMealPlanIcon = (mealPlan) => {
     switch (mealPlan.toLowerCase()) {
       case "room only":
@@ -834,6 +826,45 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
       cancelled = true;
     };
   }, [roomData]);
+
+  // Max cancellation nights for this hotel — MAX(noOfNights) across the
+  // cancellation-policy rows configured at /hotel-actions/{id}/hotel-policy.
+  // Fetched here for the same reason HotelBookingPage fetches it: the
+  // free-cancellation deadline is checkInDate − maxCancellationNights, which
+  // is exactly what the backend stores on the booking, so the room list, the
+  // booking page, the Booking List and the voucher all show one date.
+  const [maxCancellationNights, setMaxCancellationNights] = useState(null);
+
+  useEffect(() => {
+    const hotelId = roomData?.hotels?.[0]?.hotelId;
+    if (!hotelId || roomData?.payload?.apiId !== 1) {
+      setMaxCancellationNights(null);
+      return undefined;
+    }
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/hotels/${hotelId}/max-cancellation-nights`)
+      .then((res) => {
+        if (cancelled) return;
+        const n = Number(res?.data);
+        setMaxCancellationNights(Number.isFinite(n) ? n : 0);
+      })
+      .catch(() => {
+        // No policy configured / call failed — leave null so the pill falls
+        // back to "Non-refundable" rather than inventing a date.
+        if (!cancelled) setMaxCancellationNights(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [roomData]);
+
+  // One deadline for every rate on the page: it is a property of the hotel's
+  // cancellation policy and the stay dates, not of the individual rate.
+  const inhouseDeadline = resolveInhouseDeadline(
+    roomData?.payload?.checkInDate,
+    maxCancellationNights,
+  );
 
   // Second useEffect to fetch policy details when roomData is available
   useEffect(() => {
@@ -1473,9 +1504,6 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                         <div className="d-flex justify-content-between align-items-center w-100">
                           <div className="room-category-info">
                             <h5 className="mb-1">{category.roomCategory}</h5>
-                            <p className="mb-0 text-muted small">
-                              {category.baseRoomType}
-                            </p>
                           </div>
 
                           <div className="d-flex align-items-center gap-3">
@@ -1650,6 +1678,17 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                         {rate.contractLabel}
                                       </div>
 
+                                      {/* Same deadline the booking page shows:
+                                          checkIn − the hotel's max cancellation
+                                          nights, at 2 PM UAE. */}
+                                      <div className="feature-item">
+                                        <RateDeadlinePill
+                                          rate={rate}
+                                          deadline={inhouseDeadline}
+                                          timeLabel={DEADLINE_TIME_2PM}
+                                        />
+                                      </div>
+
                                       <div className="feature-item">
                                         <Button
                                           variant="link"
@@ -1784,6 +1823,14 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                           <span className="text-truncate">
                                             {rate.contractLabel}
                                           </span>
+                                        </div>
+                                        <div className="feature-item d-flex align-items-center">
+                                          <FaInfoCircle className="me-2 flex-shrink-0" />
+                                          <RateDeadlinePill
+                                            rate={rate}
+                                            deadline={inhouseDeadline}
+                                            timeLabel={DEADLINE_TIME_2PM}
+                                          />
                                         </div>
                                         <div className="feature-item d-flex align-items-center">
                                           <Button
@@ -2202,59 +2249,12 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
         <Modal.Body>
           {selectedRate && (
             <Row className="g-4">
-              <Col md={6}>
-                <div
-                  id="roomGallery"
-                  className="carousel slide"
-                  data-bs-ride="carousel"
-                >
-                  <div className="carousel-inner rounded">
-                    {sampleGallery.map((img, idx) => (
-                      <div
-                        key={idx}
-                        className={`carousel-item ${idx === 0 ? "active" : ""}`}
-                      >
-                        <img src={img} className="d-block w-100" alt="Room" />
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    className="carousel-control-prev"
-                    type="button"
-                    data-bs-target="#roomGallery"
-                    data-bs-slide="prev"
-                    aria-label="Previous image"
-                  >
-                    <span
-                      className="carousel-control-prev-icon"
-                      aria-hidden="true"
-                    ></span>
-                    <span className="visually-hidden">Previous</span>
-                  </button>
-                  <button
-                    className="carousel-control-next"
-                    type="button"
-                    data-bs-target="#roomGallery"
-                    data-bs-slide="next"
-                    aria-label="Next image"
-                  >
-                    <span
-                      className="carousel-control-next-icon"
-                      aria-hidden="true"
-                    ></span>
-                    <span className="visually-hidden">Next</span>
-                  </button>
-                </div>
-              </Col>
-              <Col md={6}>
+              {/* Stock room photos and the hardcoded amenity badges used to sit
+                  here. Both were identical for every hotel, so the modal now
+                  shows only what the search actually returned for this rate. */}
+              <Col md={12}>
                 <h5 className="mb-2">{selectedRate.roomCategory}</h5>
                 <p className="text-muted">{selectedRate.roomTypeDescription}</p>
-                <div className="d-flex flex-wrap gap-2 mb-3">
-                  <Badge bg="secondary">High speed internet</Badge>
-                  <Badge bg="secondary">Private bathroom</Badge>
-                  <Badge bg="secondary">Kitchen</Badge>
-                  <Badge bg="secondary">TV</Badge>
-                </div>
                 <div className="booking-details-modal">
                   <div className="d-flex justify-content-between mb-2">
                     <span>Meal Plan:</span>

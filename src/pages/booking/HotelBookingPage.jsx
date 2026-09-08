@@ -2756,34 +2756,45 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
                         </Col> */}
 
                         <Col xs={12}>
-                          {/* ✅ Show Selling Price only if ADMIN */}
-                          {activeUserRole === "ADMIN" && (
-                            <div className="p-2 rounded bg-white border mt-2">
-                              <div className="d-flex justify-content-between align-items-center">
-                                <h6 className="mb-0 text-muted">
-                                  Selling Price
-                                </h6>
-                                <h5 className="mb-0 text-success fw-bold">
-                                  {formatPrice(sellingPriceWithTd)}
-                                </h5>
-                              </div>
+                          {/* Selling price — the figure every login is
+                              allowed to see, so it is shown to all. Matches
+                              the Booking Summary sidebar, where "New Total"
+                              (also the selling price) is ungated. */}
+                          <div className="p-2 rounded bg-white border mt-2">
+                            <div className="d-flex justify-content-between align-items-center">
+                              <h6 className="mb-0 text-muted">Selling Price</h6>
+                              <h5 className="mb-0 text-success fw-bold">
+                                {formatPrice(sellingPriceWithTd)}{" "}
+                                <span className="text-muted small fw-normal">
+                                  for {pendingPayload.rooms.length}{" "}
+                                  {pendingPayload.rooms.length > 1
+                                    ? "rooms"
+                                    : "room"}
+                                </span>
+                              </h5>
+                            </div>
+                          </div>
+
+                          {/* Payable is the marked-up total — internal, so
+                              ADMIN only. It used to be shown to every login
+                              while the selling price above was admin-gated,
+                              which is the opposite of the sidebar and meant
+                              an agent's confirm dialog led with a number
+                              they should not be quoting. */}
+                          {isAdmin && (
+                            <div className="p-2 rounded bg-white border mt-2 d-flex justify-content-between align-items-center">
+                              <h6 className="mb-0 fw-bold">Payable</h6>
+                              <h5 className="mb-0 fw-bold">
+                                {formatPrice(totalPriceWithTd)}{" "}
+                                <span className="text-muted small fw-normal">
+                                  for {pendingPayload.rooms.length}{" "}
+                                  {pendingPayload.rooms.length > 1
+                                    ? "rooms"
+                                    : "room"}
+                                </span>
+                              </h5>
                             </div>
                           )}
-
-                          {/* Payable row — plain border, no green
-                              highlight. Single-line layout. */}
-                          <div className="p-2 rounded bg-white border mt-2 d-flex justify-content-between align-items-center">
-                            <h6 className="mb-0 fw-bold">Payable</h6>
-                            <h5 className="mb-0 fw-bold">
-                              {formatPrice(totalPriceWithTd)}{" "}
-                              <span className="text-muted small fw-normal">
-                                for {pendingPayload.rooms.length}{" "}
-                                {pendingPayload.rooms.length > 1
-                                  ? "rooms"
-                                  : "room"}
-                              </span>
-                            </h5>
-                          </div>
                         </Col>
                       </Row>
 

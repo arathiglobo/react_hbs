@@ -46,6 +46,7 @@ import {
   GrnChangeNoticeModal,
   grnPolicyFromRate,
 } from "../components/grn/GrnPolicy";
+import { RateDeadlinePill } from "../utils/rateDeadline";
 
 /**
  * Renders "Valid: <from> - <to>" for a policy validity period, or null when
@@ -59,104 +60,13 @@ const renderPolicyValidity = (fromDate, toDate) => {
   return `Valid: ${from || "N/A"} - ${to || "N/A"}`;
 };
 
-/**
- * ATHARVA-only per-rate deadline pill for the room list card. Source is the
- * raw supplier DeadLineDate carried on rate.deadlineDate as "DD-MMM-YYYY"
- * (e.g. "18-Jun-2023") — see AtharvaSingleHotelOrchestrator.java. We format
- * to "DD MMM YYYY" and stamp a static "11:59 PM (UAE)" time per the operator
- * spec. Returns null when the field is missing or the string doesn't parse,
- * so the pill silently disappears for non-Atharva rates and malformed rows.
- */
-/**
- * Darina (apiId 16) per-rate free-cancellation deadline pill.
- * BE emits `rate.deadlineDate` as ISO `yyyy-MM-dd` — the toDate of the
- * "Free cancellation until X" band from Darina's WithFullResponseControl
- * search response. We render "Free cancellation until DD MMM YYYY, 11:59 PM UAE"
- * so the operator sees the exact cut-off before opening the policy modal.
- * Returns null for missing / malformed input.
- */
-const renderDarinaDeadlinePill = (deadlineDate) => {
-  if (!deadlineDate || typeof deadlineDate !== "string") return null;
-  const parts = deadlineDate.trim().split("-");
-  if (parts.length !== 3) return null;
-  const [y, mm, d] = parts;
-  const monthNames = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-  ];
-  const monIdx = parseInt(mm, 10) - 1;
-  if (!y || !d || Number.isNaN(monIdx) || monIdx < 0 || monIdx > 11) return null;
-  return (
-    <span
-      className="text-danger fw-normal"
-      title="deadline date"
-    >
-      Deadline Date:  {parseInt(d, 10)} {monthNames[monIdx]} {y}
-    </span>
-  );
-};
-
-const renderAtharvaDeadlinePill = (deadlineDate) => {
-  if (!deadlineDate || typeof deadlineDate !== "string") return null;
-  const parts = deadlineDate.trim().split("-");
-  if (parts.length !== 3) return null;
-  const [d, monShort, y] = parts;
-  const monthMap = {
-    jan: "Jan",
-    feb: "Feb",
-    mar: "Mar",
-    apr: "Apr",
-    may: "May",
-    jun: "Jun",
-    jul: "Jul",
-    aug: "Aug",
-    sep: "Sep",
-    oct: "Oct",
-    nov: "Nov",
-    dec: "Dec",
-  };
-  const mon = monthMap[String(monShort || "").toLowerCase().slice(0, 3)];
-  if (!d || !mon || !y) return null;
-  return (
-    <span
-      bg="warning"
-      text="dark"
-      className="fw-normal"
-      title="Cancel by this date/time to avoid charges"
-    >
-      Deadline: {d} {mon} {y}, 23:59
-    </span>
-  );
-};
-
-/**
- * GoGlobal (apiId 21) per-rate cancellation deadline pill. GoGlobal's
- * availability offer carries CxlDeadLine as "dd/MMM/yyyy" (e.g. "18/Nov/2026"),
- * surfaced on rate.deadlineDate. Rendered in red directly above the
- * Cancellation Policies link so the operator sees the cut-off before opening
- * the modal. Falls back to the raw string if the format is unexpected so a
- * deadline is never silently hidden.
- */
-const renderGoGlobalDeadlinePill = (deadlineDate) => {
-  if (!deadlineDate || typeof deadlineDate !== "string") return null;
-  const s = deadlineDate.trim();
-  if (!s) return null;
-  let label = s;
-  const parts = s.split("/");
-  if (parts.length === 3) {
-    const [d, mon, y] = parts;
-    const dd = parseInt(d, 10);
-    label = `${Number.isNaN(dd) ? d : dd} ${mon} ${y}`;
-  }
-  return (
-    <span
-      className="text-danger fw-semibold"
-      title="Cancel by this date to avoid charges"
-    >
-      Deadline Date: {label}
-    </span>
-  );
-};
+/* The per-supplier Atharva / Darina / GoGlobal deadline pills that used to
+   live here are gone. Every supplier except GRN now renders the shared
+   RateDeadlinePill from utils/rateDeadline, which reads the same
+   rate.deadlineDate those three used, falls back to the earliest
+   cancellation-policy fromDate for the suppliers that send no deadline
+   field at all, and prints one format in one colour. GRN keeps its own
+   IST-based, colour-coded pill. */
 
 /**
  * Strip HTML markup out of a policy string so the modal shows plain text.
@@ -2597,19 +2507,6 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
     }
   };
 
-  const sampleGallery = [
-    "/images/01.png",
-    "/images/02.png",
-    "/images/03.png",
-    "/images/04.jpg",
-    "/images/04.png",
-    "/images/05.jpg",
-    "/images/06.png",
-    "/images/07.png",
-    "/images/main-slider.jpg",
-    "/images/small-img.jpg",
-  ];
-
   // ─────────────────── loading / error / empty ────────────────────────
   if (loading) {
     return (
@@ -3272,9 +3169,6 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                       <h5 className="mb-1">
                                         {category.roomCategory}
                                       </h5>
-                                      <p className="mb-0 text-muted small">
-                                        {category.baseRoomType}
-                                      </p>
                                     </div>
 
                                     <div className="d-flex align-items-center gap-3">
@@ -3496,54 +3390,21 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                     {rate.contractLabel}
                                                   </div>
 
-                                                  {/* ATHARVA (apiId 3) per-rate DeadLineDate pill,
-                                                      sourced from HSearchByHotelCode_V2. Sits directly
-                                                      above the Cancellation link so the operator
-                                                      sees the cut-off before opening the policy
-                                                      modal. Guarded on apiId now that Darina also
-                                                      populates rate.deadlineDate (ISO yyyy-MM-dd) —
-                                                      the Atharva helper expects DD-MMM-YYYY. */}
-                                                  {resolveApiId(hotel) ===
-                                                    apiIdMapping.ATHARVA &&
-                                                    rate.deadlineDate && (
-                                                      <div className="feature-item">
-                                                        {renderAtharvaDeadlinePill(
-                                                          rate.deadlineDate,
-                                                        )}
-                                                      </div>
-                                                    )}
-
-                                                  {/* Darina (apiId 16) free-cancellation deadline —
-                                                      BE emits rate.deadlineDate in ISO yyyy-MM-dd
-                                                      as the "Free cancellation until X" band's
-                                                      toDate. Hidden for non-refundable / no-free
-                                                      band rates (deadlineDate is null there). */}
-                                                  {resolveApiId(hotel) ===
-                                                    apiIdMapping.DARINA &&
-                                                    rate.deadlineDate && (
-                                                      <div className="feature-item">
-                                                        {renderDarinaDeadlinePill(
-                                                          rate.deadlineDate,
-                                                        )}
-                                                      </div>
-                                                    )}
-
-                                                  {/* GoGlobal (apiId 21) cancellation deadline —
-                                                      CxlDeadLine (dd/MMM/yyyy) shown in red directly
-                                                      above the Cancellation Policies link. */}
-                                                  {resolveApiId(hotel) ===
-                                                    apiIdMapping.GOGLOBAL &&
-                                                    rate.deadlineDate && (
-                                                      <div className="feature-item">
-                                                        {renderGoGlobalDeadlinePill(
-                                                          rate.deadlineDate,
-                                                        )}
-                                                      </div>
-                                                    )}
-
-                                                  {resolveApiId(hotel) === apiIdMapping.GRN && (
+                                                  {/* Free-cancellation cut-off, shown for every
+                                                      supplier. GRN keeps its own colour-coded,
+                                                      IST-based pill; everything else goes through
+                                                      the shared red one, which falls back to the
+                                                      earliest cancellation-policy fromDate for the
+                                                      suppliers that send no deadline field. */}
+                                                  {resolveApiId(hotel) === apiIdMapping.GRN ? (
                                                     <div className="feature-item">
                                                       <GrnDeadlinePill rate={rate} />
+                                                    </div>
+                                                  ) : (
+                                                    <div className="feature-item">
+                                                      <RateDeadlinePill
+                                                        rate={rate}
+                                                      />
                                                     </div>
                                                   )}
                                                   {renderPayableAtHotelPill(rate)}
@@ -3715,51 +3576,20 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                         </span>
                                                       </div>
                                                     )}
-                                                    {/* ATHARVA (apiId 3) per-rate DeadLineDate pill,
-                                                        sourced from HSearchByHotelCode_V2. Guarded
-                                                        on apiId now that Darina also populates
-                                                        rate.deadlineDate (different format). */}
-                                                    {resolveApiId(hotel) ===
-                                                      apiIdMapping.ATHARVA &&
-                                                      rate.deadlineDate && (
-                                                        <div className="feature-item d-flex align-items-center">
-                                                          <FaInfoCircle className="me-2 flex-shrink-0" />
-                                                          {renderAtharvaDeadlinePill(
-                                                            rate.deadlineDate,
-                                                          )}
-                                                        </div>
-                                                      )}
-                                                    {/* Darina (apiId 16) free-cancellation deadline
-                                                        pill. BE emits ISO yyyy-MM-dd; helper renders
-                                                        "Free cancellation until DD MMM YYYY,
-                                                        11:59 PM UAE". */}
-                                                    {resolveApiId(hotel) ===
-                                                      apiIdMapping.DARINA &&
-                                                      rate.deadlineDate && (
-                                                        <div className="feature-item d-flex align-items-center">
-                                                          <FaInfoCircle className="me-2 flex-shrink-0" />
-                                                          {renderDarinaDeadlinePill(
-                                                            rate.deadlineDate,
-                                                          )}
-                                                        </div>
-                                                      )}
-                                                    {/* GoGlobal (apiId 21) cancellation deadline —
-                                                        CxlDeadLine (dd/MMM/yyyy) in red above the link. */}
-                                                    {resolveApiId(hotel) ===
-                                                      apiIdMapping.GOGLOBAL &&
-                                                      rate.deadlineDate && (
-                                                        <div className="feature-item d-flex align-items-center">
-                                                          <FaInfoCircle className="me-2 flex-shrink-0" />
-                                                          {renderGoGlobalDeadlinePill(
-                                                            rate.deadlineDate,
-                                                          )}
-                                                        </div>
-                                                      )}
-                                                    {resolveApiId(hotel) === apiIdMapping.GRN && (
-                                                    <div className="feature-item">
-                                                      <GrnDeadlinePill rate={rate} />
-                                                    </div>
-                                                  )}
+                                                    {/* Free-cancellation cut-off for every supplier;
+                                                        GRN keeps its own colour-coded IST pill. */}
+                                                    {resolveApiId(hotel) === apiIdMapping.GRN ? (
+                                                      <div className="feature-item">
+                                                        <GrnDeadlinePill rate={rate} />
+                                                      </div>
+                                                    ) : (
+                                                      <div className="feature-item d-flex align-items-center">
+                                                        <FaInfoCircle className="me-2 flex-shrink-0" />
+                                                        <RateDeadlinePill
+                                                          rate={rate}
+                                                        />
+                                                      </div>
+                                                    )}
                                                   {renderPayableAtHotelPill(rate)}
                                                     <div className="feature-item d-flex align-items-center">
                                                       <Button
@@ -4235,36 +4065,14 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                   const perNight = perRoomStayTotal / stayNights;
                   return (
                     <Row key={index} className="g-4 mb-4">
-                      <Col md={6}>
+                      {/* Stock room photos and the hardcoded amenity badges
+                          used to sit here. Both were the same for every hotel,
+                          so the modal now shows only what the supplier
+                          actually returned for this rate. */}
+                      <Col md={12}>
                         <h5>Room {index + 1}</h5>
-                        <div
-                          id={`roomGallery-${index}`}
-                          className="carousel slide acuurate-rate-details-modal"
-                          data-bs-ride="carousel"
-                        >
-                          <div className="carousel-inner rounded">
-                            {sampleGallery
-                              .slice(index * 3, index * 3 + 3)
-                              .map((img, idx) => (
-                                <div
-                                  key={idx}
-                                  className={`carousel-item ${idx === 0 ? "active" : ""}`}
-                                >
-                                  <img src={img} className="d-block w-100" alt="Room" />
-                                </div>
-                              ))}
-                          </div>
-                        </div>
-                      </Col>
-                      <Col md={6}>
                         <h5 className="mb-2">{rate.roomCategory}</h5>
                         <p className="text-muted">{rate.roomTypeDescription}</p>
-                        <div className="d-flex flex-wrap gap-2 mb-3">
-                          <Badge bg="secondary">High speed internet</Badge>
-                          <Badge bg="secondary">Private bathroom</Badge>
-                          <Badge bg="secondary">Kitchen</Badge>
-                          <Badge bg="secondary">TV</Badge>
-                        </div>
                         <div className="booking-details-modal">
                           <div className="d-flex justify-content-between mb-2">
                             <span>Meal Plan:</span>
