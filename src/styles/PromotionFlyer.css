@@ -1,6 +1,6 @@
 /* ============================================================================
    PROMOTION FLYER
-   Page chrome (.pf-page-*) plus the five flyer designs (.pf-t1 … .pf-t5).
+   Page chrome (.pf-page-*) plus the nine flyer designs (.pf-t1 … .pf-t9).
 
    Every design draws onto the same fixed 794x1123 canvas — A4 at 96dpi — and
    the page scales it with a transform. Sizes here are therefore absolute px on
@@ -57,11 +57,13 @@
   height: 430px;
 }
 
-.pf-t1-hero img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
+/* Photos are background-image, never <img object-fit>, so the PNG/PDF export
+   crops them the same way the screen does — see promotionFlyerTemplates.jsx. */
+.pf-t1-hero-img {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
 }
 
 .pf-t1-hero-shade {
@@ -70,22 +72,14 @@
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.62) 100%);
 }
 
-.pf-t1-wave-top,
-.pf-t1-wave-bottom {
+/* No `fill:` here — the paths carry it as an attribute so it survives export,
+   and the element spans the whole artboard for the same reason. */
+.pf-t1-waves {
   position: absolute;
-  left: 0;
+  inset: 0;
   width: 794px;
-  fill: #f4e3b8;
-}
-
-.pf-t1-wave-top {
-  top: -1px;
-  height: 120px;
-}
-
-.pf-t1-wave-bottom {
-  bottom: -1px;
-  height: 130px;
+  height: 1123px;
+  z-index: 2;
 }
 
 .pf-t1-hero-copy {
@@ -270,8 +264,14 @@
   inset: 0;
   background-size: cover;
   background-position: center;
-  /* Diagonal edge — the panel below covers the rest. */
-  clip-path: polygon(0 0, 100% 0, 100% 34%, 0 52%);
+}
+
+/* The diagonal edge, drawn as a filled shape on top of the photo. */
+.pf-t2-cut {
+  position: absolute;
+  inset: 0;
+  width: 794px;
+  height: 1123px;
 }
 
 .pf-t2-panel {
@@ -545,18 +545,20 @@
   height: 470px;
 }
 
-.pf-t4-photo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  filter: saturate(0.85) brightness(0.82);
+.pf-t4-photo-img {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
 }
 
+/* This gradient does the dimming on its own. It used to sit over a photo that
+   was also darkened with `filter: brightness(.82)`, which the export drops —
+   the darker stops below reproduce that in a way the export can paint. */
 .pf-t4-fade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(16, 19, 26, 0.25) 0%, rgba(16, 19, 26, 0.55) 55%, #10131a 100%);
+  background: linear-gradient(180deg, rgba(16, 19, 26, 0.42) 0%, rgba(16, 19, 26, 0.66) 55%, #10131a 100%);
 }
 
 .pf-t4-body {
@@ -829,6 +831,942 @@
 
 .pf-t5-foot-right {
   text-align: right;
+}
+
+/* ══ 6. GRAND ARC ════════════════════════════════════════════════════════ */
+
+.pf-t6 {
+  background: #0f2b4a;
+}
+
+.pf-t6-hero {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 794px;
+  height: 640px;
+  background-size: cover;
+  background-position: center;
+}
+
+/* Lifts the masthead off the photograph without hiding the room behind it. */
+.pf-t6-veil {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 794px;
+  height: 640px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.94) 0%,
+    rgba(255, 255, 255, 0.86) 26%,
+    rgba(255, 255, 255, 0.18) 46%,
+    rgba(255, 255, 255, 0) 62%
+  );
+}
+
+.pf-t6-head {
+  position: absolute;
+  top: 34px;
+  left: 62px;
+  right: 62px;
+  z-index: 2;
+  text-align: center;
+}
+
+.pf-t6-logo {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: #c2984f;
+  margin-bottom: 16px;
+}
+
+.pf-t6-head h1 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 52px;
+  line-height: 1.08;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: #0f2b4a;
+}
+
+.pf-t6-hotel {
+  margin-top: 12px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 30px;
+  color: #b08a41;
+}
+
+.pf-t6-diamond {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 16px 0 12px;
+}
+
+.pf-t6-diamond::before,
+.pf-t6-diamond::after {
+  content: "";
+  width: 92px;
+  height: 1px;
+  background: #c2984f;
+}
+
+.pf-t6-diamond span {
+  width: 9px;
+  height: 9px;
+  background: #c2984f;
+  transform: rotate(45deg);
+}
+
+.pf-t6-tagline {
+  margin: 0;
+  font-size: 19px;
+  color: #253244;
+}
+
+.pf-t6-badge {
+  position: absolute;
+  top: 316px;
+  right: 52px;
+  width: 152px;
+  height: 152px;
+  border-radius: 50%;
+  background: #0f2b4a;
+  border: 3px solid #c2984f;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  text-align: center;
+}
+
+.pf-t6-badge strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 1.15;
+  color: #e7d3ab;
+}
+
+.pf-t6-arc {
+  position: absolute;
+  inset: 0;
+  width: 794px;
+  height: 1123px;
+  z-index: 2;
+}
+
+.pf-t6-feats {
+  position: absolute;
+  top: 686px;
+  left: 46px;
+  right: 46px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  z-index: 3;
+}
+
+.pf-t6-feat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 18px;
+  color: #f0e7d6;
+  font-size: 16.5px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.pf-t6-feat + .pf-t6-feat {
+  border-left: 1px solid rgba(194, 152, 79, 0.5);
+}
+
+.pf-t6-strip {
+  position: absolute;
+  top: 796px;
+  left: 46px;
+  right: 46px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.pf-t6-strip span {
+  height: 132px;
+  border-radius: 4px;
+  border: 2px solid rgba(194, 152, 79, 0.75);
+  background-size: cover;
+  background-position: center;
+}
+
+.pf-t6-cta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 952px;
+  height: 78px;
+  background: #f3ece0;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 0 46px;
+}
+
+.pf-t6-cta-left strong {
+  display: block;
+  font-size: 27px;
+  color: #0f2b4a;
+  line-height: 1.1;
+}
+
+.pf-t6-cta-left span {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6f7683;
+}
+
+.pf-t6-cta-mid {
+  flex: 1;
+  text-align: center;
+  border-left: 1px solid #d6cbb6;
+  border-right: 1px solid #d6cbb6;
+  padding: 0 20px;
+}
+
+.pf-t6-cta-mid h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 25px;
+  text-transform: uppercase;
+  color: #b08a41;
+}
+
+.pf-t6-cta-mid p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #45505f;
+  /* One line only: the artboard cannot grow, so a long description is cut. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pf-t6-cta-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f2b4a;
+}
+
+.pf-t6-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 62px;
+  background: #0a2039;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  color: #e7dcc6;
+  font-size: 14px;
+}
+
+.pf-t6-foot span {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.pf-t6-foot em {
+  width: 1px;
+  height: 22px;
+  background: rgba(194, 152, 79, 0.6);
+}
+
+/* ══ 7. ESTATE CARD ══════════════════════════════════════════════════════ */
+
+.pf-t7 {
+  background: #ffffff;
+}
+
+.pf-t7-hero {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 794px;
+  height: 470px;
+  background-size: cover;
+  background-position: center;
+}
+
+.pf-t7-swoosh {
+  position: absolute;
+  inset: 0;
+  width: 794px;
+  height: 1123px;
+  z-index: 1;
+}
+
+.pf-t7-logo {
+  position: absolute;
+  top: 40px;
+  right: 46px;
+  z-index: 3;
+  background: #f1f1f1;
+  border-radius: 30px;
+  padding: 9px 30px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 22px;
+  color: #b9776a;
+}
+
+.pf-t7-head {
+  position: absolute;
+  top: 132px;
+  right: 46px;
+  width: 340px;
+  z-index: 2;
+  text-align: right;
+}
+
+.pf-t7-kicker {
+  font-size: 23px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6d7178;
+  line-height: 1.2;
+}
+
+.pf-t7-head h1 {
+  margin: 4px 0 0;
+  font-size: 50px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: #1d1e20;
+}
+
+.pf-t7-tag {
+  display: inline-block;
+  margin-top: 16px;
+  background: #1d1e20;
+  color: #fff;
+  border-radius: 3px;
+  padding: 7px 24px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.pf-t7-deck {
+  position: absolute;
+  top: 352px;
+  right: 28px;
+  width: 436px;
+  height: 164px;
+  z-index: 2;
+  background: #37383a;
+  border-radius: 24px;
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  color: #fff;
+}
+
+.pf-t7-deck-photo {
+  width: 150px;
+  border-radius: 20px;
+  background-size: cover;
+  background-position: center;
+}
+
+.pf-t7-deck-copy {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+}
+
+.pf-t7-deck-copy span {
+  font-size: 14px;
+  color: #cfcfd1;
+}
+
+.pf-t7-deck-copy strong {
+  display: block;
+  font-size: 27px;
+  line-height: 1.2;
+}
+
+.pf-t7-deck-copy em {
+  font-size: 12px;
+  font-style: normal;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #b9776a;
+}
+
+.pf-t7-deck-copy p {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #d5d5d7;
+}
+
+.pf-t7-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 690px;
+  bottom: 62px;
+  background: #37383a;
+}
+
+.pf-t7-circles {
+  position: absolute;
+  top: 566px;
+  left: 46px;
+  right: 46px;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.pf-t7-circles span {
+  width: 196px;
+  height: 196px;
+  border-radius: 50%;
+  border: 7px solid #fff;
+  background-size: cover;
+  background-position: center;
+}
+
+.pf-t7-circles span:nth-child(2) {
+  width: 216px;
+  height: 216px;
+  margin-top: -14px;
+}
+
+.pf-t7-lower {
+  position: absolute;
+  top: 812px;
+  left: 46px;
+  right: 46px;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 34px;
+  color: #e9e9ea;
+}
+
+.pf-t7-label {
+  display: inline-block;
+  background: #b9776a;
+  color: #fff;
+  border-radius: 4px;
+  padding: 6px 18px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.pf-t7-feats {
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px 18px;
+}
+
+.pf-t7-feats li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 15.5px;
+}
+
+.pf-t7-feats li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 10px;
+  height: 10px;
+  background: #b9776a;
+}
+
+.pf-t7-addr {
+  border-left: 2px solid rgba(255, 255, 255, 0.22);
+  padding-left: 26px;
+}
+
+.pf-t7-addr p {
+  margin: 0 0 5px;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.pf-t7-valid {
+  color: #e0b0a5;
+  font-size: 13.5px;
+}
+
+.pf-t7-note {
+  position: absolute;
+  left: 60px;
+  right: 60px;
+  bottom: 96px;
+  z-index: 2;
+  text-align: center;
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-size: 21px;
+  color: #e0b0a5;
+}
+
+.pf-t7-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 62px;
+  background: #2a2b2d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cfcfd1;
+  font-size: 13.5px;
+  letter-spacing: 0.04em;
+}
+
+/* ══ 8. NOIR GOLD ════════════════════════════════════════════════════════ */
+
+.pf-t8 {
+  background: #1c1410;
+  color: #efe3cd;
+}
+
+.pf-t8-mast {
+  position: absolute;
+  top: 44px;
+  left: 54px;
+  right: 54px;
+  text-align: center;
+}
+
+.pf-t8-monogram {
+  width: 78px;
+  height: 78px;
+  margin: 0 auto;
+  border: 2px solid #d3a44a;
+  border-radius: 50%;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 36px;
+  line-height: 74px;
+  color: #d3a44a;
+}
+
+.pf-t8-name {
+  margin-top: 16px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 42px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #f4e7cd;
+}
+
+.pf-t8-sub {
+  margin-top: 10px;
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #b8935a;
+}
+
+.pf-t8-body {
+  position: absolute;
+  top: 252px;
+  left: 54px;
+  right: 54px;
+  height: 328px;
+  display: grid;
+  grid-template-columns: 1fr 1.05fr;
+  gap: 34px;
+  align-items: center;
+}
+
+.pf-t8-copy h1 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 48px;
+  line-height: 1.08;
+  color: #ffffff;
+}
+
+.pf-t8-copy p {
+  margin: 16px 0 0;
+  font-size: 15.5px;
+  line-height: 1.65;
+  color: #cbbba2;
+}
+
+.pf-t8-rule {
+  width: 120px;
+  height: 1px;
+  background: #d3a44a;
+  margin: 20px 0 14px;
+}
+
+.pf-t8-price strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 34px;
+  color: #d3a44a;
+}
+
+.pf-t8-price span {
+  margin-left: 10px;
+  font-size: 12.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #a58f6d;
+}
+
+.pf-t8-valid {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #b8935a;
+}
+
+.pf-t8-photo {
+  height: 328px;
+  border-radius: 16px;
+  border: 3px solid rgba(211, 164, 74, 0.65);
+  background-size: cover;
+  background-position: center;
+}
+
+.pf-t8-card {
+  position: absolute;
+  top: 618px;
+  left: 54px;
+  right: 54px;
+  height: 150px;
+  background: #f5efe2;
+  border: 2px solid #d3a44a;
+  border-radius: 16px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  align-items: center;
+}
+
+.pf-t8-feat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+}
+
+.pf-t8-feat + .pf-t8-feat {
+  border-left: 1px solid rgba(211, 164, 74, 0.55);
+}
+
+.pf-t8-ring {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 1.5px solid #d3a44a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pf-t8-feat-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #4a3a24;
+  text-align: center;
+  line-height: 1.35;
+}
+
+.pf-t8-cta {
+  position: absolute;
+  top: 806px;
+  left: 186px;
+  right: 186px;
+  height: 74px;
+  border-radius: 40px;
+  background: linear-gradient(90deg, #c2913a 0%, #e8c274 50%, #c2913a 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.pf-t8-cta strong {
+  font-size: 22px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #1c1410;
+}
+
+.pf-t8-foot {
+  position: absolute;
+  top: 918px;
+  left: 54px;
+  right: 54px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 30px;
+}
+
+.pf-t8-foot > div {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.pf-t8-foot > div + div {
+  border-left: 1px solid rgba(211, 164, 74, 0.45);
+  padding-left: 30px;
+}
+
+.pf-t8-foot p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #e6dcc8;
+}
+
+.pf-t8-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 26px;
+  background: linear-gradient(90deg, #7d5f26 0%, #d3a44a 50%, #7d5f26 100%);
+}
+
+/* ══ 9. TEAL DEAL ════════════════════════════════════════════════════════ */
+
+.pf-t9 {
+  background: #fdf7e8;
+}
+
+.pf-t9-logo {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #0d7b73;
+}
+
+.pf-t9-head {
+  position: absolute;
+  top: 66px;
+  left: 54px;
+  right: 54px;
+  text-align: center;
+}
+
+.pf-t9-head h1 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 44px;
+  line-height: 1.12;
+  color: #16232b;
+}
+
+.pf-t9-head p {
+  margin: 8px 0 0;
+  font-size: 16.5px;
+  color: #4b5a63;
+}
+
+.pf-t9-photo-a {
+  position: absolute;
+  top: 190px;
+  left: 0;
+  width: 794px;
+  height: 300px;
+  background-size: cover;
+  background-position: center;
+}
+
+.pf-t9-seam {
+  position: absolute;
+  inset: 0;
+  width: 794px;
+  height: 1123px;
+  z-index: 2;
+}
+
+.pf-t9-photo-b {
+  position: absolute;
+  top: 490px;
+  left: 0;
+  width: 794px;
+  height: 330px;
+  background-size: cover;
+  background-position: center;
+}
+
+.pf-t9-offer {
+  position: absolute;
+  top: 292px;
+  right: 44px;
+  width: 300px;
+  z-index: 3;
+  background: rgba(13, 123, 115, 0.95);
+  border: 2px solid #e6c168;
+  border-radius: 22px;
+  padding: 52px 22px 24px;
+  text-align: center;
+}
+
+.pf-t9-ribbon {
+  position: absolute;
+  top: -19px;
+  left: 22px;
+  right: 22px;
+  background: #e6c168;
+  color: #16232b;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pf-t9-offer strong {
+  display: block;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 58px;
+  line-height: 1;
+  color: #fdf7e8;
+}
+
+.pf-t9-offer span {
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #cfeae6;
+}
+
+.pf-t9-card {
+  position: absolute;
+  top: 660px;
+  left: 44px;
+  right: 44px;
+  z-index: 3;
+  background: #ffffff;
+  border: 1px solid #e6dfcc;
+  border-radius: 18px;
+  padding: 18px 8px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.pf-t9-feat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+  color: #16232b;
+}
+
+.pf-t9-feat + .pf-t9-feat {
+  border-left: 1px solid #e6dfcc;
+}
+
+.pf-t9-curve {
+  position: absolute;
+  inset: 0;
+  width: 794px;
+  height: 1123px;
+  z-index: 1;
+}
+
+.pf-t9-close {
+  position: absolute;
+  left: 60px;
+  right: 60px;
+  bottom: 152px;
+  z-index: 3;
+  text-align: center;
+}
+
+.pf-t9-close h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-size: 30px;
+  color: #e6c168;
+}
+
+.pf-t9-close p {
+  margin: 8px 0 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #dff0ed;
+}
+
+.pf-t9-foot {
+  position: absolute;
+  left: 60px;
+  right: 60px;
+  bottom: 42px;
+  height: 62px;
+  z-index: 3;
+  background: #fdf7e8;
+  border: 2px solid #e6c168;
+  border-radius: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #16232b;
+}
+
+.pf-t9-foot span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pf-t9-foot em {
+  width: 1px;
+  height: 26px;
+  background: #d9cfb2;
 }
 
 /* ══ PAGE CHROME ═════════════════════════════════════════════════════════ */

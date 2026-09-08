@@ -4,7 +4,19 @@ import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
-import { FaEdit, FaTrash, FaEye, FaCheck, FaTimes, FaPlus, FaPrint } from "react-icons/fa";
+import {
+  FaEdit,
+  FaTrash,
+  FaEye,
+  FaCheck,
+  FaTimes,
+  FaPlus,
+  FaPrint,
+  FaFileImage,
+  FaFilePdf,
+} from "react-icons/fa";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import "../../styles/PromotionFlyer.css";
 import {
   FLYER_TEMPLATES,
@@ -22,14 +34,69 @@ import {
 /**
  * Marketing → Promotion Flyer.
  *
- * Two-step create: pick one of the five designs, then fill the promotion's
+ * Two-step create: pick one of the nine designs, then fill the promotion's
  * details. The form and a live preview sit side by side, so changing a field
  * or swapping the template redraws immediately — the data is held in one
- * object shared by all five designs, which is why switching never loses input.
+ * object shared by all nine designs, which is why switching never loses input.
  *
  * Persistence goes through promotionFlyerStore (localStorage today) — see the
  * note at the top of that file before moving flyers server-side.
+ *
+ * A finished flyer leaves the page three ways — print, PNG and PDF — and all
+ * three run off the SAME hidden full-size render, so they cannot disagree.
  */
+
+/** A4 at 96dpi, matching FLYER_CANVAS in promotionFlyerTemplates.jsx. */
+const CANVAS_W = 794;
+const CANVAS_H = 1123;
+
+/** 2x gives a 1588x2246 file: sharp when printed, still small enough to send. */
+const EXPORT_SCALE = 2;
+
+/** `The Royal Hotel` + `Summer Escape` -> `the-royal-hotel-summer-escape.png` */
+const fileName = (flyer, ext) => {
+  const slug = `${flyer.hotelName || ""}-${flyer.headline || ""}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  return `${slug || "promotion-flyer"}.${ext}`;
+};
+
+const saveBlob = (blob, name) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Give the browser a moment to start the download before the URL dies.
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+};
+
+/**
+ * Warm the browser cache for a flyer's photos.
+ *
+ * Both exports need the artwork decoded before the flyer is captured or handed
+ * to a print window, or the operator gets empty boxes where the photos were.
+ * This reads the URLs off the flyer rather than out of the DOM because the
+ * templates paint photos as background-image (see the export note in
+ * promotionFlyerTemplates.jsx), so there is no <img> left to wait on.
+ */
+const preloadPhotos = (flyer) =>
+  Promise.all(
+    [flyer.photo, flyer.photo2, flyer.photo3].filter(Boolean).map(
+      (src) =>
+        new Promise((resolve) => {
+          const im = new Image();
+          im.onload = resolve;
+          im.onerror = resolve; // a broken URL must not hang the download
+          im.src = src;
+        }),
+    ),
+  );
+
 export default function PromotionFlyer() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -45,8 +112,8 @@ export default function PromotionFlyer() {
 
   // Read-only preview of a saved flyer
   const [previewing, setPreviewing] = useState(null);
-  // Flyer currently being sent to the printer (see the effect below)
-  const [printTarget, setPrintTarget] = useState(null);
+  // Flyer currently being printed or downloaded: { flyer, mode } — see below
+  const [job, setJob] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -168,35 +235,27 @@ export default function PromotionFlyer() {
     });
   };
 
-  /* Printing renders the flyer at full size ONCE, into a single hidden node
-     driven by this state — not one hidden canvas per row, which would put a
-     complete 794x1123 artboard (and its images) in the DOM for every promotion
-     in the list. */
-  const printFlyer = (flyer) => setPrintTarget(flyer);
+  /* Print and download all render the flyer at full size ONCE, into a single
+     hidden node driven by this state — not one hidden canvas per row, which
+     would put a complete 794x1123 artboard (and its images) in the DOM for
+     every promotion in the list. */
+  const busy = !!job;
+  const run = (flyer, mode) => {
+    if (!flyer || busy) return; // one export at a time — they share the node
+    setJob({ flyer, mode });
+  };
 
   useEffect(() => {
-    if (!printTarget) return undefined;
+    if (!job) return undefined;
     const root = document.getElementById("pf-print-root");
     if (!root) return undefined;
 
     let cancelled = false;
-    // Wait for the artwork, or the print window captures empty image boxes.
-    const images = [...root.querySelectorAll("img")];
-    Promise.all(
-      images.map((im) =>
-        im.complete
-          ? Promise.resolve()
-          : new Promise((res) => {
-              im.onload = res;
-              im.onerror = res;
-            }),
-      ),
-    ).then(() => {
-      if (cancelled) return;
+
+    const print = () => {
       const w = window.open("", "_blank", "width=900,height=1180");
       if (!w) {
         toast.error("Allow pop-ups to print this promotion");
-        setPrintTarget(null);
         return;
       }
       const styles = [...document.querySelectorAll('link[rel="stylesheet"], style')]
@@ -204,7 +263,7 @@ export default function PromotionFlyer() {
         .join("");
       // The flyer body is React-rendered so it is already escaped; the title is
       // raw user input, so it is escaped here before going into <title>.
-      const title = String(printTarget.hotelName || "Promotion").replace(/[<>&]/g, "");
+      const title = String(job.flyer.hotelName || "Promotion").replace(/[<>&]/g, "");
       w.document.write(
         `<!doctype html><html><head><title>${title}</title>${styles}` +
           `<style>body{margin:0;background:#fff}@page{size:A4;margin:0}</style></head>` +
@@ -215,13 +274,53 @@ export default function PromotionFlyer() {
         w.focus();
         w.print();
       }, 500);
-      setPrintTarget(null);
+    };
+
+    const download = async () => {
+      const toastId = toast.loading(
+        job.mode === "pdf" ? "Building the PDF..." : "Building the image...",
+      );
+      try {
+        const canvas = await html2canvas(root, {
+          scale: EXPORT_SCALE,
+          width: CANVAS_W,
+          height: CANVAS_H,
+          backgroundColor: "#ffffff",
+          // Operator-supplied photos can live on another host; without this a
+          // CORS-enabled one is dropped instead of drawn.
+          useCORS: true,
+          logging: false,
+        });
+
+        if (job.mode === "pdf") {
+          const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+          // JPEG, not PNG: the flyers are photographic, and a lossless page
+          // image would make a 10MB+ PDF that is awkward to email.
+          pdf.addImage(canvas.toDataURL("image/jpeg", 0.95), "JPEG", 0, 0, 210, 297);
+          pdf.save(fileName(job.flyer, "pdf"));
+        } else {
+          const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+          if (!blob) throw new Error("The image could not be created");
+          saveBlob(blob, fileName(job.flyer, "png"));
+        }
+        toast.success("Downloaded", { id: toastId });
+      } catch (err) {
+        toast.error(err.message || "Could not create the download", { id: toastId });
+      }
+    };
+
+    // Wait for the artwork, or the flyer is captured with empty photo boxes.
+    preloadPhotos(job.flyer).then(async () => {
+      if (cancelled) return;
+      if (job.mode === "print") print();
+      else await download();
+      if (!cancelled) setJob(null);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [printTarget]);
+  }, [job]);
 
   const activeTemplate = useMemo(() => getTemplate(form.templateId), [form.templateId]);
 
@@ -323,11 +422,23 @@ export default function PromotionFlyer() {
                                 title="Edit"
                                 onClick={() => openEdit(f)}
                               />
+                              <FaFileImage
+                                className="text-success"
+                                style={{ cursor: busy ? "wait" : "pointer", fontSize: 16 }}
+                                title="Download as image (PNG)"
+                                onClick={() => run(f, "png")}
+                              />
+                              <FaFilePdf
+                                className="text-danger"
+                                style={{ cursor: busy ? "wait" : "pointer", fontSize: 16 }}
+                                title="Download as PDF"
+                                onClick={() => run(f, "pdf")}
+                              />
                               <FaPrint
                                 className="text-dark"
-                                style={{ cursor: "pointer", fontSize: 16 }}
-                                title="Print / save as PDF"
-                                onClick={() => printFlyer(f)}
+                                style={{ cursor: busy ? "wait" : "pointer", fontSize: 16 }}
+                                title="Print"
+                                onClick={() => run(f, "print")}
                               />
                               <FaTrash
                                 className="text-danger"
@@ -369,7 +480,7 @@ export default function PromotionFlyer() {
               {step === 1 ? (
                 <>
                   <p className="text-muted" style={{ fontSize: 13.5 }}>
-                    All five use the same details, so you can change your mind later without
+                    They all use the same details, so you can change your mind later without
                     retyping anything.
                   </p>
                   <div className="pf-pick-grid">
@@ -548,6 +659,38 @@ export default function PromotionFlyer() {
                         <Form.Control value={form.logoText} onChange={set("logoText")} />
                       </Form.Group>
 
+                      <Row>
+                        <Col sm={6}>
+                          <Form.Group className="mb-3">
+                            <Form.Label>Tagline</Form.Label>
+                            <Form.Control
+                              value={form.tagline}
+                              onChange={set("tagline")}
+                              placeholder="Comfort. Elegance. Warmth."
+                            />
+                          </Form.Group>
+                        </Col>
+                        <Col sm={6}>
+                          <Form.Group className="mb-3">
+                            <Form.Label>Badge text</Form.Label>
+                            <Form.Control
+                              value={form.badgeText}
+                              onChange={set("badgeText")}
+                              placeholder="Deluxe Room"
+                            />
+                          </Form.Group>
+                        </Col>
+                      </Row>
+
+                      <Form.Group className="mb-3">
+                        <Form.Label>Address</Form.Label>
+                        <Form.Control value={form.address} onChange={set("address")} />
+                        <Form.Text className="text-muted">
+                          Tagline, badge and address are only drawn by the four poster designs —
+                          the first five ignore them.
+                        </Form.Text>
+                      </Form.Group>
+
                       <Form.Group className="mb-1">
                         <Form.Label>Images</Form.Label>
                         <Form.Control
@@ -629,16 +772,43 @@ export default function PromotionFlyer() {
               <Button variant="outline-secondary" onClick={() => setPreviewing(null)}>
                 Close
               </Button>
-              <Button className="btn-success" onClick={() => printFlyer(previewing)}>
-                <FaPrint className="me-2" /> Print / Save PDF
+              <Button
+                variant="outline-dark"
+                disabled={busy}
+                onClick={() => run(previewing, "print")}
+              >
+                <FaPrint className="me-2" /> Print
+              </Button>
+              <Button
+                variant="outline-danger"
+                disabled={busy}
+                onClick={() => run(previewing, "pdf")}
+              >
+                <FaFilePdf className="me-2" /> Download PDF
+              </Button>
+              <Button className="btn-success" disabled={busy} onClick={() => run(previewing, "png")}>
+                <FaFileImage className="me-2" /> Download Image
               </Button>
             </Modal.Footer>
           </Modal>
 
-          {/* The one full-size render used for printing — mounted only while a
-              flyer is actually being printed. */}
-          <div id="pf-print-root" style={{ display: "none" }}>
-            {printTarget && <FlyerCanvas data={printTarget} scale={1} />}
+          {/* The one full-size render behind print and both downloads, mounted
+              only while an export is running. It sits off-screen rather than
+              display:none because html2canvas can only rasterise a node the
+              browser has actually laid out. */}
+          <div
+            id="pf-print-root"
+            aria-hidden="true"
+            style={{
+              position: "fixed",
+              top: 0,
+              left: -20000,
+              width: CANVAS_W,
+              height: CANVAS_H,
+              pointerEvents: "none",
+            }}
+          >
+            {job && <FlyerCanvas data={job.flyer} scale={1} />}
           </div>
         </main>
       </div>
