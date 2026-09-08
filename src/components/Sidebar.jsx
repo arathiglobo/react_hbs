@@ -791,6 +791,7 @@ export default function Sidebar() {
         { label: "Banners", to: "/offer" },
         { label: "Offer Image", to: "/upload-offer-image" },
         { label: "Advertisements", to: "/advertisements" },
+        { label: "Promotion Flyer", to: "/marketing/promotion-flyer" },
       ],
     },
 

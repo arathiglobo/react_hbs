@@ -1,0 +1,1874 @@
+/* ============================================================================
+   PROMOTION FLYER
+   Page chrome (.pf-page-*) plus the nine flyer designs (.pf-t1 … .pf-t9).
+
+   Every design draws onto the same fixed 794x1123 canvas — A4 at 96dpi — and
+   the page scales it with a transform. Sizes here are therefore absolute px on
+   purpose: they must NOT respond to the viewport, or a thumbnail and the full
+   preview would lay out differently.
+   ============================================================================ */
+
+/* ── shared canvas ───────────────────────────────────────────────────────── */
+
+.pf-canvas-scaler {
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.pf-canvas {
+  width: 794px;
+  height: 1123px;
+  position: relative;
+  overflow: hidden;
+  background: #fff;
+  font-family: "Lexend", system-ui, sans-serif;
+  color: #1c2230;
+  /* The canvas is a fixed-size artboard; nothing inside may reflow with the
+     page, so line heights and boxes are all stated explicitly below. */
+  line-height: 1.4;
+}
+
+.pf-canvas * {
+  box-sizing: border-box;
+}
+
+/* ══ 1. ROYAL WAVE ═══════════════════════════════════════════════════════ */
+
+.pf-t1 {
+  background: #f4e3b8;
+}
+
+.pf-t1-logo {
+  position: absolute;
+  top: 34px;
+  left: 46px;
+  z-index: 4;
+  font-size: 27px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #1c2230;
+}
+
+.pf-t1-hero {
+  position: absolute;
+  top: 96px;
+  left: 0;
+  width: 794px;
+  height: 430px;
+}
+
+/* Photos are background-image, never <img object-fit>, so the PNG/PDF export
+   crops them the same way the screen does — see promotionFlyerTemplates.jsx. */
+.pf-t1-hero-img {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+}
+
+.pf-t1-hero-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.62) 100%);
+}
+
+/* No `fill:` here — the paths carry it as an attribute so it survives export,
+   and the element spans the whole artboard for the same reason. */
+.pf-t1-waves {
+  position: absolute;
+  inset: 0;
+  width: 794px;
+  height: 1123px;
+  z-index: 2;
+}
+
+.pf-t1-hero-copy {
+  position: absolute;
+  left: 46px;
+  right: 60px;
+  bottom: 96px;
+  z-index: 3;
+  color: #fff;
+}
+
+.pf-t1-hero-copy h1 {
+  margin: 0 0 10px;
+  font-size: 46px;
+  font-weight: 800;
+  line-height: 1.06;
+  letter-spacing: -0.015em;
+  text-transform: uppercase;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
+}
+
+.pf-t1-hero-copy p {
+  margin: 0;
+  max-width: 470px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.93);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.5);
+}
+
+.pf-t1-circles {
+  position: absolute;
+  top: 470px;
+  left: 0;
+  width: 794px;
+  height: 190px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 52px;
+  z-index: 4;
+}
+
+.pf-t1-circles span {
+  display: block;
+  width: 176px;
+  height: 176px;
+  border-radius: 50%;
+  background-size: cover;
+  background-position: center;
+  border: 7px solid #f4e3b8;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+}
+
+/* The middle circle sits lower, which is what gives the row its arc. */
+.pf-t1-circles span:nth-child(2) {
+  width: 154px;
+  height: 154px;
+  transform: translateY(46px);
+}
+
+.pf-t1-cols {
+  position: absolute;
+  top: 690px;
+  left: 52px;
+  right: 52px;
+  display: flex;
+  gap: 44px;
+}
+
+.pf-t1-cols > div {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.pf-t1-cols h2 {
+  margin: 0 0 12px;
+  font-size: 31px;
+  font-weight: 800;
+  color: #b8791b;
+  letter-spacing: -0.01em;
+}
+
+.pf-t1-cols p {
+  margin: 0 0 14px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: #2b3242;
+}
+
+.pf-t1-cols ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pf-t1-cols li {
+  position: relative;
+  padding-left: 24px;
+  margin-bottom: 9px;
+  font-size: 15px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.pf-t1-cols li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #b8791b;
+}
+
+.pf-t1-price {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pf-t1-price strong {
+  font-size: 34px;
+  font-weight: 800;
+  color: #1c2230;
+}
+
+.pf-t1-price span {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.pf-t1-valid {
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #b8791b;
+}
+
+.pf-t1-foot {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 794px;
+  height: 132px;
+  padding: 24px 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #efd79c;
+}
+
+.pf-t1-foot h3 {
+  margin: 0 0 6px;
+  font-size: 21px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
+.pf-t1-foot p {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #2b3242;
+}
+
+.pf-t1-foot-right {
+  text-align: right;
+}
+
+/* ══ 2. BOLD SPLIT ═══════════════════════════════════════════════════════ */
+
+.pf-t2 {
+  background: #123244;
+}
+
+.pf-t2-photo {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+}
+
+/* The diagonal edge, drawn as a filled shape on top of the photo. */
+.pf-t2-cut {
+  position: absolute;
+  inset: 0;
+  width: 794px;
+  height: 1123px;
+}
+
+.pf-t2-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 380px;
+  bottom: 96px;
+  padding: 54px 56px 0;
+  color: #fff;
+}
+
+.pf-t2-logo {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  color: #7fd4c1;
+  margin-bottom: 18px;
+}
+
+.pf-t2-panel h1 {
+  margin: 0;
+  font-size: 52px;
+  font-weight: 800;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  max-width: 560px;
+}
+
+.pf-t2-rule {
+  width: 92px;
+  height: 5px;
+  background: #7fd4c1;
+  margin: 22px 0;
+}
+
+.pf-t2-panel h2 {
+  margin: 0 0 12px;
+  font-size: 24px;
+  font-weight: 700;
+  color: #7fd4c1;
+}
+
+.pf-t2-panel p {
+  margin: 0 0 26px;
+  max-width: 470px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.pf-t2-services {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 24px;
+  max-width: 520px;
+}
+
+.pf-t2-services li {
+  position: relative;
+  padding-left: 26px;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.pf-t2-services li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 14px;
+  height: 8px;
+  border-left: 2.5px solid #7fd4c1;
+  border-bottom: 2.5px solid #7fd4c1;
+  transform: rotate(-45deg);
+}
+
+.pf-t2-badge {
+  position: absolute;
+  top: 300px;
+  right: 56px;
+  width: 168px;
+  height: 168px;
+  border-radius: 50%;
+  background: #7fd4c1;
+  color: #0d2733;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.32);
+  z-index: 3;
+}
+
+.pf-t2-badge span {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.pf-t2-badge strong {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.pf-t2-foot {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 794px;
+  height: 96px;
+  padding: 0 56px;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  flex-wrap: wrap;
+  background: #0d2733;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pf-t2-valid {
+  color: #7fd4c1;
+}
+
+/* ══ 3. MINIMAL FRAME ════════════════════════════════════════════════════ */
+
+.pf-t3 {
+  background: #fbfaf7;
+  padding: 34px;
+}
+
+.pf-t3-frame {
+  height: 100%;
+  border: 1px solid #d8d2c4;
+  padding: 46px 54px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pf-t3-logo {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  color: #9a8f78;
+  margin-bottom: 34px;
+}
+
+.pf-t3-kicker {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #b08a3e;
+  margin-bottom: 14px;
+}
+
+.pf-t3-frame h1 {
+  margin: 0;
+  font-size: 44px;
+  font-weight: 300;
+  letter-spacing: 0.02em;
+  line-height: 1.16;
+  color: #22262e;
+  max-width: 560px;
+}
+
+.pf-t3-hr {
+  width: 78px;
+  height: 2px;
+  background: #b08a3e;
+  margin: 26px 0;
+  flex: 0 0 auto;
+}
+
+.pf-t3-hr-thin {
+  width: 250px;
+  height: 1px;
+  background: #ded8ca;
+  margin: 26px 0 20px;
+}
+
+.pf-t3-photo {
+  width: 100%;
+  height: 340px;
+  background-size: cover;
+  background-position: center;
+  flex: 0 0 auto;
+}
+
+.pf-t3-desc {
+  margin: 30px 0 0;
+  max-width: 500px;
+  font-size: 14px;
+  line-height: 1.75;
+  color: #555c68;
+}
+
+.pf-t3-price {
+  margin-top: 28px;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+
+.pf-t3-price strong {
+  font-size: 46px;
+  font-weight: 300;
+  color: #22262e;
+}
+
+.pf-t3-price span {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9a8f78;
+}
+
+.pf-t3-valid {
+  margin-top: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #b08a3e;
+}
+
+.pf-t3-services {
+  margin-top: 22px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #4a5160;
+}
+
+.pf-t3-services i {
+  color: #c3bba8;
+  font-style: normal;
+}
+
+.pf-t3-contact {
+  display: flex;
+  gap: 22px;
+  font-size: 12.5px;
+  color: #6d7482;
+}
+
+/* ══ 4. DARK LUXE ════════════════════════════════════════════════════════ */
+
+.pf-t4 {
+  background: #10131a;
+  color: #ece7dc;
+}
+
+.pf-t4-photo {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 794px;
+  height: 470px;
+}
+
+.pf-t4-photo-img {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+}
+
+/* This gradient does the dimming on its own. It used to sit over a photo that
+   was also darkened with `filter: brightness(.82)`, which the export drops —
+   the darker stops below reproduce that in a way the export can paint. */
+.pf-t4-fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(16, 19, 26, 0.42) 0%, rgba(16, 19, 26, 0.66) 55%, #10131a 100%);
+}
+
+.pf-t4-body {
+  position: absolute;
+  top: 392px;
+  left: 58px;
+  right: 58px;
+}
+
+.pf-t4-logo {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  color: #c9a227;
+  margin-bottom: 26px;
+}
+
+.pf-t4-kicker {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(236, 231, 220, 0.6);
+  margin-bottom: 10px;
+}
+
+.pf-t4-body h1 {
+  margin: 0;
+  font-size: 50px;
+  font-weight: 300;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  color: #f3efe6;
+  max-width: 600px;
+}
+
+.pf-t4-rule {
+  width: 88px;
+  height: 1.5px;
+  background: #c9a227;
+  margin: 24px 0;
+}
+
+.pf-t4-body p {
+  margin: 0;
+  max-width: 520px;
+  font-size: 14px;
+  line-height: 1.75;
+  color: rgba(236, 231, 220, 0.72);
+}
+
+.pf-t4-price {
+  margin-top: 30px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 14px 26px;
+  border: 1px solid #c9a227;
+}
+
+.pf-t4-price strong {
+  font-size: 34px;
+  font-weight: 400;
+  color: #c9a227;
+}
+
+.pf-t4-price span {
+  font-size: 12.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(236, 231, 220, 0.65);
+}
+
+.pf-t4-valid {
+  margin-top: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(236, 231, 220, 0.55);
+}
+
+.pf-t4-services {
+  margin: 32px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 30px;
+  max-width: 540px;
+}
+
+.pf-t4-services li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 14px;
+  letter-spacing: 0.03em;
+  color: rgba(236, 231, 220, 0.85);
+}
+
+.pf-t4-services li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 7px;
+  height: 7px;
+  transform: rotate(45deg);
+  background: #c9a227;
+}
+
+.pf-t4-foot {
+  position: absolute;
+  left: 58px;
+  right: 58px;
+  bottom: 46px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(201, 162, 39, 0.35);
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: rgba(236, 231, 220, 0.7);
+}
+
+/* ══ 5. COASTAL BRIGHT ═══════════════════════════════════════════════════ */
+
+.pf-t5 {
+  background: #fdfbf6;
+  padding: 44px 46px;
+}
+
+.pf-t5-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+.pf-t5-logo {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.24em;
+  color: #14776b;
+}
+
+.pf-t5-valid {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #e6f2ef;
+  color: #14776b;
+}
+
+.pf-t5-photo {
+  position: relative;
+  height: 360px;
+  border-radius: 26px;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 16px 34px rgba(20, 119, 107, 0.18);
+}
+
+.pf-t5-pill {
+  position: absolute;
+  right: 26px;
+  bottom: -30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 152px;
+  padding: 16px 26px;
+  border-radius: 999px;
+  background: #fdfbf6;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.14);
+}
+
+.pf-t5-pill strong {
+  font-size: 30px;
+  font-weight: 800;
+  color: #14776b;
+  line-height: 1.1;
+}
+
+.pf-t5-pill span {
+  font-size: 12px;
+  color: #7b8794;
+}
+
+.pf-t5 h1 {
+  margin: 56px 0 0;
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: #16202b;
+  max-width: 600px;
+}
+
+.pf-t5-kicker {
+  margin-top: 10px;
+  font-size: 17px;
+  font-weight: 700;
+  color: #e0791b;
+}
+
+.pf-t5-desc {
+  margin: 16px 0 0;
+  max-width: 560px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #55606e;
+}
+
+.pf-t5-chips {
+  margin-top: 22px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.pf-t5-chips span {
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: #f1ece0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4a5563;
+}
+
+.pf-t5-thumbs {
+  margin-top: 24px;
+  display: flex;
+  gap: 16px;
+}
+
+.pf-t5-thumbs span {
+  flex: 1 1 0;
+  height: 152px;
+  border-radius: 18px;
+  background-size: cover;
+  background-position: center;
+}
+
+.pf-t5-foot {
+  position: absolute;
+  left: 46px;
+  right: 46px;
+  bottom: 44px;
+  padding: 22px 28px;
+  border-radius: 20px;
+  background: #14776b;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pf-t5-foot b {
+  display: block;
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: 3px;
+}
+
+.pf-t5-foot span {
+  display: block;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.pf-t5-foot-right {
+  text-align: right;
+}
+
+/* ══ 6. GRAND ARC ════════════════════════════════════════════════════════ */
+
+.pf-t6 {
+  background: #0f2b4a;
+}
+
+.pf-t6-hero {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 794px;
+  height: 640px;
+  background-size: cover;
+  background-position: center;
+}
+
+/* Lifts the masthead off the photograph without hiding the room behind it. */
+.pf-t6-veil {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 794px;
+  height: 640px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.94) 0%,
+    rgba(255, 255, 255, 0.86) 26%,
+    rgba(255, 255, 255, 0.18) 46%,
+    rgba(255, 255, 255, 0) 62%
+  );
+}
+
+.pf-t6-head {
+  position: absolute;
+  top: 34px;
+  left: 62px;
+  right: 62px;
+  z-index: 2;
+  text-align: center;
+}
+
+.pf-t6-logo {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: #c2984f;
+  margin-bottom: 16px;
+}
+
+.pf-t6-head h1 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 52px;
+  line-height: 1.08;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: #0f2b4a;
+}
+
+.pf-t6-hotel {
+  margin-top: 12px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 30px;
+  color: #b08a41;
+}
+
+.pf-t6-diamond {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 16px 0 12px;
+}
+
+.pf-t6-diamond::before,
+.pf-t6-diamond::after {
+  content: "";
+  width: 92px;
+  height: 1px;
+  background: #c2984f;
+}
+
+.pf-t6-diamond span {
+  width: 9px;
+  height: 9px;
+  background: #c2984f;
+  transform: rotate(45deg);
+}
+
+.pf-t6-tagline {
+  margin: 0;
+  font-size: 19px;
+  color: #253244;
+}
+
+.pf-t6-badge {
+  position: absolute;
+  top: 316px;
+  right: 52px;
+  width: 152px;
+  height: 152px;
+  border-radius: 50%;
+  background: #0f2b4a;
+  border: 3px solid #c2984f;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  text-align: center;
+}
+
+.pf-t6-badge strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 1.15;
+  color: #e7d3ab;
+}
+
+.pf-t6-arc {
+  position: absolute;
+  inset: 0;
+  width: 794px;
+  height: 1123px;
+  z-index: 2;
+}
+
+.pf-t6-feats {
+  position: absolute;
+  top: 686px;
+  left: 46px;
+  right: 46px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  z-index: 3;
+}
+
+.pf-t6-feat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 18px;
+  color: #f0e7d6;
+  font-size: 16.5px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.pf-t6-feat + .pf-t6-feat {
+  border-left: 1px solid rgba(194, 152, 79, 0.5);
+}
+
+.pf-t6-strip {
+  position: absolute;
+  top: 796px;
+  left: 46px;
+  right: 46px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.pf-t6-strip span {
+  height: 132px;
+  border-radius: 4px;
+  border: 2px solid rgba(194, 152, 79, 0.75);
+  background-size: cover;
+  background-position: center;
+}
+
+.pf-t6-cta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 952px;
+  height: 78px;
+  background: #f3ece0;
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 0 46px;
+}
+
+.pf-t6-cta-left strong {
+  display: block;
+  font-size: 27px;
+  color: #0f2b4a;
+  line-height: 1.1;
+}
+
+.pf-t6-cta-left span {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6f7683;
+}
+
+.pf-t6-cta-mid {
+  flex: 1;
+  text-align: center;
+  border-left: 1px solid #d6cbb6;
+  border-right: 1px solid #d6cbb6;
+  padding: 0 20px;
+}
+
+.pf-t6-cta-mid h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 25px;
+  text-transform: uppercase;
+  color: #b08a41;
+}
+
+.pf-t6-cta-mid p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: #45505f;
+  /* One line only: the artboard cannot grow, so a long description is cut. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pf-t6-cta-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f2b4a;
+}
+
+.pf-t6-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 62px;
+  background: #0a2039;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  color: #e7dcc6;
+  font-size: 14px;
+}
+
+.pf-t6-foot span {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.pf-t6-foot em {
+  width: 1px;
+  height: 22px;
+  background: rgba(194, 152, 79, 0.6);
+}
+
+/* ══ 7. ESTATE CARD ══════════════════════════════════════════════════════ */
+
+.pf-t7 {
+  background: #ffffff;
+}
+
+.pf-t7-hero {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 794px;
+  height: 470px;
+  background-size: cover;
+  background-position: center;
+}
+
+.pf-t7-swoosh {
+  position: absolute;
+  inset: 0;
+  width: 794px;
+  height: 1123px;
+  z-index: 1;
+}
+
+.pf-t7-logo {
+  position: absolute;
+  top: 40px;
+  right: 46px;
+  z-index: 3;
+  background: #f1f1f1;
+  border-radius: 30px;
+  padding: 9px 30px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 22px;
+  color: #b9776a;
+}
+
+.pf-t7-head {
+  position: absolute;
+  top: 132px;
+  right: 46px;
+  width: 340px;
+  z-index: 2;
+  text-align: right;
+}
+
+.pf-t7-kicker {
+  font-size: 23px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6d7178;
+  line-height: 1.2;
+}
+
+.pf-t7-head h1 {
+  margin: 4px 0 0;
+  font-size: 50px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: #1d1e20;
+}
+
+.pf-t7-tag {
+  display: inline-block;
+  margin-top: 16px;
+  background: #1d1e20;
+  color: #fff;
+  border-radius: 3px;
+  padding: 7px 24px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.pf-t7-deck {
+  position: absolute;
+  top: 352px;
+  right: 28px;
+  width: 436px;
+  height: 164px;
+  z-index: 2;
+  background: #37383a;
+  border-radius: 24px;
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  color: #fff;
+}
+
+.pf-t7-deck-photo {
+  width: 150px;
+  border-radius: 20px;
+  background-size: cover;
+  background-position: center;
+}
+
+.pf-t7-deck-copy {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+}
+
+.pf-t7-deck-copy span {
+  font-size: 14px;
+  color: #cfcfd1;
+}
+
+.pf-t7-deck-copy strong {
+  display: block;
+  font-size: 27px;
+  line-height: 1.2;
+}
+
+.pf-t7-deck-copy em {
+  font-size: 12px;
+  font-style: normal;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #b9776a;
+}
+
+.pf-t7-deck-copy p {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #d5d5d7;
+}
+
+.pf-t7-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 690px;
+  bottom: 62px;
+  background: #37383a;
+}
+
+.pf-t7-circles {
+  position: absolute;
+  top: 566px;
+  left: 46px;
+  right: 46px;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.pf-t7-circles span {
+  width: 196px;
+  height: 196px;
+  border-radius: 50%;
+  border: 7px solid #fff;
+  background-size: cover;
+  background-position: center;
+}
+
+.pf-t7-circles span:nth-child(2) {
+  width: 216px;
+  height: 216px;
+  margin-top: -14px;
+}
+
+.pf-t7-lower {
+  position: absolute;
+  top: 812px;
+  left: 46px;
+  right: 46px;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 34px;
+  color: #e9e9ea;
+}
+
+.pf-t7-label {
+  display: inline-block;
+  background: #b9776a;
+  color: #fff;
+  border-radius: 4px;
+  padding: 6px 18px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.pf-t7-feats {
+  margin: 18px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px 18px;
+}
+
+.pf-t7-feats li {
+  position: relative;
+  padding-left: 20px;
+  font-size: 15.5px;
+}
+
+.pf-t7-feats li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 10px;
+  height: 10px;
+  background: #b9776a;
+}
+
+.pf-t7-addr {
+  border-left: 2px solid rgba(255, 255, 255, 0.22);
+  padding-left: 26px;
+}
+
+.pf-t7-addr p {
+  margin: 0 0 5px;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.pf-t7-valid {
+  color: #e0b0a5;
+  font-size: 13.5px;
+}
+
+.pf-t7-note {
+  position: absolute;
+  left: 60px;
+  right: 60px;
+  bottom: 96px;
+  z-index: 2;
+  text-align: center;
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-size: 21px;
+  color: #e0b0a5;
+}
+
+.pf-t7-foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 62px;
+  background: #2a2b2d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cfcfd1;
+  font-size: 13.5px;
+  letter-spacing: 0.04em;
+}
+
+/* ══ 8. NOIR GOLD ════════════════════════════════════════════════════════ */
+
+.pf-t8 {
+  background: #1c1410;
+  color: #efe3cd;
+}
+
+.pf-t8-mast {
+  position: absolute;
+  top: 44px;
+  left: 54px;
+  right: 54px;
+  text-align: center;
+}
+
+.pf-t8-monogram {
+  width: 78px;
+  height: 78px;
+  margin: 0 auto;
+  border: 2px solid #d3a44a;
+  border-radius: 50%;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 36px;
+  line-height: 74px;
+  color: #d3a44a;
+}
+
+.pf-t8-name {
+  margin-top: 16px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 42px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #f4e7cd;
+}
+
+.pf-t8-sub {
+  margin-top: 10px;
+  font-size: 13px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #b8935a;
+}
+
+.pf-t8-body {
+  position: absolute;
+  top: 252px;
+  left: 54px;
+  right: 54px;
+  height: 328px;
+  display: grid;
+  grid-template-columns: 1fr 1.05fr;
+  gap: 34px;
+  align-items: center;
+}
+
+.pf-t8-copy h1 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 48px;
+  line-height: 1.08;
+  color: #ffffff;
+}
+
+.pf-t8-copy p {
+  margin: 16px 0 0;
+  font-size: 15.5px;
+  line-height: 1.65;
+  color: #cbbba2;
+}
+
+.pf-t8-rule {
+  width: 120px;
+  height: 1px;
+  background: #d3a44a;
+  margin: 20px 0 14px;
+}
+
+.pf-t8-price strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 34px;
+  color: #d3a44a;
+}
+
+.pf-t8-price span {
+  margin-left: 10px;
+  font-size: 12.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #a58f6d;
+}
+
+.pf-t8-valid {
+  margin-top: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #b8935a;
+}
+
+.pf-t8-photo {
+  height: 328px;
+  border-radius: 16px;
+  border: 3px solid rgba(211, 164, 74, 0.65);
+  background-size: cover;
+  background-position: center;
+}
+
+.pf-t8-card {
+  position: absolute;
+  top: 618px;
+  left: 54px;
+  right: 54px;
+  height: 150px;
+  background: #f5efe2;
+  border: 2px solid #d3a44a;
+  border-radius: 16px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  align-items: center;
+}
+
+.pf-t8-feat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+}
+
+.pf-t8-feat + .pf-t8-feat {
+  border-left: 1px solid rgba(211, 164, 74, 0.55);
+}
+
+.pf-t8-ring {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 1.5px solid #d3a44a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pf-t8-feat-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #4a3a24;
+  text-align: center;
+  line-height: 1.35;
+}
+
+.pf-t8-cta {
+  position: absolute;
+  top: 806px;
+  left: 186px;
+  right: 186px;
+  height: 74px;
+  border-radius: 40px;
+  background: linear-gradient(90deg, #c2913a 0%, #e8c274 50%, #c2913a 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.pf-t8-cta strong {
+  font-size: 22px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #1c1410;
+}
+
+.pf-t8-foot {
+  position: absolute;
+  top: 918px;
+  left: 54px;
+  right: 54px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 30px;
+}
+
+.pf-t8-foot > div {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.pf-t8-foot > div + div {
+  border-left: 1px solid rgba(211, 164, 74, 0.45);
+  padding-left: 30px;
+}
+
+.pf-t8-foot p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #e6dcc8;
+}
+
+.pf-t8-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 26px;
+  background: linear-gradient(90deg, #7d5f26 0%, #d3a44a 50%, #7d5f26 100%);
+}
+
+/* ══ 9. TEAL DEAL ════════════════════════════════════════════════════════ */
+
+.pf-t9 {
+  background: #fdf7e8;
+}
+
+.pf-t9-logo {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #0d7b73;
+}
+
+.pf-t9-head {
+  position: absolute;
+  top: 66px;
+  left: 54px;
+  right: 54px;
+  text-align: center;
+}
+
+.pf-t9-head h1 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 44px;
+  line-height: 1.12;
+  color: #16232b;
+}
+
+.pf-t9-head p {
+  margin: 8px 0 0;
+  font-size: 16.5px;
+  color: #4b5a63;
+}
+
+.pf-t9-photo-a {
+  position: absolute;
+  top: 190px;
+  left: 0;
+  width: 794px;
+  height: 300px;
+  background-size: cover;
+  background-position: center;
+}
+
+.pf-t9-seam {
+  position: absolute;
+  inset: 0;
+  width: 794px;
+  height: 1123px;
+  z-index: 2;
+}
+
+.pf-t9-photo-b {
+  position: absolute;
+  top: 490px;
+  left: 0;
+  width: 794px;
+  height: 330px;
+  background-size: cover;
+  background-position: center;
+}
+
+.pf-t9-offer {
+  position: absolute;
+  top: 292px;
+  right: 44px;
+  width: 300px;
+  z-index: 3;
+  background: rgba(13, 123, 115, 0.95);
+  border: 2px solid #e6c168;
+  border-radius: 22px;
+  padding: 52px 22px 24px;
+  text-align: center;
+}
+
+.pf-t9-ribbon {
+  position: absolute;
+  top: -19px;
+  left: 22px;
+  right: 22px;
+  background: #e6c168;
+  color: #16232b;
+  border-radius: 8px;
+  padding: 9px 10px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pf-t9-offer strong {
+  display: block;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 58px;
+  line-height: 1;
+  color: #fdf7e8;
+}
+
+.pf-t9-offer span {
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #cfeae6;
+}
+
+.pf-t9-card {
+  position: absolute;
+  top: 660px;
+  left: 44px;
+  right: 44px;
+  z-index: 3;
+  background: #ffffff;
+  border: 1px solid #e6dfcc;
+  border-radius: 18px;
+  padding: 18px 8px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.pf-t9-feat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+  color: #16232b;
+}
+
+.pf-t9-feat + .pf-t9-feat {
+  border-left: 1px solid #e6dfcc;
+}
+
+.pf-t9-curve {
+  position: absolute;
+  inset: 0;
+  width: 794px;
+  height: 1123px;
+  z-index: 1;
+}
+
+.pf-t9-close {
+  position: absolute;
+  left: 60px;
+  right: 60px;
+  bottom: 152px;
+  z-index: 3;
+  text-align: center;
+}
+
+.pf-t9-close h2 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-size: 30px;
+  color: #e6c168;
+}
+
+.pf-t9-close p {
+  margin: 8px 0 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #dff0ed;
+}
+
+.pf-t9-foot {
+  position: absolute;
+  left: 60px;
+  right: 60px;
+  bottom: 42px;
+  height: 62px;
+  z-index: 3;
+  background: #fdf7e8;
+  border: 2px solid #e6c168;
+  border-radius: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #16232b;
+}
+
+.pf-t9-foot span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pf-t9-foot em {
+  width: 1px;
+  height: 26px;
+  background: #d9cfb2;
+}
+
+/* ══ PAGE CHROME ═════════════════════════════════════════════════════════ */
+
+/* Template chooser */
+.pf-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 16px;
+}
+
+.pf-pick {
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 10px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+
+.pf-pick:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+
+.pf-pick.is-active {
+  border-color: var(--bs-primary, #ec0b43);
+  box-shadow: 0 8px 20px rgba(236, 11, 67, 0.16);
+}
+
+.pf-pick-thumb {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #eef0f4;
+  margin-bottom: 9px;
+  /* Centres the scaled canvas, which is narrower than the tile. */
+  display: flex;
+  justify-content: center;
+  background: #f7f8fa;
+}
+
+.pf-pick-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.pf-pick-blurb {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: #6b7280;
+}
+
+/* Live preview beside the form */
+.pf-preview-pane {
+  position: sticky;
+  top: 76px;
+  display: flex;
+  justify-content: center;
+  padding: 14px;
+  border-radius: 12px;
+  background: #eef0f4;
+  border: 1px solid #e0e3e9;
+}
+
+.pf-preview-pane .pf-canvas-scaler {
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+
+/* List thumbnails */
+.pf-row-thumb {
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: center;
+  background: #f7f8fa;
+}
+
+/* Services editor */
+.pf-service-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #f1f3f7;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.pf-service-chip button {
+  border: none;
+  background: none;
+  padding: 0;
+  line-height: 1;
+  color: #9aa3af;
+  cursor: pointer;
+}
+
+.pf-service-chip button:hover {
+  color: #dc2626;
+}
