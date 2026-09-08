@@ -3272,6 +3272,19 @@ export default function HotelSearch({
                 );
                 if (hotel) openRoomListForHotel(hotel);
               }}
+              starOptions={starOptions}
+              starRating={starRating}
+              onStarRatingChange={setStarRating}
+              sortBy={sortBy}
+              onSortByChange={setSortBy}
+              onClearFilters={() => {
+                setStarRating(null);
+                setHotelType([]);
+                setChannelType([]);
+                setAvailableDeals([]);
+                setSortBy("priceAsc");
+                setHotelSearchTerm("");
+              }}
             />
           )}
         </main>

@@ -315,6 +315,69 @@ export default function PromotionHotelSearch() {
     { value: "destinationSales", label: "Destination Sales" },
   ];
 
+  // Filter + sort applied to the fetched promotion `results`. Hoisted out
+  // of the results-render IIFE below so the "Explore on Map" modal can
+  // reuse the same sorted list (and same filter state) — pins on the map
+  // then react to the star / sort / clear controls exactly the way the
+  // hotel cards do.
+  const filteredSortedResults = useMemo(() => {
+    const nameNeedle = hotelSearchTerm.trim().toLowerCase();
+    const dealValues = new Set(availableDeals.map((d) => d.value));
+    const typeValues = new Set(hotelType.map((t) => t.value));
+    const channelValues = new Set(channelType.map((c) => c.value));
+    const filtered = results.filter((h) => {
+      if (nameNeedle && !(h.hotelName || "").toLowerCase().includes(nameNeedle)) {
+        return false;
+      }
+      if (starFilter && Number(h.starRating) !== starFilter.value) {
+        return false;
+      }
+      if (channelValues.size > 0 && !channelValues.has("inhouse")) {
+        return false;
+      }
+      if (typeValues.size > 0) {
+        const t = (h.hotelType || "").trim().toLowerCase();
+        if (!t || !typeValues.has(t)) return false;
+      }
+      if (dealValues.size > 0) {
+        const promoTypes = (h.promotionTypes || []).map((t) =>
+          (t || "").toLowerCase(),
+        );
+        const hasSpecial = promoTypes.some((t) => t.includes("special"));
+        const hasDiscount = promoTypes.some((t) => t.includes("discount"));
+        const hasStayPay = promoTypes.some((t) => t.includes("stay"));
+        let matchesADeal = false;
+        if (dealValues.has("specialRates") && hasSpecial) matchesADeal = true;
+        if (dealValues.has("discount") && hasDiscount) matchesADeal = true;
+        if (dealValues.has("stayPay") && hasStayPay) matchesADeal = true;
+        if (!matchesADeal) return false;
+      }
+      return true;
+    });
+    return [...filtered].sort((a, b) => {
+      const sa = Number(a.starRating) || 0;
+      const sb = Number(b.starRating) || 0;
+      return sortBy === "starAsc" ? sa - sb : sb - sa;
+    });
+  }, [
+    results,
+    hotelSearchTerm,
+    starFilter,
+    hotelType,
+    channelType,
+    availableDeals,
+    sortBy,
+  ]);
+
+  const clearAllFilters = () => {
+    setStarFilter(null);
+    setHotelType([]);
+    setChannelType([]);
+    setAvailableDeals([]);
+    setSortBy("starDesc");
+    setHotelSearchTerm("");
+  };
+
   // ── Initial data loads (agents, employees, destinations, nationality,
   //     currency) ── Intentional mount-only effect. loadPopular* are
   // stable closures over setState only; adding them to the deps array
@@ -1065,67 +1128,10 @@ export default function PromotionHotelSearch() {
               </div>
 
               {(() => {
-                const nameNeedle = hotelSearchTerm.trim().toLowerCase();
-                const dealValues = new Set(availableDeals.map((d) => d.value));
-                const typeValues = new Set(hotelType.map((t) => t.value));
-                const channelValues = new Set(channelType.map((c) => c.value));
-                const filtered = results.filter((h) => {
-                  if (nameNeedle && !(h.hotelName || "").toLowerCase().includes(nameNeedle)) {
-                    return false;
-                  }
-                  if (starFilter && Number(h.starRating) !== starFilter.value) {
-                    return false;
-                  }
-                  // Channel — promotion results are always INHOUSE. Only
-                  // filter when the user has explicitly ticked a non-inhouse
-                  // channel (which would then filter everything out).
-                  if (channelValues.size > 0 && !channelValues.has("inhouse")) {
-                    return false;
-                  }
-                  // Hotel Type — match the hotel's master type name
-                  // (returned by the backend as e.g. "Hotel" / "Villa" /
-                  // "Resort" / "Apartment") against the ticked checkbox
-                  // values. Case-insensitive so "Villa" ticks against
-                  // "villa". A hotel with no hotelType data is dropped
-                  // whenever ANY tick is active.
-                  if (typeValues.size > 0) {
-                    const t = (h.hotelType || "").trim().toLowerCase();
-                    if (!t || !typeValues.has(t)) return false;
-                  }
-                  // Available Deals — wire the three that map to real
-                  // promotion families in the response (specialRates /
-                  // discount / stayPay). Any other tick filters out — see
-                  // the availableDealsOptions comment above.
-                  if (dealValues.size > 0) {
-                    const promoTypes = (h.promotionTypes || []).map((t) =>
-                      (t || "").toLowerCase(),
-                    );
-                    const hasSpecial = promoTypes.some((t) => t.includes("special"));
-                    const hasDiscount = promoTypes.some((t) => t.includes("discount"));
-                    const hasStayPay = promoTypes.some((t) => t.includes("stay"));
-                    let matchesADeal = false;
-                    if (dealValues.has("specialRates") && hasSpecial) matchesADeal = true;
-                    if (dealValues.has("discount") && hasDiscount) matchesADeal = true;
-                    if (dealValues.has("stayPay") && hasStayPay) matchesADeal = true;
-                    // Non-promotion deals aren't tracked on this page.
-                    if (!matchesADeal) return false;
-                  }
-                  return true;
-                });
-                const sorted = [...filtered].sort((a, b) => {
-                  const sa = Number(a.starRating) || 0;
-                  const sb = Number(b.starRating) || 0;
-                  return sortBy === "starAsc" ? sa - sb : sb - sa;
-                });
-
-                const clearAllFilters = () => {
-                  setStarFilter(null);
-                  setHotelType([]);
-                  setChannelType([]);
-                  setAvailableDeals([]);
-                  setSortBy("starDesc");
-                  setHotelSearchTerm("");
-                };
+                // Filter / sort / clearAllFilters live at component scope
+                // now so the "Explore on Map" modal can share them. The
+                // local `sorted` alias keeps the JSX below unchanged.
+                const sorted = filteredSortedResults;
 
                 return (
                   <div className="search-layout">
@@ -1621,7 +1627,7 @@ export default function PromotionHotelSearch() {
           <MapModal
             show={showMapModal}
             onHide={() => setShowMapModal(false)}
-            markers={results.map((h) => ({
+            markers={filteredSortedResults.map((h) => ({
               id: h.hotelId,
               name: h.hotelName,
               lat: h.latitude,
@@ -1637,6 +1643,14 @@ export default function PromotionHotelSearch() {
               const picked = results.find((h) => h.hotelId === id);
               if (picked) openRoomListForHotel(picked);
             }}
+            starOptions={starOptions}
+            starRating={starFilter}
+            onStarRatingChange={setStarFilter}
+            sortBy={sortBy}
+            onSortByChange={setSortBy}
+            sortAscValue="starAsc"
+            sortDescValue="starDesc"
+            onClearFilters={clearAllFilters}
           />
         </main>
       </div>
