@@ -129,6 +129,7 @@ import DayStayBookingDetailView from "./pages/list/DayStayBookingDetailView";
 import OfferZone from "./pages/OfferZone";
 import OfferImageUpload from "./pages/OfferImageUpload";
 import Advertisements from "./pages/Advertisements";
+import PromotionFlyer from "./pages/marketing/PromotionFlyer";
 import AdvertisementDetailedView from "./pages/AdvertisementDetailedView";
 import AgentAccounts from "./pages/inhouseAccounts/AgentAccounts";
 import AgentsPaymentHistory from "./pages/inhouseAccounts/AgentsPaymentHistory";
@@ -877,6 +878,7 @@ export default function App() {
         <Route path="/offer" element={<PrivateRoute><OfferZone /></PrivateRoute>} />
         <Route path="/upload-offer-image" element={<PrivateRoute><OfferImageUpload /></PrivateRoute>} />
         <Route path="/advertisements" element={<PrivateRoute><Advertisements /></PrivateRoute>} />
+        <Route path="/marketing/promotion-flyer" element={<PrivateRoute><PromotionFlyer /></PrivateRoute>} />
         <Route path="/advertisements/view/:id" element={<PrivateRoute><AdvertisementDetailedView /></PrivateRoute>} />
 
         {/* Extranet login — REUSE the admin hotel-actions components so the
