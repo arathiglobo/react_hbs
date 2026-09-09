@@ -783,7 +783,7 @@ export default function Sidebar() {
       label: "My Incentives",
       roles: ["agent"],
       children: [
-        { label: "Dashboard", to: "/incentive/my-incentives" },
+        { label: "Dashboard", to: "/incentive/my-incentives" }, 
         { label: "My Claims", to: "/incentive/claims" },
       ],
     },
