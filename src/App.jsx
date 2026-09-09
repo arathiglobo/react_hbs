@@ -64,6 +64,7 @@ import MappedList from "./pages/master/MappedList";
 import AgentReg from "./pages/Registration/AgentReg";
 import HotelReg from "./pages/Registration/HotelReg";
 import HotelList from "./pages/Registration/HotelList";
+import AllRegistrations from "./pages/Registration/AllRegistrations";
 import EmployeeReg from "./pages/Registration/EmployeeReg";
 import CabProviderReg from "./pages/Registration/CabProviderReg";
 import CabRates from "./pages/Registration/CabRates";
@@ -703,6 +704,7 @@ export default function App() {
         <Route path="/registration/package/view/:id" element={<PrivateRoute><PackageDetailedView /></PrivateRoute>} />
         <Route path="/package-rates" element={<PrivateRoute><PackageRates /></PrivateRoute>} />
         <Route path="/registration/supplier" element={<PrivateRoute><SupplierReg /></PrivateRoute>} />
+        <Route path="/registration/all" element={<PrivateRoute roles={["admin"]}><AllRegistrations /></PrivateRoute>} />
         <Route path="/registration/hotel" element={<PrivateRoute><HotelList /></PrivateRoute>} />
         <Route path="/registration/hotel/create" element={<PrivateRoute><HotelReg /></PrivateRoute>} />
         <Route path="/registration/hotel/create/:id" element={<PrivateRoute><HotelReg /></PrivateRoute>} />
