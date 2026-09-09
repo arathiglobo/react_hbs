@@ -537,12 +537,18 @@ export default function Sidebar() {
           to: "/new-booking/religious",
         },
 
-         // Flight flow 
+         // Flight flow
         {
           label: "Flight",
           to: "/new-booking/flight",
         },
       ],
+    },
+    {
+      code: "top_promotion",
+      label: "Promotion",
+      to: "/promotion",
+      roles: ["admin"],
     },
     {
       code: "top_ai_insights",
@@ -777,7 +783,7 @@ export default function Sidebar() {
       label: "My Incentives",
       roles: ["agent"],
       children: [
-        { label: "Dashboard", to: "/incentive/my-incentives" },
+        { label: "Dashboard", to: "/incentive/my-incentives" }, 
         { label: "My Claims", to: "/incentive/claims" },
       ],
     },
@@ -1507,6 +1513,9 @@ function getIcon(label) {
 
     case "New Booking":
       return <PlusCircle {...iconProps} />;
+
+    case "Promotion":
+      return <Tag {...iconProps} />;
 
     case "AI Insights":
       return <FaRobot {...iconProps} />;

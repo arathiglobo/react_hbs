@@ -99,6 +99,7 @@ import ValidityPage from "./pages/HotelActions/Validities/ValidityPage";
 import IndividualHotelSearch from "./pages/HotelActions/IndividualHotelSearch";
 import ContractRate from "./pages/HotelActions/ContractRate/ContractRate";
 import Promotion from "./pages/HotelActions/Promotion/Promotion";
+import PromotionHotelSearch from "./pages/promotion/PromotionHotelSearch";
 import Policy from "./pages/HotelActions/Policy/Policy";
 import CreateContractRate from "./pages/HotelActions/ContractRate/CreateContractRate";
 import EditContractRate from "./pages/HotelActions/ContractRate/EditContractRate";
@@ -851,6 +852,9 @@ export default function App() {
         <Route path="/booking-details/day-stay-booking/:id" element={<PrivateRoute><DayStayBookingDetailView /></PrivateRoute>} />
 
         {/* promotion */}
+        {/* Sidebar "Promotion" entry — hotel search filtered to only
+            hotels with active in-validity promotions. */}
+        <Route path="/promotion" element={<PrivateRoute><PromotionHotelSearch /></PrivateRoute>} />
         <Route path="/hotel-actions/:id/promotions" element={<PrivateRoute><Promotion /></PrivateRoute>} />
         <Route path="/hotel-actions/:id/promotion/special-rate/save" element={<PrivateRoute><SpecialRates /></PrivateRoute>} />
         <Route path="/hotel-actions/:id/promotion/special-rate/edit/:editId" element={<PrivateRoute><EditSpecialRates /></PrivateRoute>} />
