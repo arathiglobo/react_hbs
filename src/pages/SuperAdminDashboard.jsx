@@ -207,44 +207,8 @@ export default function SuperAdminDashboard() {
             </div>
           </section>
 
-          <section>
-            <button
-              type="button"
-              className="adm-analytics-toggle"
-              onClick={() => setAnalyticsOpen((o) => !o)}
-              aria-expanded={analyticsOpen}
-              aria-controls="sa-analytics-panel"
-            >
-              <span className="adm-acc-icon" aria-hidden="true"><FaChartLine /></span>
-              <span className="adm-acc-text">
-                <span className="adm-acc-title">Platform Trends</span>
-                <span className="adm-acc-sub">Bookings and revenue across the platform</span>
-              </span>
-              <span className="adm-acc-chev" aria-hidden="true"><FaChevronDown /></span>
-            </button>
-            <Collapse in={analyticsOpen}>
-              <div id="sa-analytics-panel" className="adm-analytics-panel">
-                <div className="adm-charts">
-                  <div className="adm-card">
-                    <div className="adm-card-head">
-                      <span className="adm-dot" style={{ background: '#F75E00' }} />
-                      <h3 className="adm-card-title">Bookings across platform</h3>
-                      <span className="adm-badge">Last 5 days</span>
-                    </div>
-                    <LineChart labels={bookingsLabels} data={bookingsData} />
-                  </div>
-                  <div className="adm-card">
-                    <div className="adm-card-head">
-                      <span className="adm-dot" style={{ background: '#2F3E53' }} />
-                      <h3 className="adm-card-title">Platform revenue trend</h3>
-                      <span className="adm-badge">Last 5 days</span>
-                    </div>
-                    <BarChart labels={bookingsLabels} data={revenueData} />
-                  </div>
-                </div>
-              </div>
-            </Collapse>
-          </section>
+          {/* Analytics ("Platform Trends") section hidden by request. Code
+              retained via git history — restore this block to bring it back. */}
 
           <section>
             <p className="adm-section-label">Tenant Leaderboard</p>

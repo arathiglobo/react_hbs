@@ -83,18 +83,8 @@ export default function StaffDashboard() {
               </div>
             </section>
 
-            {/* ── Charts ── */}
-            <section>
-              <p className="qa-label">Analytics</p>
-              <div className="chart-grid">
-                <ChartCard title="Bookings Over Time" dotColor="var(--color-primary)">
-                  <LineChart labels={bookingsLabels} data={bookingsData} />
-                </ChartCard>
-                <ChartCard title="Revenue Trends" dotColor="var(--color-secondary)">
-                  <BarChart labels={bookingsLabels} data={revenueData} />
-                </ChartCard>
-              </div>
-            </section>
+            {/* Analytics section hidden by request. Code retained via git
+                history — restore this block to bring it back. */}
 
           </main>
         </div>

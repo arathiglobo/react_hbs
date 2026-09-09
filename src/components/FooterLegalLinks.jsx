@@ -239,34 +239,66 @@ export default function FooterLegalLinks() {
         </Panel>
       )}
 
-      {open === "contact" && (
-        <Panel
-          eyebrow="Desert Beds LLC"
-          title="Contact Details"
-          tagline="Formation No. 2647237 · Sharjah Media City, United Arab Emirates"
-          onClose={close}
-        >
-          {CONTACT_BLOCKS.map((block) => (
-            <section className="dbf-contact" key={block.title}>
-              <h3>{block.title}</h3>
-              <dl>
-                {block.rows.map((row) => (
-                  <React.Fragment key={row.label + row.value}>
-                    <dt>{row.label}</dt>
-                    <dd>
-                      {row.href ? (
-                        <a href={row.href}>{row.value}</a>
-                      ) : (
-                        row.value
-                      )}
-                    </dd>
-                  </React.Fragment>
-                ))}
-              </dl>
-            </section>
-          ))}
-        </Panel>
-      )}
+      {open === "contact" && <ContactPanel onClose={close} />}
+    </>
+  );
+}
+
+/* ── Contact Details modal body ─────────────────────────────────────────── */
+// Extracted so the same panel content can be triggered from anywhere (footer
+// AND the topbar contact-details button). Nothing about its markup changed.
+// Exported so a parent (e.g. TopBar) that needs to render the panel outside
+// its own sticky/stacking context can drive it directly with local state.
+export function ContactPanel({ onClose }) {
+  return (
+    <Panel
+      eyebrow="Desert Beds LLC"
+      title="Contact Details"
+      tagline="Formation No. 2647237 · Sharjah Media City, United Arab Emirates"
+      onClose={onClose}
+    >
+      {CONTACT_BLOCKS.map((block) => (
+        <section className="dbf-contact" key={block.title}>
+          <h3>{block.title}</h3>
+          <dl>
+            {block.rows.map((row) => (
+              <React.Fragment key={row.label + row.value}>
+                <dt>{row.label}</dt>
+                <dd>
+                  {row.href ? <a href={row.href}>{row.value}</a> : row.value}
+                </dd>
+              </React.Fragment>
+            ))}
+          </dl>
+        </section>
+      ))}
+    </Panel>
+  );
+}
+
+/* ── Standalone Contact Details trigger ─────────────────────────────────── */
+// A self-contained button (icon or text) that opens the same Contact Details
+// panel the footer link uses. Rendered in the topbar next to the cart so the
+// info is reachable from anywhere without scrolling to the footer. Reuses
+// CONTACT_BLOCKS + Panel — no data duplication.
+export function ContactDetailsButton({
+  className = "",
+  title = "Contact Details",
+  children,
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        className={className}
+        onClick={() => setOpen(true)}
+        aria-label={title}
+        title={title}
+      >
+        {children}
+      </button>
+      {open && <ContactPanel onClose={() => setOpen(false)} />}
     </>
   );
 }

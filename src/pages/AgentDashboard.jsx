@@ -186,20 +186,20 @@ export default function AgentDashboard() {
   // so the grid reads as a set of distinct shortcuts, not a uniform button row.
   const bookingActions = [
     { label: "Hotels",              tone: "pink",   icon: <FaHotel />,          to: "/new-booking/hotel" },
-    { label: "24 Hours",            tone: "pink",   icon: <FaClock />,          to: "/new-booking/hotel-24hr" },
+    { label: "24 Hours",            tone: "pink",   icon: <FaClock />,          to: "/new-booking/hotel-24hr",              comingSoon: true },
     { label: "Last Minutes",        tone: "orange", icon: <FaFire />,           to: "/new-booking/last-minute-booking" },
-    { label: "Long Stays",          tone: "purple", icon: <FaBriefcase />,      to: "/new-booking/long-stay" },
-    { label: "Day Stays",           tone: "blue",   icon: <FaSun />,            to: "/new-booking/day-stay" },
+    { label: "Long Stays",          tone: "purple", icon: <FaBriefcase />,      to: "/new-booking/long-stay",               comingSoon: true },
+    { label: "Day Stays",           tone: "blue",   icon: <FaSun />,            to: "/new-booking/day-stay",                comingSoon: true },
     { label: "Build Your Own Pkg", tone: "green",  icon: <FaBoxOpen />,        to: "/new-booking/make-your-own-package-v2" },
     { label: "Packages",            tone: "orange", icon: <FaGift />,           to: "/new-booking/package-search" },
-    { label: "Transfers",          tone: "teal",   icon: <FaCar />,            to: "/new-booking/cab" },
-    { label: "Chauffeur & Limousins",   tone: "purple", icon: <FaTaxi />,           to: "/new-booking/scheffer-driver" },
+    { label: "Transfers",          tone: "teal",   icon: <FaCar />,            to: "/new-booking/cab",                     comingSoon: true },
+    { label: "Chauffeur & Limousins",   tone: "purple", icon: <FaTaxi />,           to: "/new-booking/scheffer-driver",         comingSoon: true },
     { label: "Tours & Activitys",   tone: "green",  icon: <FaGlobeAmericas />,  to: "/new-booking/tours-and-activities" },
-    { label: "Restaurants",         tone: "orange", icon: <FaUtensils />,       to: "/new-booking/restaurant" },
-    { label: "Honeymoon Packages",  tone: "pink",   icon: <FaHeart />,          to: "/new-booking/honeymoon" },
-    { label: "Meeting Spaces",      tone: "purple", icon: <FaUserFriends />,    to: "/new-booking/meet-and-space" },
+    { label: "Restaurants",         tone: "orange", icon: <FaUtensils />,       to: "/new-booking/restaurant",     comingSoon: true },
+    { label: "Honeymoon Packages",  tone: "pink",   icon: <FaHeart />,          to: "/new-booking/honeymoon",      comingSoon: true },
+    { label: "Meeting Spaces",      tone: "purple", icon: <FaUserFriends />,    to: "/new-booking/meet-and-space", comingSoon: true },
     { label: "Govt/Airline/Hoteliers",               tone: "blue",   icon: <FaPlane />,          to: "/new-booking/gov-employee" },
-    { label: "Ayurveda",           tone: "green",  icon: <FaLeaf />,           to: "/new-booking/ayurveda" },
+    { label: "Ayurveda",           tone: "green",  icon: <FaLeaf />,           to: "/new-booking/ayurveda",       comingSoon: true },
     { label: "Students",            tone: "purple", icon: <FaGraduationCap />,  to: "/new-booking/student" },
     { label: "Senior Citizens",     tone: "orange", icon: <FaUserAlt />,        to: "/new-booking/senior-citizen" },
     { label: "Religious",     tone: "orange", icon: <FaPrayingHands/>,        to: "/new-booking/religious" },
@@ -365,6 +365,51 @@ export default function AgentDashboard() {
         .agent-qa-icon.tone-green  { background: #E8F8EE; color: #10B981; }
         .agent-qa-icon.tone-teal   { background: #E3F7F5; color: #14B8A6; }
         .agent-qa-icon.tone-gray   { background: #F0F1F3; color: #9098A8; }
+
+        /* ── Coming-soon tiles — visible but non-actionable. Suppresses
+              the accent-tone hover so the disabled tile can't look
+              clickable, and reveals a small "Coming soon" ribbon on
+              hover/focus in addition to the native title tooltip. ── */
+        .agent-qa-tile.is-coming-soon {
+          cursor: not-allowed;
+          opacity: 0.55;
+          filter: grayscale(0.35);
+          position: relative;
+          overflow: hidden;
+        }
+        .agent-qa-tile.is-coming-soon:hover,
+        .agent-qa-tile.is-coming-soon:focus {
+          background: #fff;
+          border-color: rgba(0,0,0,.08);
+          box-shadow: none;
+          transform: none;
+        }
+        .agent-qa-tile.is-coming-soon:hover .agent-qa-icon {
+          transform: none;
+        }
+        .agent-qa-coming-badge {
+          position: absolute;
+          left: 50%;
+          top: 6px;
+          transform: translate(-50%, -140%);
+          background: #FF6B00;
+          color: #fff;
+          font-size: 10px;
+          font-weight: 700;
+          letter-spacing: .3px;
+          padding: 2px 8px;
+          border-radius: 999px;
+          white-space: nowrap;
+          pointer-events: none;
+          opacity: 0;
+          box-shadow: 0 2px 8px rgba(255,107,0,.5);
+          transition: transform .15s ease, opacity .15s ease;
+        }
+        .agent-qa-tile.is-coming-soon:hover .agent-qa-coming-badge,
+        .agent-qa-tile.is-coming-soon:focus-visible .agent-qa-coming-badge {
+          transform: translate(-50%, 0);
+          opacity: 1;
+        }
 
         /* ── Manage — compact gradient shortcut cards ── */
         .agent-manage-grid {
@@ -762,11 +807,21 @@ export default function AgentDashboard() {
                     <button
                       key={a.label}
                       type="button"
-                      className={`agent-qa-tile tone-${a.tone}`}
-                      onClick={() => navigate(a.to)}
+                      className={`agent-qa-tile tone-${a.tone}${
+                        a.comingSoon ? " is-coming-soon" : ""
+                      }`}
+                      onClick={a.comingSoon ? undefined : () => navigate(a.to)}
+                      disabled={a.comingSoon}
+                      aria-disabled={a.comingSoon ? "true" : undefined}
+                      title={a.comingSoon ? "Coming soon…" : undefined}
                     >
                       <span className={`agent-qa-icon tone-${a.tone}`}>{a.icon}</span>
                       <span>{a.label}</span>
+                      {a.comingSoon && (
+                        <span className="agent-qa-coming-badge" aria-hidden="true">
+                          Coming soon
+                        </span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -842,40 +897,8 @@ export default function AgentDashboard() {
               </div>
             </section>
 
-            {/* ── Analytics — collapsible accordion, same pattern as
-                AdminDashboard.jsx's "Analytics" section ── */}
-            <section>
-              <button
-                type="button"
-                className="agent-analytics-toggle"
-                onClick={() => setAnalyticsOpen((o) => !o)}
-                aria-expanded={analyticsOpen}
-                aria-controls="agent-analytics-panel"
-              >
-                <span className="agent-acc-icon" aria-hidden="true">
-                  <FaChartLine />
-                </span>
-                <span className="agent-acc-text">
-                  <span className="agent-acc-title">Analytics</span>
-                  <span className="agent-acc-sub">Bookings over time &amp; revenue trend</span>
-                </span>
-                <span className="agent-acc-chev" aria-hidden="true">
-                  <FaChevronDown />
-                </span>
-              </button>
-              <Collapse in={analyticsOpen}>
-                <div id="agent-analytics-panel" className="agent-analytics-panel">
-                  <div className="chart-grid">
-                    <ChartCard title="Bookings Over Time" dotColor="var(--color-primary)">
-                      <LineChart labels={bookingsLabels} data={bookingsData} />
-                    </ChartCard>
-                    <ChartCard title="Revenue Trends" dotColor="var(--color-secondary)">
-                      <BarChart labels={bookingsLabels} data={revenueData} />
-                    </ChartCard>
-                  </div>
-                </div>
-              </Collapse>
-            </section>
+            {/* Analytics section hidden by request. Code retained via git
+                history — restore this block to bring it back. */}
 
           </main>
         </div>

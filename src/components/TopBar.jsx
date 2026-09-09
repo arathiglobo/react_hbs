@@ -49,9 +49,11 @@ import {
   FaUserAlt,
   FaPrayingHands,
   FaShieldAlt,
+  FaAddressCard,
 } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
 import { toast } from "react-hot-toast";
+import { ContactPanel } from "./FooterLegalLinks";
 
 export default function TopBar() {
   const location = useLocation();
@@ -140,6 +142,11 @@ export default function TopBar() {
   const [cartLoading, setCartLoading] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const [markups, setMarkups] = useState({});
+  // Contact Details modal (same panel the footer opens). State lives here so
+  // the panel can be rendered OUTSIDE the sticky <Navbar> — the sticky bar
+  // creates its own stacking context, which was hiding the fixed-position
+  // panel when it was mounted inside the nav row.
+  const [showContactModal, setShowContactModal] = useState(false);
 
   const getCartAgentId = () =>
     sessionStorage.getItem("makeYourOwnPackageAgentId") ||
@@ -831,6 +838,22 @@ export default function TopBar() {
        </div>
 
         <Nav className="ms-auto d-flex flex-row align-items-center gap-2 gap-md-3 flex-nowrap">
+  {/* Contact Details — same Contact panel the footer already opens, promoted
+      into the topbar so the info is one click away without scrolling to the
+      footer. Only the trigger lives inside the sticky navbar; the panel
+      itself is rendered outside <Navbar> further down to escape its
+      sticky/stacking context. */}
+  <Button
+    variant="link"
+    className="text-dark text-decoration-none p-0 d-flex align-items-center"
+    onClick={() => setShowContactModal(true)}
+    style={{ border: "none", background: "none", minWidth: "auto" }}
+    aria-label="Contact Details"
+    title="Contact Details"
+  >
+    <FaAddressCard size={20} />
+  </Button>
+
   {/* Cart Button — hidden in the v3 flow (no Redis cart there;
        selection is held in component state on /results) */}
   {sessionStorage.getItem("makePkgFlow") !== "v3" && (
@@ -1023,6 +1046,12 @@ export default function TopBar() {
         </Modal.Footer>
       </Modal>
     </Navbar>
+    {/* Contact Details panel — mounted OUTSIDE <Navbar> so it isn't trapped
+        inside the sticky bar's stacking context. Same ContactPanel the
+        footer link uses, so both entry points open the exact same modal. */}
+    {showContactModal && (
+      <ContactPanel onClose={() => setShowContactModal(false)} />
+    )}
     {showQuickActionsOnThisPage && showQuickActions && (
       <>
         <style>{topbarQuickActionsCss}</style>

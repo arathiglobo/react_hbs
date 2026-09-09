@@ -1850,7 +1850,7 @@ const PackageSearch = () => {
                                           className="pkg-book-btn rounded-pill fw-bold"
                                           onClick={() => handleBookNow(pkg)}
                                         >
-                                         Book
+                                         Next
                                         </Button>
                                       </div>
                                     </div>

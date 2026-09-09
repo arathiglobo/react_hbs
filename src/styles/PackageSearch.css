@@ -75,7 +75,7 @@
 .btn-search-modern:hover:not(:disabled) {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(247, 94, 0, 0.4);
-    background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+    background: linear-gradient(135deg, #D65100 0%, #A33F00 100%);
 }
 
 .btn-search-modern:disabled {

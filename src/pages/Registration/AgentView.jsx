@@ -12,6 +12,7 @@ import {
 } from "react-bootstrap";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
+import AgentReg from "./AgentReg";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
@@ -124,6 +125,13 @@ const AgentView = () => {
   /* Lightbox state — when the user clicks the agent photo on the header,
      the full image is shown enlarged inside a clean Bootstrap Modal. */
   const [showPhotoModal, setShowPhotoModal] = useState(false);
+
+  // Inline-edit state — when the admin clicks Edit, the full Update Agent
+  // modal (owned by AgentReg) is rendered on this same view page instead of
+  // bouncing back to /registration/agent. Kept as a flag so the AgentReg
+  // component mounts only while editing (and unmounts on close, resetting
+  // its internal form state cleanly).
+  const [showInlineEdit, setShowInlineEdit] = useState(false);
 
   // ---------- Login modal state (mirrors AgentReg) -----------------
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -272,12 +280,149 @@ const AgentView = () => {
   }, [id]);
 
   // ===================================================================
-  // Edit — bounces back to AgentReg list with ?edit=ID so the existing
-  // large form modal stays the single source of truth for edit/create.
+  // Edit — opens the AgentReg Update Agent modal inline on THIS view
+  // page (via AgentReg's `embedded` mode) so the admin never leaves
+  // /registration/agent/view/{id}. AgentReg remains the single source of
+  // truth for the edit/create form; we just render it as a modal-only
+  // overlay here. On close we refetch the agent so any saved changes
+  // reflect immediately in the view panels.
   // ===================================================================
   const handleEditClick = () => {
-    navigate(`/registration/agent?edit=${id}`);
+    setShowInlineEdit(true);
   };
+
+  const handleInlineEditClose = () => {
+    setShowInlineEdit(false);
+    // Refresh view-page data so edits done in the modal are visible without
+    // a manual page reload. Also arm the missing-config alert again so if
+    // the admin closed the modal without saving Markup/Currency, the
+    // reminder re-fires against the freshly-loaded agent record.
+    missingConfigAlertShownRef.current = false;
+    fetchAgent();
+    fetchHeaderCredit();
+  };
+
+  // ===================================================================
+  // Markup / Currency configuration guard
+  // -------------------------------------------------------------------
+  // A freshly-approved agent (coming in from /admin/approval/agents/:id →
+  // /registration/agent/view/:id) can arrive with Markup and/or Currency
+  // still unset, because the external registration form does not force
+  // them. Downstream actions (activating the agent, setting a credit
+  // limit, creating a login) all assume those two values exist, so we
+  // block them here until they do and nudge the admin into Edit to fill
+  // them in. Shown as a one-time SweetAlert on page load and re-asserted
+  // per-action so it can never be bypassed by just dismissing the alert.
+  // ===================================================================
+  const isFieldMissing = (v) =>
+    v === null || v === undefined || String(v).trim() === "";
+
+  const getMissingConfigFields = (agentObj) => {
+    const missing = [];
+    if (!agentObj) return missing;
+    if (isFieldMissing(agentObj.markup)) missing.push("Markup");
+    // Currency can be surfaced as either the numeric id (`currency`) or the
+    // resolved code (`currencyCode`) — treat the agent as configured if
+    // either is present.
+    if (isFieldMissing(agentObj.currency) && isFieldMissing(agentObj.currencyCode)) {
+      missing.push("Currency");
+    }
+    return missing;
+  };
+
+  // Sentinel so the mount-time alert only fires once per fetched agent
+  // record. Reset after an inline edit so a still-missing value re-alerts.
+  const missingConfigAlertShownRef = useRef(false);
+
+  // Blocks an action when Markup/Currency aren't configured yet. Returns
+  // true when it is safe to proceed. When it blocks, shows a SweetAlert
+  // with an "Open Edit" shortcut into the same modal used by handleEditClick
+  // so the admin can fix it without navigating away.
+  const assertMarkupCurrencyConfigured = () => {
+    const missing = getMissingConfigFields(agent);
+    if (missing.length === 0) return true;
+    Swal.fire({
+      title: "Please add missing details",
+      html:
+        `<div style="text-align:left">` +
+        `<p style="margin:0 0 8px 0">Please add ` +
+        `<b>${missing.join("</b> and <b>")}</b> for this agent first.</p>` +
+        `</div>`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Edit",
+      cancelButtonText: "Close",
+      confirmButtonColor: "#0d6efd",
+    }).then((res) => {
+      if (res.isConfirmed) setShowInlineEdit(true);
+    });
+    return false;
+  };
+
+  // Back-navigation guard. Same missing-config check as the per-action
+  // guards, but framed for the "you're about to leave" case: offers to
+  // Configure now (opens Edit) or Leave anyway (goes back to the list).
+  // Wired to both Back controls (top link + bottom action bar) so neither
+  // route slips past the check. When both fields are set, navigates
+  // straight to the list with no prompt.
+  const handleBackNavigation = () => {
+    const missing = getMissingConfigFields(agent);
+    if (missing.length === 0) {
+      navigate("/registration/agent");
+      return;
+    }
+    Swal.fire({
+      title: "Please add missing details",
+      html:
+        `<div style="text-align:left">` +
+        `<p style="margin:0 0 8px 0"><b>` +
+        missing.join("</b> and <b>") +
+        `</b> ${missing.length > 1 ? "are" : "is"} still empty.</p>` +
+        `<p style="margin:0">Do you want to leave anyway?</p>` +
+        `</div>`,
+      icon: "warning",
+      showDenyButton: true,
+      showCancelButton: true,
+      confirmButtonText: "Edit",
+      denyButtonText: "Leave",
+      cancelButtonText: "Stay",
+      confirmButtonColor: "#0d6efd",
+      denyButtonColor: "#6c757d",
+    }).then((res) => {
+      if (res.isConfirmed) {
+        setShowInlineEdit(true);
+      } else if (res.isDenied) {
+        navigate("/registration/agent");
+      }
+      // Cancel / dismiss keeps the admin on the page.
+    });
+  };
+
+  // One-time post-load alert. Fires once per fresh agent fetch when either
+  // Markup or Currency is missing — typical right after approval — so the
+  // admin sees it without having to click one of the guarded actions first.
+  useEffect(() => {
+    if (!agent) return;
+    if (missingConfigAlertShownRef.current) return;
+    const missing = getMissingConfigFields(agent);
+    if (missing.length === 0) return;
+    missingConfigAlertShownRef.current = true;
+    Swal.fire({
+      title: "Please add missing details",
+      html:
+        `<div style="text-align:left">` +
+        `<p style="margin:0">Please add ` +
+        `<b>${missing.join("</b> and <b>")}</b> for this agent.</p>` +
+        `</div>`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Edit",
+      cancelButtonText: "Later",
+      confirmButtonColor: "#0d6efd",
+    }).then((res) => {
+      if (res.isConfirmed) setShowInlineEdit(true);
+    });
+  }, [agent]);
 
   // Delete handler removed by design — agents are never deleted; access is
   // managed via the Active/Inactive status toggle below.
@@ -293,6 +438,12 @@ const AgentView = () => {
   const handleToggleStatus = () => {
     const goingInactive = isAgentActive; // currently active → will deactivate
     const nextLabel = goingInactive ? "Inactive" : "Active";
+    // Activating an unconfigured agent leaves them unable to book (no
+    // markup / no currency), so block the flip to Active until both are
+    // set. Deactivation is always allowed.
+    if (!goingInactive && !assertMarkupCurrencyConfigured()) {
+      return;
+    }
     Swal.fire({
       title: `Set ${agent?.companyName || "this agent"} to ${nextLabel}?`,
       icon: "warning",
@@ -356,8 +507,9 @@ const AgentView = () => {
   // so no new points accrue; historical rows already in agent_incentive
   // stay untouched so re-enabling later is safe.
   // ===================================================================
-  const handleToggleIncentive = (e) => {
-    const enabled = !!e?.target?.checked;
+  // Actual API call, split out so the confirmation flow can reuse it
+  // unchanged from the previous behaviour.
+  const applyIncentiveToggle = (enabled) => {
     setIncentiveUpdating(true);
     axiosInstance
       .patch(`/api/agent/${id}/incentive`, { enabled })
@@ -379,10 +531,67 @@ const AgentView = () => {
       .finally(() => setIncentiveUpdating(false));
   };
 
+  const handleToggleIncentive = (e) => {
+    const enabled = !!e?.target?.checked;
+    const currentlyEnabled = Boolean(agent?.incentiveEnabled);
+    // No-op — the target state is the same as the current one.
+    if (enabled === currentlyEnabled) return;
+    // Switching OFF keeps the previous frictionless flow.
+    if (!enabled) {
+      applyIncentiveToggle(false);
+      return;
+    }
+    // Switching ON — confirm with a mandatory acknowledgement checkbox so
+    // the admin knows the incentive starts accruing from today. The API
+    // call only fires after the box is ticked and Confirm is clicked.
+    // Snapshot the current system date/time at open time so the admin sees
+    // exactly the moment they are enabling from.
+    const nowLabel = formatDateTimeDisplay(new Date().toISOString());
+    Swal.fire({
+      title: "Enable Agent Incentive",
+      icon: "info",
+      html:
+        `<div style="text-align:left">` +
+        `<p style="margin:0 0 6px 0">Incentive will be applicable from ` +
+        `today onwards.</p>` +
+        `<p style="margin:0"><b>Effective from:</b> ${nowLabel}</p>` +
+        `</div>`,
+      input: "checkbox",
+      inputValue: 0,
+      inputPlaceholder: `I confirm — enable from ${nowLabel}`,
+      confirmButtonText: "Confirm",
+      cancelButtonText: "Cancel",
+      showCancelButton: true,
+      confirmButtonColor: "#198754",
+      // Confirm stays disabled until the checkbox is ticked — gates the
+      // action at the button itself rather than relying on validator text.
+      didOpen: () => {
+        const confirmBtn = Swal.getConfirmButton();
+        const checkbox = Swal.getInput();
+        if (!confirmBtn || !checkbox) return;
+        confirmBtn.disabled = true;
+        checkbox.addEventListener("change", () => {
+          confirmBtn.disabled = !checkbox.checked;
+        });
+      },
+    }).then((res) => {
+      if (res.isConfirmed && res.value) {
+        applyIncentiveToggle(true);
+      }
+      // Cancel / dismiss — leave the toggle where it was. Because `checked`
+      // is driven by `agent.incentiveEnabled` (not local state), no manual
+      // revert is needed.
+    });
+  };
+
   // ===================================================================
   // Login modal
   // ===================================================================
   const handleLogin = async () => {
+    // Creating a login for an agent whose markup/currency isn't set would
+    // hand them a working account that still can't book, so block until
+    // both are configured.
+    if (!assertMarkupCurrencyConfigured()) return;
     setLoginFormData({
       username: "",
       password: "",
@@ -613,6 +822,10 @@ const AgentView = () => {
   };
 
   const handleCreditLimit = async () => {
+    // Credit limit is expressed in the agent's currency and consumed by
+    // rate/markup calculations, so refuse to open the modal until both
+    // Markup and Currency are set.
+    if (!assertMarkupCurrencyConfigured()) return;
     setCreditLimitFormData({
       addCreditLimit: "",
       remarks: "",
@@ -1158,7 +1371,7 @@ const AgentView = () => {
               <Button
                 variant="link"
                 className="p-0 text-decoration-none"
-                onClick={() => navigate("/registration/agent")}
+                onClick={handleBackNavigation}
               >
                 <FaArrowLeft className="me-2" />
                 Back to Agent List
@@ -1298,6 +1511,33 @@ const AgentView = () => {
             )}
             </div>
           </div>
+
+          {/* Persistent banner — kept visible while Markup or Currency is
+              still unset so the admin sees the requirement even after
+              dismissing the mount-time SweetAlert. Clicking "Configure now"
+              opens the same inline Edit modal used by the Edit button. */}
+          {(() => {
+            const missing = getMissingConfigFields(agent);
+            if (missing.length === 0) return null;
+            return (
+              <div
+                className="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2 py-2 px-3 mb-3"
+                role="alert"
+                style={{ borderLeft: "4px solid #ffc107" }}
+              >
+                <div style={{ fontSize: "0.9rem" }}>
+                  Please add <b>{missing.join(" and ")}</b> for this agent.
+                </div>
+                <Button
+                  size="sm"
+                  variant="warning"
+                  onClick={() => setShowInlineEdit(true)}
+                >
+                  Edit
+                </Button>
+              </div>
+            );
+          })()}
 
           <Section title="Agent Details">
             <Row>
@@ -1633,7 +1873,7 @@ const AgentView = () => {
             <Card.Body className="d-flex flex-wrap gap-2 justify-content-end">
               <Button
                 variant="outline-secondary"
-                onClick={() => navigate("/registration/agent")}
+                onClick={handleBackNavigation}
               >
                 <FaArrowLeft className="me-2" />
                 Back
@@ -2674,6 +2914,19 @@ const AgentView = () => {
               </Button>
             </Modal.Footer>
           </Modal>
+
+          {/* Inline Update Agent modal — opens on this view page rather than
+              bouncing back to /registration/agent. Mounted only while
+              editing so its internal form/modal state resets cleanly on
+              close. `embedded` tells AgentReg to skip its own Topbar/
+              Sidebar/list Card and render only the modals. */}
+          {showInlineEdit && (
+            <AgentReg
+              embedded
+              initialEditId={id}
+              onClose={handleInlineEditClose}
+            />
+          )}
         </main>
       </div>
     </div>
