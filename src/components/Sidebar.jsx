@@ -779,7 +779,7 @@ export default function Sidebar() {
       ],
     },
     {
-      code: "top_agent_incentive", // agent-side variant of the same top-level slot
+      code: "top_agent_incentive", // agent-side variant of the same top-level slot 
       label: "My Incentives",
       roles: ["agent"],
       children: [
