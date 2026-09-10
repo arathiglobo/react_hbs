@@ -162,7 +162,7 @@ const Login = () => {
   // (not on resend), so the welcome message stays specifically about the
   // first-time flow and doesn't reappear on later logins from the same page.
   const [otpFirstLogin, setOtpFirstLogin] = useState(false);
-  // ── TOTP (Ente Auth) second factor ──
+  // ── TOTP (Google Authenticator) second factor ──
   // Separate from the emailed-OTP flow above: the code comes from the user's
   // authenticator app, so there is nothing to send and nothing to resend. When
   // /auth/login returns { totpRequired: true } we collect the 6-digit code and
@@ -398,7 +398,7 @@ const Login = () => {
       });
 
       // The account has an authenticator enrolled: the backend validated the
-      // password and withheld the token. Collect the code from Ente Auth
+      // password and withheld the token. Collect the code from Google Authenticator
       // instead of completing the login here. Checked before otpRequired to
       // mirror the backend's precedence.
       if (response.data?.totpRequired) {
@@ -1278,7 +1278,7 @@ const Login = () => {
         </div>
       )}
 
-      {/* ── Authenticator (Ente Auth) TOTP Modal ── */}
+      {/* ── Authenticator (Google Authenticator) TOTP Modal ── */}
       {showTotpModal && (
         <div
           style={{
@@ -1309,7 +1309,7 @@ const Login = () => {
                 Two-factor authentication
               </h5>
               <p style={{ margin: "8px 0 0", color: "#6c757d", fontSize: 14 }}>
-                Open <strong>Ente Auth</strong> and enter the 6-digit code shown
+                Open <strong>Google Authenticator</strong> and enter the 6-digit code shown
                 for this account to finish signing in.
               </p>
             </div>
