@@ -664,6 +664,13 @@ export default function Sidebar() {
           label: "Agent Accounts",
           to: "/inhouse-accounts/agent",
         },
+        {
+          // Statement of every credit movement — bookings debit, cancellations
+          // and payments credit. Inherits the parent's ["admin", "agent"]
+          // roles; an agent login is scoped to its own account server-side.
+          label: "Ledger",
+          to: "/inhouse-accounts/ledger",
+        },
         // {
         //   label: "Payment Gateway Transactions",
         //   to: "/inhouse-accounts/payment-gateway-transactions",
