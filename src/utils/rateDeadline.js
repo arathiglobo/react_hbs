@@ -17,9 +17,12 @@ import React from "react";
  *      it is where the backend already writes RateHawk's
  *      `free_cancellation_before` (RatehawkHotelRoomSearchService.java).
  *
- * The date is displayed exactly as the supplier sent it — no buffer is
- * subtracted. GRN is deliberately NOT routed through here: it keeps its own
- * colour-coded, IST-based pill in components/grn/GrnPolicy.jsx.
+ * Every date resolved here is pulled one day earlier than the supplier's own
+ * cut-off — see SUPPLIER_DEADLINE_BUFFER_DAYS — so a cancellation is actioned
+ * with a day in hand. INHOUSE has the same treatment under
+ * INHOUSE_DEADLINE_BUFFER_DAYS, and GRN under GRN_DEADLINE_BUFFER_DAYS in
+ * components/grn/GrnPolicy.jsx, where it also keeps its own colour-coded,
+ * IST-based pill rather than routing through this file.
  */
 
 const MONTHS = [
@@ -111,6 +114,36 @@ const isMidnightOrDateOnly = (value) => {
 };
 
 /**
+ * Safety buffer, in days, pulled off an API supplier's stated cut-off.
+ *
+ * Same intent as the inhouse buffer: cancel with a day in hand rather than on
+ * the last possible date, leaving margin for timezone differences, a
+ * late-in-the-day request and the supplier's own processing.
+ *
+ * Applies to every API supplier — Atharva, Darina, GoGlobal, Jumeirah, IWTX,
+ * X3, RateHawk — on /api-room-list and /api-booking-page-hotels, and to the
+ * deadlineDate those bookings persist.
+ *
+ * GRN is buffered by the same one day, but through its own constant
+ * GRN_DEADLINE_BUFFER_DAYS in components/grn/GrnPolicy.jsx: its cut-off
+ * arrives as a formatted IST string rather than a Date, so the shift is
+ * applied to that string's date portion. Keep the two values equal.
+ *
+ * INHOUSE has its own INHOUSE_DEADLINE_BUFFER_DAYS below. Three constants
+ * rather than one because inhouse policy, supplier policy and GRN's
+ * string-shaped cut-off are separate concerns that could each change alone.
+ */
+export const SUPPLIER_DEADLINE_BUFFER_DAYS = 1;
+
+/** Pull a resolved supplier cut-off earlier by the buffer, at local midnight. */
+const applySupplierBuffer = (date) => {
+  if (!date) return date;
+  const buffered = new Date(date);
+  buffered.setDate(buffered.getDate() - SUPPLIER_DEADLINE_BUFFER_DAYS);
+  return buffered;
+};
+
+/**
  * Same as resolveDeadlineDate but also reports WHICH field the answer came
  * from and its raw value. The pill puts this in its tooltip: when two screens
  * disagree, hovering each one says immediately whether they read different
@@ -121,15 +154,32 @@ export const resolveDeadlineInfo = (rate, fallbackPolicies) => {
 
   // 1. GRN states the end of the free window outright — the most direct
   //    answer any supplier gives, so it wins.
+  //
+  //    GRN normally renders through its own IST-aware pill in
+  //    components/grn/GrnPolicy.jsx (which applies GRN_DEADLINE_BUFFER_DAYS to
+  //    the string form), so this branch is a fallback for any caller that
+  //    hands a GRN rate to the shared pill. Buffered to the same day so the
+  //    two can never disagree.
   const grn = parseSupplierDate(rate.freeCancellationUntil);
-  if (grn) return { date: grn, source: "freeCancellationUntil", raw: rate.freeCancellationUntil };
+  if (grn) {
+    return {
+      date: applySupplierBuffer(grn),
+      source: `freeCancellationUntil − ${SUPPLIER_DEADLINE_BUFFER_DAYS} day buffer`,
+      raw: rate.freeCancellationUntil,
+    };
+  }
 
   // 2. Atharva / Darina / GoGlobal `deadlineDate`. Darina's is the free (0%)
   //    band's toDate — see extractFreeCancellationDeadline in
-  //    DarinaHotelRoomSearchService — i.e. already the LAST FREE DAY, so it
-  //    is used as-is.
+  //    DarinaHotelRoomSearchService — i.e. already the LAST FREE DAY.
   const own = parseSupplierDate(rate.deadlineDate);
-  if (own) return { date: own, source: "deadlineDate", raw: rate.deadlineDate };
+  if (own) {
+    return {
+      date: applySupplierBuffer(own),
+      source: `deadlineDate − ${SUPPLIER_DEADLINE_BUFFER_DAYS} day buffer`,
+      raw: rate.deadlineDate,
+    };
+  }
 
   // 3. Cancellation-policy rows. `cancellationPolicy` (singular) is the key
   //    mapRateForPayload hands to the booking page; `cancellationPolicies` is
@@ -172,9 +222,17 @@ export const resolveDeadlineInfo = (rate, fallbackPolicies) => {
   if (isMidnightOrDateOnly(earliestRaw)) {
     const adjusted = new Date(earliest);
     adjusted.setDate(adjusted.getDate() - 1);
-    return { date: adjusted, source: "policy fromDate − 1 day", raw: earliestRaw };
+    return {
+      date: applySupplierBuffer(adjusted),
+      source: `policy fromDate − 1 day − ${SUPPLIER_DEADLINE_BUFFER_DAYS} day buffer`,
+      raw: earliestRaw,
+    };
   }
-  return { date: earliest, source: "policy fromDate", raw: earliestRaw };
+  return {
+    date: applySupplierBuffer(earliest),
+    source: `policy fromDate − ${SUPPLIER_DEADLINE_BUFFER_DAYS} day buffer`,
+    raw: earliestRaw,
+  };
 };
 
 export const resolveDeadlineDate = (rate, fallbackPolicies) =>
@@ -192,15 +250,40 @@ export const DEADLINE_TIME_2PM = "02:00 PM (UAE)";
 export const DEADLINE_TIME_EOD = "11:59 PM (UAE)";
 
 /**
- * Inhouse (apiId 1) free-cancellation deadline: `checkInDate − maxNights`, at
- * local midnight.
+ * Safety buffer, in days, applied to the INHOUSE deadline only.
  *
- * This is not a guess — it is the rule the backend itself applies when it
- * stores the booking (InhouseHotelBookingService: `checkInDate.minusDays(
- * maxNights).atStartOfDay()`), where maxNights is `MAX(noOfNights)` across the
- * hotel's live cancellation-policy rows — the ones edited at
- * /hotel-actions/{hotelId}/hotel-policy. HotelBookingPage computes it the same
- * way, so room list, booking page, Booking List and voucher all agree.
+ * The hotel's policy says when the hotel starts charging; this pulls our
+ * cut-off one day earlier so the booking is cancelled with a day in hand
+ * rather than on the last possible date. Without it, a cancellation actioned
+ * on the deadline date itself leaves no margin for timezone differences,
+ * a late-in-the-day request, or the hotel's own processing.
+ *
+ * Applies ONLY to inhouse. Supplier rates (GRN / Atharva / Darina / GoGlobal
+ * / RateHawk …) keep their supplier-stated date untouched — we cannot move a
+ * cut-off the supplier will enforce on their own schedule.
+ *
+ * MUST stay in step with INHOUSE_DEADLINE_BUFFER_DAYS in
+ * InhouseHotelBookingService.java, which applies the same subtraction when it
+ * stores deadline_date on the booking. If these two disagree, the room list
+ * and booking page promise one date while the saved booking (and therefore
+ * the Booking List, voucher and auto-cancel job) uses another.
+ */
+export const INHOUSE_DEADLINE_BUFFER_DAYS = 1;
+
+/**
+ * Inhouse (apiId 1) free-cancellation deadline:
+ * `checkInDate − maxNights − INHOUSE_DEADLINE_BUFFER_DAYS`, at local midnight.
+ *
+ * maxNights is `MAX(noOfNights)` across the hotel's live cancellation-policy
+ * rows — the ones edited at /hotel-actions/{hotelId}/hotel-policy. So a hotel
+ * whose policy reads "100% fee if cancelled less than 2 days prior to arrival"
+ * with a 17 Sep check-in resolves to 15 Sep by policy, and 14 Sep once the
+ * buffer is applied.
+ *
+ * The backend applies the identical rule when storing the booking
+ * (InhouseHotelBookingService), and HotelBookingPage calls THIS function
+ * rather than repeating the arithmetic, so room list, booking page, Booking
+ * List and voucher all show one date.
  *
  * Deliberately NOT the earliest cancellation-policy fromDate: those are
  * derived display rows, and for inhouse they do not reproduce this value.
@@ -210,7 +293,11 @@ export const resolveInhouseDeadline = (checkInDate, maxCancellationNights) => {
   const cin = parseSupplierDate(checkInDate);
   if (!cin) return null;
   const deadline = new Date(cin);
-  deadline.setDate(deadline.getDate() - Number(maxCancellationNights || 0));
+  deadline.setDate(
+    deadline.getDate()
+      - Number(maxCancellationNights || 0)
+      - INHOUSE_DEADLINE_BUFFER_DAYS,
+  );
   deadline.setHours(0, 0, 0, 0);
   return deadline;
 };

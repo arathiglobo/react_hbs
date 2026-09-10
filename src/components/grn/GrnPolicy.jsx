@@ -28,6 +28,61 @@ export const isGrnApiId = (apiId) => Number(apiId) === GRN_API_ID;
 
 const truthy = (v) => v === true || v === "true" || v === "Y";
 
+/**
+ * Safety buffer, in days, applied to GRN's free-cancellation cut-off — the
+ * same 1-day margin every other supplier gets via
+ * SUPPLIER_DEADLINE_BUFFER_DAYS in utils/rateDeadline.js, and inhouse gets via
+ * INHOUSE_DEADLINE_BUFFER_DAYS.
+ *
+ * GRN needs its own constant because its cut-off is not a Date: the backend
+ * hands over a formatted IST string ("08 Nov 2026, 11:59 PM IST"), so the
+ * shift is applied to the date portion of that string.
+ */
+export const GRN_DEADLINE_BUFFER_DAYS = 1;
+
+const MONTHS_SHORT = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+const MONTH_IDX = MONTHS_SHORT.reduce((acc, name, i) => {
+  acc[name.toLowerCase()] = i;
+  return acc;
+}, {});
+
+/**
+ * Shift the DATE portion of a GRN timestamp string back by `days`, leaving the
+ * time and the timezone label exactly as GRN sent them:
+ *
+ *   "08 Nov 2026, 11:59 PM IST"  →  "07 Nov 2026, 11:59 PM IST"
+ *
+ * Only the date is rewritten, never the time — the cut-off is still 11:59 PM
+ * IST, just a day earlier. Rebuilding the whole string from a Date would drag
+ * it into the browser's timezone and silently move the hour.
+ *
+ * Returns the input untouched when it doesn't match the expected shape: a
+ * cancellation cut-off we can't parse is far better shown verbatim than
+ * guessed at.
+ */
+const shiftGrnDateString = (value, days) => {
+  if (!value || !days) return value || null;
+  const str = String(value).trim();
+  const m = str.match(/^(\d{1,2})\s+([A-Za-z]{3,})\s+(\d{4})/);
+  if (!m) return str;
+  const idx = MONTH_IDX[m[2].slice(0, 3).toLowerCase()];
+  if (idx == null) return str;
+  const d = new Date(Number(m[3]), idx, Number(m[1]));
+  if (Number.isNaN(d.getTime())) return str;
+  d.setDate(d.getDate() - days);
+  // Preserve GRN's own zero-padding style rather than imposing one.
+  const day =
+    m[1].length === 2
+      ? String(d.getDate()).padStart(2, "0")
+      : String(d.getDate());
+  const rest = str.slice(m[0].length); // ", 11:59 PM IST"
+  return `${day} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}${rest}`;
+};
+
 /** Normalise a rate / slot object (search rate, recheck DTO or mapped payload row) into one policy view. */
 export const grnPolicyFromRate = (rate) => {
   if (!rate) return null;
@@ -50,8 +105,20 @@ export const grnPolicyFromRate = (rate) => {
     refundStatus,
     nonRefundable,
     underCancellation: truthy(rate.underCancellation),
+    // Raw supplier field, never displayed — left exactly as GRN sent it.
     cancelByDate: rate.cancelByDate || null,
-    freeCancellationUntil: rate.freeCancellationUntil || null,
+    // Buffered by GRN_DEADLINE_BUFFER_DAYS. Applied HERE, at the single point
+    // every screen reads the policy through (pill, policy block, policy-lines
+    // text), so all of them agree without each remembering to shift.
+    //
+    // The shifted value must NEVER be written back onto the rate: the room
+    // list copies rate.freeCancellationUntil into the booking payload, and the
+    // booking page calls grnPolicyFromRate on that payload again — persisting
+    // the shifted string would buffer it a second time.
+    freeCancellationUntil: shiftGrnDateString(
+      rate.freeCancellationUntil,
+      GRN_DEADLINE_BUFFER_DAYS,
+    ),
     noShowFeeText: rate.noShowFeeText || null,
     policyTimezone: rate.policyTimezone || "IST",
     policyText: rate.policyText || null,
