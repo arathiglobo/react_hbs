@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Card, Button, Table, ProgressBar, Spinner, Form, Modal, Row, Col } from "react-bootstrap";
+import { Card, Button, Table, ProgressBar, Spinner, Form, Modal, Row, Col, Pagination } from "react-bootstrap";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import RegionalClock from "../../components/RegionalClock";
@@ -13,6 +13,8 @@ const SERVICE_LABEL = {
   PACKAGE: "Package",
   RESTAURANT: "Restaurant",
 };
+
+const DEFAULT_TARGET_POINTS = 50000;
 
 const emptyBank = {
   bankAccountHolderName: "",
@@ -44,6 +46,7 @@ export default function AgentIncentiveDashboard() {
   // response shape is identical: each row has `id` + `companyName`.
   const [agents, setAgents] = useState([]);
   const [agentsLoading, setAgentsLoading] = useState(false);
+  const [entriesPage, setEntriesPage] = useState(1);
 
   const fetchAll = async (id) => {
     if (!id) return;
@@ -160,8 +163,9 @@ export default function AgentIncentiveDashboard() {
   };
 
   const progressPct = useMemo(() => {
-    if (!summary || !summary.targetPoints) return 0;
-    const p = (Number(summary.totalPointsEarned || 0) / Number(summary.targetPoints)) * 100;
+    if (!summary) return 0;
+    const target = Number(summary.targetPoints) || DEFAULT_TARGET_POINTS;
+    const p = (Number(summary.totalPointsEarned || 0) / target) * 100;
     return Math.min(100, Math.max(0, Math.round(p)));
   }, [summary]);
 
@@ -171,6 +175,14 @@ export default function AgentIncentiveDashboard() {
     if (!summary) return 0;
     return Number(summary.rewardAmount || 0);
   }, [summary]);
+
+  const ENTRIES_PER_PAGE = 10;
+  const entriesTotalPages = Math.max(1, Math.ceil(rows.length / ENTRIES_PER_PAGE));
+  const entriesCurrentPage = Math.min(entriesPage, entriesTotalPages);
+  const entriesStart = (entriesCurrentPage - 1) * ENTRIES_PER_PAGE;
+  const displayedRows = rows.slice(entriesStart, entriesStart + ENTRIES_PER_PAGE);
+  const entriesDisplayStart = rows.length > 0 ? entriesStart + 1 : 0;
+  const entriesDisplayEnd = Math.min(entriesStart + displayedRows.length, rows.length);
 
   const openClaimModal = () => {
     if (agentProfile?.preferredClaimMethod) {
@@ -227,12 +239,12 @@ export default function AgentIncentiveDashboard() {
       <Topbar />
       <div className="d-flex flex-grow-1">
         <Sidebar />
-        <main className="flex-grow-1 p-4">
+        <main className="flex-grow-1 p-3">
           <div className="d-flex justify-content-end mb-3">
             <RegionalClock />
           </div>
           <Card className="shadow-sm rounded-xl mb-3">
-            <Card.Header className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <Card.Header className="d-flex justify-content-between align-items-center flex-wrap gap-2 py-2">
               <span className="fw-semibold">My Incentives</span>
               <div className="d-flex align-items-center gap-2 flex-wrap">
                 {role === "admin" && (
@@ -289,7 +301,7 @@ export default function AgentIncentiveDashboard() {
                 </Button>
               </div>
             </Card.Header>
-            <Card.Body>
+            <Card.Body className="py-3">
               {(loading || resolvingId) && (
                 <div className="text-center text-muted py-4">
                   <Spinner animation="border" size="sm" className="me-2" />
@@ -307,22 +319,26 @@ export default function AgentIncentiveDashboard() {
               )}
               {!loading && summary && (
                 <>
-                  <div className="row g-3 mb-3">
+                  <div className="row g-2 mb-3">
                     <div className="col-6 col-md">
                       <Card className="h-100 border-0 shadow-sm">
-                        <Card.Body>
+                        <Card.Body className="py-2 px-3">
                           <div className="text-muted small">Target Points</div>
-                          <div className="display-6 fw-semibold">
-                            {summary.targetPoints || 0}
+                          <div className="fs-3 fw-semibold">
+                            {summary.targetPoints || DEFAULT_TARGET_POINTS}
+                          </div>
+                          <div className="text-muted mt-1" style={{ fontSize: "0.7rem" }}>
+                            Every {summary.targetPoints || DEFAULT_TARGET_POINTS} points is AED{" "}
+                            {Number(summary.claimAmount ?? 0)}
                           </div>
                         </Card.Body>
                       </Card>
                     </div>
                     <div className="col-6 col-md">
                       <Card className="h-100 border-0 shadow-sm">
-                        <Card.Body>
+                        <Card.Body className="py-2 px-3">
                           <div className="text-muted small">Current Points</div>
-                          <div className="display-6 fw-semibold">
+                          <div className="fs-3 fw-semibold">
                             {summary.totalPointsEarned || 0}
                           </div>
                         </Card.Body>
@@ -330,9 +346,9 @@ export default function AgentIncentiveDashboard() {
                     </div>
                     <div className="col-6 col-md">
                       <Card className="h-100 border-0 shadow-sm">
-                        <Card.Body>
+                        <Card.Body className="py-2 px-3">
                           <div className="text-muted small">Claimed Points</div>
-                          <div className="display-6 fw-semibold">
+                          <div className="fs-3 fw-semibold">
                             {summary.totalPointsClaimed || 0}
                           </div>
                         </Card.Body>
@@ -340,9 +356,9 @@ export default function AgentIncentiveDashboard() {
                     </div>
                     <div className="col-6 col-md">
                       <Card className="h-100 border-0 shadow-sm">
-                        <Card.Body>
+                        <Card.Body className="py-2 px-3">
                           <div className="text-muted small">Lifetime Points</div>
-                          <div className="display-6 fw-semibold">
+                          <div className="fs-3 fw-semibold">
                             {summary.totalLifetimePoints || 0}
                           </div>
                         </Card.Body>
@@ -350,10 +366,10 @@ export default function AgentIncentiveDashboard() {
                     </div>
                     <div className="col-6 col-md">
                       <Card className="h-100 border-0 shadow-sm bg-success-subtle">
-                        <Card.Body>
+                        <Card.Body className="py-2 px-3">
                           <div className="text-muted small">Claimable Amount</div>
-                          <div className="display-6 fw-semibold text-success">
-                            ₹{summary.rewardAmount ?? 0}
+                          <div className="fs-3 fw-semibold text-success">
+                            AED {summary.rewardAmount ?? 0}
                           </div>
                         </Card.Body>
                       </Card>
@@ -363,7 +379,7 @@ export default function AgentIncentiveDashboard() {
                   <div className="mb-3">
                     <div className="d-flex justify-content-between small mb-1">
                       <span className="text-muted">
-                        Progress to next reward ({summary.totalPointsEarned || 0} / {summary.targetPoints || 0})
+                        Progress to next reward ({summary.totalPointsEarned || 0} / {summary.targetPoints || DEFAULT_TARGET_POINTS})
                       </span>
                       <span className="fw-semibold">{progressPct}%</span>
                     </div>
@@ -414,7 +430,6 @@ export default function AgentIncentiveDashboard() {
                         <th>Date</th>
                         <th>Service</th>
                         <th>Booking Ref</th>
-                        <th className="text-end">Amount</th>
                         <th className="text-end">Points</th>
                         <th>Status</th>
                       </tr>
@@ -422,17 +437,16 @@ export default function AgentIncentiveDashboard() {
                     <tbody>
                       {rows.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="text-center text-muted py-3">
+                          <td colSpan={5} className="text-center text-muted py-3">
                             No incentive entries.
                           </td>
                         </tr>
                       )}
-                      {rows.slice(0, 50).map((r) => (
+                      {displayedRows.map((r) => (
                         <tr key={r.id}>
                           <td>{r.earnedDate ? new Date(r.earnedDate).toLocaleString() : "-"}</td>
                           <td>{SERVICE_LABEL[r.serviceType] || r.serviceType}</td>
                           <td className="text-muted small">{r.bookingRef}</td>
-                          <td className="text-end">{r.bookingAmount ?? "-"}</td>
                           <td className="text-end fw-semibold">{r.pointsEarned}</td>
                           <td>
                             {r.status === "EARNED" && (
@@ -449,6 +463,65 @@ export default function AgentIncentiveDashboard() {
                       ))}
                     </tbody>
                   </Table>
+
+                  {rows.length > 0 && (
+                    <div className="d-flex justify-content-between align-items-center flex-wrap gap-3 mt-3">
+                      <div className="text-muted" style={{ fontSize: "0.875rem" }}>
+                        Showing{" "}
+                        <span className="fw-semibold text-dark">{entriesDisplayStart}</span> to{" "}
+                        <span className="fw-semibold text-dark">{entriesDisplayEnd}</span> of{" "}
+                        <span className="fw-semibold text-dark">{rows.length}</span> entries
+                      </div>
+                      <Pagination className="mb-0">
+                        <Pagination.Prev
+                          disabled={entriesCurrentPage === 1}
+                          onClick={() =>
+                            entriesCurrentPage > 1 && setEntriesPage(entriesCurrentPage - 1)
+                          }
+                          style={{
+                            cursor: entriesCurrentPage === 1 ? "not-allowed" : "pointer",
+                            opacity: entriesCurrentPage === 1 ? 0.5 : 1,
+                          }}
+                        />
+                        {(() => {
+                          const windowSize = 5;
+                          const startPage = Math.max(
+                            1,
+                            Math.min(
+                              entriesCurrentPage - Math.floor(windowSize / 2),
+                              entriesTotalPages - windowSize + 1,
+                            ),
+                          );
+                          const endPage = Math.min(entriesTotalPages, startPage + windowSize - 1);
+                          return Array.from(
+                            { length: endPage - startPage + 1 },
+                            (_, i) => startPage + i,
+                          ).map((pageNumber) => (
+                            <Pagination.Item
+                              key={pageNumber}
+                              active={entriesCurrentPage === pageNumber}
+                              onClick={() => setEntriesPage(pageNumber)}
+                              style={{ cursor: "pointer", minWidth: "38px", textAlign: "center" }}
+                            >
+                              {pageNumber}
+                            </Pagination.Item>
+                          ));
+                        })()}
+                        <Pagination.Next
+                          disabled={entriesCurrentPage === entriesTotalPages}
+                          onClick={() =>
+                            entriesCurrentPage < entriesTotalPages &&
+                            setEntriesPage(entriesCurrentPage + 1)
+                          }
+                          style={{
+                            cursor:
+                              entriesCurrentPage === entriesTotalPages ? "not-allowed" : "pointer",
+                            opacity: entriesCurrentPage === entriesTotalPages ? 0.5 : 1,
+                          }}
+                        />
+                      </Pagination>
+                    </div>
+                  )}
                 </>
               )}
             </Card.Body>
@@ -464,18 +537,16 @@ export default function AgentIncentiveDashboard() {
                   <strong>{summary?.totalPointsEarned || 0}</strong> earned points
                   {" "}—{" "}
                   <strong>
-                    {summary?.targetPoints
-                      ? Math.floor(
-                          (summary?.totalPointsEarned || 0) /
-                            summary.targetPoints,
-                        )
-                      : 0}
+                    {Math.floor(
+                      (summary?.totalPointsEarned || 0) /
+                        (summary?.targetPoints || DEFAULT_TARGET_POINTS),
+                    )}
                   </strong>{" "}
                   complete cycle(s) of{" "}
-                  <strong>{summary?.targetPoints || 0}</strong>.
+                  <strong>{summary?.targetPoints || DEFAULT_TARGET_POINTS}</strong>.
                 </div>
                 <div className="display-6 fw-semibold text-success mt-1">
-                  ₹{calculatedAmount.toFixed(2)}
+                  AED {calculatedAmount.toFixed(2)}
                 </div>
                 <div className="small text-muted">
                   This amount will be processed after admin approval.
