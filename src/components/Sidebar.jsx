@@ -474,6 +474,7 @@ export default function Sidebar() {
       // "Hotel" as required. Sub Agent / Sub User reuse the same
       // /agent-registration routes that agents themselves use.
       children: [
+        { code: "reg_all",         label: "All Registrations",                to: "/registration/all" },
         { code: "reg_hotel",         label: "Hotel",                          to: "/registration/hotel" },
         {
           code: "reg_agent_management",
@@ -662,6 +663,13 @@ export default function Sidebar() {
         {
           label: "Agent Accounts",
           to: "/inhouse-accounts/agent",
+        },
+        {
+          // Statement of every credit movement — bookings debit, cancellations
+          // and payments credit. Inherits the parent's ["admin", "agent"]
+          // roles; an agent login is scoped to its own account server-side.
+          label: "Ledger",
+          to: "/inhouse-accounts/ledger",
         },
         // {
         //   label: "Payment Gateway Transactions",
