@@ -33,7 +33,11 @@ import {
   grnPolicyFromRate,
   grnIsBundledSelection,
 } from "../../components/grn/GrnPolicy";
-import { RateDeadlinePill } from "../../utils/rateDeadline";
+import {
+  RateDeadlinePill,
+  resolveDeadlineDate,
+  isNonRefundable,
+} from "../../utils/rateDeadline";
 
 // Online-payment gateways offered when the agent's credit is short.
 // Mirrors the same list Inhouse HotelBookingPage.jsx uses (line 25) so
@@ -98,79 +102,52 @@ const stripPolicyHtml = (raw) => {
 // free-cancellation window, so the deadline job can release the room at the
 // supplier for free if nobody reconfirms. Add an apiId here only once its
 // backend create path honours bookingConfirmation="Hold & Book Later".
-const HOLD_CAPABLE_API_IDS = new Set([20]); // 20 = GRN
+const GRN_API_ID = 20;
+const HOLD_CAPABLE_API_IDS = new Set([GRN_API_ID]);
 
 /**
  * The booking's overall free-cancellation deadline, as a Date at local
  * midnight, or null when no deadline applies.
  *
- * Extracted verbatim from the create payload's own derivation so the
- * "can this be held?" gate and the deadlineDate we persist can never
- * disagree — a picker offered against one deadline and a booking saved
- * against another is exactly how a hold ends up outside its window.
+ * Delegates to resolveDeadlineDate — the SAME helper RateDeadlinePill renders
+ * — so the date shown, the date persisted, and the "can this be held?" gate
+ * are one value by construction.
  *
- *   • Darina (16) carries a live cut-off on the rate — used as-is.
- *   • Non-refundable rates have no window at all → null.
- *   • Everything else: earliest cancellation-policy fromDate, minus 2 days.
+ * This used to carry its own arithmetic (earliest cancellation-policy fromDate
+ * minus 2 days, plus a Darina special case), while the pill resolved
+ * fromDate − 1. The two therefore disagreed by a day for every supplier that
+ * falls back to policy rows: the operator was shown one cut-off and a
+ * different one was saved against the booking. Delegating removes the second
+ * copy of the rule rather than trying to keep two in step.
  *
- * The overall deadline is the EARLIEST across the selected rates.
+ * The old Darina (16) special case is gone because resolveDeadlineDate already
+ * prefers rate.deadlineDate over the policy rows, which is exactly what that
+ * branch existed to force — and it now picks it up for Atharva and GoGlobal
+ * too, which the old code did not.
+ *
+ * Non-refundable rates have no free-cancellation window at all → null, rather
+ * than a fabricated past date that anything reading deadlineDate literally
+ * would misinterpret. Matches what the pill shows for the same rate.
+ *
+ * The overall deadline is the EARLIEST across the selected rates. The
+ * SUPPLIER_DEADLINE_BUFFER_DAYS / GRN_DEADLINE_BUFFER_DAYS buffer is already
+ * baked into what resolveDeadlineDate returns — do NOT subtract it again here.
+ *
+ * Note this also moves GRN's "Hold Room and Pay Later" gate, since
+ * isHoldEligible calls this function and HOLD_CAPABLE_API_IDS is GRN-only.
+ * That is the intended behaviour: a hold is offered only while buffered
+ * free-cancellation time remains, and the backend re-checks the same persisted
+ * deadlineDate before holding.
  */
-const deriveDeadlineDate = (selectedRates, apiId) => {
+const deriveDeadlineDate = (selectedRates) => {
   const deadlines = (selectedRates || [])
-    .map((rate) => {
-      const nonRefundable =
-        rate.nonRefundable === true ||
-        rate.nonRefundable === "true" ||
-        rate.nonRefundable === "Y";
-
-      // Darina (apiId=16): rate.deadlineDate is the LIVE
-      // free-cancellation cut-off carried from
-      // CheckAvailabilityWithCancellation_NoCache_LiveCalculation
-      // (BE parses the "Free Cancellation" band's toDate). It is
-      // the deadline the operator sees in the room accordion.
-      // Use it verbatim — the generic "earliest cancellationPolicy
-      // fromDate minus 2 days" fallback below picks up the Free
-      // Cancellation band's FromDate instead of the cut-off, which
-      // reports a wildly earlier date (September vs December).
-      if (apiId === 16 && !nonRefundable && rate.deadlineDate) {
-        const iso = String(rate.deadlineDate).slice(0, 10);
-        const parts = iso.split("-");
-        if (parts.length === 3) {
-          const d = new Date(
-            Number(parts[0]),
-            Number(parts[1]) - 1,
-            Number(parts[2]),
-          );
-          if (!isNaN(d.getTime())) {
-            d.setHours(0, 0, 0, 0);
-            return d;
-          }
-        }
-      }
-
-      if (nonRefundable === true) {
-        // Non-refundable rates have no free-cancellation window, so
-        // no deadline applies — send nothing rather than a fabricated
-        // "today - 2 days" date (which always lands in the past and
-        // confuses anything that reads deadlineDate literally).
-        return null;
-      }
-      const policies = rate.cancellationPolicy || [];
-      if (policies.length === 0) return null;
-      const dates = policies
-        .map((p) => (p.fromDate ? new Date(p.fromDate) : null))
-        .filter((date) => date !== null && !isNaN(date.getTime()));
-      if (dates.length === 0) return null;
-      const earliestDate = new Date(Math.min(...dates.map((d) => d.getTime())));
-      const deadline = new Date(earliestDate);
-      deadline.setDate(earliestDate.getDate() - 2);
-      deadline.setHours(0, 0, 0, 0);
-      return deadline;
-    })
+    .map((rate) => (isNonRefundable(rate?.nonRefundable) ? null : resolveDeadlineDate(rate)))
     .filter((d) => d !== null);
 
   if (deadlines.length === 0) return null;
-  return new Date(Math.min(...deadlines.map((d) => d.getTime())));
+  const earliest = new Date(Math.min(...deadlines.map((d) => d.getTime())));
+  earliest.setHours(0, 0, 0, 0);
+  return earliest;
 };
 
 /**
@@ -238,7 +215,7 @@ const toDeadlinePayloadString = (d) => {
 const isHoldEligible = (bookingData) => {
   const apiId = bookingData?.payload?.apiId;
   if (!HOLD_CAPABLE_API_IDS.has(apiId)) return false;
-  const deadline = deriveDeadlineDate(bookingData?.selectedRate || [], apiId);
+  const deadline = deriveDeadlineDate(bookingData?.selectedRate || []);
   if (!deadline) return false;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -1152,10 +1129,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         // Same derivation the hold-eligibility gate uses — see
         // deriveDeadlineDate at the top of this file.
         deadlineDate: toDeadlinePayloadString(
-          deriveDeadlineDate(
-            bookingData.selectedRate,
-            bookingData?.payload?.apiId,
-          ),
+          deriveDeadlineDate(bookingData.selectedRate),
         ),
         isBookandVoucher: bookingConfirmation === "Book & Voucher",
         primaryGuest: {

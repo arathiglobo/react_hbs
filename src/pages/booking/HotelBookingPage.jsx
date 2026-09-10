@@ -20,6 +20,7 @@ import {
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
+import { resolveInhouseDeadline } from "../../utils/rateDeadline";
 
 // Dummy online-payment gateways shown when an agent's credit is short.
 // Each routes to /payment/<id> — a placeholder card-entry page.
@@ -385,24 +386,26 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
   // they always behave like "voucher now" → RECONFIRMED.
   // ────────────────────────────────────────────────────────────────
 
-  // Cancellation deadline, computed EXACTLY like the backend stores it
-  // (see InhouseHotelBookingService create flow) and the Booking List
-  // shows it:  deadline = checkInDate − maxCancellationNights, at midnight.
+  // Cancellation deadline:
+  //   checkInDate − maxCancellationNights − INHOUSE_DEADLINE_BUFFER_DAYS,
+  // at midnight — the same rule the backend applies when it stores
+  // deadline_date (see InhouseHotelBookingService create flow) and the same
+  // one the room list shows.
+  //
+  // This calls the shared helper rather than repeating the arithmetic, which
+  // it used to do inline. Two copies of a date rule that must agree is one
+  // copy too many: the buffer would have had to be added in both places, and
+  // a future change to either would silently make the room list promise a
+  // different date from the booking page.
+  //
   // maxCancellationNights is fetched above from
   // /api/hotels/{hotelId}/max-cancellation-nights. Null until that resolves
   // or when no check-in date is available, so the deadline-dependent flags
   // below fall back to their safe "deadline doesn't apply" behaviour.
-  const cancellationDeadline = (() => {
-    if (maxCancellationNights == null) return null;
-    const cinRaw = bookingData?.payload?.checkInDate;
-    if (!cinRaw) return null;
-    const cin = new Date(cinRaw);
-    if (isNaN(cin.getTime())) return null;
-    const deadline = new Date(cin);
-    deadline.setDate(deadline.getDate() - maxCancellationNights);
-    deadline.setHours(0, 0, 0, 0);
-    return deadline;
-  })();
+  const cancellationDeadline = resolveInhouseDeadline(
+    bookingData?.payload?.checkInDate,
+    maxCancellationNights,
+  );
 
   // True only for refundable rates whose deadline has already passed.
   // Non-refundable rates and rates without a policy row are treated as
