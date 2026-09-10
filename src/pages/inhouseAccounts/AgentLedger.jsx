@@ -27,7 +27,7 @@ import { FaFileDownload, FaSyncAlt, FaFilter, FaUndo } from "react-icons/fa";
  * enforce that — the agent picker is simply hidden.
  */
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 10;
 
 // Labels here must match AgentLedgerEntryType.label() on the backend — same
 // plain wording, no debit/credit vocabulary.
@@ -227,6 +227,7 @@ export default function AgentLedger() {
       return;
     }
     const header = [
+      "SNo",
       "Date",
       "Agent",
       "What happened",
@@ -241,8 +242,11 @@ export default function AgentLedger() {
       "Note",
     ];
     const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const lines = rows.map((r) =>
+    const lines = rows.map((r, idx) =>
       [
+        // Same continuous numbering as the table, so an exported page lines up
+        // with what the operator was looking at on screen.
+        (data?.page ?? 0) * (data?.size ?? PAGE_SIZE) + idx + 1,
         formatDateTime(r.entryDate),
         r.agentName,
         r.entryTypeLabel,
@@ -273,6 +277,17 @@ export default function AgentLedger() {
 
   const entries = data?.entries || [];
   const totalPages = data?.totalPages || 0;
+
+  /**
+   * Serial number for a row, continuous across pages: page 2 starts at 51, so
+   * the number on the last row equals the total number of entries.
+   *
+   * Uses the page/size the SERVER echoed back, not the local state, because
+   * the server clamps size (MAX_PAGE_SIZE) and normalises the page — trusting
+   * local state would drift from what was actually returned.
+   */
+  const serialOf = (idx) =>
+    (data?.page ?? 0) * (data?.size ?? PAGE_SIZE) + idx + 1;
 
   const pageNumbers = useMemo(() => {
     if (!totalPages) return [];
@@ -498,6 +513,7 @@ export default function AgentLedger() {
                 <Table hover className="mb-0 align-middle">
                   <thead className="table-light">
                     <tr>
+                      <th style={{ width: "1%", whiteSpace: "nowrap" }}>SNo</th>
                       <th style={{ whiteSpace: "nowrap" }}>Date</th>
                       {!isAgentView && <th>Agent</th>}
                       <th>What happened</th>
@@ -512,7 +528,7 @@ export default function AgentLedger() {
                     {loading && (
                       <tr>
                         <td
-                          colSpan={isAgentView ? 7 : 8}
+                          colSpan={isAgentView ? 8 : 9}
                           className="text-center py-5"
                         >
                           <Spinner animation="border" size="sm" />{" "}
@@ -524,7 +540,7 @@ export default function AgentLedger() {
                     {!loading && entries.length === 0 && (
                       <tr>
                         <td
-                          colSpan={isAgentView ? 7 : 8}
+                          colSpan={isAgentView ? 8 : 9}
                           className="text-center text-muted py-5"
                         >
                           Nothing to show for these filters.
@@ -539,8 +555,15 @@ export default function AgentLedger() {
                     )}
 
                     {!loading &&
-                      entries.map((e) => (
+                      entries.map((e, idx) => (
                         <tr key={e.id}>
+                          {/* Numbering runs CONTINUOUSLY across pages, so the
+                              last row's number is the total count. Restarting
+                              at 1 on every page would make "which number am I
+                              on?" unanswerable, which is the whole point. */}
+                          <td className="text-muted" style={{ whiteSpace: "nowrap" }}>
+                            {serialOf(idx)}
+                          </td>
                           <td style={{ whiteSpace: "nowrap" }}>
                             {formatDateTime(e.entryDate)}
                           </td>
