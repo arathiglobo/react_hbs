@@ -531,7 +531,7 @@ export default function Sidebar() {
           code: "nb_offline",
           label: "Offline",
           to: "/new-booking/offline-search",
-          roles: ["admin"],
+          roles: ["admin","agent"],
         },
         { code: "nb_restaurant",    label: "Restaurant",       to: "/new-booking/restaurant" },
         { code: "nb_honeymoon",     label: "Honeymoon Package", to: "/new-booking/honeymoon" },
@@ -615,7 +615,7 @@ export default function Sidebar() {
         {
           label: "Offline",
           to: "/booking-details/offline-booking-list",
-          roles: ["admin"],
+          roles: ["admin","agent"],
         },
         {
           label: "Restaurants",

@@ -621,8 +621,10 @@ const EmployeeReg = () => {
             toast.success("Employee deleted successfully");
             fetchEmployeeList(page, search);
           })
-          .catch(() => {
-            toast.error("Sorry!! Employee not deleted");
+          .catch((error) => {
+            toast.error(
+              error.response?.data?.message || "Sorry!! Employee not deleted"
+            );
           });
       }
     });
