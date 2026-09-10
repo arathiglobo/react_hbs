@@ -326,7 +326,7 @@ export default function AllRegistrations() {
             <Card className="border mb-3 shadow-sm" style={{ borderRadius: "6px" }}>
               <Card.Header
                 className="d-flex justify-content-between align-items-center text-dark border-bottom py-2"
-                style={{
+                style={{ 
                   borderRadius: "6px 6px 0 0",
                   backgroundColor: "#f8f9fa",
                   fontSize: "0.875rem",
