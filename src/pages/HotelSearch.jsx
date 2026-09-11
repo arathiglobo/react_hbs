@@ -538,6 +538,20 @@ export default function HotelSearch({
   // still the authoritative gate on which suppliers are queried.
   const [allowedChannels, setAllowedChannels] = useState(new Set());
   const [channelsUnrestricted, setChannelsUnrestricted] = useState(true);
+  // Every supplier super_admin has enabled for this company — the same
+  // list the /admin/api-access grid renders. Drives which rows appear
+  // in the Channel filter sidebar (both admin-enabled AND admin-disabled
+  // ones show, so the operator sees the same list as the admin page).
+  // The LIVE/OFF badge on each row is separately driven by
+  // `channelHasResults` (see below).
+  const [registeredChannels, setRegisteredChannels] = useState(new Set());
+  // Suppliers that contributed at least one hotel to the CURRENT search,
+  // as reported by the backend's `channelCounts` (counted over the whole
+  // deduplicated result set, before the apiType filter and before
+  // pagination). This is what the LIVE/OFF badge reads — allResults only
+  // ever holds the current page, so a supplier whose hotels sit on page
+  // 3+ would otherwise wrongly read OFF.
+  const [channelsWithResults, setChannelsWithResults] = useState(new Set());
   // Available Deals multi-select filter (array of option values).
   // Empty array = no filter. Matching is OR across selected options.
   const [availableDeals, setAvailableDeals] = useState([]);
@@ -611,14 +625,21 @@ export default function HotelSearch({
         if (cancelled) return;
         const unrestricted = res?.data?.unrestricted !== false;
         const codes = Array.isArray(res?.data?.codes) ? res.data.codes : [];
+        const registered = Array.isArray(res?.data?.registered)
+          ? res.data.registered
+          : [];
         setChannelsUnrestricted(unrestricted);
         setAllowedChannels(
           new Set(codes.map((c) => String(c || "").toLowerCase())),
+        );
+        setRegisteredChannels(
+          new Set(registered.map((c) => String(c || "").toLowerCase())),
         );
       } catch (_) {
         if (!cancelled) {
           setChannelsUnrestricted(true);
           setAllowedChannels(new Set());
+          setRegisteredChannels(new Set());
         }
       }
     })();
@@ -678,30 +699,27 @@ export default function HotelSearch({
      { value: "goglobal", label: "GoGlobal" },
   ];
 
-  // Narrows the Channel sidebar filter (and the SearchProgressBar pills)
-  // to the suppliers this caller's company has enabled. When the caller
-  // is unrestricted — no company assignment, or the allow-list is empty —
-  // every option stays visible, so no existing flow is affected.
+  // Channel sidebar filter — every supplier super_admin has registered
+  // for this caller's company (the exact rows the /admin/api-access page
+  // renders) shows here, whether or not admin has enabled it. Each row
+  // is then LIVE/OFF-badged below. When the caller is unrestricted (no
+  // company, no allow-list, or auth failed) every hardcoded option
+  // stays visible so no existing flow is affected.
   const visibleChannelTypeOptions = channelsUnrestricted
     ? channelTypeOptions
-    : channelTypeOptions.filter((o) => allowedChannels.has(o.value));
+    : channelTypeOptions.filter((o) => registeredChannels.has(o.value));
+  // SearchProgressBar only tracks suppliers that will ACTUALLY be
+  // queried (super_admin ∩ admin-enabled) — a disabled row never
+  // produces a pill.
   const visibleProgressChannels = channelsUnrestricted
     ? undefined // let SearchProgressBar keep its own default
     : channelTypeOptions
         .filter((o) => allowedChannels.has(o.value))
         .map((o) => o.value);
 
-  // Channels that actually returned at least one hotel in the current
-  // result set — used to badge each Channel filter row as LIVE/OFF so
-  // the operator can see, at a glance, which suppliers responded.
-  const channelHasResults = useMemo(() => {
-    const set = new Set();
-    for (const h of allResults || []) {
-      const ct = String(h?.channelType || "").toLowerCase();
-      if (ct) set.add(ct);
-    }
-    return set;
-  }, [allResults]);
+  // (channelHasResults is defined further down, right after
+  // filteredResults, so the LIVE/OFF badge reflects what is actually
+  // visible on screen instead of the full unfiltered result set.)
 
   // Available Deals filter options. Each option maps to a per-hotel
   // predicate evaluated against the feature-flag map and the search
@@ -1006,6 +1024,27 @@ export default function HotelSearch({
   }, [allResults, hotelSearchTerm, starRating, hotelType, channelType,
       availableDeals, featureFlagsMap,
       is24HourCheckin, twentyFourHourMap]);
+
+  // Channels that returned at least one hotel for the CURRENT search —
+  // drives the LIVE/OFF badge next to each Channel filter row.
+  // Rule: LIVE (green) = this supplier has hotels in the search result;
+  // OFF (red) = it has none. Nothing about admin toggles.
+  //
+  // Source of truth is `channelsWithResults`, the backend's per-supplier
+  // count over the WHOLE deduplicated result set (every page, before the
+  // apiType checkbox filter). allResults only holds the current page, so
+  // reading the badge off the page would mark a supplier OFF whenever its
+  // hotels happen to sort onto a later page — exactly the "all OFF but
+  // results are there" bug. The page-derived set is unioned in only as a
+  // fallback for a backend that hasn't been restarted with channelCounts.
+  const channelHasResults = useMemo(() => {
+    const set = new Set(channelsWithResults);
+    for (const h of allResults || []) {
+      const ct = String(h?.channelType || "").toLowerCase();
+      if (ct) set.add(ct);
+    }
+    return set;
+  }, [channelsWithResults, allResults]);
 
   // "Explore on Map" markers — one per currently-visible (filtered) hotel.
   // MapModal itself drops any entry whose lat/lng isn't a finite number, so
@@ -1457,6 +1496,22 @@ export default function HotelSearch({
           ),
         ),
       );
+      // Keep the LIVE/OFF badges in sync on filter / page refetches too.
+      // The backend counts over the full set BEFORE the apiType filter,
+      // so ticking one channel never flips the others to OFF.
+      if (
+        !isNameSearching &&
+        res.data.channelCounts &&
+        typeof res.data.channelCounts === "object"
+      ) {
+        setChannelsWithResults(
+          new Set(
+            Object.entries(res.data.channelCounts)
+              .filter(([, n]) => Number(n) > 0)
+              .map(([ct]) => String(ct).toLowerCase()),
+          ),
+        );
+      }
       setHasSearchResult(true);
       return res.data;
     } catch (err) {
@@ -1520,6 +1575,7 @@ export default function HotelSearch({
     setIsEditingSearch(false);
     setHasSearchResult(false);
     setAllResults([]);
+    setChannelsWithResults(new Set());
     setPollStatus("IDLE");
     setPageIndex(0);
     setTotalElements(0);
@@ -1678,6 +1734,19 @@ export default function HotelSearch({
                 Math.ceil(
                   (Number(data.totalResults) || mappedResults.length) / pageSize,
                 ),
+              ),
+            );
+          }
+
+          // Full-set supplier presence for the LIVE/OFF badges. Counted
+          // by the backend over every page, so it is correct even when
+          // the current page happens to be all one supplier.
+          if (data.channelCounts && typeof data.channelCounts === "object") {
+            setChannelsWithResults(
+              new Set(
+                Object.entries(data.channelCounts)
+                  .filter(([, n]) => Number(n) > 0)
+                  .map(([ct]) => String(ct).toLowerCase()),
               ),
             );
           }
@@ -2586,13 +2655,20 @@ export default function HotelSearch({
                                   Channel
                                 </Form.Label>
                                 <div className="filter-checkbox-list">
-                                  {/* Only suppliers the super_admin has
-                                      enabled in /admin/api-access appear
-                                      here — visibleChannelTypeOptions is
-                                      narrowed to the caller's per-company
-                                      allow-list. Each row is badged LIVE
-                                      (returning results in the current
-                                      search) or OFF (no results yet). */}
+                                  {/* Every supplier registered for this
+                                      company via /admin/api-access appears
+                                      here — enabled AND disabled ones —
+                                      so the filter mirrors what the admin
+                                      grid shows. The LIVE/OFF badge on
+                                      each row is a pure "is this channel
+                                      represented in the current results?"
+                                      check — nothing about admin toggles.
+                                      LIVE (green) = at least one hotel of
+                                      that channel is listed in the search
+                                      results right now; OFF (red) = none.
+                                      So the operator can read the sidebar
+                                      as "which suppliers actually gave me
+                                      data on this search". */}
                                   {visibleChannelTypeOptions.map((item) => {
                                     const isLive = channelHasResults.has(
                                       item.value,
@@ -2627,8 +2703,8 @@ export default function HotelSearch({
                                         <span
                                           title={
                                             isLive
-                                              ? "Returning results in this search"
-                                              : "No results in this search yet"
+                                              ? "Hotels from this supplier are in the results"
+                                              : "No hotels from this supplier in the results"
                                           }
                                           style={{
                                             fontSize: "0.65rem",

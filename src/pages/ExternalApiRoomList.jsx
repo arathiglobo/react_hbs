@@ -3105,12 +3105,41 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                           [roomSlotIndex]: key,
                         }));
 
+                      // Sort room categories ascending by their cheapest
+                      // rate, and — inside each category — sort the
+                      // individual rate cards the same way, so the
+                      // operator always sees the most affordable option
+                      // first. Same helper as the inhouse /room-list.
+                      const priceOf = (r) => {
+                        const v = Number(r?.rate);
+                        return Number.isFinite(v)
+                          ? v
+                          : Number.POSITIVE_INFINITY;
+                      };
+                      const sortedRoomCategories = [
+                        ...(hotel.roomCategories || []),
+                      ]
+                        .map((cat) => ({
+                          ...cat,
+                          availableRates: [
+                            ...(cat.availableRates || []),
+                          ].sort((a, b) => priceOf(a) - priceOf(b)),
+                        }))
+                        .sort((a, b) => {
+                          const minA = a.availableRates.length
+                            ? priceOf(a.availableRates[0])
+                            : Number.POSITIVE_INFINITY;
+                          const minB = b.availableRates.length
+                            ? priceOf(b.availableRates[0])
+                            : Number.POSITIVE_INFINITY;
+                          return minA - minB;
+                        });
                       const inner = (
                         <Accordion
                           activeKey={slotActiveKey}
                           onSelect={(key) => setSlotActiveKey(key)}
                         >
-                          {hotel.roomCategories.map((category, index) => {
+                          {sortedRoomCategories.map((category, index) => {
                             const eventKey = index.toString();
                             const isActive = slotActiveKey === eventKey;
                             const filteredRates = (
