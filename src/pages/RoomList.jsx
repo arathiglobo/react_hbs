@@ -131,6 +131,11 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
   });
   const [roomTypeOptions, setRoomTypeOptions] = useState([]);
   const [selectedRoomTypes, setSelectedRoomTypes] = useState([]);
+  // Room-category search box (above the accordion). Case-insensitive
+  // substring match against the roomCategory name, with a few common
+  // abbreviations (DLX → deluxe, SUT/STE → suite, STD → standard, etc.)
+  // so operators can type shorthand and still hit the right room.
+  const [roomSearch, setRoomSearch] = useState("");
 
   // Insufficient-credit warning modal. When the picked rate (single-room)
   // or the combined rate (multi-room) exceeds the agent's available
@@ -941,6 +946,44 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
     return true;
   };
 
+  // Room-name search — matches on full name, and expands a handful of
+  // common trade abbreviations so shorthand like "DLX" hits "Deluxe".
+  const ROOM_ABBREVIATIONS = {
+    dlx: "deluxe",
+    dlux: "deluxe",
+    del: "deluxe",
+    sut: "suite",
+    ste: "suite",
+    std: "standard",
+    stnd: "standard",
+    sup: "superior",
+    supr: "superior",
+    exe: "executive",
+    exec: "executive",
+    pre: "premium",
+    prem: "premium",
+    pres: "presidential",
+    jr: "junior",
+    apt: "apartment",
+    twn: "twin",
+    kng: "king",
+    qn: "queen",
+    fmy: "family",
+  };
+  const matchesRoomSearch = (name) => {
+    const q = String(roomSearch || "").trim().toLowerCase();
+    if (!q) return true;
+    const n = String(name || "").toLowerCase();
+    if (n.includes(q)) return true;
+    // token-by-token: each token can be a substring OR an abbreviation.
+    const tokens = q.split(/\s+/).filter(Boolean);
+    return tokens.every((t) => {
+      if (n.includes(t)) return true;
+      const expanded = ROOM_ABBREVIATIONS[t];
+      return expanded ? n.includes(expanded) : false;
+    });
+  };
+
   if (loading) {
     return (
      <div className="min-vh-100 bg-light d-flex flex-column">
@@ -1088,7 +1131,30 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
               <Button
                 variant="outline-primary"
                 size="sm"
-                onClick={() => navigate("/new-booking/hotel")}
+                onClick={() => {
+                  // HotelSearch's "View Rooms" opens this page via
+                  // window.open in a new tab, so this tab's own
+                  // history is empty and navigate(-1) is a no-op.
+                  // Prefer window.close() (the opener refocuses to
+                  // the search tab it already has); fall back to
+                  // in-app navigation for the direct-URL / refresh
+                  // cases where window.close is blocked.
+                  try {
+                    if (window.opener && !window.opener.closed) {
+                      try {
+                        window.opener.focus();
+                      } catch (_) {
+                        /* cross-origin — best effort only */
+                      }
+                      window.close();
+                      return;
+                    }
+                  } catch (_) {
+                    /* ignore and fall through */
+                  }
+                  if (window.history.length > 1) navigate(-1);
+                  else navigate("/new-booking/hotel");
+                }}
                 className="back-to-search-btn"
               >
                 ← Back to Search
@@ -1363,8 +1429,18 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
 
             {/* Room Categories Accordion */}
             <div className="room-categories-section">
-              <div className="d-flex justify-content-between align-items-center mb-4">
+              <div className="d-flex justify-content-between align-items-center mb-4 gap-2 flex-wrap">
                 <h4 className="mb-0">Available Room Categories</h4>
+                <div className="d-flex align-items-center gap-2 flex-wrap ms-auto">
+                  <Form.Control
+                    type="search"
+                    size="sm"
+                    placeholder="Search room (e.g. DLX, SUT)"
+                    value={roomSearch}
+                    onChange={(e) => setRoomSearch(e.target.value)}
+                    style={{ width: 220 }}
+                    aria-label="Search room categories"
+                  />
                 <div className="btn-group shadow-sm gap-1" role="group">
                   <Button
                     variant={viewMode === "grid" ? "primary" : "outline-primary"}
@@ -1382,6 +1458,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                   >
                     <span className="fs-5" style={{ lineHeight: 1 }}>☰</span>
                   </Button>
+                </div>
                 </div>
               </div>
 
@@ -1477,18 +1554,46 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                     ...prev,
                     [roomSlotIndex]: key,
                   }));
+                // Sort room categories ascending by their cheapest rate,
+                // and — inside each category — sort the individual rate
+                // cards the same way, so the operator always sees the
+                // most affordable option first. Falls back gracefully
+                // when a category has no rates.
+                const priceOf = (r) => {
+                  const v = Number(r?.rate);
+                  return Number.isFinite(v) ? v : Number.POSITIVE_INFINITY;
+                };
+                const sortedRoomCategories = [
+                  ...(hotel.roomCategories || []),
+                ]
+                  .map((cat) => ({
+                    ...cat,
+                    availableRates: [...(cat.availableRates || [])].sort(
+                      (a, b) => priceOf(a) - priceOf(b),
+                    ),
+                  }))
+                  .sort((a, b) => {
+                    const minA = a.availableRates.length
+                      ? priceOf(a.availableRates[0])
+                      : Number.POSITIVE_INFINITY;
+                    const minB = b.availableRates.length
+                      ? priceOf(b.availableRates[0])
+                      : Number.POSITIVE_INFINITY;
+                    return minA - minB;
+                  });
                 const inner = (
               <Accordion
                 activeKey={slotActiveKey}
                 onSelect={(key) => setSlotActiveKey(key)}
               >
-                {hotel.roomCategories.map((category, index) => {
+                {sortedRoomCategories.map((category, index) => {
                   const eventKey = index.toString();
                   const isActive = slotActiveKey === eventKey;
                   const filteredRates = (category.availableRates || []).filter(
                     matchesFilters,
                   );
                   if (filteredRates.length === 0) return null;
+                  if (!matchesRoomSearch(category.roomCategory)) return null;
 
                   return (
                     <Accordion.Item
@@ -2256,7 +2361,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                 <h5 className="mb-2">{selectedRate.roomCategory}</h5>
                 <p className="text-muted">{selectedRate.roomTypeDescription}</p>
                 <div className="booking-details-modal">
-                  <div className="d-flex justify-content-between mb-2">
+                  <div className="d-flex align-items-center gap-2 mb-2">
                     <span>Meal Plan:</span>
                     <span className="fw-semibold">{selectedRate.mealPlan}</span>
                   </div>

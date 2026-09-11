@@ -896,6 +896,44 @@ const ExternalApiRoomList = () => {
       mealPlan: rate.mealPlan,
     });
 
+  // Room-name search — matches on full name, and expands a handful of
+  // common trade abbreviations so shorthand like "DLX" hits "Deluxe".
+  const [roomSearch, setRoomSearch] = useState("");
+  const ROOM_ABBREVIATIONS = {
+    dlx: "deluxe",
+    dlux: "deluxe",
+    del: "deluxe",
+    sut: "suite",
+    ste: "suite",
+    std: "standard",
+    stnd: "standard",
+    sup: "superior",
+    supr: "superior",
+    exe: "executive",
+    exec: "executive",
+    pre: "premium",
+    prem: "premium",
+    pres: "presidential",
+    jr: "junior",
+    apt: "apartment",
+    twn: "twin",
+    kng: "king",
+    qn: "queen",
+    fmy: "family",
+  };
+  const matchesRoomSearch = (name) => {
+    const q = String(roomSearch || "").trim().toLowerCase();
+    if (!q) return true;
+    const n = String(name || "").toLowerCase();
+    if (n.includes(q)) return true;
+    const tokens = q.split(/\s+/).filter(Boolean);
+    return tokens.every((t) => {
+      if (n.includes(t)) return true;
+      const expanded = ROOM_ABBREVIATIONS[t];
+      return expanded ? n.includes(expanded) : false;
+    });
+  };
+
   // ─────────────────────────── effects ────────────────────────────────
   useEffect(() => {
     const fetchRooms = async () => {
@@ -2590,6 +2628,37 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
   const hotel = roomData.hotels[0];
   const payload = roomData.payload || {};
 
+  // GRN: the room-list response carries the hotel's own description from
+  // GRN's /availability/{sid}?hcode= refetch (hotelDescription, HTML). The
+  // header shows it instead of the generic "Please note" text. Other
+  // suppliers (and GRN hotels with no description) keep the static text.
+  const isGrnHotel =
+    String(hotel?.apiType || "").toUpperCase() === "GRN" ||
+    Number(payload?.apiId) === apiIdMapping.GRN;
+  const grnHotelDescription = (() => {
+    if (!isGrnHotel) return null;
+    const raw = typeof hotel?.hotelDescription === "string"
+      ? hotel.hotelDescription.trim()
+      : "";
+    if (!raw) return null;
+    // Supplier HTML — drop script blocks and inline event handlers before
+    // rendering; GRN's descriptions are plain <p>/<b>/<br /> markup.
+    const safe = raw
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+    // Show only the "Property Location" section. GRN's full description
+    // (Attractions, Amenities, Business Amenities, Rooms, Dining …) runs to
+    // dozens of lines and pushed the room list below the fold. The section
+    // ends at its closing </p> or at the next paragraph/heading tag.
+    const location = safe.match(
+      /<b>\s*Property Location\s*<\/b>[\s\S]*?(?=<\/p>|<p\b|<b>|$)/i,
+    );
+    if (location) return `<p>${location[0]}</p>`;
+    // No headed sections — fall back to the first paragraph, else as-is.
+    const firstParagraph = safe.match(/<p\b[^>]*>[\s\S]*?<\/p>/i);
+    return firstParagraph ? firstParagraph[0] : safe;
+  })();
+
   return (
     <div className="min-vh-100 bg-light d-flex flex-column room-list-container">
       <TopBar />
@@ -2610,7 +2679,28 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
               <Button
                 variant="outline-primary"
                 size="sm"
-                onClick={() => navigate("/new-booking/hotel")}
+                onClick={() => {
+                  // HotelSearch's "View Rooms" opens this page via
+                  // window.open in a new tab, so navigate(-1) is a
+                  // no-op here. Close the new tab (opener refocuses)
+                  // and fall back to in-app navigation only when
+                  // window.close is unavailable.
+                  try {
+                    if (window.opener && !window.opener.closed) {
+                      try {
+                        window.opener.focus();
+                      } catch (_) {
+                        /* cross-origin — best effort only */
+                      }
+                      window.close();
+                      return;
+                    }
+                  } catch (_) {
+                    /* ignore and fall through */
+                  }
+                  if (window.history.length > 1) navigate(-1);
+                  else navigate("/new-booking/hotel");
+                }}
                 className="back-to-search-btn"
               >
                 ← Back to Search
@@ -2755,17 +2845,31 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                             </p>
                           )}
                           <div className="mt-2">
-                            <small className="text-muted">
-                              <strong>Please note:</strong>{" "}
-                              <p className="someproperties">
-                                Some properties may collect additional charges
-                                such as city tax, resort fees, or security
-                                deposits during check-in. Policies such as
-                                check-in time, child accommodation, and
-                                cancellation rules can vary by room and
-                                provider.
-                              </p>
-                            </small>
+                            {grnHotelDescription ? (
+                              /* GRN: hotel description exactly as returned by
+                                 GRN's availability refetch, in place of the
+                                 generic note. */
+                              <small className="text-muted">
+                                <div
+                                  className="someproperties grn-hotel-description"
+                                  dangerouslySetInnerHTML={{
+                                    __html: grnHotelDescription,
+                                  }}
+                                />
+                              </small>
+                            ) : (
+                              <small className="text-muted">
+                                <strong>Please note:</strong>{" "}
+                                <p className="someproperties">
+                                  Some properties may collect additional charges
+                                  such as city tax, resort fees, or security
+                                  deposits during check-in. Policies such as
+                                  check-in time, child accommodation, and
+                                  cancellation rules can vary by room and
+                                  provider.
+                                </p>
+                              </small>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -2944,33 +3048,44 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                 </div>
               )}
 
-              <div className="d-flex justify-content-between align-items-center mb-4">
+              <div className="d-flex justify-content-between align-items-center mb-4 gap-2 flex-wrap">
                 <h4 className="mb-0">Available Room Categories</h4>
-                <div className="btn-group shadow-sm gap-1" role="group">
-                  <Button
-                    variant={
-                      viewMode === "grid" ? "primary" : "outline-primary"
-                    }
-                    onClick={() => setViewMode("grid")}
-                    className="d-flex align-items-center gap-2"
+                <div className="d-flex align-items-center gap-2 flex-wrap ms-auto">
+                  <Form.Control
+                    type="search"
                     size="sm"
-                  >
-                    <span className="fs-5" style={{ lineHeight: 1 }}>
-                      ⊞
-                    </span>
-                  </Button>
-                  <Button
-                    variant={
-                      viewMode === "list" ? "primary" : "outline-primary"
-                    }
-                    onClick={() => setViewMode("list")}
-                    className="d-flex align-items-center gap-2"
-                    size="sm"
-                  >
-                    <span className="fs-5" style={{ lineHeight: 1 }}>
-                      ☰
-                    </span>
-                  </Button>
+                    placeholder="Search room (e.g. DLX, SUT)"
+                    value={roomSearch}
+                    onChange={(e) => setRoomSearch(e.target.value)}
+                    style={{ width: 220 }}
+                    aria-label="Search room categories"
+                  />
+                  <div className="btn-group shadow-sm gap-1" role="group">
+                    <Button
+                      variant={
+                        viewMode === "grid" ? "primary" : "outline-primary"
+                      }
+                      onClick={() => setViewMode("grid")}
+                      className="d-flex align-items-center gap-2"
+                      size="sm"
+                    >
+                      <span className="fs-5" style={{ lineHeight: 1 }}>
+                        ⊞
+                      </span>
+                    </Button>
+                    <Button
+                      variant={
+                        viewMode === "list" ? "primary" : "outline-primary"
+                      }
+                      onClick={() => setViewMode("list")}
+                      className="d-flex align-items-center gap-2"
+                      size="sm"
+                    >
+                      <span className="fs-5" style={{ lineHeight: 1 }}>
+                        ☰
+                      </span>
+                    </Button>
+                  </div>
                 </div>
               </div>
 
@@ -3153,6 +3268,8 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                 });
                               });
                             if (filteredRates.length === 0) return null;
+                            if (!matchesRoomSearch(category.roomCategory))
+                              return null;
 
                             return (
                               <Accordion.Item
@@ -4074,7 +4191,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                         <h5 className="mb-2">{rate.roomCategory}</h5>
                         <p className="text-muted">{rate.roomTypeDescription}</p>
                         <div className="booking-details-modal">
-                          <div className="d-flex justify-content-between mb-2">
+                          <div className="d-flex align-items-center gap-2 mb-2">
                             <span>Meal Plan:</span>
                             <span className="fw-semibold">{rate.mealPlan}</span>
                           </div>

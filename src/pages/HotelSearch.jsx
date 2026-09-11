@@ -661,9 +661,9 @@ export default function HotelSearch({
 
   const hotelTypeOptions = [
     { value: "hotel", label: "Hotel" },
-    { value: "villa", label: "Villa" },
-    { value: "resort", label: "Resort" },
-    { value: "apartment", label: "Apartment" },
+    // { value: "villa", label: "Villa" },
+    // { value: "resort", label: "Resort" },
+    // { value: "apartment", label: "Apartment" },
   ];
 
   const channelTypeOptions = [
@@ -690,6 +690,18 @@ export default function HotelSearch({
     : channelTypeOptions
         .filter((o) => allowedChannels.has(o.value))
         .map((o) => o.value);
+
+  // Channels that actually returned at least one hotel in the current
+  // result set — used to badge each Channel filter row as LIVE/OFF so
+  // the operator can see, at a glance, which suppliers responded.
+  const channelHasResults = useMemo(() => {
+    const set = new Set();
+    for (const h of allResults || []) {
+      const ct = String(h?.channelType || "").toLowerCase();
+      if (ct) set.add(ct);
+    }
+    return set;
+  }, [allResults]);
 
   // Available Deals filter options. Each option maps to a per-hotel
   // predicate evaluated against the feature-flag map and the search
@@ -2574,27 +2586,68 @@ export default function HotelSearch({
                                   Channel
                                 </Form.Label>
                                 <div className="filter-checkbox-list">
-                                  {visibleChannelTypeOptions.map((item) => (
-                                    <Form.Check
-                                      key={item.value}
-                                      type="checkbox"
-                                      id={`channel-${item.value}`}
-                                      label={item.label}
-                                      checked={channelType.some(
-                                        (c) => c.value === item.value,
-                                      )}
-                                      onChange={(e) => {
-                                        if (e.target.checked)
-                                          setChannelType([...channelType, item]);
-                                        else
-                                          setChannelType(
-                                            channelType.filter(
-                                              (c) => c.value !== item.value,
-                                            ),
-                                          );
-                                      }}
-                                    />
-                                  ))}
+                                  {/* Only suppliers the super_admin has
+                                      enabled in /admin/api-access appear
+                                      here — visibleChannelTypeOptions is
+                                      narrowed to the caller's per-company
+                                      allow-list. Each row is badged LIVE
+                                      (returning results in the current
+                                      search) or OFF (no results yet). */}
+                                  {visibleChannelTypeOptions.map((item) => {
+                                    const isLive = channelHasResults.has(
+                                      item.value,
+                                    );
+                                    return (
+                                      <div
+                                        key={item.value}
+                                        className="d-flex align-items-center justify-content-between gap-2"
+                                        style={{ minHeight: 26 }}
+                                      >
+                                        <Form.Check
+                                          type="checkbox"
+                                          id={`channel-${item.value}`}
+                                          label={item.label}
+                                          checked={channelType.some(
+                                            (c) => c.value === item.value,
+                                          )}
+                                          onChange={(e) => {
+                                            if (e.target.checked)
+                                              setChannelType([
+                                                ...channelType,
+                                                item,
+                                              ]);
+                                            else
+                                              setChannelType(
+                                                channelType.filter(
+                                                  (c) => c.value !== item.value,
+                                                ),
+                                              );
+                                          }}
+                                        />
+                                        <span
+                                          title={
+                                            isLive
+                                              ? "Returning results in this search"
+                                              : "No results in this search yet"
+                                          }
+                                          style={{
+                                            fontSize: "0.65rem",
+                                            fontWeight: 700,
+                                            padding: "1px 6px",
+                                            borderRadius: 10,
+                                            lineHeight: 1.4,
+                                            color: "#fff",
+                                            backgroundColor: isLive
+                                              ? "#198754"
+                                              : "#dc3545",
+                                            whiteSpace: "nowrap",
+                                          }}
+                                        >
+                                          {isLive ? "LIVE" : "OFF"}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </Form.Group>
 
@@ -3239,6 +3292,33 @@ export default function HotelSearch({
                             </div>
                           </Col>
                         ))
+                      ) : pollStatus === "IN_PROGRESS" || isLoading ? (
+                        // Search is still in flight — the supplier
+                        // fan-out hasn't finished yet, so an empty
+                        // filteredResults just means we don't have
+                        // rates back for this filter YET. Show a
+                        // "fetching best prices" placeholder instead
+                        // of the misleading "No hotels found" panel,
+                        // which only makes sense once polling is
+                        // COMPLETED.
+                        <Col xs={12}>
+                          <Card className="shadow-sm rounded-xl">
+                            <Card.Body className="text-center py-5">
+                              <Spinner
+                                animation="border"
+                                variant="primary"
+                                className="mb-3"
+                              />
+                              <h5 className="text-primary mb-1">
+                                Fetching best prices…
+                              </h5>
+                              <p className="text-muted mb-0">
+                                We're comparing rates across every
+                                supplier for you. Hang on a moment.
+                              </p>
+                            </Card.Body>
+                          </Card>
+                        </Col>
                       ) : (
                         <Col xs={12}>
                           <Card className="shadow-sm rounded-xl">
