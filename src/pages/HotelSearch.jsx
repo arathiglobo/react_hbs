@@ -484,6 +484,24 @@ export default function HotelSearch({
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [nights, setNights] = useState(1);
+
+  // Prefill check-in / check-out when this page is opened from the
+  // /calendar date-range picker. The calendar hands the dates over via
+  // React Router's navigation state (location.state.checkIn / checkOut)
+  // so the URL stays clean; URL query params (?checkIn=...&checkOut=...)
+  // are still honoured as a fallback so any older link or bookmark keeps
+  // working. Runs once on mount and only when the fields are still
+  // empty, so it never overwrites user edits or state from other flows.
+  useEffect(() => {
+    const stateIn = location.state && location.state.checkIn;
+    const stateOut = location.state && location.state.checkOut;
+    const params = new URLSearchParams(location.search || "");
+    const qIn = stateIn || params.get("checkIn");
+    const qOut = stateOut || params.get("checkOut");
+    if (qIn && !checkIn) setCheckIn(qIn);
+    if (qOut && !checkOut) setCheckOut(qOut);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Longest stay this search form allows. Enforced both when the user types
   // directly into the Nights field and when they pick a Check-Out date more
   // than MAX_NIGHTS days after Check-In.
