@@ -267,11 +267,17 @@ export default function Province() {
                 <BackButton fallback="/adminDashboard" />
                 <span className="fw-semibold"> Province / City </span>
               </span>
-              {/* State Search */}
+              {/* State Search — one text box, three columns.
+                  Backend (ProvinceService.getAllProvince) matches the
+                  term against Country name, Province name, and Province
+                  code with a case-insensitive contains predicate. The
+                  placeholder tells the operator the scope up-front so
+                  they don't wonder why "India" or "KL" now returns rows
+                  that "province name only" used to hide. */}
               <Form.Group className="hotel-search-bar flex-grow-1 flex-sm-grow-0">
                 <Form.Control
                   type="text"
-                  placeholder="Search province..."
+                  placeholder="Search by country, province, or province code..."
                   className="form-control-modern-sm"
                   value={searchTerm}
                   onChange={(e) => {

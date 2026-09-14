@@ -12,6 +12,7 @@ import {
   FileText,
   Landmark,
   Users,
+  UserCog,
   CalendarDays,
   FileSignature,
   BarChart3,
@@ -299,15 +300,22 @@ export default function Sidebar() {
     {
       // super_admin-only sidebar group that surfaces the identity-and-access
       // tools together: Roles (master), Login Logs (audit trail), Role
-      // Assign (attach roles to users). Kept above Manage Masters so it's
-      // the first stop after the dashboard.
+      // Assign (attach roles to users), Admin Management (CRUD on ADMIN
+      // logins and their company binding). Kept above Manage Masters so
+      // it's the first stop after the dashboard.
+      //
+      // "Admin Management" also appears under the "Access Control" group
+      // further down for discoverability from the API-access side. Both
+      // entries link to the same route (/super-admin/admins) — kept dual
+      // so the pre-existing Access Control layout is untouched.
       code: "top_user_management",
       label: "User Management",
       roles: ["super_admin"],
       children: [
-        { label: "Roles",       to: "/masters/user-roles" },
-        { label: "Login Logs",  to: "/user-management/login-logs" },
-        { label: "Role Assign", to: "/user-management/role-assign" },
+        { label: "Roles",            to: "/masters/user-roles" },
+        { label: "Login Logs",       to: "/user-management/login-logs" },
+        { label: "Role Assign",      to: "/user-management/role-assign" },
+        { label: "Admin Management", to: "/super-admin/admins" },
       ],
     },
     {
@@ -468,6 +476,12 @@ export default function Sidebar() {
       code: "top_registration",
       label: "Registration",
       roles: ["admin"],
+      // Hidden from super_admin — the SUPER_ADMIN dashboard is a
+      // config/identity surface, not a place to onboard hotels / agents.
+      // Admin, staff and others still see this group unchanged. Applied
+      // via excludeRoles because roleAllows() otherwise inherits every
+      // admin-scoped menu for super_admin (see line 907).
+      excludeRoles: ["super_admin"],
       // "Agent Management" is an inline nested accordion (has its own
       // children[]) — the render code detects this and renders it as an
       // in-line accordion at this exact position, so it sits right after
@@ -513,6 +527,9 @@ export default function Sidebar() {
       code: "top_new_booking",
       label: "New Booking",
       roles: ["admin", "agent"],
+      // Hidden from super_admin — booking creation is an operational
+      // action, not a config surface. Admin and agent views unchanged.
+      excludeRoles: ["super_admin"],
       children: [
         { code: "nb_hotel",         label: "Hotel", to: "/new-booking/hotel" },
         { code: "nb_24hr",          label: "24 Hour", to: "/new-booking/hotel-24hr" },
@@ -565,6 +582,9 @@ export default function Sidebar() {
       code: "top_ai_insights",
       label: "AI Insights",
       roles: ["admin"],
+      // Hidden from super_admin — the AI dashboard is admin-facing
+      // operational analytics; SUPER_ADMIN uses config/access screens.
+      excludeRoles: ["super_admin"],
       children: [
         { label: "Overview", to: "/ai" },
         { label: "Demand & ADR Forecast", to: "/ai/demand-forecast" },
@@ -580,6 +600,9 @@ export default function Sidebar() {
       code: "top_booking_list",
       label: "Booking List",
       roles: ["admin", "agent", "staff"],
+      // Hidden from super_admin — booking browsing/editing is an
+      // operational task. Admin / agent / staff views unchanged.
+      excludeRoles: ["super_admin"],
       children: [
         // Unified list combining all booking types below into one view
         // (new, additive page — every other entry here is unchanged).
@@ -654,6 +677,9 @@ export default function Sidebar() {
       label: "Invoice",
       to: "/invoice",
       roles: ["admin", "agent"],
+      // Hidden from super_admin — invoice generation belongs to the
+      // admin/agent finance flow. Admin and agent views unchanged.
+      excludeRoles: ["super_admin"],
     },
     {
       code: "top_inhouse_accounts",
@@ -707,6 +733,10 @@ export default function Sidebar() {
       label: "Report",
       to: "/report",
       roles: ["admin", "agent"],
+      // Hidden from super_admin — operational reporting is admin-facing.
+      // Admin and agent views unchanged; the notes below about agent
+      // scoping apply to the admin path only.
+      excludeRoles: ["super_admin"],
       // Agents see ONLY the three daily-sales reports here. Everything else is
       // marked admin-only rather than the menu being split in two, so the list
       // stays one definition — and roleAllows() lets super_admin through any
@@ -1548,6 +1578,13 @@ function getIcon(label) {
   switch (label) {
     case labelForDashboard:
       return <LayoutDashboard {...iconProps} />;
+
+    // Super-admin-only identity-and-access group — Roles, Login Logs,
+    // Role Assign, Admin Management. UserCog reads as "user
+    // administration" and is distinct from the "Users" glyph already
+    // used by the "Assigned Agents" entry.
+    case "User Management":
+      return <UserCog {...iconProps} />;
 
     case "Manage Masters":
       return <Puzzle {...iconProps} />;

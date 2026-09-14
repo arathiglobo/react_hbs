@@ -26,6 +26,7 @@ import {
   FaToggleOn,
   FaToggleOff,
   FaPlus,
+  FaTrashAlt,
 } from "react-icons/fa";
 import { formatDateTimeDisplay } from "../../utils/dateUtils";
 
@@ -470,6 +471,78 @@ const AgentView = () => {
           )
         )
         .finally(() => setStatusUpdating(false));
+    });
+  };
+
+  // ===================================================================
+  // Hard-delete an agent — SUPER_ADMIN-only path added on top of the
+  // existing Active/Inactive lifecycle. Active/Inactive stays the day-to-
+  // day tool (deactivation preserves every booking, invoice and payment
+  // for audit); this button is the escape hatch for genuinely mistaken
+  // registrations (test rows, duplicates, bad approvals) that carry no
+  // downstream data. Guarded three ways so a routine misclick can never
+  // wipe an agent:
+  //   1. Rendered only when the caller's active role is SUPER_ADMIN
+  //      (checked via localStorage.currentActiveRole + userRole — same
+  //      source Sidebar.jsx and HotelSearch.jsx use).
+  //   2. Requires a strong Swal confirmation naming the agent.
+  //   3. Delegates to the existing DELETE /api/agent/{id} endpoint,
+  //      which is @Transactional and surfaces any FK-constraint failure
+  //      (bookings, credit history, pending approvals) as a 400 with an
+  //      operator-friendly message rather than silently orphaning rows.
+  // Everything else on this page is untouched.
+  // ===================================================================
+  const activeRoleRaw = (
+    localStorage.getItem("currentActiveRole") ||
+    ""
+  ).trim().toUpperCase();
+  const storedRolesRaw = (
+    localStorage.getItem("userRole") || ""
+  ).toUpperCase();
+  const isSuperAdmin = activeRoleRaw
+    ? activeRoleRaw === "SUPER_ADMIN"
+    : storedRolesRaw.includes("SUPER_ADMIN");
+
+  const [deleteUpdating, setDeleteUpdating] = useState(false);
+
+  const handleDeleteAgent = () => {
+    if (!isSuperAdmin) return; // belt-and-braces guard for the render check
+    const name = agent?.companyName || `Agent #${id}`;
+    Swal.fire({
+      title: `Delete ${name}?`,
+      html:
+        `<div style="text-align:left">` +
+        `<p style="margin:0 0 8px 0">This permanently removes the agent record.</p>` +
+        `<p style="margin:0 0 8px 0"><b>Prefer Set Inactive</b> whenever the agent has any bookings, invoices or credit history — deletion is refused by the database for agents with linked records.</p>` +
+        `<p style="margin:0">Continue?</p>` +
+        `</div>`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete permanently",
+      cancelButtonText: "Cancel",
+    }).then((result) => {
+      if (!result.isConfirmed) return;
+      setDeleteUpdating(true);
+      axiosInstance
+        .delete(`/api/agent/${id}`)
+        .then(() => {
+          toast.success(`${name} deleted successfully`);
+          navigate("/registration/agent");
+        })
+        .catch((err) => {
+          // Backend wraps FK violations in AgentRegistrationException
+          // ("Failed to delete agent: ...") — surface that verbatim so
+          // the operator sees WHY (linked bookings, credits, etc.) and
+          // can fall back to Set Inactive.
+          const msg =
+            err.response?.data?.message ||
+            err.response?.data ||
+            "Failed to delete agent";
+          toast.error(typeof msg === "string" ? msg : "Failed to delete agent");
+        })
+        .finally(() => setDeleteUpdating(false));
     });
   };
 
@@ -1916,8 +1989,24 @@ const AgentView = () => {
                   </>
                 )}
               </Button>
-              {/* Delete removed by design — agents are never deleted; use the
-                  Active/Inactive status to manage agent access instead. */}
+              {/* Delete — SUPER_ADMIN only. Active/Inactive remains the
+                  right choice for agents with bookings/invoices/credit
+                  history (the DB refuses hard-delete on those). This
+                  button exists for genuinely mistaken registrations —
+                  test rows, duplicates, bad approvals — that carry no
+                  downstream data. Hidden entirely for every other role,
+                  so the day-to-day flow is untouched. */}
+              {isSuperAdmin && (
+                <Button
+                  variant="danger"
+                  onClick={handleDeleteAgent}
+                  disabled={deleteUpdating}
+                  title="Permanently delete this agent (super admin only)"
+                >
+                  <FaTrashAlt className="me-2" />
+                  {deleteUpdating ? "Deleting..." : "Delete"}
+                </Button>
+              )}
             </Card.Body>
           </Card>
           </Container>

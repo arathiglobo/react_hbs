@@ -1207,18 +1207,23 @@ export default function SubAgent() {
                                 </Button>
                               );
                             })()}
-                            {/* Delete hidden by request — handler retained for
-                                future use; sub-agents are managed via status. */}
-                            {false && (
-                              <Button
-                                variant="outline-danger"
-                                size="sm"
-                                className="d-flex align-items-center gap-1"
-                                onClick={() => handleDelete(item.id)}
-                              >
-                                <FaTrash /> Delete
-                              </Button>
-                            )}
+                            {/* Delete — permanently removes the sub-agent
+                                row. The existing handleDelete() function
+                                already fires a Swal confirmation and calls
+                                DELETE /api/sub-agent/{id}. Prefer the
+                                Active/Inactive toggle above whenever the
+                                sub-agent has bookings, invoices, or credit
+                                history — the DB refuses hard-delete on
+                                rows with linked records, and handleDelete
+                                surfaces that error via toast.error. */}
+                            <Button
+                              variant="outline-danger"
+                              size="sm"
+                              className="d-flex align-items-center gap-1"
+                              onClick={() => handleDelete(item.id)}
+                            >
+                              <FaTrash /> Delete
+                            </Button>
                           </div>
                         </td>
                       </tr>
