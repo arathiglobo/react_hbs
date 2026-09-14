@@ -315,7 +315,20 @@ export default function SubUser() {
       fetchSubUsers();
       closeModal();
     } catch (error) {
-      toast.error(editing ? "Failed to update sub user" : "Failed to create sub user");
+      // Surface the backend's actual reason instead of a generic message.
+      // The sub-user service now throws an operator-friendly message for
+      // the "main agent could not be resolved" case (previously
+      // masked as a plain RuntimeException that reached the FE as a bare
+      // 500 with no body); this lets the caller act on it.
+      const serverMsg =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        (typeof error?.response?.data === "string" ? error.response.data : "") ||
+        error?.message;
+      const fallback = editing
+        ? "Failed to update sub user"
+        : "Failed to create sub user";
+      toast.error(serverMsg || fallback);
     } finally {
       setIsLoading(false);
     }
@@ -338,8 +351,17 @@ export default function SubUser() {
             toast.success("Sub User deleted successfully");
             fetchSubUsers();
           })
-          .catch(() => {
-            toast.error("Failed to delete sub user");
+          .catch((err) => {
+            // Postgres rejects hard-delete on rows referenced by
+            // bookings, credit history, etc. Surface the backend's
+            // reason so the operator knows to fall back to the
+            // Active/Inactive toggle instead.
+            const serverMsg =
+              err?.response?.data?.message ||
+              err?.response?.data?.error ||
+              (typeof err?.response?.data === "string" ? err.response.data : "") ||
+              err?.message;
+            toast.error(serverMsg || "Failed to delete sub user");
           });
       }
     });
@@ -677,7 +699,15 @@ export default function SubUser() {
                             >
                               <FaEdit /> Edit
                             </Button>
-                            {/* Delete hidden per request — kept for easy restore.
+                            {/* Delete — permanently removes the sub-user
+                                row. The existing handleDelete() function
+                                fires a Swal confirmation and calls
+                                DELETE /api/sub-user/{id}. Prefer the
+                                Active/Inactive toggle above (Status
+                                column) whenever the sub-user has bookings
+                                or credit history — the DB refuses
+                                hard-delete on rows with linked records,
+                                and the handler shows the error via toast. */}
                             <Button
                               variant="outline-danger"
                               size="sm"
@@ -686,7 +716,6 @@ export default function SubUser() {
                             >
                               <FaTrash /> Delete
                             </Button>
-                            */}
                           </div>
                         </td>
                       </tr>
