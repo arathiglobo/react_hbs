@@ -177,7 +177,16 @@ const ExternalApiRoomList = () => {
   // Agent credit gate. Same pattern as Inhouse — soft warning, never
   // blocks; user clicks "OK, continue" and we resume the queued booking
   // handler with skipCreditCheck=true so downstream flow is unchanged.
+  // `agentBalance` stays in AED — every credit gate below compares against
+  // AED-denominated totals, so the value used by the gates MUST remain the
+  // raw AED number the backend already exposed on
+  // `effectiveAvailableCreditLimit`. See RoomList.jsx for the same rule.
   const [agentBalance, setAgentBalance] = useState(null);
+  // Display-only companions: the same figure rendered in the agent's
+  // configured currency (populated from the backend's
+  // effectiveAvailableCreditLimitInAgentCurrency + currencyCode).
+  const [agentBalanceDisplay, setAgentBalanceDisplay] = useState(null);
+  const [agentBalanceCurrency, setAgentBalanceCurrency] = useState("AED");
   const [showInsufficientCreditModal, setShowInsufficientCreditModal] =
     useState(false);
   const [pendingBookingFn, setPendingBookingFn] = useState(null);
@@ -1064,22 +1073,35 @@ const ExternalApiRoomList = () => {
     const aId = roomData?.payload?.agentId;
     if (!aId) {
       setAgentBalance(null);
+      setAgentBalanceDisplay(null);
+      setAgentBalanceCurrency("AED");
       return;
     }
     let cancelled = false;
     axiosInstance
       .get(`/api/agent-credit-limit/agent/${aId}`)
       .then((res) => {
-        if (!cancelled) {
-          setAgentBalance(
+        if (cancelled) return;
+        setAgentBalance(
+          res?.data?.effectiveAvailableCreditLimit ??
+            res?.data?.availableCreditLimit ??
+            null,
+        );
+        setAgentBalanceDisplay(
+          res?.data?.effectiveAvailableCreditLimitInAgentCurrency ??
+            res?.data?.availableCreditLimitInAgentCurrency ??
             res?.data?.effectiveAvailableCreditLimit ??
-              res?.data?.availableCreditLimit ??
-              null,
-          );
-        }
+            res?.data?.availableCreditLimit ??
+            null,
+        );
+        setAgentBalanceCurrency(res?.data?.currencyCode || "AED");
       })
       .catch(() => {
-        if (!cancelled) setAgentBalance(null);
+        if (!cancelled) {
+          setAgentBalance(null);
+          setAgentBalanceDisplay(null);
+          setAgentBalanceCurrency("AED");
+        }
       });
     return () => {
       cancelled = true;
@@ -2728,7 +2750,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                   className="fw-bold"
                   style={{ color: "#dc3545", fontSize: "0.95rem" }}
                 >
-                  Available Balance: {Number(agentBalance).toFixed(2)}
+                  Available Balance: {Number(agentBalanceDisplay ?? agentBalance).toFixed(2)} {agentBalanceCurrency || "AED"}
                 </span>
               )}
             </div>
