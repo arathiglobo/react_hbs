@@ -330,7 +330,26 @@
 
 .rate-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 14px 28px rgba(247, 94, 0, 0.18);
+  box-shadow: 0 14px 28px rgba(247, 94, 0, 0.28);
+  background: #ffd9b8;
+  border-color: #f75e00;
+}
+
+.rate-card:hover .form-check-input {
+  background-color: #ffffff;
+  border-color: #d84a00;
+  border-width: 2px;
+  box-shadow: 0 0 0 2px rgba(216, 74, 0, 0.25);
+}
+
+.rate-card:hover .form-check-input:checked {
+  background-color: #f75e00;
+  border-color: #d84a00;
+}
+
+.rate-card:hover .form-check-label {
+  color: #4a2200;
+  font-weight: 600;
 }
 
 .rate-header {

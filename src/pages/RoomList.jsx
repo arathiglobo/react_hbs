@@ -41,7 +41,7 @@ import {
   RateDeadlinePill,
   resolveInhouseDeadline,
   isDeadlinePassed,
-  DEADLINE_TIME_2PM,
+  DEADLINE_TIME_EOD,
 } from "../utils/rateDeadline";
 
 /**
@@ -1806,7 +1806,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                         <RateDeadlinePill
                                           rate={rate}
                                           deadline={inhouseDeadline}
-                                          timeLabel={DEADLINE_TIME_2PM}
+                                          timeLabel={DEADLINE_TIME_EOD}
                                         />
                                       </div>
 
@@ -1951,7 +1951,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                           <RateDeadlinePill
                                             rate={rate}
                                             deadline={inhouseDeadline}
-                                            timeLabel={DEADLINE_TIME_2PM}
+                                            timeLabel={DEADLINE_TIME_EOD}
                                           />
                                         </div>
                                         <div className="feature-item d-flex align-items-center">

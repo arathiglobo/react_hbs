@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Card,
   Form,
@@ -8,7 +8,9 @@ import {
   Spinner,
   Row,
   Col,
+  Alert,
 } from "react-bootstrap";
+import { useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
@@ -41,6 +43,17 @@ const CityMapping = () => {
   // Row-wise selections and status per platform in the overview table
   const [rowState, setRowState] = useState({});
 
+  // Bulk (Auto) Mapping ▸ "Map manually" jump hook. When the user arrived
+  // here from /masters/city-mapping-bulk we get a { masterCityId, apiProvider }
+  // in the route state and pre-populate the top Country / City selects for
+  // the master city, and highlight the platform row the operator was told to
+  // fix — so they land ready to pick the supplier city and Save without
+  // hunting for the master row first.
+  const location = useLocation();
+  const [prefillBanner, setPrefillBanner] = useState(null);
+  const [highlightedPlatform, setHighlightedPlatform] = useState(null);
+  const platformRowRefs = useRef({});
+
   useEffect(() => {
     // Initialize per-platform state
     const initial = {};
@@ -54,6 +67,70 @@ const CityMapping = () => {
     });
     setRowState(initial);
   }, []);
+
+  // Prefill from Bulk (Auto) Mapping. Runs once when the route state arrives —
+  // fetches the master city record so its country + city dropdowns show real
+  // labels (not just an ID), then highlights the target platform row.
+  // Silently no-ops when the endpoint fails so the manual page still works.
+  useEffect(() => {
+    const prefill = location.state?.prefill;
+    if (!prefill?.masterCityId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await axiosInstance.get(
+          `/api/province/${prefill.masterCityId}`,
+        );
+        if (cancelled) return;
+        const d = res?.data || {};
+        const countryLabel = d.Country || d.country || "";
+        const cityLabel = d.stateName || d.name || "";
+        if (d.countryId && countryLabel) {
+          const countryOpt = { value: d.countryId, label: countryLabel };
+          setSelectedCountryOption(countryOpt);
+          setFormData((prev) => ({
+            ...prev,
+            masterCountryId: d.countryId,
+            masterCityId: d.id,
+          }));
+        }
+        if (d.id && cityLabel) {
+          setSelectedCityOption({
+            value: d.id,
+            label: `${cityLabel}${countryLabel ? `, ${countryLabel}` : ""}`,
+          });
+        }
+        setPrefillBanner({
+          masterCityId: prefill.masterCityId,
+          masterCityLabel: cityLabel || `#${prefill.masterCityId}`,
+          apiProvider: prefill.apiProvider,
+        });
+        if (prefill.apiProvider) {
+          setHighlightedPlatform(prefill.apiProvider);
+          // Give the row a tick to mount, then scroll.
+          setTimeout(() => {
+            const el = platformRowRefs.current[prefill.apiProvider];
+            if (el && typeof el.scrollIntoView === "function") {
+              el.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+          }, 100);
+        }
+      } catch (e) {
+        // Endpoint mismatch or an ID that no longer exists — leave the page
+        // in its blank state and show a plain banner with what we know.
+        setPrefillBanner({
+          masterCityId: prefill.masterCityId,
+          masterCityLabel: `#${prefill.masterCityId}`,
+          apiProvider: prefill.apiProvider,
+          error: true,
+        });
+        if (prefill.apiProvider) setHighlightedPlatform(prefill.apiProvider);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [location.state]);
 
   const [formData, setFormData] = useState({
     masterCountryId: "",
@@ -397,6 +474,26 @@ const CityMapping = () => {
             Map master countries & cities to external API platforms.
           </p>
 
+          {prefillBanner && (
+            <Alert variant="info" className="py-2 small">
+              <strong>From Bulk (Auto) Mapping:</strong>{" "}
+              please map{" "}
+              <strong>{prefillBanner.masterCityLabel}</strong>{" "}
+              (id {prefillBanner.masterCityId})
+              {prefillBanner.apiProvider ? (
+                <>
+                  {" "}
+                  for supplier{" "}
+                  <Badge bg="dark">{prefillBanner.apiProvider}</Badge>
+                </>
+              ) : null}
+              .{" "}
+              {prefillBanner.error
+                ? "The master city couldn't be pre-loaded — pick it manually above."
+                : "The country and city are already selected; pick the supplier city in the highlighted row below and click Search."}
+            </Alert>
+          )}
+
           {loading ? (
             <div className="d-flex justify-content-center my-5">
               <Spinner animation="border" variant="primary" />
@@ -623,9 +720,16 @@ const CityMapping = () => {
                     <tbody>
                       {platforms.map((p, idx) => {
                         const state = rowState[p] || {};
+                        const isHighlighted = highlightedPlatform === p;
 
                         return (
-                          <tr key={idx}>
+                          <tr
+                            key={idx}
+                            ref={(el) => (platformRowRefs.current[p] = el)}
+                            className={
+                              isHighlighted ? "table-warning" : undefined
+                            }
+                          >
                             <td>{p}</td>
 
                             {/* Dropdown for Platform Country */}
