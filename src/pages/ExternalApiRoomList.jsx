@@ -46,7 +46,11 @@ import {
   GrnChangeNoticeModal,
   grnPolicyFromRate,
 } from "../components/grn/GrnPolicy";
-import { RateDeadlinePill } from "../utils/rateDeadline";
+import {
+  RateDeadlinePill,
+  resolveDeadlineDate,
+  isDeadlinePassed,
+} from "../utils/rateDeadline";
 
 /**
  * Renders "Valid: <from> - <to>" for a policy validity period, or null when
@@ -676,11 +680,25 @@ const ExternalApiRoomList = () => {
     }
   };
 
-  const getRefundStatusBadgeInRoomList = (nonRefundable) => {
+  // `deadlinePassed` is derived by the caller (isDeadlinePassed on the rate's
+  // resolved deadline) and lets the badge downgrade a supplier-flagged
+  // Flexible rate whose free-cancellation window has already closed —
+  // otherwise the card promises green while BookingDetailedView's cancel
+  // gate will refuse. Non-refundable and unknown cases are unchanged.
+  const getRefundStatusBadgeInRoomList = (nonRefundable, deadlinePassed = false) => {
     const value = String(nonRefundable).toLowerCase();
     switch (value) {
       case "false":
-        return <Badge bg="success">Flexible</Badge>;
+        return deadlinePassed ? (
+          <Badge
+            bg="danger"
+            title="The free-cancellation window has already closed for this rate."
+          >
+            Deadline passed
+          </Badge>
+        ) : (
+          <Badge bg="success">Flexible</Badge>
+        );
       case "true":
         return <Badge bg="danger">Non-Refundable</Badge>;
       default:
@@ -3464,6 +3482,9 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                           rate.rateKey
                                                         ]?.nonRefundable ??
                                                           rate.nonRefundable,
+                                                        isDeadlinePassed(
+                                                          resolveDeadlineDate(rate),
+                                                        ),
                                                       )}
                                                 </div>
 
@@ -3693,6 +3714,9 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                               rate.rateKey
                                                             ]?.nonRefundable ??
                                                               rate.nonRefundable,
+                                                            isDeadlinePassed(
+                                                              resolveDeadlineDate(rate),
+                                                            ),
                                                           )}
                                                       {rate.roomStatus ===
                                                       "On Request" ? (
@@ -4269,7 +4293,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                               note={
                                 rate.grnPriceChanged || rate.grnPolicyChanged
                                   ? "Updated by GRN since your search — accepted."
-                                  : "Verified with GRN."
+                                  : "Verified."
                               }
                             />
                           )}
@@ -4500,7 +4524,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                 policy={policiesModalData.grnPolicy}
                 note={
                   policiesModalData.grnVerified
-                    ? "Verified with GRN just now — this is the policy that will apply to the booking."
+                    ? "Verified just now — this is the policy that will apply to the booking."
                     : prebookLoading
                       ? "Search-time policy shown; verifying with GRN…"
                       : "Search-time policy shown."

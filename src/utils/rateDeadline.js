@@ -239,6 +239,32 @@ export const resolveDeadlineDate = (rate, fallbackPolicies) =>
   resolveDeadlineInfo(rate, fallbackPolicies)?.date || null;
 
 /**
+ * True when the given free-cancellation cut-off is a day in the past.
+ *
+ * Compared at DAY granularity in the browser's local timezone: today at 00:00
+ * against the deadline's 00:00. So a deadline whose day IS today is still
+ * considered valid — the label ("11:59 PM (UAE)" / "11:59 PM IST") promises
+ * the whole of that day. Only from the next calendar day does this return
+ * true, which is what flips the room-list card, the booking-page banner and
+ * the confirm modal from "flexible" to "deadline passed".
+ *
+ * Accepts anything parseSupplierDate does (Date, ISO string, "dd-MMM-yyyy",
+ * "dd/MMM/yyyy", "dd-MM-yyyy", GRN's "dd MMM yyyy, hh:mm AM/PM IST"), so the
+ * inhouse Date, the API-supplier resolved Date and GRN's raw string all pass
+ * through the same helper. Returns false when nothing parseable is given
+ * (missing deadline never gates a booking on its own).
+ */
+export const isDeadlinePassed = (value) => {
+  const d = value instanceof Date ? value : parseSupplierDate(value);
+  if (!d || Number.isNaN(d.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dead = new Date(d);
+  dead.setHours(0, 0, 0, 0);
+  return today > dead;
+};
+
+/**
  * Static cut-off times. Suppliers send a date with no time, so the hour is
  * stamped on rather than derived.
  *
@@ -335,6 +361,23 @@ export const RateDeadlinePill = ({
 
   const { date, source, raw } = info;
   const label = `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+
+  // Deadline day is already in the past: what the supplier called "flexible"
+  // no longer buys the operator a free cancellation. Show the same red styling
+  // as the no-free-cancellation case, but a distinct message so the operator
+  // sees WHY (time, not the supplier's own rate choice) and the tooltip still
+  // carries the original date + source for triage.
+  if (isDeadlinePassed(date)) {
+    return (
+      <span
+        className="text-danger fw-semibold"
+        title={`Free-cancellation window closed on ${label}, ${timeLabel} — read from ${source}${raw ? `: ${raw}` : ""}`}
+      >
+        Free-cancellation window has passed ({label})
+      </span>
+    );
+  }
+
   return (
     <span
       className="text-danger fw-semibold"

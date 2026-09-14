@@ -1601,15 +1601,13 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
       r?.nonRefundable === "true" ||
       r?.nonRefundable === "Y",
   );
-  const cancellationDeadline = (() => {
-    const dates = selectedRate
-      .map((r) => r?.deadlineDate)
-      .filter(Boolean)
-      .map((d) => new Date(d))
-      .filter((d) => !Number.isNaN(d.getTime()));
-    if (dates.length === 0) return null;
-    return new Date(Math.min(...dates.map((d) => d.getTime())));
-  })();
+  // Display + gate deadline for the confirm modal. Routed through the SAME
+  // deriveDeadlineDate helper that isHoldEligible and the persisted deadline
+  // use, so every screen and the saved booking agree — the previous inline
+  // "r?.deadlineDate only" read fired only for Atharva / Darina / GoGlobal and
+  // silently returned null for IWTX / X3 / RateHawk / Jumeirah / GRN, leaving
+  // the "Passed" badge invisible for a rate whose window HAD already closed.
+  const cancellationDeadline = deriveDeadlineDate(selectedRate);
   const isOutsideDeadline = (() => {
     if (!cancellationDeadline) return false;
     const today = new Date();
@@ -1643,6 +1641,21 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
               )}
             </div>
 
+            {isOutsideDeadline && !isNonRefundableRate && (
+              <Alert variant="danger" className="mb-3 py-2">
+                <strong>Free-cancellation window has passed</strong>
+                {cancellationDeadline
+                  ? ` (${cancellationDeadline.toLocaleDateString("en-GB", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })})`
+                  : ""}
+                {" "}— this rate was flagged as refundable at search time, but the
+                free-cancellation cut-off is now in the past. Cancellation charges
+                will apply if the booking is cancelled after confirmation.
+              </Alert>
+            )}
             <Form onSubmit={openPolicyConsent}>
               <Row className="g-3">
                 {/* ────────────── Left column ────────────── */}
@@ -1654,7 +1667,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                         <Button
                           variant="outline-secondary"
                           size="sm"
-                          onClick={() => navigate(-1)}
+                          onClick={() => navigate("/api-room-list")}
                           className="me-3"
                         >
                           ← Back
@@ -2464,7 +2477,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                     <div className="hbp-action-bar mt-3 d-flex gap-2">
                       <Button
                         variant="outline-secondary"
-                        onClick={() => navigate(-1)}
+                        onClick={() => navigate("/api-room-list")}
                         className="flex-grow-1"
                       >
                         Back

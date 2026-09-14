@@ -1550,6 +1550,22 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
                 </span>
               </div>
             )}
+            {isOutsideDeadline && !isNonRefundableRate && (
+              <Alert variant="danger" className="mb-3 py-2">
+                <strong>Free-cancellation window has passed</strong>
+                {cancellationDeadline
+                  ? ` (${cancellationDeadline.toLocaleDateString("en-GB", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    })})`
+                  : ""}
+                {" "}— the Voucher Later option has been hidden and the booking
+                will be issued immediately (Book Now &amp; Voucher Now).
+                Cancellation charges will apply if the booking is cancelled
+                after confirmation.
+              </Alert>
+            )}
             {/* Guest Details Section */}
             <Form
               onSubmit={(e) => {

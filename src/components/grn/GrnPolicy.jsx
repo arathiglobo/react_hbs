@@ -1,5 +1,6 @@
 import React from "react";
 import { Badge, Button, Modal } from "react-bootstrap";
+import { isDeadlinePassed } from "../../utils/rateDeadline";
 
 /**
  * GRN (apiId 20) cancellation-policy presentation, shared by the room list,
@@ -152,10 +153,36 @@ const categoryVariant = (category, nonRefundable) => {
   }
 };
 
+/**
+ * True when this rate's (already-buffered) free-cancellation deadline is a day
+ * in the past. Meaningful only for rates that HAD a free window in the first
+ * place — a non-refundable rate never had one, so this is false for it.
+ * Shared with GrnDeadlinePill and GrnPolicyBlock so all three flip together.
+ */
+export const isGrnDeadlinePassed = (policy) => {
+  if (!policy || policy.refundCategory === "NON_REFUNDABLE") return false;
+  return isDeadlinePassed(policy.freeCancellationUntil);
+};
+
 /** Small pill: Fully refundable / Partially refundable / Non-refundable. */
 export const GrnRefundBadge = ({ rate, policy, className = "" }) => {
   const p = policy || grnPolicyFromRate(rate);
   if (!p) return null;
+  // Deadline day is already in the past: the supplier categorised this as
+  // Fully / Partially refundable at search time, but the free window is now
+  // gone — the operator would otherwise see a green pill promising something
+  // the cancel flow (BookingDetailedView) will already refuse.
+  if (isGrnDeadlinePassed(p)) {
+    return (
+      <Badge
+        bg="danger"
+        className={className}
+        title={`Free-cancellation window closed on ${p.freeCancellationUntil}. Cancellation charges now apply.`}
+      >
+        Non-refundable (deadline passed)
+      </Badge>
+    );
+  }
   const variant = categoryVariant(p.refundCategory, p.nonRefundable);
   return (
     <Badge
@@ -176,6 +203,19 @@ export const GrnRefundBadge = ({ rate, policy, className = "" }) => {
 export const GrnDeadlinePill = ({ rate, policy }) => {
   const p = policy || grnPolicyFromRate(rate);
   if (!p) return null;
+  // Deadline in the past — override every "still free" wording. Matches the
+  // red pill RateDeadlinePill shows for non-GRN suppliers so operators see
+  // one consistent message across the whole page.
+  if (isGrnDeadlinePassed(p)) {
+    return (
+      <span
+        className="small fw-semibold text-danger"
+        title={`Free-cancellation window closed on ${p.freeCancellationUntil} (${p.policyTimezone})`}
+      >
+        Free-cancellation window has passed ({p.freeCancellationUntil})
+      </span>
+    );
+  }
   if (p.refundCategory === "FULLY_REFUNDABLE" && p.freeCancellationUntil) {
     return (
       <span
@@ -212,7 +252,13 @@ export const GrnDeadlinePill = ({ rate, policy }) => {
 export const GrnPolicyBlock = ({ rate, policy, title, note, compact = false }) => {
   const p = policy || grnPolicyFromRate(rate);
   if (!p) return null;
-  const variant = categoryVariant(p.refundCategory, p.nonRefundable);
+  // When the buffered deadline has already passed we paint the whole block
+  // in the danger tone so the badge, the note and the container agree — a
+  // red badge inside a green tile would just be confusing.
+  const deadlinePassed = isGrnDeadlinePassed(p);
+  const variant = deadlinePassed
+    ? "danger"
+    : categoryVariant(p.refundCategory, p.nonRefundable);
   const tone = {
     success: { bg: "#e8f5ec", border: "#b7dfc2", ink: "#146c43" },
     warning: { bg: "#fff8e1", border: "#f0d48a", ink: "#7a5a00" },
@@ -229,7 +275,12 @@ export const GrnPolicyBlock = ({ rate, policy, title, note, compact = false }) =
       )}
       <div className="d-flex align-items-center flex-wrap gap-2 mb-1">
         <GrnRefundBadge policy={p} />
-        {p.refundCategory === "FULLY_REFUNDABLE" && p.freeCancellationUntil && (
+        {deadlinePassed && p.freeCancellationUntil && (
+          <span className="small fw-semibold" style={{ color: tone.ink }}>
+            Free-cancellation window closed on {p.freeCancellationUntil}
+          </span>
+        )}
+        {!deadlinePassed && p.refundCategory === "FULLY_REFUNDABLE" && p.freeCancellationUntil && (
           <span className="small fw-semibold" style={{ color: tone.ink }}>
             Free cancellation until {p.freeCancellationUntil}
           </span>

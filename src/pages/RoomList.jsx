@@ -40,6 +40,7 @@ import { formatFlexibleDate } from "../utils/dateUtils";
 import {
   RateDeadlinePill,
   resolveInhouseDeadline,
+  isDeadlinePassed,
   DEADLINE_TIME_2PM,
 } from "../utils/rateDeadline";
 
@@ -721,11 +722,25 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
     }
   };
 
-  const getRefundStatusBadgeInRoomList = (nonRefundable) => {
+  // `deadlinePassed` (derived from isDeadlinePassed(inhouseDeadline) at the
+  // call site) downgrades a supplier-flagged Flexible rate whose free-
+  // cancellation window has already closed — otherwise the room list keeps
+  // promising green while the cancel gate on the saved booking already
+  // refuses.
+  const getRefundStatusBadgeInRoomList = (nonRefundable, deadlinePassed = false) => {
     const value = String(nonRefundable).toLowerCase();
     switch (value) {
       case "false":
-        return <Badge bg="success">Flexible</Badge>;
+        return deadlinePassed ? (
+          <Badge
+            bg="danger"
+            title="The free-cancellation window has already closed for this stay."
+          >
+            Deadline passed
+          </Badge>
+        ) : (
+          <Badge bg="success">Flexible</Badge>
+        );
       case "true":
         return <Badge bg="danger">Non-Refundable</Badge>;
       default:
@@ -1734,6 +1749,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
 
                                       {getRefundStatusBadgeInRoomList(
                                         rate.nonRefundable,
+                                        isDeadlinePassed(inhouseDeadline),
                                       )}
                                     </div>
 
@@ -1905,6 +1921,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                         <div className="d-flex align-items-center gap-2 flex-shrink-0">
                                           {getRefundStatusBadgeInRoomList(
                                             rate.nonRefundable,
+                                            isDeadlinePassed(inhouseDeadline),
                                           )}
                                           {rate.roomStatus === "On Request" ? (
                                             <Badge
