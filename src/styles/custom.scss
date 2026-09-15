@@ -387,6 +387,43 @@ top: auto;
   color: #111827 !important;
 }
 
+/* "Coming soon" submenu entries — agent New Booking flows that are not open
+   yet (components/Sidebar.jsx ComingSoonSubmenuItem, driven by
+   config/agentComingSoon.js). Same treatment as the AgentDashboard quick-action
+   tiles: greyed, not clickable, orange pill. The class is repeated on purpose:
+   the dashboard skins set the hover background with !important at four-class
+   specificity (.rw-dashboard .sidebar .submenu .submenu-link:hover), and a
+   disabled entry must not light up on hover there either. */
+.submenu .submenu-link.is-coming-soon.is-coming-soon.is-coming-soon {
+  opacity: .55;
+  filter: grayscale(.35);
+  cursor: not-allowed !important;
+}
+.submenu .submenu-link.is-coming-soon.is-coming-soon.is-coming-soon:hover,
+.submenu .submenu-link.is-coming-soon.is-coming-soon.is-coming-soon:focus {
+  background: transparent !important;
+  color: #111827 !important;
+}
+.submenu-coming-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.submenu-coming-badge {
+  flex: 0 0 auto;
+  background: #FF6B00;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  line-height: 1.5;
+  padding: 1px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 /* Submenu children container */
 .submenu-children {
   margin-left: 0.5rem;

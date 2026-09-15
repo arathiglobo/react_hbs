@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { FaAd, FaBrain, FaBullhorn, FaBullseye, FaFileAlt, FaImages, FaRobot, FaTags, FaUser } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
+import { isAgentComingSoon, COMING_SOON_TITLE } from "../config/agentComingSoon";
 
 
 let labelForDashboard = " ";
@@ -47,6 +48,42 @@ const SUBMENU_UP = new Set([
   "Marketing",
   "Report",
 ]);
+
+/**
+ * A New Booking submenu entry whose flow is not open to agents yet.
+ *
+ * Mirrors the AgentDashboard quick-action tile for the same route: greyed and
+ * non-clickable, "Coming soon…" tooltip, orange "Coming soon" pill (styles in
+ * custom.scss next to .submenu-link). Renders a span, not a Link, so there is
+ * nothing to navigate to — the unfinished page is never opened.
+ */
+function ComingSoonSubmenuItem({ label, color }) {
+  return (
+    <span
+      className="nav-link submenu-link is-coming-soon"
+      role="link"
+      aria-disabled="true"
+      title={COMING_SOON_TITLE}
+      onClick={(e) => e.preventDefault()}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 8,
+        padding: "8px 12px",
+        color,
+        textDecoration: "none",
+        cursor: "not-allowed",
+        fontWeight: 450,
+      }}
+    >
+      <span className="submenu-coming-label">{label}</span>
+      <span className="submenu-coming-badge" aria-hidden="true">
+        Coming soon
+      </span>
+    </span>
+  );
+}
 
 export default function Sidebar() {
   const [show, setShow] = useState(false);
@@ -125,6 +162,12 @@ export default function Sidebar() {
     localStorage.getItem("UserName") || sessionStorage.getItem("UserName") || "";
   const isSubAccountAgent =
     currentRole === "agent" && loginUserName.includes(".");
+
+  // New Booking flows that are "Coming soon" for AGENT logins (same set the
+  // AgentDashboard quick actions use — config/agentComingSoon.js). Admin,
+  // super_admin, staff and extranet keep the normal links.
+  const isComingSoonForRole = (child) =>
+    currentRole === "agent" && !!child?.to && isAgentComingSoon(child.to);
 
   // Re-sync the stored active role with the dashboard context so the
   // role-guarded routes (PrivateRoute roles=[...]) agree with the menu.
@@ -1220,6 +1263,15 @@ export default function Sidebar() {
                             </div>
                           );
                         }
+                        if (isComingSoonForRole(child)) {
+                          return (
+                            <ComingSoonSubmenuItem
+                              key={`${item.label}-${child.label}`}
+                              label={child.label}
+                              color="var(--color-secondary, #111827)"
+                            />
+                          );
+                        }
                         return (
                           <Nav.Link
                             as={Link}
@@ -1449,6 +1501,15 @@ export default function Sidebar() {
                                   </div>
                                 )}
                               </div>
+                            );
+                          }
+                          if (isComingSoonForRole(child)) {
+                            return (
+                              <ComingSoonSubmenuItem
+                                key={`${item.label}-mobile-${child.label}`}
+                                label={child.label}
+                                color="#111827"
+                              />
                             );
                           }
                           return (

@@ -41,6 +41,7 @@ import {
 import { MdWifiOff } from "react-icons/md";
 import TopBar from "../components/TopBar";
 import axiosInstance from "../components/AxiosInstance";
+import { isAgentComingSoon, COMING_SOON_TITLE } from "../config/agentComingSoon";
 import {
   dashboardCss,
   DashboardHeader,
@@ -184,26 +185,30 @@ export default function AgentDashboard() {
   // corresponding search/booking page without opening the sidebar. Each tile
   // carries its own accent "tone" (styled in the scoped <style> block below)
   // so the grid reads as a set of distinct shortcuts, not a uniform button row.
+  //
+  // Which flows are "Coming soon" is NOT decided here: the tiles read the
+  // shared AGENT_COMING_SOON_ROUTES set (config/agentComingSoon.js) that the
+  // Sidebar → New Booking submenu uses too, so the two never disagree.
   const bookingActions = [
     { label: "Hotels",              tone: "pink",   icon: <FaHotel />,          to: "/new-booking/hotel" },
-    { label: "24 Hours",            tone: "pink",   icon: <FaClock />,          to: "/new-booking/hotel-24hr",              comingSoon: true },
+    { label: "24 Hours",            tone: "pink",   icon: <FaClock />,          to: "/new-booking/hotel-24hr" },
     { label: "Last Minutes",        tone: "orange", icon: <FaFire />,           to: "/new-booking/last-minute-booking" },
-    { label: "Long Stays",          tone: "purple", icon: <FaBriefcase />,      to: "/new-booking/long-stay",               comingSoon: true },
-    { label: "Day Stays",           tone: "blue",   icon: <FaSun />,            to: "/new-booking/day-stay",                comingSoon: true },
+    { label: "Long Stays",          tone: "purple", icon: <FaBriefcase />,      to: "/new-booking/long-stay" },
+    { label: "Day Stays",           tone: "blue",   icon: <FaSun />,            to: "/new-booking/day-stay" },
     { label: "Build Your Own Pkg", tone: "green",  icon: <FaBoxOpen />,        to: "/new-booking/make-your-own-package-v2" },
     { label: "Packages",            tone: "orange", icon: <FaGift />,           to: "/new-booking/package-search" },
-    { label: "Transfers",          tone: "teal",   icon: <FaCar />,            to: "/new-booking/cab",                     comingSoon: true },
-    { label: "Chauffeur & Limousins",   tone: "purple", icon: <FaTaxi />,           to: "/new-booking/scheffer-driver",         comingSoon: true },
+    { label: "Transfers",          tone: "teal",   icon: <FaCar />,            to: "/new-booking/cab" },
+    { label: "Chauffeur & Limousins",   tone: "purple", icon: <FaTaxi />,           to: "/new-booking/scheffer-driver" },
     { label: "Tours & Activitys",   tone: "green",  icon: <FaGlobeAmericas />,  to: "/new-booking/tours-and-activities" },
-    { label: "Restaurants",         tone: "orange", icon: <FaUtensils />,       to: "/new-booking/restaurant",     comingSoon: true },
-    { label: "Honeymoon Packages",  tone: "pink",   icon: <FaHeart />,          to: "/new-booking/honeymoon",      comingSoon: true },
-    { label: "Meeting Spaces",      tone: "purple", icon: <FaUserFriends />,    to: "/new-booking/meet-and-space", comingSoon: true },
+    { label: "Restaurants",         tone: "orange", icon: <FaUtensils />,       to: "/new-booking/restaurant" },
+    { label: "Honeymoon Packages",  tone: "pink",   icon: <FaHeart />,          to: "/new-booking/honeymoon" },
+    { label: "Meeting Spaces",      tone: "purple", icon: <FaUserFriends />,    to: "/new-booking/meet-and-space" },
     { label: "Govt/Airline/Hoteliers",               tone: "blue",   icon: <FaPlane />,          to: "/new-booking/gov-employee" },
-    { label: "Ayurveda",           tone: "green",  icon: <FaLeaf />,           to: "/new-booking/ayurveda",       comingSoon: true },
+    { label: "Ayurveda",           tone: "green",  icon: <FaLeaf />,           to: "/new-booking/ayurveda" },
     { label: "Students",            tone: "purple", icon: <FaGraduationCap />,  to: "/new-booking/student" },
     { label: "Senior Citizens",     tone: "orange", icon: <FaUserAlt />,        to: "/new-booking/senior-citizen" },
     { label: "Religious",     tone: "orange", icon: <FaPrayingHands/>,        to: "/new-booking/religious" },
-  ];
+  ].map((a) => ({ ...a, comingSoon: isAgentComingSoon(a.to) }));
 
   const manageActions = [
     {
@@ -813,7 +818,7 @@ export default function AgentDashboard() {
                       onClick={a.comingSoon ? undefined : () => navigate(a.to)}
                       disabled={a.comingSoon}
                       aria-disabled={a.comingSoon ? "true" : undefined}
-                      title={a.comingSoon ? "Coming soon…" : undefined}
+                      title={a.comingSoon ? COMING_SOON_TITLE : undefined}
                     >
                       <span className={`agent-qa-icon tone-${a.tone}`}>{a.icon}</span>
                       <span>{a.label}</span>
