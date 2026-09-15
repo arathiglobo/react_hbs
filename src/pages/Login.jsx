@@ -1060,7 +1060,7 @@ const Login = () => {
               <i className="fas fa-user-circle me-2"></i>Create Account As
             </h5>
             <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 28 }}>
-              {["Agent", "Hotel"].map((role) => (
+              {["Agent", "Hotel", "Supplier", "DMC"].map((role) => (
                 <label
                   key={role}
                   style={{
@@ -1082,8 +1082,18 @@ const Login = () => {
                     onChange={() => setSelectedRole(role)}
                     style={{ accentColor: "#c0392b", width: 18, height: 18 }}
                   />
-                  <i className={`fas ${role === "Agent" ? "fa-briefcase" : "fa-hotel"} me-1`}></i>
-                  {role}
+                  <i
+                    className={`fas ${
+                      role === "Agent"
+                        ? "fa-briefcase"
+                        : role === "Hotel"
+                          ? "fa-hotel"
+                          : role === "Supplier"
+                            ? "fa-truck"
+                            : "fa-map-marked-alt"
+                    } me-1`}
+                  ></i>
+                  {role === "DMC" ? "DMC (Destination Management Company)" : role}
                 </label>
               ))}
             </div>
@@ -1102,7 +1112,14 @@ const Login = () => {
                 type="button"
                 onClick={() => {
                   setShowRoleModal(false);
-                  navigate(selectedRole === "Hotel" ? "/hotel-register" : "/register");
+                  // Supplier / DMC share one form (PartnerRegisterFromOut)
+                  // parameterised by route; Agent / Hotel unchanged.
+                  const registerPath = {
+                    Hotel: "/hotel-register",
+                    Supplier: "/supplier-register",
+                    DMC: "/dmc-register",
+                  };
+                  navigate(registerPath[selectedRole] || "/register");
                 }}
                 style={{
                   padding: "8px 22px", borderRadius: 7, border: "none",

@@ -6,6 +6,8 @@ const AUTH_KEYS = [
   "UserName",
   "currentActiveRole",
   "makeYourOwnPackageAgentId",
+  // Supplier / DMC approved-feature snapshot (hooks/usePartnerAccess.js).
+  "partnerAccess",
 ];
 
 export const clearAuthStorage = () => {

@@ -29,6 +29,8 @@ import {
 import { FaAd, FaBrain, FaBullhorn, FaBullseye, FaFileAlt, FaImages, FaRobot, FaTags, FaUser } from "react-icons/fa";
 import axiosInstance from "./AxiosInstance";
 import { isAgentComingSoon, COMING_SOON_TITLE } from "../config/agentComingSoon";
+import { isPartnerRole } from "../config/partnerFeatures";
+import PartnerSidebar from "./PartnerSidebar";
 
 
 let labelForDashboard = " ";
@@ -143,6 +145,10 @@ export default function Sidebar() {
     // but this path pins the active role to super_admin so the sidebar
     // filter shows the SUPER_ADMIN-only groups (API Access, Credential Vault).
     "/superAdminDashboard": "super_admin",
+    // Supplier / DMC portal — same trick, so a direct visit to either
+    // dashboard pins the partner role before PartnerSidebar renders.
+    "/supplierDashboard": "supplier",
+    "/dmcDashboard": "dmc",
   };
   const pathRole = dashboardRoleByPath[pathname];
 
@@ -209,18 +215,23 @@ export default function Sidebar() {
     let cancelled = false;
     (async () => {
       try {
-        const [hotelRes, agentRes] = await Promise.all([
+        const [hotelRes, agentRes, partnerRes] = await Promise.all([
           axiosInstance
             .get("/api/hotel-external-register/pending-count")
             .catch(() => null),
           axiosInstance
             .get("/api/agent-external-register/pending-count")
             .catch(() => null),
+          // Supplier / DMC self-registrations awaiting review.
+          axiosInstance
+            .get("/api/partner-external-register/pending-count")
+            .catch(() => null),
         ]);
         if (cancelled) return;
         const h = Number(hotelRes?.data?.count) || 0;
         const a = Number(agentRes?.data?.count) || 0;
-        setApprovalsPendingCount(h + a);
+        const p = Number(partnerRes?.data?.count) || 0;
+        setApprovalsPendingCount(h + a + p);
       } catch (_) {
         if (!cancelled) setApprovalsPendingCount(0);
       }
@@ -312,6 +323,23 @@ export default function Sidebar() {
 
 
   console.log("currentRole in sidebar::", currentRole);
+
+  // Supplier / DMC logins get a menu generated from their approved
+  // features instead of the hardcoded items below. Delegated here (after
+  // every hook above has run) so the reused product pages, which all render
+  // <Sidebar />, show the partner menu without any change of their own.
+  if (isPartnerRole(currentRole)) {
+    return (
+      <PartnerSidebar
+        role={currentRole}
+        show={show}
+        onShow={handleShow}
+        onClose={handleClose}
+        collapsed={collapsed}
+        onToggleCollapsed={toggleCollapsed}
+      />
+    );
+  }
 
   // Set dashboard path based on current active role
   let dashboardPath = "/";
@@ -518,6 +546,7 @@ export default function Sidebar() {
       children: [
         { code: "appr_hotel", label: "Hotel", to: "/admin/approval/hotels" },
         { code: "appr_agent", label: "Agent", to: "/admin/approval/agents" },
+        { code: "appr_partner", label: "Supplier / DMC", to: "/admin/approval/partners" },
       ],
     },
     {
