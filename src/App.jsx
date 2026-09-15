@@ -4,6 +4,9 @@ import Login from "./pages/Login";
 import SelectRole from "./pages/SelectRole";
 import Register from "./pages/Register";
 import HotelRegisterFromOut from "./pages/HotelRegisterFromOut";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import ContactDetails from "./pages/ContactDetails";
+import AboutUs from "./pages/AboutUs";
 import HotelApproval from "./pages/HotelApproval";
 import HotelApprovalDetail from "./pages/HotelApprovalDetail";
 import AgentApproval from "./pages/AgentApproval";
@@ -367,6 +370,9 @@ export default function App() {
         <Route path="/select-userRole" element={<SelectRole />} />
         <Route path="/register" element={<Register />} />
         <Route path="/hotel-register" element={<HotelRegisterFromOut />} />
+        <Route path="/privacypolicy" element={<PrivacyPolicy />} />
+        <Route path="/ContactDetails" element={<ContactDetails />} />
+        <Route path="/Aboutus" element={<AboutUs />} />
         
        
      {/* Protected Routes */}

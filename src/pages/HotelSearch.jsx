@@ -647,6 +647,9 @@ export default function HotelSearch({
   // Once the operator picks a currency manually we stop auto-defaulting it to
   // the agent's currency (so their choice sticks).
   const currencyTouchedRef = useRef(false);
+  // Latest selected code, readable synchronously from async callbacks
+  // (handleSearchSubmit after its POST await, the agent-default lookup).
+  const selectedCurrencyCodeRef = useRef(null);
   // Envelope-level {code, factor} from the last backend response — used by
   // the sessionStorage handoff to RoomList / booking pages. `factor` is
   // "target-per-1-AED" (backend divides master_currency.value into 1), so
@@ -765,6 +768,10 @@ export default function HotelSearch({
   // belongs to the PREVIOUS search can never write that destination's rows
   // back into allResults after Modify Search → Search cleared them.
   const searchGenRef = useRef(0);
+  // Bumped by every fetchHotels call that REPLACES allResults, so a slower
+  // full-list /resultsOut reply (currency picker) can't overwrite a newer
+  // page or hotel-name result.
+  const replaceGenRef = useRef(0);
   const [isDestinationLoading, setIsDestinationLoading] = useState(false);
   const resultsRef = useRef(null);
   const [isInitialResultsLoaded, setIsInitialResultsLoaded] = useState(false);
@@ -1114,7 +1121,12 @@ export default function HotelSearch({
           const pct = Number(meta?.percentage || 0);
           const base = Number(hotel.price || 0);
           const uplifted = +(base * (1 + pct / 100)).toFixed(2);
-          return { ...hotel, price: uplifted, _twentyFourHourPercentage: pct };
+          // The card renders displayPrice, so convert the uplifted AED price
+          // once with the backend factor (same maths as RoomList).
+          const factor = Number(hotel.displayFactor) > 0 ? Number(hotel.displayFactor) : 1;
+          const displayPrice =
+            pct > 0 ? Math.round(uplifted * factor * 100 + 1e-9) / 100 : hotel.displayPrice;
+          return { ...hotel, price: uplifted, displayPrice, _twentyFourHourPercentage: pct };
         });
     }
 
@@ -1353,18 +1365,28 @@ export default function HotelSearch({
     agentList();
   }, []);
 
-  // Maps /api/currency rows to react-select options. master_currency.value is
-  // a numeric string ("0.2723"); coerce it once here so the conversion is
-  // plain arithmetic downstream.
-  const mapCurrencyOptions = (list) =>
-    (Array.isArray(list) ? list : [])
-      .filter((c) => c && c.currencyCode)
+  // Maps /api/currency rows to react-select options. Only active rows with a
+  // positive rate are offered (the backend cannot convert into the others),
+  // one option per code — master_currency holds a deleted duplicate BDT row.
+  const mapCurrencyOptions = (list) => {
+    const seenCodes = new Set();
+    return (Array.isArray(list) ? list : [])
+      .filter((c) => {
+        if (!c || !c.currencyCode || c.isDeleted === true || !(Number(c.value) > 0)) {
+          return false;
+        }
+        const code = c.currencyCode.trim().toUpperCase();
+        if (seenCodes.has(code)) return false;
+        seenCodes.add(code);
+        return true;
+      })
       .map((c) => ({
         value: c.currencyId,
         label: c.currencyCode,
         code: c.currencyCode,
         rate: Number(c.value),
       }));
+  };
 
   // Fetches the currency list, passing the typed text as the backend `search`
   // param (server matches on currency name, e.g. "US dollar").
@@ -1433,18 +1455,29 @@ export default function HotelSearch({
   // still quoted in AED — this only sets the initial dropdown selection so the
   // operator sees the agent's currency by default. Stops once the operator
   // changes the currency manually (currencyTouchedRef).
+  useEffect(() => {
+    selectedCurrencyCodeRef.current = selectedCurrency?.code || null;
+  }, [selectedCurrency]);
+
   const currencyAgentId = isAgentRole ? selfAgentId : agent;
   useEffect(() => {
     if (currencyTouchedRef.current) return;
     if (!currencyAgentId || currencyOptions.length === 0) return;
     let cancelled = false;
+    const searchGenAtRequest = searchGenRef.current;
     axiosInstance
       .get(`/api/agent/${currencyAgentId}`)
       .then((res) => {
         const code = res?.data?.currencyCode;
         if (cancelled || !code || currencyTouchedRef.current) return;
         const opt = currencyOptions.find((o) => o.code === code);
-        if (opt) setSelectedCurrency(opt);
+        // Skip the on-screen re-convert if a new search started meanwhile:
+        // this closure's searchId would belong to the previous search.
+        if (opt) {
+          changeDisplayCurrency(opt, {
+            reconvertAll: searchGenAtRequest === searchGenRef.current,
+          });
+        }
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -1565,6 +1598,9 @@ export default function HotelSearch({
       // the "mixed AED/GBP cards" bug in the screenshot).
       const myCurrencyVersion = currencyVersionRef.current;
       const mySearchGen = searchGenRef.current;
+      if (isNameSearching || pollStatus !== "IN_PROGRESS") {
+        replaceGenRef.current += 1;
+      }
 
       const res = await axiosInstance.get(endpoint, {
         params,
@@ -1612,6 +1648,10 @@ export default function HotelSearch({
               hotel.displayBaseRate != null ? hotel.displayBaseRate : hotel.baseRate,
             displayCurrencyCode:
               hotel.displayCurrencyCode || "AED",
+            displayFactor:
+              Number(res.data.displayCurrencyFactor) > 0
+                ? Number(res.data.displayCurrencyFactor)
+                : 1,
             badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
             image:
               hotel.hotelImage ||
@@ -1836,9 +1876,12 @@ export default function HotelSearch({
       // arrives already converted to the chosen display currency. Missing
       // this made the initial rows render in AED for the ~10-15 s the poll
       // took to finish, which is the "still see AED" symptom.
-      if (selectedCurrency && selectedCurrency.code) {
-        params.displayCurrencyCode = selectedCurrency.code;
-        pollCurrencyCodeRef.current = selectedCurrency.code;
+      // Read the ref, not the closure: the agent-default currency can land
+      // while the POST above is still awaiting.
+      const pollDisplayCode = selectedCurrencyCodeRef.current;
+      if (pollDisplayCode) {
+        params.displayCurrencyCode = pollDisplayCode;
+        pollCurrencyCodeRef.current = pollDisplayCode;
       } else {
         pollCurrencyCodeRef.current = null;
       }
@@ -1912,6 +1955,10 @@ export default function HotelSearch({
                   hotel.displayBaseRate != null ? hotel.displayBaseRate : hotel.baseRate,
                 displayCurrencyCode:
                   hotel.displayCurrencyCode || "AED",
+                displayFactor:
+                  Number(data.displayCurrencyFactor) > 0
+                    ? Number(data.displayCurrencyFactor)
+                    : 1,
                 badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
                 image:
                   hotel.hotelImage ||
@@ -2075,6 +2122,112 @@ export default function HotelSearch({
   //   hasSearchResult &&
   //   isInitialResultsLoaded &&
   //   (pollStatus === "IN_PROGRESS" || pollStatus === "COMPLETED");
+
+  // Single path for every display-currency change (picker + agent default).
+  // Same code → no-op. Otherwise redirect the running poll, drop in-flight
+  // replies in the old currency, and re-convert what's already on screen.
+  const changeDisplayCurrency = (opt, { manual = false, reconvertAll = true } = {}) => {
+    if (manual) currencyTouchedRef.current = true;
+    if (!opt?.code) return;
+    setSelectedCurrency(opt);
+    if (opt.code === selectedCurrencyCodeRef.current) return;
+    selectedCurrencyCodeRef.current = opt.code;
+    currencyVersionRef.current += 1;
+    if (pollParamsRef.current) {
+      pollParamsRef.current.displayCurrencyCode = opt.code;
+    }
+    pollCurrencyCodeRef.current = opt.code;
+
+    // Once polling is over (or a name filter is active) the results effect
+    // REPLACES the list in the new currency itself (selectedCurrency?.code is
+    // one of its deps). While polling, its fetches only MERGE one page — even
+    // with a channel/star filter — so re-convert the whole list via /resultsOut.
+    const effectWillRefetch =
+      hasSearched &&
+      (pollStatus !== "IN_PROGRESS" || !!finalHotelSearchTermRef.current.trim());
+    if (!reconvertAll || !searchId || effectWillRefetch) return;
+
+    const myVersion = currencyVersionRef.current;
+    const mySearchGen = searchGenRef.current;
+    const myReplaceGen = replaceGenRef.current;
+    axiosInstance
+      .get(`/api/hotel-search/resultsOut/${searchId}`, {
+        params: {
+          agentId: (isAgentRole ? selfAgentId : agent) || 1,
+          page: 0,
+          size: 100000,
+          sortBy:
+            sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
+          sortOrder:
+            sortBy === "priceAsc" || sortBy === "ratingAsc" || sortBy === "nameAsc"
+              ? "asc"
+              : "desc",
+          starRating: starRating ? starRating.value : undefined,
+          apiType:
+            channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
+          displayCurrencyCode: opt.code,
+        },
+      })
+      .then((res) => {
+        // Drop if the currency or search moved on, a newer page/name fetch
+        // replaced the list, or a hotel-name filter now owns allResults.
+        if (
+          myVersion !== currencyVersionRef.current ||
+          mySearchGen !== searchGenRef.current ||
+          myReplaceGen !== replaceGenRef.current ||
+          finalHotelSearchTermRef.current.trim()
+        ) {
+          return;
+        }
+        if (res.data && res.data.displayCurrencyCode) {
+          backendDisplayCurrencyRef.current = {
+            code: res.data.displayCurrencyCode,
+            factor:
+              res.data.displayCurrencyFactor != null
+                ? Number(res.data.displayCurrencyFactor)
+                : 1,
+          };
+        }
+        const mapped = Array.isArray(res.data?.result)
+          ? res.data.result.map((hotel, i) => ({
+              id: hotel.hotelCode
+                ? `${searchId}-${hotel.hotelCode}`
+                : `${searchId}-h${i + 1}`,
+              searchId,
+              hotelCode: hotel.hotelCode || null,
+              name: hotel.hotelName || "Unknown Hotel",
+              address: hotel.hotelAddress || "",
+              city: hotel.hotelAddress
+                ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
+                : "Unknown City",
+              price: hotel.baseRate || null,
+              displayPrice:
+                hotel.displayBaseRate != null ? hotel.displayBaseRate : hotel.baseRate,
+              displayCurrencyCode: hotel.displayCurrencyCode || "AED",
+              displayFactor:
+                Number(res.data.displayCurrencyFactor) > 0
+                  ? Number(res.data.displayCurrencyFactor)
+                  : 1,
+              badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
+              image:
+                hotel.hotelImage ||
+                "https://details/assets/details/profilepic/hotel/hoteldefault.jpg",
+              rating: hotel.starRating || 0,
+              hotelType: "hotel",
+              channelType: hotel.apiType?.toLowerCase() || "inhouse",
+              hasDestinationSales: !!hotel.hasDestinationSales,
+              flashSale: !!hotel.flashSale,
+              latitude: hotel.latitude,
+              longitude: hotel.longitude,
+              contactNumber: hotel.contactNumber || "",
+            }))
+          : [];
+        setAllResults(mapped);
+      })
+      .catch(() => {
+        /* fail-safe: leave existing rows */
+      });
+  };
 
   const showResultsDuringPolling = hasSearchResult || allResults.length > 0;
 
@@ -2905,148 +3058,9 @@ export default function HotelSearch({
                                 <Select
                                   options={currencyOptions}
                                   value={selectedCurrency}
-                                  onChange={(opt) => {
-                                    // Operator override — stop auto-defaulting
-                                    // to the agent's currency from here on.
-                                    currencyTouchedRef.current = true;
-                                    setSelectedCurrency(opt);
-                                    // Bump the currency-version — any
-                                    // in-flight fetch/poll request whose
-                                    // response arrives after this point gets
-                                    // dropped instead of merged, so a stale
-                                    // in-flight request can't clobber the
-                                    // new-currency rows.
-                                    currencyVersionRef.current += 1;
-                                    // 1) Redirect the still-running poll into
-                                    //    the new currency. Mutating params in
-                                    //    place is safe because pollUntilComplete
-                                    //    closes over this exact object and
-                                    //    re-reads it every tick.
-                                    if (pollParamsRef.current && opt?.code) {
-                                      pollParamsRef.current.displayCurrencyCode =
-                                        opt.code;
-                                    }
-                                    pollCurrencyCodeRef.current = opt?.code || null;
-                                    // 2) Fetch the WHOLE deduplicated result
-                                    //    set (not just page 0) in the new
-                                    //    currency and REPLACE allResults. The
-                                    //    per-page merge in fetchHotels only
-                                    //    updates the top-10 by sort order and
-                                    //    leaves earlier-tick "straggler"
-                                    //    hotels in their old currency — that
-                                    //    was the "AED 550 after USD picked"
-                                    //    symptom in the screenshot. /resultsOut
-                                    //    returns every row so one REPLACE
-                                    //    reconverts the entire list.
-                                    if (searchId && opt?.code) {
-                                      const myVersion = currencyVersionRef.current;
-                                      const mySearchGen = searchGenRef.current;
-                                      axiosInstance
-                                        .get(
-                                          `/api/hotel-search/resultsOut/${searchId}`,
-                                          {
-                                            params: {
-                                              agentId:
-                                                (isAgentRole ? selfAgentId : agent) || 1,
-                                              page: 0,
-                                              size: 100000,
-                                              sortBy:
-                                                sortBy === "priceAsc" ||
-                                                sortBy === "priceDesc"
-                                                  ? "baseRate"
-                                                  : sortBy,
-                                              sortOrder:
-                                                sortBy === "priceAsc" ||
-                                                sortBy === "ratingAsc" ||
-                                                sortBy === "nameAsc"
-                                                  ? "asc"
-                                                  : "desc",
-                                              starRating: starRating
-                                                ? starRating.value
-                                                : undefined,
-                                              apiType:
-                                                channelType
-                                                  .map((c) => c.value.toUpperCase())
-                                                  .join(",") || undefined,
-                                              displayCurrencyCode: opt.code,
-                                            },
-                                          },
-                                        )
-                                        .then((res) => {
-                                          // Guard against the picker moving
-                                          // on, or a new search starting,
-                                          // before this fetch returns.
-                                          if (
-                                            myVersion !== currencyVersionRef.current ||
-                                            mySearchGen !== searchGenRef.current
-                                          ) {
-                                            return;
-                                          }
-                                          if (
-                                            res.data &&
-                                            res.data.displayCurrencyCode
-                                          ) {
-                                            backendDisplayCurrencyRef.current = {
-                                              code: res.data.displayCurrencyCode,
-                                              factor:
-                                                res.data.displayCurrencyFactor != null
-                                                  ? Number(
-                                                      res.data.displayCurrencyFactor,
-                                                    )
-                                                  : 1,
-                                            };
-                                          }
-                                          const mapped = Array.isArray(
-                                            res.data?.result,
-                                          )
-                                            ? res.data.result.map((hotel, i) => ({
-                                                id: hotel.hotelCode
-                                                  ? `${searchId}-${hotel.hotelCode}`
-                                                  : `${searchId}-h${i + 1}`,
-                                                searchId,
-                                                hotelCode: hotel.hotelCode || null,
-                                                name:
-                                                  hotel.hotelName || "Unknown Hotel",
-                                                address: hotel.hotelAddress || "",
-                                                city: hotel.hotelAddress
-                                                  ? hotel.hotelAddress
-                                                      .split(", ")
-                                                      .pop() || "Unknown City"
-                                                  : "Unknown City",
-                                                price: hotel.baseRate || null,
-                                                displayPrice:
-                                                  hotel.displayBaseRate != null
-                                                    ? hotel.displayBaseRate
-                                                    : hotel.baseRate,
-                                                displayCurrencyCode:
-                                                  hotel.displayCurrencyCode || opt.code,
-                                                badge: hotel.baseRate
-                                                  ? "Rate Available"
-                                                  : "Rate Unavailable",
-                                                image:
-                                                  hotel.hotelImage ||
-                                                  "https://details/assets/details/profilepic/hotel/hoteldefault.jpg",
-                                                rating: hotel.starRating || 0,
-                                                hotelType: "hotel",
-                                                channelType:
-                                                  hotel.apiType?.toLowerCase() ||
-                                                  "inhouse",
-                                                hasDestinationSales:
-                                                  !!hotel.hasDestinationSales,
-                                                flashSale: !!hotel.flashSale,
-                                                latitude: hotel.latitude,
-                                                longitude: hotel.longitude,
-                                                contactNumber:
-                                                  hotel.contactNumber || "",
-                                              }))
-                                            : [];
-                                          setAllResults(mapped);
-                                        })
-                                        .catch(() => {
-                                          /* fail-safe: leave existing rows */
-                                        });
-                                    }
-                                  }}
+                                  onChange={(opt) =>
+                                    changeDisplayCurrency(opt, { manual: true })
+                                  }
                                   placeholder="Select currency"
                                   isSearchable
                                   // Server-side search: the backend filters the
@@ -3781,17 +3795,28 @@ export default function HotelSearch({
                                           // `aedAmount × factor` for their
                                           // display without doing any rate
                                           // lookup or direction guessing.
+                                          // Prefer the clicked card's own
+                                          // code/factor so RoomList matches it
+                                          // even while other rows mid-refresh.
                                           const backendCurrency =
                                             backendDisplayCurrencyRef.current ||
                                             { code: "AED", factor: 1 };
-                                          const currency = {
-                                            code: backendCurrency.code || "AED",
-                                            factor:
-                                              Number.isFinite(backendCurrency.factor) &&
-                                              backendCurrency.factor > 0
-                                                ? backendCurrency.factor
-                                                : 1,
-                                          };
+                                          const currency = hotel.displayCurrencyCode
+                                            ? {
+                                                code: hotel.displayCurrencyCode,
+                                                factor:
+                                                  Number(hotel.displayFactor) > 0
+                                                    ? Number(hotel.displayFactor)
+                                                    : 1,
+                                              }
+                                            : {
+                                                code: backendCurrency.code || "AED",
+                                                factor:
+                                                  Number.isFinite(backendCurrency.factor) &&
+                                                  backendCurrency.factor > 0
+                                                    ? backendCurrency.factor
+                                                    : 1,
+                                              };
                                           sessionStorage.setItem(
                                             "roomListPayload",
                                             JSON.stringify({ payload, meta, currency }),
