@@ -207,7 +207,7 @@ export default function AgentDashboard() {
 
   const manageActions = [
     {
-      label: "Accounts",
+      label: "Accounts and Ledgers",
       desc: "Manage your accounts and finances",
       tone: "pink",
       icon: <FaCreditCard />,
@@ -394,7 +394,7 @@ export default function AgentDashboard() {
           transform: translate(-50%, -140%);
           background: #FF6B00;
           color: #fff;
-          font-size: 10px;
+          font-size: 13px;
           font-weight: 700;
           letter-spacing: .3px;
           padding: 2px 8px;
