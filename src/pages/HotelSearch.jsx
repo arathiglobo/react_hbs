@@ -317,23 +317,77 @@ function RoomGuestSelector({ value, onChange }) {
 // ─────────────────────────────────────────────
 // Lazy Image
 // ─────────────────────────────────────────────
+// Local placeholder the rest of the app already uses for missing photos.
+const NO_IMAGE_SRC = "/images/not-available.jpg";
+
+// Returns the image URL unchanged, or null when it can never load. Several
+// supplier search legs send "https://details/…" or "https://deatails/…" to
+// mean "no photo". A dotless host like that never resolves, yet the browser
+// spent ~3s failing its DNS lookup for every such card.
+function usableImageUrl(url) {
+  if (!url || typeof url !== "string") return null;
+  try {
+    const { protocol, hostname } = new URL(url, window.location.origin);
+    if (protocol !== "http:" && protocol !== "https:") return null;
+    if (hostname !== "localhost" && !hostname.includes(".")) return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+// One <link rel="preconnect"> per image host, so DNS + TLS setup for a
+// supplier's image server is already done when a card lower down the page
+// requests its photo.
+const preconnectedImageOrigins = new Set();
+function preconnectImageOrigin(url) {
+  try {
+    const { origin } = new URL(url, window.location.origin);
+    if (
+      origin === window.location.origin ||
+      preconnectedImageOrigins.has(origin)
+    ) {
+      return;
+    }
+    preconnectedImageOrigins.add(origin);
+    const link = document.createElement("link");
+    link.rel = "preconnect";
+    link.href = origin;
+    document.head.appendChild(link);
+  } catch {
+    // Unparseable URL — nothing to warm up.
+  }
+}
+
 function LazyImage({ src, alt, className }) {
   const containerRef = useRef(null);
   const [inView, setInView] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  // Keyed by URL instead of plain booleans, so a card whose photo changes
+  // starts over rather than keeping a stale loaded/failed flag.
+  const [loadedSrc, setLoadedSrc] = useState(null);
+  const [failedSrc, setFailedSrc] = useState(null);
+
+  const supplierSrc = usableImageUrl(src);
+  const imageSrc =
+    supplierSrc && failedSrc !== supplierSrc ? supplierSrc : NO_IMAGE_SRC;
+  const loaded = loadedSrc === imageSrc;
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     if ("IntersectionObserver" in window) {
-      const observer = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setInView(true);
-            observer.disconnect();
-          }
-        });
-      });
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              setInView(true);
+              observer.disconnect();
+            }
+          });
+        },
+        // Start the request a little before the card scrolls into view.
+        { rootMargin: "300px 0px" },
+      );
       observer.observe(el);
       return () => observer.disconnect();
     } else {
@@ -341,27 +395,25 @@ function LazyImage({ src, alt, className }) {
     }
   }, []);
 
-  const buildSrcSet = (url) => {
-    try {
-      const safeUrl = url || "https://via.placeholder.com/480x270";
-      const pattern = /\/(\d+)\/(\d+)$/;
-      const small = pattern.test(safeUrl)
-        ? safeUrl.replace(pattern, "/320/180")
-        : `${safeUrl}?w=320&h=180`;
-      const medium = pattern.test(safeUrl)
-        ? safeUrl.replace(pattern, "/480/270")
-        : `${safeUrl}?w=480&h=270`;
-      const large = pattern.test(safeUrl)
-        ? safeUrl.replace(pattern, "/640/360")
-        : `${safeUrl}?w=640&h=360`;
-      return `${small} 320w, ${medium} 480w, ${large} 640w`;
-    } catch {
-      return undefined;
-    }
+  useEffect(() => {
+    if (supplierSrc) preconnectImageOrigin(supplierSrc);
+  }, [supplierSrc]);
+
+  // A broken supplier photo falls back to the placeholder; if even that
+  // fails, drop the skeleton instead of letting it shimmer forever.
+  const handleError = () => {
+    if (imageSrc === NO_IMAGE_SRC) setLoadedSrc(imageSrc);
+    else setFailedSrc(imageSrc);
   };
 
-  const imageSrc = src || "https://via.placeholder.com/480x270";
-
+  // The supplier URL is requested exactly as sent. The old srcSet appended
+  // ?w=&h= to it, which sent Akamai-hosted photos through Akamai's resizer
+  // (3–4s cold, 5-minute browser cache instead of ~10 days) and mangled URLs
+  // that already carry a query string, such as Darina's
+  // ShowImg.aspx?params=…. loading="lazy" and fetchpriority="low" are gone
+  // too: the IntersectionObserver already holds the <img> back until the
+  // card is near the viewport, and low priority let other requests jump
+  // ahead of photos that were already on screen.
   return (
     <div
       ref={containerRef}
@@ -372,13 +424,10 @@ function LazyImage({ src, alt, className }) {
       {inView && (
         <img
           src={imageSrc}
-          srcSet={buildSrcSet(imageSrc)}
-          sizes="(min-width:1200px) 33vw, (min-width:768px) 50vw, 100vw"
-          loading="lazy"
           decoding="async"
-          fetchpriority="low"
           alt={alt}
-          onLoad={() => setLoaded(true)}
+          onLoad={() => setLoadedSrc(imageSrc)}
+          onError={handleError}
           className={`img-cover ${loaded ? "img-loaded" : "img-loading"}`}
         />
       )}
@@ -1063,10 +1112,34 @@ export default function HotelSearch({
         });
     }
 
+    // Client-side sort so the visible list always matches the selected
+    // sort pill (Low to High is the default). The backend sorts each page,
+    // but the poll merges pages into `allResults` in insertion order via a
+    // Map — so a late-arriving supplier's cheap hotel would appear at the
+    // bottom of the list even when Low to High is selected. Re-sorting the
+    // current page here fixes that. Only the sort keys the UI can actually
+    // pick are handled; anything else keeps the incoming order.
+    if (sortBy === "priceAsc" || sortBy === "priceDesc") {
+      const dir = sortBy === "priceAsc" ? 1 : -1;
+      // Copy so we don't mutate a memoized array from an earlier stage.
+      results = [...results].sort((a, b) => {
+        const pa = Number(a?.price);
+        const pb = Number(b?.price);
+        // Rows without a numeric price sink to the bottom regardless of
+        // direction, so they never distort the top of the list.
+        const aMissing = !Number.isFinite(pa);
+        const bMissing = !Number.isFinite(pb);
+        if (aMissing && bMissing) return 0;
+        if (aMissing) return 1;
+        if (bMissing) return -1;
+        return (pa - pb) * dir;
+      });
+    }
+
     return results;
   }, [allResults, hotelSearchTerm, starRating, hotelType, channelType,
       availableDeals, featureFlagsMap,
-      is24HourCheckin, twentyFourHourMap]);
+      is24HourCheckin, twentyFourHourMap, sortBy]);
 
   // Channels that returned at least one hotel for the CURRENT search —
   // drives the LIVE/OFF badge next to each Channel filter row.
@@ -1666,6 +1739,14 @@ export default function HotelSearch({
     setIsInitialResultsLoaded(false);
     completedChannelsRef.current = new Set();
     setCompletedChannels(new Set());
+    // Drop the previous search's id until the new one comes back. Keeping it
+    // let the results effect refetch the OLD search as soon as pollStatus
+    // reset to IDLE — which is why a second Search press showed the first
+    // search's third-party hotels. Bumping currencyVersionRef (fetchHotels'
+    // stale-response guard) also stops a fetch still in flight for the old
+    // search from writing its rows into this one.
+    setSearchId(null);
+    currencyVersionRef.current += 1;
 
     try {
       const nationalityId = selectedNationality.value;
@@ -1896,7 +1977,9 @@ export default function HotelSearch({
         // between poll ticks before the timeout still show up. If GRN
         // hasn't finished by then the catch below no longer flips
         // hasSearched=false (existing behaviour after the 60 s bump), so
-        // filter changes keep working.
+        // filter changes keep working. Supplier legs that finish after the
+        // timeout are picked up by the late-results check (the effect right
+        // after the results effect).
         30000,
         2000,
       );
@@ -1974,7 +2057,15 @@ export default function HotelSearch({
   // are on screen, unless the user explicitly chose to modify the search.
   const collapseSearch = showResultsDuringPolling && !isEditingSearch;
 
+  // Bumped by the late-results check below to make the results effect
+  // refetch the visible page. lateResultsRefreshRef marks that refetch as a
+  // background one so it doesn't flash the loading card every few seconds.
+  const [resultsRefreshTick, setResultsRefreshTick] = useState(0);
+  const lateResultsRefreshRef = useRef(false);
+
   useEffect(() => {
+    const isBackgroundRefresh = lateResultsRefreshRef.current;
+    lateResultsRefreshRef.current = false;
     if (!searchId || !hasSearched) return;
     // Gate basic (unfiltered) fetches until polling finishes so we don't
     // double-write allResults alongside the poll's merge. Name-search
@@ -1999,10 +2090,10 @@ export default function HotelSearch({
       !finalHotelSearchTerm.trim() &&
       !hasActiveFilter
     ) return;
-    setIsLoading(true);
-    fetchHotels(pageIndex, searchId, agent, finalHotelSearchTerm).finally(() =>
-      setIsLoading(false),
-    );
+    if (!isBackgroundRefresh) setIsLoading(true);
+    fetchHotels(pageIndex, searchId, agent, finalHotelSearchTerm).finally(() => {
+      if (!isBackgroundRefresh) setIsLoading(false);
+    });
   }, [
     pageIndex,
     sortBy,
@@ -2019,7 +2110,65 @@ export default function HotelSearch({
     // the code as a dep so a picker change re-fetches the results in the
     // new currency instead of leaving stale numbers on screen.
     selectedCurrency?.code,
+    resultsRefreshTick,
   ]);
+
+  // Late supplier results. The search poll gives up after 30 s, but a slow
+  // supplier leg (GRN waits up to its 25 s cutoff_time; big cities take
+  // longer) can still add hotels after that. Nothing asked again, so those
+  // hotels only appeared on the next Search press. After a poll timeout,
+  // check the result count every few seconds until the backend reports every
+  // supplier finished, and refresh the visible page whenever the count moves.
+  useEffect(() => {
+    if (pollStatus !== "TIMEOUT" || !searchId) return;
+    const CHECK_EVERY_MS = 4000;
+    const GIVE_UP_AFTER_MS = 90000;
+    const startedAt = Date.now();
+    let cancelled = false;
+    let timer;
+    let lastTotal = null;
+
+    const checkForLateResults = async () => {
+      try {
+        const res = await axiosInstance.get(
+          `/api/hotel-search/results/${searchId}`,
+          {
+            params: {
+              agentId: (isAgentRole ? selfAgentId : agent) || 1,
+              page: 0,
+              size: 1,
+            },
+          },
+        );
+        if (cancelled) return;
+        if (res.data?.finalStatus === "COMPLETED") {
+          // pollStatus is a dependency of the results effect, so this also
+          // runs its final (background) refetch.
+          lateResultsRefreshRef.current = true;
+          setPollStatus("COMPLETED");
+          return;
+        }
+        const total = Number(res.data?.totalResults) || 0;
+        if (total !== lastTotal) {
+          lastTotal = total;
+          lateResultsRefreshRef.current = true;
+          setResultsRefreshTick((tick) => tick + 1);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.warn("Late supplier results check failed (will retry):", err);
+      }
+      if (Date.now() - startedAt < GIVE_UP_AFTER_MS) {
+        timer = setTimeout(checkForLateResults, CHECK_EVERY_MS);
+      }
+    };
+
+    timer = setTimeout(checkForLateResults, CHECK_EVERY_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [pollStatus, searchId, agent, selfAgentId, isAgentRole]);
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
