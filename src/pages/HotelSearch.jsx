@@ -759,6 +759,12 @@ export default function HotelSearch({
   const completedChannelsRef = useRef(new Set());
   const [completedChannels, setCompletedChannels] = useState(new Set());
   const [searchId, setSearchId] = useState(null);
+  // Bumped at the start of every search. fetchHotels and the currency
+  // picker's /resultsOut refetch capture it at send time and drop their
+  // response if another search has started since, so a slow reply that
+  // belongs to the PREVIOUS search can never write that destination's rows
+  // back into allResults after Modify Search → Search cleared them.
+  const searchGenRef = useRef(0);
   const [isDestinationLoading, setIsDestinationLoading] = useState(false);
   const resultsRef = useRef(null);
   const [isInitialResultsLoaded, setIsInitialResultsLoaded] = useState(false);
@@ -1558,10 +1564,18 @@ export default function HotelSearch({
       // overwrite freshly-fetched rows with old-currency data (that was
       // the "mixed AED/GBP cards" bug in the screenshot).
       const myCurrencyVersion = currencyVersionRef.current;
+      const mySearchGen = searchGenRef.current;
 
       const res = await axiosInstance.get(endpoint, {
         params,
       });
+
+      // A newer search has started since this request went out — its
+      // payload belongs to the previous destination, so never let it touch
+      // allResults / totals / hasSearchResult.
+      if (mySearchGen !== searchGenRef.current) {
+        return res.data;
+      }
 
       // Drop stale name-search responses so an older term can't overwrite
       // results for the term the user is actually looking at.
@@ -1726,6 +1740,17 @@ export default function HotelSearch({
     }
 
     setErrors({});
+    // Start a new search generation and forget the previous searchId BEFORE
+    // the reset below. The fetch-effect further down re-runs whenever
+    // pollStatus / pageIndex change, and on a Modify Search → Search it was
+    // firing with the OLD searchId still in state: it re-fetched the
+    // previous destination's cached /results page and wrote those rows
+    // (plus hasSearchResult=true) straight back over the cleared list while
+    // the new search was still polling. Nulling searchId makes the effect
+    // early-return exactly as it does on the very first search; the
+    // generation bump covers any reply that is already in flight.
+    searchGenRef.current += 1;
+    setSearchId(null);
     setIsLoading(true);
     setHasSearched(true);
     setIsEditingSearch(false);
@@ -2915,6 +2940,7 @@ export default function HotelSearch({
                                     //    reconverts the entire list.
                                     if (searchId && opt?.code) {
                                       const myVersion = currencyVersionRef.current;
+                                      const mySearchGen = searchGenRef.current;
                                       axiosInstance
                                         .get(
                                           `/api/hotel-search/resultsOut/${searchId}`,
@@ -2947,10 +2973,12 @@ export default function HotelSearch({
                                           },
                                         )
                                         .then((res) => {
-                                          // Guard against picker moving on
+                                          // Guard against the picker moving
+                                          // on, or a new search starting,
                                           // before this fetch returns.
                                           if (
-                                            myVersion !== currencyVersionRef.current
+                                            myVersion !== currencyVersionRef.current ||
+                                            mySearchGen !== searchGenRef.current
                                           ) {
                                             return;
                                           }
