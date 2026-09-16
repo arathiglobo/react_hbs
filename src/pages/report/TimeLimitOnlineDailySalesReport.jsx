@@ -257,7 +257,7 @@ export default function TimeLimitOnlineDailySalesReport() {
         <main className="flex-grow-1 p-4" style={{ overflow: "auto" }}>
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex align-items-center gap-2">
-              <BackButton fallback="/agentDashboard" />
+              <BackButton forceFallback fallback={isAgentRole ? "/agentDashboard" : "/adminDashboard"} />
               <span className="fw-semibold">TimeLimit Online Sales Report</span>
             </Card.Header>
             {/* Filters Section */}

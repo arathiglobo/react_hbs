@@ -510,6 +510,7 @@ const CityMapping = () => {
                         <AsyncSelect
                           cacheOptions
                           defaultOptions
+                          isClearable
                           placeholder="Search country..."
                           value={selectedCountryOption}
                           loadOptions={loadCountries}
@@ -548,6 +549,7 @@ const CityMapping = () => {
                         <AsyncSelect
                           cacheOptions
                           defaultOptions
+                          isClearable
                           placeholder="Search  here & select city..."
                           value={selectedCityOption}
                           loadOptions={loadCities}
@@ -610,6 +612,7 @@ const CityMapping = () => {
                             key={`country-${formData.apiProvider}`}
                             cacheOptions
                             defaultOptions
+                            isClearable
                             placeholder="Search country..."
                             value={selectedPlatformCountryOption}
                             loadOptions={loadPlatformCountry(
@@ -652,6 +655,7 @@ const CityMapping = () => {
                             key={`city-${formData.apiProvider}-${formData.apiCountryId}`}
                             cacheOptions
                             defaultOptions
+                            isClearable
                             placeholder="Search & select city..."
                             value={selectedPlatformCityOption}
                             loadOptions={loadPlatformCity(

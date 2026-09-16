@@ -585,6 +585,7 @@ const SupplierReg = () => {
                 <thead>
                   <tr>
                     <th style={{ width: 100 }}>S/N</th>
+                    <th>Supplier ID</th>
                     <th>Name</th>
                     <th>Email</th>
                     <th>Phone Number</th>

@@ -859,18 +859,21 @@ export default function Sidebar() {
           to: "/report/user-logins",
           roles: ["admin"],
         },
-        // ── The agent's whole Report menu ──
+        // ── Daily sales reports (shared: admin + agent) ──
         {
           label: "Offline Daily Sales",
           to: "/report/offline-daily-sales",
+          roles: ["admin", "agent"],
         },
         {
           label: "Online Daily Sales",
           to: "/report/online-daily-sales",
+          roles: ["admin", "agent"],
         },
         {
           label: "Time Limit Daily Sales",
           to: "/report/time-limit-daily-sales",
+          roles: ["admin", "agent"],
         },
         {
           label: "Hotel Booking History",
