@@ -18,10 +18,10 @@ import "../styles/FooterLegalLinks.css";
 
 /* ── Terms & Conditions ─────────────────────────────────────────────────── */
 
-const TERMS_INTRO =
+export const TERMS_INTRO =
   "By accessing or using the Desert Beds LLC booking platform, website, API connectivity, or related services, the registered travel agency, tour operator, OTA, corporate travel company, or reseller (“Client”) agrees to be bound by these Terms & Conditions.";
 
-const TERMS_SECTIONS = [
+export const TERMS_SECTIONS = [
   {
     title: "Scope of Services",
     body: "Desert Beds LLC operates as a B2B travel wholesaler, Bed Bank, Online Travel Agency (OTA), and Destination Management Company (DMC), providing accommodation, transfers, tours, excursions, transportation, visa assistance, and other travel-related services through its platform and contracted suppliers.",
@@ -86,7 +86,7 @@ const TERMS_SECTIONS = [
 
 /* ── Contact details ────────────────────────────────────────────────────── */
 
-const CONTACT_BLOCKS = [
+export const CONTACT_BLOCKS = [
   {
     title: "Binoy Ouseph",
     rows: [

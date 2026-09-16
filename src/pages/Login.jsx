@@ -62,15 +62,15 @@ const LOGIN_USPS = [
 // ── About us ────────────────────────────────────────────────────────────────
 // Company profile behind the footer link. Held as data rather than inline JSX
 // so the modal stays one readable layout and the copy is easy to edit.
-const ABOUT_INTRO = [
+export const ABOUT_INTRO = [
   "Desert Beds LLC is a UAE-based Online Travel Agency (OTA), B2B Bedbank and Destination Management Company (DMC) focused on connecting travel professionals with quality accommodation and travel services worldwide.",
   "Built around technology, global connectivity and strong destination expertise, Desert Beds provides travel agencies, tour operators, and other travel professionals with access to a comprehensive portfolio of hotels, resorts, apartments, transfers, tours, excursions and destination services through a single B2B platform.",
 ];
 
-const ABOUT_USP_LEAD =
+export const ABOUT_USP_LEAD =
   "At Desert Beds LLC, we believe the future of travel is not built around a single product. It is built around choice, personalization, flexibility and seamless access to multiple travel solutions through one platform. Desert Beds brings together a diverse portfolio of accommodation, travel experiences, lifestyle products and specialized travel solutions designed to meet the evolving requirements of today’s travel industry and the next generation of travellers.";
 
-const ABOUT_PRODUCTS = [
+export const ABOUT_PRODUCTS = [
   "Hotels & Resorts",
   "Apartments & Villas",
   "Student Travel",
@@ -91,10 +91,10 @@ const ABOUT_PRODUCTS = [
   "Restaurant Reservations",
 ];
 
-const ABOUT_PLATFORM =
+export const ABOUT_PLATFORM =
   "Our platform is designed to simplify the way travel businesses search, compare, book and manage travel products, offering competitive rates, real-time availability and efficient booking solutions. Through API connectivity and direct as well as strategic supplier partnerships, we aim to deliver reliable inventory and seamless distribution to our B2B partners.";
 
-const ABOUT_SERVICES = [
+export const ABOUT_SERVICES = [
   {
     title: "B2B Bedbank",
     desc: "Global hotel and accommodation inventory with competitive wholesale rates and flexible booking solutions.",
@@ -113,13 +113,13 @@ const ABOUT_SERVICES = [
   },
 ];
 
-const ABOUT_VISION =
+export const ABOUT_VISION =
   "To become a trusted global travel distribution and technology partner, connecting suppliers and travel sellers through one efficient ecosystem.";
 
-const ABOUT_MISSION =
+export const ABOUT_MISSION =
   "To make travel distribution simpler, smarter and more accessible to everyone, across generations and markets, by combining innovative technology, competitive pricing, global inventory and deep destination expertise.";
 
-const ABOUT_WHY = [
+export const ABOUT_WHY = [
   { emoji: "\u{1F30D}", label: "Global Accommodation & Travel Inventory" },
   { emoji: "\u{1F4BC}", label: "Dedicated B2B Solutions" },
   { emoji: "\u{1F517}", label: "API & Technology Connectivity" },
@@ -130,7 +130,7 @@ const ABOUT_WHY = [
   { emoji: "\u{1F4DE}", label: "Professional B2B Support" },
 ];
 
-const ABOUT_CLOSING =
+export const ABOUT_CLOSING =
   "At Desert Beds, we believe the future of travel distribution is built on technology, connectivity and trust. Our goal is not simply to provide hotel rooms, but to create a complete travel ecosystem that helps our partners grow their business and deliver better experiences to their customers.";
 
 const Login = () => {

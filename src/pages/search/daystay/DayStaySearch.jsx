@@ -421,11 +421,14 @@ export default function DayStaySearch() {
 
   const convertFromAed = (aedPrice) => {
     if (aedPrice == null) return aedPrice;
+    // master_currency.value stores "AED per 1 unit of target", so AED → target
+    // is `aed / value`, not `aed * value`. AED itself has value 1 (aedBaseRate)
+    // and short-circuits when the picker sits on it.
     const targetRate =
-      selectedCurrency && Number.isFinite(selectedCurrency.rate)
+      selectedCurrency && Number.isFinite(selectedCurrency.rate) && selectedCurrency.rate > 0
         ? selectedCurrency.rate
         : aedBaseRate;
-    return Number(aedPrice) * (targetRate / aedBaseRate);
+    return Number(aedPrice) * (aedBaseRate / targetRate);
   };
 
   // Reuse the HotelSearch debounce helper.

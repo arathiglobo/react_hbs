@@ -124,7 +124,17 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
   // than the grid tiles. Operator can still toggle to grid via the icon
   // buttons in the "Available Room Categories" header.
   const [viewMode, setViewMode] = useState("list");
+  // `agentBalance` stays in AED — every credit-check comparison further
+  // down (isInsufficientBalance, handleBooking) is done against AED amounts,
+  // so the value used for the *gate* MUST remain the raw AED figure the
+  // backend already returns on `effectiveAvailableCreditLimit`.
   const [agentBalance, setAgentBalance] = useState(null);
+  // Display-only companions: the same figure rendered in the agent's
+  // configured currency (populated from the backend's
+  // effectiveAvailableCreditLimitInAgentCurrency + currencyCode). Purely
+  // for the "Available Balance" chip; NOT read by any gating logic.
+  const [agentBalanceDisplay, setAgentBalanceDisplay] = useState(null);
+  const [agentBalanceCurrency, setAgentBalanceCurrency] = useState("AED");
   // Filter state
   const [refundFilter, setRefundFilter] = useState({
     refundable: false,
@@ -821,6 +831,8 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
     const aId = roomData?.payload?.agentId;
     if (!aId) {
       setAgentBalance(null);
+      setAgentBalanceDisplay(null);
+      setAgentBalanceCurrency("AED");
       return;
     }
     let cancelled = false;
@@ -831,16 +843,31 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
         // currently-Active Temporary Credit Limit (same combined figure the
         // backend's check-sufficient-credit / booking-create flow use).
         // Falls back to availableCreditLimit for older cached responses.
-        if (!cancelled) {
-          setAgentBalance(
+        if (cancelled) return;
+        setAgentBalance(
+          res?.data?.effectiveAvailableCreditLimit ??
+            res?.data?.availableCreditLimit ??
+            null,
+        );
+        // Agent-currency display value + code from the same backend fields
+        // this fix added on AgentCreditLimitResponseDTO. When the backend is
+        // older (fields missing) both `??` chains land on the AED number
+        // and the chip renders identically to before this fix.
+        setAgentBalanceDisplay(
+          res?.data?.effectiveAvailableCreditLimitInAgentCurrency ??
+            res?.data?.availableCreditLimitInAgentCurrency ??
             res?.data?.effectiveAvailableCreditLimit ??
-              res?.data?.availableCreditLimit ??
-              null,
-          );
-        }
+            res?.data?.availableCreditLimit ??
+            null,
+        );
+        setAgentBalanceCurrency(res?.data?.currencyCode || "AED");
       })
       .catch(() => {
-        if (!cancelled) setAgentBalance(null);
+        if (!cancelled) {
+          setAgentBalance(null);
+          setAgentBalanceDisplay(null);
+          setAgentBalanceCurrency("AED");
+        }
       });
     return () => {
       cancelled = true;
@@ -1179,7 +1206,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                   className="fw-bold"
                   style={{ color: "#dc3545", fontSize: "0.95rem" }}
                 >
-                  Available Balance: {Number(agentBalance).toFixed(2)}
+                  Available Balance: {Number(agentBalanceDisplay ?? agentBalance).toFixed(2)} {agentBalanceCurrency || "AED"}
                 </span>
               )}
             </div>

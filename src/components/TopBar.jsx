@@ -446,7 +446,17 @@ export default function TopBar() {
     return null;
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Close the open admin_user_master_log row (logout_date_time) on the
+    // server BEFORE wiping storage: the axios request interceptor reads
+    // authToken from localStorage on every call, and /auth/logout resolves
+    // the username from that Bearer header (refresh cookie as fallback).
+    // Clearing first is why Login Logs showed "0000:00:00" for every logout.
+    try {
+      await axiosInstance.post("/auth/logout", {}, { withCredentials: true });
+    } catch {
+      // Best-effort: still finish the client-side logout if the call fails.
+    }
     // Remove specific items
     localStorage.removeItem("authToken");
     localStorage.removeItem("userRole");

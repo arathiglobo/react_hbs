@@ -371,11 +371,17 @@ export default function GovEmployeeSearch() {
     return aed && Number.isFinite(aed.rate) && aed.rate > 0 ? aed.rate : 1;
   }, [currencyOptions]);
 
+  // factor = AED → target multiplier. master_currency.value is "AED per 1 unit"
+  // of the target, so the multiplier is aedBaseRate / value (= 1/value when AED
+  // itself has value 1), NOT value / aedBaseRate.
   const displayCurrency = useMemo(() => ({
     code: selectedCurrency?.code || "AED",
     factor:
-      selectedCurrency && Number.isFinite(selectedCurrency.rate) && aedBaseRate
-        ? selectedCurrency.rate / aedBaseRate
+      selectedCurrency &&
+      Number.isFinite(selectedCurrency.rate) &&
+      selectedCurrency.rate > 0 &&
+      aedBaseRate
+        ? aedBaseRate / selectedCurrency.rate
         : 1,
   }), [selectedCurrency, aedBaseRate]);
   const displayCurrencyCode = displayCurrency.code;
