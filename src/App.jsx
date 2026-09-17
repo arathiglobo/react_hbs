@@ -355,6 +355,14 @@ import FlightBookPlaceholder from "./pages/search/flight/FlightBookPlaceholder";
 import FlightBookPage from "./pages/search/flight/FlightBookPage";
 import FlightBookingList from "./pages/list/FlightBookingList";
 
+// Supplier / DMC ("partner") self-registration, admin approval and portal.
+// Feature access is driven by config/partnerFeatures.js + the backend
+// PartnerFeatureAccessFilter; see PrivateRoute's partner branch.
+import PartnerRegisterFromOut from "./pages/PartnerRegisterFromOut";
+import PartnerApproval from "./pages/PartnerApproval";
+import PartnerApprovalDetail from "./pages/PartnerApprovalDetail";
+import PartnerDashboard from "./pages/PartnerDashboard";
+
 
 
 
@@ -373,6 +381,8 @@ export default function App() {
         <Route path="/privacypolicy" element={<PrivacyPolicy />} />
         <Route path="/ContactDetails" element={<ContactDetails />} />
         <Route path="/Aboutus" element={<AboutUs />} />
+        <Route path="/supplier-register" element={<PartnerRegisterFromOut partnerType="SUPPLIER" />} />
+        <Route path="/dmc-register" element={<PartnerRegisterFromOut partnerType="DMC" />} />
         
        
      {/* Protected Routes */}
@@ -420,6 +430,24 @@ export default function App() {
           element={
             <PrivateRoute>
               <ExtranetHotelDashboard />
+            </PrivateRoute>
+          }
+        />
+        {/* Supplier / DMC dashboards — one component, two paths so the
+            sidebar / TopBar can derive the active role from the URL. */}
+        <Route
+          path="/supplierDashboard"
+          element={
+            <PrivateRoute roles={["supplier"]}>
+              <PartnerDashboard partnerType="supplier" />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/dmcDashboard"
+          element={
+            <PrivateRoute roles={["dmc"]}>
+              <PartnerDashboard partnerType="dmc" />
             </PrivateRoute>
           }
         />
@@ -694,6 +722,10 @@ export default function App() {
         {/* Agent Approval — admin only */}
         <Route path="/admin/approval/agents" element={<PrivateRoute><AgentApproval /></PrivateRoute>} />
         <Route path="/admin/approval/agents/:id" element={<PrivateRoute><AgentApprovalDetail /></PrivateRoute>} />
+
+        {/* Supplier / DMC approval — requested vs approved features decided here. */}
+        <Route path="/admin/approval/partners" element={<PrivateRoute roles={["admin"]}><PartnerApproval /></PrivateRoute>} />
+        <Route path="/admin/approval/partners/:id" element={<PrivateRoute roles={["admin"]}><PartnerApprovalDetail /></PrivateRoute>} />
 
         {/* Company Profile */}
         <Route path="/company-profile" element={<PrivateRoute><CompanyProfile /></PrivateRoute>} />
