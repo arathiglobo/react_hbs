@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import axiosInstance from "./AxiosInstance";
 
 /**
@@ -132,12 +132,19 @@ const formatDateTime = (now, timezone) => {
 const RegionalClock = ({ variant = "default", countryCode: override } = {}) => {
   const [profile, setProfile] = useState(() => readCachedProfile());
   const [now, setNow] = useState(() => new Date());
+  // One profile fetch per mount. The effect below depends on `profile`, and
+  // a profile that comes back WITHOUT a countryCode (admins, agents with no
+  // country, partner accounts…) still calls setProfile — without this guard
+  // that re-ran the effect and re-fetched in a tight loop.
+  const fetchedRef = useRef(false);
 
   // 1) Resolve the user's profile (just for countryCode + countryName).
   //    Skip the round-trip if we've cached it from an earlier dashboard.
   useEffect(() => {
     if (override) return; // explicit override wins
     if (profile && profile.countryCode) return; // cached — done
+    if (fetchedRef.current) return; // already asked once — fall back to browser TZ
+    fetchedRef.current = true;
     let alive = true;
     const userName =
       localStorage.getItem("UserName") || sessionStorage.getItem("UserName");

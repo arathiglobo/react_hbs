@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Select from "react-select";
 import "../styles/Register.css";
 import "../styles/RegisterModern.css";
@@ -65,7 +65,7 @@ const PartnerRegisterFromOut = ({ partnerType = "SUPPLIER" }) => {
     registrationNumber: "",
     address: "",
     countryId: "",
-    stateId: "",
+    provinceId: "",
     placeId: "",
     username: "",
     password: "",
@@ -75,9 +75,14 @@ const PartnerRegisterFromOut = ({ partnerType = "SUPPLIER" }) => {
 
   const [features, setFeatures] = useState([]);
   const [featuresLoading, setFeaturesLoading] = useState(true);
+  // Country → City (province) → Location (place): same masters, same
+  // endpoints and the same search-and-select controls as the agent /register
+  // form, so a partner sees exactly what an agent sees.
   const [countries, setCountries] = useState([]);
   const [provinces, setProvinces] = useState([]);
   const [places, setPlaces] = useState([]);
+  // Debounce timer for the server-side country search (/api/country?search=).
+  const countrySearchTimer = useRef(null);
 
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -96,30 +101,52 @@ const PartnerRegisterFromOut = ({ partnerType = "SUPPLIER" }) => {
         if (alive) toast.error("Could not load the list of services. Please refresh the page.");
       })
       .finally(() => alive && setFeaturesLoading(false));
-    axiosInstance
-      .get("/api/country")
-      .then((res) => alive && setCountries(res.data || []))
-      .catch((err) => console.error("Error loading countries:", err));
+    countryList();
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Same as /register: /api/country with an optional `search` term so the
+  // BACKEND filters (CountryController supports ?search=...); without a term
+  // the default first page is loaded.
+  const countryList = async (search = "") => {
+    try {
+      const params = {};
+      if (search && search.trim()) params.search = search.trim();
+      const response = await axiosInstance.get("/api/country", { params });
+      setCountries(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.log("error for country list :", error);
+    }
+  };
+
+  const provinceList = async (countryId) => {
+    try {
+      const response = await axiosInstance.get(`/api/province/getByCountryId/${countryId}`);
+      setProvinces(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.log("axios call error for province list : ", error);
+    }
+  };
+
+  const cityList = async (provinceId) => {
+    try {
+      const response = await axiosInstance.get(`/api/destination/getplaces/${provinceId}`);
+      setPlaces(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.log("axios call error for city list : ", error);
+    }
+  };
+
   useEffect(() => {
-    if (!formData.countryId) return;
-    axiosInstance
-      .get(`/api/province/getByCountryId/${formData.countryId}`)
-      .then((res) => setProvinces(res.data || []))
-      .catch((err) => console.error("Error loading provinces:", err));
+    if (formData.countryId) provinceList(formData.countryId);
   }, [formData.countryId]);
 
   useEffect(() => {
-    if (!formData.stateId) return;
-    axiosInstance
-      .get(`/api/destination/getplaces/${formData.stateId}`)
-      .then((res) => setPlaces(res.data || []))
-      .catch((err) => console.error("Error loading places:", err));
-  }, [formData.stateId]);
+    if (formData.provinceId) cityList(formData.provinceId);
+  }, [formData.provinceId]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -132,11 +159,11 @@ const PartnerRegisterFromOut = ({ partnerType = "SUPPLIER" }) => {
     setFormData((prev) => {
       const updated = { ...prev, [name]: value };
       if (name === "countryId") {
-        updated.stateId = "";
+        updated.provinceId = "";
         updated.placeId = "";
         setProvinces([]);
         setPlaces([]);
-      } else if (name === "stateId") {
+      } else if (name === "provinceId") {
         updated.placeId = "";
         setPlaces([]);
       }
@@ -172,8 +199,8 @@ const PartnerRegisterFromOut = ({ partnerType = "SUPPLIER" }) => {
     else if (!/^\+?\d{7,15}$/.test(formData.phone.replace(/\s/g, "")))
       newErrors.phone = "Phone must be 7-15 digits";
     if (!formData.countryId) newErrors.countryId = "Country is required";
-    if (!formData.stateId) newErrors.stateId = "State/Province is required";
-    if (!formData.placeId) newErrors.placeId = "City is required";
+    if (!formData.provinceId) newErrors.provinceId = "City is required";
+    if (!formData.placeId) newErrors.placeId = "Location is required";
     if (!formData.address.trim()) newErrors.address = "Address is required";
     if (selectedFeatures.size === 0) newErrors.features = "Select at least one service you want to offer";
     if (!formData.username.trim()) newErrors.username = "Username is required";
@@ -201,7 +228,8 @@ const PartnerRegisterFromOut = ({ partnerType = "SUPPLIER" }) => {
     }
 
     const countryName = countries.find((c) => String(c.id) === String(formData.countryId))?.name || "";
-    const cityName = places.find((pl) => String(pl.id) === String(formData.placeId))?.name || "";
+    const cityName = provinces.find((p) => String(p.id) === String(formData.provinceId))?.stateName || "";
+    const locationName = places.find((pl) => String(pl.id) === String(formData.placeId))?.name || "";
 
     try {
       const res = await axiosInstance.post("/api/partner-external-register", {
@@ -215,8 +243,10 @@ const PartnerRegisterFromOut = ({ partnerType = "SUPPLIER" }) => {
         address: formData.address,
         countryId: Number(formData.countryId),
         country: countryName,
-        placeId: Number(formData.placeId),
+        provinceId: Number(formData.provinceId),
         city: cityName,
+        placeId: Number(formData.placeId),
+        location: locationName,
         username: formData.username.trim(),
         password: formData.password,
         // Order follows the master list so the admin sees them in menu order.
@@ -263,10 +293,6 @@ const PartnerRegisterFromOut = ({ partnerType = "SUPPLIER" }) => {
   const provinceOptions = useMemo(
     () => provinces.map((p) => ({ value: p.id, label: p.stateName })),
     [provinces],
-  );
-  const placeOptions = useMemo(
-    () => places.map((pl) => ({ value: pl.id, label: pl.name })),
-    [places],
   );
 
   return (
@@ -455,65 +481,97 @@ const PartnerRegisterFromOut = ({ partnerType = "SUPPLIER" }) => {
                           </Form.Group>
                         </Col>
 
-                        <Col md={6} lg={4}>
+                        <Col md={4}>
                           <Form.Group>
                             <Form.Label className="form-label">
                               Country <span className="required">*</span>
                             </Form.Label>
+                            {/* Searchable country dropdown — same as /register: the
+                                BACKEND filters via /api/country?search=..., so
+                                react-select's local filter is disabled and the
+                                server's results are shown verbatim. */}
                             <Select
                               inputId="countryId"
+                              name="countryId"
                               classNamePrefix="reg-select"
                               isSearchable
                               isClearable
                               placeholder="Search country..."
+                              filterOption={null}
                               options={countryOptions}
                               value={countryOptions.find((o) => String(o.value) === String(formData.countryId)) || null}
+                              /* Refetch on every keystroke, debounced 300ms; ignore
+                                 'menu-close' / 'set-value' so a pick doesn't refetch. */
+                              onInputChange={(value, meta) => {
+                                if (meta.action !== "input-change") return value;
+                                if (countrySearchTimer.current) clearTimeout(countrySearchTimer.current);
+                                countrySearchTimer.current = setTimeout(() => {
+                                  countryList(value);
+                                }, 300);
+                                return value;
+                              }}
+                              onMenuOpen={() => {
+                                // Reload the unfiltered list when the menu opens
+                                // (helps after a previous filtered search).
+                                if (countrySearchTimer.current) clearTimeout(countrySearchTimer.current);
+                                countryList("");
+                              }}
                               onChange={(opt) => handleGeoChange("countryId", opt ? String(opt.value) : "")}
+                              className={errors.countryId ? "is-invalid" : ""}
                               styles={selectStyles(!!errors.countryId)}
                             />
                             {errors.countryId && <div className="invalid-feedback d-block">{errors.countryId}</div>}
                           </Form.Group>
                         </Col>
 
-                        <Col md={6} lg={4}>
-                          <Form.Group>
-                            <Form.Label className="form-label">
-                              State/Province <span className="required">*</span>
-                            </Form.Label>
-                            <Select
-                              inputId="stateId"
-                              classNamePrefix="reg-select"
-                              isSearchable
-                              isClearable
-                              isDisabled={!formData.countryId}
-                              placeholder="Search state..."
-                              options={provinceOptions}
-                              value={provinceOptions.find((o) => String(o.value) === String(formData.stateId)) || null}
-                              onChange={(opt) => handleGeoChange("stateId", opt ? String(opt.value) : "")}
-                              styles={selectStyles(!!errors.stateId)}
-                            />
-                            {errors.stateId && <div className="invalid-feedback d-block">{errors.stateId}</div>}
-                          </Form.Group>
-                        </Col>
-
-                        <Col md={6} lg={4}>
+                        <Col md={4}>
                           <Form.Group>
                             <Form.Label className="form-label">
                               City <span className="required">*</span>
                             </Form.Label>
+                            {/* Searchable city dropdown — provinces are preloaded
+                                for the chosen country, so react-select filters
+                                locally by typed text (same as /register). */}
                             <Select
-                              inputId="placeId"
+                              inputId="provinceId"
+                              name="provinceId"
                               classNamePrefix="reg-select"
                               isSearchable
                               isClearable
-                              isDisabled={!formData.stateId}
+                              isDisabled={!formData.countryId}
                               placeholder="Search city..."
-                              options={placeOptions}
-                              value={placeOptions.find((o) => String(o.value) === String(formData.placeId)) || null}
-                              onChange={(opt) => handleGeoChange("placeId", opt ? String(opt.value) : "")}
-                              styles={selectStyles(!!errors.placeId)}
+                              options={provinceOptions}
+                              value={provinceOptions.find((o) => String(o.value) === String(formData.provinceId)) || null}
+                              onChange={(opt) => handleGeoChange("provinceId", opt ? String(opt.value) : "")}
+                              className={errors.provinceId ? "is-invalid" : ""}
+                              styles={selectStyles(!!errors.provinceId)}
                             />
-                            {errors.placeId && <div className="invalid-feedback d-block">{errors.placeId}</div>}
+                            {errors.provinceId && <div className="invalid-feedback d-block">{errors.provinceId}</div>}
+                          </Form.Group>
+                        </Col>
+
+                        <Col md={4}>
+                          <Form.Group>
+                            <Form.Label className="form-label">
+                              Location <span className="required">*</span>
+                            </Form.Label>
+                            <Form.Select
+                              name="placeId"
+                              value={formData.placeId}
+                              onChange={(e) => handleGeoChange("placeId", e.target.value)}
+                              disabled={!formData.provinceId}
+                              className={`form-input ${errors.placeId ? "is-invalid" : ""}`}
+                            >
+                              <option value="">Select location</option>
+                              {places.map((place) => (
+                                <option key={place.id} value={place.id}>
+                                  {place.name}
+                                </option>
+                              ))}
+                            </Form.Select>
+                            {errors.placeId && (
+                              <Form.Control.Feedback type="invalid">{errors.placeId}</Form.Control.Feedback>
+                            )}
                           </Form.Group>
                         </Col>
 

@@ -35,6 +35,7 @@ import TopBar from "../components/TopBar";
 import usePartnerAccess from "../hooks/usePartnerAccess";
 import {
   PARTNER_TYPE_LABEL,
+  registrationTargetFor,
   resolveApprovedFeatures,
 } from "../config/partnerFeatures";
 import {
@@ -110,14 +111,14 @@ export default function PartnerDashboard({ partnerType }) {
         out.push({
           key: `${f.code}-${r.to}`,
           label: r.to === "/registration/hotel" ? "Hotel" : r.label,
-          to: r.to,
+          to: registrationTargetFor(role, r.to),
           icon: f.icon,
           tone: f.tone,
         });
       }
     }
     return out;
-  }, [features]);
+  }, [features, role]);
 
   const locationBits = [profile?.address, profile?.city, profile?.country]
     .filter(Boolean)
@@ -224,48 +225,7 @@ export default function PartnerDashboard({ partnerType }) {
                   services have been switched on for this account. Please contact the administrator.
                 </div>
               </section>
-            )}
-
-            {features.length > 0 && (
-              <>
-                <section>
-                  <p className="qa-label">
-                    <FaPlusCircle style={{ marginRight: 6 }} /> New Booking
-                  </p>
-                  {renderTiles(
-                    features.map((f) => ({
-                      key: `nb-${f.code}`,
-                      label: f.newBooking.label,
-                      to: f.newBooking.to,
-                      icon: f.icon,
-                      tone: f.tone,
-                    })),
-                  )}
-                </section>
-
-                <section>
-                  <p className="qa-label">
-                    <FaClipboardList style={{ marginRight: 6 }} /> Registration
-                  </p>
-                  {renderTiles(registrationLinks)}
-                </section>
-
-                <section>
-                  <p className="qa-label">
-                    <FaListUl style={{ marginRight: 6 }} /> Booking List
-                  </p>
-                  {renderTiles(
-                    features.map((f) => ({
-                      key: `bl-${f.code}`,
-                      label: f.bookingList.label,
-                      to: f.bookingList.to,
-                      icon: f.icon,
-                      tone: f.tone,
-                    })),
-                  )}
-                </section>
-              </>
-            )}
+            )}           
           </main>
         </div>
         <DashboardFooter />

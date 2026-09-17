@@ -1093,7 +1093,7 @@ const Login = () => {
                             : "fa-map-marked-alt"
                     } me-1`}
                   ></i>
-                  {role === "DMC" ? "DMC (Destination Management Company)" : role}
+                  {role === "DMC" ? "DMC" : role}
                 </label>
               ))}
             </div>

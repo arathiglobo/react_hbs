@@ -318,6 +318,7 @@ export default function PartnerApprovalDetail() {
                     <DetailItem icon={<FaPhone />} label="Phone" value={reg.phone} />
                     <DetailItem icon={<FaGlobe />} label="Country" value={reg.country} />
                     <DetailItem icon={<FaMapMarkerAlt />} label="City" value={reg.city} />
+                    <DetailItem icon={<FaMapMarkerAlt />} label="Location" value={reg.location} />
                     <DetailItem icon={<FaMapMarkerAlt />} label="Address" value={reg.address} />
                     <DetailItem icon={<FaLink />} label="Website" value={reg.website} />
                     <DetailItem icon={<FaIdCard />} label="Trade Licence / Registration No." value={reg.registrationNumber} />
@@ -382,7 +383,8 @@ export default function PartnerApprovalDetail() {
                                 style={{
                                   display: "flex",
                                   alignItems: "center",
-                                  gap: 10,
+                                  flexWrap: "wrap",
+                                  gap: "6px 10px",
                                   padding: "8px 10px",
                                   borderRadius: 8,
                                   border: `1.5px solid ${checked ? "#22c55e" : "#e5e7eb"}`,
@@ -400,16 +402,16 @@ export default function PartnerApprovalDetail() {
                                   onChange={() => toggle(f.code)}
                                   style={{ accentColor: "#16a34a", width: 16, height: 16, flexShrink: 0 }}
                                 />
-                                <span style={{ fontWeight: checked ? 600 : 500, color: "#15171C", flex: 1 }}>
+                                <span style={{ fontWeight: checked ? 600 : 500, color: "#15171C", flex: "1 1 auto", minWidth: 0 }}>
                                   {f.label}
                                 </span>
                                 {checked && !wasRequested && (
-                                  <span className="badge rounded-pill" style={{ background: "#fde68a", color: "#78350f", fontSize: "0.62rem" }}>
+                                  <span className="badge rounded-pill" style={{ background: "#fde68a", color: "#78350f", fontSize: "0.62rem", flexShrink: 0, whiteSpace: "nowrap" }}>
                                     added by admin
                                   </span>
                                 )}
                                 {!checked && wasRequested && (
-                                  <span className="badge rounded-pill" style={{ background: "#fecaca", color: "#7f1d1d", fontSize: "0.62rem" }}>
+                                  <span className="badge rounded-pill" style={{ background: "#fecaca", color: "#7f1d1d", fontSize: "0.62rem", flexShrink: 0, whiteSpace: "nowrap" }}>
                                     not approved
                                   </span>
                                 )}

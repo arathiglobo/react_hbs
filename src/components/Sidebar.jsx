@@ -333,7 +333,6 @@ export default function Sidebar() {
       <PartnerSidebar
         role={currentRole}
         show={show}
-        onShow={handleShow}
         onClose={handleClose}
         collapsed={collapsed}
         onToggleCollapsed={toggleCollapsed}

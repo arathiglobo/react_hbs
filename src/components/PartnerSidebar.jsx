@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Nav, Offcanvas } from "react-bootstrap";
 import { Link, useLocation } from "react-router-dom";
 import { LayoutDashboard, PlusCircle, ClipboardList, BookOpen } from "lucide-react";
@@ -7,6 +7,7 @@ import usePartnerAccess from "../hooks/usePartnerAccess";
 import {
   PARTNER_TYPE_LABEL,
   partnerDashboardPath,
+  registrationTargetFor,
   resolveApprovedFeatures,
 } from "../config/partnerFeatures";
 
@@ -16,7 +17,7 @@ import {
  * Sidebar.jsx, which delegates here for partner roles.
  *
  * Shape mirrors the admin/agent menu the partner would recognise:
- *   Dashboard · New Booking · Registration · Booking List
+ *   Dashboard · Registration · New Booking · Booking List
  * with each group holding only the entries of approved features (see
  * config/partnerFeatures.js). A feature the admin has not approved is not
  * rendered at all; the route guard + backend filter enforce the same set.
@@ -32,6 +33,8 @@ export default function PartnerSidebar({
   collapsed,
   onToggleCollapsed,
 }) {
+  // (the parent Sidebar keeps the open/close + collapse handlers; only the
+  //  state and the setters it needs are passed down)
   const { pathname } = useLocation();
   const { access, loading } = usePartnerAccess();
   const [openGroups, setOpenGroups] = useState({});
@@ -61,7 +64,8 @@ export default function PartnerSidebar({
         registration.push({
           key: `reg-${f.code}-${r.to}`,
           label: r.to === "/registration/hotel" ? "Hotel" : r.label,
-          to: r.to,
+          // DMC: hotel registration opens the create form (see catalog).
+          to: registrationTargetFor(role, r.to),
         });
       }
     }
@@ -72,15 +76,34 @@ export default function PartnerSidebar({
       to: f.bookingList.to,
     }));
 
+    // Menu order: Registration (set up inventory) → New Booking → Booking List.
     const groups = [];
-    if (newBooking.length) groups.push({ label: "New Booking", children: newBooking });
     if (registration.length) groups.push({ label: "Registration", children: registration });
+    if (newBooking.length) groups.push({ label: "New Booking", children: newBooking });
     if (bookingList.length) groups.push({ label: "Booking List", children: bookingList });
     return groups;
-  }, [access]);
+  }, [access, role]);
 
   const toggleGroup = (label) =>
     setOpenGroups((prev) => ({ [label]: !prev[label] }));
+
+  // Same behaviour as Sidebar.jsx: a click anywhere outside the menu closes
+  // the open flyout, otherwise it would sit over the page content.
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      const sidebarEl = sidebarRef.current;
+      const offcanvasEl = offcanvasRef.current;
+      if (
+        sidebarEl &&
+        !sidebarEl.contains(event.target) &&
+        (!offcanvasEl || !offcanvasEl.contains(event.target))
+      ) {
+        setOpenGroups({});
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const iconFor = (label) => {
     const props = { size: 18, strokeWidth: 1.5, className: "sidebar-icon" };
@@ -110,7 +133,18 @@ export default function PartnerSidebar({
         >
           <span className="d-flex align-items-center">
             <span className="me-2">{iconFor("Dashboard")}</span>
-            <span>{dashboardLabel}</span>
+            {/* Sidebar.css forces nowrap + hidden overflow on the link, so a
+                long label ("Supplier Dashboard") would run under the collapse
+                button; let just this label wrap and stop short of it. */}
+            <span
+              style={
+                variant === "desktop"
+                  ? { whiteSpace: "normal", lineHeight: 1.15, paddingRight: 30 }
+                  : undefined
+              }
+            >
+              {dashboardLabel}
+            </span>
           </span>
         </Nav.Link>
       </Nav.Item>

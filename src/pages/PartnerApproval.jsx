@@ -180,22 +180,7 @@ export default function PartnerApproval() {
                   />
                 </InputGroup>
               </div>
-              <button
-                type="button"
-                className="btn d-inline-flex align-items-center gap-2"
-                onClick={fetchRequests}
-                style={{
-                  border: "1.5px solid #c0392b",
-                  color: "#c0392b",
-                  background: "#fff",
-                  fontWeight: 600,
-                  fontSize: "0.85rem",
-                  borderRadius: "8px",
-                  height: "40px",
-                }}
-              >
-                <FaSync /> Refresh
-              </button>
+              
             </div>
 
             {/* Filters */}

@@ -397,6 +397,22 @@ export const PARTNER_COMMON_ROUTES = [
 
 const FEATURE_BY_CODE = Object.fromEntries(PARTNER_FEATURES.map((f) => [f.code, f]));
 
+/**
+ * Per-role overrides for registration link targets. A DMC registers its own
+ * hotels, so its "Hotel" registration entry opens the create form directly
+ * instead of the hotel list (which, for a DMC, only ever shows its own
+ * hotels anyway). Suppliers keep the list. Keyed by the catalog's `to`.
+ */
+const REGISTRATION_TARGET_BY_ROLE = {
+  dmc: {
+    "/registration/hotel": "/registration/hotel/create",
+  },
+};
+
+/** The registration route a given partner role should open for a catalog link. */
+export const registrationTargetFor = (role, to) =>
+  REGISTRATION_TARGET_BY_ROLE[String(role || "").toLowerCase()]?.[to] || to;
+
 export const isPartnerRole = (role) =>
   PARTNER_ROLES.includes(String(role || "").trim().toLowerCase());
 
