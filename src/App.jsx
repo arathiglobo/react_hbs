@@ -706,7 +706,7 @@ export default function App() {
         <Route path="/new-booking/offline-search" element={<PrivateRoute><OfflineSearch /> </PrivateRoute>}/>
         
 
-        {/* Booking List/Details */}
+        {/* Booking List/Details */} 
         <Route path="/booking-details/cab-booking-list" element={<PrivateRoute><CabBookingList /></PrivateRoute>} />
         <Route path="/booking-details/cab-booking/:id" element={<PrivateRoute><CabBookingDetailView /></PrivateRoute>} />
         <Route path="/booking-details/activity-booking-list" element={<PrivateRoute><ActivityBookingList /></PrivateRoute>} />
