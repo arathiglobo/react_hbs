@@ -27,6 +27,7 @@ import {
   FaTrash,
   FaSearch,
   FaExclamationTriangle,
+  FaArrowLeft,
 } from "react-icons/fa";
 import "../../styles/HotelList.css";
 
@@ -321,6 +322,18 @@ const HotelList = () => {
         <Sidebar />
         <main className="flex-grow-1 p-4">
           <Container fluid>
+            {/* Back to Admin Dashboard — top-left, above the page header */}
+            <div className="mb-3">
+              <Button
+                variant="outline-secondary"
+                onClick={() => navigate("/adminDashboard")}
+                className="d-inline-flex align-items-center gap-2 rounded-pill px-3 py-2"
+              >
+                <FaArrowLeft />
+                Back
+              </Button>
+            </div>
+
             {/* Header Section */}
             <div className="d-flex justify-content-between align-items-center mb-4">
               <div>
