@@ -68,6 +68,8 @@ export default function TopBar() {
     staff: "/staffDashboard",
     extranet: "/extranetDashboard",
     super_admin: "/superAdminDashboard",
+    supplier: "/supplierDashboard",
+    dmc: "/dmcDashboard",
   };
   const storedRoles = (localStorage.getItem("userRole") || "")
     .split(",")
@@ -464,6 +466,8 @@ export default function TopBar() {
     localStorage.removeItem("currentActiveRole");
     // End the ad-view session so the next login counts ad views fresh.
     localStorage.removeItem("adSessionId");
+    // Supplier / DMC approved-feature snapshot (hooks/usePartnerAccess.js).
+    localStorage.removeItem("partnerAccess");
 
     // Optionally redirect to login page
     window.location.href = "/";
