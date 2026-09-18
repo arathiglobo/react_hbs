@@ -17,6 +17,7 @@ import {
   FaEye,
   FaInbox,
   FaUser,
+  FaArrowLeft,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -498,6 +499,18 @@ const PackageBookingList = () => {
               paddingRight: "0.5rem",
             }}
           >
+            {/* Back to Admin Dashboard — top-left, above the header row */}
+            <div className="mb-3">
+              <Button
+                variant="outline-secondary"
+                onClick={() => navigate("/adminDashboard")}
+                className="d-inline-flex align-items-center gap-2 rounded-pill px-3 py-2"
+              >
+                <FaArrowLeft />
+                Back
+              </Button>
+            </div>
+
             <div className="d-flex justify-content-between align-items-end mb-3 hbl-header">
               <div className="hbl-header-left">
                 <h3 className="fw-bold text-dark mb-2">Package Booking</h3>

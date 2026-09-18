@@ -20,6 +20,7 @@ import {
   FaInbox,
   FaUser,
   FaUsers,
+  FaArrowLeft,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -412,6 +413,18 @@ export default function LastMinuteBookingList() {
               paddingRight: "0.5rem",
             }}
           >
+            {/* Back to Admin Dashboard — top-left, above the header row */}
+            <div className="mb-3">
+              <Button
+                variant="outline-secondary"
+                onClick={() => navigate("/adminDashboard")}
+                className="d-inline-flex align-items-center gap-2 rounded-pill px-3 py-2"
+              >
+                <FaArrowLeft />
+                Back
+              </Button>
+            </div>
+
             {/* Header: Title + Search (left) | Time Period (right) — mirrors
                 /booking-details/hotel-booking-list */}
             <div className="d-flex justify-content-between align-items-end mb-3 hbl-header">

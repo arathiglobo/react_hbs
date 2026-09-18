@@ -26,6 +26,7 @@ import {
   FaMapMarkedAlt,
   FaMapSigns,
   FaGlobeAsia,
+  FaArrowLeft,
 } from "react-icons/fa";
 
 // Enhanced SearchableSelect Component with loading support
@@ -1604,6 +1605,18 @@ const CabProviderReg = () => {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
+          {/* Back to Admin Dashboard — top-left, above the page card */}
+          <div className="mb-3">
+            <Button
+              variant="outline-secondary"
+              onClick={() => navigate("/adminDashboard")}
+              className="d-inline-flex align-items-center gap-2 rounded-pill px-3 py-2"
+            >
+              <FaArrowLeft />
+              Back
+            </Button>
+          </div>
+
           <Card className="shadow-sm rounded-xl">
             <Card.Header className="d-flex justify-content-between align-items-center">
               <span className="fw-semibold">Transfers</span>

@@ -17,6 +17,7 @@ import {
   FaSearch,
   FaUser,
   FaInbox,
+  FaArrowLeft,
 } from "react-icons/fa";
 import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
@@ -492,6 +493,18 @@ const CabBookingList = () => {
           style={{ width: "100%", overflow: "hidden" }}
         >
           <Container fluid className="px-0">
+            {/* Back to Admin Dashboard — top-left, above the header row */}
+            <div className="mb-3">
+              <Button
+                variant="outline-secondary"
+                onClick={() => navigate("/adminDashboard")}
+                className="d-inline-flex align-items-center gap-2 rounded-pill px-3 py-2"
+              >
+                <FaArrowLeft />
+                Back
+              </Button>
+            </div>
+
             {/* Header: Title + Search (left) | Time Period (right) */}
             <div className="d-flex justify-content-between align-items-end mb-3 hbl-header">
               <div className="hbl-header-left">

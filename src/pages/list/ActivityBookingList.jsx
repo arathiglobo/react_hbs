@@ -10,6 +10,7 @@ import {
   InputGroup,
   Spinner,
   Pagination,
+  Button,
 } from "react-bootstrap";
 import {
   FaSearch,
@@ -17,6 +18,7 @@ import {
   FaEye,
   FaUser,
   FaInbox,
+  FaArrowLeft,
 } from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
@@ -349,6 +351,18 @@ const ActivityBookingList = () => {
           style={{ width: "100%", overflow: "hidden" }}
         >
           <Container fluid className="px-0">
+            {/* Back to Admin Dashboard — top-left, above the header row */}
+            <div className="mb-3">
+              <Button
+                variant="outline-secondary"
+                onClick={() => navigate("/adminDashboard")}
+                className="d-inline-flex align-items-center gap-2 rounded-pill px-3 py-2"
+              >
+                <FaArrowLeft />
+                Back
+              </Button>
+            </div>
+
             {/* Header: Title + Search (left) | Time Period (right) */}
             <div className="d-flex justify-content-between align-items-end mb-3 hbl-header">
               <div className="hbl-header-left">

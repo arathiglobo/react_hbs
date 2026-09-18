@@ -24,6 +24,7 @@ import {
   FaExclamationTriangle,
   FaRupeeSign,
   FaStar,
+  FaArrowLeft,
 } from "react-icons/fa";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../components/Sidebar";
@@ -108,6 +109,18 @@ const HoneymoonList = () => {
         <Sidebar />
         <main className="flex-grow-1 p-4">
           <Container fluid>
+            {/* Back to Admin Dashboard — top-left, above the page header */}
+            <div className="mb-3">
+              <Button
+                variant="outline-secondary"
+                onClick={() => navigate("/adminDashboard")}
+                className="d-inline-flex align-items-center gap-2 rounded-pill px-3 py-2"
+              >
+                <FaArrowLeft />
+                Back
+              </Button>
+            </div>
+
             <div className="d-flex justify-content-between align-items-center mb-4">
               <div>
                 <h2 className="text-primary mb-1">
