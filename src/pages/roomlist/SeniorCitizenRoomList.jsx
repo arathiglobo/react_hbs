@@ -82,7 +82,7 @@ export default function SeniorCitizenRoomList() {
   const [error, setError] = useState(null);
   const [agentBalance, setAgentBalance] = useState(null);
   const [activePromotion, setActivePromotion] = useState(null);
-  const [viewMode, setViewMode] = useState("grid");
+  const [viewMode, setViewMode] = useState("list");
   const [activeAccordion, setActiveAccordion] = useState("0");
 
   // ── Filter sidebar state ─────────────────────────────────────

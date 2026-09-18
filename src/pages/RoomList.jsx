@@ -1875,14 +1875,29 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                           selectedRooms[roomSlotIndex]
                                             ?.selectedRate === rate
                                         }
-                                        onChange={() =>
+                                        // Controlled radio: onChange is a
+                                        // no-op so React does not warn, and
+                                        // onClick drives the state update.
+                                        // onClick fires on every click
+                                        // (including clicks that would
+                                        // otherwise silently re-check an
+                                        // already-selected radio without
+                                        // firing onChange), so the user can
+                                        // switch between rates or clear the
+                                        // selection reliably. stopPropagation
+                                        // shields the click from the parent
+                                        // Accordion, which would otherwise
+                                        // collapse the category on click.
+                                        onChange={() => {}}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
                                           handleRateSelect(
                                             roomSlotIndex,
                                             rate,
                                             hotel.hotelId,
                                             hotel.hotelName,
-                                          )
-                                        }
+                                          );
+                                        }}
                                       />
                                     ) : (
                                       <Button
@@ -1916,14 +1931,23 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                             selectedRooms[roomSlotIndex]
                                               ?.selectedRate === rate
                                           }
-                                          onChange={() =>
+                                          // See the grid-mode radio above for
+                                          // the rationale. onClick fires on
+                                          // every click so the user can
+                                          // switch between rates or clear
+                                          // the selection; stopPropagation
+                                          // shields the click from the
+                                          // Accordion parent.
+                                          onChange={() => {}}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
                                             handleRateSelect(
                                               roomSlotIndex,
                                               rate,
                                               hotel.hotelId,
                                               hotel.hotelName,
-                                            )
-                                          }
+                                            );
+                                          }}
                                           style={{ whiteSpace: "nowrap" }}
                                         />
                                       </div>

@@ -544,7 +544,7 @@ export default function LongStayRoomList() {
   // each room's expanded contract independent). Default seed "0" is
   // read per-slot on first render so single-room mode is unchanged.
   const [activeAccordions, setActiveAccordions] = useState({});
-  const [viewMode, setViewMode] = useState("grid"); // "grid" | "list"
+  const [viewMode, setViewMode] = useState("list"); // "grid" | "list"
 
   // Cancellation Policies & Terms modal — opened from a per-room-card link.
   // Read-only viewer; sources directly from the contract already loaded

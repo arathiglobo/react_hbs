@@ -78,7 +78,7 @@ export default function StudentRoomList() {
   const [error, setError] = useState(null);
   const [agentBalance, setAgentBalance] = useState(null);
   const [activePromotion, setActivePromotion] = useState(null);
-  const [viewMode, setViewMode] = useState("grid");
+  const [viewMode, setViewMode] = useState("list");
   // Which category accordion is open, tracked PER ROOM SLOT so opening
   // a category in Room 1 doesn't also open the same category in Room 2
   // (they used to share a single string; multi-room searches now keep
