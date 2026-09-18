@@ -34,7 +34,7 @@ import axiosInstance from "../../../components/AxiosInstance";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
 import DateInput from "../../../components/DateInput";
-import { FaSearch, FaStar } from "react-icons/fa";
+import { FaSearch, FaStar, FaArrowLeft } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import "../../../styles/HotelSearch.css";
 
@@ -864,6 +864,18 @@ export default function SeniorCitizenSearch() {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4 hs-page">
+          {/* Back to Admin Dashboard — top-left, above the page content */}
+          <div className="mb-3">
+            <Button
+              variant="outline-secondary"
+              onClick={() => navigate("/adminDashboard")}
+              className="d-inline-flex align-items-center gap-2 rounded-pill px-3 py-2"
+            >
+              <FaArrowLeft />
+              Back
+            </Button>
+          </div>
+
           {/* ── Results-page heading ──
               Shown once actual results have arrived (not just on search
               click), above the search summary / form. Matches the heading

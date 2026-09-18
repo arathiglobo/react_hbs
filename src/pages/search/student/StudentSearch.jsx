@@ -18,7 +18,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Card, Button, Row, Col, Form, Spinner } from "react-bootstrap";
-import { FaSearch, FaStar, FaGraduationCap } from "react-icons/fa";
+import { FaSearch, FaStar, FaGraduationCap, FaArrowLeft } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import Select from "react-select";
 import AgentSelect from "../../../components/AgentSelect";
@@ -734,6 +734,18 @@ export default function StudentSearch() {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4 hs-page">
+          {/* Back to Admin Dashboard — top-left, above the page content */}
+          <div className="mb-3">
+            <Button
+              variant="outline-secondary"
+              onClick={() => navigate("/adminDashboard")}
+              className="d-inline-flex align-items-center gap-2 rounded-pill px-3 py-2"
+            >
+              <FaArrowLeft />
+              Back
+            </Button>
+          </div>
+
           {/* ── Results-page heading ──
               Shown once actual results have arrived (not just on search
               click), above the search summary / form. Matches the heading
