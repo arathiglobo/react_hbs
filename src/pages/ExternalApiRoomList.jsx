@@ -39,6 +39,7 @@ import toast from "react-hot-toast";
 import { formatFlexibleDate } from "../utils/dateUtils";
 import RoomFilters from "../components/roomlist/RoomFilters";
 import useRoomFilters from "../hooks/useRoomFilters";
+import { roomTypeNameForRate } from "../utils/mealPlanCategory";
 import {
   GrnRefundBadge,
   GrnDeadlinePill,
@@ -917,11 +918,27 @@ const ExternalApiRoomList = () => {
   const filters = useRoomFilters();
 
   // Rate → normalised shape the shared predicate understands.
-  const rateMatches = (rate) =>
-    filters.rateMatches({
-      isNonRefundable: String(rate.nonRefundable).toLowerCase() === "true",
-      mealPlan: rate.mealPlan,
+  //
+  // Refund: read the same value the card badge shows. For ATHARVA the search
+  // response always says refundable and the truth only arrives with the
+  // prebook (cached per rateKey), so without this the "Non Refundable"
+  // filter never matched an Atharva rate the badge already marked as such.
+  //
+  // Room Type: the checkboxes are the inhouse master names ("Room with
+  // BreakFast", …) while suppliers send "Bed and Breakfast", "BB",
+  // "half-board", "nomeal", … — the shared predicate compares names exactly,
+  // so ticking any Room Type used to hide every API rate. Map the supplier
+  // meal plan onto the master name of the same board category first.
+  const rateMatches = (rate) => {
+    const nonRefundable =
+      atharvaPrebookCache?.[rate?.rateKey]?.nonRefundable ?? rate?.nonRefundable;
+    return filters.rateMatches({
+      isNonRefundable:
+        nonRefundable === true ||
+        ["true", "y", "yes"].includes(String(nonRefundable).toLowerCase()),
+      mealPlan: roomTypeNameForRate(rate, filters.roomTypeOptions),
     });
+  };
 
   // Room-name search — matches on full name, and expands a handful of
   // common trade abbreviations so shorthand like "DLX" hits "Deluxe".
@@ -1113,6 +1130,17 @@ const ExternalApiRoomList = () => {
   // view-mode toggles.
   const numRooms = (roomData?.payload?.rooms || []).length || 1;
   const isMultiRoom = numRooms > 1;
+
+  // Amount a rate card prints as its price (multi-room: the rate's total;
+  // single room: rate × rooms, falling back to the total). All suppliers
+  // put the MARKED-UP figure in these two fields, so the accordion header
+  // ("From …") reads the same number as the cards beneath it.
+  const displayTotalOf = (rate) =>
+    Number(
+      isMultiRoom
+        ? rate?.totalRate || 0
+        : rate?.roomRateBasedOnRoomCount || rate?.totalRate || 0,
+    ) || 0;
 
   // Nights across the searched stay — derived once at the render scope so
   // both the rate-card breakdown ("N nights × M rooms") and the Booking
@@ -3361,14 +3389,15 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                       <div className="room-category-price text-end">
                                         <div className="price-range">
                                           From{" "}
+                                          {/* Cheapest card in this category, read
+                                              through the same expression the cards
+                                              use (marked-up total). `rate.rate` was
+                                              used before, and GRN / GoGlobal fill
+                                              that field with the PRE-markup price,
+                                              so their headers under-quoted. */}
                                           {formatPrice(
                                             Math.min(
-                                              ...filteredRates.map(
-                                                (rate) =>
-                                                  rate.rate ||
-                                                  rate.totalRate ||
-                                                  0,
-                                              ),
+                                              ...filteredRates.map(displayTotalOf),
                                             ),
                                           )}
                                         </div>
