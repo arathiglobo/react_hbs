@@ -591,6 +591,17 @@
    SEARCH PROGRESS BAR
    ============================================================ */
 
+/* The .hs-progress-anchor wrapper only exists to carry the modifier class
+   + the --hs-summary-h CSS variable. Without display:contents it becomes
+   the sticky element's containing block, so the sticky effect ends as
+   soon as the anchor itself scrolls out of view (which happened after a
+   few hundred pixels of scroll and re-hid the progress bar). Removing
+   the anchor from the box tree hands the containing block back to the
+   real ancestor (the <main>), which is what sticky needs. */
+.hs-progress-anchor {
+  display: contents;
+}
+
 .search-progress-bar-wrap {
   background: #fff;
   border: 1px solid #e9ecef;
@@ -598,12 +609,106 @@
   padding: 14px 18px;
   margin-bottom: 16px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  /* Entrance: subtle fade + slide when the bar first mounts, and a
+     slow orange glow pulse while polling so the whole card visibly
+     "breathes" alongside the sweeping fill. */
+  animation:
+    hsProgressEnter 0.32s cubic-bezier(0.16, 1, 0.3, 1) both,
+    hsProgressGlow 2.4s ease-in-out 0.4s infinite;
+  /* Keep the progress bar anchored under the sticky TopBar (top:0,
+     z-index:1030) throughout an active search so scrolling the results
+     never hides it. z-index sits below the collapsed summary bar (1020)
+     so the two never fight for the same slot; when the summary bar is
+     also on screen the .hs-progress--below-summary parent bumps the
+     sticky top down, so the bar re-appears just below the summary. The
+     global `* { transition: .3s }` rule further down the app CSS was
+     animating `top` on the modifier switch (making the sticky offset
+     look like it never took), so transitions are pinned off here. */
+  position: sticky;
+  top: 64px;
+  z-index: 1015;
+  transition: none !important;
+}
+
+/* When results are on screen the collapsed summary bar is also sticky at
+   top:64 (z-index:1020). --hs-summary-h is set by React from a
+   ResizeObserver on that bar, so the progress bar's sticky top always
+   clears whatever height it happens to have — including when the chips
+   wrap to a second line at narrow widths. Fallback (--hs-summary-h
+   missing) keeps a safe 56px so the bar still sits below a typical
+   summary bar even if the variable never reaches the element. The
+   !important beats any lower-specificity later-declared rule that
+   might have overridden `top`. */
+.hs-progress--below-summary .search-progress-bar-wrap {
+  top: calc(64px + var(--hs-summary-h, 56px) + 6px) !important;
 }
 
 .search-progress-label {
   font-size: 0.82rem;
   font-weight: 500;
   color: #6b7280;
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
+/* Pulsing indicator dot that sits right before the "Searching hotels"
+   text. Uses the brand orange and scales + fades so the label reads as
+   live activity, not a static string. */
+.search-progress-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #F75E00;
+  margin-right: 8px;
+  box-shadow: 0 0 0 rgba(247, 94, 0, 0.5);
+  animation: hsProgressDot 1.05s ease-in-out infinite;
+}
+
+/* Bouncing "..." after the label. Each dot fades on its own beat so
+   the whole ellipsis feels like a wave rather than a blink. */
+.search-progress-ellipsis {
+  display: inline-flex;
+  margin-left: 2px;
+  letter-spacing: 1px;
+}
+.search-progress-ellipsis > span {
+  opacity: 0.25;
+  animation: hsProgressBlink 1.2s ease-in-out infinite;
+}
+.search-progress-ellipsis > span:nth-child(2) { animation-delay: 0.18s; }
+.search-progress-ellipsis > span:nth-child(3) { animation-delay: 0.36s; }
+
+@keyframes hsProgressEnter {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes hsProgressGlow {
+  0%, 100% { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06); }
+  50%      { box-shadow: 0 4px 16px rgba(247, 94, 0, 0.22); }
+}
+@keyframes hsProgressDot {
+  0%, 100% { transform: scale(1);   opacity: 1;   box-shadow: 0 0 0 0    rgba(247, 94, 0, 0.5); }
+  50%      { transform: scale(0.7); opacity: 0.55; box-shadow: 0 0 0 6px rgba(247, 94, 0, 0);   }
+}
+@keyframes hsProgressBlink {
+  0%, 100% { opacity: 0.25; }
+  50%      { opacity: 1; }
+}
+
+/* Respect users who ask for reduced motion — hold the still, non-
+   moving version of the bar for accessibility. */
+@media (prefers-reduced-motion: reduce) {
+  .search-progress-bar-wrap,
+  .search-progress-fill,
+  .search-progress-fill::after,
+  .search-progress-dot,
+  .search-progress-ellipsis > span {
+    animation: none !important;
+  }
+  .search-progress-fill::after { display: none; }
+  .search-progress-ellipsis > span { opacity: 1; }
 }
 
 .search-progress-percent {
@@ -617,26 +722,57 @@
 /* Track */
 .search-progress-track {
   width: 100%;
-  height: 6px;
+  height: 8px;
   background: #eef0f4;
   border-radius: 99px;
   overflow: hidden;
   margin-bottom: 12px;
+  position: relative;
 }
 
-/* Animated fill */
+/* Animated fill — brighter base shimmer (light peach in the middle
+   instead of a darker orange) so the sweep is actually visible, plus
+   a traveling white shine on top for an obvious "loading" cue. */
 .search-progress-fill {
   height: 100%;
   border-radius: 99px;
-  background: linear-gradient(90deg, #F75E00, #D65100, #F75E00);
+  background: linear-gradient(90deg, #F75E00 0%, #FFB27A 50%, #F75E00 100%);
   background-size: 200% 100%;
   animation: progressShimmer 1.6s linear infinite;
   transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Bright white streak that sweeps left→right across the current fill,
+   independent of how full the bar is. Uses inset:0 so it always spans
+   the exact filled region, and a wide gradient stop with hard
+   transparent edges keeps the highlight readable at any progress %. */
+.search-progress-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    transparent 35%,
+    rgba(255, 255, 255, 0.85) 50%,
+    transparent 65%,
+    transparent 100%
+  );
+  background-size: 220% 100%;
+  animation: hsProgressShine 1.4s linear infinite;
+  pointer-events: none;
 }
 
 @keyframes progressShimmer {
   0%   { background-position: 200% center; }
   100% { background-position: -200% center; }
+}
+@keyframes hsProgressShine {
+  0%   { background-position: 220% 0; }
+  100% { background-position: -120% 0; }
 }
 
 /* Channel pills row */
@@ -1491,4 +1627,89 @@
 
 .hs-hotel-img.ratio::before {
   padding-top: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   HotelSearch — compact "+ Add Room" button and expanded
+   Rooms & Guests panel. Purely spacing/sizing: keeps SEARCH
+   as the visually dominant CTA and keeps SEARCH inside the
+   viewport once the operator opens the rooms panel. Scoped to
+   .hs-page so other pages that share .btn-add-room-premium /
+   .rgs-* classes (StudentSearch, GovEmployeeSearch, etc.)
+   keep their existing look.
+   ───────────────────────────────────────────────────────────── */
+
+/* 1) Small, secondary "+ Add Room" pill beside the Rooms & Guests
+      trigger. !important so any Bootstrap .btn default cannot win. */
+.hs-page .btn-add-room-premium.hs-add-room-btn-red {
+  padding: 0.22rem 0.55rem !important;
+  font-size: 0.68rem !important;
+  border-radius: 6px !important;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 2px 5px rgba(247, 94, 0, 0.15) !important;
+  gap: 0.22rem !important;
+  line-height: 1.15 !important;
+  min-height: 0 !important;
+}
+.hs-page .btn-add-room-premium.hs-add-room-btn-red .add-room-plus {
+  font-size: 0.78rem !important;
+}
+
+/* Trim the sibling "Rooms & Guests" trigger and drop its
+   Bootstrap .btn min-height so it lines up with the smaller pill. */
+.hs-page .rooms-summary-btn-modern {
+  padding: 6px 12px !important;
+  font-size: 0.85rem !important;
+  min-height: 0 !important;
+}
+
+/* 2) Compact room-card layout inside the expanded panel. */
+.hs-page .rgs-grid { gap: 6px; }
+
+.hs-page .rgs-room-card {
+  padding: 5px 9px;
+  gap: 1px;
+  border-radius: 8px;
+}
+
+.hs-page .rgs-room-label   { font-size: 0.7rem; }
+.hs-page .rgs-counters-col { gap: 0; }
+.hs-page .rgs-counter-row  { padding: 1px 0; }
+.hs-page .rgs-counter-title { font-size: 0.7rem; line-height: 1.1; }
+.hs-page .rgs-counter-sub   { font-size: 0.58rem; line-height: 1.1; }
+
+.hs-page .rgs-counter-btn {
+  width: 18px;
+  height: 18px;
+  font-size: 0.75rem;
+}
+.hs-page .rgs-counter-val { font-size: 0.78rem; }
+
+/* 3) Compact "Add Room" tile inside the expanded grid. */
+.hs-page .rgs-add-room-btn {
+  min-height: 38px;
+  padding: 3px 6px;
+  font-size: 0.72rem;
+  border-radius: 8px;
+}
+.hs-page .rgs-add-room-btn .rgs-add-icon { font-size: 0.9rem; }
+
+/* 4) Tighten the whole search widget once the rooms panel is
+      expanded so the SEARCH button remains fully in view without
+      extra scrolling. Reduces the card body's own padding, the
+      hero heading's bottom margin, and the mt-3 gaps between rows
+      inside the form (Bootstrap's 1rem). */
+.hs-page .search-card-modern .card-body {
+  padding: 20px 32px 14px !important;
+}
+.hs-page .search-card-modern .card-body h2 {
+  margin-bottom: 2px !important;
+}
+.hs-page .search-card-modern .card-body p {
+  margin-bottom: 14px !important;
+  font-size: 0.92rem !important;
+}
+.hs-page .search-card-modern .card-body form > .row.mt-3 {
+  margin-top: 0.45rem !important;
 }
