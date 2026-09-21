@@ -360,7 +360,6 @@ const Register = () => {
     } else if (currentStep === 3) {
       if (!formData.countryId) newErrors.countryId = "Country is required";
       if (!formData.provinceId) newErrors.provinceId = "City is required";
-      if (!formData.placeId) newErrors.placeId = "Location is required";
       if (!formData.address.trim()) newErrors.address = "Address is required";
     } else if (currentStep === 4) {
       // Step 4 — Login credentials (used to provision the AGENT UserAccount
@@ -450,7 +449,6 @@ const Register = () => {
     if (!formData.timezone) newErrors.timezone = "Timezone is required.";
     if (!formData.countryId) newErrors.countryId = "Country is required";
     if (!formData.provinceId) newErrors.provinceId = "Province is required";
-    if (!formData.placeId) newErrors.placeId = "City is required";
     if (!formData.address.trim()) newErrors.address = "Address is required";
 
     // Additional format validations
@@ -558,6 +556,13 @@ const Register = () => {
       // the number-shaped value to the String DTO field.)
       if (payload.markup) {
         payload.markup = parseInt(payload.markup, 10);
+      }
+
+      // Location is optional. When the user doesn't pick one the state
+      // value is "" — send null so Jackson doesn't fail to coerce an
+      // empty string into the Long placeId field on the backend DTO.
+      if (payload.placeId === "" || payload.placeId === undefined) {
+        payload.placeId = null;
       }
 
       // When the operator picked a trade-license file, upgrade the request to
@@ -1485,7 +1490,7 @@ const Register = () => {
                           <Col md={4}>
                             <Form.Group>
                               <Form.Label className="form-label">
-                                Location <span className="required">*</span>
+                                Location
                               </Form.Label>
                               <Form.Select
                                 name="placeId"
