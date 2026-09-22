@@ -41,7 +41,7 @@ const DEFAULT_PROGRESS_CHANNELS = [
   "grn",
 ];
 
-function SearchProgressBar({ pollStatus, completedChannels, channels }) {
+function SearchProgressBar({ pollStatus, completedChannels, channels, isLoading }) {
   const effectiveChannels =
     Array.isArray(channels) && channels.length > 0
       ? channels
@@ -50,7 +50,15 @@ function SearchProgressBar({ pollStatus, completedChannels, channels }) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (pollStatus === "IN_PROGRESS") {
+    // isLoading covers the tiny window between the user's Search click and
+    // pollStatus flipping to IN_PROGRESS (handleSearchSubmit resets pollStatus
+    // to IDLE first). Without it, a Modify Search briefly hides the bar
+    // because the previous COMPLETED state is wiped before the new poll has
+    // started — the exact "accidentally hides" case the spec warns about.
+    const isActive =
+      pollStatus === "IN_PROGRESS" ||
+      (!!isLoading && pollStatus !== "COMPLETED");
+    if (isActive) {
       setVisible(true);
       const done = completedChannels.size;
       const target =
@@ -66,15 +74,26 @@ function SearchProgressBar({ pollStatus, completedChannels, channels }) {
       setVisible(false);
       setProgress(0);
     }
-  }, [pollStatus, completedChannels]);
+  }, [pollStatus, completedChannels, isLoading]);
 
   if (!visible) return null;
 
   return (
     <div className="search-progress-bar-wrap">
-      {/* Label row */}
+      {/* Label row — the pulsing dot before the label + the animated
+          "…" after it give a live "actively searching" cue that pairs
+          with the moving progress fill. Purely presentational; no
+          impact on state, polling, or completion timing. */}
       <div className="d-flex justify-content-between align-items-center mb-2">
-        <span className="search-progress-label">Searching hotels...</span>
+        <span className="search-progress-label">
+          <span className="search-progress-dot" aria-hidden="true" />
+          Searching hotels
+          <span className="search-progress-ellipsis" aria-hidden="true">
+            <span>.</span>
+            <span>.</span>
+            <span>.</span>
+          </span>
+        </span>
         <span className="search-progress-percent">{Math.round(progress)}%</span>
       </div>
 
@@ -776,6 +795,13 @@ export default function HotelSearch({
   const resultsRef = useRef(null);
   const [isInitialResultsLoaded, setIsInitialResultsLoaded] = useState(false);
   const [isNationalityLoading, setIsNationalityLoading] = useState(false);
+  // Live height of the sticky summary bar (px). The progress bar reads
+  // this into its sticky `top` so it always sits just below the summary
+  // bar, even when the summary chips wrap to a second line at narrower
+  // widths. 0 = summary bar is not on screen and the progress bar sticks
+  // right under the TopBar.
+  const summaryBarRef = useRef(null);
+  const [summaryBarHeight, setSummaryBarHeight] = useState(0);
 
   const starOptions = [
     { value: 5, label: "5 Stars" },
@@ -896,11 +922,68 @@ export default function HotelSearch({
       }
       setIsDestinationLoading(true);
       try {
+        // Tokenize on whitespace/commas so multi-word queries like
+        // "van turkey" or "Van, Turkey" actually work. The backend's
+        // /api/province?search= does a whole-string contains match and
+        // returns 0 rows for either of those, but returns 165 rows for
+        // just "van" (with "Van, Turkey" buried at index 162). We hit
+        // the backend with the LONGEST token — the most specific one,
+        // less likely to over-match a common prefix — then filter and
+        // rank client-side so exact/starts-with city matches surface
+        // above hits that only contain the token as a substring.
+        const tokens = searchText
+          .trim()
+          .toLowerCase()
+          .split(/[\s,]+/)
+          .filter(Boolean);
+        if (tokens.length === 0) {
+          setDestinationOptions([]);
+          return;
+        }
+        const backendQuery = tokens.reduce(
+          (a, b) => (b.length > a.length ? b : a),
+          tokens[0],
+        );
+
         const response = await axiosInstance.get(
-          `/api/province?search=${searchText}`,
+          `/api/province?search=${encodeURIComponent(backendQuery)}`,
         );
         const cityApiRes = Array.isArray(response.data) ? response.data : [];
-        const options = cityApiRes.slice(0, 50).map((city) => ({
+
+        // Rank each row by how well it matches the FULL query. Rows
+        // that don't contain every token in stateName + country are
+        // dropped so a two-word query behaves like AND (matches "Van
+        // + Turkey" but not "Vannes + France").
+        const query = tokens.join(" ");
+        const scored = [];
+        for (const city of cityApiRes) {
+          const sn = String(city.stateName || "").toLowerCase();
+          const cn = String(city.country || "").toLowerCase();
+          const combined = `${sn} ${cn}`;
+          if (!tokens.every((t) => combined.includes(t))) continue;
+
+          let score = 0;
+          if (sn === query) score += 1000;
+          if (tokens.some((t) => sn === t)) score += 800;
+          if (sn.startsWith(tokens[0])) score += 500;
+          if (tokens.length > 1 && cn === tokens[tokens.length - 1])
+            score += 400;
+          if (
+            tokens.length > 1 &&
+            tokens.slice(1).every((t) => cn.includes(t))
+          )
+            score += 300;
+          if (sn.includes(query)) score += 200;
+          if (sn.includes(tokens[0])) score += 100;
+          // Slight tiebreaker so a shorter, tighter name wins over a
+          // long incidental substring match.
+          score -= Math.min(50, sn.length * 0.5);
+
+          scored.push({ city, score });
+        }
+        scored.sort((a, b) => b.score - a.score);
+
+        const options = scored.slice(0, 50).map(({ city }) => ({
           value: city.id,
           label: `${city.stateName}, ${city.country}`,
           countryId: city.countryId,
@@ -1056,6 +1139,22 @@ export default function HotelSearch({
 
   const filteredResults = useMemo(() => {
     let results = allResults;
+
+    // Hotel Name filter (client-side): case-insensitive, whitespace-
+    // tokenized substring match — ALL tokens must appear somewhere in
+    // hotel.name. Handles the "smart hyde" → "Smart Hyde Park Inn" case
+    // that the backend's whole-string /filter-by-name endpoint rejects,
+    // and normalizes redundant whitespace between tokens ("smart   hyde").
+    const rawNameQuery = String(hotelSearchTerm || "").trim();
+    if (rawNameQuery) {
+      const tokens = rawNameQuery.toLowerCase().split(/\s+/).filter(Boolean);
+      if (tokens.length > 0) {
+        results = results.filter((hotel) => {
+          const name = String(hotel?.name || "").toLowerCase();
+          return tokens.every((t) => name.includes(t));
+        });
+      }
+    }
 
     if (starRating) {
       results = results.filter(
@@ -1550,15 +1649,27 @@ export default function HotelSearch({
       // fetches don't need this — the poll loop is already the sole writer
       // for them and never races with itself.
       const mySeq = isNameSearching ? ++nameSearchSeqRef.current : null;
-      const endpoint = isNameSearching
-        ? `/api/hotel-search/results/${sid}/filter-by-name`
-        : `/api/hotel-search/results/${sid}`;
+      // Client-side owns hotel-name matching now (see filteredResults memo)
+      // so we always hit the plain /results endpoint. When a name filter is
+      // active we pull the entire result set in one page (mirroring the
+      // /resultsOut currency-refetch that already asks for size=100000) so
+      // the tokenized client filter can look at every hotel, not just the
+      // 10-row page slice — otherwise a hotel that sorts onto page 2+ could
+      // never match a partial name typed on page 1.
+      const NAME_SEARCH_PAGE_SIZE = 100000;
+      const endpoint = `/api/hotel-search/results/${sid}`;
 
       const params = {
         agentId:
           agentId || (isAgentRole ? selfAgentId : agent) || 1,
-        page,
-        pageSize,
+        page: isNameSearching ? 0 : page,
+        // pageSize is kept for the paginated case so existing behaviour is
+        // preserved (backend defaults to 10 anyway). For the name-search
+        // fetch we must send `size` — the backend's Pageable binder reads
+        // `size` (verified: /results?pageSize=1000 returns 10, /results?
+        // size=1000 returns 1000), matching the /resultsOut convention.
+        pageSize: isNameSearching ? undefined : pageSize,
+        size: isNameSearching ? NAME_SEARCH_PAGE_SIZE : undefined,
         sortBy:
           sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
         sortOrder:
@@ -1587,9 +1698,12 @@ export default function HotelSearch({
         params.displayCurrencyCode = effectiveCurrencyCode;
       }
 
-      if (isNameSearching) {
-        params.hotelName = nameSearch.trim();
-      }
+      // hotelName is deliberately NOT sent — the client-side filter in
+      // filteredResults does tokenized substring matching, which is broader
+      // than the backend endpoint's whole-string match ("smart hyde" would
+      // otherwise return zero even though "Smart Hyde Park Inn" is in the
+      // result set). Server-side filters (starRating, apiType) still ride
+      // on the same request so combined filtering keeps working.
 
       // Capture the currency-version at send-time; if the user picks a
       // different currency before the response lands, we DROP the response
@@ -1697,15 +1811,24 @@ export default function HotelSearch({
         setAllResults([]);
       }
 
-      setTotalElements(Number(res.data.totalResults) || mappedResults.length);
-      setTotalPages(
-        Math.max(
-          1,
-          Math.ceil(
-            (Number(res.data.totalResults) || mappedResults.length) / pageSize,
+      // For a name-search fetch we pulled everything (up to
+      // NAME_SEARCH_PAGE_SIZE) in one go and filter it client-side, so the
+      // paginator collapses to a single page for the visible/filtered set.
+      // Everything else uses the server-side totals exactly as before.
+      if (isNameSearching) {
+        setTotalElements(mappedResults.length);
+        setTotalPages(1);
+      } else {
+        setTotalElements(Number(res.data.totalResults) || mappedResults.length);
+        setTotalPages(
+          Math.max(
+            1,
+            Math.ceil(
+              (Number(res.data.totalResults) || mappedResults.length) / pageSize,
+            ),
           ),
-        ),
-      );
+        );
+      }
       // Keep the LIVE/OFF badges in sync on filter / page refetches too.
       // The backend counts over the full set BEFORE the apiType filter,
       // so ticking one channel never flips the others to OFF.
@@ -2235,6 +2358,32 @@ export default function HotelSearch({
   // are on screen, unless the user explicitly chose to modify the search.
   const collapseSearch = showResultsDuringPolling && !isEditingSearch;
 
+  // Track the summary bar's live height. When the summary bar shows up the
+  // sticky progress bar has to sit right below it (both are sticky at the
+  // top of the results area — without this the summary bar's higher
+  // z-index just covers the progress bar and the user sees nothing while
+  // scrolling). ResizeObserver keeps this in sync with chip wrap, viewport
+  // changes, and Modify-Search collapse/expand.
+  useEffect(() => {
+    if (!collapseSearch) {
+      setSummaryBarHeight(0);
+      return;
+    }
+    const el = summaryBarRef.current;
+    if (!el) return;
+    // offsetHeight includes padding + border, matching the summary bar's
+    // real sticky footprint (contentRect.height would exclude padding and
+    // let the progress bar overlap the bottom of the summary strip).
+    setSummaryBarHeight(el.offsetHeight);
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      const h = el.offsetHeight;
+      setSummaryBarHeight((prev) => (prev === h ? prev : h));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [collapseSearch]);
+
   // Bumped by the late-results check below to make the results effect
   // refetch the visible page. lateResultsRefreshRef marks that refetch as a
   // background one so it doesn't flash the loading card every few seconds.
@@ -2375,7 +2524,7 @@ export default function HotelSearch({
               Shown once results are on screen. "Modify Search" re-expands
               the full form by flipping isEditingSearch. */}
           {collapseSearch && (
-            <div className="hs-summary-bar">
+            <div className="hs-summary-bar" ref={summaryBarRef}>
               <Button
                 type="button"
                 className="hs-summary-modify"
@@ -2546,6 +2695,14 @@ export default function HotelSearch({
                         onInputChange={(inputValue, { action }) => {
                           if (action === "input-change") cityList(inputValue);
                         }}
+                        // Client-side filter/ranking is already done inside
+                        // debouncedCitySearch. Keeping react-select's default
+                        // filter would drop "Van, Turkey" for the query
+                        // "van turkey" because it does a raw substring test
+                        // against the label and the comma between city and
+                        // country breaks the match. Same pattern the Currency
+                        // picker below already uses.
+                        filterOption={() => true}
                         menuPortalTarget={document.body}
                         styles={{
                           menuPortal: (base) => ({ ...base, zIndex: 9999 }),
@@ -2926,12 +3083,30 @@ export default function HotelSearch({
           </div>
           )}
 
-          {/* ── Progress Bar ── */}
-          <SearchProgressBar
-            pollStatus={pollStatus}
-            completedChannels={completedChannels}
-            channels={visibleProgressChannels}
-          />
+          {/* ── Progress Bar ──
+              Rendered here so it sits between the search summary/form and
+              the Accommodation results. .search-progress-bar-wrap is made
+              sticky in HotelSearch.css so it stays anchored to the top of
+              the results area while the user scrolls during a search.
+              The wrapper's .hs-progress--below-summary modifier bumps the
+              sticky top down when the collapsed summary bar is also on
+              screen — otherwise the two would fight for top:64 and the
+              summary bar (higher z-index) would cover the progress bar. */}
+          <div
+            className={
+              collapseSearch
+                ? "hs-progress-anchor hs-progress--below-summary"
+                : "hs-progress-anchor"
+            }
+            style={{ "--hs-summary-h": `${summaryBarHeight}px` }}
+          >
+            <SearchProgressBar
+              pollStatus={pollStatus}
+              completedChannels={completedChannels}
+              channels={visibleProgressChannels}
+              isLoading={isLoading}
+            />
+          </div>
 
           {/* ── Loading skeleton ──
           {hasSearched && !showResultsDuringPolling && (
