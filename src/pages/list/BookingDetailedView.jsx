@@ -1739,6 +1739,20 @@ export default function BookingDetailedView() {
                       </Col>
                       <Col md={6}>
                         <InfoRow label="Agent" value={booking.agentName} />
+                        {/* Supplier — which external API fulfilled this
+                            booking (INHOUSE / IWTX / GRN / X3 / GOGLOBAL /
+                            RATEHAWK / ATHARVA / DARINA / JUMEIRAH / JUNIPER).
+                            ADMIN-only so agents never see it — mirrors the
+                            "agent must never know the supplier" whitelabel
+                            invariant applied on the All Bookings list. Non-
+                            hotel-supplier rows fall back to "Inhouse" so the
+                            cell never renders blank. */}
+                        {(isAdmin || isSuperAdmin) && (
+                          <InfoRow
+                            label="Supplier"
+                            value={booking.apiId || "Inhouse"}
+                          />
+                        )}
                         {/* Contact — "Booking done for" value entered on the
                             booking page, shown as "<value>/<agentName>". Only
                             rendered when a value was entered. */}

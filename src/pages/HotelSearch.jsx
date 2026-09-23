@@ -15,6 +15,7 @@ import Select from "react-select";
 import AgentSelect from "../components/AgentSelect";
 import AgentCreditBalance from "../components/AgentCreditBalance";
 import axiosInstance from "../components/AxiosInstance";
+import { logAgentSearch } from "../utils/agentSearchLog";
 import AdvertisementCarousel from "../components/AdvertisementCarousel";
 import TimeApplyPicker from "../components/TimeApplyPicker";
 import DateInput from "../components/DateInput";
@@ -1976,6 +1977,23 @@ export default function HotelSearch({
       const newSearchId = searchKeyRes.data.searchId;
       if (!newSearchId) throw new Error("No searchId returned");
       setSearchId(newSearchId);
+
+      // ── Agent search log (Unbooked Opportunities → Searches tab) ──────
+      // Fire-and-forget snapshot of the search context so the admin AI
+      // report can show what agents are looking for even when they never
+      // reach the booking page. Shared with LastMinuteBookingPage and
+      // any future /new-booking flow — see utils/agentSearchLog.js.
+      logAgentSearch({
+        agentId,
+        agentName: loggedInAgentName,
+        destinationId: destinationCityId,
+        destinationLabel: selectedDestination?.label,
+        nationalityLabel: selectedNationality?.label,
+        checkIn,
+        checkOut,
+        rooms,
+        source: "search-page",
+      });
 
       const params = {
         agentId,

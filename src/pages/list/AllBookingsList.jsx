@@ -53,6 +53,9 @@ const COLUMN_WIDTHS = {
   agentName: "90px",
   customerName: "120px",
   bookingCode: "95px",
+  // Supplier-side confirmation number entered on the booking detail page.
+  // Sits next to Booking Code so operators can eyeball both refs at once.
+  confirmationNumber: "110px",
   bookDate: "90px",
   bookingDetails: "230px",
   deadlineDate: "105px",
@@ -60,6 +63,10 @@ const COLUMN_WIDTHS = {
   paymentStatus: "110px",
   notification: "100px",
   action: "110px",
+  // Which supplier fulfilled the booking. Only rendered when role === "admin"
+  // so the whitelabel invariant ("agent must never know the supplier") stays
+  // intact for agent sessions.
+  supplier: "90px",
 };
 
 const BOOKING_TYPE_OPTIONS = [
@@ -370,7 +377,8 @@ const AllBookingsList = () => {
   };
 
   // +1 for the Payment Status column.
-  const colSpan = role === "admin" ? 11 : 10;
+  // +1 Confirmation No. column (always shown), +1 Supplier column (admin only).
+  const colSpan = role === "admin" ? 13 : 11;
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column hbl-modern">
@@ -537,8 +545,19 @@ const AllBookingsList = () => {
                           {role === "admin" && (
                             <th style={thStyle(undefined, COLUMN_WIDTHS.agentName)}>Agent Name</th>
                           )}
+                          {/* Supplier column — admin-only so agents never
+                              see which supplier fulfilled the booking
+                              (whitelabel invariant). */}
+                          {role === "admin" && (
+                            <th style={thStyle("center", COLUMN_WIDTHS.supplier)}>Supplier</th>
+                          )}
                           <th style={thStyle(undefined, COLUMN_WIDTHS.customerName)}>Customer Name</th>
                           <th style={thStyle(undefined, COLUMN_WIDTHS.bookingCode)}>Booking Code</th>
+                          {/* Confirmation No. — the supplier-side ref the
+                              operator entered on the booking detail page.
+                              Blank cell renders when unset. Shown to
+                              everyone since agents enter it themselves. */}
+                          <th style={thStyle("center", COLUMN_WIDTHS.confirmationNumber)}>Confirmation No.</th>
                           <th style={thStyle("center", COLUMN_WIDTHS.bookDate)}>Book Date</th>
                           <th style={thStyle(undefined, COLUMN_WIDTHS.bookingDetails)}>Booking Details</th>
                           <th style={thStyle("center", COLUMN_WIDTHS.deadlineDate)}>Deadline Date</th>
@@ -590,6 +609,13 @@ const AllBookingsList = () => {
                                     <span className="fw-medium text-dark">{b.agentName || "-"}</span>
                                   </td>
                                 )}
+                                {role === "admin" && (
+                                  <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.supplier }}>
+                                    <span className="fw-medium text-dark">
+                                      {b.supplierName || "-"}
+                                    </span>
+                                  </td>
+                                )}
                                 <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.customerName }}>
                                   <span className="d-inline-flex align-items-center" style={{ gap: "0.3rem" }}>
                                     <FaUser style={{ color: "#6c757d", fontSize: "0.78rem", flexShrink: 0 }} />
@@ -598,6 +624,13 @@ const AllBookingsList = () => {
                                 </td>
                                 <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.bookingCode }}>
                                   <span className="fw-bold text-primary">{b.bookingCode || "-"}</span>
+                                </td>
+                                <td style={{ ...baseCellStyle, textAlign: "center", fontFamily: "monospace", width: COLUMN_WIDTHS.confirmationNumber }}>
+                                  {b.confirmationNumber ? (
+                                    <span className="text-dark">{b.confirmationNumber}</span>
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
                                 </td>
                                 <td className="text-muted" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.bookDate }}>
                                   {formatDate(b.bookingDate) || "-"}

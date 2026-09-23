@@ -29,6 +29,7 @@ import AgentSelect from "../../../components/AgentSelect";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
+import { logAgentSearch } from "../../../utils/agentSearchLog";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
 import DateInput from "../../../components/DateInput";
@@ -694,6 +695,20 @@ export default function GovEmployeeSearch() {
           adultAges: room.adultAges?.length ? room.adultAges : [25],
         })),
       };
+
+      // Agent search log (Unbooked Opportunities → Searches tab) —
+      // fire-and-forget, agent-only, non-blocking. See utils/agentSearchLog.js.
+      logAgentSearch({
+        agentId: effectiveAgentId,
+        agentName: loggedInAgentName,
+        destinationId: selectedDestination?.value,
+        destinationLabel: selectedDestination?.label,
+        nationalityLabel: selectedNationality?.label,
+        checkIn,
+        checkOut,
+        rooms,
+        source: "gov-employee",
+      });
 
       const { data } = await axiosInstance.post(
         "/api/gov-employee-hotel-search/search",

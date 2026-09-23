@@ -14,6 +14,7 @@ import TopBar from "../../components/TopBar";
 import Select from "react-select";
 import AgentSelect from "../../components/AgentSelect";
 import axiosInstance from "../../components/AxiosInstance";
+import { logAgentSearch } from "../../utils/agentSearchLog";
 import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import AdvertisementCarousel from "../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../components/AgentCreditBalance";
@@ -566,6 +567,24 @@ export default function LastMinuteBookingPage() {
     try {
       setSearching(true);
       setResults(null);
+
+      // ── Agent search log (Unbooked Opportunities → Searches tab) ──────
+      // Fire-and-forget snapshot of the Last Minute search context so
+      // admins see it in the Unbooked Opportunities report even when the
+      // agent never picks a hotel. Shared with HotelSearch — see
+      // utils/agentSearchLog.js. Runs BEFORE the inhouse search so it
+      // gets on the wire even if the inhouse call fails.
+      logAgentSearch({
+        agentId: (isAgentRole ? selfAgentId : agent) || 1,
+        agentName: loggedInAgentName,
+        destinationId: selectedDestination?.value,
+        destinationLabel: selectedDestination?.label,
+        nationalityLabel: selectedNationality?.label,
+        checkIn,
+        checkOut,
+        rooms,
+        source: "last-minute-booking",
+      });
 
       // ── Source 1: inhouse last-minute contract rates (unchanged) ──────────
       // Awaited first so the page paints as soon as these land. This request,

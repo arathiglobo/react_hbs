@@ -31,6 +31,7 @@ import TopBar from "../../../components/TopBar";
 import Select from "react-select";
 import AgentSelect from "../../../components/AgentSelect";
 import axiosInstance from "../../../components/AxiosInstance";
+import { logAgentSearch } from "../../../utils/agentSearchLog";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
 import DateInput from "../../../components/DateInput";
@@ -694,6 +695,20 @@ export default function SeniorCitizenSearch() {
         agentId: Number(agent),
         roomConfigurations,
       };
+
+      // Agent search log (Unbooked Opportunities → Searches tab) —
+      // fire-and-forget, agent-only, non-blocking. See utils/agentSearchLog.js.
+      logAgentSearch({
+        agentId: Number(agent) || null,
+        agentName: loggedInAgentName,
+        destinationId: selectedDestination?.value,
+        destinationLabel: selectedDestination?.label,
+        nationalityLabel: selectedNationality?.label,
+        checkIn,
+        checkOut,
+        rooms,
+        source: "senior-citizen",
+      });
 
       const { data } = await axiosInstance.post(
         "/api/senior-citizen-hotel-search/search",

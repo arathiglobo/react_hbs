@@ -12,6 +12,7 @@ import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import Select from "react-select";
 import axiosInstance from "../../components/AxiosInstance";
+import { logAgentSearch } from "../../utils/agentSearchLog";
 import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import AgentSelect from "../../components/AgentSelect";
 import AdvertisementCarousel from "../../components/AdvertisementCarousel";
@@ -906,6 +907,20 @@ export default function LongStaySearch() {
         roomConfigurations,
         agentId,
       };
+
+      // Agent search log (Unbooked Opportunities → Searches tab) —
+      // fire-and-forget, agent-only, non-blocking. See utils/agentSearchLog.js.
+      logAgentSearch({
+        agentId,
+        agentName: loggedInAgentName,
+        destinationId: destinationCityId,
+        destinationLabel: selectedDestination?.label,
+        nationalityLabel: selectedNationality?.label,
+        checkIn,
+        checkOut,
+        rooms,
+        source: "long-stay",
+      });
 
       const searchKeyRes = await axiosInstance.post(
         "/api/long-stay-search/search",
