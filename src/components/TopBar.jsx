@@ -468,6 +468,10 @@ export default function TopBar() {
     localStorage.removeItem("adSessionId");
     // Supplier / DMC approved-feature snapshot (hooks/usePartnerAccess.js).
     localStorage.removeItem("partnerAccess");
+    // RegionalClock country cache (components/RegionalClock.jsx). Without
+    // this the next login inherits the previous user's timezone until the
+    // browser storage is cleared by hand.
+    localStorage.removeItem("regionalClockProfile");
 
     // Optionally redirect to login page
     window.location.href = "/";
