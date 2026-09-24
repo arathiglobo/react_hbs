@@ -202,7 +202,11 @@ const CityMapping = () => {
       countries: "/api/jumeirah/countrylist",
     },
     X3: {
-      countries: "api/iwtx/countrylist",
+      // X3 has no city master of its own — bulk-generated api_city_mapping
+      // rows use INHOUSE master ids (see X3CitySource.buildRow). The row's
+      // dropdowns therefore need to feed master ids, not IWTX ids, or the
+      // Search button would never find its own row. See ticket comments.
+      countries: "/api/country",
     },
     Ratehawk: {
       countries: "/api/ratehawk/countrylist",
@@ -229,7 +233,11 @@ const CityMapping = () => {
       cities: "/api/jumeirah/citylist",
     },
     X3: {
-      cities: "/api/iwtx/citylist",
+      // Same reason as X3 countries above — feeds master state ids so the
+      // row matches the bulk-generated api_city_mapping.api_city_id.
+      // {countryId} is substituted by loadPlatformCity from the selected
+      // country's value.
+      cities: "/api/province/getByCountryId/{countryId}",
     },
     Ratehawk: {
       cities: "/api/ratehawk/citylist",
@@ -272,19 +280,28 @@ const CityMapping = () => {
     if (!platform || !countryId) return [];
 
     try {
-      const apiUrl = platformCityApis[platform]?.cities;
-      if (!apiUrl) return [];
+      const apiUrlTemplate = platformCityApis[platform]?.cities;
+      if (!apiUrlTemplate) return [];
 
-      const response = await axiosInstance.get(apiUrl, {
-        params: {
-          search: inputValue,
-          countryId: countryId,
-        },
-      });
+      // Suppliers whose city list is served as a path-param endpoint use a
+      // {countryId} placeholder in the URL template (currently X3, whose
+      // dropdowns feed master state ids from /api/province/getByCountryId).
+      // For those, do NOT also pass countryId as a query param.
+      const hasCountryPlaceholder = apiUrlTemplate.includes("{countryId}");
+      const apiUrl = hasCountryPlaceholder
+        ? apiUrlTemplate.replace("{countryId}", encodeURIComponent(countryId))
+        : apiUrlTemplate;
+      const params = hasCountryPlaceholder
+        ? { search: inputValue }
+        : { search: inputValue, countryId: countryId };
+
+      const response = await axiosInstance.get(apiUrl, { params });
 
       return response.data.map((c) => ({
+        // stateName is set by /api/province/getByCountryId (MasterStateDTO);
+        // every other supplier response already lands via cityName or name.
         value: c.cityId || c.id,
-        label: c.cityName || c.name,
+        label: c.cityName || c.name || c.stateName,
       }));
     } catch (error) {
       console.error("Error loading platform cities:", error);
