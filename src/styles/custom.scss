@@ -257,7 +257,12 @@ body{
   border-radius: .75rem;
   box-shadow: 0 20px 25px rgba(0,0,0,0.1);
   padding: .5rem;
-  z-index: 1000;
+  /* Must sit above every page-level sticky strip. Previously 1000 which
+     the /new-booking/hotel search summary (.hs-summary-bar, z-index
+     1020) painted over — the first submenu entry ("Hotel") appeared
+     hidden. 2000 wins against any sticky UI on the page without
+     conflicting with the TopBar (1030) or app-level overlays. */
+  z-index: 2000;
   border: 1px solid #e5e7eb;
   font-weight: 300;
 }

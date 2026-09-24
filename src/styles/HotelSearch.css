@@ -1521,11 +1521,16 @@
 
 /* ── Collapsed sticky search summary strip ──────────────────────────────
    Replaces the full search form once results are on screen. Sticks just
-   below the (sticky, z-index 1030) TopBar. "Modify Search" re-expands. */
+   below the (sticky, z-index 1030) TopBar. "Modify Search" re-expands.
+   z-index intentionally kept at 0 so the Sidebar's popover / dropdown
+   menus can render ABOVE the summary bar — a z-index of 1020 pushed the
+   summary bar over the New Booking submenu and hid its first entry
+   ("Hotel") behind the chip strip. Matches PackageSearch.css and the
+   sibling *Search stylesheets. */
 .hs-summary-bar {
   position: sticky;
   top: 64px;                /* clears the sticky TopBar */
-  z-index: 1020;            /* above results, below TopBar */
+  z-index: 0;               /* stay below the sidebar dropdowns */
   display: flex;
   align-items: center;
   gap: 14px;

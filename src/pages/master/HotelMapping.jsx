@@ -25,6 +25,12 @@ const HotelMapping = () => {
   const [selectedCountryOption, setSelectedCountryOption] = useState(null);
   const [selectedCityOption, setSelectedCityOption] = useState(null);
 
+  // Supplier codes surfaced in the Base Supplier + Target Supplier
+  // dropdowns. Must stay in sync with the backend Supplier enum at
+  // hotelmapping/entity/Supplier.java — any code the backend accepts
+  // MUST appear here or admins can't select it. GRN + GOGLOBAL were
+  // missing which is why the two suppliers didn't show in the
+  // dropdown even though the backend already accepted them.
   const [platforms] = useState([
     "IWTX",
     "DARINA",
@@ -32,6 +38,8 @@ const HotelMapping = () => {
     "X3",
     "RATEHAWK",
     "ATHARVA",
+    "GRN",
+    "GOGLOBAL",
   ]);
 
   const platformOptions = platforms.map((p) => ({ value: p, label: p }));

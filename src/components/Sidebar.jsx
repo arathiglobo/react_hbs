@@ -1122,8 +1122,18 @@ export default function Sidebar() {
           height: "calc(100vh - 60px)", // 👈 reserve space
           background: "var(--color-bg, #fff)",
           borderRight: "1px solid var(--color-border, #e5e7eb)",
-          zIndex: 100,
-          // zIndex: 100,
+          // Must sit above every page-level sticky strip. Previously 100
+          // which created a stacking context BELOW page-level sticky
+          // bars like /new-booking/hotel's .hs-summary-bar (was 1020).
+          // Any popover / submenu rendered inside this <aside> was
+          // trapped in this stacking context and painted UNDER the
+          // summary bar, hiding submenu items like the first "Hotel"
+          // entry. 1050 keeps the sidebar under the TopBar (1030? no —
+          // TopBar sits above, so pick a value clearly above every
+          // in-page sticky strip). Any element that legitimately needs
+          // to sit on top of the sidebar (modals, toasts) already uses
+          // 9999+ so no regression there.
+          zIndex: 1050,
         }}
       >
         {/* Collapse control — pinned to the top-right corner of the sidebar

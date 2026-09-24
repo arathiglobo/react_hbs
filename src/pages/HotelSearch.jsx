@@ -788,6 +788,14 @@ export default function HotelSearch({
   const [pollStatus, setPollStatus] = useState("IDLE");
   const completedChannelsRef = useRef(new Set());
   const [completedChannels, setCompletedChannels] = useState(new Set());
+  // Set of every supplier the backend has confirmed it fan-out'd to,
+  // built from data.status keys as poll results arrive. Used as the
+  // DENOMINATOR by SearchProgressBar so the "%" reflects the real
+  // dispatched list (which varies by market/agent restrictions) —
+  // previously the bar divided by a hardcoded 8-supplier default and
+  // stalled at ~25% because only a subset ever reported back.
+  const dispatchedChannelsRef = useRef(new Set());
+  const [dispatchedChannels, setDispatchedChannels] = useState(new Set());
   const [searchId, setSearchId] = useState(null);
   // Bumped at the start of every search. fetchHotels and the currency
   // picker's /resultsOut refetch capture it at send time and drop their
@@ -847,14 +855,21 @@ export default function HotelSearch({
   const visibleChannelTypeOptions = channelsUnrestricted
     ? channelTypeOptions
     : channelTypeOptions.filter((o) => registeredChannels.has(o.value));
-  // SearchProgressBar only tracks suppliers that will ACTUALLY be
-  // queried (super_admin ∩ admin-enabled) — a disabled row never
-  // produces a pill.
-  const visibleProgressChannels = channelsUnrestricted
-    ? undefined // let SearchProgressBar keep its own default
-    : channelTypeOptions
-        .filter((o) => allowedChannels.has(o.value))
-        .map((o) => o.value);
+  // SearchProgressBar's denominator — the list of suppliers we KNOW
+  // the backend actually dispatched to. Comes from data.status keys
+  // observed on the live poll (dispatchedChannels), with two fallbacks
+  // so the bar still renders sensibly before the first poll returns:
+  //   1. live dispatched list (arrives after the first successful poll)
+  //   2. explicit allow-list when the caller has one (super_admin ∩
+  //      admin-enabled) — same restriction the pill row used to use
+  //   3. SearchProgressBar's own DEFAULT_PROGRESS_CHANNELS fallback
+  const visibleProgressChannels = dispatchedChannels.size > 0
+    ? Array.from(dispatchedChannels)
+    : channelsUnrestricted
+      ? undefined
+      : channelTypeOptions
+          .filter((o) => allowedChannels.has(o.value))
+          .map((o) => o.value);
 
   // (channelHasResults is defined further down, right after
   // filteredResults, so the LIVE/OFF badge reflects what is actually
@@ -1973,6 +1988,8 @@ export default function HotelSearch({
     setIsInitialResultsLoaded(false);
     completedChannelsRef.current = new Set();
     setCompletedChannels(new Set());
+    dispatchedChannelsRef.current = new Set();
+    setDispatchedChannels(new Set());
     // Drop the previous search's id until the new one comes back. Keeping it
     // let the results effect refetch the OLD search as soon as pollStatus
     // reset to IDLE — which is why a second Search press showed the first
@@ -2177,7 +2194,18 @@ export default function HotelSearch({
           }
 
           const currentStatuses = data.status || {};
-          expectedChannels.forEach((ch) => {
+          // Track every supplier the backend fan-out'd to (denominator)
+          // AND every one that reported COMPLETED (numerator). Iterate
+          // over the LIVE status keys so we never miss a supplier that
+          // wasn't on the old hardcoded expectedChannels list; the bar
+          // now progresses through every real reply and only reserves
+          // the final 10% for the overall COMPLETED flip.
+          let dispatchedGrew = false;
+          Object.keys(currentStatuses).forEach((ch) => {
+            if (!dispatchedChannelsRef.current.has(ch)) {
+              dispatchedChannelsRef.current.add(ch);
+              dispatchedGrew = true;
+            }
             if (
               currentStatuses[ch] === "COMPLETED" &&
               !completedChannelsRef.current.has(ch)
@@ -2185,6 +2213,9 @@ export default function HotelSearch({
               completedChannelsRef.current.add(ch);
             }
           });
+          if (dispatchedGrew) {
+            setDispatchedChannels(new Set(dispatchedChannelsRef.current));
+          }
           setCompletedChannels(new Set(completedChannelsRef.current));
 
           if (pollCount === 1 || mappedResults.length > 0) {
@@ -3312,18 +3343,12 @@ export default function HotelSearch({
                             )}
                           </div>
 
-                          <Form.Control
-                            type="text"
-                            placeholder={placeholder}
-                            className="ps-3 mb-2"
-                            value={hotelSearchTerm}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setHotelSearchTerm(val);
-                              setPageIndex(0);
-                              debouncedSetFinalTerm(val);
-                            }}
-                          />
+                          {/* Hotel-name search input intentionally removed
+                              from the left sidebar — it now lives in the
+                              top filter row on the right, next to the
+                              Clear button (see &lt;Col lg={9}&gt; below). Same
+                              state / handlers, so filtering, debounce,
+                              and page-reset behaviour are unchanged. */}
 
                           {/* Display currency — converts the shown rates from
                               AED into the chosen currency using the
@@ -3595,6 +3620,32 @@ export default function HotelSearch({
                           >
                             Clear
                           </Button>
+
+                          {/* Hotel-name search — moved here from the left
+                              sidebar. Same state + handlers (500 ms
+                              debounce, page-reset) so filtering / name
+                              search flows are unchanged. ms-auto pushes it
+                              to the right edge of the row so on wide
+                              viewports it sits at the far right next to
+                              Clear, and on narrow ones it wraps below the
+                              sort pills without breaking the layout. */}
+                          <Form.Control
+                            type="text"
+                            placeholder={placeholder}
+                            value={hotelSearchTerm}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setHotelSearchTerm(val);
+                              setPageIndex(0);
+                              debouncedSetFinalTerm(val);
+                            }}
+                            className="ms-auto ps-3"
+                            style={{
+                              height: "36px",
+                              maxWidth: "260px",
+                              minWidth: "180px",
+                            }}
+                          />
                         </div>
                       </Card.Body>
                     </Card>
