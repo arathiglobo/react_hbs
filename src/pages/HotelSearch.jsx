@@ -534,6 +534,13 @@ export default function HotelSearch({
   // so it's persisted on the new HotelBooking row.
   const [employees, setEmployees] = useState([]);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
+  // Agent-side staff for the "Booking Done On Behalf Of Agent Staff"
+  // dropdown — separate from the admin-side employees above. Populated
+  // from GET /api/sub-user/by-agent/{agentId} whenever the picked agent
+  // changes. Empty list until an agent is chosen; the dropdown is hidden
+  // when there are no sub-users for the picked agent.
+  const [agentStaffOptions, setAgentStaffOptions] = useState([]);
+  const [selectedAgentStaff, setSelectedAgentStaff] = useState(null);
 
   useEffect(() => {
     const fetchEmployees = async () => {
@@ -1525,6 +1532,44 @@ export default function HotelSearch({
       cancelled = true;
     };
   }, []);
+
+  // Fetch the picked agent's own sub-users so the "Booking Done On
+  // Behalf Of Agent Staff" dropdown can populate. Fires whenever the
+  // Agent field changes (admin flow) or when the logged-in agent's own
+  // id resolves (agent flow). Fire-and-forget; failures collapse the
+  // options list to empty and the dropdown auto-hides.
+  useEffect(() => {
+    const resolvedAgentId = isAgentRole ? selfAgentId : agent;
+    if (!resolvedAgentId) {
+      setAgentStaffOptions([]);
+      setSelectedAgentStaff(null);
+      return;
+    }
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/sub-user/by-agent/${resolvedAgentId}`)
+      .then((res) => {
+        if (cancelled) return;
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        setAgentStaffOptions(rows);
+        // If the previously-selected staff no longer belongs to the
+        // new agent (admin switched agents), clear the selection so
+        // stale ids never ride onto the payload.
+        setSelectedAgentStaff((prev) => {
+          if (!prev) return prev;
+          const stillValid = rows.some(
+            (r) => String(r.id) === String(prev.id),
+          );
+          return stillValid ? prev : null;
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAgentStaffOptions([]);
+        setSelectedAgentStaff(null);
+      });
+    return () => { cancelled = true; };
+  }, [agent, selfAgentId, isAgentRole]);
 
   // For agent logins, resolve the agent's own id (cached userId else
   // /api/personalProfile/{UserName}) so we can look up their currency below.
@@ -2864,6 +2909,52 @@ export default function HotelSearch({
                       </Form.Group>
                     </Col>
                   )}
+                  {/* Booking Done On Behalf Of Agent Staff — new dropdown
+                      whose options come from the selected agent's own
+                      sub-users (GET /api/sub-user/by-agent/{agentId},
+                      fetched in the effect above). Auto-hides when the
+                      picked agent has no registered sub-users, so
+                      agencies without staff don't see an empty
+                      dropdown. Completely optional; when left blank the
+                      booking is persisted without agent-side attribution
+                      exactly as before this feature. */}
+                  {agentStaffOptions.length > 0 && (
+                    <Col lg={4} md={6}>
+                      <Form.Group>
+                        <Form.Label className="fw-semibold text-dark">
+                          Booking Done On Behalf Of Agent Staff{" "}
+                          <span className="text-muted small">(optional)</span>
+                        </Form.Label>
+                        <Select
+                          options={agentStaffOptions.map((s) => ({
+                            value: s.id,
+                            label: (s.agentName ||
+                              [s.firstName, s.lastName]
+                                .filter(Boolean)
+                                .join(" ")
+                                .trim() ||
+                              `Sub-user #${s.id}`),
+                          }))}
+                          value={selectedAgentStaff}
+                          onChange={(option) => setSelectedAgentStaff(option)}
+                          placeholder="Select agent staff"
+                          isSearchable
+                          isClearable
+                          className="modern-select"
+                          menuPortalTarget={document.body}
+                          styles={{
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                            control: (base) => ({
+                              ...base,
+                              minHeight: "42px",
+                              border: "1px solid #dee2e6",
+                              "&:hover": { borderColor: "#86b7fe" },
+                            }),
+                          }}
+                        />
+                      </Form.Group>
+                    </Col>
+                  )}
 
                   {/* 4. Check-In — RateCalendar renders a picker that
                        shows the "starting from" nightly rate under each day
@@ -3946,6 +4037,28 @@ export default function HotelSearch({
                                             employeeId: isAgentRole
                                               ? null
                                               : selectedEmployee?.value || null,
+                                            // Booking Done On Behalf Of
+                                            // Agent Staff — the picked
+                                            // sub-user of the selected
+                                            // agent. Both fields ride
+                                            // through RoomList →
+                                            // HotelBookingPage → POST
+                                            // /api/hotel-booking/create,
+                                            // where the backend
+                                            // (InhouseHotelBookingService)
+                                            // persists them onto
+                                            // hotel_booking.agent_staff_id /
+                                            // agent_staff_name. Null when
+                                            // no agent staff was picked,
+                                            // so bookings without the
+                                            // dropdown behave exactly as
+                                            // before this feature.
+                                            agentStaffId:
+                                              selectedAgentStaff?.value != null
+                                                ? String(selectedAgentStaff.value)
+                                                : null,
+                                            agentStaffName:
+                                              selectedAgentStaff?.label || null,
                                             // 24 Hour Check-In flags — only
                                             // populated when the user opted
                                             // in. RoomList / HotelBookingPage

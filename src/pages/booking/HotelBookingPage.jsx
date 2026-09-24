@@ -1155,6 +1155,14 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
         // dropdown (optional). It flows here via bookingData.payload and
         // gets persisted on the new HotelBooking row.
         employeeId: bookingData?.payload?.employeeId || null,
+        // Agent-side staff attribution — picked in HotelSearch's
+        // "Booking Done On Behalf Of Agent Staff" dropdown (optional).
+        // Both fields ride here on bookingData.payload and land on
+        // hotel_booking.agent_staff_id / agent_staff_name via the
+        // create-booking endpoint. Null when the operator skipped the
+        // dropdown, so existing bookings are unaffected.
+        agentStaffId: bookingData?.payload?.agentStaffId || null,
+        agentStaffName: bookingData?.payload?.agentStaffName || null,
         roomStatus: bookingData.selectedRate.roomStatus,
         cancellationPolicy:
           bookingData.selectedRate.cancellationPolicy?.map(
