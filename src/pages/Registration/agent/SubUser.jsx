@@ -148,6 +148,14 @@ const sortMarkupTypesByPercentage = (items = []) => {
   });
 };
 
+// The Login Details modal only offers the SUB_USER role (see the dropdown
+// below). Match it tolerantly — trim, upper-case, and treat spaces / hyphens
+// as underscores — so a row saved as "Sub User" or "SUB-USER" through the
+// User Roles master still resolves instead of leaving the dropdown empty.
+const normalizeRoleName = (name) =>
+  String(name || "").trim().toUpperCase().replace(/[\s-]+/g, "_");
+const isSubUserRole = (role) => normalizeRoleName(role?.roleName) === "SUB_USER";
+
 export default function SubUser() {
   const [items, setItems] = useState([]);
   const [showModal, setShowModal] = useState(false);
@@ -386,12 +394,18 @@ export default function SubUser() {
     setShowPassword(false);
     setShowRePassword(false);
 
+    // The roles master is normally loaded on mount, but if that request
+    // failed (or hasn't finished yet) the modal would open with an empty
+    // dropdown and no AGENT id for the lookup below — retry here so a single
+    // failed mount fetch doesn't block issuing credentials for the session.
+    const roles = await ensureRolesLoaded();
+
     try {
       // Scope the "already registered?" check to the AGENT user type so
       // entities of other types sharing the same numeric id don't resolve to
       // this sub-user's account (backend keys user_accounts by user_id +
       // user_type_id).
-      const agentRole = rolesList.find((r) => r.roleName === "AGENT");
+      const agentRole = roles.find((r) => r.roleName === "AGENT");
       // subUserType=SUB_USER keeps this from returning a MAIN-agent /
       // SUB_AGENT row that happens to share the same numeric id.
       const checkUrl = agentRole
@@ -554,6 +568,20 @@ export default function SubUser() {
     }
   };
 
+  // Returns the roles master, re-fetching it when the mount-time load left
+  // it empty. Keeps state in sync so the dropdown re-renders with the list.
+  const ensureRolesLoaded = async () => {
+    if (rolesList.length > 0) return rolesList;
+    try {
+      const res = await axiosInstance.get("/api/userRoles");
+      const list = Array.isArray(res.data) ? res.data : [];
+      setRolesList(list);
+      return list;
+    } catch (err) {
+      return rolesList;
+    }
+  };
+
   const resolveSubAgentCurrency = async () => {
     try {
       const uname =
@@ -589,6 +617,9 @@ export default function SubUser() {
   useEffect(() => {
     fetchProvinces(formData.countryId);
   }, [formData.countryId]);
+
+  // Only the SUB_USER role is offered in the Login Details modal.
+  const selectableRoles = rolesList.filter(isSubUserRole);
 
   const filteredItems = items.filter((item) =>
     item.agentName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -997,11 +1028,23 @@ export default function SubUser() {
                       {/* Sub-user creation page — the only meaningful role
                           here is SUB_USER, so hide every other option to
                           prevent operators from picking the wrong bucket. */}
-                      {rolesList.filter(r => r.roleName === "SUB_USER").map(role => (
-                        <div key={role.id} className="p-2 cursor-pointer hover-bg-light" onClick={() => toggleRole(role.id)} onMouseEnter={e => e.target.style.backgroundColor='#f8f9fa'} onMouseLeave={e => e.target.style.backgroundColor=''}>
-                          {role.roleName}
+                      {selectableRoles.length > 0 ? (
+                        selectableRoles.map(role => (
+                          <div key={role.id} className="p-2 cursor-pointer hover-bg-light" onClick={() => toggleRole(role.id)} onMouseEnter={e => e.target.style.backgroundColor='#f8f9fa'} onMouseLeave={e => e.target.style.backgroundColor=''}>
+                            {role.roleName}
+                          </div>
+                        ))
+                      ) : (
+                        // Without this the dropdown opens as an empty strip and
+                        // looks broken. The SUB_USER row is seeded by the backend
+                        // (SubAccountRoleSeeder) but can be missing on a database
+                        // that predates it — say so instead of staying silent.
+                        <div className="p-2 text-muted small">
+                          {rolesList.length === 0
+                            ? "Could not load user roles. Close this dialog and try again."
+                            : "The SUB_USER role is not configured. Ask an administrator to add it under Manage Masters → Roles."}
                         </div>
-                      ))}
+                      )}
                     </div>
                   )}
                   {loginErrors.userroles && <div className="text-danger small">{loginErrors.userroles}</div>}
