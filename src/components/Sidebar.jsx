@@ -1260,7 +1260,24 @@ export default function Sidebar() {
                     }}
                   >
                     {hasChildren &&
-                      item.children.map((child) => {
+                      // Sort the "New Booking" submenu so active flows show
+                      // above "Coming soon" ones for agent logins — matches
+                      // the AgentDashboard Quick Actions ordering the agent
+                      // now sees. Stable sort preserves the declared order
+                      // WITHIN each group (Hotel → 24 Hour → Last Minute …
+                      // among active, then Long Stay → Day Stay → … among
+                      // coming-soon). Gated on label + agent role so every
+                      // other menu (Booking List, Manage Masters, etc.) and
+                      // every non-agent role keeps its original order — no
+                      // impact on existing flows.
+                      (item.label === "New Booking" && currentRole === "agent"
+                        ? [...item.children].sort(
+                            (a, b) =>
+                              Number(isComingSoonForRole(a)) -
+                              Number(isComingSoonForRole(b))
+                          )
+                        : item.children
+                      ).map((child) => {
                         // Inline nested group: a child with its own children[]
                         // renders as an in-line accordion so it can sit at any
                         // position in the flat list (e.g. "Agent Management"

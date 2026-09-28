@@ -720,6 +720,17 @@ const Register = () => {
         if (typeof payload[k] === "string") payload[k] = payload[k].trim();
       });
 
+      // Trim the password too. The user's client-side validator enforces
+      // length + character rules on the raw value, so a pasted "Passw0rd "
+      // passes here but gets BCrypt-hashed WITH the trailing space on the
+      // server — the agent's login page later sends "Passw0rd" (no space)
+      // and BCrypt.matches returns false. Trimming here mirrors what
+      // AgentView's admin credentials modal now does, and the backend also
+      // trims defensively in AgentExternalRegistrationService.
+      if (typeof payload.password === "string") {
+        payload.password = payload.password.trim();
+      }
+
       // Coerce markup to a plain integer (matches the admin AgentReg
       // submit — line 880 there. Backend AgentServiceImpl.registerAgent
       // calls Long.parseLong on request.getMarkup() and Jackson coerces

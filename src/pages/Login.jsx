@@ -348,12 +348,29 @@ const Login = () => {
     // Non-blocking on failure — login itself never fails on a
     // personalProfile hiccup; the lazy fallback in downstream pages
     // remains as a safety net.
+    // Drop any RegionalClock country cached by a previous user whose
+    // session ended without a logout (closed browser, direct /login,
+    // expired token), so this login never inherits their region.
+    localStorage.removeItem("regionalClockProfile");
     try {
       const profile = await axiosInstance.get(
         `/api/personalProfile/${loginedUserName}`,
       );
       if (profile?.data?.id != null) {
         localStorage.setItem("userId", String(profile.data.id));
+      }
+      // Seed the RegionalClock cache with THIS user's country so the
+      // dashboard clock shows it immediately (same shape RegionalClock
+      // writes itself). Skipped when no country came back — the clock
+      // then fetches on its own as before.
+      if (profile?.data?.countryCode) {
+        localStorage.setItem(
+          "regionalClockProfile",
+          JSON.stringify({
+            countryCode: profile.data.countryCode,
+            countryName: profile.data.countryName || "",
+          }),
+        );
       }
     } catch (profileErr) {
       // Swallow — the per-page lazy fetch will still run.

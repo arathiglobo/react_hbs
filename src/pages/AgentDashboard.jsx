@@ -208,7 +208,17 @@ export default function AgentDashboard() {
     { label: "Students",            tone: "purple", icon: <FaGraduationCap />,  to: "/new-booking/student" },
     { label: "Senior Citizens",     tone: "orange", icon: <FaUserAlt />,        to: "/new-booking/senior-citizen" },
     { label: "Religious",     tone: "orange", icon: <FaPrayingHands/>,        to: "/new-booking/religious" },
-  ].map((a) => ({ ...a, comingSoon: isAgentComingSoon(a.to) }));
+  ]
+    .map((a) => ({ ...a, comingSoon: isAgentComingSoon(a.to) }))
+    // Active tiles first, "Coming soon" tiles last. Stable sort so the
+    // declaration order above is preserved WITHIN each group — the source
+    // array still defines the reading order agents remember (Hotels →
+    // 24 Hours → Last Minutes → …), we're only pulling the disabled ones to
+    // the tail so the grid reads as "everything I can actually use" before
+    // "everything that's not live yet". Nothing else consumes this array's
+    // index, so re-ordering it here has no side effect on comingSoon
+    // gating, click handlers or the shared AGENT_COMING_SOON_ROUTES set.
+    .sort((a, b) => Number(a.comingSoon) - Number(b.comingSoon));
 
   const manageActions = [
     {

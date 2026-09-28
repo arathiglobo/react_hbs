@@ -2987,6 +2987,20 @@ export default function HotelSearch({
                     </Col>
                   )}
 
+                  {/* Row-break before Check-In (lg+ only) — only when the
+                      optional Agent-Staff dropdown is rendered. Bootstrap 5
+                      flex-wrap treats a full-width child as a hard break, so
+                      Check-In / Nights / Check-Out / Rooms & Guests
+                      (3 + 2 + 3 + 4 = 12) always land together on their own
+                      row instead of getting split across two rows when
+                      BookingBy + AgentStaff + Check-In (4 + 4 + 3 = 11) push
+                      Nights + Check-Out to the next line. On md and below
+                      each Col is already full-width, so the breaker is
+                      hidden there and the stacked layout is unchanged. */}
+                  {agentStaffOptions.length > 0 && (
+                    <div className="w-100 d-none d-lg-block" aria-hidden="true" />
+                  )}
+
                   {/* 4. Check-In — RateCalendar renders a picker that
                        shows the "starting from" nightly rate under each day
                        (from GET /api/hotel-search/rate-calendar). Same

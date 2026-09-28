@@ -66,12 +66,13 @@ const COLUMN_WIDTHS = {
   sn: "34px",
   agentName: "82px",  // admin-only
   supplier: "72px",   // admin-only (whitelabel invariant — agents never see this)
-  booker: "100px",    // was Customer Name
+  booker: "100px",    // was Customer Name — header now reads "Pax Name"
   pax: "38px",        // total pax
   rsvnRef: "90px",    // was Booking Code
-  confirmationNumber: "80px",
+  confirmationNumber: "80px", // header now reads "Hotel Conf"
   bookDate: "75px",
   hotel: "130px",     // hotel name + booking-type badge
+  bookedBy: "90px",   // "Booker" column — operator who created the booking (Hotel only)
   checkIn: "72px",
   checkOut: "72px",
   deadlineDate: "80px",
@@ -391,7 +392,8 @@ const AllBookingsList = () => {
   // +1 for the Payment Status column.
   // 14 columns visible to every role; admins additionally see Agent Name and
   // Supplier, so 16 total. Update in sync with the <thead> below.
-  const colSpan = role === "admin" ? 16 : 14;
+  // Column count bumped by one — new "Booker" column sits after Hotel.
+  const colSpan = role === "admin" ? 17 : 15;
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column hbl-modern">
@@ -569,7 +571,13 @@ const AllBookingsList = () => {
                           {role === "admin" && (
                             <th style={thStyle("center", COLUMN_WIDTHS.supplier)}>Supplier</th>
                           )}
-                          <th style={thStyle(undefined, COLUMN_WIDTHS.booker)}>Booker</th>
+                          {/* Column renamed from "Booker" → "Pax Name".
+                              Data source unchanged (b.primaryGuestName) —
+                              this column always showed the guest name, the
+                              old header was misleading. A dedicated
+                              "Booker" column (operator who created the
+                              booking) now sits after Hotel below. */}
+                          <th style={thStyle(undefined, COLUMN_WIDTHS.booker)}>Pax Name</th>
                           <th style={thStyle("center", COLUMN_WIDTHS.pax)}>Pax</th>
                           <th style={thStyle(undefined, COLUMN_WIDTHS.rsvnRef)}>Rsvn Ref</th>
                           {/* Confirmation No. — the supplier-side ref the
@@ -581,9 +589,23 @@ const AllBookingsList = () => {
                               whiteSpace: normal) so nothing gets
                               truncated to "AGENT N..." and no
                               horizontal scroll is needed. */}
-                          <th style={thStyle("center", COLUMN_WIDTHS.confirmationNumber)}>Confirmation No.</th>
+                          {/* Header shortened from "Confirmation No." →
+                              "Hotel Conf". Data source unchanged
+                              (b.confirmationNumber, supplier-side ref
+                              entered on the detail page). */}
+                          <th style={thStyle("center", COLUMN_WIDTHS.confirmationNumber)}>Hotel Conf</th>
                           <th style={thStyle("center", COLUMN_WIDTHS.bookDate)}>Book Date</th>
                           <th style={thStyle(undefined, COLUMN_WIDTHS.hotel)}>Hotel</th>
+                          {/* Booker — the operator who created the
+                              booking (agent-staff picked in the search
+                              form, or created_by as fallback). Populated
+                              by UnifiedBookingListServiceImpl in the
+                              Hotel section; other booking-type rows show
+                              "-" because they don't currently capture an
+                              agent-staff attribution. Sits after Hotel
+                              per spec, distinct from Agent Name (agency)
+                              and Pax Name (guest). */}
+                          <th style={thStyle(undefined, COLUMN_WIDTHS.bookedBy)}>Booker</th>
                           <th style={thStyle("center", COLUMN_WIDTHS.checkIn)}>Check In</th>
                           <th style={thStyle("center", COLUMN_WIDTHS.checkOut)}>Check Out</th>
                           <th style={thStyle("center", COLUMN_WIDTHS.deadlineDate)}>Deadline Date</th>
@@ -708,6 +730,18 @@ const AllBookingsList = () => {
                                       {b.bookingType || "-"}
                                     </span>
                                   </div>
+                                </td>
+                                {/* Booker cell — mirrors the new "Booker"
+                                    header above. b.bookerName is null on
+                                    non-Hotel rows and legacy hotel rows
+                                    without agent_staff_name / created_by,
+                                    so we render "-" for those. */}
+                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.bookedBy }} title={b.bookerName || ""}>
+                                  {b.bookerName ? (
+                                    <span className="fw-medium text-dark">{b.bookerName}</span>
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
                                 </td>
                                 <td className="text-muted" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.checkIn }} title={formatDate(b.checkInDate) || ""}>
                                   {formatDate(b.checkInDate) || "-"}

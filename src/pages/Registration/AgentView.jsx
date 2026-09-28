@@ -816,12 +816,18 @@ const AgentView = () => {
         setIsLoading(false);
         return;
       }
+      // Trim credentials before submit — trailing/leading whitespace was
+      // silently persisted (Postgres varchar keeps the space) and the agent's
+      // login form doesn't send one, causing "Invalid username or password"
+      // on the very credentials the admin just saved. The backend also trims
+      // now, but doing it here surfaces any resulting empty-value error
+      // inline in the modal instead of a generic 500.
       const payload = {
         userId: Number(id),
         userTypeId: activeRoleObj.id,
-        userName: loginFormData.username,
+        userName: (loginFormData.username || "").trim(),
         userRoleIds: loginFormData.userroles,
-        password: loginFormData.password,
+        password: (loginFormData.password || "").trim(),
       };
       const response = await axiosInstance.post("/auth/register", payload);
       if (response.data) {
