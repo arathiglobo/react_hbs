@@ -1770,7 +1770,7 @@ const ActivitySearch = () => {
                     ) : (
                       <Badge bg="success">Private</Badge>
                     )}
-                    {selectedActivity.apiType && (
+                    {selectedActivity.apiType && !isAgentRole && (
                       <Badge bg="dark">{selectedActivity.apiType}</Badge>
                     )}
                   </div>

@@ -650,6 +650,21 @@ export default function HotelSearch({
   // Available Deals multi-select filter (array of option values).
   // Empty array = no filter. Matching is OR across selected options.
   const [availableDeals, setAvailableDeals] = useState([]);
+  // Refund Policy sidebar filter. Sent to /results as `refundPolicy` so it
+  // narrows the WHOLE result set (all pages), and re-applied client-side in
+  // filteredResults so the list is right even while suppliers are still
+  // polling. Both / neither ticked = no narrowing. Hotels whose supplier
+  // sends no refund info at search time (flag null) are never hidden.
+  const [refundPolicy, setRefundPolicy] = useState({
+    refundable: false,
+    nonRefundable: false,
+  });
+  const refundPolicyParam =
+    refundPolicy.refundable === refundPolicy.nonRefundable
+      ? undefined
+      : refundPolicy.refundable
+        ? "refundable"
+        : "nonRefundable";
   const [sortBy, setSortBy] = useState("priceAsc");
   const [hotelSearchTerm, setHotelSearchTerm] = useState("");
   const [errors, setErrors] = useState({});
@@ -1197,6 +1212,14 @@ export default function HotelSearch({
       );
     }
 
+    // Refund Policy — drop a hotel only when the backend says definitively
+    // that it has no rate of the selected kind (flag === false).
+    if (refundPolicyParam === "refundable") {
+      results = results.filter((hotel) => hotel.hasRefundable !== false);
+    } else if (refundPolicyParam === "nonRefundable") {
+      results = results.filter((hotel) => hotel.hasNonRefundable !== false);
+    }
+
     // Available Deals — OR-match across the selected option values.
     if (availableDeals.length > 0) {
       const selected = new Set(availableDeals.map((d) => d.value));
@@ -1278,7 +1301,7 @@ export default function HotelSearch({
 
     return results;
   }, [allResults, hotelSearchTerm, starRating, hotelType, channelType,
-      availableDeals, featureFlagsMap,
+      availableDeals, featureFlagsMap, refundPolicyParam,
       is24HourCheckin, twentyFourHourMap, sortBy]);
 
   // Channels that returned at least one hotel for the CURRENT search —
@@ -1655,7 +1678,7 @@ export default function HotelSearch({
     if (hasSearchResult && resultsRef.current) {
       resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  }, [starRating, hotelType, channelType, sortBy]);
+  }, [starRating, hotelType, channelType, sortBy, refundPolicyParam]);
 
   // After a fresh search, jump the viewport to the very top of the page so
   // the operator sees the "Hotel / Accommodation" heading and summary strip
@@ -1742,6 +1765,7 @@ export default function HotelSearch({
         starRating: starRating ? starRating.value : undefined,
         apiType:
           channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
+        refundPolicy: refundPolicyParam,
       };
 
       // Currency-conversion is fully backend-side now. When the operator
@@ -1834,6 +1858,9 @@ export default function HotelSearch({
             rating: hotel.starRating || 0,
             hotelType: "hotel",
             channelType: hotel.apiType?.toLowerCase() || "inhouse",
+            // Refund Policy filter flags: true / false / null (unknown).
+            hasRefundable: hotel.hasRefundable ?? null,
+            hasNonRefundable: hotel.hasNonRefundable ?? null,
             // Surface the backend-computed promotion flag so the
             // "Destination Sales" pill and filter actually work.
             hasDestinationSales: !!hotel.hasDestinationSales,
@@ -2072,6 +2099,7 @@ export default function HotelSearch({
         starRating: starRating ? starRating.value : undefined,
         apiType:
           channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
+        refundPolicy: refundPolicyParam,
       };
 
       // The poll uses the SAME /results endpoint fetchHotels does — pass the
@@ -2169,6 +2197,9 @@ export default function HotelSearch({
                 rating: hotel.starRating || 0,
                 hotelType: "hotel",
                 channelType: hotel.apiType?.toLowerCase() || "inhouse",
+                // Refund Policy filter flags: true / false / null (unknown).
+                hasRefundable: hotel.hasRefundable ?? null,
+                hasNonRefundable: hotel.hasNonRefundable ?? null,
                 // Surface backend promotion flags so the
                 // "Destination Sales" pill + filter actually work.
                 hasDestinationSales: !!hotel.hasDestinationSales,
@@ -2382,6 +2413,7 @@ export default function HotelSearch({
           starRating: starRating ? starRating.value : undefined,
           apiType:
             channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
+          refundPolicy: refundPolicyParam,
           displayCurrencyCode: opt.code,
         },
       })
@@ -2432,6 +2464,9 @@ export default function HotelSearch({
               rating: hotel.starRating || 0,
               hotelType: "hotel",
               channelType: hotel.apiType?.toLowerCase() || "inhouse",
+              // Refund Policy filter flags: true / false / null (unknown).
+              hasRefundable: hotel.hasRefundable ?? null,
+              hasNonRefundable: hotel.hasNonRefundable ?? null,
               hasDestinationSales: !!hotel.hasDestinationSales,
               flashSale: !!hotel.flashSale,
               latitude: hotel.latitude,
@@ -2505,6 +2540,7 @@ export default function HotelSearch({
     const hasActiveFilter =
       (channelType && channelType.length > 0) ||
       !!starRating ||
+      !!refundPolicyParam ||
       (hotelType && hotelType.length > 0);
     if (
       pollStatus === "IN_PROGRESS" &&
@@ -2520,6 +2556,7 @@ export default function HotelSearch({
     sortBy,
     starRating,
     channelType,
+    refundPolicyParam,
     hotelType,
     searchId,
     agent,
@@ -3414,6 +3451,42 @@ export default function HotelSearch({
                             </>
                           )}
 
+                          {/* Refund Policy — lets the agent narrow the hotel
+                              list without opening each hotel's rooms. */}
+                          <Form.Group className="mb-2">
+                            <Form.Label className="fw-semibold small">
+                              Refund Policy
+                            </Form.Label>
+                            <div className="filter-checkbox-list">
+                              <Form.Check
+                                type="checkbox"
+                                id="refund-policy-refundable"
+                                label="Refundable"
+                                checked={refundPolicy.refundable}
+                                onChange={(e) =>
+                                  setRefundPolicy((prev) => ({
+                                    ...prev,
+                                    refundable: e.target.checked,
+                                  }))
+                                }
+                              />
+                              <Form.Check
+                                type="checkbox"
+                                id="refund-policy-non-refundable"
+                                label="Non Refundable"
+                                checked={refundPolicy.nonRefundable}
+                                onChange={(e) =>
+                                  setRefundPolicy((prev) => ({
+                                    ...prev,
+                                    nonRefundable: e.target.checked,
+                                  }))
+                                }
+                              />
+                            </div>
+                          </Form.Group>
+
+                          <hr />
+
                           <Form.Group className="mb-2">
                             <Form.Label className="fw-semibold small">
                               Hotel Type
@@ -3628,6 +3701,7 @@ export default function HotelSearch({
                               setHotelType([]);
                               setChannelType([]);
                               setAvailableDeals([]);
+                              setRefundPolicy({ refundable: false, nonRefundable: false });
                               setSortBy("priceAsc");
                               setHotelSearchTerm("");
                             }}
@@ -3824,6 +3898,41 @@ export default function HotelSearch({
                                           }}
                                         >
                                           {hotel.badge}
+                                        </span>
+                                      )}
+                                      {/* Refund pills — only when the supplier
+                                          told us at search time; unknown
+                                          (null) shows nothing. */}
+                                      {hotel.hasRefundable === true && (
+                                        <span
+                                          title="This hotel has at least one refundable rate"
+                                          style={{
+                                            backgroundColor: "#e8f5e9",
+                                            color: "#1b7a2f",
+                                            border: "1px solid #b7e0c0",
+                                            padding: "3px 8px",
+                                            borderRadius: "4px",
+                                            fontSize: "0.75rem",
+                                            display: "inline-block",
+                                          }}
+                                        >
+                                          Refundable
+                                        </span>
+                                      )}
+                                      {hotel.hasNonRefundable === true && (
+                                        <span
+                                          title="This hotel has at least one non-refundable rate"
+                                          style={{
+                                            backgroundColor: "#fdecea",
+                                            color: "#b42318",
+                                            border: "1px solid #f5c2c0",
+                                            padding: "3px 8px",
+                                            borderRadius: "4px",
+                                            fontSize: "0.75rem",
+                                            display: "inline-block",
+                                          }}
+                                        >
+                                          Non Refundable
                                         </span>
                                       )}
                                       {/* Flash Sale badge — shown beside Rate Available
