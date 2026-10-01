@@ -1739,20 +1739,58 @@ export default function BookingDetailedView() {
                       </Col>
                       <Col md={6}>
                         <InfoRow label="Agent" value={booking.agentName} />
-                        {/* Supplier — which external API fulfilled this
-                            booking (INHOUSE / IWTX / GRN / X3 / GOGLOBAL /
-                            RATEHAWK / ATHARVA / DARINA / JUMEIRAH / JUNIPER).
-                            ADMIN-only so agents never see it — mirrors the
-                            "agent must never know the supplier" whitelabel
-                            invariant applied on the All Bookings list. Non-
-                            hotel-supplier rows fall back to "Inhouse" so the
-                            cell never renders blank. */}
+                        {/* Supplier Name — which external API fulfilled
+                            this booking (INHOUSE / IWTX / GRN / X3 /
+                            GOGLOBAL / RATEHAWK / ATHARVA / DARINA /
+                            JUMEIRAH / JUNIPER). ADMIN-only so agents never
+                            see it — mirrors the "agent must never know the
+                            supplier" whitelabel invariant applied on the
+                            All Bookings list. Non-hotel-supplier rows fall
+                            back to "Inhouse" so the cell never renders
+                            blank. */}
                         {(isAdmin || isSuperAdmin) && (
                           <InfoRow
-                            label="Supplier"
+                            label="Supplier Name"
                             value={booking.apiId || "Inhouse"}
                           />
                         )}
+                        {/* Payable to Supplier — what our company owes
+                            the supplier for this booking. Admin/super-admin
+                            only: mirrors the same whitelabel rule as the
+                            Supplier Name row above. Prefers the supplier's
+                            native amount+currency when available (e.g. X3
+                            confirms in USD while we sell in AED); falls
+                            back to the booking total in the display
+                            currency when the supplier didn't return a
+                            distinct native amount. Hidden entirely when no
+                            amount is known so we never render a "-" that
+                            could imply zero cost. */}
+                        {(isAdmin || isSuperAdmin) &&
+                          (() => {
+                            const nativeCurr = booking.supplierNativeCurrency;
+                            const nativeAmt = Number(
+                              booking.supplierNativeAmount,
+                            );
+                            const hasNative =
+                              !!nativeCurr &&
+                              Number.isFinite(nativeAmt) &&
+                              nativeAmt > 0;
+                            const fallbackAmt = Number(booking.totalRate);
+                            const hasFallback =
+                              Number.isFinite(fallbackAmt) && fallbackAmt > 0;
+                            if (!hasNative && !hasFallback) return null;
+                            const value = hasNative
+                              ? `${nativeCurr} ${nativeAmt.toFixed(2)}`
+                              : `${currencyCode} ${toDisplayAmount(
+                                  fallbackAmt,
+                                ).toFixed(2)}`;
+                            return (
+                              <InfoRow
+                                label="Payable to Supplier"
+                                value={value}
+                              />
+                            );
+                          })()}
                         {/* Contact — "Booking done for" value entered on the
                             booking page, shown as "<value>/<agentName>". Only
                             rendered when a value was entered. */}
@@ -1788,8 +1826,22 @@ export default function BookingDetailedView() {
                           label="Agent Reference"
                           value={booking.customer?.agentLpo}
                         />
+                        {/* Confirmation number row. For admin / super-admin
+                            this is the "Hotel Confirmation Number" — the
+                            actual reference the hotel/supplier returned, so
+                            it's relabeled to make that scope explicit.
+                            Agents keep the neutral "Confirmation No." label
+                            they've always seen: it's the same field they
+                            use as their customer-facing reference and does
+                            not by itself name the supplier, so no
+                            supplier-identifying information is exposed by
+                            the label change. */}
                         <InfoRow
-                          label="Confirmation No."
+                          label={
+                            isAdmin || isSuperAdmin
+                              ? "Hotel Confirmation Number"
+                              : "Confirmation No."
+                          }
                           value={
                             booking.confirmationNumber ||
                             booking.customer?.confirmationNumber
@@ -2019,7 +2071,13 @@ export default function BookingDetailedView() {
                               <tr>
                                 <th>Room Category</th>
                                 <th>Meal Type</th>
-                                <th>Supplier Ref.</th>
+                                {/* Supplier Ref. — same admin-only rule
+                                    as the Supplier Name row above. Hiding
+                                    both the header and cell keeps the
+                                    table shape consistent for each role. */}
+                                {(isAdmin || isSuperAdmin) && (
+                                  <th>Supplier Ref.</th>
+                                )}
                                 <th>Adults</th>
                                 <th>Children</th>
                                 <th>Rate</th>
@@ -2030,7 +2088,9 @@ export default function BookingDetailedView() {
                               <tr>
                                 <td>{room.roomCategory || "-"}</td>
                                 <td>{room.mealPlan || "-"}</td>
-                                <td>{booking.supplierReference || "-"}</td>
+                                {(isAdmin || isSuperAdmin) && (
+                                  <td>{booking.supplierReference || "-"}</td>
+                                )}
                                 <td>{room.adults ?? "-"}</td>
                                 <td>{room.children ?? "0"}</td>
                                 <td>
@@ -2132,7 +2192,11 @@ export default function BookingDetailedView() {
                       // stays the visual anchor.
                       const nativeCurr = booking.supplierNativeCurrency;
                       const nativeAmt = Number(booking.supplierNativeAmount);
+                      // Admin/super-admin only: the label prefixes the
+                      // amount with "supplier:" which by itself hints at
+                      // the supplier chain, so agents must not see it.
                       const showNative =
+                        (isAdmin || isSuperAdmin) &&
                         !!nativeCurr &&
                         nativeCurr !== currencyCode &&
                         Number.isFinite(nativeAmt) &&

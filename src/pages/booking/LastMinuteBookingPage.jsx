@@ -29,6 +29,7 @@ import {
   apiIdForApiType,
 } from "../../utils/lastMinuteApiHotels";
 import "../../styles/HotelSearch.css";
+import { isAgentLogin } from "../../utils/supplierDisplay";
 
 // Default placeholder when the hotel has no image.
 const DEFAULT_HOTEL_IMAGE =
@@ -1219,7 +1220,11 @@ function ResultsWithFilters({
     if (hotel?.source === "API") {
       const apiId = apiIdForApiType(hotel.apiType);
       if (!apiId) {
-        toast.error(`Unknown supplier "${hotel.apiType || ""}" — cannot open rooms.`);
+        toast.error(
+          isAgentLogin()
+            ? "Unable to open rooms for this hotel."
+            : `Unknown supplier "${hotel.apiType || ""}" — cannot open rooms.`,
+        );
         return;
       }
 
@@ -1606,7 +1611,10 @@ function HotelCard({ hotel: h, onViewRooms, currencyCode = "AED", currencyFactor
                   borderRadius: "10px",
                 }}
               >
-                {h.source === "API" ? h.apiType || "API" : "INHOUSE"}
+                {/* Agents must not see the supplier name. */}
+                {h.source === "API"
+                  ? isAgentLogin() ? "API" : h.apiType || "API"
+                  : "INHOUSE"}
               </span>
             </div>
           </div>

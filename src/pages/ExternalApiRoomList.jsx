@@ -37,6 +37,7 @@ import "../styles/RoomList.css";
 import axiosInstance from "../components/AxiosInstance";
 import toast from "react-hot-toast";
 import { formatFlexibleDate } from "../utils/dateUtils";
+import { displayHotelName } from "../utils/supplierDisplay";
 import RoomFilters from "../components/roomlist/RoomFilters";
 import useRoomFilters from "../hooks/useRoomFilters";
 import { roomTypeNameForRate } from "../utils/mealPlanCategory";
@@ -923,6 +924,9 @@ const ExternalApiRoomList = () => {
   // response always says refundable and the truth only arrives with the
   // prebook (cached per rateKey), so without this the "Non Refundable"
   // filter never matched an Atharva rate the badge already marked as such.
+  // A supplier-flagged refundable rate whose free-cancellation deadline has
+  // already passed (red "Deadline passed" badge) can no longer be cancelled
+  // free, so it is filtered as Non Refundable — same check the badge uses.
   //
   // Room Type: the checkboxes are the inhouse master names ("Room with
   // BreakFast", …) while suppliers send "Bed and Breakfast", "BB",
@@ -935,7 +939,8 @@ const ExternalApiRoomList = () => {
     return filters.rateMatches({
       isNonRefundable:
         nonRefundable === true ||
-        ["true", "y", "yes"].includes(String(nonRefundable).toLowerCase()),
+        ["true", "y", "yes"].includes(String(nonRefundable).toLowerCase()) ||
+        isDeadlinePassed(resolveDeadlineDate(rate)),
       mealPlan: roomTypeNameForRate(rate, filters.roomTypeOptions),
     });
   };
@@ -2889,7 +2894,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                         <FaHotel size={40} className="text-primary" />
                       </div>
                       <div className="hotel-info">
-                        <h2 className="hotel-name mb-2">{hotel.hotelName}</h2>
+                        <h2 className="hotel-name mb-2">{displayHotelName(hotel.hotelName)}</h2>
                         <div className="d-flex align-items-center gap-3 mb-2">
                           <div className="star-rating">
                             {renderStars(hotel.starRating)}
