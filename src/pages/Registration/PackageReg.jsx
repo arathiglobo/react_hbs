@@ -53,6 +53,10 @@ const SearchableSelect = ({
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredOptions, setFilteredOptions] = useState(options || []);
+  // The option list is server-searched, so it is replaced after every
+  // keystroke (and reset once a pick clears the search). Keep the picked
+  // option so its label still shows when it is no longer in `options`.
+  const [pickedOption, setPickedOption] = useState(null);
 
   useEffect(() => {
     if (!options || !Array.isArray(options)) {
@@ -77,6 +81,7 @@ const SearchableSelect = ({
       console.log("Selecting option:", option);
       // Ensure we pass a proper value
       const value = option.id !== undefined ? option.id : option;
+      setPickedOption(option);
       onChange({
         target: {
           name: name,
@@ -91,9 +96,11 @@ const SearchableSelect = ({
     }
   };
 
-  const selectedOption = options?.find(
-    (option) => String(option.id) === String(value)
-  );
+  const selectedOption =
+    options?.find((option) => String(option.id) === String(value)) ||
+    (pickedOption && String(pickedOption.id) === String(value)
+      ? pickedOption
+      : undefined);
 
   return (
     <div className="position-relative">
@@ -254,6 +261,10 @@ const PackageReg = () => {
   const [selectedOthers, setSelectedOthers] = useState([]);
   const [countries, setCountries] = useState([]);
   const [places, setPlaces] = useState([]);
+  // Cities already saved on the package being edited. `places` only holds
+  // the first 50 (or the current search), so these are fetched by id and
+  // merged in to keep the saved Arrive City / day places labelled.
+  const [pinnedPlaces, setPinnedPlaces] = useState([]);
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
   const [allDestinations, setAllDestinations] = useState([]);
   const [isLoadingDestinations, setIsLoadingDestinations] = useState(false);
@@ -456,6 +467,7 @@ const PackageReg = () => {
     ]);
     setSelectedOthers([]);
     setPlaces([]);
+    setPinnedPlaces([]);
     setPackageValidityDTOList([{ validityFrom: "", validityTo: "" }]);
     setPackageCancellationPolicyDTOList([
       { cancellationFee: "", cancellationFeeType: "PERCENT", noOfNights: "" },
@@ -822,6 +834,28 @@ const PackageReg = () => {
     }
   };
 
+  const loadPinnedPlaces = async (ids) => {
+    const unique = [...new Set(ids.filter((id) => id !== null && id !== undefined && id !== "").map(String))];
+    const results = await Promise.all(
+      unique.map((id) =>
+        axiosInstance
+          .get(`/api/province/${id}`)
+          .then((res) => ({ id: res.data.id, name: res.data.name || res.data.stateName }))
+          .catch(() => null)
+      )
+    );
+    setPinnedPlaces(results.filter(Boolean));
+  };
+
+  // Dropdown options for Arrive City and the itinerary day places: the
+  // current search results plus any saved city that is not among them.
+  const placeOptions = [
+    ...pinnedPlaces.filter((p) => !places.some((pl) => String(pl.id) === String(p.id))),
+    ...(Array.isArray(places)
+      ? places.map((place) => ({ id: place.id, name: place.name || place.stateName }))
+      : []),
+  ];
+
   const loadCurrencies = async () => {
     try {
       const response = await axiosInstance.get("/api/currency");
@@ -929,6 +963,7 @@ const PackageReg = () => {
 
       // Clear places and place selection when country changes
       setPlaces([]);
+      setPinnedPlaces([]);
       setIsLoadingPlaces(false);
 
       setFormData((prev) => ({
@@ -1090,6 +1125,13 @@ const PackageReg = () => {
       } else {
         setSelectedCountryOption(null);
       }
+
+      loadPinnedPlaces([
+        ...(Array.isArray(data.arrivePlace) ? data.arrivePlace : [data.placeId]),
+        ...(Array.isArray(data.packageItinearyDTOList)
+          ? data.packageItinearyDTOList.map((it) => it.placeId)
+          : []),
+      ]);
 
       // Load itinerary data
       if (data.packageItinearyDTOList && Array.isArray(data.packageItinearyDTOList)) {
@@ -2486,20 +2528,12 @@ const PackageReg = () => {
                                   ? "Loading places..."
                                   : "Search and select place"
                               }
-                              options={
-                                Array.isArray(places)
-                                  ? places.map((place) => ({
-                                    id: place.id,
-                                    name: place.name || place.stateName,
-                                  }))
-                                  : []
-                              }
+                              options={placeOptions}
                               isInvalid={!!validationErrors.placeId}
-                              disabled={
-                                isViewMode ||
-                                !formData.countryId ||
-                                isLoadingPlaces
-                              }
+                              // Not disabled while a search is loading: that
+                              // dropped focus mid-typing. The dropdown shows
+                              // its own spinner instead.
+                              disabled={isViewMode || !formData.countryId}
                               isLoading={isLoadingPlaces}
                             />
                             {validationErrors.placeId && (
@@ -2678,15 +2712,8 @@ const PackageReg = () => {
                                     ? "Loading places..."
                                     : "Search and select destination"
                                 }
-                                options={
-                                  Array.isArray(places)
-                                    ? places.map((place) => ({
-                                      id: place.id,
-                                      name: place.name || place.stateName,
-                                    }))
-                                    : []
-                                }
-                                disabled={isViewMode || !formData.countryId || isLoadingPlaces}
+                                options={placeOptions}
+                                disabled={isViewMode || !formData.countryId}
                                 isLoading={isLoadingPlaces}
                               />
                             </Form.Group>
