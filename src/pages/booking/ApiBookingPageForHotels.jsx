@@ -103,7 +103,18 @@ const stripPolicyHtml = (raw) => {
 // supplier for free if nobody reconfirms. Add an apiId here only once its
 // backend create path honours bookingConfirmation="Hold & Book Later".
 const GRN_API_ID = 20;
-const HOLD_CAPABLE_API_IDS = new Set([GRN_API_ID]);
+// IWTX (12) — backend hold branch added 2026-09-29 in IwtxHotelBookingService
+// mirroring the GRN pattern: isHoldRoomPayLater() gate, pre-flight refusal
+// outside the free-cxl window, deferred credit deduction, "On Reconfirmation"
+// voucher marker, on-hold email. Auto-cancel uses the existing IWTX cancel
+// adapter registered in SupplierCancellationDispatcher.
+const IWTX_API_ID = 12;
+// GoGlobal (21) — backend hold branch added 2026-09-29 in
+// GoGlobalHotelBookingService using the same pattern. GoGlobal's C/RQ
+// status is overridden to "Confirmed / On Reconfirmation" on hold; the
+// existing GoGlobal cancel adapter handles the auto-cancel path.
+const GOGLOBAL_API_ID = 21;
+const HOLD_CAPABLE_API_IDS = new Set([GRN_API_ID, IWTX_API_ID, GOGLOBAL_API_ID]);
 
 /**
  * The booking's overall free-cancellation deadline, as a Date at local
