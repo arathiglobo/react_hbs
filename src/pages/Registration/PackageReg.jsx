@@ -268,6 +268,70 @@ const PackageReg = () => {
   const countryDebounceRef = useRef(null);
   const placeDebounceRef = useRef(null);
   const itineraryPlaceDebounceRef = useRef(null);
+
+  // ── Selected-place name cache ────────────────────────────────────────
+  // `places` is ONE list shared by Arrive City and every itinerary day's
+  // Place dropdown, and it is replaced on every search (max 50 rows). The
+  // dropdown resolves the visible label by looking the selected id up in its
+  // options, so as soon as the list reloaded without the picked city (e.g.
+  // the empty-search reload fired right after selecting "Moscow") the field
+  // went blank even though the id was still selected. Remember the name of
+  // every place we have ever loaded and always include the selected one in
+  // that dropdown's options.
+  const [placeNameCache, setPlaceNameCache] = useState({});
+  const requestedPlaceIdsRef = useRef(new Set());
+
+  useEffect(() => {
+    if (!Array.isArray(places) || places.length === 0) return;
+    setPlaceNameCache((prev) => {
+      let next = prev;
+      places.forEach((place) => {
+        const label = place?.name || place?.stateName;
+        if (place?.id == null || !label || prev[place.id] === label) return;
+        if (next === prev) next = { ...prev };
+        next[place.id] = label;
+      });
+      return next;
+    });
+  }, [places]);
+
+  // Edit / view mode: ids loaded from a saved package may not be in the
+  // current 50-row list at all — fetch their names once.
+  useEffect(() => {
+    const selectedIds = [
+      formData.placeId,
+      ...packageItinearyDTOList.map((day) => day.placeId),
+    ].filter((id) => id !== "" && id !== null && id !== undefined);
+    selectedIds.forEach((id) => {
+      const key = String(id);
+      if (placeNameCache[key] !== undefined || requestedPlaceIdsRef.current.has(key)) return;
+      requestedPlaceIdsRef.current.add(key);
+      axiosInstance
+        .get(`/api/province/${encodeURIComponent(key)}`)
+        .then((res) => {
+          const label = res?.data?.name || res?.data?.stateName;
+          if (label) setPlaceNameCache((prev) => ({ ...prev, [key]: label }));
+        })
+        .catch(() => {
+          /* name stays unresolved — dropdown just shows its placeholder */
+        });
+    });
+  }, [formData.placeId, packageItinearyDTOList, placeNameCache]);
+
+  // Options for one place dropdown: the current search list, plus the
+  // dropdown's own selected place when the list doesn't contain it.
+  const placeOptionsFor = (selectedId) => {
+    const base = Array.isArray(places)
+      ? places.map((place) => ({
+          id: place.id,
+          name: place.name || place.stateName,
+        }))
+      : [];
+    if (selectedId === "" || selectedId === null || selectedId === undefined) return base;
+    if (base.some((opt) => String(opt.id) === String(selectedId))) return base;
+    const cached = placeNameCache[String(selectedId)];
+    return cached ? [{ id: selectedId, name: cached }, ...base] : base;
+  };
   const [selectedCountryOption, setSelectedCountryOption] = useState(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState(null);
@@ -2486,14 +2550,7 @@ const PackageReg = () => {
                                   ? "Loading places..."
                                   : "Search and select place"
                               }
-                              options={
-                                Array.isArray(places)
-                                  ? places.map((place) => ({
-                                    id: place.id,
-                                    name: place.name || place.stateName,
-                                  }))
-                                  : []
-                              }
+                              options={placeOptionsFor(formData.placeId)}
                               isInvalid={!!validationErrors.placeId}
                               disabled={
                                 isViewMode ||
@@ -2678,14 +2735,7 @@ const PackageReg = () => {
                                     ? "Loading places..."
                                     : "Search and select destination"
                                 }
-                                options={
-                                  Array.isArray(places)
-                                    ? places.map((place) => ({
-                                      id: place.id,
-                                      name: place.name || place.stateName,
-                                    }))
-                                    : []
-                                }
+                                options={placeOptionsFor(day.placeId)}
                                 disabled={isViewMode || !formData.countryId || isLoadingPlaces}
                                 isLoading={isLoadingPlaces}
                               />
