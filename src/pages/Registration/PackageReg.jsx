@@ -2129,6 +2129,8 @@ const PackageReg = () => {
                           <Form.Control
                             type="text"
                             placeholder="Enter package name"
+                            // packages.package_name is VARCHAR(255)
+                            maxLength={255}
                             value={formData.packageName}
                             isInvalid={!!validationErrors.packageName}
                             {...getFormControlProps(
@@ -2167,6 +2169,8 @@ const PackageReg = () => {
                           <Form.Control
                             type="text"
                             placeholder="Enter package code"
+                            // packages.package_code is VARCHAR(255)
+                            maxLength={255}
                             value={formData.packageCode}
                             onChange={(e) => {
                               setFormData((prev) => ({

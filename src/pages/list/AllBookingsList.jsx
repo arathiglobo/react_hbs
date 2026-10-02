@@ -619,7 +619,7 @@ const AllBookingsList = () => {
                               content unchanged, still rendered by
                               NotificationCell. */}
                           <th style={thStyle("center", COLUMN_WIDTHS.status)}>Status</th>
-                          <th style={thStyle("center", COLUMN_WIDTHS.action)}>Action</th>
+                          <th className="abl-col-action" style={thStyle("center", COLUMN_WIDTHS.action)}>Action</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -790,7 +790,7 @@ const AllBookingsList = () => {
                                 <td data-label="Status" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
                                   <NotificationCell booking={b} />
                                 </td>
-                                <td data-label="Action" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.action }}>
+                                <td data-label="Action" className="abl-col-action" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.action }}>
                                   <div className="d-flex justify-content-center align-items-center">
                                     <FaEye
                                       role="button"

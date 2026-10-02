@@ -17,6 +17,32 @@
   }
 }
 
+/* ── Laptop / desktop (> 768px): the 15–17 columns add up to ~1,340px for
+      admins, wider than a 1366px laptop minus the sidebar, and the
+      wrapper's inline overflow:hidden clipped the last columns (Payment
+      Status, Status, Action). Scroll sideways instead, and pin the Action
+      column to the right edge so the View icon is always reachable. On
+      screens wide enough to fit every column nothing scrolls. ── */
+@media (min-width: 769px) {
+  .hbl-modern .abl-table-wrap {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .hbl-modern .abl-table .abl-col-action {
+    position: sticky;
+    right: 0;
+    box-shadow: -6px 0 8px -6px rgba(17, 19, 24, .22);
+  }
+  .hbl-modern .abl-table tbody td.abl-col-action {
+    z-index: 1;
+  }
+  /* Header cells are already sticky to the top (z-index 2); keep the
+     Action header above them when the row scrolls underneath. */
+  .hbl-modern .abl-table thead th.abl-col-action {
+    z-index: 3;
+  }
+}
+
 /* ── Phone: each booking becomes a stacked card of "LABEL  value" rows.
       Labels come from the data-label attribute on every <td>. ── */
 @media (max-width: 768px) {
