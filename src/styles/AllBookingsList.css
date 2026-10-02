@@ -28,6 +28,23 @@
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch;
   }
+  /* Size columns to their content instead of the fixed px widths (which
+     add up to ~1,340px): with tighter cell padding every column fits a
+     1366px laptop (1280px with the compact rules below) without scrolling,
+     dates stay on one line and headers wrap between words. */
+  .hbl-modern .hbl-table.abl-table {
+    table-layout: auto !important;
+  }
+  .hbl-modern .abl-table thead th,
+  .hbl-modern .abl-table tbody td {
+    width: auto !important;
+    padding: 6px 5px !important;
+  }
+  .hbl-modern .abl-table thead th {
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+  }
   .hbl-modern .abl-table .abl-col-action {
     position: sticky;
     right: 0;
@@ -40,6 +57,22 @@
      Action header above them when the row scrolls underneath. */
   .hbl-modern .abl-table thead th.abl-col-action {
     z-index: 3;
+  }
+}
+
+/* ── Smaller laptops (1200–1365px, e.g. 1280px): a touch more compact so
+      all columns still fit without sideways scrolling. ── */
+@media (min-width: 1200px) and (max-width: 1365.98px) {
+  .hbl-modern .abl-table thead th,
+  .hbl-modern .abl-table tbody td {
+    padding: 5px 3px !important;
+  }
+  .hbl-modern .abl-table tbody td {
+    font-size: .7rem !important;
+  }
+  .hbl-modern .abl-table .badge {
+    padding: 3px 6px !important;
+    letter-spacing: .02em !important;
   }
 }
 
