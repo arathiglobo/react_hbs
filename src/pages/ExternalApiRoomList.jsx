@@ -109,6 +109,34 @@ const stripHtmlTags = (raw) => {
   return s;
 };
 
+/**
+ * First hotel of an IWTX / X3 accurate-rate (reprice) reply.
+ *
+ * When the picked rate can no longer be sold (typically fewer rooms of that
+ * type are left than were requested) the vendor answers with an empty
+ * <Hotels/> and an ErrorMessage such as "Not Available". The callers read
+ * `hotels.hotel[0]` straight away, so that reply surfaced to the agent as
+ * "Cannot read properties of null (reading '0')". Throw a readable error in
+ * the shape the callers' catch already reads instead. A reply that carries a
+ * hotel with rooms is returned untouched, so working flows are unchanged.
+ */
+const ROOM_NO_LONGER_AVAILABLE_MSG =
+  "This room is no longer available for the selected number of rooms. " +
+  "Please choose another room or reduce the number of rooms.";
+
+const repricedHotelOrThrow = (resp) => {
+  const hotel = resp?.data?.hotels?.hotel?.[0];
+  if (hotel?.roomTypeDetails?.rooms?.room) return hotel;
+  const vendorMsg = resp?.data?.errorMessage?.msg;
+  const message =
+    !vendorMsg || /not\s*available/i.test(vendorMsg)
+      ? ROOM_NO_LONGER_AVAILABLE_MSG
+      : vendorMsg;
+  const err = new Error(message);
+  err.response = { data: { message } };
+  throw err;
+};
+
 function AccordionToggleButton({ eventKey, isActive }) {
   const decoratedOnClick = useAccordionButton(eventKey);
   return (
@@ -1952,7 +1980,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
               : "/api/x3/hotel/availability";
 
           const response = await axiosInstance.post(endpoint, priceCheckReq);
-          const respHotel = response.data.hotels.hotel[0];
+          const respHotel = repricedHotelOrThrow(response);
           const rooms = respHotel.roomTypeDetails.rooms.room;
           const accurateRates = rooms
             .filter((room) => room != null)
@@ -2479,7 +2507,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
             });
 
             accurateRates = responses.map((resp, i) => {
-              const respHotel = resp.data.hotels.hotel[0];
+              const respHotel = repricedHotelOrThrow(resp);
               const room = respHotel.roomTypeDetails.rooms.room.find(
                 (rr) => rr != null,
               );
@@ -2537,7 +2565,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                 : "/api/x3/hotel/availability";
 
             const response = await axiosInstance.post(endpoint, priceCheckReq);
-            const respHotel = response.data.hotels.hotel[0];
+            const respHotel = repricedHotelOrThrow(response);
             const rooms = respHotel.roomTypeDetails.rooms.room;
             accurateRates = rooms
               .filter((room) => room != null)
