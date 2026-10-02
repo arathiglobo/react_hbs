@@ -5,18 +5,6 @@
    Desktop (>= 1200px) keeps the existing fit-to-viewport fixed layout.
    ============================================================================ */
 
-/* ── Tablet / small laptop: 15–17 columns can't fit, so scroll sideways
-      inside the card instead of crushing (and clipping) every column. ── */
-@media (min-width: 769px) and (max-width: 1199.98px) {
-  .hbl-modern .abl-table-wrap {
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch;
-  }
-  .hbl-modern .hbl-table.abl-table {
-    min-width: 1150px;
-  }
-}
-
 /* ── Laptop / desktop (> 768px): the 15–17 columns add up to ~1,340px for
       admins, wider than a 1366px laptop minus the sidebar, and the
       wrapper's inline overflow:hidden clipped the last columns (Payment
@@ -45,6 +33,21 @@
     word-break: normal !important;
     overflow-wrap: normal !important;
   }
+  /* The Hotel cell's inline word-break:break-word let it shrink below its
+     words, so on narrower screens (or a zoomed browser) it absorbed all the
+     squeeze and long names broke mid-word ("Autogra ph"). Wrap between words
+     only, and give it a readable minimum width. */
+  .hbl-modern .abl-table tbody td[data-label="Hotel"] {
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+  }
+  .hbl-modern .abl-table tbody td[data-label="Hotel"] > div {
+    min-width: 110px;
+  }
+  /* Keep "2026-09-25" on one line (it would otherwise split at a hyphen). */
+  .hbl-modern .abl-table tbody td[data-label="Deadline Date"] {
+    white-space: nowrap !important;
+  }
   .hbl-modern .abl-table .abl-col-action {
     position: sticky;
     right: 0;
@@ -60,15 +63,19 @@
   }
 }
 
-/* ── Smaller laptops (1200–1365px, e.g. 1280px): a touch more compact so
-      all columns still fit without sideways scrolling. ── */
-@media (min-width: 1200px) and (max-width: 1365.98px) {
-  .hbl-modern .abl-table thead th,
-  .hbl-modern .abl-table tbody td {
-    padding: 5px 3px !important;
+/* ── Smaller laptops and zoomed browsers (769–1365px, e.g. 1280px, or a
+      1366px screen at 110% zoom ≈ 1240px): more compact cells and headers
+      so all columns still fit without sideways scrolling down to ~1200px.
+      Below that the table scrolls sideways with Action pinned. ── */
+@media (min-width: 769px) and (max-width: 1365.98px) {
+  .hbl-modern .abl-table thead th {
+    padding: 4px 2px !important;
+    font-size: .62rem !important;
+    letter-spacing: .02em !important;
   }
   .hbl-modern .abl-table tbody td {
-    font-size: .7rem !important;
+    padding: 4px 3px !important;
+    font-size: .68rem !important;
   }
   .hbl-modern .abl-table .badge {
     padding: 3px 6px !important;
