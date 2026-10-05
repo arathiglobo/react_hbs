@@ -107,6 +107,25 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const [stat, setStat] = useState(DEFAULT_DASHBOARD);
   const [loading, setLoading] = useState(true);
+  // Revenue visibility gate: per ops request only super-admins may see the
+  // Total Revenue KPI (and its "By location" breakdown). Admin / MyAdmin /
+  // Staff / Sales / any other role must not see it. currentActiveRole is
+  // the same source of truth the TopBar + BookingDetailedView already use.
+  // Multi-role logins that haven't picked an active role fall back to the
+  // list on `userRole`, so a super-admin who also carries other roles is
+  // still recognised. Backend endpoints continue to enforce their own
+  // access rules — this is a display-only gate.
+  const isSuperAdminUser = (() => {
+    const active = (localStorage.getItem('currentActiveRole') || '')
+      .trim()
+      .toLowerCase();
+    if (active) return active === 'super_admin';
+    const stored = (localStorage.getItem('userRole') || '')
+      .split(',')
+      .map((r) => r.trim().toLowerCase())
+      .filter(Boolean);
+    return stored.includes('super_admin');
+  })();
   // Analytics charts are collapsed by default to save vertical space.
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   // Admin-only Unbooked Opportunities tile — reads the aggregate
@@ -235,15 +254,26 @@ export default function AdminDashboard() {
             <p className="adm-section-label">Performance</p>
             {loading ? (
               <>
-                <div className="adm-kpis">{[...Array(4)].map((_, i) => <div key={i} className="adm-skel" />)}</div>
+                {/* Match the skeleton count to what will actually render —
+                    non-super-admin loses one card (Total Revenue), so the
+                    shimmer row shows 3 instead of 4 to avoid a visible
+                    jump when data arrives. */}
+                <div className="adm-kpis">{[...Array(isSuperAdminUser ? 4 : 3)].map((_, i) => <div key={i} className="adm-skel" />)}</div>
                 <div className="adm-kpis-wide">{[...Array(2)].map((_, i) => <div key={i} className="adm-skel" />)}</div>
               </>
             ) : (
               <>
-                {/* four uniform KPI cards */}
+                {/* KPI cards. Total Revenue is gated to super-admin only —
+                    the row keeps its 4-column layout at desktop widths; when
+                    the card is hidden the remaining three cards flow to the
+                    left and the trailing grid cell stays empty. Responsive
+                    breakpoints (repeat(2,1fr) at ≤1100px, single column at
+                    ≤480px) continue to apply via the .adm-kpis rules. */}
                 <div className="adm-kpis">
-                  <Kpi icon="account" label="Total Revenue" value={`AED ${formatNumber(stat.totalRevenue)}`}
-                       dropdown={<AdmDropdown label="By location" grouped={revenueByLocation} fmt={(v) => `AED ${formatNumber(v)}`} />} />
+                  {isSuperAdminUser && (
+                    <Kpi icon="account" label="Total Revenue" value={`AED ${formatNumber(stat.totalRevenue)}`}
+                         dropdown={<AdmDropdown label="By location" grouped={revenueByLocation} fmt={(v) => `AED ${formatNumber(v)}`} />} />
+                  )}
                   <Kpi icon="agent" label="Active Agents" value={formatNumber(stat.totalActiveAgents)} slate
                        dropdown={<AdmDropdown label="By location" grouped={agentsByLocation} />} />
                   <Kpi icon="booking" label="Today's Bookings" value={formatNumber(stat.todayBookings)} slate />

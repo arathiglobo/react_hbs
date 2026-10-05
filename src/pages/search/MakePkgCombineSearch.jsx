@@ -46,6 +46,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import "../../styles/RoomList.css";
+import { isAgentLogin } from "../../utils/supplierDisplay";
 
 // ─────────────────────────────────────────────
 // Search Progress Bar (same as HotelSearch)
@@ -3158,7 +3159,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                           {activity.starRating}
                                         </>
                                       )}
-                                      {activity.apiType && (
+                                      {activity.apiType && !isAgentLogin() && (
                                         <span
                                           style={{
                                             marginLeft: "4px",
@@ -3524,7 +3525,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
                         </div>
                       </Col>
                     )}
-                    {selectedActivity.apiType && (
+                    {selectedActivity.apiType && !isAgentLogin() && (
                       <Col md={6}>
                         <div>
                           <strong>API Type:</strong> {selectedActivity.apiType}

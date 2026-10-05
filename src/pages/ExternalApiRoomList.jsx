@@ -37,6 +37,7 @@ import "../styles/RoomList.css";
 import axiosInstance from "../components/AxiosInstance";
 import toast from "react-hot-toast";
 import { formatFlexibleDate } from "../utils/dateUtils";
+import { displayHotelName } from "../utils/supplierDisplay";
 import RoomFilters from "../components/roomlist/RoomFilters";
 import useRoomFilters from "../hooks/useRoomFilters";
 import { roomTypeNameForRate } from "../utils/mealPlanCategory";
@@ -106,6 +107,34 @@ const stripHtmlTags = (raw) => {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
   return s;
+};
+
+/**
+ * First hotel of an IWTX / X3 accurate-rate (reprice) reply.
+ *
+ * When the picked rate can no longer be sold (typically fewer rooms of that
+ * type are left than were requested) the vendor answers with an empty
+ * <Hotels/> and an ErrorMessage such as "Not Available". The callers read
+ * `hotels.hotel[0]` straight away, so that reply surfaced to the agent as
+ * "Cannot read properties of null (reading '0')". Throw a readable error in
+ * the shape the callers' catch already reads instead. A reply that carries a
+ * hotel with rooms is returned untouched, so working flows are unchanged.
+ */
+const ROOM_NO_LONGER_AVAILABLE_MSG =
+  "This room is no longer available for the selected number of rooms. " +
+  "Please choose another room or reduce the number of rooms.";
+
+const repricedHotelOrThrow = (resp) => {
+  const hotel = resp?.data?.hotels?.hotel?.[0];
+  if (hotel?.roomTypeDetails?.rooms?.room) return hotel;
+  const vendorMsg = resp?.data?.errorMessage?.msg;
+  const message =
+    !vendorMsg || /not\s*available/i.test(vendorMsg)
+      ? ROOM_NO_LONGER_AVAILABLE_MSG
+      : vendorMsg;
+  const err = new Error(message);
+  err.response = { data: { message } };
+  throw err;
 };
 
 function AccordionToggleButton({ eventKey, isActive }) {
@@ -923,6 +952,9 @@ const ExternalApiRoomList = () => {
   // response always says refundable and the truth only arrives with the
   // prebook (cached per rateKey), so without this the "Non Refundable"
   // filter never matched an Atharva rate the badge already marked as such.
+  // A supplier-flagged refundable rate whose free-cancellation deadline has
+  // already passed (red "Deadline passed" badge) can no longer be cancelled
+  // free, so it is filtered as Non Refundable — same check the badge uses.
   //
   // Room Type: the checkboxes are the inhouse master names ("Room with
   // BreakFast", …) while suppliers send "Bed and Breakfast", "BB",
@@ -935,7 +967,8 @@ const ExternalApiRoomList = () => {
     return filters.rateMatches({
       isNonRefundable:
         nonRefundable === true ||
-        ["true", "y", "yes"].includes(String(nonRefundable).toLowerCase()),
+        ["true", "y", "yes"].includes(String(nonRefundable).toLowerCase()) ||
+        isDeadlinePassed(resolveDeadlineDate(rate)),
       mealPlan: roomTypeNameForRate(rate, filters.roomTypeOptions),
     });
   };
@@ -1947,7 +1980,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
               : "/api/x3/hotel/availability";
 
           const response = await axiosInstance.post(endpoint, priceCheckReq);
-          const respHotel = response.data.hotels.hotel[0];
+          const respHotel = repricedHotelOrThrow(response);
           const rooms = respHotel.roomTypeDetails.rooms.room;
           const accurateRates = rooms
             .filter((room) => room != null)
@@ -2474,7 +2507,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
             });
 
             accurateRates = responses.map((resp, i) => {
-              const respHotel = resp.data.hotels.hotel[0];
+              const respHotel = repricedHotelOrThrow(resp);
               const room = respHotel.roomTypeDetails.rooms.room.find(
                 (rr) => rr != null,
               );
@@ -2532,7 +2565,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                 : "/api/x3/hotel/availability";
 
             const response = await axiosInstance.post(endpoint, priceCheckReq);
-            const respHotel = response.data.hotels.hotel[0];
+            const respHotel = repricedHotelOrThrow(response);
             const rooms = respHotel.roomTypeDetails.rooms.room;
             accurateRates = rooms
               .filter((room) => room != null)
@@ -2889,7 +2922,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                         <FaHotel size={40} className="text-primary" />
                       </div>
                       <div className="hotel-info">
-                        <h2 className="hotel-name mb-2">{hotel.hotelName}</h2>
+                        <h2 className="hotel-name mb-2">{displayHotelName(hotel.hotelName)}</h2>
                         <div className="d-flex align-items-center gap-3 mb-2">
                           <div className="star-rating">
                             {renderStars(hotel.starRating)}

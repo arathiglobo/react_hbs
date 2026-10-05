@@ -1,0 +1,168 @@
+/* ============================================================================
+   ALL BOOKINGS LIST · RESPONSIVE
+   Scoped to /booking-details/all-bookings-list via .abl-table / .abl-table-wrap
+   so the other booking lists sharing HotelBookingListModern.css are untouched.
+   Desktop (>= 1200px) keeps the existing fit-to-viewport fixed layout.
+   ============================================================================ */
+
+/* ── Laptop / desktop (> 768px): the 15–17 columns add up to ~1,340px for
+      admins, wider than a 1366px laptop minus the sidebar, and the
+      wrapper's inline overflow:hidden clipped the last columns (Payment
+      Status, Status, Action). Scroll sideways instead, and pin the Action
+      column to the right edge so the View icon is always reachable. On
+      screens wide enough to fit every column nothing scrolls. ── */
+@media (min-width: 769px) {
+  .hbl-modern .abl-table-wrap {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Size columns to their content instead of the fixed px widths (which
+     add up to ~1,340px): with tighter cell padding every column fits a
+     1366px laptop (1280px with the compact rules below) without scrolling,
+     dates stay on one line and headers wrap between words. */
+  .hbl-modern .hbl-table.abl-table {
+    table-layout: auto !important;
+  }
+  .hbl-modern .abl-table thead th,
+  .hbl-modern .abl-table tbody td {
+    width: auto !important;
+    padding: 6px 5px !important;
+  }
+  .hbl-modern .abl-table thead th {
+    white-space: normal !important;
+    word-break: normal !important;
+    overflow-wrap: normal !important;
+  }
+  /* The Hotel cell's inline word-break:break-word let it shrink below its
+     words, so on narrower screens (or a zoomed browser) it absorbed all the
+     squeeze and long names broke mid-word ("Autogra ph"). Wrap between words
+     only, and give it a readable minimum width. */
+  .hbl-modern .abl-table tbody td[data-label="Hotel"] {
+    word-break: normal !important;
+    overflow-wrap: break-word !important;
+  }
+  .hbl-modern .abl-table tbody td[data-label="Hotel"] > div {
+    min-width: 110px;
+  }
+  /* Keep "2026-09-25" on one line (it would otherwise split at a hyphen). */
+  .hbl-modern .abl-table tbody td[data-label="Deadline Date"] {
+    white-space: nowrap !important;
+  }
+  .hbl-modern .abl-table .abl-col-action {
+    position: sticky;
+    right: 0;
+    box-shadow: -6px 0 8px -6px rgba(17, 19, 24, .22);
+  }
+  .hbl-modern .abl-table tbody td.abl-col-action {
+    z-index: 1;
+  }
+  /* Header cells are already sticky to the top (z-index 2); keep the
+     Action header above them when the row scrolls underneath. */
+  .hbl-modern .abl-table thead th.abl-col-action {
+    z-index: 3;
+  }
+}
+
+/* ── Smaller laptops and zoomed browsers (769–1365px, e.g. 1280px, or a
+      1366px screen at 110% zoom ≈ 1240px): more compact cells and headers
+      so all columns still fit without sideways scrolling down to ~1200px.
+      Below that the table scrolls sideways with Action pinned. ── */
+@media (min-width: 769px) and (max-width: 1365.98px) {
+  .hbl-modern .abl-table thead th {
+    padding: 4px 2px !important;
+    font-size: .62rem !important;
+    letter-spacing: .02em !important;
+  }
+  .hbl-modern .abl-table tbody td {
+    padding: 4px 3px !important;
+    font-size: .68rem !important;
+  }
+  .hbl-modern .abl-table .badge {
+    padding: 3px 6px !important;
+    letter-spacing: .02em !important;
+  }
+}
+
+/* ── Phone: each booking becomes a stacked card of "LABEL  value" rows.
+      Labels come from the data-label attribute on every <td>. ── */
+@media (max-width: 768px) {
+  .hbl-modern .abl-table-wrap {
+    overflow-x: hidden !important;
+    background: #FAFAF8;
+    padding: 10px;
+  }
+  .hbl-modern .hbl-table.abl-table {
+    display: block;
+    min-width: 0 !important;
+    width: 100% !important;
+    table-layout: auto !important;
+    border: 0 !important;
+    background: transparent;
+  }
+  .hbl-modern .abl-table thead {
+    display: none;
+  }
+  .hbl-modern .abl-table tbody {
+    display: block;
+    width: 100%;
+  }
+  .hbl-modern .abl-table tbody tr {
+    display: block;
+    width: 100%;
+    margin-bottom: 12px;
+    border: 1px solid #ECECE8;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff !important;
+    box-shadow: 0 1px 3px rgba(17, 19, 24, .05);
+  }
+  .hbl-modern .abl-table tbody tr:last-child {
+    margin-bottom: 0;
+  }
+  .hbl-modern .abl-table tbody td {
+    display: block;
+    width: 100% !important;
+  }
+  .hbl-modern .abl-table tbody td[data-label] {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 12px !important;
+    text-align: right !important;
+    font-size: .85rem !important;
+    font-family: inherit !important;
+    border-bottom: 1px solid #F2F2EE !important;
+    overflow-wrap: anywhere;
+  }
+  .hbl-modern .abl-table tbody tr td[data-label]:last-child {
+    border-bottom: none !important;
+  }
+  .hbl-modern .abl-table tbody td[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 38%;
+    text-align: left;
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: #6B7280;
+  }
+  /* Values made of several inline pieces (hotel name + type badge, status
+     pill) stay right-aligned and may wrap under each other. */
+  .hbl-modern .abl-table tbody td[data-label] > div,
+  .hbl-modern .abl-table tbody td[data-label] > span {
+    justify-content: flex-end !important;
+    text-align: right;
+    min-width: 0;
+  }
+  /* First row of each card (SN) reads as a light header strip. */
+  .hbl-modern .abl-table tbody td[data-label="SN"] {
+    background: #F6F6F4 !important;
+    font-weight: 700;
+  }
+  /* Bigger tap target for the View icon. */
+  .hbl-modern .abl-table tbody td[data-label="Action"] svg {
+    font-size: 22px !important;
+  }
+}

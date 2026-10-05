@@ -19,6 +19,7 @@ import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import "../../styles/HotelBookingListModern.css";
+import "../../styles/AllBookingsList.css";
 
 // Unified "All Bookings" list — reads GET /api/unified-bookings/list, a
 // new, standalone, read-only endpoint that combines Hotel, 24 Hour,
@@ -532,11 +533,11 @@ const AllBookingsList = () => {
                     <p className="mt-2 text-muted">Loading bookings...</p>
                   </div>
                 ) : (
-                  <div className="thin-scrollbar" style={{ overflowX: "hidden", width: "100%" }}>
+                  <div className="thin-scrollbar abl-table-wrap" style={{ overflowX: "hidden", width: "100%" }}>
                     <Table
                       hover
                       size="sm"
-                      className="mb-0 align-middle table-bordered hbl-table"
+                      className="mb-0 align-middle table-bordered hbl-table abl-table"
                       style={{
                         // Fits the viewport without a horizontal scrollbar:
                         // fixed layout distributes width: 100% across
@@ -618,7 +619,7 @@ const AllBookingsList = () => {
                               content unchanged, still rendered by
                               NotificationCell. */}
                           <th style={thStyle("center", COLUMN_WIDTHS.status)}>Status</th>
-                          <th style={thStyle("center", COLUMN_WIDTHS.action)}>Action</th>
+                          <th className="abl-col-action" style={thStyle("center", COLUMN_WIDTHS.action)}>Action</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -663,48 +664,49 @@ const AllBookingsList = () => {
                                 onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#e7f3ff"; }}
                                 onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = i % 2 === 0 ? "#ffffff" : "#f8f9fa"; }}
                               >
-                                <td className="text-muted fw-semibold" style={{ ...baseCellStyle, textAlign: "center", color: "#6c757d", width: COLUMN_WIDTHS.sn }}>
+                                <td data-label="SN" className="text-muted fw-semibold" style={{ ...baseCellStyle, textAlign: "center", color: "#6c757d", width: COLUMN_WIDTHS.sn }}>
                                   {serialNumberBase + i + 1}
                                 </td>
                                 {role === "admin" && (
-                                  <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.agentName }} title={b.agentName || ""}>
+                                  <td data-label="Agent Name" style={{ ...baseCellStyle, width: COLUMN_WIDTHS.agentName }} title={b.agentName || ""}>
                                     <span className="fw-medium text-dark">{b.agentName || "-"}</span>
                                   </td>
                                 )}
                                 {role === "admin" && (
-                                  <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.supplier }} title={b.supplierName || ""}>
+                                  <td data-label="Supplier" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.supplier }} title={b.supplierName || ""}>
                                     <span className="fw-medium text-dark">
                                       {b.supplierName || "-"}
                                     </span>
                                   </td>
                                 )}
-                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.booker }} title={b.primaryGuestName || ""}>
+                                <td data-label="Pax Name" style={{ ...baseCellStyle, width: COLUMN_WIDTHS.booker }} title={b.primaryGuestName || ""}>
                                   <span className="d-inline-flex align-items-center" style={{ gap: "0.3rem" }}>
                                     <FaUser style={{ color: "#6c757d", fontSize: "0.78rem", flexShrink: 0 }} />
                                     <span className="fw-medium text-dark">{b.primaryGuestName || "-"}</span>
                                   </span>
                                 </td>
-                                <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.pax }}>
+                                <td data-label="Pax" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.pax }}>
                                   {b.pax != null ? (
                                     <span className="fw-medium text-dark">{b.pax}</span>
                                   ) : (
                                     <span className="text-muted">-</span>
                                   )}
                                 </td>
-                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.rsvnRef }} title={b.bookingCode || ""}>
+                                <td data-label="Rsvn Ref" style={{ ...baseCellStyle, width: COLUMN_WIDTHS.rsvnRef }} title={b.bookingCode || ""}>
                                   <span className="fw-bold text-primary">{b.bookingCode || "-"}</span>
                                 </td>
-                                <td style={{ ...baseCellStyle, textAlign: "center", fontFamily: "monospace", width: COLUMN_WIDTHS.confirmationNumber }} title={b.confirmationNumber || ""}>
+                                <td data-label="Hotel Conf" style={{ ...baseCellStyle, textAlign: "center", fontFamily: "monospace", width: COLUMN_WIDTHS.confirmationNumber }} title={b.confirmationNumber || ""}>
                                   {b.confirmationNumber ? (
                                     <span className="text-dark">{b.confirmationNumber}</span>
                                   ) : (
                                     <span className="text-muted">-</span>
                                   )}
                                 </td>
-                                <td className="text-muted" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.bookDate }} title={formatDate(b.bookingDate) || ""}>
+                                <td data-label="Book Date" className="text-muted" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.bookDate }} title={formatDate(b.bookingDate) || ""}>
                                   {formatDate(b.bookingDate) || "-"}
                                 </td>
                                 <td
+                                  data-label="Hotel"
                                   style={{
                                     ...baseCellStyle,
                                     width: COLUMN_WIDTHS.hotel,
@@ -736,23 +738,23 @@ const AllBookingsList = () => {
                                     non-Hotel rows and legacy hotel rows
                                     without agent_staff_name / created_by,
                                     so we render "-" for those. */}
-                                <td style={{ ...baseCellStyle, width: COLUMN_WIDTHS.bookedBy }} title={b.bookerName || ""}>
+                                <td data-label="Booker" style={{ ...baseCellStyle, width: COLUMN_WIDTHS.bookedBy }} title={b.bookerName || ""}>
                                   {b.bookerName ? (
                                     <span className="fw-medium text-dark">{b.bookerName}</span>
                                   ) : (
                                     <span className="text-muted">-</span>
                                   )}
                                 </td>
-                                <td className="text-muted" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.checkIn }} title={formatDate(b.checkInDate) || ""}>
+                                <td data-label="Check In" className="text-muted" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.checkIn }} title={formatDate(b.checkInDate) || ""}>
                                   {formatDate(b.checkInDate) || "-"}
                                 </td>
-                                <td className="text-muted" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.checkOut }} title={formatDate(b.checkOutDate) || ""}>
+                                <td data-label="Check Out" className="text-muted" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.checkOut }} title={formatDate(b.checkOutDate) || ""}>
                                   {formatDate(b.checkOutDate) || "-"}
                                 </td>
-                                <td className="text-muted" style={{ ...baseCellStyle, textAlign: "center", fontFamily: "monospace", width: COLUMN_WIDTHS.deadlineDate }} title={b.deadlineDate || ""}>
+                                <td data-label="Deadline Date" className="text-muted" style={{ ...baseCellStyle, textAlign: "center", fontFamily: "monospace", width: COLUMN_WIDTHS.deadlineDate }} title={b.deadlineDate || ""}>
                                   {formatDeadlineDate(b.deadlineDate)}
                                 </td>
-                                <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentMode }} title={getPaymentModeLabel(b)}>
+                                <td data-label="Payment Mode" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentMode }} title={getPaymentModeLabel(b)}>
                                   {(() => {
                                     const label = getPaymentModeLabel(b);
                                     if (label === "-") return <span className="text-muted">-</span>;
@@ -765,7 +767,7 @@ const AllBookingsList = () => {
                                     Paid, a cancellation → Paid or Un-Paid
                                     depending on whether it had been
                                     reconfirmed. See getPaymentStatusLabel. */}
-                                <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentStatus }} title={getPaymentStatusLabel(b)}>
+                                <td data-label="Payment Status" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.paymentStatus }} title={getPaymentStatusLabel(b)}>
                                   {(() => {
                                     const label = getPaymentStatusLabel(b);
                                     if (label === "-") return <span className="text-muted">-</span>;
@@ -785,10 +787,10 @@ const AllBookingsList = () => {
                                     );
                                   })()}
                                 </td>
-                                <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
+                                <td data-label="Status" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.status }}>
                                   <NotificationCell booking={b} />
                                 </td>
-                                <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.action }}>
+                                <td data-label="Action" className="abl-col-action" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.action }}>
                                   <div className="d-flex justify-content-center align-items-center">
                                     <FaEye
                                       role="button"

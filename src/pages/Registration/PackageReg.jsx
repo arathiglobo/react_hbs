@@ -53,6 +53,10 @@ const SearchableSelect = ({
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [filteredOptions, setFilteredOptions] = useState(options || []);
+  // The option list is server-searched, so it is replaced after every
+  // keystroke (and reset once a pick clears the search). Keep the picked
+  // option so its label still shows when it is no longer in `options`.
+  const [pickedOption, setPickedOption] = useState(null);
 
   useEffect(() => {
     if (!options || !Array.isArray(options)) {
@@ -77,6 +81,7 @@ const SearchableSelect = ({
       console.log("Selecting option:", option);
       // Ensure we pass a proper value
       const value = option.id !== undefined ? option.id : option;
+      setPickedOption(option);
       onChange({
         target: {
           name: name,
@@ -91,9 +96,11 @@ const SearchableSelect = ({
     }
   };
 
-  const selectedOption = options?.find(
-    (option) => String(option.id) === String(value)
-  );
+  const selectedOption =
+    options?.find((option) => String(option.id) === String(value)) ||
+    (pickedOption && String(pickedOption.id) === String(value)
+      ? pickedOption
+      : undefined);
 
   return (
     <div className="position-relative">
@@ -254,6 +261,10 @@ const PackageReg = () => {
   const [selectedOthers, setSelectedOthers] = useState([]);
   const [countries, setCountries] = useState([]);
   const [places, setPlaces] = useState([]);
+  // Cities already saved on the package being edited. `places` only holds
+  // the first 50 (or the current search), so these are fetched by id and
+  // merged in to keep the saved Arrive City / day places labelled.
+  const [pinnedPlaces, setPinnedPlaces] = useState([]);
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
   const [allDestinations, setAllDestinations] = useState([]);
   const [isLoadingDestinations, setIsLoadingDestinations] = useState(false);
@@ -268,6 +279,67 @@ const PackageReg = () => {
   const countryDebounceRef = useRef(null);
   const placeDebounceRef = useRef(null);
   const itineraryPlaceDebounceRef = useRef(null);
+
+  // ── Selected-place name cache ────────────────────────────────────────
+  // `places` is ONE list shared by Arrive City and every itinerary day's
+  // Place dropdown, and it is replaced on every search (max 50 rows). The
+  // dropdown resolves the visible label by looking the selected id up in its
+  // options, so as soon as the list reloaded without the picked city (e.g.
+  // the empty-search reload fired right after selecting "Moscow") the field
+  // went blank even though the id was still selected. Remember the name of
+  // every place we have ever loaded and always include the selected one in
+  // that dropdown's options.
+  const [placeNameCache, setPlaceNameCache] = useState({});
+  const requestedPlaceIdsRef = useRef(new Set());
+
+  useEffect(() => {
+    if (!Array.isArray(places) || places.length === 0) return;
+    setPlaceNameCache((prev) => {
+      let next = prev;
+      places.forEach((place) => {
+        const label = place?.name || place?.stateName;
+        if (place?.id == null || !label || prev[place.id] === label) return;
+        if (next === prev) next = { ...prev };
+        next[place.id] = label;
+      });
+      return next;
+    });
+  }, [places]);
+
+  // Edit / view mode: ids loaded from a saved package may not be in the
+  // current 50-row list at all — fetch their names once.
+  useEffect(() => {
+    const selectedIds = [
+      formData.placeId,
+      ...packageItinearyDTOList.map((day) => day.placeId),
+    ].filter((id) => id !== "" && id !== null && id !== undefined);
+    selectedIds.forEach((id) => {
+      const key = String(id);
+      if (placeNameCache[key] !== undefined || requestedPlaceIdsRef.current.has(key)) return;
+      requestedPlaceIdsRef.current.add(key);
+      axiosInstance
+        .get(`/api/province/${encodeURIComponent(key)}`)
+        .then((res) => {
+          const label = res?.data?.name || res?.data?.stateName;
+          if (label) setPlaceNameCache((prev) => ({ ...prev, [key]: label }));
+        })
+        .catch(() => {
+          /* name stays unresolved — dropdown just shows its placeholder */
+        });
+    });
+  }, [formData.placeId, packageItinearyDTOList, placeNameCache]);
+
+  // Options for one place dropdown: the current search list, plus the
+  // dropdown's own selected place when the list doesn't contain it.
+  const placeOptionsFor = (selectedId) => {
+    // placeOptions (defined below) = current search results + the saved
+    // cities pinned when a package is opened for edit/view.
+    const base = placeOptions;
+    if (selectedId === "" || selectedId === null || selectedId === undefined) return base;
+    if (base.some((opt) => String(opt.id) === String(selectedId))) return base;
+    const cached = placeNameCache[String(selectedId)];
+    return cached ? [{ id: selectedId, name: cached }, ...base] : base;
+  };
   const [selectedCountryOption, setSelectedCountryOption] = useState(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState(null);
@@ -456,6 +528,7 @@ const PackageReg = () => {
     ]);
     setSelectedOthers([]);
     setPlaces([]);
+    setPinnedPlaces([]);
     setPackageValidityDTOList([{ validityFrom: "", validityTo: "" }]);
     setPackageCancellationPolicyDTOList([
       { cancellationFee: "", cancellationFeeType: "PERCENT", noOfNights: "" },
@@ -822,6 +895,28 @@ const PackageReg = () => {
     }
   };
 
+  const loadPinnedPlaces = async (ids) => {
+    const unique = [...new Set(ids.filter((id) => id !== null && id !== undefined && id !== "").map(String))];
+    const results = await Promise.all(
+      unique.map((id) =>
+        axiosInstance
+          .get(`/api/province/${id}`)
+          .then((res) => ({ id: res.data.id, name: res.data.name || res.data.stateName }))
+          .catch(() => null)
+      )
+    );
+    setPinnedPlaces(results.filter(Boolean));
+  };
+
+  // Dropdown options for Arrive City and the itinerary day places: the
+  // current search results plus any saved city that is not among them.
+  const placeOptions = [
+    ...pinnedPlaces.filter((p) => !places.some((pl) => String(pl.id) === String(p.id))),
+    ...(Array.isArray(places)
+      ? places.map((place) => ({ id: place.id, name: place.name || place.stateName }))
+      : []),
+  ];
+
   const loadCurrencies = async () => {
     try {
       const response = await axiosInstance.get("/api/currency");
@@ -929,6 +1024,7 @@ const PackageReg = () => {
 
       // Clear places and place selection when country changes
       setPlaces([]);
+      setPinnedPlaces([]);
       setIsLoadingPlaces(false);
 
       setFormData((prev) => ({
@@ -1090,6 +1186,13 @@ const PackageReg = () => {
       } else {
         setSelectedCountryOption(null);
       }
+
+      loadPinnedPlaces([
+        ...(Array.isArray(data.arrivePlace) ? data.arrivePlace : [data.placeId]),
+        ...(Array.isArray(data.packageItinearyDTOList)
+          ? data.packageItinearyDTOList.map((it) => it.placeId)
+          : []),
+      ]);
 
       // Load itinerary data
       if (data.packageItinearyDTOList && Array.isArray(data.packageItinearyDTOList)) {
@@ -2026,6 +2129,8 @@ const PackageReg = () => {
                           <Form.Control
                             type="text"
                             placeholder="Enter package name"
+                            // packages.package_name is VARCHAR(255)
+                            maxLength={255}
                             value={formData.packageName}
                             isInvalid={!!validationErrors.packageName}
                             {...getFormControlProps(
@@ -2064,6 +2169,8 @@ const PackageReg = () => {
                           <Form.Control
                             type="text"
                             placeholder="Enter package code"
+                            // packages.package_code is VARCHAR(255)
+                            maxLength={255}
                             value={formData.packageCode}
                             onChange={(e) => {
                               setFormData((prev) => ({
@@ -2486,20 +2593,12 @@ const PackageReg = () => {
                                   ? "Loading places..."
                                   : "Search and select place"
                               }
-                              options={
-                                Array.isArray(places)
-                                  ? places.map((place) => ({
-                                    id: place.id,
-                                    name: place.name || place.stateName,
-                                  }))
-                                  : []
-                              }
+                              options={placeOptionsFor(formData.placeId)}
                               isInvalid={!!validationErrors.placeId}
-                              disabled={
-                                isViewMode ||
-                                !formData.countryId ||
-                                isLoadingPlaces
-                              }
+                              // Not disabled while a search is loading: that
+                              // dropped focus mid-typing. The dropdown shows
+                              // its own spinner instead.
+                              disabled={isViewMode || !formData.countryId}
                               isLoading={isLoadingPlaces}
                             />
                             {validationErrors.placeId && (
@@ -2678,15 +2777,8 @@ const PackageReg = () => {
                                     ? "Loading places..."
                                     : "Search and select destination"
                                 }
-                                options={
-                                  Array.isArray(places)
-                                    ? places.map((place) => ({
-                                      id: place.id,
-                                      name: place.name || place.stateName,
-                                    }))
-                                    : []
-                                }
-                                disabled={isViewMode || !formData.countryId || isLoadingPlaces}
+                                options={placeOptionsFor(day.placeId)}
+                                disabled={isViewMode || !formData.countryId}
                                 isLoading={isLoadingPlaces}
                               />
                             </Form.Group>
