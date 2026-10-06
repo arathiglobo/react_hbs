@@ -162,6 +162,19 @@ const deriveDeadlineDate = (selectedRates) => {
 };
 
 /**
+ * True when ANY selected room is non-refundable — flagged by the supplier,
+ * or carrying no free-cancellation date at all (exactly what RateDeadlinePill
+ * labels "Non-refundable — no free cancellation"). A non-refundable booking
+ * is never offered "Hold Room and Pay Later", for any supplier: a held room
+ * that is not reconfirmed in time gets cancelled, and on a non-refundable
+ * rate that cancellation is charged in full.
+ */
+const hasNonRefundableRate = (selectedRates) =>
+  (selectedRates || []).some(
+    (rate) => isNonRefundable(rate?.nonRefundable) || !resolveDeadlineDate(rate),
+  );
+
+/**
  * GRN (apiId 20): human-readable cancellation-policy lines for the create
  * payload / Booking Details / voucher. Bundled rate (all rooms share one
  * rate key) → one common set; non-bundled → one set per room, prefixed
@@ -226,6 +239,7 @@ const toDeadlinePayloadString = (d) => {
 const isHoldEligible = (bookingData) => {
   const apiId = bookingData?.payload?.apiId;
   if (!HOLD_CAPABLE_API_IDS.has(apiId)) return false;
+  if (hasNonRefundableRate(bookingData?.selectedRate)) return false;
   const deadline = deriveDeadlineDate(bookingData?.selectedRate || []);
   if (!deadline) return false;
   const today = new Date();
@@ -290,6 +304,10 @@ const ApiBookingPageForHotels = () => {
   const [paymentMode, setPaymentMode] = useState("CREDITLIMIT");
   const [agentAvailableBalance, setAgentAvailableBalance] = useState(null);
   const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
+  // Registered country of the booking agent (countryName from
+  // GET /api/agent/{id}). Drives the ATHARVA PAN gate — PAN is only
+  // collected for agents registered in India, never for e.g. UAE agents.
+  const [agentCountryName, setAgentCountryName] = useState("");
 
   // Insufficient-credit → online-payment flow (RATEHAWK only, per the
   // original design). The declarations for showInsufficientModal,
@@ -464,6 +482,7 @@ const ApiBookingPageForHotels = () => {
       .then((res) => {
         if (cancelled) return;
         setAgentCardPaymentEnabled(!!res?.data?.cardPaymentEnabled);
+        setAgentCountryName(res?.data?.countryName || "");
         // RateHawk (apiId=14) needs user.email / user.phone on
         // booking/finish/. Instead of asking the operator to retype them,
         // seed the payload from the chosen agent's registration record —
@@ -707,9 +726,13 @@ const ApiBookingPageForHotels = () => {
   // AtharvaHotelBookingService) so FE + BE agree on who the PAN gate applies
   // to. The nationality is stamped by the search page into
   // bookingData.payload.nationality — we don't peek at per-guest values.
+  // PAN is only asked when the booking agent is registered in India
+  // (isIndianAgent in AtharvaHotelBookingService) — agents registered in
+  // any other country (e.g. UAE) never see the PAN card.
   const requiresAtharvaPan = () => {
     if (!bookingData) return false;
     if (Number(bookingData?.payload?.apiId) !== 3) return false;
+    if (String(agentCountryName || "").trim().toUpperCase() !== "INDIA") return false;
     const n = String(bookingData?.payload?.nationality || "").trim().toUpperCase();
     return n === "IN" || n === "IND" || n === "INDIA";
   };
@@ -824,6 +847,19 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
           "Selected agent's Mobile Number is invalid — please correct it on the agent record.";
         hasErrors = true;
       }
+    }
+
+    // "Hold Room and Pay Later" is hidden for non-refundable rates, but a
+    // pick made before the Atharva late prebook refreshed the policies
+    // could still be set — reject it here so both openPolicyConsent and
+    // handleSubmit (which runs after that prebook) catch it.
+    if (
+      bookingConfirmation === "Hold & Book Later" &&
+      hasNonRefundableRate(bookingData?.selectedRate)
+    ) {
+      errors.bookingMode =
+        "Hold Room and Pay Later is not available for non-refundable rates. Please choose Book and Pay Now.";
+      hasErrors = true;
     }
 
     return { errors, hasErrors };
@@ -1010,8 +1046,9 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
       bookingConfirmation !== "Book & Voucher" &&
       bookingConfirmation !== "Hold & Book Later"
     ) {
-      errors.bookingMode =
-        "Please select a booking mode: Book and Pay Now or Hold Room and Pay Later.";
+      errors.bookingMode = hasNonRefundableRate(bookingData?.selectedRate)
+        ? "Please select Book and Pay Now to continue."
+        : "Please select a booking mode: Book and Pay Now or Hold Room and Pay Later.";
     }
 
     if (hasErrors || errors.bookingMode) {
@@ -1053,6 +1090,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
     const { errors, hasErrors } = validateForm();
     if (hasErrors) {
       setValidationErrors(errors);
+      if (errors.bookingMode) toast.error(errors.bookingMode);
       return;
     }
     setValidationErrors({});
@@ -2457,25 +2495,29 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                             }}
                             className="mb-1"
                           />
-                          <Form.Check
-                            type="radio"
-                            name="atharvaBookingMode"
-                            id="atharva-mode-hold"
-                            label="Hold Room and Pay Later"
-                            checked={
-                              bookingConfirmation === "Hold & Book Later"
-                            }
-                            onChange={() => {
-                              setBookingConfirmation("Hold & Book Later");
-                              if (validationErrors.bookingMode) {
-                                setValidationErrors((prev) => {
-                                  const next = { ...prev };
-                                  delete next.bookingMode;
-                                  return next;
-                                });
+                          {/* Never offered on a non-refundable booking —
+                              see hasNonRefundableRate. */}
+                          {!hasNonRefundableRate(bookingData?.selectedRate) && (
+                            <Form.Check
+                              type="radio"
+                              name="atharvaBookingMode"
+                              id="atharva-mode-hold"
+                              label="Hold Room and Pay Later"
+                              checked={
+                                bookingConfirmation === "Hold & Book Later"
                               }
-                            }}
-                          />
+                              onChange={() => {
+                                setBookingConfirmation("Hold & Book Later");
+                                if (validationErrors.bookingMode) {
+                                  setValidationErrors((prev) => {
+                                    const next = { ...prev };
+                                    delete next.bookingMode;
+                                    return next;
+                                  });
+                                }
+                              }}
+                            />
+                          )}
                           {validationErrors.bookingMode && (
                             <div className="text-danger small mt-2">
                               {validationErrors.bookingMode}
