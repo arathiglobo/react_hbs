@@ -429,6 +429,22 @@ top: auto;
   pointer-events: none;
 }
 
+/* Pending-approval count on each Approvals submenu entry (Hotel / Agent /
+   Supplier / DMC) — components/Sidebar.jsx SubmenuPendingBadge. Matches the
+   total pill on the Approvals label, and flips to white on hover so it stays
+   visible against the brand-coloured hover background. */
+.submenu-pending-badge {
+  background: $brand-red;
+  color: #fff;
+  font-size: 0.65rem;
+  padding: 3px 7px;
+  line-height: 1;
+}
+.submenu .submenu-link:hover .submenu-pending-badge {
+  background: #fff;
+  color: $brand-red;
+}
+
 /* Submenu children container */
 .submenu-children {
   margin-left: 0.5rem;
