@@ -855,7 +855,6 @@ export default function CabBookingDetailView() {
     try {
       setSavingNote(true);
       const createdBy =
-        localStorage.getItem("UserName") ||
         sessionStorage.getItem("UserName") ||
         "unknown";
       await axiosInstance.post(`/api/cab/${bookingId}/notes`, {

@@ -111,7 +111,7 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
   const navigate = useNavigate();
   const location = useLocation();
 
-  let activeUserRole = localStorage.getItem("currentActiveRole");
+  let activeUserRole = sessionStorage.getItem("currentActiveRole");
   console.log("currentActiveRole::", activeUserRole);
 
   // "Booking Done For" is an internal/admin-facing field — shown to ADMIN
@@ -558,11 +558,11 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
   // not appear on the report. The backend save endpoint enforces the same
   // rule from the JWT roles.
   const isAgentSession = () => {
-    const stored = (localStorage.getItem("userRole") || "")
+    const stored = (sessionStorage.getItem("userRole") || "")
       .split(",")
       .map((r) => r.trim().toLowerCase());
     const role =
-      localStorage.getItem("currentActiveRole")?.toLowerCase() ||
+      sessionStorage.getItem("currentActiveRole")?.toLowerCase() ||
       stored[0] ||
       "";
     return role === "agent";

@@ -234,10 +234,10 @@ const PackageSearch = () => {
   // and the agent-required validation is skipped. Mirrors the same rule on
   // /new-booking/hotel (HotelSearch.jsx) — currentActiveRole isn't set for
   // single-role logins, so fall back to userRole.
-  const activeRole = (localStorage.getItem("currentActiveRole") || "")
+  const activeRole = (sessionStorage.getItem("currentActiveRole") || "")
     .trim()
     .toUpperCase();
-  const storedRoles = (localStorage.getItem("userRole") || "").toUpperCase();
+  const storedRoles = (sessionStorage.getItem("userRole") || "").toUpperCase();
   const isAgentRole = activeRole
     ? activeRole === "AGENT"
     : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
@@ -246,7 +246,6 @@ const PackageSearch = () => {
   // agent themselves, so the "Booking Done By Employee" picker is hidden and
   // this name is shown instead. Empty for admin/staff.
   const loggedInAgentName =
-    localStorage.getItem("UserName") ||
     sessionStorage.getItem("UserName") ||
     "";
 
@@ -619,13 +618,13 @@ const PackageSearch = () => {
   // agent (and therefore their markup) even though the picker is hidden.
   useEffect(() => {
     if (!isAgentRole) return undefined;
-    const cached = localStorage.getItem("userId");
+    const cached = sessionStorage.getItem("userId");
     if (cached) {
       setSelfAgentId(cached);
       return undefined;
     }
     const userName =
-      localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+      sessionStorage.getItem("UserName");
     if (!userName) return undefined;
     let cancelled = false;
     axiosInstance
@@ -634,7 +633,7 @@ const PackageSearch = () => {
         if (cancelled) return;
         if (res?.data?.id != null) {
           const idv = String(res.data.id);
-          localStorage.setItem("userId", idv);
+          sessionStorage.setItem("userId", idv);
           setSelfAgentId(idv);
         }
       })

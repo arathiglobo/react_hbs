@@ -209,7 +209,7 @@ const SchefferDriverBookingList = ({
   const fetchList = async () => {
     setLoading(true);
     try {
-      const role = (localStorage.getItem("currentActiveRole") || "")
+      const role = (sessionStorage.getItem("currentActiveRole") || "")
         .toLowerCase();
       const params = {
         upcomingPage: 0,
@@ -220,7 +220,7 @@ const SchefferDriverBookingList = ({
         cancelledSize: 500,
       };
       if (role === "agent") {
-        const agentId = localStorage.getItem("agentId");
+        const agentId = sessionStorage.getItem("agentId");
         if (agentId && agentId !== "null") params.agentId = agentId;
       }
       if (selectedMonth) params.month = selectedMonth;

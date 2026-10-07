@@ -34,7 +34,7 @@ export default function StaffDashboard() {
   useEffect(() => {
     const fetchProfile = async () => {
       try {
-        const userName = localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+        const userName = sessionStorage.getItem("UserName");
         if (userName) {
           const response = await axiosInstance.get(`/api/personalProfile/${userName}`);
           console.log("Profile Data:", response.data);
@@ -62,9 +62,8 @@ export default function StaffDashboard() {
           <Sidebar />
           <main className="dash-main">
 
-            {/* Regional date+time chip — staff users typically don't have a
-                country on their profile, so this falls back to the browser
-                timezone. */}
+            {/* Regional date+time chip — United Arab Emirates time from
+                the server (/api/dashboard/regional-time). */}
             <DashboardHeader title="Staff Dashboard" />
 
             {/* ── Quick Actions ── */}

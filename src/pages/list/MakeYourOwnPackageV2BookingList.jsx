@@ -151,11 +151,11 @@ const MakeYourOwnPackageV2BookingList = () => {
     setLoading(true);
     try {
       const role = (
-        localStorage.getItem("currentActiveRole") || ""
+        sessionStorage.getItem("currentActiveRole") || ""
       ).toLowerCase();
       const params = {};
       if (role === "agent") {
-        const agentId = localStorage.getItem("agentId");
+        const agentId = sessionStorage.getItem("agentId");
         if (agentId && agentId !== "null") params.agentId = agentId;
       }
       const res = await axiosInstance.get(

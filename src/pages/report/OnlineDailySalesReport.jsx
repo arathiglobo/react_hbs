@@ -61,8 +61,8 @@ export default function OnlineDailySalesReport() {
  const updateFilter = (field, value) =>
   setTempFilters((prev) => ({ ...prev, [field]: value }));
 
- const activeRole = (localStorage.getItem("currentActiveRole") || "").trim().toUpperCase();
- const storedRoles = (localStorage.getItem("userRole") || "").toUpperCase();
+ const activeRole = (sessionStorage.getItem("currentActiveRole") || "").trim().toUpperCase();
+ const storedRoles = (sessionStorage.getItem("userRole") || "").toUpperCase();
  const isAgentRole = activeRole ? activeRole === "AGENT" : (storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN"));
 
  const fetchSales = async (filters = {}) => {

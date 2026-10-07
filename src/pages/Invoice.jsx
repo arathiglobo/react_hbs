@@ -107,10 +107,10 @@ export default function Invoice() {
   const tableAreaRef = useRef(null);
   const measuredRowsRef = useRef(0);
 
-  const activeRole = (localStorage.getItem("currentActiveRole") || "")
+  const activeRole = (sessionStorage.getItem("currentActiveRole") || "")
     .trim()
     .toUpperCase();
-  const storedRoles = (localStorage.getItem("userRole") || "").toUpperCase();
+  const storedRoles = (sessionStorage.getItem("userRole") || "").toUpperCase();
   const isAgentRole = activeRole
     ? activeRole === "AGENT"
     : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");

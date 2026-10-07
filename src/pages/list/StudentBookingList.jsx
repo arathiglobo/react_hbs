@@ -253,7 +253,7 @@ export default function StudentBookingList() {
   const [selectedYear, setSelectedYear] = useState("");
 
   const [role, setRole] = useState(
-    (localStorage.getItem("currentActiveRole") || "").toLowerCase()
+    (sessionStorage.getItem("currentActiveRole") || "").toLowerCase()
   );
 
   const [showCustomersModal, setShowCustomersModal] = useState(false);
@@ -264,10 +264,10 @@ export default function StudentBookingList() {
   };
 
   useEffect(() => {
-    const r = (localStorage.getItem("currentActiveRole") || "").toLowerCase();
+    const r = (sessionStorage.getItem("currentActiveRole") || "").toLowerCase();
     setRole(r);
     if (r === "agent") {
-      const uid = localStorage.getItem("userId");
+      const uid = sessionStorage.getItem("userId");
       if (uid && uid !== "null") setAgentId(uid);
     }
   }, []);

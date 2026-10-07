@@ -224,10 +224,10 @@ export const CabSearch = () => {
   // agent-required validation is skipped. currentActiveRole isn't set for
   // single-role logins, so fall back to userRole; admin/super-admin/staff
   // keep the picker exactly as before.
-  const activeRole = (localStorage.getItem("currentActiveRole") || "")
+  const activeRole = (sessionStorage.getItem("currentActiveRole") || "")
     .trim()
     .toUpperCase();
-  const storedRoles = (localStorage.getItem("userRole") || "").toUpperCase();
+  const storedRoles = (sessionStorage.getItem("userRole") || "").toUpperCase();
   const isAgentRole = activeRole
     ? activeRole === "AGENT"
     : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
@@ -1557,7 +1557,7 @@ export const CabSearch = () => {
           (agent && String(agent)) ||
           sessionStorage.getItem("makeYourOwnPackageAgentId") ||
           localStorage.getItem("makeYourOwnPackageAgentId") ||
-          (isAgentRole ? localStorage.getItem("userId") : "") ||
+          (isAgentRole ? sessionStorage.getItem("userId") : "") ||
           "",
         nationality,
         destination,

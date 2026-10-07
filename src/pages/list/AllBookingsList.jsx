@@ -247,7 +247,7 @@ const years = Array.from({ length: currentYear - 2014 }, (_, i) => 2020 + i);
 
 const AllBookingsList = () => {
   const navigate = useNavigate();
-  const [role] = useState(() => localStorage.getItem("currentActiveRole")?.toLowerCase() || null);
+  const [role] = useState(() => sessionStorage.getItem("currentActiveRole")?.toLowerCase() || null);
 
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(false);

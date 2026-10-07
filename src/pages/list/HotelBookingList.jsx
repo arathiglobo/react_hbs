@@ -238,10 +238,10 @@ const HotelBookingList = ({
 } = {}) => {
   const navigate = useNavigate();
   const [role, setRole] = useState(() => {
-    return localStorage.getItem("currentActiveRole")?.toLowerCase() || null;
+    return sessionStorage.getItem("currentActiveRole")?.toLowerCase() || null;
   });
   const [userId, setUserId] = useState(() => {
-    const stored = localStorage.getItem("userId");
+    const stored = sessionStorage.getItem("userId");
     return stored && stored !== "null" ? stored : null;
   });
 
@@ -369,12 +369,12 @@ const HotelBookingList = ({
 
   // Handle role sync if it's missing from localStorage initially
   useEffect(() => {
-    const storedRole = localStorage.getItem("currentActiveRole")?.toLowerCase();
+    const storedRole = sessionStorage.getItem("currentActiveRole")?.toLowerCase();
     if (storedRole && storedRole !== role) {
       setRole(storedRole);
     } else if (!storedRole) {
       // Fallback to userRole if currentActiveRole is missing
-      const userRoles = (localStorage.getItem("userRole") || "")
+      const userRoles = (sessionStorage.getItem("userRole") || "")
         .toLowerCase()
         .split(",");
       if (userRoles.includes("agent")) setRole("agent");
@@ -390,7 +390,7 @@ const HotelBookingList = ({
       if (userId && userId !== "null") return;
 
       const userName =
-        localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+        sessionStorage.getItem("UserName");
       if (!userName) {
         console.warn("No UserName found in storage, cannot fetch profile ID");
         return;
@@ -405,7 +405,7 @@ const HotelBookingList = ({
           const id = String(response.data.id);
           console.log(`Successfully retrieved ID: ${id} for user: ${userName}`);
           setUserId(id);
-          localStorage.setItem("userId", id);
+          sessionStorage.setItem("userId", id);
         } else {
           console.warn(
             "Profile fetch successful but no ID found in response",

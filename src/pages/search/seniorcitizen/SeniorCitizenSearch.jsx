@@ -215,10 +215,10 @@ export default function SeniorCitizenSearch() {
   // as-is. So for an agent login we resolve their own Agent id (via
   // /api/personalProfile/{UserName}) and seed it into `agent` below, so the
   // search payload + results call still carry a valid agentId.
-  const activeRole = (localStorage.getItem("currentActiveRole") || "")
+  const activeRole = (sessionStorage.getItem("currentActiveRole") || "")
     .trim()
     .toUpperCase();
-  const storedRoles = (localStorage.getItem("userRole") || "").toUpperCase();
+  const storedRoles = (sessionStorage.getItem("userRole") || "").toUpperCase();
   const isAgentRole = activeRole
     ? activeRole === "AGENT"
     : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
@@ -227,7 +227,6 @@ export default function SeniorCitizenSearch() {
   // agent themselves, so the "Booking Done By Employee" picker is hidden and
   // this name is shown instead. Empty for admin/staff.
   const loggedInAgentName =
-    localStorage.getItem("UserName") ||
     sessionStorage.getItem("UserName") ||
     "";
 
@@ -478,13 +477,13 @@ export default function SeniorCitizenSearch() {
   // (returns the Agent entity id for an AGENT account).
   useEffect(() => {
     if (!isAgentRole) return;
-    const cached = localStorage.getItem("userId");
+    const cached = sessionStorage.getItem("userId");
     if (cached) {
       setAgent(cached);
       return;
     }
     const userName =
-      localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+      sessionStorage.getItem("UserName");
     if (!userName) return;
     let cancelled = false;
     axiosInstance
@@ -493,7 +492,7 @@ export default function SeniorCitizenSearch() {
         if (cancelled) return;
         if (res?.data?.id != null) {
           const id = String(res.data.id);
-          localStorage.setItem("userId", id);
+          sessionStorage.setItem("userId", id);
           setAgent(id);
         }
       })

@@ -259,7 +259,7 @@ export default function DayStayBookingDetailView() {
   // Role gate for admin-only actions — currently gates the "Send Email"
   // affordance inside the PDF preview modal. Matches HotelBookingPage's
   // convention.
-  const activeUserRole = localStorage.getItem("currentActiveRole");
+  const activeUserRole = sessionStorage.getItem("currentActiveRole");
   const isAdmin = String(activeUserRole || "").toUpperCase() === "ADMIN";
   const isSuperAdmin =
     String(activeUserRole || "").toUpperCase() === "SUPER_ADMIN";
@@ -276,11 +276,11 @@ export default function DayStayBookingDetailView() {
   // currentActiveRole isn't set for single-role logins, so fall back to
   // userRole (same convention as HotelSearch.jsx). Visibility only — no
   // API/flow/permission change.
-  const activeRole = String(localStorage.getItem("currentActiveRole") || "")
+  const activeRole = String(sessionStorage.getItem("currentActiveRole") || "")
     .trim()
     .toUpperCase();
   const storedRoles = String(
-    localStorage.getItem("userRole") || "",
+    sessionStorage.getItem("userRole") || "",
   ).toUpperCase();
   const isAgentRole = activeRole
     ? activeRole === "AGENT"
@@ -989,7 +989,6 @@ export default function DayStayBookingDetailView() {
       // (body field is `note`, not `noteText`). Nothing about how notes are
       // stored is changed.
       const createdBy =
-        localStorage.getItem("UserName") ||
         sessionStorage.getItem("UserName") ||
         "unknown";
       const res = await axiosInstance.post(

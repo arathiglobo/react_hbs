@@ -54,6 +54,7 @@ import {
 import axiosInstance from "./AxiosInstance";
 import { toast } from "react-hot-toast";
 import { ContactPanel } from "./FooterLegalLinks";
+import { getUserRole, getCurrentActiveRole, getUserName, clearAuthSession } from "../utils/authSession";
 
 export default function TopBar() {
   const location = useLocation();
@@ -71,12 +72,12 @@ export default function TopBar() {
     supplier: "/supplierDashboard",
     dmc: "/dmcDashboard",
   };
-  const storedRoles = (localStorage.getItem("userRole") || "")
+  const storedRoles = getUserRole()
     .split(",")
     .map((r) => r.trim().toLowerCase())
     .filter(Boolean);
   const currentRole =
-    localStorage.getItem("currentActiveRole")?.trim().toLowerCase() ||
+    getCurrentActiveRole().trim().toLowerCase() ||
     storedRoles[0] ||
     "";
   const backToDashboardPath = DASHBOARD_BY_ROLE[currentRole];
@@ -459,19 +460,9 @@ export default function TopBar() {
     } catch {
       // Best-effort: still finish the client-side logout if the call fails.
     }
-    // Remove specific items
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("userRole");
-    localStorage.removeItem("UserName");
-    localStorage.removeItem("currentActiveRole");
-    // End the ad-view session so the next login counts ad views fresh.
-    localStorage.removeItem("adSessionId");
-    // Supplier / DMC approved-feature snapshot (hooks/usePartnerAccess.js).
-    localStorage.removeItem("partnerAccess");
-    // RegionalClock country cache (components/RegionalClock.jsx). Without
-    // this the next login inherits the previous user's timezone until the
-    // browser storage is cleared by hand.
-    localStorage.removeItem("regionalClockProfile");
+    // Clears this tab's session only — see utils/authSession.js. Other open
+    // tabs keep whatever user they were independently logged in as.
+    clearAuthSession();
 
     // Optionally redirect to login page
     window.location.href = "/";
@@ -1188,23 +1179,15 @@ const ProfileToggle = React.forwardRef(({ onClick }, ref) => {
   const [userName, setUserName] = React.useState("");
 
   React.useEffect(() => {
-    const updateUserName = () => {
-      const name =
-        localStorage.getItem("UserName") ||
-        sessionStorage.getItem("UserName") ||
-        "";
-      setUserName(name);
-    };
-
-    // Initial load
-    updateUserName();
-
-    // Listen for storage changes (in case username is updated in another tab)
-    window.addEventListener("storage", updateUserName);
-
-    return () => {
-      window.removeEventListener("storage", updateUserName);
-    };
+    // This tab's own username only (sessionStorage — see utils/authSession.js).
+    // Previously this also listened for the native "storage" event to react
+    // to ANOTHER tab's localStorage write, which was the exact cross-tab
+    // leak this fixes: logging in on tab 2 would flip tab 1's profile name
+    // to tab 2's user the instant tab 2's login resolved. sessionStorage
+    // writes never fire "storage" in other tabs, so there is nothing to
+    // listen for any more — each tab's name only ever changes from its own
+    // login/logout, which already re-renders this component via navigation.
+    setUserName(getUserName());
   }, []);
 
   return (

@@ -25,8 +25,8 @@ const emptyBank = {
 };
 
 export default function AgentIncentiveDashboard() {
-  const role = (localStorage.getItem("currentActiveRole") || "").toLowerCase();
-  const storedId = localStorage.getItem("userId");
+  const role = (sessionStorage.getItem("currentActiveRole") || "").toLowerCase();
+  const storedId = sessionStorage.getItem("userId");
   const defaultAgentId = storedId && /^\d+$/.test(storedId) ? storedId : "";
 
   const [agentId, setAgentId] = useState(defaultAgentId);
@@ -124,7 +124,7 @@ export default function AgentIncentiveDashboard() {
       if (role === "admin") return;
 
       const userName =
-        localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+        sessionStorage.getItem("UserName");
       if (!userName) return;
 
       setResolvingId(true);
@@ -132,7 +132,7 @@ export default function AgentIncentiveDashboard() {
         const res = await axiosInstance.get(`/api/personalProfile/${userName}`);
         if (res.data && res.data.id) {
           const id = String(res.data.id);
-          localStorage.setItem("userId", id);
+          sessionStorage.setItem("userId", id);
           setAgentId(id);
           fetchAll(id);
           fetchAgentProfile(id);

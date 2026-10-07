@@ -96,7 +96,7 @@ async function reverseGeocode(lat, lon) {
 export default function SeniorCitizenBookingPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const activeUserRole = localStorage.getItem("currentActiveRole");
+  const activeUserRole = sessionStorage.getItem("currentActiveRole");
 
   const [bookingData, setBookingData] = useState(null);
   const [agentAvailableBalance, setAgentAvailableBalance] = useState(null);

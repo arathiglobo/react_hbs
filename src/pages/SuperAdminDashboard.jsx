@@ -84,7 +84,7 @@ export default function SuperAdminDashboard() {
   useEffect(() => {
     const init = async () => {
       try {
-        const userName = localStorage.getItem('UserName') ?? sessionStorage.getItem('UserName');
+        const userName = sessionStorage.getItem('UserName');
         if (userName) axiosInstance.get(`/api/personalProfile/${userName}`).catch(() => {});
         const res = await axiosInstance.get('/api/dashboard/stats');
         if (res.data && typeof res.data === 'object') setStat((p) => ({ ...p, ...res.data }));

@@ -1139,7 +1139,7 @@ export default function PackageBookingDetailView() {
     try {
       setSavingNote(true);
       const createdBy =
-        localStorage.getItem("UserName") ||
+        sessionStorage.getItem("UserName") ||
         localStorage.getItem("username") ||
         sessionStorage.getItem("UserName") ||
         "unknown";

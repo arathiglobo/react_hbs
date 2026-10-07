@@ -502,10 +502,10 @@ export default function HotelSearch({
   // Agent picker is hidden and the agent-required validation is skipped.
   // currentActiveRole isn't set for single-role logins, so fall back to
   // userRole; admin/super-admin/staff keep the picker exactly as before.
-  const activeRole = (localStorage.getItem("currentActiveRole") || "")
+  const activeRole = (sessionStorage.getItem("currentActiveRole") || "")
     .trim()
     .toUpperCase();
-  const storedRoles = (localStorage.getItem("userRole") || "").toUpperCase();
+  const storedRoles = (sessionStorage.getItem("userRole") || "").toUpperCase();
   const isAgentRole = activeRole
     ? activeRole === "AGENT"
     : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
@@ -515,7 +515,6 @@ export default function HotelSearch({
   // this name is shown (and sent) instead. Same source the payload's
   // agentName uses for agent logins. Empty for admin/staff.
   const loggedInAgentName =
-    localStorage.getItem("UserName") ||
     sessionStorage.getItem("UserName") ||
     "";
 
@@ -1617,10 +1616,10 @@ export default function HotelSearch({
   // /api/personalProfile/{UserName}) so we can look up their currency below.
   useEffect(() => {
     if (!isAgentRole) return;
-    const cached = localStorage.getItem("userId");
+    const cached = sessionStorage.getItem("userId");
     if (cached) { setSelfAgentId(cached); return; }
     const userName =
-      localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+      sessionStorage.getItem("UserName");
     if (!userName) return;
     let cancelled = false;
     axiosInstance
@@ -1629,7 +1628,7 @@ export default function HotelSearch({
         if (cancelled) return;
         if (res?.data?.id != null) {
           const idv = String(res.data.id);
-          localStorage.setItem("userId", idv);
+          sessionStorage.setItem("userId", idv);
           setSelfAgentId(idv);
         }
       })
@@ -4166,8 +4165,7 @@ export default function HotelSearch({
                                             (a) => String(a?.id) === pickedAgentId,
                                           );
                                           const agentName = isAgentRole
-                                            ? localStorage.getItem("UserName") ||
-                                              sessionStorage.getItem("UserName") ||
+                                            ? sessionStorage.getItem("UserName") ||
                                               ""
                                             : pickedAgent
                                               ? pickedAgent.companyName ||

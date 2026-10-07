@@ -129,10 +129,10 @@ const OfflineBookingList = () => {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
   const [role, setRole] = useState(() => {
-    return localStorage.getItem("currentActiveRole")?.toLowerCase() || null;
+    return sessionStorage.getItem("currentActiveRole")?.toLowerCase() || null;
   });
   const [userId, setUserId] = useState(() => {
-    const stored = localStorage.getItem("userId");
+    const stored = sessionStorage.getItem("userId");
     return stored && stored !== "null" ? stored : null;
   });
   const [loading, setLoading] = useState(false);
@@ -173,7 +173,7 @@ const OfflineBookingList = () => {
     if (storedRole && storedRole !== role) {
       setRole(storedRole);
     } else if (!storedRole) {
-      const userRoles = (localStorage.getItem("userRole") || "")
+      const userRoles = (sessionStorage.getItem("userRole") || "")
         .toLowerCase()
         .split(",");
       if (userRoles.includes("agent")) setRole("agent");
@@ -187,7 +187,6 @@ const OfflineBookingList = () => {
     const fetchUserId = async () => {
       if (userId && userId !== "null") return;
       const userName =
-        localStorage.getItem("UserName") ||
         sessionStorage.getItem("UserName");
       if (!userName) return;
       try {
@@ -197,7 +196,7 @@ const OfflineBookingList = () => {
         if (response.data && response.data.id) {
           const id = String(response.data.id);
           setUserId(id);
-          localStorage.setItem("userId", id);
+          sessionStorage.setItem("userId", id);
         }
       } catch (error) {
         console.error("Error fetching user profile for ID:", error);

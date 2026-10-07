@@ -1,110 +1,29 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import axiosInstance from "./AxiosInstance";
 
 /**
  * RegionalClock
  * ─────────────
- * Live date+time chip pinned to the top of every dashboard. The clock
- * is rendered in the timezone of the country the logged-in user is
- * registered in (Agent / Hotel → server-side `countryCode` on
- * /api/personalProfile/{userName}; Admin / Staff / others → browser
- * timezone fallback). Ticks once per second.
+ * Live date+time chip pinned to the top of every dashboard. Always shows
+ * United Arab Emirates time, taken from the server via
+ * GET /api/dashboard/regional-time — not from the user's browser clock or
+ * timezone, so every user sees the same, correct UAE time. Ticks once per
+ * second.
  *
  *   <RegionalClock />                    // default chip
  *   <RegionalClock variant="compact" />  // small inline pill
  *
- * Resolution order:
- *   1. countryCode override passed as prop (rare — overrides everything).
- *   2. Cached profile in localStorage under "regionalClockProfile"
- *      (so subsequent dashboards don't re-fetch the profile).
- *   3. GET /api/personalProfile/{userName} — `countryCode` field.
- *   4. Browser-local timezone (Intl.DateTimeFormat().resolvedOptions()).
+ * The server time is fetched once per mount. The difference between it and
+ * the browser clock is kept as an offset, so the per-second tick stays on
+ * server time even when the user's PC clock is wrong.
  */
 
-// ISO-3166 alpha-2 → IANA timezone. We pick a single representative
-// zone per country (the one most travel-booking ops use). Multi-zone
-// countries (US, RU, etc.) get a primary; if your business needs
-// finer per-state granularity, extend this map or expose timezone
-// directly on the profile.
-const COUNTRY_TZ = {
-  AE: "Asia/Dubai",
-  SA: "Asia/Riyadh",
-  QA: "Asia/Qatar",
-  KW: "Asia/Kuwait",
-  BH: "Asia/Bahrain",
-  OM: "Asia/Muscat",
-  IN: "Asia/Kolkata",
-  PK: "Asia/Karachi",
-  BD: "Asia/Dhaka",
-  LK: "Asia/Colombo",
-  NP: "Asia/Kathmandu",
-  US: "America/New_York",
-  CA: "America/Toronto",
-  GB: "Europe/London",
-  IE: "Europe/Dublin",
-  DE: "Europe/Berlin",
-  FR: "Europe/Paris",
-  IT: "Europe/Rome",
-  ES: "Europe/Madrid",
-  PT: "Europe/Lisbon",
-  NL: "Europe/Amsterdam",
-  BE: "Europe/Brussels",
-  CH: "Europe/Zurich",
-  AT: "Europe/Vienna",
-  RU: "Europe/Moscow",
-  TR: "Europe/Istanbul",
-  EG: "Africa/Cairo",
-  ZA: "Africa/Johannesburg",
-  NG: "Africa/Lagos",
-  KE: "Africa/Nairobi",
-  CN: "Asia/Shanghai",
-  HK: "Asia/Hong_Kong",
-  TW: "Asia/Taipei",
-  JP: "Asia/Tokyo",
-  KR: "Asia/Seoul",
-  SG: "Asia/Singapore",
-  MY: "Asia/Kuala_Lumpur",
-  TH: "Asia/Bangkok",
-  VN: "Asia/Ho_Chi_Minh",
-  ID: "Asia/Jakarta",
-  PH: "Asia/Manila",
-  AU: "Australia/Sydney",
-  NZ: "Pacific/Auckland",
-  BR: "America/Sao_Paulo",
-  AR: "America/Argentina/Buenos_Aires",
-  MX: "America/Mexico_City",
-};
-
-const BROWSER_TZ = (() => {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  } catch {
-    return "UTC";
-  }
-})();
-
-const PROFILE_CACHE_KEY = "regionalClockProfile";
-
-const readCachedProfile = () => {
-  try {
-    const raw = localStorage.getItem(PROFILE_CACHE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-};
-const writeCachedProfile = (data) => {
-  try {
-    localStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify(data));
-  } catch {
-    /* localStorage disabled / quota — silently ignore */
-  }
-};
-
-const resolveTimezone = (countryCode) => {
-  if (!countryCode) return BROWSER_TZ;
-  const code = String(countryCode).trim().toUpperCase();
-  return COUNTRY_TZ[code] || BROWSER_TZ;
+// Used only if the regional-time call fails, so the chip never stays blank —
+// the time then comes from the browser clock, still shown in UAE time.
+const FALLBACK_REGION = {
+  timezone: "Asia/Dubai",
+  countryName: "United Arab Emirates",
+  offsetMs: 0,
 };
 
 const formatDateTime = (now, timezone) => {
@@ -129,59 +48,52 @@ const formatDateTime = (now, timezone) => {
   }
 };
 
-const RegionalClock = ({ variant = "default", countryCode: override } = {}) => {
-  const [profile, setProfile] = useState(() => readCachedProfile());
-  const [now, setNow] = useState(() => new Date());
-  // One profile fetch per mount. The effect below depends on `profile`, and
-  // a profile that comes back WITHOUT a countryCode (admins, agents with no
-  // country, partner accounts…) still calls setProfile — without this guard
-  // that re-ran the effect and re-fetched in a tight loop.
-  const fetchedRef = useRef(false);
+const RegionalClock = ({ variant = "default" } = {}) => {
+  // { timezone, countryName, offsetMs } — null until the server answers.
+  const [region, setRegion] = useState(null);
+  const [now, setNow] = useState(() => Date.now());
 
-  // 1) Resolve the user's profile (just for countryCode + countryName).
-  //    Skip the round-trip if we've cached it from an earlier dashboard.
+  // 1) Fetch the UAE time from the server once per mount.
   useEffect(() => {
-    if (override) return; // explicit override wins
-    if (profile && profile.countryCode) return; // cached — done
-    if (fetchedRef.current) return; // already asked once — fall back to browser TZ
-    fetchedRef.current = true;
     let alive = true;
-    const userName =
-      localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
-    if (!userName) return;
+    const sentAt = Date.now();
     axiosInstance
-      .get(`/api/personalProfile/${userName}`)
+      .get("/api/dashboard/regional-time")
       .then((res) => {
         if (!alive) return;
+        const receivedAt = Date.now();
         const data = res?.data || {};
-        const next = {
-          countryCode: data.countryCode || "",
-          countryName: data.countryName || "",
-        };
-        setProfile(next);
-        writeCachedProfile(next);
+        const serverMs = Number(data.epochMillis);
+        // The server read its clock somewhere during the round trip; assume
+        // the midpoint so network latency doesn't skew the offset.
+        const offsetMs = Number.isFinite(serverMs)
+          ? serverMs - Math.round((sentAt + receivedAt) / 2)
+          : 0;
+        setRegion({
+          timezone: data.timezone || FALLBACK_REGION.timezone,
+          countryName: data.countryName || FALLBACK_REGION.countryName,
+          offsetMs,
+        });
       })
       .catch(() => {
-        // 404 / network — just fall back to browser TZ.
+        if (alive) setRegion(FALLBACK_REGION);
       });
     return () => {
       alive = false;
     };
-  }, [override, profile]);
+  }, []);
 
   // 2) Tick every second.
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
+    const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
 
-  const effectiveCode = override || profile?.countryCode || "";
-  const timezone = resolveTimezone(effectiveCode);
-  const { date, time } = formatDateTime(now, timezone);
-  const regionLabel =
-    profile?.countryName ||
-    effectiveCode ||
-    timezone.replace("_", " ").split("/").pop();
+  const timezone = region?.timezone || FALLBACK_REGION.timezone;
+  const { date, time } = region
+    ? formatDateTime(new Date(now + region.offsetMs), timezone)
+    : { date: "", time: "--:--:--" };
+  const regionLabel = region?.countryName || "";
 
   if (variant === "compact") {
     return (

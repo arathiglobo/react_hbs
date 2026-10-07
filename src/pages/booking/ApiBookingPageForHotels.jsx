@@ -266,7 +266,7 @@ const ApiBookingPageForHotels = () => {
   // from history so reloads don't re-trigger the create.
   const location = useLocation();
 
-  const activeUserRole = localStorage.getItem("currentActiveRole");
+  const activeUserRole = sessionStorage.getItem("currentActiveRole");
 
   const [bookingData, setBookingData] = useState(null);
   const [rooms, setRooms] = useState([]);

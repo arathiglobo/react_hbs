@@ -31,6 +31,7 @@ import axiosInstance from "./AxiosInstance";
 import { isAgentComingSoon, COMING_SOON_TITLE } from "../config/agentComingSoon";
 import { isPartnerRole } from "../config/partnerFeatures";
 import PartnerSidebar from "./PartnerSidebar";
+import { getUserRole, getCurrentActiveRole, setCurrentActiveRole, getUserName } from "../utils/authSession";
 
 
 let labelForDashboard = " ";
@@ -147,7 +148,7 @@ export default function Sidebar() {
     });
   };
 
-  const storedRoles = (localStorage.getItem("userRole") || "")
+  const storedRoles = getUserRole()
     .split(",")
     .map((role) => role.trim().toLowerCase());
 
@@ -177,7 +178,7 @@ export default function Sidebar() {
 
   const currentRole =
     pathRole ||
-    localStorage.getItem("currentActiveRole")?.toLowerCase() ||
+    getCurrentActiveRole().toLowerCase() ||
     storedRoles[0] ||
     "";
 
@@ -187,8 +188,7 @@ export default function Sidebar() {
   // not see the agent "Registration" menu — they can't create their own
   // sub-users / sub-agents. Only affects agent-role logins; every other role
   // is unchanged.
-  const loginUserName =
-    localStorage.getItem("UserName") || sessionStorage.getItem("UserName") || "";
+  const loginUserName = getUserName();
   const isSubAccountAgent =
     currentRole === "agent" && loginUserName.includes(".");
 
@@ -201,18 +201,15 @@ export default function Sidebar() {
   // Re-sync the stored active role with the dashboard context so the
   // role-guarded routes (PrivateRoute roles=[...]) agree with the menu.
   useEffect(() => {
-    if (
-      pathRole &&
-      localStorage.getItem("currentActiveRole")?.toLowerCase() !== pathRole
-    ) {
-      localStorage.setItem("currentActiveRole", pathRole);
+    if (pathRole && getCurrentActiveRole().toLowerCase() !== pathRole) {
+      setCurrentActiveRole(pathRole);
     }
   }, [pathRole]);
 
   useEffect(() => {
     const fetchHotelId = async () => {
       try {
-        const userName = localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+        const userName = getUserName();
         if (userName && currentRole === "extranet") {
           const response = await axiosInstance.get(`/api/personalProfile/${userName}`);
           if (response.data && response.data.id) {

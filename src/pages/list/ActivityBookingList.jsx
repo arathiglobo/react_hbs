@@ -76,10 +76,10 @@ const fmtDateLong = (iso) => {
 const ActivityBookingList = () => {
   const navigate = useNavigate();
   const [role, setRole] = useState(() => {
-    return localStorage.getItem("currentActiveRole")?.toLowerCase() || null;
+    return sessionStorage.getItem("currentActiveRole")?.toLowerCase() || null;
   });
   const [userId, setUserId] = useState(() => {
-    const stored = localStorage.getItem("userId");
+    const stored = sessionStorage.getItem("userId");
     return (stored && stored !== "null") ? stored : null;
   });
   const [loading, setLoading] = useState(false);
@@ -122,12 +122,12 @@ const ActivityBookingList = () => {
 
   // Handle role sync if it's missing from localStorage initially
   useEffect(() => {
-    const storedRole = localStorage.getItem("currentActiveRole")?.toLowerCase();
+    const storedRole = sessionStorage.getItem("currentActiveRole")?.toLowerCase();
     if (storedRole && storedRole !== role) {
       setRole(storedRole);
     } else if (!storedRole) {
       // Fallback to userRole if currentActiveRole is missing
-      const userRoles = (localStorage.getItem("userRole") || "").toLowerCase().split(",");
+      const userRoles = (sessionStorage.getItem("userRole") || "").toLowerCase().split(",");
       if (userRoles.includes("agent")) setRole("agent");
       else if (userRoles.includes("staff")) setRole("staff");
       else if (userRoles.includes("admin")) setRole("admin");
@@ -140,7 +140,7 @@ const ActivityBookingList = () => {
       // Don't fetch if we already have a valid userId
       if (userId && userId !== "null") return;
 
-      const userName = localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+      const userName = sessionStorage.getItem("UserName");
       if (!userName) return;
 
       try {
@@ -148,7 +148,7 @@ const ActivityBookingList = () => {
         if (response.data && response.data.id) {
           const id = String(response.data.id);
           setUserId(id);
-          localStorage.setItem("userId", id);
+          sessionStorage.setItem("userId", id);
         }
       } catch (error) {
         console.error("Error fetching user profile for ID:", error);

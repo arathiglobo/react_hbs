@@ -32,7 +32,6 @@ const ExtranetHotelDashboard = () => {
     const fetchProfile = async () => {
       try {
         const userName =
-          localStorage.getItem("UserName") ||
           sessionStorage.getItem("UserName");
 
         if (userName) {

@@ -214,10 +214,10 @@ export default function LastMinuteBookingPage() {
   // agent-required validation is skipped. currentActiveRole isn't set for
   // single-role logins, so fall back to userRole; admin/super-admin/staff
   // keep the picker exactly as before.
-  const activeRole = (localStorage.getItem("currentActiveRole") || "")
+  const activeRole = (sessionStorage.getItem("currentActiveRole") || "")
     .trim()
     .toUpperCase();
-  const storedRoles = (localStorage.getItem("userRole") || "").toUpperCase();
+  const storedRoles = (sessionStorage.getItem("userRole") || "").toUpperCase();
   const isAgentRole = activeRole
     ? activeRole === "AGENT"
     : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
@@ -226,7 +226,6 @@ export default function LastMinuteBookingPage() {
   // agent themselves, so the "Booking Done By Employee" picker is hidden and
   // this name is shown instead. Empty for admin/staff.
   const loggedInAgentName =
-    localStorage.getItem("UserName") ||
     sessionStorage.getItem("UserName") ||
     "";
 
@@ -445,10 +444,10 @@ export default function LastMinuteBookingPage() {
 
   useEffect(() => {
     if (!isAgentRole) return;
-    const cached = localStorage.getItem("userId");
+    const cached = sessionStorage.getItem("userId");
     if (cached) { setSelfAgentId(cached); return; }
     const userName =
-      localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+      sessionStorage.getItem("UserName");
     if (!userName) return;
     let cancelled = false;
     axiosInstance
@@ -456,7 +455,7 @@ export default function LastMinuteBookingPage() {
       .then((res) => {
         if (!cancelled && res?.data?.id != null) {
           const idv = String(res.data.id);
-          localStorage.setItem("userId", idv);
+          sessionStorage.setItem("userId", idv);
           setSelfAgentId(idv);
         }
       })

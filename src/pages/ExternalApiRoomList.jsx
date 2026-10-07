@@ -289,7 +289,7 @@ const ExternalApiRoomList = () => {
     GOGLOBAL: 21,
   };
 
-  const activeUserRole = localStorage.getItem("currentActiveRole");
+  const activeUserRole = sessionStorage.getItem("currentActiveRole");
 
   // ─────────────────────────── helpers ────────────────────────────────
 

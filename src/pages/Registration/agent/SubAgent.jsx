@@ -253,7 +253,7 @@ export default function SubAgent() {
     mainAgentId: ""
   };
 
-  const mainAgentName = localStorage.getItem("UserName") || "";
+  const mainAgentName = sessionStorage.getItem("UserName") || "";
 
   // A sub agent always belongs to a main agent. An AGENT login owns the sub
   // agents it creates, so the backend resolves the parent from the JWT and the
@@ -261,12 +261,12 @@ export default function SubAgent() {
   // own (an admin's user_accounts.user_id is null), so it must pick the parent
   // explicitly — without it the backend cannot resolve an owner at all.
   // Role resolution mirrors Sidebar.jsx.
-  const storedRoles = (localStorage.getItem("userRole") || "")
+  const storedRoles = (sessionStorage.getItem("userRole") || "")
     .split(",")
     .map((r) => r.trim().toLowerCase())
     .filter(Boolean);
   const activeRole =
-    (localStorage.getItem("currentActiveRole") || "").toLowerCase() ||
+    (sessionStorage.getItem("currentActiveRole") || "").toLowerCase() ||
     storedRoles[0] ||
     "";
   const isAgentLogin = activeRole === "agent";
@@ -383,7 +383,7 @@ export default function SubAgent() {
   // empty rather than blocking registration (currency is optional on submit).
   const resolveMainAgentCurrency = async () => {
     try {
-      const uname = localStorage.getItem("UserName");
+      const uname = sessionStorage.getItem("UserName");
       if (!uname) return;
       const prof = await axiosInstance.get(`/api/personalProfile/${uname}`);
       const agentId = prof?.data?.id;

@@ -166,7 +166,7 @@ export default function AdvertisementCarousel({ cityId, cityName }) {
   // page in the same login does not increase the count, but a fresh login does.
   const recordView = (ad) => {
     if (!ad || viewedRef.current.has(ad.advertisementId)) return;
-    const sessionId = localStorage.getItem("adSessionId");
+    const sessionId = sessionStorage.getItem("adSessionId");
     if (!sessionId) return; // not logged in via the normal flow — skip
     viewedRef.current.add(ad.advertisementId);
     axiosInstance

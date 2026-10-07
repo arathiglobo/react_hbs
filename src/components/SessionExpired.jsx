@@ -1,22 +1,11 @@
 import Swal from "sweetalert2";
+import { clearAuthSession } from "../utils/authSession";
 
-const AUTH_KEYS = [
-  "authToken",
-  "userRole",
-  "UserName",
-  "currentActiveRole",
-  "makeYourOwnPackageAgentId",
-  // Supplier / DMC approved-feature snapshot (hooks/usePartnerAccess.js).
-  "partnerAccess",
-  // RegionalClock country cache (components/RegionalClock.jsx). Cleared so
-  // the next login re-fetches its own countryCode instead of inheriting
-  // the previous user's timezone.
-  "regionalClockProfile",
-];
-
-export const clearAuthStorage = () => {
-  AUTH_KEYS.forEach((key) => localStorage.removeItem(key));
-};
+// Thin re-export so every existing call site (TopBar, Profile, Logout,
+// the axios interceptor) keeps working unchanged. The actual key list and
+// storage mechanism (this tab's sessionStorage — see utils/authSession.js)
+// now live in one place instead of being hand-copied in four files.
+export const clearAuthStorage = clearAuthSession;
 
 export const showSessionExpiredAlert = () => {
   Swal.fire({

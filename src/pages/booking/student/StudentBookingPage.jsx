@@ -119,7 +119,7 @@ const formatDateTime = (dateStr) => {
 export default function StudentBookingPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const activeUserRole = localStorage.getItem("currentActiveRole");
+  const activeUserRole = sessionStorage.getItem("currentActiveRole");
 
   const [bookingData, setBookingData] = useState(null);
   const [agentAvailableBalance, setAgentAvailableBalance] = useState(null);

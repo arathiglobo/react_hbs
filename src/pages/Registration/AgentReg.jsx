@@ -1663,7 +1663,7 @@ const AgentReg = ({ embedded = false, initialEditId = null, onClose = null } = {
       try {
         setIsLoading(true);
 
-        let activeUserRole = localStorage.getItem("currentActiveRole");
+        let activeUserRole = sessionStorage.getItem("currentActiveRole");
        // console.log("currentActiveRole::", activeUserRole);
         console.log("roleslist::", rolesList);
 

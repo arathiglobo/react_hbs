@@ -255,7 +255,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
   // ──────────────────────────────────────────────────────────────────────
   const [selectedRooms, setSelectedRooms] = useState([]);
 
-  let activeUserRole = localStorage.getItem("currentActiveRole");
+  let activeUserRole = sessionStorage.getItem("currentActiveRole");
   // console.log("currentActiveRole::", activeUserRole);
 
   // Trigger API call on page load with state passed from HotelSearch

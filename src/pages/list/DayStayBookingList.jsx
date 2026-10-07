@@ -228,14 +228,14 @@ export default function DayStayBookingList() {
   // Reads currentActiveRole first (multi-role logins), then falls back to
   // userRole (single-role logins).
   const [role, setRole] = useState(() => {
-    return localStorage.getItem("currentActiveRole")?.toLowerCase() || null;
+    return sessionStorage.getItem("currentActiveRole")?.toLowerCase() || null;
   });
   useEffect(() => {
-    const storedRole = localStorage.getItem("currentActiveRole")?.toLowerCase();
+    const storedRole = sessionStorage.getItem("currentActiveRole")?.toLowerCase();
     if (storedRole && storedRole !== role) {
       setRole(storedRole);
     } else if (!storedRole) {
-      const userRoles = (localStorage.getItem("userRole") || "")
+      const userRoles = (sessionStorage.getItem("userRole") || "")
         .toLowerCase()
         .split(",");
       if (userRoles.includes("agent")) setRole("agent");

@@ -11,6 +11,7 @@ import GloboFooterMarks from "../components/GloboFooterMarks";
 import axiosInstance from "../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import { downloadLoginPanelPdf } from "../utils/loginPanelPdf";
+import { setAuthSession, setUserId } from "../utils/authSession";
 
 // Hotel-brand logos shown in the right-hand rail. These are the normalised
 // copies in public/images/marqueeImages/mono/ — same artwork as the originals
@@ -968,11 +969,13 @@ const Login = () => {
       );
     }
 
-    localStorage.setItem("authToken", token);
-    localStorage.setItem("userRole", roles);
-    localStorage.setItem("UserName", loginedUserName);
+    // Writes to THIS tab's sessionStorage only (utils/authSession.js) — a
+    // second tab logging in concurrently as a different user must never be
+    // able to overwrite this tab's identity, which is exactly what sharing
+    // localStorage across tabs used to do.
+    setAuthSession({ token, roles, username: loginedUserName });
 
-    // Prime localStorage.userId with the caller's own entity id (for
+    // Prime userId with the caller's own entity id (for
     // agents: their agent id) BEFORE any downstream page mounts. Several
     // pages (HotelSearch, LongStaySearch, etc.) read userId synchronously
     // as the "self" agent id when building the search payload — if userId
@@ -994,7 +997,7 @@ const Login = () => {
         `/api/personalProfile/${loginedUserName}`,
       );
       if (profile?.data?.id != null) {
-        localStorage.setItem("userId", String(profile.data.id));
+        setUserId(String(profile.data.id));
       }
       // Seed the RegionalClock cache with THIS user's country so the
       // dashboard clock shows it immediately (same shape RegionalClock
@@ -1014,13 +1017,8 @@ const Login = () => {
       console.warn("Failed to prime userId at login:", profileErr);
     }
 
-    // Fresh per-login id used to dedupe advertisement views (an ad is counted
-    // once per page per login session). A new login → new id → countable again.
-    const newAdSessionId =
-      typeof crypto !== "undefined" && crypto.randomUUID
-        ? crypto.randomUUID()
-        : `s-${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
-    localStorage.setItem("adSessionId", newAdSessionId);
+    // (adSessionId — dedupes advertisement views per login — is minted by
+    // setAuthSession() above.)
 
     if (roles.length > 1) {
       navigate("/select-userRole", { state: { roles } });

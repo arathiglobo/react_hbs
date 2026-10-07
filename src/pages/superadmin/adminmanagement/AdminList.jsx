@@ -93,8 +93,7 @@ export default function AdminList() {
   // a button they cannot use. Falls back to sessionStorage the same way
   // Sidebar.jsx does, so the check works after a hard refresh too.
   const selfUsername = useMemo(() => (
-    (localStorage.getItem("UserName") ||
-      sessionStorage.getItem("UserName") ||
+    (sessionStorage.getItem("UserName") ||
       "").trim().toLowerCase()
   ), []);
   const isSelfRow = (row) =>

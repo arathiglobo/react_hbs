@@ -221,7 +221,7 @@ export default function LastMinuteBookingForm() {
   // render it as "Contact: <value>/<agentName>". The input is ADMIN-only.
   const [bookingDoneFor, setBookingDoneFor] = useState("");
   const isAdmin =
-    String(localStorage.getItem("currentActiveRole") || "").toUpperCase() ===
+    String(sessionStorage.getItem("currentActiveRole") || "").toUpperCase() ===
     "ADMIN";
 
   // Client location snapshot for the booking-history audit trail, resolved
@@ -808,11 +808,11 @@ export default function LastMinuteBookingForm() {
 
     const agentId =
       (ctx?.agentId && String(ctx.agentId)) ||
-      localStorage.getItem("userId") ||
-      localStorage.getItem("agentId") ||
+      sessionStorage.getItem("userId") ||
+      sessionStorage.getItem("agentId") ||
       "0";
     const createdByRole =
-      localStorage.getItem("currentActiveRole") || "agent";
+      sessionStorage.getItem("currentActiveRole") || "agent";
 
     // Primary Guest Details card is hidden — derive customer from
     // the Lead-marked guest in the Guest Details grid above. Email
