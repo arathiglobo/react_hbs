@@ -434,6 +434,10 @@ export default function Sidebar() {
         {
           label: "Location settings",
           children: [
+            // Country → City → Location manager: add a city under a chosen
+            // country, a location under a chosen city, and (soft) delete any
+            // of them. Feeds the Country / City / Location registration dropdowns.
+            { label: "Country / City / Location", to: "/masters/location-hierarchy" },
             { label: "Market Type", to: "/masters/market-type" },
             { label: "Region", to: "/masters/region" },
             { label: "Countries", to: "/masters/countries" },
