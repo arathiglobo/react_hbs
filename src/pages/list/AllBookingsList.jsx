@@ -18,6 +18,7 @@ import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
+import RoomCountSummary from "../../components/RoomCountSummary";
 import "../../styles/HotelBookingListModern.css";
 import "../../styles/AllBookingsList.css";
 
@@ -76,6 +77,7 @@ const COLUMN_WIDTHS = {
   bookedBy: "90px",   // "Booker" column — operator who created the booking (Hotel only)
   checkIn: "72px",
   checkOut: "72px",
+  noOfRooms: "95px",  // total rooms + per-room-type breakdown
   deadlineDate: "80px",
   paymentMode: "95px",
   paymentStatus: "90px",
@@ -394,7 +396,8 @@ const AllBookingsList = () => {
   // 14 columns visible to every role; admins additionally see Agent Name and
   // Supplier, so 16 total. Update in sync with the <thead> below.
   // Column count bumped by one — new "Booker" column sits after Hotel.
-  const colSpan = role === "admin" ? 17 : 15;
+  // Bumped again for the "No. of Rooms" column after Check Out.
+  const colSpan = role === "admin" ? 18 : 16;
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column hbl-modern">
@@ -609,6 +612,9 @@ const AllBookingsList = () => {
                           <th style={thStyle(undefined, COLUMN_WIDTHS.bookedBy)}>Booker</th>
                           <th style={thStyle("center", COLUMN_WIDTHS.checkIn)}>Check In</th>
                           <th style={thStyle("center", COLUMN_WIDTHS.checkOut)}>Check Out</th>
+                          {/* No. of Rooms — total rooms with the per-room-type
+                              breakdown (totalRooms / roomSummary). */}
+                          <th style={thStyle("center", COLUMN_WIDTHS.noOfRooms)}>No. of Rooms</th>
                           <th style={thStyle("center", COLUMN_WIDTHS.deadlineDate)}>Deadline Date</th>
                           <th style={thStyle("center", COLUMN_WIDTHS.paymentMode)}>Payment Mode</th>
                           {/* Payment Status — same mapping as
@@ -750,6 +756,22 @@ const AllBookingsList = () => {
                                 </td>
                                 <td data-label="Check Out" className="text-muted" style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.checkOut }} title={formatDate(b.checkOutDate) || ""}>
                                   {formatDate(b.checkOutDate) || "-"}
+                                </td>
+                                <td
+                                  data-label="No. of Rooms"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.noOfRooms,
+                                    // Total + breakdown stack on separate
+                                    // lines, like the Hotel cell.
+                                    whiteSpace: "normal",
+                                    overflow: "visible",
+                                    textOverflow: "clip",
+                                    wordBreak: "break-word",
+                                  }}
+                                >
+                                  <RoomCountSummary total={b.totalRooms} lines={b.roomSummary} />
                                 </td>
                                 <td data-label="Deadline Date" className="text-muted" style={{ ...baseCellStyle, textAlign: "center", fontFamily: "monospace", width: COLUMN_WIDTHS.deadlineDate }} title={b.deadlineDate || ""}>
                                   {formatDeadlineDate(b.deadlineDate)}

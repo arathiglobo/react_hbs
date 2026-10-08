@@ -44,6 +44,7 @@ import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
+import RoomCountSummary from "../../components/RoomCountSummary";
 import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -63,6 +64,7 @@ const COLUMN_WIDTHS = {
   referenceCode: "160px",
   bookDate: "90px",
   bookingDetails: "230px",
+  noOfRooms: "120px",
   deadlineDate: "105px",
   paymentMode: "110px",
   paymentStatus: "110px",
@@ -454,7 +456,8 @@ export default function SeniorCitizenBookingList() {
   };
 
   // +1 for the Payment Status column.
-  const colSpan = role === "admin" ? 12 : 11;
+  // Includes the No. of Rooms column.
+  const colSpan = role === "admin" ? 14 : 13;
 
   const baseCellStyle = {
     padding: "0.5rem 0.6rem",
@@ -680,6 +683,9 @@ export default function SeniorCitizenBookingList() {
                           <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingDetails }}>
                             Booking Details
                           </th>
+                          <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.noOfRooms }}>
+                            No. of Rooms
+                          </th>
                           <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.deadlineDate }}>
                             Deadline Date
                           </th>
@@ -848,6 +854,9 @@ export default function SeniorCitizenBookingList() {
                                       </span>
                                     )}
                                   </div>
+                                </td>
+                                <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.noOfRooms }}>
+                                  <RoomCountSummary total={b.totalRooms} lines={b.roomSummary} />
                                 </td>
                                 <td
                                   style={{

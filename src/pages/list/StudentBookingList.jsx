@@ -46,6 +46,7 @@ import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
+import RoomCountSummary from "../../components/RoomCountSummary";
 import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -106,6 +107,7 @@ const COLUMN_WIDTHS = {
   referenceCode: "160px",
   bookDate: "90px",
   bookingDetails: "230px",
+  noOfRooms: "120px",
   deadlineDate: "105px",
   paymentMode: "110px",
   paymentStatus: "110px",
@@ -439,7 +441,8 @@ export default function StudentBookingList() {
   };
 
   // +1 for the Payment Status column.
-  const colSpan = role === "admin" ? 12 : 11;
+  // Includes the No. of Rooms column.
+  const colSpan = role === "admin" ? 14 : 13;
 
   // Notification cell renderer — maps the composite student status onto the
   // shared StatusPill badges so it matches the Hotel/LongStay skin. The page
@@ -685,6 +688,7 @@ export default function StudentBookingList() {
                           <th style={thStyle(COLUMN_WIDTHS.referenceCode)}>Reference Code</th>
                           <th style={thStyle(COLUMN_WIDTHS.bookDate, true)}>Book Date</th>
                           <th style={thStyle(COLUMN_WIDTHS.bookingDetails)}>Booking Details</th>
+                          <th style={thStyle(COLUMN_WIDTHS.noOfRooms, true)}>No. of Rooms</th>
                           <th style={thStyle(COLUMN_WIDTHS.deadlineDate, true)}>Deadline Date</th>
                           <th style={thStyle(COLUMN_WIDTHS.paymentMode, true)}>Payment Mode</th>
                           {/* Payment Status — same mapping as
@@ -841,6 +845,9 @@ export default function StudentBookingList() {
                                       </span>
                                     )}
                                   </div>
+                                </td>
+                                <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.noOfRooms }}>
+                                  <RoomCountSummary total={b.totalRooms} lines={b.roomSummary} />
                                 </td>
                                 <td
                                   style={{

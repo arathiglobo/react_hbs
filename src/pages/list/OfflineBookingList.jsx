@@ -35,6 +35,7 @@ import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
+import RoomCountSummary from "../../components/RoomCountSummary";
 import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -52,6 +53,7 @@ const COLUMN_WIDTHS = {
   invoice: "110px",
   agent: "130px",
   bookingDetails: "260px",
+  noOfRooms: "120px",
   total: "110px",
   status: "110px",
   action: "70px",
@@ -333,7 +335,7 @@ const OfflineBookingList = () => {
     lineHeight: 1.2,
   };
 
-  const colCount = role === "admin" ? 8 : 7;
+  const colCount = role === "admin" ? 9 : 8;
   const safeTotalPages = Math.max(1, totalPages || 1);
   const hasResults = visibleBookings.length > 0;
   const displayStart = hasResults ? (page - 1) * perPage + 1 : 0;
@@ -578,6 +580,15 @@ const OfflineBookingList = () => {
                           <th
                             style={{
                               ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.noOfRooms,
+                            }}
+                          >
+                            No. of Rooms
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
                               textAlign: "right",
                               width: COLUMN_WIDTHS.total,
                             }}
@@ -726,6 +737,20 @@ const OfflineBookingList = () => {
                                         }`
                                       : ""}
                                   </div>
+                                </td>
+                                {/* No. of Rooms — summed across the booking's
+                                    hotel lines (totalRooms / roomSummary). */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.noOfRooms,
+                                  }}
+                                >
+                                  <RoomCountSummary
+                                    total={booking.totalRooms}
+                                    lines={booking.roomSummary}
+                                  />
                                 </td>
                                 <td
                                   style={{

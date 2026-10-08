@@ -23,6 +23,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import { toast } from "react-hot-toast";
+import RoomCountSummary, { countRoomTypes } from "../../components/RoomCountSummary";
 import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -42,6 +43,7 @@ const COLUMN_WIDTHS = {
   confirmationNo: "130px",
   agent: "130px",
   tourDate: "100px",
+  noOfRooms: "120px",
   total: "110px",
   status: "110px",
   action: "70px",
@@ -104,6 +106,20 @@ const formatShortDate = (dateString) => {
   const day = String(d.getDate()).padStart(2, "0");
   const month = String(d.getMonth() + 1).padStart(2, "0");
   return `${day}/${month}/${d.getFullYear()}`;
+};
+
+// No. of Rooms column — each `hotels[]` line is one room category with its
+// own `noOfRooms`. A missing count is read as 1 room, the same fallback the
+// package voucher PDF uses.
+const roomsOnLine = (hotel) =>
+  Number(hotel?.noOfRooms) > 0 ? Number(hotel.noOfRooms) : 1;
+
+const getRoomSummary = (booking) => {
+  const hotels = Array.isArray(booking?.hotels) ? booking.hotels : [];
+  return {
+    total: hotels.reduce((sum, h) => sum + (h ? roomsOnLine(h) : 0), 0),
+    lines: countRoomTypes(hotels, (h) => h.roomCategory, roomsOnLine),
+  };
 };
 
 const MakeYourOwnPackageV2BookingList = () => {
@@ -518,6 +534,15 @@ const MakeYourOwnPackageV2BookingList = () => {
                           <th
                             style={{
                               ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.noOfRooms,
+                            }}
+                          >
+                            No. of Rooms
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
                               textAlign: "right",
                               width: COLUMN_WIDTHS.total,
                             }}
@@ -548,7 +573,7 @@ const MakeYourOwnPackageV2BookingList = () => {
                         {pageBookings.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={8}
+                              colSpan={10}
                               className="text-center py-5 text-muted"
                               style={{
                                 border: "1px solid #dee2e6",
@@ -705,6 +730,15 @@ const MakeYourOwnPackageV2BookingList = () => {
                                   }}
                                 >
                                   {formatShortDate(b.tourDate) || "-"}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.noOfRooms,
+                                  }}
+                                >
+                                  <RoomCountSummary {...getRoomSummary(b)} />
                                 </td>
                                 <td
                                   style={{

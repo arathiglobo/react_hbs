@@ -31,6 +31,7 @@ import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
+import RoomCountSummary from "../../components/RoomCountSummary";
 import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -59,6 +60,7 @@ const COLUMN_WIDTHS = {
   referenceCode: "160px",
   bookDate: "90px",
   bookingDetails: "210px",
+  noOfRooms: "120px",
   deadlineDate: "105px",
   paymentMode: "110px",
   paymentStatus: "115px",
@@ -1665,6 +1667,23 @@ const HotelBookingList = ({
                           >
                             Booking Details
                           </th>
+                          {/* No. of Rooms — total rooms on the booking with
+                              the per-room-type breakdown beneath it. */}
+                          <th
+                            style={{
+                              padding: "0.45rem 0.6rem",
+                              fontWeight: "600",
+                              textTransform: "uppercase",
+                              color: "#495057",
+                              textAlign: "center",
+                              border: "1px solid #dee2e6",
+                              whiteSpace: "normal",
+                              lineHeight: 1.2,
+                              width: COLUMN_WIDTHS.noOfRooms,
+                            }}
+                          >
+                            No. of Rooms
+                          </th>
                           <th
                             style={{
                               padding: "0.45rem 0.6rem",
@@ -1752,7 +1771,7 @@ const HotelBookingList = ({
                         {displayedBookings.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={11}
+                              colSpan={role === "admin" ? 13 : 12}
                               className="text-center py-5 text-muted"
                               style={{
                                 border: "1px solid #dee2e6",
@@ -2014,6 +2033,18 @@ const HotelBookingList = ({
                                         </span>
                                       )}
                                   </div>
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.noOfRooms,
+                                  }}
+                                >
+                                  <RoomCountSummary
+                                    total={b.totalRooms}
+                                    lines={b.roomSummary}
+                                  />
                                 </td>
                                 <td
                                   className="text-muted"
