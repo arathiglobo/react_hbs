@@ -736,7 +736,9 @@ export default function StudentSearch() {
     } catch (e) {
       /* ignore quota / serialization issues — new tab can still open */
     }
-    window.open("/student-room-list", "_blank", "noopener");
+    // No "noopener": the login lives in per-tab sessionStorage
+    // (utils/authSession.js), which a new tab only inherits from its opener.
+    window.open("/student-room-list", "_blank");
   };
 
   const hasResultsView = results.length > 0;

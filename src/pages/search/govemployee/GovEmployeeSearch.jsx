@@ -807,7 +807,9 @@ export default function GovEmployeeSearch() {
     } catch (e) {
       /* ignore quota / serialization issues — new tab can still open */
     }
-    window.open("/gov-employee-room-list", "_blank", "noopener");
+    // No "noopener": the login lives in per-tab sessionStorage
+    // (utils/authSession.js), which a new tab only inherits from its opener.
+    window.open("/gov-employee-room-list", "_blank");
   };
 
   const hasResultsView = results.length > 0;

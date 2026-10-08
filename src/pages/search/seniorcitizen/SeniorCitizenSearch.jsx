@@ -866,7 +866,9 @@ export default function SeniorCitizenSearch() {
     } catch (e) {
       /* ignore quota / serialization issues — new tab can still open */
     }
-    window.open("/senior-citizen-room-list", "_blank", "noopener");
+    // No "noopener": the login lives in per-tab sessionStorage
+    // (utils/authSession.js), which a new tab only inherits from its opener.
+    window.open("/senior-citizen-room-list", "_blank");
   };
 
   const hasResultsView = hasSearchResult || allResults.length > 0;
