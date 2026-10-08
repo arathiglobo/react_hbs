@@ -2087,8 +2087,20 @@ export default function BookingDetailedView() {
                               <tr>
                                 <td>{room.roomCategory || "-"}</td>
                                 <td>{room.mealPlan || "-"}</td>
+                                {/* The unique booking reference the 3rd-party
+                                    supplier returned (IWTX/X3 BookingNumber,
+                                    GRN bref, GoGlobal GoBookingCode, Juniper
+                                    LocatorID, …). In-house bookings persist the
+                                    "0" placeholder — no supplier exists — so
+                                    that renders as "-" instead of a bare 0. */}
                                 {(isAdmin || isSuperAdmin) && (
-                                  <td>{booking.supplierReference || "-"}</td>
+                                  <td>
+                                    {booking.supplierReference &&
+                                    String(booking.supplierReference).trim() !==
+                                      "0"
+                                      ? booking.supplierReference
+                                      : "-"}
+                                  </td>
                                 )}
                                 <td>{room.adults ?? "-"}</td>
                                 <td>{room.children ?? "0"}</td>
