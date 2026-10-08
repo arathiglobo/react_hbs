@@ -1512,16 +1512,19 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
 
                       <div className="filter-group mb-3">
                         <div className="filter-group-label">Refund Policy</div>
+                        {/* Mutually exclusive, like the hotel search page:
+                            ticking one clears the other, and unticking
+                            shows every rate again. */}
                         <Form.Check
                           type="checkbox"
                           id="filter-refundable"
                           label="Refundable"
                           checked={refundFilter.refundable}
                           onChange={(e) =>
-                            setRefundFilter((p) => ({
-                              ...p,
+                            setRefundFilter({
                               refundable: e.target.checked,
-                            }))
+                              nonRefundable: false,
+                            })
                           }
                         />
                         <Form.Check
@@ -1530,10 +1533,10 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                           label="Non Refundable"
                           checked={refundFilter.nonRefundable}
                           onChange={(e) =>
-                            setRefundFilter((p) => ({
-                              ...p,
+                            setRefundFilter({
+                              refundable: false,
                               nonRefundable: e.target.checked,
-                            }))
+                            })
                           }
                         />
                       </div>
