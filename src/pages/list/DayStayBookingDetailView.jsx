@@ -1305,7 +1305,7 @@ export default function DayStayBookingDetailView() {
                 onClick={() => navigate(-1)}
               >
                 ← Back
-              </button>
+              </button> 
               <span
                 style={{
                   marginLeft: "12px",
