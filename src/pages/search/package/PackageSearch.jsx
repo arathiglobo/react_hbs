@@ -768,9 +768,9 @@ const PackageSearch = () => {
     // nationality, rate…) is handed off via a one-shot localStorage draft
     // keyed by packageId; PackageBooking reads it via useParams() and
     // clears it on mount. Same pattern CabSearch already uses for
-    // cabBookingDraft. localStorage (not sessionStorage) because window.open
-    // with noopener spawns a tab that does NOT inherit the opener's
-    // sessionStorage but DOES share localStorage on the same origin.
+    // cabBookingDraft. localStorage (not sessionStorage) so the draft reaches
+    // the new tab however it is opened — localStorage is shared by every tab
+    // on the same origin.
     const totalAdults = rooms.reduce((a, r) => a + (r.adults || 0), 0);
     const totalChildren = rooms.reduce((a, r) => a + (r.children || 0), 0);
     const allChildAges = rooms.flatMap((r) => r.childAges || []);
@@ -844,7 +844,9 @@ const PackageSearch = () => {
     }
 
     const url = `/new-booking/package-booking/${pkg.packageId}`;
-    window.open(url, "_blank", "noopener,noreferrer");
+    // No "noopener": the login lives in per-tab sessionStorage
+    // (utils/authSession.js), which a new tab only inherits from its opener.
+    window.open(url, "_blank");
   };
 
   // Resolve image paths the same way PackageDetailedView does, so saved

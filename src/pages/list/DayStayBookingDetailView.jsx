@@ -1316,7 +1316,7 @@ export default function DayStayBookingDetailView() {
               >
                 Day Stay Booking Details
               </span>
-              {selected?.bookingCode && (
+              {/* {selected?.bookingCode && (
                 <span
                   style={{
                     marginLeft: "10px",
@@ -1332,7 +1332,7 @@ export default function DayStayBookingDetailView() {
                 <span style={{ marginLeft: "10px" }}>
                   <StatusBadge status={displayStatus} />
                 </span>
-              )}
+              )} */}
             </div>
 
             {detailsLoading && !selected ? (
