@@ -82,7 +82,7 @@ export default function TravellersPicker({
     setOpen(false);
   };
 
-  return (
+  return ( 
     <>
       <button
         type="button"
