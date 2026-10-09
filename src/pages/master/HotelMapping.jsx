@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Card,
@@ -19,18 +19,22 @@ import AsyncSelect from "react-select/async";
 import "../../styles/CityMapping.css";
 import "../../styles/AutomatedHotelMapping.css";
 import BackButton from "../../components/BackButton";
-import AutomatedHotelMappingModal from "./automap/AutomatedHotelMappingModal";
 import useAutoMappingStatus from "./automap/useAutoMappingStatus";
 import { statusMeta } from "./automap/automapFormat";
 import { getCurrentActiveRole, getUserRole } from "../../utils/authSession";
 
+// The Automated Hotel Mapping screen (pages/master/automap/
+// AutomatedHotelMappingPage.jsx). Opened in a NEW TAB from the pill below.
+const AUTOMATED_MAPPING_PATH = "/masters/hotel-mapping/automated";
+
 const HotelMapping = () => {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
 
-  // Automated Mapping popup (background engine status + mapped matrix +
-  // manual review). The backend restricts /api/hotel-mapping/auto/** to
-  // ADMIN / SUPER_ADMIN, so the pill is only rendered for those roles.
+  // "Automated Mapping" pill (background engine state + review badge). The
+  // screen itself lives at AUTOMATED_MAPPING_PATH. The backend restricts
+  // /api/hotel-mapping/auto/** to ADMIN / SUPER_ADMIN, so the pill is only
+  // rendered for those roles.
   const isAdminUser = useMemo(() => {
     const active = (getCurrentActiveRole() || "").trim().toLowerCase();
     const roles = (getUserRole() || "")
@@ -40,14 +44,21 @@ const HotelMapping = () => {
     const role = active || roles[0] || "";
     return role === "admin" || role === "super_admin";
   }, []);
-  const [showAutoModal, setShowAutoModal] = useState(false);
-  // 5 s while the popup is open, 15 s for the pill alone.
+  // 15 s keeps the pill's state dot and review badge current; the screen
+  // itself polls every 5 s in its own tab.
   const autoStatus = useAutoMappingStatus({
     enabled: isAdminUser,
-    intervalMs: showAutoModal ? 5000 : 15000,
+    intervalMs: 15000,
   });
   const autoMeta = statusMeta(autoStatus.status?.status || (autoStatus.error ? "ERROR" : "IDLE"));
   const autoRunning = autoStatus.status?.status === "RUNNING";
+  // Deliberately no "noopener": a tab opened by window.open inherits a clone
+  // of this tab's sessionStorage, i.e. the per-tab auth session
+  // (utils/authSession.js), so the new tab is already logged in. This is
+  // the same hand-off the search → booking pages use.
+  const openAutomatedMapping = () => {
+    window.open(AUTOMATED_MAPPING_PATH, "_blank");
+  };
   const [selectedCountryOption, setSelectedCountryOption] = useState(null);
   const [selectedCityOption, setSelectedCityOption] = useState(null);
 
@@ -82,7 +93,7 @@ const HotelMapping = () => {
   const [searching, setSearching] = useState(false);
   const [errors, setErrors] = useState({});
   const [mappingId, setMappingId] = useState(null); // to track which group is being mapped
-  const [bulkMapping, setBulkMapping] = useState(false); // global bulk loading
+  const [bulkMapping] = useState(false); // global bulk loading
   const [resultsFilter, setResultsFilter] = useState("");
 
   // Generic form input handler
@@ -163,6 +174,7 @@ const HotelMapping = () => {
   };
 
   // Save mapping (kept for reference, but search is primary now)
+  // eslint-disable-next-line no-unused-vars
   const handleAddMapping = async () => {
     toast.error(
       "Add mapping functionality needs to be updated for new structure.",
@@ -318,9 +330,8 @@ const HotelMapping = () => {
               <button
                 type="button"
                 className="ahm-pill ms-auto"
-                onClick={() => setShowAutoModal(true)}
-                title="Automated mapping status, mapped hotels and manual review"
-                aria-haspopup="dialog"
+                onClick={openAutomatedMapping}
+                title="Open the Automated Hotel Mapping screen in a new tab"
               >
                 <span className={`ahm-dot tone-${autoMeta.tone}${autoRunning ? " pulse" : ""}`}></span>
                 <span className="ahm-pill-text">Automated Mapping</span>
@@ -331,6 +342,7 @@ const HotelMapping = () => {
                     {autoStatus.status.manualReviewCount}
                   </Badge>
                 )}
+                <i className="fas fa-external-link-alt text-muted small" aria-hidden="true"></i>
               </button>
             )}
           </span>
@@ -767,18 +779,6 @@ const HotelMapping = () => {
             </>
           )}
 
-          {isAdminUser && (
-            <AutomatedHotelMappingModal
-              show={showAutoModal}
-              onHide={() => setShowAutoModal(false)}
-              status={autoStatus.status}
-              error={autoStatus.error}
-              loading={autoStatus.loading}
-              lastFetchedAt={autoStatus.lastFetchedAt}
-              refresh={autoStatus.refresh}
-              canAct={isAdminUser}
-            />
-          )}
         </main>
       </div>
     </div>

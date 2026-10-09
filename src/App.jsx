@@ -1,5 +1,5 @@
 import React from "react";
-import { Routes, Route, Link } from "react-router-dom";
+import { Routes, Route } from "react-router-dom";
 import Login from "./pages/Login";
 import SelectRole from "./pages/SelectRole";
 import Register from "./pages/Register";
@@ -14,13 +14,11 @@ import AgentApprovalDetail from "./pages/AgentApprovalDetail";
 
 import Country from "./pages/master/Country";
 import Destination from "./pages/master/Destination";
-import Hotels from "./pages/master/Hotels";
 import PrivateRoute from "./components/PrivateRoute";
 import AgentDashboard from "./pages/AgentDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import StaffDashboard from "./pages/StaffDashboard";
-import Test from "./pages/Test";
 import LandingPage from "./pages/LandingPage";
 import { Toaster } from "react-hot-toast";
 import Designations from "./pages/master/Designation";
@@ -34,7 +32,6 @@ import ReligiousBookingList from "./pages/list/ReligiousBookingList";
 import AllBookingsList from "./pages/list/AllBookingsList";
 // Last Minute Booking — list page (Phase 4)
 import LastMinuteBookingList from "./pages/list/LastMinuteBookingList";
-import LastMinuteBookingDetailView from "./pages/list/LastMinuteBookingDetailView";
 // 24 Hour Check-In configuration pages (new feature)
 import Hotel24HourCheckin from "./pages/HotelActions/TwentyFourHourCheckin/Hotel24HourCheckin";
 import Hotel24HourCheckinForm from "./pages/HotelActions/TwentyFourHourCheckin/Hotel24HourCheckinForm";
@@ -198,7 +195,6 @@ import LongStayBookingPage from "./pages/booking/LongStayBookingPage";
 import LongStayBookingList from "./pages/list/LongStayBookingList";
 import LongStayBookingDetailView from "./pages/list/LongStayBookingDetailView";
 import LongStayRoomList from "./pages/LongStayRoomList";
-import CopilotWidget from "./components/CopilotWidget";
 import AiDashboard from "./pages/ai/AiDashboard";
 import DemandForecast from "./pages/ai/DemandForecast";
 import AgentBehavior from "./pages/ai/AgentBehavior";
@@ -216,6 +212,7 @@ import CabBookingDetailView from "./pages/list/CabBookingDetailView";
 import ActivityBookingList from "./pages/list/ActivityBookingList";
 import ActivityBookingDetailView from "./pages/list/ActivityBookingDetailView";
 import HotelMapping from "./pages/master/HotelMapping";
+import AutomatedHotelMappingPage from "./pages/master/automap/AutomatedHotelMappingPage";
 import HotelMappingBulkList from "./pages/master/HotelMappingBulkList";
 import UnMappingCity from "./pages/master/UnMappingCity";
 import BulkCityMapping from "./pages/master/BulkCityMapping";
@@ -224,22 +221,6 @@ import Airport from "./pages/master/Airport";
 import LocationHierarchy from "./pages/master/LocationHierarchy";
 import ExtranetImgUpload from "./pages/extranet/ExtranetImgUpload";
 import ExtranetCalendar from "./pages/extranet/ExtranetCalendar";
-import ExtranetOccupancyAndMinimumLength from "./pages/extranet/ExtranetOccupancyAndMinimumLength";
-import ExtranetContractRate from "./pages/extranet/ExtranetContractRate";
-import { EditIcon } from "lucide-react";
-import EditExtranetContractRate from "./pages/extranet/EditExtranetContractRate";
-import ExtranetCreateContractRate from "./pages/extranet/ExtranetCreateContractRate";
-import ExtranetPolicy from "./pages/extranet/Extranet-Policy/ExtranetPolicy";
-import ExtranetPolicyCreate from "./pages/extranet/Extranet-Policy/ExtranetPolicyCreate";
-import ExtranetPolicyUpdate from "./pages/extranet/Extranet-Policy/ExtranetPolicyUpdate";
-import ExtranetPromotion from "./pages/extranet/Extranet-Promotion/ExtranetPromotion";
-import ExtranetSpecialRates from "./pages/extranet/Extranet-Promotion/ExtranetSpecialRates";
-import ExtranetDiscountPromotion from "./pages/extranet/Extranet-Promotion/ExtranetDiscountPromotion";
-import ExtranetStayPayPromotion from "./pages/extranet/Extranet-Promotion/ExtranetStayPayPromotion";
-import ExtranetSpecialRateEdit from "./pages/extranet/Extranet-Promotion/EditSpecialRateExtranet";
-import EditDiscountPromotionExtranet from "./pages/extranet/Extranet-Promotion/EditDiscountPromotionExtranet";
-import EditStayPayPromotionExtranet from "./pages/extranet/Extranet-Promotion/EditStayPayPromotionExtranet";
-import EditSpecialRateExtranet from "./pages/extranet/Extranet-Promotion/EditSpecialRateExtranet";
 import PackageSearch from "./pages/search/package/PackageSearch";
 import PackageBooking from "./pages/booking/packagebooking/PackageBooking";
 import PackageCheckout from "./pages/booking/packagebooking/PackageCheckout";
@@ -506,6 +487,7 @@ export default function App() {
         <Route path="/masters/visa-information" element={<PrivateRoute><VisaDetails /></PrivateRoute>} />
         <Route path="/masters/terms-and-conditions" element={<PrivateRoute><TermsAndConditions /></PrivateRoute>} />
         <Route path="/masters/hotel-mapping" element={<PrivateRoute roles={["admin"]}><HotelMapping /></PrivateRoute>} />
+        <Route path="/masters/hotel-mapping/automated" element={<PrivateRoute roles={["admin"]}><AutomatedHotelMappingPage /></PrivateRoute>} />
         <Route path="/masters/transfer-airport-mapping" element={<PrivateRoute><TransferAirportMapping /></PrivateRoute>} />
         <Route path="/masters/transfer-place-mapping" element={<PrivateRoute><TransferPlaceMapping /></PrivateRoute>} />
         <Route path="/masters/transfer-hotel-mapping" element={<PrivateRoute><TransferHotelMapping /></PrivateRoute>} />
