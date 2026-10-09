@@ -26,6 +26,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import { toast } from "react-hot-toast";
+import RoomCountSummary, { countRoomTypes } from "../../components/RoomCountSummary";
 import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -51,6 +52,7 @@ const COLUMN_WIDTHS = {
   // Slightly trimmed to fund the wider Payment Status + Notification
   // columns below. Hotel names still wrap cleanly at word boundary.
   bookingDetails: "210px",
+  noOfRooms: "120px",
   deadlineDate: "105px",
   paymentMode: "110px",
   // Widened so "Payment Pending" stays on one line.
@@ -198,6 +200,16 @@ const getGuestNames = (booking) => {
     if (n) names.push(n);
   }
   return names;
+};
+
+// No. of Rooms column — one `rooms[]` entry per booked room, grouped by
+// category. Falls back to the stored `noOfRooms` when no room rows exist.
+const getRoomSummary = (booking) => {
+  const rooms = Array.isArray(booking?.rooms) ? booking.rooms : [];
+  return {
+    total: rooms.length || booking?.noOfRooms || 0,
+    lines: countRoomTypes(rooms, (r) => r.roomCategory),
+  };
 };
 
 // "dd/mm/yyyy" — same shape HotelBookingList uses in the table cells.
@@ -710,6 +722,15 @@ export default function DayStayBookingList() {
                             style={{
                               ...baseHeaderStyle,
                               textAlign: "center",
+                              width: COLUMN_WIDTHS.noOfRooms,
+                            }}
+                          >
+                            No. of Rooms
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
                               width: COLUMN_WIDTHS.deadlineDate,
                             }}
                           >
@@ -760,7 +781,7 @@ export default function DayStayBookingList() {
                         {pageBookings.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={role === "admin" ? 11 : 10}
+                              colSpan={role === "admin" ? 13 : 12}
                               className="text-center py-5 text-muted"
                               style={{
                                 border: "1px solid #dee2e6",
@@ -984,6 +1005,15 @@ export default function DayStayBookingList() {
                                       </span>
                                     )}
                                   </div>
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.noOfRooms,
+                                  }}
+                                >
+                                  <RoomCountSummary {...getRoomSummary(b)} />
                                 </td>
                                 <td
                                   className="text-muted"

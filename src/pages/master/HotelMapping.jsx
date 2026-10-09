@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Card,
@@ -17,11 +17,37 @@ import Topbar from "../../components/TopBar";
 import Select from "react-select";
 import AsyncSelect from "react-select/async";
 import "../../styles/CityMapping.css";
+import "../../styles/AutomatedHotelMapping.css";
 import BackButton from "../../components/BackButton";
+import AutomatedHotelMappingModal from "./automap/AutomatedHotelMappingModal";
+import useAutoMappingStatus from "./automap/useAutoMappingStatus";
+import { statusMeta } from "./automap/automapFormat";
+import { getCurrentActiveRole, getUserRole } from "../../utils/authSession";
 
 const HotelMapping = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+
+  // Automated Mapping popup (background engine status + mapped matrix +
+  // manual review). The backend restricts /api/hotel-mapping/auto/** to
+  // ADMIN / SUPER_ADMIN, so the pill is only rendered for those roles.
+  const isAdminUser = useMemo(() => {
+    const active = (getCurrentActiveRole() || "").trim().toLowerCase();
+    const roles = (getUserRole() || "")
+      .split(",")
+      .map((r) => r.trim().toLowerCase())
+      .filter(Boolean);
+    const role = active || roles[0] || "";
+    return role === "admin" || role === "super_admin";
+  }, []);
+  const [showAutoModal, setShowAutoModal] = useState(false);
+  // 5 s while the popup is open, 15 s for the pill alone.
+  const autoStatus = useAutoMappingStatus({
+    enabled: isAdminUser,
+    intervalMs: showAutoModal ? 5000 : 15000,
+  });
+  const autoMeta = statusMeta(autoStatus.status?.status || (autoStatus.error ? "ERROR" : "IDLE"));
+  const autoRunning = autoStatus.status?.status === "RUNNING";
   const [selectedCountryOption, setSelectedCountryOption] = useState(null);
   const [selectedCityOption, setSelectedCityOption] = useState(null);
 
@@ -285,9 +311,28 @@ const HotelMapping = () => {
       <div className="d-flex flex-grow-1">
         <Sidebar />
         <main className="flex-grow-1 p-4">
-          <span className="d-flex align-items-center gap-2 mb-3">
+          <span className="d-flex align-items-center gap-2 mb-3 flex-wrap">
             <BackButton fallback="/adminDashboard" />
             <h3 className="mb-0">Hotel Mapping</h3>
+            {isAdminUser && (
+              <button
+                type="button"
+                className="ahm-pill ms-auto"
+                onClick={() => setShowAutoModal(true)}
+                title="Automated mapping status, mapped hotels and manual review"
+                aria-haspopup="dialog"
+              >
+                <span className={`ahm-dot tone-${autoMeta.tone}${autoRunning ? " pulse" : ""}`}></span>
+                <span className="ahm-pill-text">Automated Mapping</span>
+                <span className="text-muted fw-normal">· {autoMeta.label}</span>
+                {autoRunning && <Spinner animation="border" size="sm" role="presentation" />}
+                {autoStatus.status?.manualReviewCount > 0 && (
+                  <Badge bg="warning" text="dark" pill title="Hotels waiting for manual review">
+                    {autoStatus.status.manualReviewCount}
+                  </Badge>
+                )}
+              </button>
+            )}
           </span>
           <p className="text-muted">
             Map same hotels across countries & cities.
@@ -720,6 +765,19 @@ const HotelMapping = () => {
                 )}
               </div>
             </>
+          )}
+
+          {isAdminUser && (
+            <AutomatedHotelMappingModal
+              show={showAutoModal}
+              onHide={() => setShowAutoModal(false)}
+              status={autoStatus.status}
+              error={autoStatus.error}
+              loading={autoStatus.loading}
+              lastFetchedAt={autoStatus.lastFetchedAt}
+              refresh={autoStatus.refresh}
+              canAct={isAdminUser}
+            />
           )}
         </main>
       </div>

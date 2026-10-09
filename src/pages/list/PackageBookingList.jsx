@@ -39,6 +39,7 @@ const COLUMN_WIDTHS = {
   bookingCode: "100px",
   bookDate: "95px",
   bookingDetails: "240px",
+  noOfRooms: "110px",
   deadlineDate: "110px",
   paymentMode: "140px",
   status: "110px",
@@ -736,6 +737,9 @@ const PackageBookingList = () => {
                             <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingDetails }}>
                               Booking Details
                             </th>
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.noOfRooms }}>
+                              No. of Rooms
+                            </th>
                             <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.deadlineDate }}>
                               Deadline Date
                             </th>
@@ -815,6 +819,18 @@ const PackageBookingList = () => {
                                       </span>
                                     )}
                                   </div>
+                                </td>
+                                {/* No. of Rooms — package bookings don't store a
+                                    room count or room type yet (only the hotel
+                                    name and rate), so this shows "-". */}
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.noOfRooms,
+                                  }}
+                                >
+                                  <span className="text-muted">-</span>
                                 </td>
                                 <td
                                   className="text-muted"

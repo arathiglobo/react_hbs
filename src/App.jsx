@@ -221,6 +221,7 @@ import UnMappingCity from "./pages/master/UnMappingCity";
 import BulkCityMapping from "./pages/master/BulkCityMapping";
 import SubLocation from "./pages/master/SubLocation";
 import Airport from "./pages/master/Airport";
+import LocationHierarchy from "./pages/master/LocationHierarchy";
 import ExtranetImgUpload from "./pages/extranet/ExtranetImgUpload";
 import ExtranetCalendar from "./pages/extranet/ExtranetCalendar";
 import ExtranetOccupancyAndMinimumLength from "./pages/extranet/ExtranetOccupancyAndMinimumLength";
@@ -484,6 +485,7 @@ export default function App() {
         <Route path="/masters/destination" element={<PrivateRoute><Destination /></PrivateRoute>} />
         <Route path="/masters/sub-location" element={<PrivateRoute><SubLocation /></PrivateRoute>} />
         <Route path="/masters/airport" element={<PrivateRoute><Airport /></PrivateRoute>} />
+        <Route path="/masters/location-hierarchy" element={<PrivateRoute><LocationHierarchy /></PrivateRoute>} />
         <Route path="/masters/city-mapping" element={<PrivateRoute><CityMapping /></PrivateRoute>} />
         <Route path="/masters/city-mapping-bulk" element={<PrivateRoute roles={["super_admin"]}><BulkCityMapping /></PrivateRoute>} />
         <Route path="/masters/city-unmapping" element={<PrivateRoute><UnMappingCity /></PrivateRoute>} />
@@ -503,7 +505,7 @@ export default function App() {
         <Route path="/masters/itinerary-details" element={<PrivateRoute><ItineraryDetails /></PrivateRoute>} />
         <Route path="/masters/visa-information" element={<PrivateRoute><VisaDetails /></PrivateRoute>} />
         <Route path="/masters/terms-and-conditions" element={<PrivateRoute><TermsAndConditions /></PrivateRoute>} />
-        <Route path="/masters/hotel-mapping" element={<PrivateRoute><HotelMapping /></PrivateRoute>} />
+        <Route path="/masters/hotel-mapping" element={<PrivateRoute roles={["admin"]}><HotelMapping /></PrivateRoute>} />
         <Route path="/masters/transfer-airport-mapping" element={<PrivateRoute><TransferAirportMapping /></PrivateRoute>} />
         <Route path="/masters/transfer-place-mapping" element={<PrivateRoute><TransferPlaceMapping /></PrivateRoute>} />
         <Route path="/masters/transfer-hotel-mapping" element={<PrivateRoute><TransferHotelMapping /></PrivateRoute>} />
