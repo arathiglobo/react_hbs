@@ -505,7 +505,7 @@ export default function App() {
         <Route path="/masters/itinerary-details" element={<PrivateRoute><ItineraryDetails /></PrivateRoute>} />
         <Route path="/masters/visa-information" element={<PrivateRoute><VisaDetails /></PrivateRoute>} />
         <Route path="/masters/terms-and-conditions" element={<PrivateRoute><TermsAndConditions /></PrivateRoute>} />
-        <Route path="/masters/hotel-mapping" element={<PrivateRoute><HotelMapping /></PrivateRoute>} />
+        <Route path="/masters/hotel-mapping" element={<PrivateRoute roles={["admin"]}><HotelMapping /></PrivateRoute>} />
         <Route path="/masters/transfer-airport-mapping" element={<PrivateRoute><TransferAirportMapping /></PrivateRoute>} />
         <Route path="/masters/transfer-place-mapping" element={<PrivateRoute><TransferPlaceMapping /></PrivateRoute>} />
         <Route path="/masters/transfer-hotel-mapping" element={<PrivateRoute><TransferHotelMapping /></PrivateRoute>} />
