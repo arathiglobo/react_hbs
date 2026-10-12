@@ -1596,8 +1596,8 @@ const handleAmenityChange = (e) => {
         // after a successful update send them back to their dashboard. Admin
         // behavior is unchanged (still returns to the registration list).
         const activeRole = (
-          localStorage.getItem("currentActiveRole") ||
-          localStorage.getItem("userRole") ||
+          sessionStorage.getItem("currentActiveRole") ||
+          sessionStorage.getItem("userRole") ||
           ""
         ).toLowerCase();
         if (isEditMode && activeRole.includes("extranet")) {

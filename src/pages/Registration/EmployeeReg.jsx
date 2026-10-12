@@ -785,7 +785,7 @@ const EmployeeReg = () => {
       try {
         setIsLoading(true);
 
-        let activeUserRole = localStorage.getItem("currentActiveRole");
+        let activeUserRole = sessionStorage.getItem("currentActiveRole");
          console.log("activeUserRole::" , activeUserRole)
 
         let activeRoleObj = rolesList.find((role) => role.roleName === "STAFF");

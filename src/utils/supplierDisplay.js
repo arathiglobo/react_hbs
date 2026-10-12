@@ -17,10 +17,10 @@ const SUPPLIER_SUFFIX_RE =
  */
 export function isAgentLogin() {
   try {
-    const activeRole = (localStorage.getItem("currentActiveRole") || "")
+    const activeRole = (sessionStorage.getItem("currentActiveRole") || "")
       .trim()
       .toUpperCase();
-    const storedRoles = (localStorage.getItem("userRole") || "").toUpperCase();
+    const storedRoles = (sessionStorage.getItem("userRole") || "").toUpperCase();
     return activeRole
       ? activeRole === "AGENT"
       : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");

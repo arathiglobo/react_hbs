@@ -24,8 +24,8 @@ const [emailAddress, setEmailAddress] = useState("");
 const [isSending, setIsSending] = useState(false);
 const [reportType,setReportType] = useState(null);
 
-const activeRole = (localStorage.getItem("currentActiveRole") || "").trim().toUpperCase();
-const storedRoles = (localStorage.getItem("userRole") || "").toUpperCase();
+const activeRole = (sessionStorage.getItem("currentActiveRole") || "").trim().toUpperCase();
+const storedRoles = (sessionStorage.getItem("userRole") || "").toUpperCase();
 const isAgentRole = activeRole ? activeRole === "AGENT" : (storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN"));
 
 // Pagination states

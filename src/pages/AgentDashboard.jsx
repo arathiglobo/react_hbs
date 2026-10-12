@@ -144,7 +144,6 @@ export default function AgentDashboard() {
     const fetchProfile = async () => {
       try {
         const userName =
-          localStorage.getItem("UserName") ||
           sessionStorage.getItem("UserName");
         if (userName) {
           const response = await axiosInstance.get(
@@ -553,9 +552,8 @@ export default function AgentDashboard() {
           <Sidebar />
           <main className="dash-main">
 
-            {/* Regional date+time chip — uses the agent's registered
-                country's timezone (resolved server-side via
-                /api/personalProfile, browser-TZ fallback). */}
+            {/* Regional date+time chip — United Arab Emirates time from
+                the server (/api/dashboard/regional-time). */}
             <DashboardHeader title="Agent Dashboard" />
 
             {/* ── Agent identity card — company / location / contact +

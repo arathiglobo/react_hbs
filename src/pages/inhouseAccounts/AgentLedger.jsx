@@ -86,7 +86,7 @@ const formatDateTime = (iso) => {
 
 export default function AgentLedger() {
   const currentRole = (
-    localStorage.getItem("currentActiveRole") || ""
+    sessionStorage.getItem("currentActiveRole") || ""
   ).toLowerCase();
 
   const [data, setData] = useState(null);

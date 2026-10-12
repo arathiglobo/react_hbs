@@ -984,6 +984,230 @@
   color: var(--lg-navy);
 }
 
+/* ── Panel download bar ──────────────────────────────────────────────────── */
+/* Pinned under the scrolling body of the About / Privacy / Systems / Terms
+   panels, so "Download PDF" is always in reach without scrolling. */
+.lg-about-foot {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px clamp(24px, 5vw, 52px);
+  border-top: 1px solid #eef0f4;
+  background: #fafbfc;
+}
+
+.lg-about-foot-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--lg-body);
+}
+
+.lg-about-foot-note i {
+  font-size: 15px;
+  color: var(--lg-orange);
+}
+
+.lg-about-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border: none;
+  border-radius: 10px;
+  background: var(--lg-orange);
+  color: #fff;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.lg-about-download:hover:not(:disabled) {
+  background: var(--lg-orange-dark);
+  box-shadow: 0 6px 16px rgba(247, 94, 0, 0.25);
+}
+
+.lg-about-download:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--lg-orange-soft);
+}
+
+.lg-about-download:disabled {
+  opacity: 0.75;
+  cursor: progress;
+}
+
+@media (max-width: 560px) {
+  .lg-about-foot {
+    justify-content: center;
+  }
+
+  .lg-about-foot-note {
+    display: none;
+  }
+}
+
+/* ── Privacy Policy panel ────────────────────────────────────────────────── */
+/* Rides on the About us shell and body type; only adds sub-headings, bullet
+   lists and drops the divider above the first section. */
+.lg-privacy-section:first-child h3 {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.lg-privacy h4 {
+  margin: 20px 0 6px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--lg-navy);
+}
+
+.lg-privacy-list {
+  margin: 0 0 15px;
+  padding: 0;
+  list-style: none;
+}
+
+.lg-privacy-list li {
+  position: relative;
+  padding: 3px 0 3px 18px;
+}
+
+.lg-privacy-list li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 12px;
+  width: 5px;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--lg-orange);
+}
+
+.lg-privacy a {
+  color: var(--lg-orange-dark);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.lg-privacy a:hover {
+  text-decoration: underline;
+}
+
+/* ── Systems Policy panel ────────────────────────────────────────────────── */
+/* Booking, Cancellation & Complaints Policy. Rides on the About us shell and
+   body type; clauses get a fixed number column so the text lines up, and
+   sub-clauses (1.1.1) sit one step in. */
+.lg-policy h3 {
+  display: flex;
+  gap: 8px;
+}
+
+.lg-policy h3 .lg-policy-no {
+  color: var(--lg-orange);
+}
+
+.lg-policy-clause {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 0 10px;
+}
+
+.lg-policy-sub {
+  grid-template-columns: 52px minmax(0, 1fr);
+}
+
+/* Third level (e.g. 3.2.8.1) — longer numbers need a wider column. */
+.lg-policy-depth-2 {
+  grid-template-columns: 62px minmax(0, 1fr);
+}
+
+.lg-policy-clause p {
+  margin: 0 0 10px;
+}
+
+.lg-policy-no {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--lg-navy);
+}
+
+.lg-policy-sub .lg-policy-no {
+  font-weight: 600;
+  color: var(--lg-body);
+}
+
+/* ── Contact us panel ────────────────────────────────────────────────────── */
+/* Reuses the About us shell (backdrop, close button, header) at a compact
+   width; the body is two tappable rows — phone and email. */
+.lg-contact {
+  max-width: 440px;
+}
+
+.lg-contact-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 clamp(24px, 5vw, 40px) clamp(26px, 4vh, 36px);
+}
+
+.lg-contact-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--lg-line);
+  border-radius: 12px;
+  background: var(--lg-field);
+  color: var(--lg-navy);
+  text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.lg-contact-row:hover {
+  border-color: var(--lg-orange);
+  background: var(--lg-orange-soft);
+  color: var(--lg-navy);
+}
+
+.lg-contact-icon {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 99px;
+  background: var(--lg-orange);
+  color: #fff;
+  font-size: 15px;
+}
+
+.lg-contact-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lg-contact-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lg-muted);
+}
+
+.lg-contact-value {
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 640px) {
   .lg-about-chips,
   .lg-about-why {

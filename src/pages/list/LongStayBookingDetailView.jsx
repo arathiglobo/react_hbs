@@ -242,11 +242,11 @@ export default function LongStayBookingDetailView() {
   const { id: routeId } = useParams();
   const navigate = useNavigate();
   // Agent-role gate (UI visibility only).
-  const activeRole = String(localStorage.getItem("currentActiveRole") || "")
+  const activeRole = String(sessionStorage.getItem("currentActiveRole") || "")
     .trim()
     .toUpperCase();
   const storedRoles = String(
-    localStorage.getItem("userRole") || "",
+    sessionStorage.getItem("userRole") || "",
   ).toUpperCase();
   const isAgentRole = activeRole
     ? activeRole === "AGENT"
@@ -729,7 +729,7 @@ export default function LongStayBookingDetailView() {
         `/api/longStayBooking/${bookingId}/confirmation-status`,
         {
           action: "REJECT",
-          rejectedBy: localStorage.getItem("UserName") || "",
+          rejectedBy: sessionStorage.getItem("UserName") || "",
           rejectionRemarks: rejectRemarks.trim() || null,
         }
       );
@@ -859,7 +859,6 @@ export default function LongStayBookingDetailView() {
     try {
       setSavingNote(true);
       const createdBy =
-        localStorage.getItem("UserName") ||
         sessionStorage.getItem("UserName") ||
         "unknown";
       const res = await axiosInstance.post(

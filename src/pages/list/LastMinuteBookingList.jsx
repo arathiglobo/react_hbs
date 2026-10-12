@@ -27,6 +27,7 @@ import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import { formatDateTime } from "../../utils/dateUtils";
+import RoomCountSummary from "../../components/RoomCountSummary";
 // Shared "hotel booking list" look (Lexend, red/white theme, table/card/
 // pagination styling). Scoped under .hbl-modern — same stylesheet the
 // /booking-details/hotel-booking-list and long-stay list use, so all three
@@ -51,6 +52,7 @@ const COLUMN_WIDTHS = {
   confirmationNo: "130px",
   bookDate: "95px",
   bookingDetails: "240px",
+  noOfRooms: "120px",
   nights: "70px",
   total: "110px",
   paymentStatus: "110px",
@@ -664,6 +666,9 @@ export default function LastMinuteBookingList() {
                             <th style={{ ...baseHeaderStyle, width: COLUMN_WIDTHS.bookingDetails }}>
                               Booking Details
                             </th>
+                            <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.noOfRooms }}>
+                              No. of Rooms
+                            </th>
                             <th style={{ ...baseHeaderStyle, textAlign: "center", width: COLUMN_WIDTHS.nights }}>
                               Nights
                             </th>
@@ -812,6 +817,9 @@ export default function LastMinuteBookingList() {
                                         </span>
                                       )}
                                   </div>
+                                </td>
+                                <td style={{ ...baseCellStyle, textAlign: "center", width: COLUMN_WIDTHS.noOfRooms }}>
+                                  <RoomCountSummary total={b.totalRooms} lines={b.roomSummary} />
                                 </td>
                                 <td
                                   className="text-muted"

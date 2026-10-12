@@ -493,11 +493,11 @@ const AgentView = () => {
   // Everything else on this page is untouched.
   // ===================================================================
   const activeRoleRaw = (
-    localStorage.getItem("currentActiveRole") ||
+    sessionStorage.getItem("currentActiveRole") ||
     ""
   ).trim().toUpperCase();
   const storedRolesRaw = (
-    localStorage.getItem("userRole") || ""
+    sessionStorage.getItem("userRole") || ""
   ).toUpperCase();
   const isSuperAdmin = activeRoleRaw
     ? activeRoleRaw === "SUPER_ADMIN"

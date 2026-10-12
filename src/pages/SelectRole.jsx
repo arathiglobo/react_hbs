@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/SelectRole.css";
 import DashboardRedirections from "../components/DashboardRedirections";
 import GloboFooterMarks from "../components/GloboFooterMarks";
+import { setCurrentActiveRole } from "../utils/authSession";
 
 const SelectRole = () => {
   const { state } = useLocation();
@@ -58,8 +59,8 @@ const SelectRole = () => {
 
   const handleRoleSelection = (role) => {
     DashboardRedirections(role, navigate);
-   
-    localStorage.setItem("currentActiveRole", role);
+
+    setCurrentActiveRole(role);
     console.log(`Role selected: ${role}`);
   };
 

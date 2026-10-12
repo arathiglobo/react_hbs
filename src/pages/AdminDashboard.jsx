@@ -116,11 +116,11 @@ export default function AdminDashboard() {
   // still recognised. Backend endpoints continue to enforce their own
   // access rules — this is a display-only gate.
   const isSuperAdminUser = (() => {
-    const active = (localStorage.getItem('currentActiveRole') || '')
+    const active = (sessionStorage.getItem('currentActiveRole') || '')
       .trim()
       .toLowerCase();
     if (active) return active === 'super_admin';
-    const stored = (localStorage.getItem('userRole') || '')
+    const stored = (sessionStorage.getItem('userRole') || '')
       .split(',')
       .map((r) => r.trim().toLowerCase())
       .filter(Boolean);
@@ -140,7 +140,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     const init = async () => {
       try {
-        const userName = localStorage.getItem('UserName') ?? sessionStorage.getItem('UserName');
+        const userName = sessionStorage.getItem('UserName');
         if (userName) axiosInstance.get(`/api/personalProfile/${userName}`).catch(() => {});
         const res = await axiosInstance.get('/api/dashboard/stats');
         if (res.data && typeof res.data === 'object') setStat((p) => ({ ...p, ...res.data }));

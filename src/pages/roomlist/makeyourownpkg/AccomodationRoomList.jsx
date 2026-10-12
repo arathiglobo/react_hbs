@@ -51,7 +51,7 @@ const AccomodationRoomList = () => {
   const [showUnavailableModal, setShowUnavailableModal] = useState(false);
   const [policyList, setPolicyList] = useState(null);
 
-  let activeUserRole = localStorage.getItem("currentActiveRole");
+  let activeUserRole = sessionStorage.getItem("currentActiveRole");
   // console.log("currentActiveRole::", activeUserRole);
 
   // Trigger API call on page load with state passed from HotelSearch

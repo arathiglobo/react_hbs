@@ -198,7 +198,7 @@ export default function SubUser() {
   // is stored as "prefix.mainAgent" (same convention as sub-agents) and the
   // account is created via /auth/register with subUser:true so the backend
   // resolves the credentials email from the sub_user table.
-  const mainAgentName = localStorage.getItem("UserName") || "";
+  const mainAgentName = sessionStorage.getItem("UserName") || "";
   const [rolesList, setRolesList] = useState([]);
   const [loginTarget, setLoginTarget] = useState(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -585,7 +585,7 @@ export default function SubUser() {
   const resolveSubAgentCurrency = async () => {
     try {
       const uname =
-        localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+        sessionStorage.getItem("UserName");
       if (!uname) return;
       const prof = await axiosInstance.get(`/api/personalProfile/${uname}`);
       const agentId = prof?.data?.id;

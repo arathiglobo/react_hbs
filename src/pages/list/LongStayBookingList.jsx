@@ -27,6 +27,7 @@ import { formatDateTime } from "../../utils/dateUtils";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import { toast } from "react-hot-toast";
+import RoomCountSummary, { countRoomTypes } from "../../components/RoomCountSummary";
 import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -46,6 +47,7 @@ const COLUMN_WIDTHS = {
   confirmationNo: "130px",
   bookDate: "95px",
   bookingDetails: "240px",
+  noOfRooms: "120px",
   nights: "70px",
   total: "110px",
   paymentStatus: "110px",
@@ -166,6 +168,16 @@ const getGuestNames = (booking) => {
     names.push(booking.primaryGuestName);
   }
   return names;
+};
+
+// No. of Rooms column — `rooms[]` holds one entry per booked room, and
+// every room on a long-stay booking shares the contract room's category.
+const getRoomSummary = (booking) => {
+  const total = Array.isArray(booking?.rooms) ? booking.rooms.length : 0;
+  return {
+    total,
+    lines: countRoomTypes([booking], (b) => b.roomCategoryName, () => total),
+  };
 };
 
 const StatusPill = ({ meta, raw }) => {
@@ -674,6 +686,15 @@ export default function LongStayBookingList() {
                             style={{
                               ...baseHeaderStyle,
                               textAlign: "center",
+                              width: COLUMN_WIDTHS.noOfRooms,
+                            }}
+                          >
+                            No. of Rooms
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
                               width: COLUMN_WIDTHS.nights,
                             }}
                           >
@@ -724,7 +745,7 @@ export default function LongStayBookingList() {
                         {pageBookings.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={10}
+                              colSpan={12}
                               className="text-center py-5 text-muted"
                               style={{
                                 border: "1px solid #dee2e6",
@@ -941,6 +962,15 @@ export default function LongStayBookingList() {
                                         </span>
                                       )}
                                   </div>
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.noOfRooms,
+                                  }}
+                                >
+                                  <RoomCountSummary {...getRoomSummary(b)} />
                                 </td>
                                 <td
                                   className="text-muted"

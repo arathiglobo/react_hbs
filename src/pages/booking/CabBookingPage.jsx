@@ -181,10 +181,10 @@ const CabBookingPage = () => {
   // (they ARE the agent), so makeYourOwnPackageAgentId is never populated
   // for them. Detect that case here so we can fall back to the logged-in
   // user's own userId — same resolution the search page's build now does.
-  const activeRoleOnLoad = (localStorage.getItem("currentActiveRole") || "")
+  const activeRoleOnLoad = (sessionStorage.getItem("currentActiveRole") || "")
     .trim()
     .toUpperCase();
-  const storedRolesOnLoad = (localStorage.getItem("userRole") || "").toUpperCase();
+  const storedRolesOnLoad = (sessionStorage.getItem("userRole") || "").toUpperCase();
   const isAgentRoleOnLoad = activeRoleOnLoad
     ? activeRoleOnLoad === "AGENT"
     : storedRolesOnLoad.includes("AGENT") && !storedRolesOnLoad.includes("ADMIN");
@@ -193,7 +193,7 @@ const CabBookingPage = () => {
       ? String(searchCriteria.agentId)
       : sessionStorage.getItem("makeYourOwnPackageAgentId") ||
         localStorage.getItem("makeYourOwnPackageAgentId") ||
-        (isAgentRoleOnLoad ? localStorage.getItem("userId") || "" : "") ||
+        (isAgentRoleOnLoad ? sessionStorage.getItem("userId") || "" : "") ||
         "";
 
   // If accessed directly without state, we should probably redirect or show an error

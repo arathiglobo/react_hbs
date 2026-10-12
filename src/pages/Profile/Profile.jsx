@@ -23,6 +23,7 @@ import {
   FaArrowLeft,
 } from "react-icons/fa";
 import axiosInstance from "../../components/AxiosInstance";
+import { clearAuthSession, getUserName, getUserRole, getCurrentActiveRole } from "../../utils/authSession";
 import TopBar from "../../components/TopBar";
 import Sidebar from "../../components/Sidebar";
 
@@ -87,29 +88,17 @@ const Profile = () => {
     } catch {
       // Best-effort: still finish the client-side logout if the call fails.
     }
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("userRole");
-    localStorage.removeItem("UserName");
-    localStorage.removeItem("currentActiveRole");
-    localStorage.removeItem("adSessionId");
-    localStorage.removeItem("partnerAccess");
-    localStorage.removeItem("regionalClockProfile");
+    clearAuthSession();
     // Full navigation so any in-memory app state is dropped, matching the
     // TopBar Logout behaviour exactly.
     window.location.href = "/login";
   };
 
-  const userName = useMemo(
-    () =>
-      localStorage.getItem("UserName") ||
-      sessionStorage.getItem("UserName") ||
-      "",
-    []
-  );
+  const userName = useMemo(() => getUserName(), []);
 
   const roles = useMemo(
     () =>
-      (localStorage.getItem("userRole") || "")
+      getUserRole()
         .split(",")
         .map((r) => r.trim().toLowerCase())
         .filter(Boolean),
@@ -117,12 +106,7 @@ const Profile = () => {
   );
 
   const currentRole = useMemo(
-    () =>
-      (localStorage.getItem("currentActiveRole") || "")
-        .trim()
-        .toLowerCase() ||
-      roles[0] ||
-      "",
+    () => getCurrentActiveRole().trim().toLowerCase() || roles[0] || "",
     [roles]
   );
 

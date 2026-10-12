@@ -502,10 +502,10 @@ export default function HotelSearch({
   // Agent picker is hidden and the agent-required validation is skipped.
   // currentActiveRole isn't set for single-role logins, so fall back to
   // userRole; admin/super-admin/staff keep the picker exactly as before.
-  const activeRole = (localStorage.getItem("currentActiveRole") || "")
+  const activeRole = (sessionStorage.getItem("currentActiveRole") || "")
     .trim()
     .toUpperCase();
-  const storedRoles = (localStorage.getItem("userRole") || "").toUpperCase();
+  const storedRoles = (sessionStorage.getItem("userRole") || "").toUpperCase();
   const isAgentRole = activeRole
     ? activeRole === "AGENT"
     : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
@@ -515,7 +515,6 @@ export default function HotelSearch({
   // this name is shown (and sent) instead. Same source the payload's
   // agentName uses for agent logins. Empty for admin/staff.
   const loggedInAgentName =
-    localStorage.getItem("UserName") ||
     sessionStorage.getItem("UserName") ||
     "";
 
@@ -653,8 +652,10 @@ export default function HotelSearch({
   // Refund Policy sidebar filter. Sent to /results as `refundPolicy` so it
   // narrows the WHOLE result set (all pages), and re-applied client-side in
   // filteredResults so the list is right even while suppliers are still
-  // polling. Both / neither ticked = no narrowing. Hotels whose supplier
-  // sends no refund info at search time (flag null) are never hidden.
+  // polling. At most one box can be ticked (the checkboxes clear each
+  // other); neither ticked = no narrowing. Strict: hotels whose
+  // supplier sends no refund info at search time (flag null) are hidden
+  // while either box is ticked.
   const [refundPolicy, setRefundPolicy] = useState({
     refundable: false,
     nonRefundable: false,
@@ -1212,12 +1213,14 @@ export default function HotelSearch({
       );
     }
 
-    // Refund Policy — drop a hotel only when the backend says definitively
-    // that it has no rate of the selected kind (flag === false).
+    // Refund Policy — strict: keep a hotel only when the backend confirms it
+    // has a rate of the selected kind (flag === true). Unknown (null) is
+    // hidden too, so "Refundable" never lists a non-refundable-only hotel.
+    // Same rule as HotelSearchService.applyRefundPolicyFilter.
     if (refundPolicyParam === "refundable") {
-      results = results.filter((hotel) => hotel.hasRefundable !== false);
+      results = results.filter((hotel) => hotel.hasRefundable === true);
     } else if (refundPolicyParam === "nonRefundable") {
-      results = results.filter((hotel) => hotel.hasNonRefundable !== false);
+      results = results.filter((hotel) => hotel.hasNonRefundable === true);
     }
 
     // Available Deals — OR-match across the selected option values.
@@ -1613,10 +1616,10 @@ export default function HotelSearch({
   // /api/personalProfile/{UserName}) so we can look up their currency below.
   useEffect(() => {
     if (!isAgentRole) return;
-    const cached = localStorage.getItem("userId");
+    const cached = sessionStorage.getItem("userId");
     if (cached) { setSelfAgentId(cached); return; }
     const userName =
-      localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+      sessionStorage.getItem("UserName");
     if (!userName) return;
     let cancelled = false;
     axiosInstance
@@ -1625,7 +1628,7 @@ export default function HotelSearch({
         if (cancelled) return;
         if (res?.data?.id != null) {
           const idv = String(res.data.id);
-          localStorage.setItem("userId", idv);
+          sessionStorage.setItem("userId", idv);
           setSelfAgentId(idv);
         }
       })
@@ -3452,7 +3455,10 @@ export default function HotelSearch({
                           )}
 
                           {/* Refund Policy — lets the agent narrow the hotel
-                              list without opening each hotel's rooms. */}
+                              list without opening each hotel's rooms. The two
+                              boxes are mutually exclusive: ticking one clears
+                              the other, and either can be unticked to show
+                              every hotel again. */}
                           <Form.Group className="mb-2">
                             <Form.Label className="fw-semibold small">
                               Refund Policy
@@ -3464,10 +3470,10 @@ export default function HotelSearch({
                                 label="Refundable"
                                 checked={refundPolicy.refundable}
                                 onChange={(e) =>
-                                  setRefundPolicy((prev) => ({
-                                    ...prev,
+                                  setRefundPolicy({
                                     refundable: e.target.checked,
-                                  }))
+                                    nonRefundable: false,
+                                  })
                                 }
                               />
                               <Form.Check
@@ -3476,10 +3482,10 @@ export default function HotelSearch({
                                 label="Non Refundable"
                                 checked={refundPolicy.nonRefundable}
                                 onChange={(e) =>
-                                  setRefundPolicy((prev) => ({
-                                    ...prev,
+                                  setRefundPolicy({
+                                    refundable: false,
                                     nonRefundable: e.target.checked,
-                                  }))
+                                  })
                                 }
                               />
                             </div>
@@ -4159,8 +4165,7 @@ export default function HotelSearch({
                                             (a) => String(a?.id) === pickedAgentId,
                                           );
                                           const agentName = isAgentRole
-                                            ? localStorage.getItem("UserName") ||
-                                              sessionStorage.getItem("UserName") ||
+                                            ? sessionStorage.getItem("UserName") ||
                                               ""
                                             : pickedAgent
                                               ? pickedAgent.companyName ||

@@ -306,7 +306,7 @@ export default function BookingDetailedView() {
 
   // Role gate for admin-only actions (currently: "Send Email" on the
   // PDF preview modal). Matches the convention used on HotelBookingPage.
-  const activeUserRole = localStorage.getItem("currentActiveRole");
+  const activeUserRole = sessionStorage.getItem("currentActiveRole");
   const isAdmin = String(activeUserRole || "").toUpperCase() === "ADMIN";
   const isSuperAdmin =
     String(activeUserRole || "").toUpperCase() === "SUPER_ADMIN";
@@ -325,7 +325,7 @@ export default function BookingDetailedView() {
   // changes visibility only; no API/flow/permission behaviour is affected.
   const activeRole = String(activeUserRole || "").trim().toUpperCase();
   const storedRoles = String(
-    localStorage.getItem("userRole") || "",
+    sessionStorage.getItem("userRole") || "",
   ).toUpperCase();
   const isAgentRole = activeRole
     ? activeRole === "AGENT"
@@ -1194,7 +1194,6 @@ export default function BookingDetailedView() {
       // Same endpoint + payload shape the standalone /notes page uses; nothing
       // about how notes are stored/retrieved is changed.
       const createdBy =
-        localStorage.getItem("UserName") ||
         sessionStorage.getItem("UserName") ||
         "unknown";
       const res = await axiosInstance.post(
@@ -2088,8 +2087,20 @@ export default function BookingDetailedView() {
                               <tr>
                                 <td>{room.roomCategory || "-"}</td>
                                 <td>{room.mealPlan || "-"}</td>
+                                {/* The unique booking reference the 3rd-party
+                                    supplier returned (IWTX/X3 BookingNumber,
+                                    GRN bref, GoGlobal GoBookingCode, Juniper
+                                    LocatorID, …). In-house bookings persist the
+                                    "0" placeholder — no supplier exists — so
+                                    that renders as "-" instead of a bare 0. */}
                                 {(isAdmin || isSuperAdmin) && (
-                                  <td>{booking.supplierReference || "-"}</td>
+                                  <td>
+                                    {booking.supplierReference &&
+                                    String(booking.supplierReference).trim() !==
+                                      "0"
+                                      ? booking.supplierReference
+                                      : "-"}
+                                  </td>
                                 )}
                                 <td>{room.adults ?? "-"}</td>
                                 <td>{room.children ?? "0"}</td>

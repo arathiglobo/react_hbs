@@ -175,7 +175,7 @@ export default function LongStayBookingPage() {
   // render it as "Contact: <value>/<agentName>". The input is ADMIN-only.
   const [bookingDoneFor, setBookingDoneFor] = useState("");
   const isAdmin =
-    String(localStorage.getItem("currentActiveRole") || "").toUpperCase() ===
+    String(sessionStorage.getItem("currentActiveRole") || "").toUpperCase() ===
     "ADMIN";
 
   const handleSpecialRequestToggle = (request) => {

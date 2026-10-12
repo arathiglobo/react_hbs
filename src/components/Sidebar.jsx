@@ -31,6 +31,7 @@ import axiosInstance from "./AxiosInstance";
 import { isAgentComingSoon, COMING_SOON_TITLE } from "../config/agentComingSoon";
 import { isPartnerRole } from "../config/partnerFeatures";
 import PartnerSidebar from "./PartnerSidebar";
+import { getUserRole, getCurrentActiveRole, setCurrentActiveRole, getUserName } from "../utils/authSession";
 
 
 let labelForDashboard = " ";
@@ -87,6 +88,22 @@ function ComingSoonSubmenuItem({ label, color }) {
   );
 }
 
+/**
+ * Pending-approval pill for an Approvals submenu entry (Hotel / Agent /
+ * Supplier / DMC). Styled by .submenu-pending-badge in custom.scss.
+ */
+function SubmenuPendingBadge({ count }) {
+  if (!count) return null;
+  return (
+    <span
+      className="ms-2 badge rounded-pill submenu-pending-badge"
+      title={`${count} pending approval${count === 1 ? "" : "s"}`}
+    >
+      {count}
+    </span>
+  );
+}
+
 export default function Sidebar() {
   const [show, setShow] = useState(false);
   const handleClose = () => setShow(false);
@@ -104,11 +121,18 @@ export default function Sidebar() {
    */
   const [hiddenCodes, setHiddenCodes] = useState(() => new Set());
   /**
-   * Combined count of PENDING hotel + agent self-registration requests.
-   * Shown as a red pill next to the Approvals menu label so admins see
-   * there's queue work without opening the menu. Only admins fetch it.
+   * PENDING self-registration counts per Approvals submenu entry, keyed by
+   * the child's menu code. The Approvals label shows their sum so admins
+   * see there's queue work without opening the menu; once expanded, each
+   * entry (Hotel / Agent / Supplier / DMC) shows its own share. Only admins
+   * fetch it.
    */
-  const [approvalsPendingCount, setApprovalsPendingCount] = useState(0);
+  const [approvalsPendingByCode, setApprovalsPendingByCode] = useState({});
+  // Entries hidden by super_admin are left out so the total always equals
+  // the sum of the counts visible in the expanded submenu.
+  const approvalsPendingCount = Object.entries(approvalsPendingByCode)
+    .filter(([code]) => !hiddenCodes.has(code))
+    .reduce((sum, [, n]) => sum + n, 0);
 
   // Desktop sidebar collapse (remembered across reloads). When collapsed the
   // <aside> is removed so the page content reclaims the space, and a small
@@ -124,7 +148,7 @@ export default function Sidebar() {
     });
   };
 
-  const storedRoles = (localStorage.getItem("userRole") || "")
+  const storedRoles = getUserRole()
     .split(",")
     .map((role) => role.trim().toLowerCase());
 
@@ -154,7 +178,7 @@ export default function Sidebar() {
 
   const currentRole =
     pathRole ||
-    localStorage.getItem("currentActiveRole")?.toLowerCase() ||
+    getCurrentActiveRole().toLowerCase() ||
     storedRoles[0] ||
     "";
 
@@ -164,8 +188,7 @@ export default function Sidebar() {
   // not see the agent "Registration" menu — they can't create their own
   // sub-users / sub-agents. Only affects agent-role logins; every other role
   // is unchanged.
-  const loginUserName =
-    localStorage.getItem("UserName") || sessionStorage.getItem("UserName") || "";
+  const loginUserName = getUserName();
   const isSubAccountAgent =
     currentRole === "agent" && loginUserName.includes(".");
 
@@ -178,18 +201,15 @@ export default function Sidebar() {
   // Re-sync the stored active role with the dashboard context so the
   // role-guarded routes (PrivateRoute roles=[...]) agree with the menu.
   useEffect(() => {
-    if (
-      pathRole &&
-      localStorage.getItem("currentActiveRole")?.toLowerCase() !== pathRole
-    ) {
-      localStorage.setItem("currentActiveRole", pathRole);
+    if (pathRole && getCurrentActiveRole().toLowerCase() !== pathRole) {
+      setCurrentActiveRole(pathRole);
     }
   }, [pathRole]);
 
   useEffect(() => {
     const fetchHotelId = async () => {
       try {
-        const userName = localStorage.getItem("UserName") || sessionStorage.getItem("UserName");
+        const userName = getUserName();
         if (userName && currentRole === "extranet") {
           const response = await axiosInstance.get(`/api/personalProfile/${userName}`);
           if (response.data && response.data.id) {
@@ -209,7 +229,7 @@ export default function Sidebar() {
   // also refreshes whenever this component remounts (route changes).
   useEffect(() => {
     if (currentRole !== "admin") {
-      setApprovalsPendingCount(0);
+      setApprovalsPendingByCode({});
       return;
     }
     let cancelled = false;
@@ -228,12 +248,13 @@ export default function Sidebar() {
             .catch(() => null),
         ]);
         if (cancelled) return;
-        const h = Number(hotelRes?.data?.count) || 0;
-        const a = Number(agentRes?.data?.count) || 0;
-        const p = Number(partnerRes?.data?.count) || 0;
-        setApprovalsPendingCount(h + a + p);
+        setApprovalsPendingByCode({
+          appr_hotel: Number(hotelRes?.data?.count) || 0,
+          appr_agent: Number(agentRes?.data?.count) || 0,
+          appr_partner: Number(partnerRes?.data?.count) || 0,
+        });
       } catch (_) {
-        if (!cancelled) setApprovalsPendingCount(0);
+        if (!cancelled) setApprovalsPendingByCode({});
       }
     })();
     return () => {
@@ -413,6 +434,10 @@ export default function Sidebar() {
         {
           label: "Location settings",
           children: [
+            // Country → City → Location manager: add a city under a chosen
+            // country, a location under a chosen city, and (soft) delete any
+            // of them. Feeds the Country / City / Location registration dropdowns.
+            { label: "Country / City / Location", to: "/masters/location-hierarchy" },
             { label: "Market Type", to: "/masters/market-type" },
             { label: "Region", to: "/masters/region" },
             { label: "Countries", to: "/masters/countries" },
@@ -1346,6 +1371,9 @@ export default function Sidebar() {
                             }}
                           >
                             {child.label}
+                            <SubmenuPendingBadge
+                              count={approvalsPendingByCode[child.code]}
+                            />
                           </Nav.Link>
                         );
                       })}
@@ -1586,6 +1614,9 @@ export default function Sidebar() {
                               }}
                             >
                               {child.label}
+                              <SubmenuPendingBadge
+                                count={approvalsPendingByCode[child.code]}
+                              />
                             </Nav.Link>
                           );
                         })}

@@ -1352,7 +1352,7 @@ const PaxInformation = forwardRef(({
             // Local helpers — kept inline so this modal has no external
             // dependency other than the props/state PaxInformation already
             // computes above.
-            const activeUserRole = localStorage.getItem("currentActiveRole");
+            const activeUserRole = sessionStorage.getItem("currentActiveRole");
             const formatPrice = (v) =>
               `AED ${Number(v || 0).toLocaleString("en-US", {
                 minimumFractionDigits: 2,

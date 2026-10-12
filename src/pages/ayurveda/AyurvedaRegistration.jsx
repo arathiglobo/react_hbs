@@ -236,7 +236,7 @@ const AyurvedaRegistration = () => {
       status: enquiry.status === "NEW" ? "IN_PROGRESS" : enquiry.status,
       response: enquiry.response || "",
       respondedBy:
-        localStorage.getItem("UserName") ||
+        sessionStorage.getItem("UserName") ||
         localStorage.getItem("userName") ||
         "",
     });

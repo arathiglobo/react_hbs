@@ -115,7 +115,7 @@ const SPECIAL_REQUEST_OPTIONS = [
 export default function DayStayBookingPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const activeUserRole = localStorage.getItem("currentActiveRole");
+  const activeUserRole = sessionStorage.getItem("currentActiveRole");
 
   // ── Source of truth ───────────────────────────────────────────────
   // `payload` is the flattened DayStay handoff object written by

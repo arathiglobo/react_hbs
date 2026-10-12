@@ -425,7 +425,7 @@ const GenerateQuotationBooking = () => {
       const markupTypeName = "Percent";
       const agentId = parseInt(sessionStorage.getItem("makePkgAgentId") || "0");
       const employeeId = firstHotel?.employeeId || "1";
-      const agent = localStorage.getItem("UserName") || sessionStorage.getItem("UserName") || "";
+      const agent = sessionStorage.getItem("UserName") || "";
 
       const quoteItineraryDTOList = [];
       if (selectedItineraries.day1.length > 0) {

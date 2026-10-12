@@ -134,7 +134,7 @@ const formatDateTime = (dateStr) => {
 const GovEmployeeBookingPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const activeUserRole = localStorage.getItem("currentActiveRole");
+  const activeUserRole = sessionStorage.getItem("currentActiveRole");
 
   // ── State pulled from sessionStorage (set by GovEmployeeRoomList) ─
   const [bookingData, setBookingData] = useState(null);
