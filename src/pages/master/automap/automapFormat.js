@@ -121,3 +121,12 @@ export function reasonLabel(code) {
 export function methodLabel(method) {
   return method === "AUTOMATED" ? "Automated" : "Manual";
 }
+
+/** Escapes a value for the small HTML blocks shown in SweetAlert confirmations. */
+export function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}

@@ -25,11 +25,13 @@ import { fmtNumber, statusMeta } from "./automapFormat";
  * Three tabs backed by /api/hotel-mapping/auto/*:
  *   Status        — live engine state (running / paused + reason / completed /
  *                   error), system load, progress figures, supplier health,
- *                   supplier catalog pull.
+ *                   supplier catalog pull, supplier ↔ supplier matching.
  *   Mapped Hotels — per-hotel supplier matrix with green tick / red cross,
- *                   server-side search + filters + paging.
+ *                   server-side search + filters + paging; "Supplier-only
+ *                   hotels" lists masters without an in-house hotel.
  *   Manual Review — alphabetical list of hotels below the 100% rule with
- *                   their candidates and Map / Reject actions.
+ *                   their candidates and Map / Reject actions; "Supplier ↔
+ *                   supplier" lists the pairs of the supplier pass.
  *
  * `status` is polled every 5 s by useAutoMappingStatus, so the header pill,
  * the Status tab and the tab counters update without a page reload. The
@@ -59,7 +61,10 @@ export default function AutomatedHotelMappingPage() {
   const isRunning = status?.status === "RUNNING";
   const suppliers = useMemo(() => status?.suppliers || [], [status]);
   // Changes whenever the engine or an operator writes links / candidates.
-  const refreshKey = `${status?.automatedMappingsTotal ?? ""}-${status?.manualMappingsTotal ?? ""}-${status?.manualReviewCount ?? ""}`;
+  const pairCount = status?.supplierMatch?.pendingReviewPairs;
+  const refreshKey = `${status?.automatedMappingsTotal ?? ""}-${status?.manualMappingsTotal ?? ""}-${status?.manualReviewCount ?? ""}-${
+    status?.supplierMatch?.supplierOnlyMasters ?? ""
+  }-${pairCount ?? ""}`;
 
   const rescan = async () => {
     const confirm = await Swal.fire({
@@ -91,10 +96,7 @@ export default function AutomatedHotelMappingPage() {
         <main className="flex-grow-1 p-4 ahm-page">
           <div className="ahm-page-head">
             <BackButton fallback="/masters/hotel-mapping" />
-            <h3 className="mb-0">
-              <i className="fas fa-robot me-2 text-muted" aria-hidden="true"></i>
-              Automated Hotel Mapping
-            </h3>
+            <h3 className="mb-0">Automated Hotel Mapping</h3>
             <span className="ahm-pill" style={{ cursor: "default" }} role="status" aria-live="polite">
               <span className={`ahm-dot tone-${meta.tone}${isRunning ? " pulse" : ""}`}></span>
               <span>{meta.label}</span>
@@ -109,7 +111,8 @@ export default function AutomatedHotelMappingPage() {
             </span>
           </div>
           <p className="text-muted">
-            Background engine status, the per-supplier mapped matrix and the hotels waiting for manual review.
+            Background engine status, the per-supplier mapped matrix (our hotels and supplier-only hotels) and everything
+            waiting for manual review.
           </p>
 
           {!isAdminUser && (
@@ -179,9 +182,14 @@ export default function AutomatedHotelMappingPage() {
                   title={
                     <span>
                       <i className="fas fa-user-check me-1" aria-hidden="true"></i> Manual Review{" "}
-                      <Badge bg={status.manualReviewCount > 0 ? "warning" : "light"} text="dark" pill>
+                      <Badge bg={status.manualReviewCount > 0 ? "warning" : "light"} text="dark" pill title="Our hotels with pending candidates">
                         {fmtNumber(status.manualReviewCount)}
                       </Badge>
+                      {pairCount > 0 && (
+                        <Badge bg="info" text="dark" pill className="ms-1" title="Supplier ↔ supplier pairs to review">
+                          {fmtNumber(pairCount)}
+                        </Badge>
+                      )}
                     </span>
                   }
                 >
@@ -191,6 +199,8 @@ export default function AutomatedHotelMappingPage() {
                     canAct={isAdminUser}
                     onChanged={refresh}
                     refreshKey={refreshKey}
+                    hotelCount={status.manualReviewCount}
+                    pairCount={pairCount}
                   />
                 </Tab>
               </Tabs>
