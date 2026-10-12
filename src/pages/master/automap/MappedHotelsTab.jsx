@@ -10,8 +10,18 @@ import { fmtDateTime, fmtNumber, fmtPercent, methodLabel } from "./automapFormat
  * server-side (GET /api/hotel-mapping/auto/mapped). `refreshKey` changes
  * whenever the status poll reports new links, so the list follows the
  * engine without a manual reload.
+ *
+ * The "Supplier-only hotels" source lists master hotels that two or more
+ * suppliers sell but we have no in-house hotel for — built by the
+ * supplier-to-supplier pass (GET /api/hotel-mapping/auto/supplier-masters).
  */
+const SOURCES = [
+  { value: "INHOUSE", label: "In-house hotels" },
+  { value: "SUPPLIER", label: "Supplier-only hotels" },
+];
+
 export default function MappedHotelsTab({ suppliers, active, refreshKey }) {
+  const [source, setSource] = useState("INHOUSE");
   const [search, setSearch] = useState("");
   const [country, setCountry] = useState("");
   const [city, setCity] = useState("");
@@ -40,19 +50,23 @@ export default function MappedHotelsTab({ suppliers, active, refreshKey }) {
       const seq = ++requestSeq.current;
       if (!silent) setLoading(true);
       try {
-        const res = await axiosInstance.get("/api/hotel-mapping/auto/mapped", {
-          params: {
-            search: debounced.search || undefined,
-            country: debounced.country || undefined,
-            city: debounced.city || undefined,
-            supplier: supplier || undefined,
-            status,
-            method,
-            page,
-            size,
+        const supplierOnly = source === "SUPPLIER";
+        const res = await axiosInstance.get(
+          supplierOnly ? "/api/hotel-mapping/auto/supplier-masters" : "/api/hotel-mapping/auto/mapped",
+          {
+            params: {
+              search: debounced.search || undefined,
+              country: debounced.country || undefined,
+              city: debounced.city || undefined,
+              supplier: supplier || undefined,
+              status: supplierOnly ? undefined : status,
+              method,
+              page,
+              size,
+            },
+            timeout: 30000,
           },
-          timeout: 30000,
-        });
+        );
         if (seq !== requestSeq.current) return;
         setData(res.data);
         setError(null);
@@ -63,7 +77,7 @@ export default function MappedHotelsTab({ suppliers, active, refreshKey }) {
         if (seq === requestSeq.current) setLoading(false);
       }
     },
-    [debounced, supplier, status, method, page, size],
+    [source, debounced, supplier, status, method, page, size],
   );
 
   useEffect(() => {
@@ -81,11 +95,38 @@ export default function MappedHotelsTab({ suppliers, active, refreshKey }) {
 
   const columns = useMemo(() => suppliers || [], [suppliers]);
   const content = data?.content || [];
+  const supplierOnly = source === "SUPPLIER";
+
+  const changeSource = (value) => {
+    if (value === source) return;
+    setSource(value);
+    setData(null);
+    setPage(0);
+  };
 
   return (
     <div className="d-flex flex-column gap-3">
       {/* ---- filters ---- */}
       <div className="ahm-panel p-3 ahm-filters">
+        <div className="d-flex flex-wrap align-items-center gap-2 mb-2" role="group" aria-label="Hotel source">
+          {SOURCES.map((s) => (
+            <Button
+              key={s.value}
+              size="sm"
+              variant={source === s.value ? "primary" : "outline-secondary"}
+              onClick={() => changeSource(s.value)}
+              aria-pressed={source === s.value}
+            >
+              {s.label}
+            </Button>
+          ))}
+          {supplierOnly && (
+            <span className="small text-muted">
+              Hotels two or more suppliers sell that we have no in-house hotel for. Search shows each as one hotel and its
+              room list shows every supplier's rooms.
+            </span>
+          )}
+        </div>
         <div className="row g-2 align-items-end">
           <div className="col-lg-4 col-md-6">
             <Form.Label className="small fw-semibold text-muted mb-1">Search</Form.Label>
@@ -114,7 +155,12 @@ export default function MappedHotelsTab({ suppliers, active, refreshKey }) {
           </div>
           <div className="col-lg-2 col-md-4">
             <Form.Label className="small fw-semibold text-muted mb-1">Mapping status</Form.Label>
-            <Form.Select value={status} onChange={(e) => { setStatus(e.target.value); setPage(0); }} aria-label="Filter by mapping status">
+            <Form.Select
+              value={supplierOnly ? "MAPPED" : status}
+              onChange={(e) => { setStatus(e.target.value); setPage(0); }}
+              disabled={supplierOnly}
+              aria-label="Filter by mapping status"
+            >
               <option value="MAPPED">Mapped</option>
               <option value="UNMAPPED">Not mapped</option>
               <option value="ALL">All hotels</option>
@@ -177,7 +223,7 @@ export default function MappedHotelsTab({ suppliers, active, refreshKey }) {
           <thead>
             <tr>
               <th style={{ width: 44 }}>#</th>
-              <th>Our hotel</th>
+              <th>{supplierOnly ? "Hotel (supplier-only)" : "Our hotel"}</th>
               <th>City</th>
               <th>Country</th>
               {columns.map((s) => (
@@ -196,18 +242,24 @@ export default function MappedHotelsTab({ suppliers, active, refreshKey }) {
                 </th>
               ))}
               <th className="text-center">Mapped</th>
-              <th>Last processed</th>
+              <th>{supplierOnly ? "Created" : "Last processed"}</th>
             </tr>
           </thead>
           <tbody>
             {content.map((row, idx) => (
-              <tr key={row.hotelId}>
+              <tr key={supplierOnly ? `m${row.masterHotelId}` : row.hotelId}>
                 <td className="text-muted">{page * size + idx + 1}</td>
                 <td>
-                  <div className="ahm-hotel-name">{row.hotelName}</div>
+                  <div className="ahm-hotel-name">{supplierOnly ? row.name : row.hotelName}</div>
                   <div className="ahm-hotel-id">
-                    ID {row.hotelId}
-                    {row.masterHotelId ? ` · master #${row.masterHotelId}` : ""}
+                    {supplierOnly ? (
+                      `master #${row.masterHotelId}`
+                    ) : (
+                      <>
+                        ID {row.hotelId}
+                        {row.masterHotelId ? ` · master #${row.masterHotelId}` : ""}
+                      </>
+                    )}
                   </div>
                 </td>
                 <td>{row.city || "—"}</td>
@@ -219,7 +271,11 @@ export default function MappedHotelsTab({ suppliers, active, refreshKey }) {
                   const cell = (row.suppliers || []).find((c) => c.supplier === s.code);
                   return (
                     <td key={s.code} className="ahm-cell-sup">
-                      <SupplierCell cell={cell} supplier={s} hotelName={row.hotelName} />
+                      <SupplierCell
+                        cell={cell}
+                        supplier={s}
+                        hotelName={supplierOnly ? `m${row.masterHotelId}` : row.hotelName}
+                      />
                     </td>
                   );
                 })}
@@ -229,8 +285,14 @@ export default function MappedHotelsTab({ suppliers, active, refreshKey }) {
                   </Badge>
                 </td>
                 <td className="small text-muted text-nowrap">
-                  {fmtDateTime(row.lastProcessedAt)}
-                  {row.progressStatus ? <div className="text-uppercase" style={{ fontSize: ".65rem" }}>{row.progressStatus.replace(/_/g, " ")}</div> : null}
+                  {supplierOnly ? (
+                    fmtDateTime(row.createdAt)
+                  ) : (
+                    <>
+                      {fmtDateTime(row.lastProcessedAt)}
+                      {row.progressStatus ? <div className="text-uppercase" style={{ fontSize: ".65rem" }}>{row.progressStatus.replace(/_/g, " ")}</div> : null}
+                    </>
+                  )}
                 </td>
               </tr>
             ))}
@@ -240,9 +302,11 @@ export default function MappedHotelsTab({ suppliers, active, refreshKey }) {
                   <div className="ahm-empty-icon">
                     <i className="fas fa-hotel" aria-hidden="true"></i>
                   </div>
-                  {status === "MAPPED"
-                    ? "No hotel matches these filters yet. Mapped hotels appear here as the engine (or an operator) links them."
-                    : "No hotel matches these filters."}
+                  {supplierOnly
+                    ? "No supplier-only hotel matches these filters yet. They appear here as the supplier-to-supplier pass links hotels two suppliers sell."
+                    : status === "MAPPED"
+                      ? "No hotel matches these filters yet. Mapped hotels appear here as the engine (or an operator) links them."
+                      : "No hotel matches these filters."}
                 </td>
               </tr>
             )}

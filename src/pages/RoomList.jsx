@@ -43,6 +43,27 @@ import {
   isDeadlinePassed,
   DEADLINE_TIME_EOD,
 } from "../utils/rateDeadline";
+import {
+  isNonRefundableRate,
+  sumSelectedRooms,
+  buildInhouseSingleBookingData,
+  buildInhouseMultiBookingData,
+} from "../utils/inhouseBookingData";
+import { stripSupplierSuffix } from "../utils/supplierDisplay";
+
+/**
+ * Whether a hotel block of /api/hotel-rooms/search belongs to the supplier
+ * the search was made for (payload.apiId — 1 / in-house on /room-list; the
+ * 24-hour route can also open other suppliers' hotels here). A hotel mapped
+ * across several suppliers comes back as one block per supplier, each
+ * tagged with its own apiId. Untagged blocks (older backend) are treated as
+ * the searched supplier's.
+ */
+const isSearchedSupplierBlock = (h, searchedApiId) => {
+  const blockApiId = Number(h?.apiId);
+  if (!Number.isFinite(blockApiId) || blockApiId <= 0) return true;
+  return blockApiId === Number(searchedApiId);
+};
 
 /**
  * Builds the "Valid: <from> - <to>" label for a policy validity period.
@@ -261,6 +282,9 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
   // Trigger API call on page load with state passed from HotelSearch
   useEffect(() => {
     const fetchRooms = async () => {
+      // Set when the results are handed over to /api-room-list (mapped
+      // multi-supplier hotel) so the loader stays up until the route swaps.
+      let handedOff = false;
       try {
         setLoading(true);
         setError(null);
@@ -327,6 +351,54 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
           return;
         }
 
+        // ── Hotel mapped across several suppliers ──────────────────────
+        // /api/hotel-rooms/search returns ONE block per mapped supplier
+        // (apiType / apiId / supplierHotelCode on each). The normal in-house
+        // flow hands such a response to the merged multi-supplier room list
+        // (/api-room-list), passing the response along so that page does not
+        // run the search again. In-house-only modes — religious, 24-hour and
+        // Book-Again amendments (parentBookingCode; only the in-house booking
+        // page links a child booking to its parent) — keep only the searched
+        // supplier's block(s) (in-house) so they never show another
+        // supplier's rooms.
+        let searchData = res.data;
+        const searchBlocks = Array.isArray(res.data.hotels) ? res.data.hotels : [];
+        const isOwnBlock = (h) => isSearchedSupplierBlock(h, payload?.apiId);
+        if (searchBlocks.some((h) => !isOwnBlock(h))) {
+          const inhouseOnlyMode =
+            religiousMode ||
+            force24Hour ||
+            payload?.is24HourCheckin === true ||
+            !!payload?.parentBookingCode;
+          if (!inhouseOnlyMode) {
+            try {
+              sessionStorage.setItem(
+                "roomListPrefetch",
+                JSON.stringify({
+                  // Identifies the search this response belongs to —
+                  // ExternalApiRoomList only consumes it for the same payload.
+                  payloadKey: JSON.stringify(payload),
+                  response: res.data,
+                }),
+              );
+            } catch (e) {
+              // Storage full / blocked — the merged page simply re-runs the
+              // search itself.
+              console.error("Error storing roomListPrefetch:", e);
+            }
+            handedOff = true;
+            navigate("/api-room-list", {
+              replace: true,
+              state: { payload, meta, currency: currencyInfo },
+            });
+            return;
+          }
+          searchData = {
+            ...res.data,
+            hotels: searchBlocks.filter(isOwnBlock),
+          };
+        }
+
         // ── 24 Hour Check-In rate uplift ────────────────────────────────
         // When the search came in with is24HourCheckin=true, apply the
         // configured percentage on every per-rate amount. We multiply the
@@ -354,8 +426,8 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
             : r;
 
         const enriched = {
-          ...res.data,
-          hotels: (res.data.hotels || []).map((h) => ({
+          ...searchData,
+          hotels: (searchData.hotels || []).map((h) => ({
             ...h,
             // Sort availableRates within each category by totalRate asc.
             // Uplift first (so sort uses the marked-up rate) then sort.
@@ -376,11 +448,14 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
         console.error("Room search failed:", err);
         setError("Search failed. Please try again.");
       } finally {
-        setLoading(false);
+        if (!handedOff) setLoading(false);
       }
     };
 
     fetchRooms();
+    // religiousMode / force24Hour are fixed per route and navigate is
+    // stable — only a new search (location.state) should re-run this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
 
   // Whether the picked amount exceeds the agent's available balance.
@@ -396,16 +471,9 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
     return required > available;
   };
 
-  // Refundability is owned by the contract rate (the Refundable / Non
-  // Refundable radios on the Contract Rate page persist `refundable`) and
-  // reaches the room list inverted as `nonRefundable`. Providers disagree on
-  // the encoding — inhouse sends boolean / "true", IWTX and X3 send "Y" / "N"
-  // — so normalise before testing. Anything unrecognised (null, undefined,
-  // "") is treated as refundable, i.e. the safe/no-popup case.
-  const isNonRefundableRate = (nonRefundable) => {
-    const value = String(nonRefundable).trim().toLowerCase();
-    return value === "true" || value === "y" || value === "yes";
-  };
+  // Refundability check (`isNonRefundableRate`) lives in
+  // utils/inhouseBookingData so the merged multi-supplier room list applies
+  // the exact same rule to in-house rates.
 
   const handleBooking = async (rate, skipCreditCheck = false) => {
     const { payload, hotels } = roomData;
@@ -507,35 +575,16 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
     } else {
       // For all other API IDs (including 1), redirect directly to booking page
       try {
-        // Create booking data from the current rate
-        const bookingData = {
-          selectedRate: {
-            hotelId: hotelsdetail.hotelId,
-            hotelName: hotelsdetail.hotelName,
-            roomCategory: rate.roomCategory,
-            mealPlan: rate.mealPlan,
-            contractLabel: rate.contractLabel,
-            nonRefundable: rate.nonRefundable,
-            rate: rate.totalRate,
-            rateWithoutMarkup: rate.totalRateWithoutMarkup,
-            currency: "AED",
-            cancellationPolicy: hotelsdetail.cancellationPolicies,
-            roomStatus: rate.roomStatus,
-            roomRateBasedOnRoomCount: rate.roomRateBasedOnRoomCount,
-            roomRateBasedOnRoomCount_WithoutMarkup: rate.roomRateBasedOnRoomCount_WithoutMarkup,
-          },
-          hotelStaticData: roomData.meta,
-          payload: payload,
-          // Display currency chosen on the search page — forwarded so the
-          // booking page shows + persists the same currency. Rates stay AED.
+        // Create booking data from the current rate (shared builder — the
+        // merged multi-supplier room list books in-house rates with it too).
+        const bookingData = buildInhouseSingleBookingData({
+          rate,
+          hotel: hotelsdetail,
+          meta: roomData.meta,
+          payload,
           currency: displayCurrency,
-          // Religious-flow marker — read by HotelBookingPage's create
-          // path and forwarded on the /api/hotel-booking/create payload
-          // so the persisted row is tagged is_religious_booking=true.
-          // Undefined for every other flow, so bookingData shape is
-          // unchanged in the normal path.
-          isReligiousBooking: religiousMode || undefined,
-        };
+          religiousMode,
+        });
 
         // console.log("Booking data for direct redirect:", bookingData);
 
@@ -609,33 +658,17 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
         alert("Hotel context missing. Please refresh and try again.");
         return;
       }
-      const primary = selectedRooms[0].selectedRate;
-      const sum = (key) =>
-        selectedRooms.reduce(
-          (acc, r) => acc + (Number(r.selectedRate?.[key]) || 0),
-          0,
-        );
-
-      // Overall booking type must consider EVERY selected room, not just
-      // the first — priority: On Request > Non-Refundable > Flexible.
-      const anyRoomOnRequest = selectedRooms.some(
-        (r) => r.selectedRate?.roomStatus === "On Request",
-      );
+      // Overall booking type (On Request > Non-Refundable > Flexible) and the
+      // combined selectedRate / roomBreakdown are built by the shared
+      // buildInhouseMultiBookingData (utils/inhouseBookingData) — the merged
+      // multi-supplier room list books in-house rates with it too.
       const anyRoomNonRefundable = selectedRooms.some((r) =>
         isNonRefundableRate(r.selectedRate?.nonRefundable),
       );
-      // When no room is On Request, fall back to the primary room's own
-      // status string rather than a hardcoded value — preserves prior
-      // behavior exactly for the single-room case and avoids assuming
-      // "Available" is the only other possible status value.
-      const overallRoomStatus = anyRoomOnRequest
-        ? "On Request"
-        : primary.roomStatus;
-      const overallNonRefundable = anyRoomNonRefundable;
 
       // Multi-room credit gate. Each slot is ONE room, so sum(totalRate)
-      // across slots is the full payable amount — matches what we send
-      // as `combinedSelectedRate.rate` below. As in the single-room flow the
+      // across slots is the full payable amount — matches what the builder
+      // sends as `selectedRate.rate`. As in the single-room flow the
       // gate only applies when the booking is non-refundable; here that means
       // ANY selected room being non-refundable makes the whole booking
       // non-refundable, which is the same rule `overallNonRefundable` uses.
@@ -644,72 +677,21 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
       if (
         !skipCreditCheck &&
         anyRoomNonRefundable &&
-        isInsufficientBalance(sum("totalRate"))
+        isInsufficientBalance(sumSelectedRooms(selectedRooms, "totalRate"))
       ) {
         setPendingBookingFn(() => () => handleProceedBooking(true));
         setShowInsufficientCreditModal(true);
         return;
       }
 
-      const combinedSelectedRate = {
-        hotelId: hotelsdetail.hotelId,
-        hotelName: hotelsdetail.hotelName,
-        // Concatenated labels so the booking summary shows e.g.
-        // "Deluxe + Suite" / "Breakfast + Half Board" without needing
-        // any per-room rendering on the booking page.
-        roomCategory: selectedRooms
-          .map((r) => r.selectedRate?.roomCategory)
-          .filter(Boolean)
-          .join(" + "),
-        mealPlan: selectedRooms
-          .map((r) => r.selectedRate?.mealPlan)
-          .filter(Boolean)
-          .join(" + "),
-        contractLabel: primary.contractLabel,
-        nonRefundable: overallNonRefundable,
-        rate: sum("totalRate"),
-        rateWithoutMarkup: sum("totalRateWithoutMarkup"),
-        currency: "AED",
-        cancellationPolicy: hotelsdetail.cancellationPolicies,
-        roomStatus: overallRoomStatus,
-        // IMPORTANT: each rate's `roomRateBasedOnRoomCount` is already
-        // (totalRate × numberOfRooms) for the WHOLE search (e.g. 214 × 2
-        // = 428 when the user searched for 2 rooms). Summing that across
-        // 2 selected slots would give 856 — 2× the real total. The
-        // correct multi-room booking total is sum(totalRate) — one
-        // per-room rate per slot, summed across slots. Single-room
-        // searches keep the original semantics because numberOfRooms = 1
-        // there, so totalRate === roomRateBasedOnRoomCount.
-        roomRateBasedOnRoomCount: sum("totalRate"),
-        roomRateBasedOnRoomCount_WithoutMarkup: sum("totalRateWithoutMarkup"),
-      };
-
-      const bookingData = {
-        selectedRate: combinedSelectedRate,
-        // Additive — HotelBookingPage doesn't read this today, but it's
-        // here for any future per-room display work that wants the
-        // detail without re-deriving it.
-        roomBreakdown: selectedRooms.map((r, i) => ({
-          roomNo: i + 1,
-          roomCategory: r.selectedRate?.roomCategory,
-          mealPlan: r.selectedRate?.mealPlan,
-          contractLabel: r.selectedRate?.contractLabel,
-          nonRefundable: r.selectedRate?.nonRefundable,
-          rate: r.selectedRate?.totalRate,
-          rateWithoutMarkup: r.selectedRate?.totalRateWithoutMarkup,
-          roomRateBasedOnRoomCount: r.selectedRate?.roomRateBasedOnRoomCount,
-          roomRateBasedOnRoomCount_WithoutMarkup:
-            r.selectedRate?.roomRateBasedOnRoomCount_WithoutMarkup,
-          roomStatus: r.selectedRate?.roomStatus,
-        })),
-        hotelStaticData: meta,
+      const bookingData = buildInhouseMultiBookingData({
+        selectedRooms,
+        hotel: hotelsdetail,
+        meta,
         payload,
-        // Display currency chosen on the search page (see single-room path).
         currency: displayCurrency,
-        // Religious-flow marker (see single-room path). Undefined outside
-        // the religious flow keeps this payload shape unchanged.
-        isReligiousBooking: religiousMode || undefined,
-      };
+        religiousMode,
+      });
 
       sessionStorage.setItem("bookingData", JSON.stringify(bookingData));
       window.open(bookingPageRoute, "_blank");
@@ -1330,7 +1312,10 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                         <FaHotel size={40} className="text-primary" />
                       </div>
                       <div className="hotel-info">
-                        <h2 className="hotel-name mb-2">{hotel.hotelName}</h2>
+                        {/* A mapped hotel's block name carries a
+                            " (INHOUSE)" supplier suffix — the header is the
+                            hotel, so it is shown without it. */}
+                        <h2 className="hotel-name mb-2">{stripSupplierSuffix(hotel.hotelName)}</h2>
                         <div className="d-flex align-items-center gap-3 mb-2">
                           <div className="star-rating">
                             {renderStars(hotel.starRating)}

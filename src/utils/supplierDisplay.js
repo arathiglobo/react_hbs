@@ -29,8 +29,19 @@ export function isAgentLogin() {
   }
 }
 
+/**
+ * Hotel name with the " (<SUPPLIER>)" suffix removed for EVERY login. Used
+ * where the name stands for the hotel itself rather than one supplier's
+ * block of it (e.g. the room-list header of a hotel mapped across several
+ * suppliers, whose rooms are merged into one list).
+ */
+export function stripSupplierSuffix(name) {
+  if (typeof name !== "string") return name;
+  return name.replace(SUPPLIER_SUFFIX_RE, "");
+}
+
 /** Hotel name for display — supplier suffix removed for agent logins. */
 export function displayHotelName(name) {
   if (typeof name !== "string" || !isAgentLogin()) return name;
-  return name.replace(SUPPLIER_SUFFIX_RE, "");
+  return stripSupplierSuffix(name);
 }

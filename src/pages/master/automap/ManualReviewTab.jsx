@@ -4,6 +4,7 @@ import Swal from "sweetalert2";
 import toast from "react-hot-toast";
 import axiosInstance from "../../../components/AxiosInstance";
 import PagerBar from "./PagerBar";
+import SupplierPairReview from "./SupplierPairReview";
 import { confidenceTone, fmtDistance, fmtNumber, fmtPercent, reasonLabel } from "./automapFormat";
 
 /**
@@ -12,8 +13,12 @@ import { confidenceTone, fmtDistance, fmtNumber, fmtPercent, reasonLabel } from 
  * their accuracy. "Map" asks the backend to approve one candidate; the
  * backend re-validates against live data before writing anything.
  * "Reject" closes a candidate for good. Both are admin-only server-side.
+ *
+ * The "Supplier ↔ supplier" switch shows the pairs of the
+ * supplier-to-supplier pass instead (SupplierPairReview).
  */
-export default function ManualReviewTab({ suppliers, active, canAct, onChanged, refreshKey }) {
+export default function ManualReviewTab({ suppliers, active, canAct, onChanged, refreshKey, hotelCount, pairCount }) {
+  const [mode, setMode] = useState("INHOUSE");
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [supplier, setSupplier] = useState("");
@@ -55,17 +60,19 @@ export default function ManualReviewTab({ suppliers, active, canAct, onChanged, 
     [debounced, supplier, page, size],
   );
 
+  const inhouseActive = active && mode === "INHOUSE";
+
   useEffect(() => {
-    if (active) load(false);
-  }, [active, load]);
+    if (inhouseActive) load(false);
+  }, [inhouseActive, load]);
 
   const lastKey = useRef(refreshKey);
   useEffect(() => {
-    if (active && refreshKey !== lastKey.current) {
+    if (inhouseActive && refreshKey !== lastKey.current) {
       lastKey.current = refreshKey;
       load(true);
     }
-  }, [active, refreshKey, load]);
+  }, [inhouseActive, refreshKey, load]);
 
   const displayName = (code) => (suppliers || []).find((s) => s.code === code)?.displayName || code;
 
@@ -125,8 +132,42 @@ export default function ManualReviewTab({ suppliers, active, canAct, onChanged, 
 
   const content = data?.content || [];
 
+  const modeSwitch = (
+    <div className="d-flex flex-wrap align-items-center gap-2" role="group" aria-label="Review list">
+      {[
+        { value: "INHOUSE", label: "Our hotels ↔ suppliers", count: hotelCount },
+        { value: "SUPPLIER", label: "Supplier ↔ supplier", count: pairCount },
+      ].map((m) => (
+        <Button
+          key={m.value}
+          size="sm"
+          variant={mode === m.value ? "primary" : "outline-secondary"}
+          onClick={() => setMode(m.value)}
+          aria-pressed={mode === m.value}
+        >
+          {m.label}
+          {m.count !== null && m.count !== undefined && (
+            <Badge bg={mode === m.value ? "light" : "secondary"} text={mode === m.value ? "dark" : undefined} pill className="ms-2">
+              {fmtNumber(m.count)}
+            </Badge>
+          )}
+        </Button>
+      ))}
+    </div>
+  );
+
+  if (mode === "SUPPLIER") {
+    return (
+      <div className="d-flex flex-column gap-3">
+        {modeSwitch}
+        <SupplierPairReview suppliers={suppliers} active={active} canAct={canAct} onChanged={onChanged} refreshKey={refreshKey} />
+      </div>
+    );
+  }
+
   return (
     <div className="d-flex flex-column gap-3">
+      {modeSwitch}
       <div className="ahm-panel p-3 ahm-filters">
         <div className="row g-2 align-items-end">
           <div className="col-lg-6 col-md-8">

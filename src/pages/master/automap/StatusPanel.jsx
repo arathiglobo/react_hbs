@@ -209,6 +209,9 @@ export default function StatusPanel({ status, lastFetchedAt, onRescan, rescannin
       {/* ---- supplier catalog pull ---- */}
       <CatalogSyncPanel sync={status.catalogSync} canAct={canAct} onStarted={onRefresh} />
 
+      {/* ---- supplier-to-supplier matching ---- */}
+      <SupplierMatchPanel match={status.supplierMatch} canAct={canAct} onStarted={onRefresh} />
+
       {/* ---- settings + actions ---- */}
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-2">
         <div className="small text-muted">
@@ -282,12 +285,17 @@ function CatalogSyncPanel({ sync, canAct, onStarted }) {
     return <Badge bg="light" text="dark">Pending</Badge>;
   };
 
+  const worldwide = sync.scope === "WORLDWIDE";
+
   return (
     <div className="ahm-panel">
       <div className="ahm-panel-head">
         <span className="d-flex align-items-center gap-2 flex-wrap">
           Supplier catalog pull
           <Badge bg={tone} text={tone === "warning" ? "dark" : undefined}>{label}</Badge>
+          <Badge bg="light" text="dark" title={worldwide ? "Our cities every run, plus the suppliers' whole worldwide catalogs in slices" : "Only the countries / cities where we have in-house hotels"}>
+            {worldwide ? "Worldwide" : "Our cities only"}
+          </Badge>
           {sync.running && <Spinner animation="border" size="sm" role="status" aria-label="Catalog pull running" />}
         </span>
         {canAct && (
@@ -295,8 +303,9 @@ function CatalogSyncPanel({ sync, canAct, onStarted }) {
             placement="top"
             overlay={
               <Tooltip id="ahm-sync-tip">
-                Fetch hotels from every supplier API for the cities where we have hotels, add the ones missing locally, and
-                match them straight away.
+                {worldwide
+                  ? "Fetch hotels from every supplier API — our cities first, then the next slice of the worldwide catalogs — add the ones missing locally, and match them."
+                  : "Fetch hotels from every supplier API for the cities where we have hotels, add the ones missing locally, and match them straight away."}
               </Tooltip>
             }
           >
@@ -325,7 +334,11 @@ function CatalogSyncPanel({ sync, canAct, onStarted }) {
             <Row2 label="Finished" value={fmtDateTime(sync.finishedAt)} />
           </div>
           <div className="col-md-3">
-            <Row2 label="Next scheduled" value={sync.enabled ? fmtDateTime(sync.nextRunAt) : "disabled"} hint={sync.enabled ? `every ${Math.round((sync.intervalMinutes || 1440) / 60)} h` : undefined} />
+            <Row2
+              label="Next scheduled"
+              value={sync.enabled ? fmtDateTime(sync.nextRunAt) : "disabled"}
+              hint={sync.enabled ? (sync.backlogTotal > 0 ? "next worldwide slice" : `every ${Math.round((sync.intervalMinutes || 1440) / 60)} h`) : undefined}
+            />
           </div>
           <div className="col-md-3">
             <Row2 label="Now pulling" value={sync.currentSupplier ? `${sync.currentSupplier} · ${sync.currentScope || ""}` : "—"} />
@@ -338,6 +351,11 @@ function CatalogSyncPanel({ sync, canAct, onStarted }) {
           <span>Refreshed <strong className="text-dark">{fmtNumber(sync.totalUpdated)}</strong></span>
           <span>Write errors <strong className={sync.totalFailedRows > 0 ? "text-danger" : "text-dark"}>{fmtNumber(sync.totalFailedRows)}</strong></span>
           <span>Failed scopes <strong className={sync.totalFailedScopes > 0 ? "text-danger" : "text-dark"}>{fmtNumber(sync.totalFailedScopes)}</strong></span>
+          {worldwide && (
+            <span title={`Worldwide countries / cities still due; each is pulled again after ${sync.scopeRefreshHours || 168} h`}>
+              Worldwide backlog <strong className="text-dark">{fmtNumber(sync.backlogTotal)}</strong>
+            </span>
+          )}
         </div>
         <div className="text-muted" style={{ fontSize: ".75rem" }}>
           Every received hotel is counted once: Added (new row written), Already in DB (same supplier id was present and
@@ -368,7 +386,18 @@ function CatalogSyncPanel({ sync, canAct, onStarted }) {
                 <span className="text-muted ms-1 small">({s.code})</span>
               </td>
               <td>{supplierState(s)}</td>
-              <td className="text-end">{s.supported && s.enabled ? `${fmtNumber(s.scopesDone)} / ${fmtNumber(s.scopesTotal)}` : "—"}</td>
+              <td className="text-end">
+                {s.supported && s.enabled ? `${fmtNumber(s.scopesDone)} / ${fmtNumber(s.scopesTotal)}` : "—"}
+                {s.supported && s.enabled && s.backgroundTotal > 0 && (
+                  <div
+                    className="text-muted"
+                    style={{ fontSize: ".7rem" }}
+                    title={`${fmtNumber(s.backgroundTotal)} worldwide scopes in total · ${fmtNumber(s.skippedFresh)} pulled recently · ${fmtNumber(s.backlog)} left for the next slice`}
+                  >
+                    world {fmtNumber(s.backgroundTotal)} · due later {fmtNumber(s.backlog)}
+                  </div>
+                )}
+              </td>
               <td className="text-end">{fmtNumber(s.fetched)}</td>
               <td className={`text-end${s.inserted > 0 ? " text-success fw-semibold" : ""}`}>{fmtNumber(s.inserted)}</td>
               <td className="text-end">{fmtNumber(s.existing)}</td>
@@ -385,6 +414,146 @@ function CatalogSyncPanel({ sync, canAct, onStarted }) {
             <tr>
               <td colSpan={11} className="text-center text-muted py-3">
                 No supplier catalog pullers are registered.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </Table>
+    </div>
+  );
+}
+
+const MATCH_LABELS = {
+  INDEXING: ["Indexing catalogs", "info"],
+  RUNNING: ["Running", "success"],
+  PAUSED_HIGH_SYSTEM_LOAD: ["Paused — High System Load", "warning"],
+  COMPLETED: ["Completed", "success"],
+  ERROR: ["Error", "danger"],
+  DISABLED: ["Disabled", "secondary"],
+  IDLE: ["Idle", "secondary"],
+};
+
+/**
+ * "Supplier ↔ supplier matching": every supplier catalog is copied into one
+ * index and compared with every other supplier, so a hotel two suppliers sell
+ * becomes one hotel in search even without an in-house hotel. Backed by the
+ * `supplierMatch` block of the status response.
+ */
+function SupplierMatchPanel({ match, canAct, onStarted }) {
+  const [checking, setChecking] = useState(false);
+  if (!match) return null;
+  const [label, tone] = MATCH_LABELS[match.state] || [match.state || "Unknown", "secondary"];
+  const matchedPct =
+    match.indexedRows > 0 ? Math.min(100, Math.round(((match.indexedRows - match.pendingRows) / match.indexedRows) * 100)) : 0;
+
+  const recheck = async () => {
+    setChecking(true);
+    try {
+      const res = await axiosInstance.post("/api/hotel-mapping/auto/supplier-match/index-check", null, { timeout: 30000 });
+      toast.success(res.data?.message || "Catalogs are re-checked at the next tick.");
+      if (onStarted) onStarted();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "The re-check could not be requested.");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <div className="ahm-panel">
+      <div className="ahm-panel-head">
+        <span className="d-flex align-items-center gap-2 flex-wrap">
+          Supplier ↔ supplier matching
+          <Badge bg={tone} text={tone === "warning" ? "dark" : undefined}>{label}</Badge>
+          {match.running && <Spinner animation="border" size="sm" role="status" aria-label="Supplier matching running" />}
+        </span>
+        {canAct && (
+          <OverlayTrigger
+            placement="top"
+            overlay={
+              <Tooltip id="ahm-match-tip">
+                Compare every supplier catalog with the matching index now; changed catalogs are copied and their new hotels
+                matched. Otherwise this runs every few minutes by itself.
+              </Tooltip>
+            }
+          >
+            <span>
+              <Button size="sm" variant="outline-primary" onClick={recheck} disabled={checking || !match.enabled}>
+                {checking ? <Spinner animation="border" size="sm" className="me-1" /> : <i className="fas fa-sync-alt me-1" aria-hidden="true"></i>}
+                Re-check catalogs
+              </Button>
+            </span>
+          </OverlayTrigger>
+        )}
+      </div>
+      <div className="p-3 small">
+        <p className="mb-2">{match.message || "Supplier hotels are matched with each other in the background."}</p>
+        {match.lastError && (
+          <p className="text-danger mb-2">
+            <i className="fas fa-bug me-1" aria-hidden="true"></i>
+            {match.lastError}
+          </p>
+        )}
+        <div className="d-flex justify-content-between align-items-center mb-1 text-muted">
+          <span>Matched</span>
+          <span>
+            {fmtNumber(match.indexedRows - match.pendingRows)} / {fmtNumber(match.indexedRows)} supplier hotels ({matchedPct}%)
+          </span>
+        </div>
+        <ProgressBar now={matchedPct} variant="success" style={{ height: 6 }} className="mb-3" aria-label="Supplier hotels matched" />
+        <div className="ahm-tiles mb-2">
+          <Tile label="Supplier hotels indexed" value={fmtNumber(match.indexedRows)} sub={`${fmtNumber(match.pendingRows)} waiting to be matched`} />
+          <Tile label="Supplier-only hotels" value={fmtNumber(match.supplierOnlyMasters)} sub="sold by 2+ suppliers, no in-house hotel" accent />
+          <Tile label="Pairs to review" value={fmtNumber(match.pendingReviewPairs)} sub={match.nearMatchReview ? "similar names nearby" : "conflicts only"} />
+          <Tile
+            label="This run"
+            value={fmtNumber(match.linksThisRun)}
+            sub={`links · ${fmtNumber(match.mastersCreatedThisRun)} new hotels · ${fmtNumber(match.mergesThisRun)} merges`}
+          />
+        </div>
+        <div className="text-muted" style={{ fontSize: ".75rem" }}>
+          Only <strong>100%</strong> matches (identical names, same country, within the max distance) are mapped
+          automatically. Figures refreshed {fmtTime(match.countsAt)}.
+        </div>
+      </div>
+      <Table responsive hover className="ahm-table">
+        <thead>
+          <tr>
+            <th>Supplier</th>
+            <th className="text-end">Hotels indexed</th>
+            <th className="text-end">Waiting</th>
+            <th className="text-end">Pairs to review</th>
+            <th>Last indexed</th>
+            <th>Note</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(match.suppliers || []).map((s) => (
+            <tr key={s.code}>
+              <td>
+                <span className="fw-semibold">{s.displayName || s.code}</span>
+                <span className="text-muted ms-1 small">({s.code})</span>
+              </td>
+              <td className="text-end">{fmtNumber(s.indexedRows)}</td>
+              <td className="text-end">{fmtNumber(s.pendingRows)}</td>
+              <td className="text-end">{fmtNumber(s.pendingReviewPairs)}</td>
+              <td className="small text-muted text-nowrap">
+                {fmtDateTime(s.lastIndexedAt)}
+                {s.lastIndexedAt && (
+                  <div style={{ fontSize: ".7rem" }}>
+                    read {fmtNumber(s.lastIndexRead)} · changed {fmtNumber(s.lastIndexChanged)}
+                  </div>
+                )}
+              </td>
+              <td className="small" style={{ maxWidth: 360 }}>
+                {s.lastError ? <span className="text-danger">{s.lastError}</span> : <span className="text-muted">—</span>}
+              </td>
+            </tr>
+          ))}
+          {(match.suppliers || []).length === 0 && (
+            <tr>
+              <td colSpan={6} className="text-center text-muted py-3">
+                No supplier catalog has been indexed yet.
               </td>
             </tr>
           )}
