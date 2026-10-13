@@ -18,6 +18,7 @@ import axiosInstance from "../components/AxiosInstance";
 import { logAgentSearch } from "../utils/agentSearchLog";
 import AdvertisementCarousel from "../components/AdvertisementCarousel";
 import TimeApplyPicker from "../components/TimeApplyPicker";
+import PriceRangeSlider from "../components/PriceRangeSlider";
 import DateInput from "../components/DateInput";
 import MapModal from "../components/map/MapModal";
 import { ENABLE_MAP_PREVIEW } from "../config/featureFlags";
@@ -666,6 +667,67 @@ export default function HotelSearch({
       : refundPolicy.refundable
         ? "refundable"
         : "nonRefundable";
+  // Budget slider + price chart (sidebar, above Refund Policy). All values
+  // are AED, the unit of hotel.price / baseRate; labels convert to the
+  // display currency.
+  //   priceBounds — { min, max, sliderMax, histogram } for the whole result
+  //                 set, from the backend's priceMin / priceMax /
+  //                 priceSliderMax / priceHistogram (null = none yet).
+  //   priceSlider — [lo, hi] while dragging; an end left at its edge is null
+  //                 ("no limit"), so it keeps tracking the edge as more
+  //                 suppliers report in (null = whole range).
+  //   priceRange  — committed [lo, hi] with the same null-ends, sent to
+  //                 /results as minPrice / maxPrice so it narrows every page.
+  const [priceBounds, setPriceBounds] = useState(null);
+  const [priceSlider, setPriceSlider] = useState(null);
+  const [priceRange, setPriceRange] = useState(null);
+  const minPriceParam = priceRange?.[0] ?? undefined;
+  const maxPriceParam = priceRange?.[1] ?? undefined;
+  // Whole-number slider ends — cheapest to dearest rate, the same ends the
+  // backend's chart bars are laid across. A single price still gets a
+  // 1-wide track.
+  const budgetMin = priceBounds ? Math.floor(priceBounds.min) : 0;
+  const budgetMax = priceBounds
+    ? priceBounds.sliderMax ||
+      Math.max(Math.ceil(priceBounds.max), budgetMin + 1)
+    : 0;
+  // Commit the handles 400 ms after they stop moving, so a drag refetches
+  // once rather than on every step.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const lo = priceSlider?.[0] ?? null;
+      const hi = priceSlider?.[1] ?? null;
+      setPriceRange((prev) =>
+        lo === null && hi === null
+          ? null
+          : prev && prev[0] === lo && prev[1] === hi
+            ? prev
+            : [lo, hi],
+      );
+    }, 400);
+    return () => clearTimeout(t);
+  }, [priceSlider]);
+  // Slider data from a /results response. Only replaces the state when it
+  // changes, so steady polling doesn't re-render the slider each tick.
+  const updatePriceBounds = (data) => {
+    const min = Number(data?.priceMin);
+    const max = Number(data?.priceMax);
+    if (!(min > 0) || !(max > 0)) return;
+    const sliderMax =
+      Number(data?.priceSliderMax) > 0 ? Number(data.priceSliderMax) : null;
+    const histogram = Array.isArray(data?.priceHistogram)
+      ? data.priceHistogram.map(Number)
+      : [];
+    setPriceBounds((prev) =>
+      prev &&
+      prev.min === min &&
+      prev.max === max &&
+      prev.sliderMax === sliderMax &&
+      prev.histogram.join() === histogram.join()
+        ? prev
+        : { min, max, sliderMax, histogram },
+    );
+  };
   const [sortBy, setSortBy] = useState("priceAsc");
   const [hotelSearchTerm, setHotelSearchTerm] = useState("");
   const [errors, setErrors] = useState({});
@@ -1223,6 +1285,20 @@ export default function HotelSearch({
       results = results.filter((hotel) => hotel.hasNonRefundable === true);
     }
 
+    // Budget — same inclusive AED bounds /results applies server-side (an
+    // undefined end is open); re-applied here so rows merged in by the poll
+    // obey it too.
+    if (minPriceParam !== undefined || maxPriceParam !== undefined) {
+      results = results.filter((hotel) => {
+        const p = Number(hotel.price);
+        return (
+          Number.isFinite(p) &&
+          (minPriceParam === undefined || p >= minPriceParam) &&
+          (maxPriceParam === undefined || p <= maxPriceParam)
+        );
+      });
+    }
+
     // Available Deals — OR-match across the selected option values.
     if (availableDeals.length > 0) {
       const selected = new Set(availableDeals.map((d) => d.value));
@@ -1305,6 +1381,7 @@ export default function HotelSearch({
     return results;
   }, [allResults, hotelSearchTerm, starRating, hotelType, channelType,
       availableDeals, featureFlagsMap, refundPolicyParam,
+      minPriceParam, maxPriceParam,
       is24HourCheckin, twentyFourHourMap, sortBy]);
 
   // Channels that returned at least one hotel for the CURRENT search —
@@ -1385,21 +1462,28 @@ export default function HotelSearch({
   const displayTotal =
     shownCount < allResults.length ? endEntry : Math.max(totalElements, endEntry);
 
+  // Page buttons: always the first 3 and last 3 pages, plus the current
+  // page and its neighbours (so the window slides as you page through the
+  // middle); "…" fills each gap. A gap of a single page shows that page
+  // instead — an ellipsis there would hide nothing.
   const pageNumbers = useMemo(() => {
+    const EDGE_PAGES = 3;
     const current = pageIndex + 1;
     const total = effectiveTotalPages;
-    const nums = [];
-    if (total <= 7) {
-      for (let i = 1; i <= total; i++) nums.push(i);
-    } else {
-      nums.push(1);
-      const left = Math.max(2, current - 1);
-      const right = Math.min(total - 1, current + 1);
-      if (left > 2) nums.push("ellipsis-left");
-      for (let i = left; i <= right; i++) nums.push(i);
-      if (right < total - 1) nums.push("ellipsis-right");
-      nums.push(total);
+    const shown = new Set();
+    for (let i = 1; i <= Math.min(EDGE_PAGES, total); i++) shown.add(i);
+    for (let i = Math.max(1, total - EDGE_PAGES + 1); i <= total; i++) shown.add(i);
+    for (let i = Math.max(1, current - 1); i <= Math.min(total, current + 1); i++) {
+      shown.add(i);
     }
+    const sorted = Array.from(shown).sort((a, b) => a - b);
+    const nums = [];
+    sorted.forEach((n, idx) => {
+      const prev = sorted[idx - 1];
+      if (prev !== undefined && n - prev === 2) nums.push(prev + 1);
+      else if (prev !== undefined && n - prev > 2) nums.push(`ellipsis-${prev}`);
+      nums.push(n);
+    });
     return nums;
   }, [pageIndex, effectiveTotalPages]);
 
@@ -1681,7 +1765,8 @@ export default function HotelSearch({
     if (hasSearchResult && resultsRef.current) {
       resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  }, [starRating, hotelType, channelType, sortBy, refundPolicyParam]);
+  }, [starRating, hotelType, channelType, sortBy, refundPolicyParam,
+      minPriceParam, maxPriceParam]);
 
   // After a fresh search, jump the viewport to the very top of the page so
   // the operator sees the "Hotel / Accommodation" heading and summary strip
@@ -1769,6 +1854,8 @@ export default function HotelSearch({
         apiType:
           channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
         refundPolicy: refundPolicyParam,
+        minPrice: minPriceParam,
+        maxPrice: maxPriceParam,
       };
 
       // Currency-conversion is fully backend-side now. When the operator
@@ -1936,6 +2023,7 @@ export default function HotelSearch({
           ),
         );
       }
+      updatePriceBounds(res.data);
       setHasSearchResult(true);
       return res.data;
     } catch (err) {
@@ -2011,6 +2099,9 @@ export default function HotelSearch({
     setHasSearchResult(false);
     setAllResults([]);
     setChannelsWithResults(new Set());
+    setPriceBounds(null);
+    setPriceSlider(null);
+    setPriceRange(null);
     setPollStatus("IDLE");
     setPageIndex(0);
     setTotalElements(0);
@@ -2103,6 +2194,8 @@ export default function HotelSearch({
         apiType:
           channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
         refundPolicy: refundPolicyParam,
+        // No minPrice / maxPrice — a new search resets the budget slider
+        // (its ends depend on the destination), so the poll is unfiltered.
       };
 
       // The poll uses the SAME /results endpoint fetchHotels does — pass the
@@ -2290,6 +2383,8 @@ export default function HotelSearch({
               ),
             );
           }
+          // Budget slider ends widen as more suppliers report in.
+          updatePriceBounds(data);
         },
         2000,
         // 30 s poll ceiling — keeps the UI responsive; GRN's slower
@@ -2417,6 +2512,8 @@ export default function HotelSearch({
           apiType:
             channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
           refundPolicy: refundPolicyParam,
+          minPrice: minPriceParam,
+          maxPrice: maxPriceParam,
           displayCurrencyCode: opt.code,
         },
       })
@@ -2544,6 +2641,8 @@ export default function HotelSearch({
       (channelType && channelType.length > 0) ||
       !!starRating ||
       !!refundPolicyParam ||
+      minPriceParam !== undefined ||
+      maxPriceParam !== undefined ||
       (hotelType && hotelType.length > 0);
     if (
       pollStatus === "IN_PROGRESS" &&
@@ -2560,6 +2659,8 @@ export default function HotelSearch({
     starRating,
     channelType,
     refundPolicyParam,
+    minPriceParam,
+    maxPriceParam,
     hotelType,
     searchId,
     agent,
@@ -3454,6 +3555,54 @@ export default function HotelSearch({
                             </>
                           )}
 
+                          {/* Budget — a bar chart of how many hotels sit at
+                              each price, with a two-handle slider under it to
+                              narrow the list. Ends come from the whole result
+                              set (AED); labels are in the display currency.
+                              Shown once any hotel has a price. */}
+                          {priceBounds && (
+                            <>
+                              <Form.Group className="mb-2">
+                                <Form.Label className="fw-semibold small">
+                                  Budget
+                                </Form.Label>
+                                <PriceRangeSlider
+                                  min={budgetMin}
+                                  max={budgetMax}
+                                  value={[
+                                    priceSlider?.[0] ?? budgetMin,
+                                    priceSlider?.[1] ?? budgetMax,
+                                  ]}
+                                  // An end dragged back to its edge means
+                                  // "no limit" on that side — stored as null.
+                                  onChange={([lo, hi]) =>
+                                    setPriceSlider(
+                                      lo <= budgetMin && hi >= budgetMax
+                                        ? null
+                                        : [
+                                            lo <= budgetMin ? null : lo,
+                                            hi >= budgetMax ? null : hi,
+                                          ],
+                                    )
+                                  }
+                                  histogram={priceBounds.histogram}
+                                  format={(aed) => {
+                                    const factor =
+                                      Number(backendDisplayCurrencyRef.current?.factor) > 0
+                                        ? Number(backendDisplayCurrencyRef.current.factor)
+                                        : 1;
+                                    return `${displayCurrencyCode} ${Math.round(
+                                      aed * factor,
+                                    ).toLocaleString()}`;
+                                  }}
+                                  ariaLabel="Budget"
+                                />
+                              </Form.Group>
+
+                              <hr />
+                            </>
+                          )}
+
                           {/* Refund Policy — lets the agent narrow the hotel
                               list without opening each hotel's rooms. The two
                               boxes are mutually exclusive: ticking one clears
@@ -3708,6 +3857,8 @@ export default function HotelSearch({
                               setChannelType([]);
                               setAvailableDeals([]);
                               setRefundPolicy({ refundable: false, nonRefundable: false });
+                              setPriceSlider(null);
+                              setPriceRange(null);
                               setSortBy("priceAsc");
                               setHotelSearchTerm("");
                             }}
@@ -4388,6 +4539,8 @@ export default function HotelSearch({
                                   setChannelType([]);
                                   setSortBy("priceAsc");
                                   setHotelSearchTerm("");
+                                  setAvailableDeals([])
+                                  setRefundPolicy({ refundable: false, nonRefundable: false });
                                 }}
                               >
                                 Clear All Filters
