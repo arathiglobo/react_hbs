@@ -972,7 +972,7 @@ export default function DayStayRoomList() {
                 if (filteredCategories.length === 0) {
                   return (
                     <Alert variant="info" className="mb-0">
-                      No rates match the selected filters.
+                      No rates match the selected filters, please check other filters.
                     </Alert>
                   );
                 }

@@ -1057,7 +1057,7 @@ export default function LastMinuteRoomList() {
                     (c) => (c.rates || []).filter(rateVisible).length === 0,
                   ) && (
                     <Alert variant="info" className="mb-0">
-                      No rates match the selected filters.
+                      No rates match the selected filters, please check other filters.
                     </Alert>
                   )}
                 </Accordion>
