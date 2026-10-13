@@ -6,6 +6,12 @@ import './styles/modernTheme.css'; // global modern-premium polish (layout/spaci
 import 'bootstrap/dist/js/bootstrap.bundle.min.js'; // Includes Popper.js for Tabs
 import App from './App';
 import { FeatureFlagsProvider } from './config/FeatureFlagsContext';
+import { initActivityLogger } from './utils/activityLogger';
+
+// Page views, clicks, JS errors and failed API calls → backend frontend.log.
+// Observe-only; see utils/activityLogger.js.
+initActivityLogger();
+
 const container = document.getElementById('root');
 const root = createRoot(container);
 root.render(
