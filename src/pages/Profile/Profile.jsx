@@ -8,7 +8,6 @@ import {
   Button,
   Badge,
   Alert,
-  Modal,
 } from "react-bootstrap";
 import {
   FaUser,
@@ -22,8 +21,6 @@ import {
   FaKey,
   FaSignOutAlt,
   FaArrowLeft,
-  FaTrashAlt,
-  FaExclamationTriangle,
 } from "react-icons/fa";
 import axiosInstance from "../../components/AxiosInstance";
 import { clearAuthSession, getUserName, getUserRole, getCurrentActiveRole } from "../../utils/authSession";
@@ -82,8 +79,6 @@ const Profile = () => {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
   // Mirrors handleLogout in components/TopBar.jsx so the sign-out path
   // stays identical to the TopBar's Logout item.
@@ -97,13 +92,6 @@ const Profile = () => {
     // Full navigation so any in-memory app state is dropped, matching the
     // TopBar Logout behaviour exactly.
     window.location.href = "/login";
-  };
-
-  const handleConfirmDelete = async () => {
-    // Delete is intentionally a no-op on the backend for now — just log
-    // the user out so the flow ends cleanly with no backend side-effects.
-    setDeleting(true);
-    await performLogout();
   };
 
   const userName = useMemo(() => getUserName(), []);
@@ -243,14 +231,6 @@ const Profile = () => {
                       >
                         <FaKey className="me-2" />
                         Change Password
-                      </Button>
-                      <Button
-                        variant="outline-danger"
-                        size="sm"
-                        onClick={() => setShowDeleteModal(true)}
-                      >
-                        <FaTrashAlt className="me-2" />
-                        Delete Account
                       </Button>
                     </div>
                   </Card.Body>
@@ -481,14 +461,6 @@ const Profile = () => {
                             <FaSignOutAlt className="me-2" />
                             Logout
                           </Button>
-                          <Button
-                            variant="outline-danger"
-                            size="sm"
-                            onClick={() => setShowDeleteModal(true)}
-                          >
-                            <FaTrashAlt className="me-2" />
-                            Delete Account
-                          </Button>
                         </div>
                       </Card.Body>
                     </Card>
@@ -499,70 +471,6 @@ const Profile = () => {
           </div>
         </main>
       </div>
-
-      {/* Delete Account confirmation — informs the user their data will be
-          removed within 5–7 days. The real backend deletion is intentionally
-          not wired up yet; confirming reuses the existing /logout flow so
-          the user is signed out cleanly and no other flow is affected. */}
-      <Modal
-        show={showDeleteModal}
-        onHide={() => !deleting && setShowDeleteModal(false)}
-        centered
-        backdrop="static"
-        keyboard={!deleting}
-      >
-        <Modal.Header closeButton={!deleting}>
-          <Modal.Title className="d-flex align-items-center gap-2 text-danger">
-            <FaExclamationTriangle />
-            Delete Account
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <p className="mb-2">
-            Are you sure you want to delete your account?
-          </p>
-          <Alert variant="warning" className="mb-2">
-            Your account and associated data will be permanently deleted
-            within <strong>5 to 7 working days</strong>. You will be signed
-            out immediately.
-          </Alert>
-          <p className="text-muted small mb-0">
-            If this was a mistake, please contact your administrator before
-            the deletion window ends.
-          </p>
-        </Modal.Body>
-        <Modal.Footer>
-          <Button
-            variant="secondary"
-            onClick={() => setShowDeleteModal(false)}
-            disabled={deleting}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            onClick={handleConfirmDelete}
-            disabled={deleting}
-          >
-            {deleting ? (
-              <>
-                <Spinner
-                  as="span"
-                  animation="border"
-                  size="sm"
-                  className="me-2"
-                />
-                Signing out…
-              </>
-            ) : (
-              <>
-                <FaTrashAlt className="me-2" />
-                Yes, Delete My Account
-              </>
-            )}
-          </Button>
-        </Modal.Footer>
-      </Modal>
     </div>
   );
 };
