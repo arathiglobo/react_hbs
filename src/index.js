@@ -8,8 +8,9 @@ import App from './App';
 import { FeatureFlagsProvider } from './config/FeatureFlagsContext';
 import { initActivityLogger } from './utils/activityLogger';
 
-// Page views, clicks, JS errors and failed API calls → backend frontend.log.
-// Observe-only; see utils/activityLogger.js.
+// User interactions (navigation, clicks, menus, tabs, dropdowns, form
+// submissions + outcome) → backend interaction log; JS errors and failed API
+// calls → backend frontend.log. Observe-only; see utils/activityLogger.js.
 initActivityLogger();
 
 const container = document.getElementById('root');
