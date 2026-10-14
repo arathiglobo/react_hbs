@@ -247,6 +247,25 @@ const isHoldEligible = (bookingData) => {
   return deadline >= today;
 };
 
+// Where to land after a successful booking. Last Minute supplier bookings
+// (payload.lastMinuteBooking, set by LastMinuteBookingPage) are tagged
+// LAST_MINUTE server-side, so they belong on the Last Minute booking list.
+const postBookingListPath = (isLastMinute) =>
+  isLastMinute
+    ? "/booking-details/last-minute-booking-list"
+    : "/booking-details/hotel-booking-list";
+
+// The CC Avenue return path runs before bookingData state is restored, so it
+// reads the flag from the sessionStorage copy, which survives the round trip.
+const storedBookingIsLastMinute = () => {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem("bookingData") || "null");
+    return stored?.payload?.lastMinuteBooking === true;
+  } catch (_) {
+    return false;
+  }
+};
+
 /**
  * API booking page — visual shell restyled to match the Inhouse
  * HotelBookingPage (two-column sticky layout, .hbp-* classes,
@@ -566,7 +585,7 @@ const ApiBookingPageForHotels = () => {
           toast.success(
             bookingResponse?.message || "Booking created after payment.",
           );
-          navigate("/booking-details/hotel-booking-list");
+          navigate(postBookingListPath(payload?.lastMinuteBooking === true));
         } else {
           toast.error(
             bookingResponse?.message || "Booking submission failed. Please try again.",
@@ -608,7 +627,7 @@ const ApiBookingPageForHotels = () => {
             bookingResponse.message || "Booking created after payment.",
           );
           setShowConfirmModal(false);
-          navigate("/booking-details/hotel-booking-list");
+          navigate(postBookingListPath(storedBookingIsLastMinute()));
         } else {
           const beMsg = (bookingResponse && bookingResponse.message) || null;
           toast.error(
@@ -1457,8 +1476,12 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         // (matches IWTX / X3 / ATHARVA / DARINA / JUMEIRAH / JUNIPER). GRN
         // used to route straight to its detail page instead but the client
         // asked for uniform post-confirm UX — the detail page is still one
-        // click away from the list row.
-        navigate("/booking-details/hotel-booking-list");
+        // click away from the list row. Last Minute bookings land on the
+        // Last Minute list instead (sessionStorage was cleared above, so the
+        // flag comes from state).
+        navigate(
+          postBookingListPath(bookingData?.payload?.lastMinuteBooking === true),
+        );
       } else if (statusUpper === "DUPLICATE") {
         // GRN error code 6000 — the exact booking already exists at the
         // supplier. Show a dedicated modal (not a toast) so the operator
