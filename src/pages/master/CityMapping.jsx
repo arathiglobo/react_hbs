@@ -453,7 +453,10 @@ const CityMapping = () => {
       setSelectedCountryOption(null);
       setSelectedCityOption(null);
     } catch (err) {
-      toast.error("Failed to save mapping ❌");
+      // The backend refuses a second mapping for an already-mapped city
+      // (409 with a message naming the city) — show that instead of the
+      // generic text so the user knows to unmap the existing row first.
+      toast.error(err?.response?.data?.message || "Failed to save mapping ❌");
       console.error(err);
     }
   };
