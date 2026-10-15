@@ -1,6 +1,7 @@
 import axios from "axios";
 import { showSessionExpiredAlert, clearAuthStorage } from "./SessionExpired";
 import { getAuthToken, setAuthToken, TAB_SESSION_HEADER, getTabSessionId } from "../utils/authSession";
+import { CLIENT_LOCATION_HEADER, getClientLocationHeader } from "../utils/geoLocation";
 
 const axiosInstance = axios.create({
   baseURL: process.env.REACT_APP_API_BASE_URL,
@@ -42,6 +43,17 @@ axiosInstance.interceptors.request.use(
     if (config.url && config.url.includes("/auth/")) {
       config.headers = config.headers || {};
       config.headers[TAB_SESSION_HEADER] = getTabSessionId();
+    }
+    // Latest browser position (utils/geoLocation.js) so the backend can
+    // record where each business action was done (Super Admin → Activity
+    // Logs). Only sent when the user allowed location and the fix is fresh;
+    // otherwise the backend uses the IP address's city. Signed-in calls
+    // already carry Authorization (a preflighted header), so this adds no
+    // extra CORS preflight to them.
+    const clientLocation = getClientLocationHeader();
+    if (clientLocation) {
+      config.headers = config.headers || {};
+      config.headers[CLIENT_LOCATION_HEADER] = clientLocation;
     }
     return config;
   },

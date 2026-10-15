@@ -126,6 +126,7 @@ export default function SuperAdminDashboard() {
     { label: 'User Roles',         icon: 'check',    to: '/masters/user-roles',                 primary: true },
     { label: 'Assign Menu',        icon: 'list',     to: '/masters/assign-menu',                primary: true },
     { label: 'Login Logs',         icon: 'calendar', to: '/user-management/login-logs',         primary: true },
+    { label: 'Activity Logs',      icon: 'list',     to: '/user-management/activity-logs',      primary: true },
   ];
 
   const governance = [
@@ -135,6 +136,7 @@ export default function SuperAdminDashboard() {
     { icon: 'agent',    title: 'Admin Users',        desc: 'Provision or retire admin accounts.',            to: '/super-admin/admins' },
     { icon: 'check',    title: 'User Roles',         desc: 'Define role definitions used across the app.',   to: '/masters/user-roles' },
     { icon: 'calendar', title: 'Login Audit',        desc: 'Recent authentications across every user.',      to: '/user-management/login-logs' },
+    { icon: 'list',     title: 'Activity Logs',      desc: 'What each user did, when, from which IP and place.', to: '/user-management/activity-logs' },
   ];
 
   return (

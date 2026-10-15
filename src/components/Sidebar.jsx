@@ -405,6 +405,7 @@ export default function Sidebar() {
       children: [
         { label: "Roles",            to: "/masters/user-roles" },
         { label: "Login Logs",       to: "/user-management/login-logs" },
+        { label: "Activity Logs",    to: "/user-management/activity-logs" },
         { label: "Role Assign",      to: "/user-management/role-assign" },
         { label: "Admin Management", to: "/super-admin/admins" },
       ],

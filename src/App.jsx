@@ -329,6 +329,7 @@ import AdminApiAccess from "./pages/admin/apiaccess/AdminApiAccess";
 import AssignMenu from "./pages/master/AssignMenu";
 import UserRoles from "./pages/master/UserRoles";
 import LoginLogs from "./pages/user-management/LoginLogs";
+import UserActivityLogs from "./pages/user-management/UserActivityLogs";
 import RoleAssign from "./pages/user-management/RoleAssign";
 
 import FlightSearch from "./pages/search/flight/FlightSearch";
@@ -556,6 +557,7 @@ export default function App() {
             via SuperAdminOnlyGuard, so the PrivateRoute role gate mirrors
             that surface. */}
         <Route path="/user-management/login-logs" element={<PrivateRoute roles={["super_admin"]}><LoginLogs /></PrivateRoute>} />
+        <Route path="/user-management/activity-logs" element={<PrivateRoute roles={["super_admin"]}><UserActivityLogs /></PrivateRoute>} />
         <Route path="/user-management/role-assign" element={<PrivateRoute roles={["super_admin"]}><RoleAssign /></PrivateRoute>} />
 
        {/* New Booking */}
