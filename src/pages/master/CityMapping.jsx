@@ -436,6 +436,12 @@ const CityMapping = () => {
       toast.error("⚠ Please fill all required fields");
       return;
     }
+    // Without the supplier's own country / city the server used to store
+    // our in-house ids as supplier ids (now it refuses with a 400).
+    if (!formData.apiCountryId || !formData.apiCityId) {
+      toast.error("⚠ Please select the platform country and city to map to");
+      return;
+    }
 
     try {
       const res = await axiosInstance.post("/api/cityMapping/save", formData);
