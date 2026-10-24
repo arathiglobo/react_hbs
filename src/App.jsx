@@ -499,23 +499,23 @@ export default function App() {
         <Route path="/masters/mapped-list" element={<PrivateRoute roles={["admin"]}><MappedList /></PrivateRoute>} />
      
         {/* :bar_chart: Reports */}
-        <Route path="/report/booking" element={<PrivateRoute><ReportBooking /></PrivateRoute>} />
-        <Route path="/report/cancellation" element={<PrivateRoute><CancellationReport /></PrivateRoute>} />
-        <Route path="/report/inventory-status" element={<PrivateRoute><InventoryStatus /></PrivateRoute>} />
-        <Route path="/report/hotel-wise" element={<PrivateRoute><HotelWise /></PrivateRoute>} />
-        <Route path="/report/accounts" element={<PrivateRoute><Accounts /></PrivateRoute>} />
-        <Route path="/report/day-wise" element={<PrivateRoute><DayWise /></PrivateRoute>} />
-        <Route path="/report/monthly-wise" element={<PrivateRoute><MonthlyWise /></PrivateRoute>} />
-        <Route path="/report/comparison" element={<PrivateRoute><Comparison /></PrivateRoute>} />
-        <Route path="/report/agent-wise" element={<PrivateRoute><AgentWise /></PrivateRoute>} />
-        <Route path="/report/contract-expiry" element={<PrivateRoute><ContractExpiryReport /></PrivateRoute>} />
-        <Route path="/report/contract-rate" element={<PrivateRoute><Contractrate /></PrivateRoute>} />
-        <Route path="/report/user-report" element={<PrivateRoute><UserReport /></PrivateRoute>} />
-        <Route path="/report/stop-sale" element={<PrivateRoute><Stopsalereport /></PrivateRoute>} />
-        <Route path="/report/user-logins" element={<PrivateRoute><UserLogins /></PrivateRoute>} />
-        <Route path="/report/offline-daily-sales" element={<PrivateRoute><OfflineBookingDailySalesStatement /></PrivateRoute>} />
-        <Route path="/report/online-daily-sales" element={<PrivateRoute><OnlineDailySalesReport /></PrivateRoute>} />
-        <Route path="/report/time-limit-daily-sales" element={<PrivateRoute><TimeLimitOnlineDailySalesReport /></PrivateRoute>} />
+        <Route path="/report/booking" element={<PrivateRoute roles={["admin"]}><ReportBooking /></PrivateRoute>} />
+        <Route path="/report/cancellation" element={<PrivateRoute roles={["admin"]}><CancellationReport /></PrivateRoute>} />
+        <Route path="/report/inventory-status" element={<PrivateRoute roles={["admin"]}><InventoryStatus /></PrivateRoute>} />
+        <Route path="/report/hotel-wise" element={<PrivateRoute roles={["admin"]}><HotelWise /></PrivateRoute>} />
+        <Route path="/report/accounts" element={<PrivateRoute roles={["admin"]}><Accounts /></PrivateRoute>} />
+        <Route path="/report/day-wise" element={<PrivateRoute roles={["admin"]}><DayWise /></PrivateRoute>} />
+        <Route path="/report/monthly-wise" element={<PrivateRoute roles={["admin"]}><MonthlyWise /></PrivateRoute>} />
+        <Route path="/report/comparison" element={<PrivateRoute roles={["admin"]}><Comparison /></PrivateRoute>} />
+        <Route path="/report/agent-wise" element={<PrivateRoute roles={["admin"]}><AgentWise /></PrivateRoute>} />
+        <Route path="/report/contract-expiry" element={<PrivateRoute roles={["admin"]}><ContractExpiryReport /></PrivateRoute>} />
+        <Route path="/report/contract-rate" element={<PrivateRoute roles={["admin"]}><Contractrate /></PrivateRoute>} />
+        <Route path="/report/user-report" element={<PrivateRoute roles={["admin"]}><UserReport /></PrivateRoute>} />
+        <Route path="/report/stop-sale" element={<PrivateRoute roles={["admin"]}><Stopsalereport /></PrivateRoute>} />
+        <Route path="/report/user-logins" element={<PrivateRoute roles={["admin"]}><UserLogins /></PrivateRoute>} />
+        <Route path="/report/offline-daily-sales" element={<PrivateRoute roles={["admin","agent"]}><OfflineBookingDailySalesStatement /></PrivateRoute>} />
+        <Route path="/report/online-daily-sales" element={<PrivateRoute roles={["admin","agent"]}><OnlineDailySalesReport /></PrivateRoute>} />
+        <Route path="/report/time-limit-daily-sales" element={<PrivateRoute roles={["admin","agent"]}><TimeLimitOnlineDailySalesReport /></PrivateRoute>} />
         <Route path="/report/hotel-booking-history" element={<PrivateRoute roles={["admin"]}><HotelBookingHistory /></PrivateRoute>} />
 
         {/* Super Admin — API access control for external clients. Restricted
@@ -770,10 +770,10 @@ export default function App() {
             All inner data calls go via /api/restaurant-extranet/** and
             are scoped server-side by the JWT's username → UserAccount
             → userId resolution. */}
-        <Route path="/restaurant-extranet/dashboard" element={<RestaurantExtranetDashboard />} />
-        <Route path="/restaurant-extranet/reservations" element={<RestaurantExtranetReservations />} />
-        <Route path="/restaurant-extranet/calendar" element={<RestaurantExtranetCalendar />} />
-        <Route path="/restaurant-extranet/gallery" element={<RestaurantExtranetGallery />} />
+        <Route path="/restaurant-extranet/dashboard" element={<PrivateRoute roles={["restaurant_extranet"]}><RestaurantExtranetDashboard /></PrivateRoute>} />
+        <Route path="/restaurant-extranet/reservations" element={<PrivateRoute roles={["restaurant_extranet"]}><RestaurantExtranetReservations /></PrivateRoute>} />
+        <Route path="/restaurant-extranet/calendar" element={<PrivateRoute roles={["restaurant_extranet"]}><RestaurantExtranetCalendar /></PrivateRoute>} />
+        <Route path="/restaurant-extranet/gallery" element={<PrivateRoute roles={["restaurant_extranet"]}><RestaurantExtranetGallery /></PrivateRoute>} />
         <Route path="/restaurant-extranet/profile" element={<RestaurantExtranetProfile />} />
         <Route path="/restaurant-extranet/profile/edit" element={<RestaurantExtranetProfileEdit />} />
 
