@@ -17,6 +17,7 @@ import { toast } from "react-hot-toast";
 import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
 import BackButton from "../../components/BackButton";
+import { isAgentLogin } from "../../utils/supplierDisplay";
 
 export default function OnlineDailySalesReport() {
 
@@ -64,6 +65,10 @@ export default function OnlineDailySalesReport() {
  const activeRole = (sessionStorage.getItem("currentActiveRole") || "").trim().toUpperCase();
  const storedRoles = (sessionStorage.getItem("userRole") || "").toUpperCase();
  const isAgentRole = activeRole ? activeRole === "AGENT" : (storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN"));
+ // Net Price (our cost) and Profit (our margin) are not shown to agents —
+ // the server also leaves them out of the agent's report data.
+ // isAgentLogin() also covers sub-agents and sub-users (utils/supplierDisplay).
+ const showCost = !isAgentLogin();
 
  const fetchSales = async (filters = {}) => {
   try {
@@ -151,8 +156,7 @@ const handleReset = async () =>{
     <th>Book Date</th>
     <th>Native Country</th>
     <th>Selling Price</th>
-    <th>Net Price</th>
-    <th>Profit</th>
+    ${showCost ? '<th>Net Price</th><th>Profit</th>' : ''}
      </tr>
     </thead>
     <tbody>
@@ -167,8 +171,7 @@ const handleReset = async () =>{
       <td>${r.bookingDate ? r.bookingDate.split("T")[0] : 'N/A'}</td>
       <td>${r.nativeCountry || 'N/A'}</td>
       <td>${r.sellingPrice || '0.00'}</td>
-      <td>${r.netPrice || '0.00'}</td>
-      <td>${r.profit || '0.00'}</td>
+      ${showCost ? `<td>${r.netPrice || '0.00'}</td><td>${r.profit || '0.00'}</td>` : ''}
       </tr>
       `).join('')}
     </tbody>
@@ -183,7 +186,8 @@ const handleReset = async () =>{
 const handleExcel = () => {
   const headers = [
     'SI.No', 'Agent Name', 'Supplier Name', 'Customer Name', 'Booking Code',
-    'Booking Done By', 'Book Date', 'Native Country', 'Selling Price', 'Net Price', 'Profit'
+    'Booking Done By', 'Book Date', 'Native Country', 'Selling Price',
+    ...(showCost ? ['Net Price', 'Profit'] : [])
   ];
 
   const escapeCSV = (value) => {
@@ -208,8 +212,7 @@ const handleExcel = () => {
       r.bookingDate ? r.bookingDate.split("T")[0] : 'N/A',
       r.nativeCountry || 'N/A',
       r.sellingPrice || '0.00',
-      r.netPrice || '0.00',
-      r.profit || '0.00'
+      ...(showCost ? [r.netPrice || '0.00', r.profit || '0.00'] : [])
     ].map(escapeCSV).join(','))
   ].join('\n');
 
@@ -501,8 +504,8 @@ const filteredreports = useMemo(()=>{
                     <th>Book Date</th>
                     <th>Native Country</th>
                     <th>Selling Price</th>
-                    <th>Net Price</th>
-                    <th>Profit</th>
+                    {showCost && <th>Net Price</th>}
+                    {showCost && <th>Profit</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -518,13 +521,13 @@ const filteredreports = useMemo(()=>{
                         <td>{r.bookingDate ? r.bookingDate.split("T")[0] : 'N/A'}</td>
                         <td>{r.nativeCountry || 'N/A'}</td>
                         <td>{r.sellingPrice || '0.00'}</td>
-                        <td>{r.netPrice || '0.00'}</td>
-                        <td>{r.profit || '0.00'}</td>
+                        {showCost && <td>{r.netPrice || '0.00'}</td>}
+                        {showCost && <td>{r.profit || '0.00'}</td>}
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="11" className="text-center text-muted py-4">
+                      <td colSpan={showCost ? 11 : 9} className="text-center text-muted py-4">
                         No data available in table
                       </td>
                     </tr>

@@ -17,6 +17,7 @@ import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
 import { toast } from "react-hot-toast";
 import BackButton from "../../components/BackButton";
+import { isAgentLogin } from "../../utils/supplierDisplay";
 
 export default function OfflineBookingDailySalesStatement() {
 
@@ -64,6 +65,10 @@ export default function OfflineBookingDailySalesStatement() {
   const activeRole = (sessionStorage.getItem("currentActiveRole") || "").trim().toUpperCase();
   const storedRoles = (sessionStorage.getItem("userRole") || "").toUpperCase();
   const isAgentRole = activeRole ? activeRole === "AGENT" : (storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN"));
+  // Net Price (our cost) and Profit (our margin) are not shown to agents —
+  // the server also leaves them out of the agent's statement data.
+  // isAgentLogin() also covers sub-agents and sub-users (utils/supplierDisplay).
+  const showCost = !isAgentLogin();
 
   const fetchSales = async (filters = {}) => {
     try {
@@ -146,8 +151,7 @@ export default function OfflineBookingDailySalesStatement() {
                 <th>Reference</th>
                 <th>Details</th>
                  <th>Selling Price</th>
-                 <th>Net Price</th>
-                  <th>Profit</th>
+                 ${showCost ? '<th>Net Price</th><th>Profit</th>' : ''}
               </tr>
             </thead>
             <tbody>
@@ -162,8 +166,7 @@ export default function OfflineBookingDailySalesStatement() {
                   <td>${s.reference || ''}</td>
                   <td class="details">${s.details || ''}</td>
                    <td>${s.sellingPrice}</td>
-                   <td>${s.netPrice ?? ''}</td>
-                   <td>${s.profit ?? ''}</td>
+                   ${showCost ? `<td>${s.netPrice ?? ''}</td><td>${s.profit ?? ''}</td>` : ''}
                 </tr>
               `).join('')}
             </tbody>
@@ -176,7 +179,8 @@ export default function OfflineBookingDailySalesStatement() {
   };
 
   const handleExcel = () => {
-    const headers = ['Sl.No', 'Date', 'Invoice No', 'Supplier', 'Agent', 'Booking By', 'Reference', 'Details', 'Selling Price', 'Net Price', 'Profit'];
+    const headers = ['Sl.No', 'Date', 'Invoice No', 'Supplier', 'Agent', 'Booking By', 'Reference', 'Details', 'Selling Price',
+      ...(showCost ? ['Net Price', 'Profit'] : [])];
 
     // Create CSV content with proper escaping
     const escapeCSV = (value) => {
@@ -201,8 +205,7 @@ export default function OfflineBookingDailySalesStatement() {
         s.reference,
         s.details,
         s.sellingPrice,
-        s.netPrice,
-        s.profit
+        ...(showCost ? [s.netPrice, s.profit] : [])
       ].map(escapeCSV).join(','))
     ].join('\n');
 
@@ -485,8 +488,8 @@ export default function OfflineBookingDailySalesStatement() {
                     <th>Reference Number</th>
                     <th>Booking Details</th>
                     <th>Selling Price</th>
-                    <th>Net Price</th>
-                    <th>Profit</th>
+                    {showCost && <th>Net Price</th>}
+                    {showCost && <th>Profit</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -502,13 +505,13 @@ export default function OfflineBookingDailySalesStatement() {
                         <td>{s.reference}</td>
                         <td style={{ whiteSpace: "pre-line" }}>{s.details}</td>
                         <td>{s.sellingPrice}</td>
-                        <td>{s.netPrice}</td>
-                        <td>{s.profit}</td>
+                        {showCost && <td>{s.netPrice}</td>}
+                        {showCost && <td>{s.profit}</td>}
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="11" className="text-center text-muted py-4">
+                      <td colSpan={showCost ? 11 : 9} className="text-center text-muted py-4">
                         No data available in table
                       </td>
                     </tr>
