@@ -994,13 +994,14 @@ export default function GovEmployeeBookingDetailView() {
 
   // Uploaded government ID. The preview endpoint needs the Bearer token,
   // which a plain <a href> navigation never sends, so fetch it through
-  // axiosInstance and open the file as a blob URL in a new tab.
-  const handleViewGovtId = async (path) => {
+  // axiosInstance and open the file as a blob URL in a new tab. It is asked
+  // for through the booking (not by file path), so the server checks that
+  // this login may open that booking.
+  const handleViewGovtId = async () => {
     // Opened before the request so popup blockers treat it as a click.
     const previewTab = window.open("", "_blank");
     try {
-      const res = await axiosInstance.get("/api/gov-employee-id-upload/preview", {
-        params: { path },
+      const res = await axiosInstance.get(`/api/gov-employee-id-upload/booking/${id}`, {
         responseType: "blob",
       });
       const blobUrl = URL.createObjectURL(res.data);
@@ -1012,7 +1013,11 @@ export default function GovEmployeeBookingDetailView() {
       setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
     } catch (e) {
       if (previewTab) previewTab.close();
-      toast.error("Failed to open the uploaded ID");
+      toast.error(
+        e.response?.status === 403
+          ? "You are not allowed to view this document."
+          : "Failed to open the uploaded ID",
+      );
     }
   };
 
@@ -1395,7 +1400,7 @@ export default function GovEmployeeBookingDetailView() {
                                   variant="link"
                                   className="p-0 border-0 align-baseline"
                                   style={{ fontSize: "inherit" }}
-                                  onClick={() => handleViewGovtId(booking.govtIdFilePath)}
+                                  onClick={() => handleViewGovtId()}
                                 >
                                   {booking.govtIdFileName || "View uploaded ID"}
                                 </Button>
