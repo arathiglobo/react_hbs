@@ -188,7 +188,6 @@ import OnlineDailySalesReport from "./pages/report/OnlineDailySalesReport";
 import TimeLimitOnlineDailySalesReport from "./pages/report/TimeLimitOnlineDailySalesReport";
 import ExternalApiRoomList from "./pages/ExternalApiRoomList";
 import HotelBookingPage from "./pages/booking/HotelBookingPage";
-import DummyPaymentPage from "./pages/booking/DummyPaymentPage";
 import CCAvenueCheckoutPage from "./pages/booking/CCAvenueCheckoutPage";
 import ApiBookingPageForHotels from "./pages/booking/ApiBookingPageForHotels";
 import LongStaySearch from "./pages/search/LongStaySearch";
@@ -457,7 +456,6 @@ export default function App() {
         {/* Masters */}
         <Route path="/masters/designations" element={<PrivateRoute><Designations /></PrivateRoute>} />
         <Route path="/masters/bank" element={<PrivateRoute><Bank /></PrivateRoute>} />
-        <Route path="/masters/user-roles" element={<PrivateRoute><UserRoles /></PrivateRoute>} />
         <Route path="/masters/contact-type" element={<PrivateRoute><ContactType /></PrivateRoute>} />
         <Route path="/masters/markup-type" element={<PrivateRoute><MarkupType /></PrivateRoute>} />
         <Route path="/masters/cab-type" element={<PrivateRoute><CabType /></PrivateRoute>} />
@@ -613,7 +611,9 @@ export default function App() {
         {/* Last Minute Room List — opened from "View Rooms" button on the search page */}
         <Route path="/last-minute-room-list" element={<PrivateRoute><LastMinuteRoomList /></PrivateRoute>} />
         <Route path="/hotel-booking-page" element={<PrivateRoute><HotelBookingPage /></PrivateRoute>} />
-        <Route path="/payment/:gateway" element={<PrivateRoute><DummyPaymentPage /></PrivateRoute>} />
+        {/* The dummy /payment/:gateway page took no payment and its resume path
+            could confirm a booking unpaid (S:PAY-02). Every page offers CC Avenue
+            only, which goes to /payment/ccavenue-redirect below. */}
         <Route path="/payment/ccavenue-redirect" element={<PrivateRoute><CCAvenueCheckoutPage /></PrivateRoute>} />
         <Route path="/new-booking/long-stay" element={<PrivateRoute><LongStaySearch /></PrivateRoute>} />
         <Route path="/long-stay-booking-page" element={<PrivateRoute><LongStayBookingPage /></PrivateRoute>} />
