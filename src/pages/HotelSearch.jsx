@@ -1957,6 +1957,8 @@ export default function HotelSearch({
             // Refund Policy filter flags: true / false / null (unknown).
             hasRefundable: hotel.hasRefundable ?? null,
             hasNonRefundable: hotel.hasNonRefundable ?? null,
+            // How many suppliers sell this hotel (mapped hotels: best price of all).
+            supplierCount: hotel.supplierCount || 1,
             // Surface the backend-computed promotion flag so the
             // "Destination Sales" pill and filter actually work.
             hasDestinationSales: !!hotel.hasDestinationSales,
@@ -2302,6 +2304,8 @@ export default function HotelSearch({
                 // Refund Policy filter flags: true / false / null (unknown).
                 hasRefundable: hotel.hasRefundable ?? null,
                 hasNonRefundable: hotel.hasNonRefundable ?? null,
+                // How many suppliers sell this hotel (mapped hotels: best price of all).
+                supplierCount: hotel.supplierCount || 1,
                 // Surface backend promotion flags so the
                 // "Destination Sales" pill + filter actually work.
                 hasDestinationSales: !!hotel.hasDestinationSales,
@@ -2573,6 +2577,8 @@ export default function HotelSearch({
               // Refund Policy filter flags: true / false / null (unknown).
               hasRefundable: hotel.hasRefundable ?? null,
               hasNonRefundable: hotel.hasNonRefundable ?? null,
+              // How many suppliers sell this hotel (mapped hotels: best price of all).
+              supplierCount: hotel.supplierCount || 1,
               hasDestinationSales: !!hotel.hasDestinationSales,
               flashSale: !!hotel.flashSale,
               latitude: hotel.latitude,
@@ -4097,6 +4103,25 @@ export default function HotelSearch({
                                           }}
                                         >
                                           {hotel.badge}
+                                        </span>
+                                      )}
+                                      {/* A hotel several suppliers sell is one
+                                          card at the best price; its room list
+                                          shows every supplier's room types. */}
+                                      {hotel.supplierCount > 1 && (
+                                        <span
+                                          title="Best price shown. Opening the hotel lists the room types of every supplier that sells it."
+                                          style={{
+                                            backgroundColor: "#e7f1ff",
+                                            color: "#0b4a8b",
+                                            border: "1px solid #b6d4fe",
+                                            padding: "3px 8px",
+                                            borderRadius: "4px",
+                                            fontSize: "0.75rem",
+                                            display: "inline-block",
+                                          }}
+                                        >
+                                          Best of {hotel.supplierCount} suppliers
                                         </span>
                                       )}
                                       {/* Refund pills — only when the supplier
