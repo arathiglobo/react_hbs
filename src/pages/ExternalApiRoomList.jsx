@@ -1361,10 +1361,16 @@ const ExternalApiRoomList = () => {
           // response. The rates come back tagged with a `bundleType` field so
           // the UI can toggle between "Book as one package" (bundled) and
           // "Pick per room" (non-bundled) without a second network trip.
-          // Single-room and non-GRN searches are unaffected — the flag is
-          // GRN-scoped on the backend and other suppliers ignore it.
-          const isGrnMultiRoom =
-            Number(payload?.apiId) === 20 && (payload?.rooms || []).length > 1;
+          // Single-room searches are unaffected — the flag is GRN-scoped on
+          // the backend and other suppliers ignore it.
+          //
+          // A mapped hotel asks every one of its suppliers at once, so both
+          // this flag and the GoGlobal one below go on EVERY multi-room
+          // search, not only when the clicked card was GRN / GoGlobal —
+          // otherwise a mapped GRN or GoGlobal hotel answers with rates its
+          // multi-room booking can't use.
+          const isMultiRoomSearch = (payload?.rooms || []).length > 1;
+          const isGrnMultiRoom = isMultiRoomSearch;
           // GoGlobal (apiId 21) multi-room opt-in. When more than one room is
           // requested, ask the backend to fan out to K parallel single-room
           // HOTEL_SEARCH_REQUEST calls (spec §6) so each returned offer has
@@ -1373,8 +1379,7 @@ const ExternalApiRoomList = () => {
           // valuations (§7) + K bookings (§8) under one BasketNumber.
           // Single-room GoGlobal searches skip the flag → existing bundle
           // path runs unchanged; other suppliers ignore the flag.
-          const isGoGlobalMultiRoomSearch =
-            Number(payload?.apiId) === 21 && (payload?.rooms || []).length > 1;
+          const isGoGlobalMultiRoomSearch = isMultiRoomSearch;
           let searchBody = payload;
           if (isGrnMultiRoom) {
             searchBody = { ...searchBody, includeNonBundled: true };
