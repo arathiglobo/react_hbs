@@ -7,6 +7,7 @@ import { toast } from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { escapeHtml } from "../../utils/safeHtml";
 
 // Same "2026-Jul-29 - 09:55:21 AM" formatter the User Management → Login Logs
 // page uses, so a login prints identically on both screens. Null (an open
@@ -195,12 +196,12 @@ export default function UserLogins() {
             <tbody>
               ${currentLogins.map((l, index) => `
                 <tr>
-                  <td>${startIndex + index + 1}</td>
-                  <td>${l.code || ""}</td>
-                  <td>${l.name || ""}</td>
-                  <td>${prettyType(l.loginType)}</td>
-                  <td>${formatAudit(l.login)}</td>
-                  <td>${formatAudit(l.logout)}</td>
+                  <td>${escapeHtml(startIndex + index + 1)}</td>
+                  <td>${escapeHtml(l.code || "")}</td>
+                  <td>${escapeHtml(l.name || "")}</td>
+                  <td>${escapeHtml(prettyType(l.loginType))}</td>
+                  <td>${escapeHtml(formatAudit(l.login))}</td>
+                  <td>${escapeHtml(formatAudit(l.logout))}</td>
                 </tr>
               `).join('')}
             </tbody>

@@ -18,6 +18,7 @@ import DestinationCity from "../../components/filters/DestinationCity";
 import { toast } from "react-hot-toast";
 import BackButton from "../../components/BackButton";
 import { isAgentLogin } from "../../utils/supplierDisplay";
+import { escapeHtml } from "../../utils/safeHtml";
 
 export default function OfflineBookingDailySalesStatement() {
 
@@ -158,15 +159,15 @@ export default function OfflineBookingDailySalesStatement() {
               ${filteredsales.map((s, index) => `
                 <tr>
                   <td>${index + 1}</td>
-                  <td>${formatDate(s.date)}</td>
-                  <td>${s.invoiceNumber || ''}</td>
-                  <td>${s.supplier || ''}</td>
-                  <td>${s.agent || ''}</td>
-                  <td>${s.bookingBy || ''}</td>
-                  <td>${s.reference || ''}</td>
-                  <td class="details">${s.details || ''}</td>
-                   <td>${s.sellingPrice}</td>
-                   ${showCost ? `<td>${s.netPrice ?? ''}</td><td>${s.profit ?? ''}</td>` : ''}
+                  <td>${escapeHtml(formatDate(s.date))}</td>
+                  <td>${escapeHtml(s.invoiceNumber || '')}</td>
+                  <td>${escapeHtml(s.supplier || '')}</td>
+                  <td>${escapeHtml(s.agent || '')}</td>
+                  <td>${escapeHtml(s.bookingBy || '')}</td>
+                  <td>${escapeHtml(s.reference || '')}</td>
+                  <td class="details">${escapeHtml(s.details || '')}</td>
+                   <td>${escapeHtml(s.sellingPrice)}</td>
+                   ${showCost ? `<td>${escapeHtml(s.netPrice)}</td><td>${escapeHtml(s.profit)}</td>` : ''}
                 </tr>
               `).join('')}
             </tbody>

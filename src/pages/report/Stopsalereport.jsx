@@ -10,6 +10,7 @@ import autoTable from 'jspdf-autotable';
 import HotelFilter from "../../components/filters/Hotelfilters";
 import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
+import { escapeHtml } from "../../utils/safeHtml";
 
 export default function Stopsalereport() {
  
@@ -194,11 +195,11 @@ export default function Stopsalereport() {
               ${currentStopSale.map((s, index) => `
                 <tr>
                   <td>${index + 1}</td>
-                  <td>${s.hotel}</td>
-                  <td>${s.market}</td>
-                  <td>${s.type}</td>
-                  <td>${s.roomCategory}</td>
-                  <td>${formatValidity(s.validityList)}</td>
+                  <td>${escapeHtml(s.hotel)}</td>
+                  <td>${escapeHtml(s.market)}</td>
+                  <td>${escapeHtml(s.type)}</td>
+                  <td>${escapeHtml(s.roomCategory)}</td>
+                  <td>${escapeHtml(formatValidity(s.validityList))}</td>
                 </tr>
               `).join('')}
 

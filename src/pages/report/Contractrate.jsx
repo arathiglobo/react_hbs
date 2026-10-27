@@ -11,6 +11,7 @@ import HotelFilter from "../../components/filters/Hotelfilters";
 import MarketType from "../../components/filters/MarketType";
 import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
+import { escapeHtml } from "../../utils/safeHtml";
 
 export default function Contractrate() {
   const [contracts, setContracts] = useState([]);
@@ -160,11 +161,11 @@ export default function Contractrate() {
 
     contracts.forEach((c) => {
       html += `
-        <h4>Rate Code: ${c.rateCode || "N/A"}</h4>
-        <p><b>Market Type:</b> ${getMarketTypeNames(c.markeType)}</p>
+        <h4>Rate Code: ${escapeHtml(c.rateCode || "N/A")}</h4>
+        <p><b>Market Type:</b> ${escapeHtml(getMarketTypeNames(c.markeType))}</p>
         <p><b>Validity:</b><br>${
           c.contractRateValidityDTO?.map(
-            (v) => `${v.validityFrom} to ${v.validityTo}<br>`
+            (v) => `${escapeHtml(v.validityFrom)} to ${escapeHtml(v.validityTo)}<br>`
           ) || "N/A"
         }</p>
 
@@ -184,11 +185,11 @@ export default function Contractrate() {
       c.contractRateRoomDTO?.forEach((r) => {
         html += `
           <tr>
-            <td>${r.meal ? "Room with Breakfast" : "Room Only"}</td>
-            <td>${r.rate || "-"}</td>
-            <td>${r.rate || "-"}</td>
-            <td>${r.adultRate || "-"}</td>
-            <td>${r.childRate || "-"}</td>
+            <td>${escapeHtml(r.meal ? "Room with Breakfast" : "Room Only")}</td>
+            <td>${escapeHtml(r.rate || "-")}</td>
+            <td>${escapeHtml(r.rate || "-")}</td>
+            <td>${escapeHtml(r.adultRate || "-")}</td>
+            <td>${escapeHtml(r.childRate || "-")}</td>
           </tr>
         `;
       });

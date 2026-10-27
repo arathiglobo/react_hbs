@@ -18,6 +18,7 @@ import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
 import BackButton from "../../components/BackButton";
 import { isAgentLogin } from "../../utils/supplierDisplay";
+import { escapeHtml } from "../../utils/safeHtml";
 
 export default function OnlineDailySalesReport() {
 
@@ -163,15 +164,15 @@ const handleReset = async () =>{
     ${currentfilter.map((r,index)=>`
       <tr>
       <td>${index+1}</td>
-      <td>${r.agentName || 'N/A'}</td>
-      <td>${r.supplierName || 'N/A'}</td>
-      <td>${r.customerName || 'N/A'}</td>
-      <td>${r.bookingCode || 'N/A'}</td>
-      <td>${r.bookingDoneBy || 'N/A'}</td>
-      <td>${r.bookingDate ? r.bookingDate.split("T")[0] : 'N/A'}</td>
-      <td>${r.nativeCountry || 'N/A'}</td>
-      <td>${r.sellingPrice || '0.00'}</td>
-      ${showCost ? `<td>${r.netPrice || '0.00'}</td><td>${r.profit || '0.00'}</td>` : ''}
+      <td>${escapeHtml(r.agentName || 'N/A')}</td>
+      <td>${escapeHtml(r.supplierName || 'N/A')}</td>
+      <td>${escapeHtml(r.customerName || 'N/A')}</td>
+      <td>${escapeHtml(r.bookingCode || 'N/A')}</td>
+      <td>${escapeHtml(r.bookingDoneBy || 'N/A')}</td>
+      <td>${escapeHtml(r.bookingDate ? r.bookingDate.split("T")[0] : 'N/A')}</td>
+      <td>${escapeHtml(r.nativeCountry || 'N/A')}</td>
+      <td>${escapeHtml(r.sellingPrice || '0.00')}</td>
+      ${showCost ? `<td>${escapeHtml(r.netPrice || '0.00')}</td><td>${escapeHtml(r.profit || '0.00')}</td>` : ''}
       </tr>
       `).join('')}
     </tbody>

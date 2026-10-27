@@ -13,6 +13,7 @@ import HotelCategory from "../../components/filters/HotelCategory";
 import MonthFilter from "../../components/filters/MonthFilter";
 import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
+import { escapeHtml } from "../../utils/safeHtml";
 
 function MonthlyWise() {
 
@@ -214,7 +215,7 @@ const handlePrint = () => {
   printWindow.document.write(`
     <html>
       <head>
-        <title>Monthly Wise Report - ${reportType === 'inhouse' ? 'Inhouse' : 'API'}</title>
+        <title>Monthly Wise Report - ${escapeHtml(reportType === 'inhouse' ? 'Inhouse' : 'API')}</title>
         <style>
           body { font-family: Arial, sans-serif; margin: 20px; }
           table { width: 100%; border-collapse: collapse; }
@@ -224,11 +225,11 @@ const handlePrint = () => {
         </style>
       </head>
       <body>
-        <h1>Monthly Wise Report - ${reportType === 'inhouse' ? 'Inhouse' : 'API'}</h1>
+        <h1>Monthly Wise Report - ${escapeHtml(reportType === 'inhouse' ? 'Inhouse' : 'API')}</h1>
         <table>
           <thead>
             <tr>
-              ${columns.map(col => `<th>${col}</th>`).join('')}
+              ${columns.map(col => `<th>${escapeHtml(col)}</th>`).join('')}
             </tr>
           </thead>
           <tbody>
@@ -237,21 +238,21 @@ const handlePrint = () => {
                 return `
                   <tr>
                     <td>${index + 1}</td>
-                    <td>${booking.hotelName || ''}</td>
-                    <td>${booking.hotelType || ''}</td>
-                    <td>${booking.hotelCategory || ''}</td>
-                    <td>${booking.noOfBooking || booking.noofbooking || 0}</td>
-                    <td>${booking.noOfBookingCancelled || booking.noofCancelledbooking || 0}</td>
+                    <td>${escapeHtml(booking.hotelName || '')}</td>
+                    <td>${escapeHtml(booking.hotelType || '')}</td>
+                    <td>${escapeHtml(booking.hotelCategory || '')}</td>
+                    <td>${escapeHtml(booking.noOfBooking || booking.noofbooking || 0)}</td>
+                    <td>${escapeHtml(booking.noOfBookingCancelled || booking.noofCancelledbooking || 0)}</td>
                   </tr>
                 `;
               } else {
                 return `
                   <tr>
                     <td>${index + 1}</td>
-                    <td>${booking.hotelName || ''}</td>
-                    <td>${booking.platform || ''}</td>
-                    <td>${booking.noofbooking || 0}</td>
-                    <td>${booking.noofCancelledbooking || 0}</td>
+                    <td>${escapeHtml(booking.hotelName || '')}</td>
+                    <td>${escapeHtml(booking.platform || '')}</td>
+                    <td>${escapeHtml(booking.noofbooking || 0)}</td>
+                    <td>${escapeHtml(booking.noofCancelledbooking || 0)}</td>
                   </tr>
                 `;
               }

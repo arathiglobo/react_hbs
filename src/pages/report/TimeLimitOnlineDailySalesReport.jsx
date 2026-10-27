@@ -9,6 +9,7 @@ import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
 import { toast } from "react-hot-toast";
 import BackButton from "../../components/BackButton";
+import { escapeHtml } from "../../utils/safeHtml";
 
 export default function TimeLimitOnlineDailySalesReport() {
 
@@ -159,15 +160,15 @@ export default function TimeLimitOnlineDailySalesReport() {
             ${currentreports.map((r, index) =>
               `<tr>
               <td>${index + 1}</td>
-               <td>${r.agentName || ''}</td>
-               <td>${r.supplierName || ''}</td>
-               <td>${r.customerName || ''}</td>
-               <td>${r.bookingCode || ''}</td>
-               <td>${r.referenceCode || ''}</td>
-               <td>${r.bookingDoneBy || ''}</td>
-               <td>${r.bookingDate ? r.bookingDate.split('T')[0] : '_'}</td>
-               <td class="details">${formatDetails(r)}</td>
-               <td>${r.deadlineDate ? r.deadlineDate.split('T')[0] : '_'}</td>
+               <td>${escapeHtml(r.agentName || '')}</td>
+               <td>${escapeHtml(r.supplierName || '')}</td>
+               <td>${escapeHtml(r.customerName || '')}</td>
+               <td>${escapeHtml(r.bookingCode || '')}</td>
+               <td>${escapeHtml(r.referenceCode || '')}</td>
+               <td>${escapeHtml(r.bookingDoneBy || '')}</td>
+               <td>${escapeHtml(r.bookingDate ? r.bookingDate.split('T')[0] : '_')}</td>
+               <td class="details">${escapeHtml(formatDetails(r))}</td>
+               <td>${escapeHtml(r.deadlineDate ? r.deadlineDate.split('T')[0] : '_')}</td>
               </tr>
               `
             ).join('')}

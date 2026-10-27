@@ -10,6 +10,7 @@ import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { escapeHtml } from "../../utils/safeHtml";
 
 /**
  * Report → Hotel Booking History (admin only).
@@ -198,13 +199,13 @@ export default function HotelBookingHistory() {
           <table>
             <thead>
               <tr>
-                ${exportHeaders.map((h) => `<th>${h}</th>`).join('')}
+                ${exportHeaders.map((h) => `<th>${escapeHtml(h)}</th>`).join('')}
               </tr>
             </thead>
             <tbody>
               ${currentRows.map((h, index) => `
                 <tr>
-                  ${exportRow(h, index).map((cell) => `<td>${cell}</td>`).join('')}
+                  ${exportRow(h, index).map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}
                 </tr>
               `).join('')}
             </tbody>

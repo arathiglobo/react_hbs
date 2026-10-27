@@ -20,6 +20,7 @@ import {
 } from "react-bootstrap";
 import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
+import { escapeHtml } from "../../utils/safeHtml";
 
 export default function CancellationReport() {
 
@@ -174,11 +175,11 @@ export default function CancellationReport() {
                 ${filteredcancellation.map((c, index) => `
                   <tr>
                     <td>${index + 1}</td>
-                    <td>${c.bookingCode}</td>
-                     <td>${c.bookingDate ? c.bookingDate.split('T')[0]:'_'}</td>
-                    <td>${c.customerName}</td>
-                    <td>${c.bookingDoneBy}</td>
-                    <td>${c.nativeCountry}</td>
+                    <td>${escapeHtml(c.bookingCode)}</td>
+                     <td>${escapeHtml(c.bookingDate ? c.bookingDate.split('T')[0]:'_')}</td>
+                    <td>${escapeHtml(c.customerName)}</td>
+                    <td>${escapeHtml(c.bookingDoneBy)}</td>
+                    <td>${escapeHtml(c.nativeCountry)}</td>
                    </tr>
                 `).join('')}
               </tbody>

@@ -10,6 +10,7 @@ import HotelFilter from "../../components/filters/Hotelfilters";
 import axiosInstance from "../../components/AxiosInstance";
 import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
+import { escapeHtml } from "../../utils/safeHtml";
 
 export default function ContractExpiryReport() {
 
@@ -331,11 +332,11 @@ const handleSendEmail = async () => {
               ${currentData.map((c, index) => `
                 <tr>
                   <td>${index + 1}</td>
-                  <td>${c.rateCode}</td>
-                  <td>${c.day}</td>
-                  <td>${c.hotelName}</td>
-                  <td>${getContractStatus(c.expirationDate)}</td>
-                  <td>${c.expirationDate}</td>
+                  <td>${escapeHtml(c.rateCode)}</td>
+                  <td>${escapeHtml(c.day)}</td>
+                  <td>${escapeHtml(c.hotelName)}</td>
+                  <td>${escapeHtml(getContractStatus(c.expirationDate))}</td>
+                  <td>${escapeHtml(c.expirationDate)}</td>
                 </tr>
               `).join('')}
             </tbody>

@@ -7,6 +7,7 @@ import { toast } from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { escapeHtml } from "../../utils/safeHtml";
 
 
 export default function UserReport() {
@@ -207,7 +208,7 @@ export default function UserReport() {
     let html = `
       <html>
         <head>
-          <title>User Report - ${reportType || 'All'}</title>
+          <title>User Report - ${escapeHtml(reportType || 'All')}</title>
           <style>
             body { font-family: Arial, sans-serif; margin: 20px; }
             table { width: 100%; border-collapse: collapse; }
@@ -217,7 +218,7 @@ export default function UserReport() {
           </style>
         </head>
         <body>
-          <h1>User Report - ${reportType || 'All'}</h1>
+          <h1>User Report - ${escapeHtml(reportType || 'All')}</h1>
           <table>
             <thead>
               <tr>
@@ -236,10 +237,10 @@ export default function UserReport() {
         html += `
           <tr>
             <td>${i + 1}</td>
-            <td>${c.code || 'N/A'}</td>
-            <td>${c.name || 'N/A'}</td>
-            <td>${c.createdBy || 'N/A'}</td>
-            <td>${c.modifiedBy || 'N/A'}</td>
+            <td>${escapeHtml(c.code || 'N/A')}</td>
+            <td>${escapeHtml(c.name || 'N/A')}</td>
+            <td>${escapeHtml(c.createdBy || 'N/A')}</td>
+            <td>${escapeHtml(c.modifiedBy || 'N/A')}</td>
           </tr>`;
       });
     } else if (reportType === "Special Rate") {
@@ -247,10 +248,10 @@ export default function UserReport() {
         html += `
           <tr>
             <td>${i + 1}</td>
-           <td>${s.code || 'N/A'}</td>
-            <td>${s.name || 'N/A'}</td>
-            <td>${s.createdBy || 'N/A'}</td>
-            <td>${s.modifiedBy || 'N/A'}</td>
+           <td>${escapeHtml(s.code || 'N/A')}</td>
+            <td>${escapeHtml(s.name || 'N/A')}</td>
+            <td>${escapeHtml(s.createdBy || 'N/A')}</td>
+            <td>${escapeHtml(s.modifiedBy || 'N/A')}</td>
           </tr>`;
       });
     } else if (reportType === "Promotion") {
@@ -258,10 +259,10 @@ export default function UserReport() {
         html += `
           <tr>
             <td>${i + 1}</td>
-            <td>${p.code || 'N/A'}</td>
-            <td>${p.name || 'N/A'}</td>
-            <td>${p.createdBy || 'N/A'}</td>
-            <td>${p.modifiedBy || 'N/A'}</td>
+            <td>${escapeHtml(p.code || 'N/A')}</td>
+            <td>${escapeHtml(p.name || 'N/A')}</td>
+            <td>${escapeHtml(p.createdBy || 'N/A')}</td>
+            <td>${escapeHtml(p.modifiedBy || 'N/A')}</td>
           </tr>`;
       });
       } else if (reportType === "Availability") {
@@ -269,10 +270,10 @@ export default function UserReport() {
         html += `
           <tr>
             <td>${i + 1}</td>
-            <td>${a.code || 'N/A'}</td>
-            <td>${a.name || 'N/A'}</td>
-            <td>${a.createdBy || 'N/A'}</td>
-            <td>${a.modifiedBy || 'N/A'}</td>
+            <td>${escapeHtml(a.code || 'N/A')}</td>
+            <td>${escapeHtml(a.name || 'N/A')}</td>
+            <td>${escapeHtml(a.createdBy || 'N/A')}</td>
+            <td>${escapeHtml(a.modifiedBy || 'N/A')}</td>
           </tr>`;
       });
        } else if (reportType === "Booking") {
@@ -280,10 +281,10 @@ export default function UserReport() {
         html += `
           <tr>
             <td>${i + 1}</td>
-            <td>${b.code || 'N/A'}</td>
-            <td>${b.name || 'N/A'}</td>
-            <td>${b.createdBy || 'N/A'}</td>
-            <td>${b.modifiedBy || 'N/A'}</td>
+            <td>${escapeHtml(b.code || 'N/A')}</td>
+            <td>${escapeHtml(b.name || 'N/A')}</td>
+            <td>${escapeHtml(b.createdBy || 'N/A')}</td>
+            <td>${escapeHtml(b.modifiedBy || 'N/A')}</td>
           </tr>`;
       });
     } else if (reportType === "Agent") {
@@ -291,10 +292,10 @@ export default function UserReport() {
         html += `
           <tr>
             <td>${i + 1}</td>
-           <td>${a.code || 'N/A'}</td>
-            <td>${a.name || 'N/A'}</td>
-            <td>${a.createdBy || 'N/A'}</td>
-            <td>${a.modifiedBy || 'N/A'}</td>
+           <td>${escapeHtml(a.code || 'N/A')}</td>
+            <td>${escapeHtml(a.name || 'N/A')}</td>
+            <td>${escapeHtml(a.createdBy || 'N/A')}</td>
+            <td>${escapeHtml(a.modifiedBy || 'N/A')}</td>
            
           </tr>`;
       });
@@ -303,10 +304,10 @@ export default function UserReport() {
         html += `
           <tr>
             <td>${i + 1}</td>
-           <td>${u.code || 'N/A'}</td>
-            <td>${u.name || 'N/A'}</td>
-            <td>${u.createdBy || 'N/A'}</td>
-            <td>${u.modifiedBy || 'N/A'}</td>
+           <td>${escapeHtml(u.code || 'N/A')}</td>
+            <td>${escapeHtml(u.name || 'N/A')}</td>
+            <td>${escapeHtml(u.createdBy || 'N/A')}</td>
+            <td>${escapeHtml(u.modifiedBy || 'N/A')}</td>
           </tr>`;
       });
     }

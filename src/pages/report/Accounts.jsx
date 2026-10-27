@@ -19,6 +19,7 @@ import autoTable from 'jspdf-autotable';
 import Agent from "../../components/filters/Agent";
 import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
+import { escapeHtml } from "../../utils/safeHtml";
 
 export default function Accounts() {
 
@@ -198,11 +199,11 @@ export default function Accounts() {
               ${currentBookings.map((a, index) => `
                 <tr>
                   <td>${index + 1}</td>
-                  <td>${a.companyName}</td>
-                  <td>${formatDate(a.paymentDate)}</td>
-                  <td>${a.creditLimit}</td>
-                  <td>${a.amountPaid}</td>
-                  <td>${a.remarks || ''}</td>
+                  <td>${escapeHtml(a.companyName)}</td>
+                  <td>${escapeHtml(formatDate(a.paymentDate))}</td>
+                  <td>${escapeHtml(a.creditLimit)}</td>
+                  <td>${escapeHtml(a.amountPaid)}</td>
+                  <td>${escapeHtml(a.remarks || '')}</td>
                 </tr>
               `).join('')}
             </tbody>

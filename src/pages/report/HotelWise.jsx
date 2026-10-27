@@ -25,6 +25,7 @@ import Country from "../../components/filters/Country";
 import State from "../../components/filters/State";
 import Place from "../../components/filters/place";
 import Supplier from "../../components/filters/Supplier";
+import { escapeHtml } from "../../utils/safeHtml";
 
 export default function HotelWise() {
 
@@ -243,14 +244,14 @@ export default function HotelWise() {
               ${currentHotels.map((h, index) => `
                 <tr>
                   <td>${index +1}</td>
-                  <td>${h.hotelName}</td>
-                  <td>${h.hotelType}</td>
-                  <td>${h.hotelCategory}</td>
-                  <td>${h.roomCategory}</td>
-                  <td>${h.region}</td>
-                  <td>${h.country}</td>
-                  <td>${h.state}</td>
-                  <td>${h.place}</td>
+                  <td>${escapeHtml(h.hotelName)}</td>
+                  <td>${escapeHtml(h.hotelType)}</td>
+                  <td>${escapeHtml(h.hotelCategory)}</td>
+                  <td>${escapeHtml(h.roomCategory)}</td>
+                  <td>${escapeHtml(h.region)}</td>
+                  <td>${escapeHtml(h.country)}</td>
+                  <td>${escapeHtml(h.state)}</td>
+                  <td>${escapeHtml(h.place)}</td>
 
                 </tr>
               `).join('')}

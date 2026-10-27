@@ -18,6 +18,7 @@ import {
 } from "react-bootstrap";
 import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
+import { escapeHtml } from "../../utils/safeHtml";
 
 export default function BookingReport() {
 
@@ -175,14 +176,14 @@ const handleReset = async () => {
             ${currentBookings.map((b, index) => `
               <tr>
                 <td>${index + 1}</td>
-                <td>${b.bookingCode}</td>
-                <td>${b.bookingDate ? b.bookingDate.split('T')[0]:'_'}</td>
-                <td>${b.customerName}</td>
-                <td>${b.bookingDoneBy}</td>
-                <td>${b.sellingPrice}</td>
-                <td>${b.netPrice ?? ''}</td>
-                <td>${b.profit ?? ''}</td>
-                <td>${b.nativeCountry}</td>
+                <td>${escapeHtml(b.bookingCode)}</td>
+                <td>${escapeHtml(b.bookingDate ? b.bookingDate.split('T')[0]:'_')}</td>
+                <td>${escapeHtml(b.customerName)}</td>
+                <td>${escapeHtml(b.bookingDoneBy)}</td>
+                <td>${escapeHtml(b.sellingPrice)}</td>
+                <td>${escapeHtml(b.netPrice)}</td>
+                <td>${escapeHtml(b.profit)}</td>
+                <td>${escapeHtml(b.nativeCountry)}</td>
               </tr>
             `
               )
