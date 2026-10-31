@@ -701,15 +701,16 @@ export default function BookingDetailedView() {
   };
 
   /**
-   * True when this booking is past its free-cancellation deadline — the case
-   * the backend used to refuse outright. Mirrors the backend's own test
-   * (BookingCancellationServiceImpl): API bookings only, and never for a
-   * non-refundable rate, whose deadline is stamped in the past at create time
-   * and so is meaningless.
+   * True when this booking is past its free-cancellation deadline. Credit is
+   * refunded only when a booking is cancelled BEFORE its deadline, so past it
+   * the operator must accept that nothing will be refunded. Mirrors the
+   * backend's own test (BookingCancellationServiceImpl): in-house and API
+   * bookings alike, but never for a non-refundable rate, whose deadline is
+   * stamped in the past at create time and which forfeits the full amount
+   * anyway.
    */
   const isPastCancellationDeadline = (() => {
     if (!booking?.deadlineDate) return false;
-    if (booking.apiBooking === false) return false;
     if (String(booking.refundStatus || "").toLowerCase() === "non-refundable") {
       return false;
     }
@@ -3444,9 +3445,9 @@ export default function BookingDetailedView() {
                           );
                         })()}
                       {/* Past the free-cancellation deadline the booking can
-                          still be cancelled — the supplier may charge only a
-                          partial penalty — but the operator has to accept that
-                          charges may apply before the button unlocks. */}
+                          still be cancelled, but the agent's credit is not
+                          refunded — the operator has to accept that before the
+                          button unlocks. */}
                       {isPastCancellationDeadline && (
                         <div
                           className="mb-3 text-start"
@@ -3464,9 +3465,8 @@ export default function BookingDetailedView() {
                             The free-cancellation deadline has passed
                           </div>
                           <div className="mb-2">
-                            You can still cancel this booking, but the supplier may
-                            apply cancellation charges. Any charge is settled
-                            separately from the amount shown above.
+                            You can still cancel this booking, but the booking
+                            amount will not be refunded to the agent's credit.
                           </div>
                           <Form.Check
                             type="checkbox"
@@ -3478,7 +3478,7 @@ export default function BookingDetailedView() {
                             }
                             label={
                               <span className="fw-semibold">
-                                I understand that cancellation charges may apply.
+                                I understand that the booking amount will not be refunded.
                               </span>
                             }
                           />
