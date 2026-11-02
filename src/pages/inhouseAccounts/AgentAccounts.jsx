@@ -13,6 +13,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import { useNavigate } from "react-router-dom";
+import { getCurrentActiveRole } from "../../utils/authSession";
 import {
   FaPlus,
   FaHistory,
@@ -21,6 +22,11 @@ import {
 
 export default function AgentAccounts() {
   const navigate = useNavigate();
+  // Recording a payment adds to the agent's available credit, so only an
+  // admin may do it (the backend refuses everyone else too).
+  const isAdmin = ["ADMIN", "SUPER_ADMIN"].includes(
+    String(getCurrentActiveRole() || "").toUpperCase(),
+  );
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -305,20 +311,22 @@ export default function AgentAccounts() {
                           className="d-flex gap-1 flex-nowrap"
                           style={{ whiteSpace: "nowrap" }}
                         >
-                          <Button
-                            size="sm"
-                            variant="outline-success"
-                            onClick={() => openCreate(item)}
-                            title="Record a payment received from this agent"
-                            className="d-inline-flex align-items-center"
-                            style={{
-                              padding: "1px 6px",
-                              fontSize: "0.68rem",
-                              lineHeight: 1.15,
-                            }}
-                          >
-                            <FaPlus style={{ fontSize: "0.62rem" }} className="me-1" /> Payment
-                          </Button>
+                          {isAdmin && (
+                            <Button
+                              size="sm"
+                              variant="outline-success"
+                              onClick={() => openCreate(item)}
+                              title="Record a payment received from this agent"
+                              className="d-inline-flex align-items-center"
+                              style={{
+                                padding: "1px 6px",
+                                fontSize: "0.68rem",
+                                lineHeight: 1.15,
+                              }}
+                            >
+                              <FaPlus style={{ fontSize: "0.62rem" }} className="me-1" /> Payment
+                            </Button>
+                          )}
                           <Button
                             size="sm"
                             variant="outline-info"
