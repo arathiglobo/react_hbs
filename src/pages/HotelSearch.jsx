@@ -57,8 +57,14 @@ function SearchProgressBar({ pollStatus, completedChannels, channels, isLoading 
     // to IDLE first). Without it, a Modify Search briefly hides the bar
     // because the previous COMPLETED state is wiped before the new poll has
     // started — the exact "accidentally hides" case the spec warns about.
+    //
+    // TIMEOUT counts as active too: the 30 s poll window has ended, but the
+    // late-results check is still waiting on slower suppliers (GRN can take
+    // 70-80 s). The bar stays up until the backend reports every active
+    // supplier finished (pollStatus flips to COMPLETED).
     const isActive =
       pollStatus === "IN_PROGRESS" ||
+      pollStatus === "TIMEOUT" ||
       (!!isLoading && pollStatus !== "COMPLETED");
     if (isActive) {
       setVisible(true);
@@ -2681,11 +2687,14 @@ export default function HotelSearch({
   // hotels only appeared on the next Search press. After a poll timeout,
   // check the result count every few seconds until the backend reports every
   // supplier finished, and refresh the visible page whenever the count moves.
+  // The "Searching hotels" bar stays up for this whole phase (TIMEOUT is an
+  // active state in SearchProgressBar) and hides once COMPLETED is set here.
   useEffect(() => {
     if (pollStatus !== "TIMEOUT" || !searchId) return;
     const CHECK_EVERY_MS = 4000;
     const GIVE_UP_AFTER_MS = 90000;
     const startedAt = Date.now();
+    const mySearchGen = searchGenRef.current;
     let cancelled = false;
     let timer;
     let lastTotal = null;
@@ -2702,7 +2711,33 @@ export default function HotelSearch({
             },
           },
         );
-        if (cancelled) return;
+        if (cancelled || mySearchGen !== searchGenRef.current) return;
+        // Keep the bar's percentage moving as the slower suppliers report
+        // in — same bookkeeping the main poll does on each tick.
+        const lateStatuses = res.data?.status;
+        if (lateStatuses && typeof lateStatuses === "object") {
+          let dispatchedGrew = false;
+          let completedGrew = false;
+          Object.keys(lateStatuses).forEach((ch) => {
+            if (!dispatchedChannelsRef.current.has(ch)) {
+              dispatchedChannelsRef.current.add(ch);
+              dispatchedGrew = true;
+            }
+            if (
+              lateStatuses[ch] === "COMPLETED" &&
+              !completedChannelsRef.current.has(ch)
+            ) {
+              completedChannelsRef.current.add(ch);
+              completedGrew = true;
+            }
+          });
+          if (dispatchedGrew) {
+            setDispatchedChannels(new Set(dispatchedChannelsRef.current));
+          }
+          if (completedGrew) {
+            setCompletedChannels(new Set(completedChannelsRef.current));
+          }
+        }
         if (res.data?.finalStatus === "COMPLETED") {
           // pollStatus is a dependency of the results effect, so this also
           // runs its final (background) refetch.
@@ -2722,6 +2757,12 @@ export default function HotelSearch({
       }
       if (Date.now() - startedAt < GIVE_UP_AFTER_MS) {
         timer = setTimeout(checkForLateResults, CHECK_EVERY_MS);
+      } else if (!cancelled && mySearchGen === searchGenRef.current) {
+        // A supplier that never answers must not keep "Searching hotels"
+        // on screen forever. Stop waiting and treat the search as finished;
+        // the background refetch picks up anything that landed meanwhile.
+        lateResultsRefreshRef.current = true;
+        setPollStatus("COMPLETED");
       }
     };
 
@@ -3901,7 +3942,8 @@ export default function HotelSearch({
                         <small className="text-muted fw-semibold">
                           Showing {startEntry} to {endEntry} of {displayTotal}{" "}
                           entries
-                          {pollStatus === "IN_PROGRESS" && (
+                          {(pollStatus === "IN_PROGRESS" ||
+                            pollStatus === "TIMEOUT") && (
                             <span className="ms-1 text-primary">
                               (updating…)
                             </span>
