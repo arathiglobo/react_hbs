@@ -447,6 +447,11 @@ const AgentView = () => {
     }
     Swal.fire({
       title: `Set ${agent?.companyName || "this agent"} to ${nextLabel}?`,
+      // The backend also switches the logins of this agent's sub agents and
+      // sub users (SubAccountLoginStatusService). Bookings are kept.
+      text: goingInactive
+        ? "The agent and all of its sub agents and sub users will be signed out and will not be able to log in or make bookings. Existing bookings are not affected."
+        : "The agent can log in again. Its sub agents and sub users that are Active can log in again too.",
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: goingInactive ? "#d33" : "#198754",

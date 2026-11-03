@@ -532,10 +532,9 @@ const ApiBookingPageForHotels = () => {
   //     1. Strip the resume signal from history so a reload doesn't retry
   //     2. Re-verify the payment status server-side (a tampered URL is
   //        rejected)
-  //     3. Read back the pending payload from sessionStorage (persisted
-  //        just before we navigated away) and fire the create call, or
-  //        fall back to the backend-owned /api/payment/ccavenue/finalize
-  //        flow when nothing was persisted.
+  //     3. Ask the backend to finalize via /api/payment/ccavenue/finalize —
+  //        it replays the payload it stored at /initiate. The browser never
+  //        posts a paid booking to /api/hotel-booking/create itself.
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const ccavenueOrderId = searchParams.get("ccavenueOrderId");
@@ -547,61 +546,7 @@ const ApiBookingPageForHotels = () => {
     // re-render can't race the effect.
     navigate(location.pathname, { replace: true, state: {} });
 
-    // ── Legacy resume path (HEAD) ──
-    // Reads the payload the older gateway modal persisted to
-    // sessionStorage under "hbpPendingCreatePayload" just before
-    // navigating to CC Avenue, and fires /api/hotel-booking/create with
-    // it. Kept for browser tabs that were opened against the older UI
-    // and still have a persisted payload waiting.
-    const readPendingPayload = () => {
-      const stored = sessionStorage.getItem("hbpPendingCreatePayload");
-      sessionStorage.removeItem("hbpPendingCreatePayload");
-      if (!stored) return null;
-      try {
-        return JSON.parse(stored);
-      } catch (e) {
-        console.error("Malformed persisted create payload", e);
-        return null;
-      }
-    };
-
-    const finalizeCreate = async (payload) => {
-      try {
-        setIsSubmitting(true);
-        // RateHawk booking flow needs the extended 120s timeout (see
-        // confirmBooking above for the reasoning). The resume path hits
-        // the same endpoint so it needs the same override.
-        const response = await axiosInstance.post(
-          "/api/hotel-booking/create",
-          payload,
-          { timeout: 120000 },
-        );
-        const bookingResponse = response.data;
-        const statusUpper = String(bookingResponse?.status || "").toUpperCase();
-        const ok =
-          (statusUpper === "CONFIRMED" || statusUpper === "RECONFIRMED") &&
-          bookingResponse?.bookingId != 0;
-        if (ok) {
-          toast.success(
-            bookingResponse?.message || "Booking created after payment.",
-          );
-          navigate(postBookingListPath(payload?.lastMinuteBooking === true));
-        } else {
-          toast.error(
-            bookingResponse?.message || "Booking submission failed. Please try again.",
-          );
-        }
-      } catch (err) {
-        const beMsg =
-          err?.response?.data?.message || err?.response?.data?.error || null;
-        console.error("Error finalising booking after payment:", err);
-        toast.error(beMsg || "Booking submission failed. Please try again.");
-      } finally {
-        setIsSubmitting(false);
-      }
-    };
-
-    // ── Backend-owned finalize (newer flow) ──
+    // ── Backend-owned finalize ──
     // Real CC Avenue path — the backend owns the payload and the create
     // call. We just ask it to finalize. Idempotent: a second call for
     // the same orderId returns the already-created booking, so a
@@ -610,8 +555,12 @@ const ApiBookingPageForHotels = () => {
       try {
         setIsFinalizingPayment(true);
         setIsSubmitting(true);
+        // Finalize replays the supplier booking (RateHawk can take up to
+        // ~120 s), so allow longer than the 30 s client default.
         const response = await axiosInstance.post(
           `/api/payment/ccavenue/finalize/${ccavenueOrderId}`,
+          null,
+          { timeout: 120000 },
         );
         const bookingResponse = response.data;
         const statusUpper = String(bookingResponse?.status || "").toUpperCase();
@@ -652,7 +601,6 @@ const ApiBookingPageForHotels = () => {
     (async () => {
       if (ccavenueStatus !== "success") {
         toast.error("Payment was not completed. Please try again.");
-        sessionStorage.removeItem("hbpPendingCreatePayload");
         return;
       }
       try {
@@ -664,7 +612,6 @@ const ApiBookingPageForHotels = () => {
             statusResponse.data?.statusMessage ||
               "Payment was not successful. Please try again.",
           );
-          sessionStorage.removeItem("hbpPendingCreatePayload");
           return;
         }
       } catch (err) {
@@ -674,15 +621,7 @@ const ApiBookingPageForHotels = () => {
         );
         return;
       }
-      // Prefer the legacy sessionStorage payload if one exists (browser
-      // tab opened against the older UI). Otherwise fall through to the
-      // backend-owned finalize flow.
-      const payload = readPendingPayload();
-      if (payload) {
-        finalizeCreate(payload);
-      } else {
-        finalizeAfterCCAvenue();
-      }
+      finalizeAfterCCAvenue();
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
@@ -3274,153 +3213,6 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                   </Button>
                 </Modal.Footer>
               </Modal>
-
-{/* ── Insufficient credit → online payment required ──
-    RATEHAWK-only. Non-RateHawk flows never open this modal
-    (they still hit the toast in confirmBooking). Pay opens
-    the gateway picker; Cancel dismisses. */}
-<Modal
-  show={showInsufficientModal}
-  onHide={() => setShowInsufficientModal(false)}
-  centered
->
-  <Modal.Header closeButton>
-    <Modal.Title>Online Payment Required</Modal.Title>
-  </Modal.Header>
-  <Modal.Body className="text-center py-4">
-    <p className="mb-2 text-muted">
-      The agent's available credit is insufficient for this
-      booking. You need to proceed with{" "}
-      <strong>online payment</strong>.
-    </p>
-    <div className="mt-3">
-      <div className="text-muted small">Payable amount</div>
-      <div className="fs-4 fw-bold text-dark">
-        {formatPrice(insufficientAmount)}
-      </div>
-    </div>
-  </Modal.Body>
-  <Modal.Footer className="justify-content-center border-0">
-    <Button
-      variant="danger"
-      onClick={() => setShowInsufficientModal(false)}
-    >
-      Cancel
-    </Button>
-    <Button
-      variant="success"
-      onClick={() => {
-        setShowInsufficientModal(false);
-        setSelectedGateway("");
-        setShowGatewayModal(true);
-      }}
-    >
-      Pay
-    </Button>
-  </Modal.Footer>
-</Modal>
-
-{/* ── Select payment gateway ──
-    Radios from PAYMENT_GATEWAYS. Proceed persists the
-    pending payload to sessionStorage under
-    "hbpPendingCreatePayload" (same key Inhouse uses so the
-    same CCAvenueCheckoutPage picks it up unchanged) and
-    navigates to /payment/ccavenue-redirect. */}
-<Modal
-  show={showGatewayModal}
-  onHide={() => setShowGatewayModal(false)}
-  centered
->
-  <Modal.Header closeButton>
-    <Modal.Title>Select Payment Gateway</Modal.Title>
-  </Modal.Header>
-  <Modal.Body>
-    <p className="text-muted small mb-3">
-      Choose a gateway to enter your card details.
-    </p>
-
-    {PAYMENT_GATEWAYS.map((g) => (
-      <Form.Check
-        key={g.id}
-        type="radio"
-        name="payment-gateway"
-        id={`gw-${g.id}`}
-        className="mb-2"
-        checked={selectedGateway === g.id}
-        onChange={() => setSelectedGateway(g.id)}
-        label={
-          <span>
-            <span className="fw-semibold">{g.name}</span>
-            <span className="text-muted small ms-2">
-              {g.desc}
-            </span>
-          </span>
-        }
-      />
-    ))}
-  </Modal.Body>
-
-  <Modal.Footer className="border-0">
-    <Button
-      variant="secondary"
-      onClick={() => setShowGatewayModal(false)}
-    >
-      Cancel
-    </Button>
-
-    <Button
-      variant="success"
-      disabled={!selectedGateway}
-      onClick={() => {
-        setShowGatewayModal(false);
-
-        // Persist the payload for the resume flow to replay
-        // after the user returns from CC Avenue. React state
-        // is lost across the redirect so the resume effect
-        // above rebuilds the create call purely from this.
-        // paymentMode is flipped to "ONLINE" so the Booking
-        // List labels the row correctly (same convention as
-        // Inhouse — see HotelBookingPage.jsx line 2942).
-        try {
-          sessionStorage.setItem(
-            "hbpPendingCreatePayload",
-            JSON.stringify({
-              ...pendingPayload,
-              paymentMode: "ONLINE",
-            }),
-          );
-        } catch (e) {
-          console.error(
-            "Could not persist pending create payload",
-            e,
-          );
-        }
-
-        if (selectedGateway === "ccavenue") {
-          const guest = pendingPayload?.primaryGuest;
-
-          const billingName = guest
-            ? [guest.firstName, guest.lastName]
-                .filter(Boolean)
-                .join(" ")
-            : "";
-
-          navigate("/payment/ccavenue-redirect", {
-            state: {
-              amount: insufficientAmount,
-              amountLabel: formatPrice(insufficientAmount),
-              agentId: pendingPayload?.agentId || null,
-              billingName,
-              returnTo: location.pathname,
-            },
-          });
-        }
-      }}
-    >
-      Proceed to Pay
-    </Button>
-  </Modal.Footer>
-</Modal>
 
 {/* ── Duplicate-booking modal ──
     Opened when the backend replies status="DUPLICATE"

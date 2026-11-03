@@ -47,7 +47,10 @@ export default function AgentAccounts() {
     return allAgents.slice(page * 10, (page + 1) * 10);
   }, [allAgents, page]);
 
-  const fetchAgentSummaries = async (searchVal = searchTerm) => {
+  // keepPage: refresh after a payment save/update/delete stays on the page
+  // the admin was on (clamped if the list got shorter). A new search or the
+  // first load still starts from page 1.
+  const fetchAgentSummaries = async (searchVal = searchTerm, { keepPage = false } = {}) => {
     setIsLoading(true);
     try {
       const res = await axiosInstance.get("/api/agent-credit-limit/agents");
@@ -60,7 +63,12 @@ export default function AgentAccounts() {
           );
         }
         setAllAgents(data);
-        setPage(0); // Reset to first page on new data/search
+        if (keepPage) {
+          const lastPage = Math.max(0, Math.ceil(data.length / 10) - 1);
+          setPage((prev) => Math.min(prev, lastPage));
+        } else {
+          setPage(0); // Reset to first page on new data/search
+        }
       } else {
         setAllAgents([]);
       }
@@ -135,7 +143,7 @@ export default function AgentAccounts() {
 
       if (editRes.data) {
         toast.success("Amount Receive Updated Successfully!");
-        await fetchAgentSummaries();
+        await fetchAgentSummaries(searchTerm, { keepPage: true });
         closeModal();
       }
     } catch (error) {
@@ -193,7 +201,7 @@ export default function AgentAccounts() {
 
       if (saveRes.data !== 0) {
         toast.success("Amount Receive added Successfully!");
-        await fetchAgentSummaries();
+        await fetchAgentSummaries(searchTerm, { keepPage: true });
         closeModal();
       }
     } catch (error) {
@@ -235,7 +243,7 @@ export default function AgentAccounts() {
           .delete(`/api/inhouseAgentAccounts/${item.id}`)
           .then(() => {
             toast.success("Amount receive record deleted successfully");
-            fetchAgentSummaries();
+            fetchAgentSummaries(searchTerm, { keepPage: true });
           })
           .catch(() => {
             toast.error("Sorry!! Amount receive record not deleted");

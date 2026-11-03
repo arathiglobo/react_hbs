@@ -493,27 +493,27 @@ export default function App() {
         <Route path="/masters/transfer-place-mapping" element={<PrivateRoute><TransferPlaceMapping /></PrivateRoute>} />
         <Route path="/masters/transfer-hotel-mapping" element={<PrivateRoute><TransferHotelMapping /></PrivateRoute>} />
         <Route path="/masters/hotel-upcooming-mapped-list" element={<PrivateRoute><HotelMappingBulkList /></PrivateRoute>} />
-        <Route path="/masters/fetch-new-hotels" element={<FetchNewHotels />} />
+        <Route path="/masters/fetch-new-hotels" element={<PrivateRoute roles={["admin"]}><FetchNewHotels /></PrivateRoute>} />
         <Route path="/masters/mapped-list" element={<PrivateRoute><MappedList /></PrivateRoute>} />
      
         {/* :bar_chart: Reports */}
-        <Route path="/report/booking" element={<ReportBooking />} />
-        <Route path="/report/cancellation" element={<CancellationReport />} />
-        <Route path="/report/inventory-status" element={<InventoryStatus />} />
-        <Route path="/report/hotel-wise" element={<HotelWise />} />
-        <Route path="/report/accounts" element={<Accounts />} />
-        <Route path="/report/day-wise" element={<DayWise />} />
-        <Route path="/report/monthly-wise" element={<MonthlyWise />} />
-        <Route path="/report/comparison" element={<Comparison />} />
-        <Route path="/report/agent-wise" element={<AgentWise />} />
-        <Route path="/report/contract-expiry" element={<ContractExpiryReport />} />
-        <Route path="/report/contract-rate" element={<Contractrate />} />
-        <Route path="/report/user-report" element={<UserReport />} />
-        <Route path="/report/stop-sale" element={<Stopsalereport />} />
-        <Route path="/report/user-logins" element={<UserLogins />} />
-        <Route path="/report/offline-daily-sales" element={<OfflineBookingDailySalesStatement />} />
-        <Route path="/report/online-daily-sales" element={<OnlineDailySalesReport />} />
-        <Route path="/report/time-limit-daily-sales" element={<TimeLimitOnlineDailySalesReport />} />
+        <Route path="/report/booking" element={<PrivateRoute><ReportBooking /></PrivateRoute>} />
+        <Route path="/report/cancellation" element={<PrivateRoute><CancellationReport /></PrivateRoute>} />
+        <Route path="/report/inventory-status" element={<PrivateRoute><InventoryStatus /></PrivateRoute>} />
+        <Route path="/report/hotel-wise" element={<PrivateRoute><HotelWise /></PrivateRoute>} />
+        <Route path="/report/accounts" element={<PrivateRoute><Accounts /></PrivateRoute>} />
+        <Route path="/report/day-wise" element={<PrivateRoute><DayWise /></PrivateRoute>} />
+        <Route path="/report/monthly-wise" element={<PrivateRoute><MonthlyWise /></PrivateRoute>} />
+        <Route path="/report/comparison" element={<PrivateRoute><Comparison /></PrivateRoute>} />
+        <Route path="/report/agent-wise" element={<PrivateRoute><AgentWise /></PrivateRoute>} />
+        <Route path="/report/contract-expiry" element={<PrivateRoute><ContractExpiryReport /></PrivateRoute>} />
+        <Route path="/report/contract-rate" element={<PrivateRoute><Contractrate /></PrivateRoute>} />
+        <Route path="/report/user-report" element={<PrivateRoute><UserReport /></PrivateRoute>} />
+        <Route path="/report/stop-sale" element={<PrivateRoute><Stopsalereport /></PrivateRoute>} />
+        <Route path="/report/user-logins" element={<PrivateRoute><UserLogins /></PrivateRoute>} />
+        <Route path="/report/offline-daily-sales" element={<PrivateRoute><OfflineBookingDailySalesStatement /></PrivateRoute>} />
+        <Route path="/report/online-daily-sales" element={<PrivateRoute><OnlineDailySalesReport /></PrivateRoute>} />
+        <Route path="/report/time-limit-daily-sales" element={<PrivateRoute><TimeLimitOnlineDailySalesReport /></PrivateRoute>} />
         <Route path="/report/hotel-booking-history" element={<PrivateRoute roles={["admin"]}><HotelBookingHistory /></PrivateRoute>} />
 
         {/* Super Admin — API access control for external clients. Restricted

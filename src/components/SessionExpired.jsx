@@ -18,3 +18,28 @@ export const showSessionExpiredAlert = () => {
     window.location.href = "/login";
   });
 };
+
+// Message the backend sends for an account set Inactive (agent / sub agent):
+// JwtAuthenticationFilter on any request, AuthController on token refresh.
+export const ACCOUNT_INACTIVE_MESSAGE =
+  "Your account is inactive. Please contact the administrator.";
+
+export const isAccountInactiveError = (error) => {
+  const message = error?.response?.data?.message;
+  return (
+    typeof message === "string" &&
+    message.startsWith("Your account is inactive")
+  );
+};
+
+export const showAccountInactiveAlert = () => {
+  Swal.fire({
+    title: "Account Inactive",
+    text: ACCOUNT_INACTIVE_MESSAGE,
+    icon: "error",
+    confirmButtonText: "OK",
+  }).then(() => {
+    clearAuthStorage();
+    window.location.href = "/login";
+  });
+};

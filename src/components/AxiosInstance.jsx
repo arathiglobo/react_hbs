@@ -1,5 +1,10 @@
 import axios from "axios";
-import { showSessionExpiredAlert, clearAuthStorage } from "./SessionExpired";
+import {
+  showSessionExpiredAlert,
+  clearAuthStorage,
+  isAccountInactiveError,
+  showAccountInactiveAlert,
+} from "./SessionExpired";
 import { getAuthToken, setAuthToken, TAB_SESSION_HEADER, getTabSessionId } from "../utils/authSession";
 import { CLIENT_LOCATION_HEADER, getClientLocationHeader } from "../utils/geoLocation";
 
@@ -73,6 +78,15 @@ axiosInstance.interceptors.response.use(
       typeof originalRequest?.url === "string" &&
       originalRequest.url.split("?")[0].endsWith("/auth/login");
 
+    // The account was set Inactive (agent / sub agent) while signed in. A
+    // token refresh cannot fix that, so sign out with the real reason instead
+    // of "Session Expired".
+    if (!isLoginRequest && error.response?.status === 403 && isAccountInactiveError(error)) {
+      clearAuthStorage();
+      showAccountInactiveAlert();
+      return Promise.reject(error);
+    }
+
     if (
       !isLoginRequest &&
       error.response &&
@@ -117,7 +131,11 @@ axiosInstance.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null);
         clearAuthStorage();
-        showSessionExpiredAlert();
+        if (isAccountInactiveError(refreshError)) {
+          showAccountInactiveAlert();
+        } else {
+          showSessionExpiredAlert();
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

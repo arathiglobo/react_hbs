@@ -1085,7 +1085,15 @@ const Login = () => {
 
       await completeLogin(response.data);
     } catch (err) {
-      setError("Invalid username or password");
+      // Wrong credentials come back as 401. A 400 carries a specific reason —
+      // e.g. an agent / sub agent set Inactive ("Your account is inactive…") —
+      // so show that instead of the generic credentials message.
+      const serverMessage = err?.response?.data?.message;
+      setError(
+        err?.response?.status === 400 && serverMessage
+          ? serverMessage
+          : "Invalid username or password"
+      );
     } finally {
       setSubmitting(false);
     }

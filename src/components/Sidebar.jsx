@@ -174,7 +174,16 @@ export default function Sidebar() {
     "/supplierDashboard": "supplier",
     "/dmcDashboard": "dmc",
   };
-  const pathRole = dashboardRoleByPath[pathname];
+  // Honour the dashboard's role only when this login actually holds it, so
+  // typing /adminDashboard cannot switch an agent into the admin menu.
+  // Super admin may still open the admin dashboard (it inherits admin).
+  const requestedPathRole = dashboardRoleByPath[pathname];
+  const pathRole =
+    requestedPathRole &&
+    (storedRoles.includes(requestedPathRole) ||
+      (requestedPathRole === "admin" && storedRoles.includes("super_admin")))
+      ? requestedPathRole
+      : undefined;
 
   const currentRole =
     pathRole ||
