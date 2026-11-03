@@ -29,6 +29,22 @@ import { FaFileDownload, FaSyncAlt, FaFilter, FaUndo } from "react-icons/fa";
 
 const PAGE_SIZE = 10;
 
+// Export pulls the WHOLE filtered statement in chunks of this size — the
+// largest page AgentLedgerQueryService allows (MAX_PAGE_SIZE).
+const EXPORT_PAGE_SIZE = 500;
+
+// Query params for the current filters (page/size are added by the caller).
+const filterParams = (filters) => {
+  const params = {};
+  if (filters.agentId) params.agentId = filters.agentId;
+  if (filters.from) params.from = filters.from;
+  if (filters.to) params.to = filters.to;
+  if (filters.entryType) params.entryType = filters.entryType;
+  if (filters.sourceModule) params.sourceModule = filters.sourceModule;
+  if (filters.search?.trim()) params.search = filters.search.trim();
+  return params;
+};
+
 // Labels here must match AgentLedgerEntryType.label() on the backend — same
 // plain wording, no debit/credit vocabulary.
 const ENTRY_TYPES = [
@@ -55,7 +71,9 @@ const MODULES = [
   { value: "RESTAURANT", label: "Restaurant" },
   { value: "LONG_STAY", label: "Long Stay" },
   { value: "GOV_EMPLOYEE", label: "Gov Employee" },
+  { value: "SENIOR_CITIZEN", label: "Senior Citizen" },
   { value: "STUDENT", label: "Student" },
+  { value: "ACTIVITY", label: "Activity" },
   { value: "TRIP", label: "Trip" },
   { value: "ACCOUNTS", label: "Accounts" },
   { value: "OTHER", label: "Other" },
@@ -88,11 +106,15 @@ export default function AgentLedger() {
   const currentRole = (
     sessionStorage.getItem("currentActiveRole") || ""
   ).toLowerCase();
+  // The backend lets ADMIN and SUPER_ADMIN rebuild history; the button used to
+  // check "admin" only, so a super admin never saw it.
+  const isAdmin = currentRole === "admin" || currentRole === "super_admin";
 
   const [data, setData] = useState(null);
   const [agents, setAgents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [page, setPage] = useState(0);
 
   // Draft filter state — only applied on "Apply", so typing a date doesn't
@@ -123,13 +145,7 @@ export default function AgentLedger() {
     async (filters, pageNo) => {
       setLoading(true);
       try {
-        const params = { page: pageNo, size: PAGE_SIZE };
-        if (filters.agentId) params.agentId = filters.agentId;
-        if (filters.from) params.from = filters.from;
-        if (filters.to) params.to = filters.to;
-        if (filters.entryType) params.entryType = filters.entryType;
-        if (filters.sourceModule) params.sourceModule = filters.sourceModule;
-        if (filters.search?.trim()) params.search = filters.search.trim();
+        const params = { ...filterParams(filters), page: pageNo, size: PAGE_SIZE };
 
         const res = await axiosInstance.get("/api/inhouse-accounts/ledger", {
           params,
@@ -220,8 +236,32 @@ export default function AgentLedger() {
     }
   };
 
-  const exportCsv = () => {
-    const rows = data?.entries || [];
+  const exportCsv = async () => {
+    if (!data?.totalElements) {
+      toast.error("Nothing to export.");
+      return;
+    }
+    // Export the whole statement for the applied filters, not just the 10
+    // rows on screen — it used to download only the current page.
+    setExporting(true);
+    const rows = [];
+    try {
+      for (let p = 0; ; p++) {
+        const res = await axiosInstance.get("/api/inhouse-accounts/ledger", {
+          params: { ...filterParams(applied), page: p, size: EXPORT_PAGE_SIZE },
+        });
+        const chunk = res.data?.entries || [];
+        rows.push(...chunk);
+        if (!chunk.length || p + 1 >= (res.data?.totalPages || 0)) break;
+      }
+    } catch (err) {
+      toast.error(
+        err?.response?.data?.message || "Could not export the ledger."
+      );
+      return;
+    } finally {
+      setExporting(false);
+    }
     if (!rows.length) {
       toast.error("Nothing to export.");
       return;
@@ -244,9 +284,9 @@ export default function AgentLedger() {
     const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const lines = rows.map((r, idx) =>
       [
-        // Same continuous numbering as the table, so an exported page lines up
-        // with what the operator was looking at on screen.
-        (data?.page ?? 0) * (data?.size ?? PAGE_SIZE) + idx + 1,
+        // Same continuous numbering as the table (newest = 1), so a row in
+        // the file has the same number it has on screen.
+        idx + 1,
         formatDateTime(r.entryDate),
         r.agentName,
         r.entryTypeLabel,
@@ -319,11 +359,12 @@ export default function AgentLedger() {
                   size="sm"
                   variant="outline-secondary"
                   onClick={exportCsv}
-                  disabled={loading || !entries.length}
+                  disabled={loading || exporting || !entries.length}
                 >
-                  <FaFileDownload className="me-1" /> Export CSV
+                  <FaFileDownload className="me-1" />{" "}
+                  {exporting ? "Exporting…" : "Export CSV"}
                 </Button>
-                {currentRole === "admin" && (
+                {isAdmin && (
                   <Button
                     size="sm"
                     variant="outline-primary"
@@ -544,7 +585,7 @@ export default function AgentLedger() {
                           className="text-center text-muted py-5"
                         >
                           Nothing to show for these filters.
-                          {currentRole === "admin" && (
+                          {isAdmin && (
                             <div className="small mt-2">
                               If this agent has older bookings, click{" "}
                               <b>Add past entries</b> at the top to bring them in.

@@ -553,6 +553,11 @@ export default function SubAgent() {
     const nextLabel = isActive ? "Inactive" : "Active";
     Swal.fire({
       title: `Set ${item.companyName || "this sub agent"} to ${nextLabel}?`,
+      // Inactive switches the sub agent's login off (backend sets
+      // user_accounts.active). Bookings and history are kept.
+      text: isActive
+        ? "The sub agent will be signed out and will not be able to log in or make bookings until set Active again. Existing bookings are not affected."
+        : "The sub agent will be able to log in and make bookings again.",
       icon: "warning",
       showCancelButton: true,
       reverseButtons: true,
@@ -568,7 +573,8 @@ export default function SubAgent() {
         toast.success(`Sub Agent set to ${nextLabel}`);
         fetchSubAgents();
       } catch (err) {
-        toast.error("Failed to update status");
+        // e.g. "The main agent … is Inactive. Set the main agent Active first."
+        toast.error(err.response?.data?.message || "Failed to update status");
       }
     });
   };
@@ -689,6 +695,10 @@ export default function SubAgent() {
           userName: `${loginFormData.username}.${mainAgentName}`,
           password: loginFormData.password,
           userRoleIds: loginFormData.userroles,
+          // Tells the backend this id is a sub agent (ids overlap with main
+          // agents), so the login is tagged SUB_AGENT, emailed to the sub
+          // agent, and created inactive if the sub agent is Inactive.
+          subAgent: true,
         };
 
         const response = await axiosInstance.post("/auth/register", loginPayload);

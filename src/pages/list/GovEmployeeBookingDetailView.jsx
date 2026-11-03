@@ -988,6 +988,30 @@ export default function GovEmployeeBookingDetailView() {
     }
   };
 
+  // Uploaded government ID. The preview endpoint needs the Bearer token,
+  // which a plain <a href> navigation never sends, so fetch it through
+  // axiosInstance and open the file as a blob URL in a new tab.
+  const handleViewGovtId = async (path) => {
+    // Opened before the request so popup blockers treat it as a click.
+    const previewTab = window.open("", "_blank");
+    try {
+      const res = await axiosInstance.get("/api/gov-employee-id-upload/preview", {
+        params: { path },
+        responseType: "blob",
+      });
+      const blobUrl = URL.createObjectURL(res.data);
+      if (previewTab) {
+        previewTab.location.href = blobUrl;
+      } else {
+        window.open(blobUrl, "_blank");
+      }
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+    } catch (e) {
+      if (previewTab) previewTab.close();
+      toast.error("Failed to open the uploaded ID");
+    }
+  };
+
   /**
    * Open the RESEND MAIL preview modal. Two parallel calls hydrate the
    * modal so the admin sees exactly what's about to go out:
@@ -1363,15 +1387,14 @@ export default function GovEmployeeBookingDetailView() {
                             label="Document"
                             value={
                               booking.govtIdFilePath ? (
-                                <a
-                                  href={`${axiosInstance.defaults.baseURL || ""}/api/gov-employee-id-upload/preview?path=${encodeURIComponent(
-                                    booking.govtIdFilePath,
-                                  )}`}
-                                  target="_blank"
-                                  rel="noreferrer"
+                                <Button
+                                  variant="link"
+                                  className="p-0 border-0 align-baseline"
+                                  style={{ fontSize: "inherit" }}
+                                  onClick={() => handleViewGovtId(booking.govtIdFilePath)}
                                 >
                                   {booking.govtIdFileName || "View uploaded ID"}
-                                </a>
+                                </Button>
                               ) : (
                                 "-"
                               )

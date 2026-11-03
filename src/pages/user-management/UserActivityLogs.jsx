@@ -43,6 +43,11 @@ const ACTION_LABELS = {
   ADMIN_UPDATE: "Updated",
   ADMIN_DELETE: "Deleted",
   ADMIN_VIEW: "Viewed",
+  // Admin → API Access; the row's description names the API and the change.
+  API_ACCESS_TOGGLE: "API enabled / disabled",
+  API_ENVIRONMENT_CHANGE: "API environment switched",
+  API_CREDENTIALS_SAVE: "API credentials saved",
+  API_CREDENTIALS_REVEAL: "API credentials revealed",
   ACCESS_DENIED: "Access denied",
   UNAUTHENTICATED: "Not signed in",
   ACTIVITY_LOG_EXPORT: "Activity logs downloaded",
@@ -114,6 +119,47 @@ const formatDetails = (details) => {
     .slice(0, 6)
     .map(([k, v]) => `${k}: ${v}`)
     .join(" · ");
+};
+
+// What the action saved (built on the server from every row it created, updated
+// or deleted): [{ op, entity, id, name, fields: [{ field, from, to }], moreFields }]
+// or { op, entity, count } for rows that were only counted.
+const CHANGE_VERBS = { CREATE: "Created", UPDATE: "Updated", DELETE: "Deleted" };
+
+const changeHead = (c) => {
+  const verb = CHANGE_VERBS[c.op] || "Updated";
+  if (c.count != null) return `${verb} ${c.entity} ×${c.count}`;
+  return `${verb} ${c.entity}${c.id != null ? ` #${c.id}` : ""}${c.name ? ` (${c.name})` : ""}`;
+};
+
+const ActivityChanges = ({ changes }) => {
+  const [open, setOpen] = useState(false);
+  if (!Array.isArray(changes) || changes.length === 0) return null;
+  return (
+    <div className="mt-1">
+      <Button
+        variant="link"
+        size="sm"
+        className="p-0 text-decoration-none"
+        onClick={() => setOpen((v) => !v)}
+      >
+        {open ? "Hide changes" : `View changes (${changes.length})`}
+      </Button>
+      {open &&
+        changes.map((c, i) => (
+          <div key={i} className="small mt-1">
+            <div className="fw-semibold">{changeHead(c)}</div>
+            {Array.isArray(c.fields) &&
+              c.fields.map((f, j) => (
+                <div key={j} className="text-muted ps-2">
+                  {f.field}: {f.from != null ? `${f.from} → ${f.to}` : f.to}
+                </div>
+              ))}
+            {c.moreFields > 0 && <div className="text-muted ps-2">+{c.moreFields} more fields</div>}
+          </div>
+        ))}
+    </div>
+  );
 };
 
 const describeDevice = (ua) => {
@@ -421,6 +467,9 @@ export default function UserActivityLogs() {
                           </td>
                           <td title={`${row.httpMethod || ""} ${row.path || ""}`.trim()}>
                             <div className="fw-semibold">{actionLabel(row.action)}</div>
+                            {/* What the user did, in plain words — e.g. "IWTX_API (IWTX): Enabled → Disabled" */}
+                            {row.description && <div>{row.description}</div>}
+                            <ActivityChanges changes={row.changes} />
                             {/* Hotel booked / cancelled / amended / searched */}
                             {row.hotelName && (
                               <div>
