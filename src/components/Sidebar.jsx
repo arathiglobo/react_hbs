@@ -620,7 +620,7 @@ export default function Sidebar() {
         { code: "reg_ayurveda",      label: "Ayurveda",                       to: "/registration/ayurveda" },
         { code: "reg_scheffer",      label: "Chauffer Driver and Limousine",  to: "/registration/schefferDriver" },
         { code: "reg_package_addons", label: "Build Your Own Package Add-Ons", to: "/registration/package-addons" },
-      ],
+      ], 
     },
     {
       code: "top_registration", // same visibility bucket — agent variant of the same top-level slot
