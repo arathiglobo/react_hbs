@@ -41,6 +41,7 @@ import { isAgentLogin, stripSupplierSuffix } from "../utils/supplierDisplay";
 import {
   isNonRefundableRate,
   sumSelectedRooms,
+  slotRateValue,
   buildInhouseSingleBookingData,
   buildInhouseMultiBookingData,
 } from "../utils/inhouseBookingData";
@@ -4044,7 +4045,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                   <div className="current-price">
                                                     {formatPrice(
                                                       isMultiRoom
-                                                        ? rate.totalRate || 0
+                                                        ? slotRateValue(rate, roomSlotIndex, "totalRate") || 0
                                                         : rate.roomRateBasedOnRoomCount ||
                                                             rate.totalRate ||
                                                             0,
@@ -4381,7 +4382,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                   <div className="fs-5 fw-bold text-primary">
                                                     {formatPrice(
                                                       isMultiRoom
-                                                        ? rate.totalRate || 0
+                                                        ? slotRateValue(rate, roomSlotIndex, "totalRate") || 0
                                                         : rate.roomRateBasedOnRoomCount ||
                                                             rate.totalRate ||
                                                             0,
@@ -4605,8 +4606,11 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                       {slotSelection.selectedRate.roomCategory}
                                       {" — "}
                                       {formatPrice(
-                                        slotSelection.selectedRate.totalRate ||
-                                          0,
+                                        slotRateValue(
+                                          slotSelection.selectedRate,
+                                          roomSlotIndex,
+                                          "totalRate",
+                                        ) || 0,
                                       )}
                                     </Badge>
                                   )

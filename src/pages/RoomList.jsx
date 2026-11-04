@@ -46,6 +46,7 @@ import {
 import {
   isNonRefundableRate,
   sumSelectedRooms,
+  slotRateValue,
   buildInhouseSingleBookingData,
   buildInhouseMultiBookingData,
 } from "../utils/inhouseBookingData";
@@ -421,6 +422,11 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                 rate: uplift(r.rate),
                 roomRateBasedOnRoomCount: uplift(r.roomRateBasedOnRoomCount),
                 recommendedRetailPrice: uplift(r.recommendedRetailPrice),
+                // Per-room prices (multi-room) get the same uplift.
+                perRoomRates: r.perRoomRates?.map((p) => ({
+                  ...p,
+                  totalRate: uplift(p.totalRate),
+                })),
                 _twentyFourHourMarkupApplied: upliftPct, // diagnostic flag
               }
             : r;
@@ -1782,7 +1788,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                       <div className="current-price">
                                         {formatPrice(
                                           isMultiRoom
-                                            ? rate.totalRate || 0
+                                            ? slotRateValue(rate, roomSlotIndex, "totalRate") || 0
                                             : rate.roomRateBasedOnRoomCount,
                                         )}
                                       </div>
@@ -2017,7 +2023,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                       <div className="fs-5 fw-bold text-primary">
                                         {formatPrice(
                                           isMultiRoom
-                                            ? rate.totalRate || 0
+                                            ? slotRateValue(rate, roomSlotIndex, "totalRate") || 0
                                             : rate.roomRateBasedOnRoomCount,
                                         )}
                                       </div>
@@ -2103,7 +2109,11 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                 // numberOfRooms-multiplied figure) so
                                 // the slot badge matches the per-room
                                 // price shown on the rate card.
-                                slotSelection.selectedRate.totalRate || 0,
+                                slotRateValue(
+                                  slotSelection.selectedRate,
+                                  roomSlotIndex,
+                                  "totalRate",
+                                ) || 0,
                               )}
                             </Badge>
                           ) : (
