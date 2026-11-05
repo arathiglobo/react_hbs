@@ -35,7 +35,6 @@ import {
   FaPen,
   FaCalendarCheck,
   FaSyncAlt,
-  FaChartBar,
   FaPrayingHands,
 } from "react-icons/fa";
 import { MdWifiOff } from "react-icons/md";
@@ -884,13 +883,10 @@ export default function AgentDashboard() {
                     {formatNumber(todayBookings)}
                   </span>
                 </div>
-                <div className="agent-overview-card">
-                  <span className="agent-overview-icon tone-pink"><FaChartBar /></span>
-                  <span className="agent-overview-label">Total Revenue</span>
-                  <span className="agent-overview-value">
-                    AED {formatNumber(dashboardStatus.totalRevenue)}
-                  </span>
-                </div>
+                {/* "Total Revenue" removed (audit FA-17): the figure was the
+                    platform's markup on this agent's bookings (selling price
+                    minus supplier cost), which agents must not see. The
+                    backend no longer sends it for agent logins. */}
                 <div className="agent-overview-card">
                   <span className="agent-overview-icon tone-orange"><FaHotel /></span>
                   <span className="agent-overview-label">Hotels Bookings</span>

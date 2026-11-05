@@ -180,8 +180,8 @@ const handleReset = async () => {
                 <td>${b.customerName}</td>
                 <td>${b.bookingDoneBy}</td>
                 <td>${b.sellingPrice}</td>
-                <td>${b.netPrice}</td>
-                <td>${b.profit}</td>
+                <td>${b.netPrice ?? ''}</td>
+                <td>${b.profit ?? ''}</td>
                 <td>${b.nativeCountry}</td>
               </tr>
             `

@@ -162,8 +162,8 @@ export default function OfflineBookingDailySalesStatement() {
                   <td>${s.reference || ''}</td>
                   <td class="details">${s.details || ''}</td>
                    <td>${s.sellingPrice}</td>
-                   <td>${s.netPrice}</td>
-                   <td>${s.profit}</td>
+                   <td>${s.netPrice ?? ''}</td>
+                   <td>${s.profit ?? ''}</td>
                 </tr>
               `).join('')}
             </tbody>
