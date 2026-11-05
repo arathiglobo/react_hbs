@@ -36,6 +36,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/RoomList.css";
 import axiosInstance from "../components/AxiosInstance";
+import AdminSupplierStrip from "../components/AdminSupplierStrip";
 import { formatFlexibleDate } from "../utils/dateUtils";
 import {
   RateDeadlinePill,
@@ -1322,6 +1323,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                             " (INHOUSE)" supplier suffix — the header is the
                             hotel, so it is shown without it. */}
                         <h2 className="hotel-name mb-2">{stripSupplierSuffix(hotel.hotelName)}</h2>
+                        <AdminSupplierStrip supplier={hotel.apiType || "INHOUSE"} hotelCode={hotel.supplierHotelCode || payload?.hotelCode} />
                         <div className="d-flex align-items-center gap-3 mb-2">
                           <div className="star-rating">
                             {renderStars(hotel.starRating)}

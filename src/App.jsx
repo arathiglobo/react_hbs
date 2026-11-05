@@ -469,9 +469,9 @@ export default function App() {
         <Route path="/masters/sub-location" element={<PrivateRoute><SubLocation /></PrivateRoute>} />
         <Route path="/masters/airport" element={<PrivateRoute><Airport /></PrivateRoute>} />
         <Route path="/masters/location-hierarchy" element={<PrivateRoute><LocationHierarchy /></PrivateRoute>} />
-        <Route path="/masters/city-mapping" element={<PrivateRoute><CityMapping /></PrivateRoute>} />
+        <Route path="/masters/city-mapping" element={<PrivateRoute roles={["admin"]}><CityMapping /></PrivateRoute>} />
         <Route path="/masters/city-mapping-bulk" element={<PrivateRoute roles={["super_admin"]}><BulkCityMapping /></PrivateRoute>} />
-        <Route path="/masters/city-unmapping" element={<PrivateRoute><UnMappingCity /></PrivateRoute>} />
+        <Route path="/masters/city-unmapping" element={<PrivateRoute roles={["admin"]}><UnMappingCity /></PrivateRoute>} />
         <Route path="/masters/hotel-category" element={<PrivateRoute><HotelCategory /></PrivateRoute>} />
         <Route path="/masters/hotel-type" element={<PrivateRoute><HotelType /></PrivateRoute>} />
         <Route path="/masters/occupancy-type" element={<PrivateRoute><OccupancyType /></PrivateRoute>} />
@@ -493,9 +493,9 @@ export default function App() {
         <Route path="/masters/transfer-airport-mapping" element={<PrivateRoute><TransferAirportMapping /></PrivateRoute>} />
         <Route path="/masters/transfer-place-mapping" element={<PrivateRoute><TransferPlaceMapping /></PrivateRoute>} />
         <Route path="/masters/transfer-hotel-mapping" element={<PrivateRoute><TransferHotelMapping /></PrivateRoute>} />
-        <Route path="/masters/hotel-upcooming-mapped-list" element={<PrivateRoute><HotelMappingBulkList /></PrivateRoute>} />
+        <Route path="/masters/hotel-upcooming-mapped-list" element={<PrivateRoute roles={["admin"]}><HotelMappingBulkList /></PrivateRoute>} />
         <Route path="/masters/fetch-new-hotels" element={<PrivateRoute roles={["admin"]}><FetchNewHotels /></PrivateRoute>} />
-        <Route path="/masters/mapped-list" element={<PrivateRoute><MappedList /></PrivateRoute>} />
+        <Route path="/masters/mapped-list" element={<PrivateRoute roles={["admin"]}><MappedList /></PrivateRoute>} />
      
         {/* :bar_chart: Reports */}
         <Route path="/report/booking" element={<PrivateRoute><ReportBooking /></PrivateRoute>} />

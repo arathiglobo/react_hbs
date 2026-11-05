@@ -112,6 +112,8 @@ export const REASON_LABELS = {
   AMBIGUOUS: "Ambiguous (tie at 100%)",
   SINGLE_SUPPLIER: "100% — single supplier",
   CONFLICT: "Already mapped elsewhere",
+  GIATA_NAME_DIFFERS: "Same GIATA code, names differ",
+  GIATA_TOO_FAR: "Same GIATA code, too far apart",
 };
 
 export function reasonLabel(code) {
@@ -119,6 +121,7 @@ export function reasonLabel(code) {
 }
 
 export function methodLabel(method) {
+  if (method === "GIATA") return "GIATA code";
   return method === "AUTOMATED" ? "Automated" : "Manual";
 }
 

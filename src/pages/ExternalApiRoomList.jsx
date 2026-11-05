@@ -37,7 +37,8 @@ import "../styles/RoomList.css";
 import axiosInstance from "../components/AxiosInstance";
 import toast from "react-hot-toast";
 import { formatFlexibleDate } from "../utils/dateUtils";
-import { isAgentLogin, stripSupplierSuffix } from "../utils/supplierDisplay";
+import { isAdminLogin, isAgentLogin, stripSupplierSuffix, supplierCodeForBlock, supplierDisplayName } from "../utils/supplierDisplay";
+import AdminSupplierStrip from "../components/AdminSupplierStrip";
 import {
   isNonRefundableRate,
   sumSelectedRooms,
@@ -3136,7 +3137,8 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
 
   // Admin / staff see which supplier each rate of a mapped hotel comes from;
   // agents never see supplier names.
-  const showSupplierBadge = isMergedResponse && !isAgentLogin();
+  // Admins always see each rate's supplier; staff only on a mapped hotel.
+  const showSupplierBadge = isAdminLogin() || (isMergedResponse && !isAgentLogin());
 
   // Supplier block (and its apiId / payload) of the rate(s) currently shown
   // in the Room Details modal — what that modal's Continue books with.
@@ -3343,6 +3345,10 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                             block — shown without the " (SUPPLIER)" suffix
                             mapped hotels carry, for every login. */}
                         <h2 className="hotel-name mb-2">{stripSupplierSuffix(hotel.hotelName)}</h2>
+                        <AdminSupplierStrip
+                          supplier={supplierCodeForBlock(responseBlocks[0], roomData?.payload?.apiId)}
+                          hotelCode={responseBlocks[0]?.supplierHotelCode || roomData?.payload?.hotelCode}
+                        />
                         <div className="d-flex align-items-center gap-3 mb-2">
                           <div className="star-rating">
                             {renderStars(hotel.starRating)}
@@ -4005,15 +4011,14 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                     </div>
                                                     {/* Mapped hotel: supplier of this
                                                         rate — admin / staff only. */}
-                                                    {showSupplierBadge &&
-                                                      rateBlock?.apiType && (
+                                                    {showSupplierBadge && (
                                                         <div className="mt-1">
                                                           <Badge
                                                             bg="light"
                                                             text="dark"
                                                             className="border"
                                                           >
-                                                            {rateBlock.apiType}
+                                                            {supplierDisplayName(supplierCodeForBlock(rateBlock, rateApiId))}
                                                           </Badge>
                                                         </div>
                                                       )}
@@ -4307,14 +4312,13 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                       )}
                                                       {/* Mapped hotel: supplier of this
                                                           rate — admin / staff only. */}
-                                                      {showSupplierBadge &&
-                                                        rateBlock?.apiType && (
+                                                      {showSupplierBadge && (
                                                           <Badge
                                                             bg="light"
                                                             text="dark"
                                                             className="border"
                                                           >
-                                                            {rateBlock.apiType}
+                                                            {supplierDisplayName(supplierCodeForBlock(rateBlock, rateApiId))}
                                                           </Badge>
                                                         )}
                                                     </div>
