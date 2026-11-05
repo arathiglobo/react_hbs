@@ -195,6 +195,7 @@ import LongStayBookingPage from "./pages/booking/LongStayBookingPage";
 import LongStayBookingList from "./pages/list/LongStayBookingList";
 import LongStayBookingDetailView from "./pages/list/LongStayBookingDetailView";
 import LongStayRoomList from "./pages/LongStayRoomList";
+import NotificationsPage from "./pages/notifications/NotificationsPage";
 import AiDashboard from "./pages/ai/AiDashboard";
 import DemandForecast from "./pages/ai/DemandForecast";
 import AgentBehavior from "./pages/ai/AgentBehavior";
@@ -624,6 +625,7 @@ export default function App() {
         <Route path="/booking-details/cab-booking/:id/notes" element={<PrivateRoute><CabBookingNotesPage /></PrivateRoute>} />
         <Route path="/booking-details/scheffer-driver-booking/:id/notes" element={<PrivateRoute><SchefferDriverBookingNotesPage /></PrivateRoute>} />
         <Route path="/long-stay-room-list" element={<PrivateRoute><LongStayRoomList /></PrivateRoute>} />
+        <Route path="/notifications" element={<PrivateRoute roles={["admin", "agent"]}><NotificationsPage /></PrivateRoute>} />
         <Route path="/ai" element={<PrivateRoute><AiDashboard /></PrivateRoute>} />
         <Route path="/ai/demand-forecast" element={<PrivateRoute><DemandForecast /></PrivateRoute>} />
         <Route path="/ai/agent-behavior" element={<PrivateRoute><AgentBehavior /></PrivateRoute>} />

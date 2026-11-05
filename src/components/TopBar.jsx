@@ -54,6 +54,7 @@ import {
 import axiosInstance from "./AxiosInstance";
 import { toast } from "react-hot-toast";
 import { ContactPanel } from "./FooterLegalLinks";
+import NotificationBell from "./NotificationBell";
 import { getUserRole, getCurrentActiveRole, getUserName, clearAuthSession } from "../utils/authSession";
 
 export default function TopBar() {
@@ -83,6 +84,7 @@ export default function TopBar() {
   const backToDashboardPath = DASHBOARD_BY_ROLE[currentRole];
   const showBackToDashboard =
     !!backToDashboardPath && location.pathname !== backToDashboardPath;
+  const showNotificationBell = ["admin", "super_admin", "agent"].includes(currentRole);
 
   // Clicking the Globosoft brand mark opens this accordion for agent logins
   // only — same Quick Actions tile set as AgentDashboard.jsx's bookingActions,
@@ -851,10 +853,11 @@ export default function TopBar() {
       into the topbar so the info is one click away without scrolling to the
       footer. Only the trigger lives inside the sticky navbar; the panel
       itself is rendered outside <Navbar> further down to escape its
-      sticky/stacking context. */}
+      sticky/stacking context. On a phone it gives its place to the alerts bell,
+      which would not fit otherwise, and moves into the profile menu. */}
   <Button
     variant="link"
-    className="text-dark text-decoration-none p-0 d-flex align-items-center"
+    className={`text-dark text-decoration-none p-0 align-items-center ${showNotificationBell ? "d-none d-sm-flex" : "d-flex"}`}
     onClick={() => setShowContactModal(true)}
     style={{ border: "none", background: "none", minWidth: "auto" }}
     aria-label="Contact Details"
@@ -885,6 +888,10 @@ export default function TopBar() {
     </Button>
   )}
 
+  {/* Alerts bell — only the roles that receive alerts. Other logins would just
+      poll an empty inbox. */}
+  {showNotificationBell && <NotificationBell />}
+
   {/* Profile Dropdown */}
   <Dropdown align="end">
     <Dropdown.Toggle
@@ -894,6 +901,15 @@ export default function TopBar() {
       style={{ minWidth: "auto" }}
     />
     <Dropdown.Menu className="shadow-sm">
+      {showNotificationBell && (
+        <>
+          <Dropdown.Item className="d-sm-none" onClick={() => setShowContactModal(true)}>
+            <FaAddressCard className="me-2" />
+            Contact Details
+          </Dropdown.Item>
+          <Dropdown.Divider className="d-sm-none" />
+        </>
+      )}
       <Dropdown.Item href="change-password">
         <FaKey className="me-2" />
         Change Password
