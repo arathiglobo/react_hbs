@@ -53,12 +53,34 @@ import { toast } from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
+import {
+  canSeeSupplierNames,
+  savedPackageRate,
+  savedSupplierHotelRate,
+  supplierLabel,
+  supplierStatusLabel,
+} from "../booking/packagebooking/supplierHotels";
 // HotelBookingPage's stylesheet is the source of truth for the .pg-option /
 // .pg-option-selected / .pg-option-radio / .pg-option-logo classes used by
 // the "Select Payment Gateway" modal below. Importing here keeps the modal
 // visually identical to the Hotel / Package-Create / LastMinute / LongStay
 // flows without a copy.
 import "../../styles/HotelBookingPage.css";
+
+// Line under a supplier hotel's name. Admins see the supplier and whether it
+// still has to be booked by hand; everyone else only sees it's a live-rate hotel.
+const SupplierHotelNote = ({ hotel }) => {
+  if (!canSeeSupplierNames()) {
+    return <div className="small text-muted">Live rate hotel</div>;
+  }
+  return (
+    <div className="small text-muted">
+      {supplierLabel(hotel.supplier)} · {supplierStatusLabel(hotel.supplierBookingStatus)}
+      {hotel.supplierReference && ` · Ref: ${hotel.supplierReference}`}
+      {hotel.hotelBookingCode && ` · Hotel booking: ${hotel.hotelBookingCode}`}
+    </div>
+  );
+};
 
 // CC Avenue is the only real gateway wired today (see
 // project_ccavenue_payment_integration memory). Kept as a list so adding
@@ -254,8 +276,8 @@ const formatDate = (dateString) => {
   }
 };
 
-// Deadline Date carries the package's Policy Details validityTo (the latest
-// validity window). Every package-booking detail view shows BOTH the date AND
+// Deadline Date is the end of the last free-cancellation day, worked out by the
+// backend from the travel date. Every package-booking detail view shows BOTH the date AND
 // the time. Values may be a full datetime ("yyyy-MM-ddTHH:mm:ss") or a legacy
 // date-only ("yyyy-MM-dd"); a date-only value is normalised to local midnight
 // so it renders as "12:00 AM" rather than a timezone-shifted time — new Date()
@@ -1714,8 +1736,19 @@ export default function PackageBookingDetailView() {
                           {bookingDetails.selections.hotels.map(
                             (hotel, hIdx) => (
                               <tr key={hotel.hotelId || hIdx}>
-                                <td>{hotel.hotelName}</td>
-                                <td>{hotel.hotelId}</td>
+                                <td>
+                                  {hotel.hotelName}
+                                  {hotel.supplier && (
+                                    <SupplierHotelNote hotel={hotel} />
+                                  )}
+                                </td>
+                                <td>
+                                  {hotel.supplier
+                                    ? canSeeSupplierNames()
+                                      ? hotel.supplierHotelCode
+                                      : "—"
+                                    : hotel.hotelId}
+                                </td>
                                 <td className="text-end">
                                   {hotel.currency || "AED"}{" "}
                                   {parseFloat(
@@ -1723,6 +1756,11 @@ export default function PackageBookingDetailView() {
                                   ).toLocaleString("en-US", {
                                     minimumFractionDigits: 2,
                                   })}
+                                  {hotel.supplier && (
+                                    <div className="small text-muted">
+                                      Whole stay
+                                    </div>
+                                  )}
                                 </td>
                               </tr>
                             ),
@@ -1760,6 +1798,18 @@ export default function PackageBookingDetailView() {
                 <div style={CARD_STYLE}>
                   <div style={SECTION_HEADER}>Pricing</div>
                   <div style={{ padding: "12px 16px" }}>
+                    {savedPackageRate(bookingDetails) > 0 && (
+                      <>
+                        <InfoRow
+                          label="Package Rate"
+                          value={`AED ${savedPackageRate(bookingDetails).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                        />
+                        <InfoRow
+                          label="Hotel"
+                          value={`AED ${savedSupplierHotelRate(bookingDetails).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                        />
+                      </>
+                    )}
                     {bookingDetails.tourismDirham != null &&
                       bookingDetails.tourismDirham !== 0 && (
                         <InfoRow

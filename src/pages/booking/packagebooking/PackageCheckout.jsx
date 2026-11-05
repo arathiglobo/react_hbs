@@ -7,6 +7,7 @@ import TopBar from "../../../components/TopBar";
 import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import { toast } from "react-hot-toast";
 import {
+  FaArrowLeft,
   FaCalendarAlt,
   FaUsers,
   FaGlobe,
@@ -324,9 +325,15 @@ const PackageCheckout = () => {
 
   const [showPolicyModal, setShowPolicyModal] = useState(false);
 
+  // Back to Package Details with everything picked so far (PackageBooking starts
+  // from this bookingData). An amend also has to say so, or the page would come
+  // back as a brand-new booking instead of amending this one.
   const handlePrev = () => {
     navigate(`/new-booking/package-booking/${id}`, {
       state: {
+        ...(editingBookingId
+          ? { mode: "edit", bookingId: editingBookingId }
+          : {}),
         bookingData,
         packageData,
         packageView,
@@ -499,6 +506,11 @@ const PackageCheckout = () => {
           style={{ minWidth: 0, overflowX: "clip" }}
         >
           <div className="container-fluid" style={{ paddingTop: "10px" }}>
+            <div className="mb-2">
+              <Button variant="light" size="sm" onClick={handlePrev}>
+                <FaArrowLeft className="me-1" /> Back
+              </Button>
+            </div>
             <div className="hs-page-heading d-flex justify-content-between align-items-center flex-wrap gap-2">
               <h3 className="hs-page-heading-title mb-0">Package Checkout</h3>
               {bookingData.searchParams?.agentId && (
@@ -519,7 +531,6 @@ const PackageCheckout = () => {
                       searchParams={bookingData.searchParams}
                       bookingData={bookingData}
                       updateData={setBookingData}
-                      onPrev={handlePrev}
                       onFinish={handleFinish}
                       packageData={packageData}
                       totalPrice={totalPrice}
@@ -693,6 +704,13 @@ const PackageCheckout = () => {
                       {formatPackageAmount(totalPrice)}
                     </div>
                     <div className="price-sidebar-sub">AED</div>
+                    {priceBreakdown.supplierHotelSelected && (
+                      <div className="price-sidebar-mealplan">
+                        Package rate AED{" "}
+                        {formatPackageAmount(priceBreakdown.packageRate)} + Hotel
+                        AED {formatPackageAmount(priceBreakdown.supplierHotel)}
+                      </div>
+                    )}
                     {bookingData.selections?.selectedMealPlan && (
                       <div className="price-sidebar-mealplan">
                         +{" "}

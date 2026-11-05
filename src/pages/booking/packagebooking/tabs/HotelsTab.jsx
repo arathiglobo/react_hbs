@@ -15,8 +15,15 @@ import {
   FaSuitcase,
   FaBed,
 } from "react-icons/fa";
+import SupplierHotelsSection from "./SupplierHotelsSection";
+import {
+  packageSupplierProviders,
+  selectedSupplierHotel,
+  supplierHotelKey,
+  toSupplierSelection,
+} from "../supplierHotels";
 
-const HotelsTab = ({ searchParams, bookingData, programme, updateData, updateProgramme, packageRate, onPackageRateResolved, onPrev, onNext }) => {
+const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFixed, bookingData, programme, updateData, updateProgramme, packageRate, onPackageRateResolved, onPrev, onNext }) => {
   const [hotels, setHotels] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
@@ -212,13 +219,54 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
     });
   };
 
+  // A supplier hotel has no hotelId, so its "selected" state is read straight
+  // from the parent's selections. Own-hotel selection above is untouched:
+  // picking an own hotel replaces selectedHotels, which clears this too.
+  const supplierProviders = packageSupplierProviders(packageView);
+  const selectedSupplier = selectedSupplierHotel(bookingData);
+
+  // A supplier hotel's price is added to the package rate, so that rate has to
+  // be known first. Otherwise the total would fall back to the search card's
+  // per-adult "from" price and undercharge a group. An amend already holds the
+  // amount charged (packageRateFixed).
+  const packageRateKnown =
+    packageRateFixed ||
+    (!isLoading && hotels.some((h) => Number(h.totalRateWithMarkup) > 0));
+  const packageRateMessage = isLoading
+    ? "Please wait, the package rate is still loading."
+    : "The package rate isn't available for these dates, so a live hotel can't be added.";
+
+  const toggleSupplierHotel = (hotel) => {
+    const isCurrentPick =
+      selectedSupplier &&
+      supplierHotelKey(selectedSupplier.supplier, selectedSupplier.supplierHotelCode) ===
+        supplierHotelKey(hotel.supplier, hotel.hotelCode);
+    if (!isCurrentPick && !packageRateKnown) {
+      toast.error(packageRateMessage);
+      return;
+    }
+    setSelectedHotelId(null);
+    setSelectedMealPlan(null);
+    const pick = isCurrentPick ? null : toSupplierSelection(hotel);
+    updateData({
+      selectedHotels: pick ? [pick] : [],
+      hotelPrice: pick ? Number(pick.totalRateWithMarkup || 0) : 0,
+      selectedMealPlan: null,
+      mealPlanPrice: 0,
+    });
+  };
+
   // On Next: a hotel MUST be selected before proceeding to checkout — no
   // "proceed anyway" escape hatch per product spec. Toast the operator and
   // stop; onNext (which navigates to the checkout tab) only fires when
-  // selectedHotelId is set.
+  // a hotel (own or supplier) is selected.
   const handleNext = () => {
-    if (!selectedHotelId) {
+    if (!selectedHotelId && !selectedSupplier) {
       toast.error("Please select a hotel to continue.");
+      return;
+    }
+    if (selectedSupplier && !packageRateKnown) {
+      toast.error(packageRateMessage);
       return;
     }
     onNext();
@@ -583,6 +631,21 @@ const HotelsTab = ({ searchParams, bookingData, programme, updateData, updatePro
               </div>
             )}
           </div>
+
+          {/* Only for a package registered with "Allow supplier hotels", or a
+              booking being amended that already holds a supplier hotel. */}
+          {(supplierProviders.length > 0 || selectedSupplier) && (
+            <SupplierHotelsSection
+              providers={supplierProviders}
+              searchParams={searchParams}
+              checkInDate={programme?.checkInDate || searchParams.travelDate}
+              searchCityId={searchCityId}
+              searchRoomCount={searchRoomCount}
+              selected={selectedSupplier}
+              onToggle={toggleSupplierHotel}
+              getImageUrl={getImageUrl}
+            />
+          )}
       </div>
 
       {/* Cancellation Policy card removed per product spec — the same

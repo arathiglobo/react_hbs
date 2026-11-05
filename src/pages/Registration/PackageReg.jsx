@@ -36,6 +36,17 @@ import {
 import DateTimeApplyPicker, {
   parseLocalDateTime,
 } from "../../components/DateTimeApplyPicker";
+import {
+  SUPPLIER_LABELS,
+  canSeeSupplierNames,
+  parseSupplierProviders,
+} from "../booking/packagebooking/supplierHotels";
+
+// Suppliers a package can offer through "Allow supplier hotels". The backend
+// checks the posted codes against its own list (SupplierHotelProviders).
+const SUPPLIER_HOTEL_OPTIONS = Object.entries(SUPPLIER_LABELS).map(
+  ([value, label]) => ({ value, label })
+);
 
 // Enhanced SearchableSelect Component with loading support
 const SearchableSelect = ({
@@ -235,7 +246,13 @@ const PackageReg = () => {
     // Free-text notes captured on the "Information on Package" tab.
     // Persisted as packages.package_information (TEXT) on the backend.
     packageInformation: "",
+    supplierHotelsEnabled: false,
+    supplierHotelProviders: [],
   });
+  // Only admin logins see this option or post its fields, so an edit by anyone
+  // else leaves the package's existing setting alone (the backend keeps it when
+  // the field is absent).
+  const canManageSupplierHotels = canSeeSupplierNames();
 
   // Additional state for itinerary and others
   const [packageItinearyDTOList, setPackageItinearyDTOList] = useState([
@@ -494,6 +511,16 @@ const PackageReg = () => {
         "Please select or enter at least one item in Inclusion, Exclusion, or Terms & Conditions";
     }
 
+    if (
+      canManageSupplierHotels &&
+      data.containHotel &&
+      data.supplierHotelsEnabled &&
+      !data.supplierHotelProviders?.length
+    ) {
+      errors.supplierHotelProviders =
+        "Please select at least one supplier for supplier hotels";
+    }
+
     return errors;
   };
 
@@ -516,6 +543,8 @@ const PackageReg = () => {
       overview: "",
       noOfNights: "1",
       packageInformation: "",
+      supplierHotelsEnabled: false,
+      supplierHotelProviders: [],
     });
     setPackageItinearyDTOList([
       {
@@ -638,6 +667,26 @@ const PackageReg = () => {
     formDataPayload.append("containHotel", formData.containHotel ? 1 : 0);
     formDataPayload.append("containCab", formData.containCab ? 1 : 0);
     formDataPayload.append("containActivity", formData.containActivity ? 1 : 0);
+
+    // Only sent when the option is on, or was on and is being switched off, so
+    // a package that never used it posts exactly the form it always did.
+    const supplierHotelsWereOn = Number(editing?.supplierHotelsEnabled) === 1;
+    if (
+      canManageSupplierHotels &&
+      formData.containHotel &&
+      (formData.supplierHotelsEnabled || supplierHotelsWereOn)
+    ) {
+      formDataPayload.append(
+        "supplierHotelsEnabled",
+        formData.supplierHotelsEnabled ? 1 : 0
+      );
+      if (formData.supplierHotelsEnabled) {
+        formDataPayload.append(
+          "supplierHotelProviders",
+          formData.supplierHotelProviders.join(",")
+        );
+      }
+    }
 
     formData.packageCategory.forEach((category, index) => {
       formDataPayload.append(`packageCategory[${index}]`, String(category));
@@ -853,7 +902,7 @@ const PackageReg = () => {
       "packageName", "packageCode", "packageType", "packageCategory",
       "countryId", "placeId", "noOfNights",
     ];
-    if (basicKeys.some((k) => errors[k])) { setActiveTab("basic"); return; }
+    if (basicKeys.some((k) => errors[k]) || errors.supplierHotelProviders) { setActiveTab("basic"); return; }
     if (errors.itinerary) { setActiveTab("itinerary"); return; }
     if (errors.others) { setActiveTab("inclusions"); return; }
   };
@@ -1165,6 +1214,8 @@ const PackageReg = () => {
         overview: data.overview || "",
         noOfNights: data.noOfNights || "1",
         packageInformation: data.packageInformation || "",
+        supplierHotelsEnabled: Number(data.supplierHotelsEnabled) === 1,
+        supplierHotelProviders: parseSupplierProviders(data.supplierHotelProviders),
       });
 
       // Preload admin-defined "Standard Package Details" for the
@@ -1380,6 +1431,17 @@ const PackageReg = () => {
         "containActivity",
         item.containActivity === 1 || item.containActivity === true ? 1 : 0
       );
+      if (
+        canManageSupplierHotels &&
+        Number(item.supplierHotelsEnabled) === 1 &&
+        item.supplierHotelProviders
+      ) {
+        formDataPayload.append("supplierHotelsEnabled", 1);
+        formDataPayload.append(
+          "supplierHotelProviders",
+          item.supplierHotelProviders
+        );
+      }
 
       // Package categories as array with proper indexing
       if (item.packageCategory && Array.isArray(item.packageCategory)) {
@@ -2412,6 +2474,65 @@ const PackageReg = () => {
                             </div>
                           )}
                         </Form.Group>
+                        {/* Only offered with Hotel ticked: the backend switches
+                            supplier hotels off for a package without hotels. */}
+                        {canManageSupplierHotels && formData.containHotel && (
+                          <Form.Group className="mb-3">
+                            <FormCheck
+                              type="checkbox"
+                              id="allow-supplier-hotels"
+                              label="Allow supplier hotels"
+                              disabled={isViewMode}
+                              checked={!!formData.supplierHotelsEnabled}
+                              onChange={(e) =>
+                                setFormData((prev) => ({
+                                  ...prev,
+                                  supplierHotelsEnabled: e.target.checked,
+                                }))
+                              }
+                            />
+                            <Form.Text className="text-muted d-block">
+                              Offers live hotels from the selected suppliers next
+                              to this package's own hotels when it is booked.
+                            </Form.Text>
+                            {formData.supplierHotelsEnabled && (
+                              <div className="mt-2">
+                                {SUPPLIER_HOTEL_OPTIONS.map((option) => (
+                                  <FormCheck
+                                    key={option.value}
+                                    inline
+                                    type="checkbox"
+                                    id={`supplier-hotel-${option.value}`}
+                                    label={option.label}
+                                    disabled={isViewMode}
+                                    checked={(
+                                      formData.supplierHotelProviders || []
+                                    ).includes(option.value)}
+                                    onChange={(e) =>
+                                      setFormData((prev) => {
+                                        const current =
+                                          prev.supplierHotelProviders || [];
+                                        return {
+                                          ...prev,
+                                          supplierHotelProviders: e.target.checked
+                                            ? [...current, option.value]
+                                            : current.filter(
+                                                (code) => code !== option.value
+                                              ),
+                                        };
+                                      })
+                                    }
+                                  />
+                                ))}
+                                {validationErrors.supplierHotelProviders && (
+                                  <div className="text-danger small mt-1">
+                                    {validationErrors.supplierHotelProviders}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </Form.Group>
+                        )}
                       </Col>
                       <Col md={6}>
                         <Form.Group className="mb-3">

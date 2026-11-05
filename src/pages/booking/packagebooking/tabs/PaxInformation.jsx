@@ -9,6 +9,7 @@ import { Row, Col, Form, Modal, Button, Table } from "react-bootstrap";
 import axiosInstance from "../../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import { useNavigate, useLocation } from "react-router-dom";
+import { supplierPayloadFields } from "../supplierHotels";
 // HotelBookingPage's stylesheet is the source of truth for the .pg-option /
 // .pg-option-selected / .pg-option-radio / .pg-option-logo classes used by
 // the "Select Payment Gateway" modal below — importing here keeps the modal
@@ -121,7 +122,6 @@ const PaxInformation = forwardRef(({
   searchParams,
   bookingData,
   updateData,
-  onPrev,
   onFinish,
   packageData,
   totalPrice,
@@ -642,6 +642,7 @@ const PaxInformation = forwardRef(({
             hotelName: h.hotelName,
             selectedRate: h.totalRateWithMarkup,
             currency: h.currencyCode || "AED",
+            ...supplierPayloadFields(h),
           })),
           cab: null,
           activity: null,
@@ -1204,15 +1205,10 @@ const PaxInformation = forwardRef(({
           Package Search page, exactly like HotelBookingPage's Guest Details
           grid follows the room occupancy. */}
 
-      <div className="sticky-nav-row d-flex justify-content-between">
-        <button className="btn-nav-prev" onClick={onPrev}>
-          ← Previous
-        </button>
-        {/* Confirm booking → button removed from here; PackageCheckout now
-            renders it in the right sidebar directly below the "Are you sure
-            you want to continue with the booking?" card. It triggers the
-            same triggerConfirmClick() flow via the ref exposed below. */}
-      </div>
+      {/* Page navigation lives on PackageCheckout: its Back button at the top
+          left, and Confirm booking in the right sidebar directly below the
+          "Are you sure you want to continue with the booking?" card. Confirm
+          triggers triggerConfirmClick() via the ref exposed below. */}
 
       {/* Terms & Conditions popup — gates the order-summary modal. */}
       <Modal
@@ -1750,19 +1746,34 @@ const PaxInformation = forwardRef(({
                   {/* Itemised components of the selling price. The
                       accommodation row is the selected hotel's pax-scaled rate
                       (or, if no hotel was picked, the package's own rate) —
-                      never both, they are the same PackageRates money. Meal
-                      plan / cab / activity are genuine extras and only appear
-                      when they carry a charge. */}
+                      never both, they are the same PackageRates money. A live
+                      supplier hotel is the exception: it is charged on top of
+                      the package rate, so both are listed. Meal plan / cab /
+                      activity are genuine extras and only appear when they
+                      carry a charge. */}
                   {priceBreakdown && (
                     <>
-                      <div className="d-flex justify-content-between text-muted small">
-                        <span>
-                          {priceBreakdown.hotelSelected
-                            ? "Accommodation"
-                            : "Package rate"}
-                        </span>
-                        <span>{formatPrice(priceBreakdown.accommodation)}</span>
-                      </div>
+                      {priceBreakdown.supplierHotelSelected ? (
+                        <>
+                          <div className="d-flex justify-content-between text-muted small">
+                            <span>Package rate</span>
+                            <span>{formatPrice(priceBreakdown.packageRate)}</span>
+                          </div>
+                          <div className="d-flex justify-content-between text-muted small">
+                            <span>Hotel</span>
+                            <span>{formatPrice(priceBreakdown.supplierHotel)}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="d-flex justify-content-between text-muted small">
+                          <span>
+                            {priceBreakdown.hotelSelected
+                              ? "Accommodation"
+                              : "Package rate"}
+                          </span>
+                          <span>{formatPrice(priceBreakdown.accommodation)}</span>
+                        </div>
+                      )}
                       {priceBreakdown.mealPlan > 0 && (
                         <div className="d-flex justify-content-between text-muted small">
                           <span>
