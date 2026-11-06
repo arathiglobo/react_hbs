@@ -300,7 +300,13 @@ const CityMapping = () => {
       return response.data.map((c) => ({
         // stateName is set by /api/province/getByCountryId (MasterStateDTO);
         // every other supplier response already lands via cityName or name.
-        value: c.cityId || c.id,
+        // Atharva's list carries both our local row id (cityId) and Atharva's
+        // own city id (atharvaCityCode); the mapping must store Atharva's.
+        // cityId used to be sent, so Dubai was saved as "Little Hartley, NSW".
+        value:
+          platform === "Atharva" && c.atharvaCityCode != null
+            ? c.atharvaCityCode
+            : c.cityId || c.id,
         label: c.cityName || c.name || c.stateName,
       }));
     } catch (error) {
@@ -434,6 +440,12 @@ const CityMapping = () => {
       !formData.apiProvider
     ) {
       toast.error("⚠ Please fill all required fields");
+      return;
+    }
+    // Without the supplier's own country / city the server used to store
+    // our in-house ids as supplier ids (now it refuses with a 400).
+    if (!formData.apiCountryId || !formData.apiCityId) {
+      toast.error("⚠ Please select the platform country and city to map to");
       return;
     }
 

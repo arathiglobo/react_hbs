@@ -11,6 +11,9 @@ import "../../../styles/AutomatedHotelMapping.css";
 import StatusPanel from "./StatusPanel";
 import MappedHotelsTab from "./MappedHotelsTab";
 import ManualReviewTab from "./ManualReviewTab";
+import NotMappedTab from "./NotMappedTab";
+import CitiesReviewTab from "./CitiesReviewTab";
+import MappingRulesTab from "./MappingRulesTab";
 import useAutoMappingStatus from "./useAutoMappingStatus";
 import { fmtNumber, statusMeta } from "./automapFormat";
 
@@ -22,7 +25,8 @@ import { fmtNumber, statusMeta } from "./automapFormat";
  * inherits a clone of the opener's per-tab session and is already logged
  * in — see utils/authSession.js). It replaces the earlier modal popup.
  *
- * Three tabs backed by /api/hotel-mapping/auto/*:
+ * Not Mapped, Cities and Rules & Settings are the admin review
+ * tabs (see each component). The first three tabs are backed by /api/hotel-mapping/auto/*:
  *   Status        — live engine state (running / paused + reason / completed /
  *                   error), system load, progress figures, supplier health,
  *                   supplier catalog pull, supplier ↔ supplier matching.
@@ -54,7 +58,8 @@ export default function AutomatedHotelMappingPage() {
     intervalMs: 5000,
   });
 
-  const [tab, setTab] = useState("status");
+  // ?tab= lets an alert link straight to the screen that deals with it.
+  const [tab, setTab] = useState(() => new URLSearchParams(window.location.search).get("tab") || "status");
   const [rescanning, setRescanning] = useState(false);
 
   const meta = statusMeta(status?.status || (error ? "ERROR" : "IDLE"));
@@ -202,6 +207,36 @@ export default function AutomatedHotelMappingPage() {
                     hotelCount={status.manualReviewCount}
                     pairCount={pairCount}
                   />
+                </Tab>
+                <Tab
+                  eventKey="unmapped"
+                  title={
+                    <span>
+                      <i className="fas fa-unlink me-1" aria-hidden="true"></i> Not Mapped
+                    </span>
+                  }
+                >
+                  <NotMappedTab suppliers={suppliers} active={tab === "unmapped"} />
+                </Tab>
+                <Tab
+                  eventKey="cities"
+                  title={
+                    <span>
+                      <i className="fas fa-city me-1" aria-hidden="true"></i> Cities
+                    </span>
+                  }
+                >
+                  <CitiesReviewTab active={tab === "cities"} />
+                </Tab>
+                <Tab
+                  eventKey="rules"
+                  title={
+                    <span>
+                      <i className="fas fa-sliders-h me-1" aria-hidden="true"></i> Rules &amp; Settings
+                    </span>
+                  }
+                >
+                  <MappingRulesTab active={tab === "rules"} />
                 </Tab>
               </Tabs>
             </div>

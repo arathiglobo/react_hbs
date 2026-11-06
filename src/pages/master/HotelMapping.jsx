@@ -208,9 +208,27 @@ const HotelMapping = () => {
       );
 
       if (response.status === 200) {
-        toast.success("Hotels mapped successfully!");
-        // Optional: remove mapped group from results
-        // setSearchResults((prev) => prev.filter((_, i) => i !== index));
+        // The bulk endpoint answers 200 with one result per group: a group
+        // can fail (success=false) and targets already mapped to another
+        // master hotel are listed in `skipped` — both used to be ignored
+        // and the whole group was shown as mapped.
+        const results = Array.isArray(response.data) ? response.data : [];
+        const failed = results.filter((r) => r && r.success === false);
+        if (failed.length > 0) {
+          toast.error(failed.map((r) => r.message).filter(Boolean).join(" | ") || "Failed to map hotels.");
+          return;
+        }
+        const skipped = results.flatMap((r) => (Array.isArray(r?.skipped) ? r.skipped : []));
+        const isSkipped = (h) =>
+          skipped.some((s) => s.startsWith(`${h.supplier} ${h.supplierHotelId}`));
+        if (skipped.length > 0) {
+          toast(results.map((r) => r.message).filter(Boolean).join(" "), {
+            icon: "⚠️",
+            duration: 10000,
+          });
+        } else {
+          toast.success("Hotels mapped successfully!");
+        }
 
         setSearchResults((prev) =>
           prev.map((group, i) => {
@@ -219,7 +237,7 @@ const HotelMapping = () => {
                 ...group,
                 hotels: group.hotels.map((h) => ({
                   ...h,
-                  mappingStatus: true,
+                  mappingStatus: isSkipped(h) ? h.mappingStatus : true,
                 })),
               };
             }

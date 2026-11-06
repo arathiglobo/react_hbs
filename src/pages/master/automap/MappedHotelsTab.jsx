@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Badge, Button, Form, InputGroup, OverlayTrigger, Spinner, Table, Tooltip } from "react-bootstrap";
+import Swal from "sweetalert2";
+import toast from "react-hot-toast";
 import axiosInstance from "../../../components/AxiosInstance";
 import PagerBar from "./PagerBar";
 import { fmtDateTime, fmtNumber, fmtPercent, methodLabel } from "./automapFormat";
@@ -14,6 +16,10 @@ import { fmtDateTime, fmtNumber, fmtPercent, methodLabel } from "./automapFormat
  * The "Supplier-only hotels" source lists master hotels that two or more
  * suppliers sell but we have no in-house hotel for — built by the
  * supplier-to-supplier pass (GET /api/hotel-mapping/auto/supplier-masters).
+ *
+ * A wrong link is removed from its cell (DELETE
+ * /api/hotel-mapping/auto/mappings/{id}); the server records the two hotels
+ * as different properties so the next scan does not link them again.
  */
 const SOURCES = [
   { value: "INHOUSE", label: "In-house hotels" },
@@ -123,7 +129,7 @@ export default function MappedHotelsTab({ suppliers, active, refreshKey }) {
           {supplierOnly && (
             <span className="small text-muted">
               Hotels two or more suppliers sell that we have no in-house hotel for. Search shows each as one hotel and its
-              room list shows every supplier's rooms.
+              room list draws on every supplier's rooms.
             </span>
           )}
         </div>
@@ -275,6 +281,8 @@ export default function MappedHotelsTab({ suppliers, active, refreshKey }) {
                         cell={cell}
                         supplier={s}
                         hotelName={supplierOnly ? `m${row.masterHotelId}` : row.hotelName}
+                        groupLabel={supplierOnly ? `master hotel #${row.masterHotelId}` : row.hotelName}
+                        onUnmapped={() => load(true)}
                       />
                     </td>
                   );
@@ -335,7 +343,39 @@ export default function MappedHotelsTab({ suppliers, active, refreshKey }) {
   );
 }
 
-function SupplierCell({ cell, supplier, hotelName }) {
+function SupplierCell({ cell, supplier, hotelName, groupLabel, onUnmapped }) {
+  const [removing, setRemoving] = useState(false);
+
+  const unmap = async () => {
+    const confirm = await Swal.fire({
+      title: "Remove this link?",
+      text:
+        `${supplier?.displayName || cell.supplier} hotel "${cell.supplierHotelName || cell.supplierHotelId}" ` +
+        `will be removed from ${groupLabel || "this hotel"}. The automatic mapping will not link them again.`,
+      icon: "warning",
+      input: "text",
+      inputPlaceholder: "Reason (optional)",
+      showCancelButton: true,
+      confirmButtonText: "Remove link",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: "#dc3545",
+    });
+    if (!confirm.isConfirmed) return;
+    setRemoving(true);
+    try {
+      const res = await axiosInstance.delete(`/api/hotel-mapping/auto/mappings/${cell.mappingId}`, {
+        params: { note: confirm.value?.trim() || undefined },
+        timeout: 30000,
+      });
+      toast.success(res.data?.message || "Link removed.");
+      onUnmapped?.();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || "The link could not be removed.");
+    } finally {
+      setRemoving(false);
+    }
+  };
+
   if (!cell || !cell.mapped) {
     const blocked = supplier && !supplier.enabled;
     return (
@@ -372,8 +412,22 @@ function SupplierCell({ cell, supplier, hotelName }) {
         </Tooltip>
       }
     >
-      <span className="ahm-mark is-mapped" aria-label={`Mapped (${methodLabel(cell.mappingMethod)})`}>
-        <i className="fas fa-check" aria-hidden="true"></i>
+      <span className="d-inline-flex align-items-center gap-1">
+        <span className="ahm-mark is-mapped" aria-label={`Mapped (${methodLabel(cell.mappingMethod)})`}>
+          <i className="fas fa-check" aria-hidden="true"></i>
+        </span>
+        {cell.mappingId ? (
+          <button
+            type="button"
+            className="btn btn-link btn-sm p-0 text-danger"
+            title="Remove this link (wrong match)"
+            aria-label={`Remove the ${cell.supplier} link`}
+            disabled={removing}
+            onClick={unmap}
+          >
+            {removing ? <Spinner animation="border" size="sm" /> : <i className="fas fa-unlink" aria-hidden="true"></i>}
+          </button>
+        ) : null}
       </span>
     </OverlayTrigger>
   );

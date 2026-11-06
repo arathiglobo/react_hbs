@@ -36,6 +36,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/RoomList.css";
 import axiosInstance from "../components/AxiosInstance";
+import AdminSupplierStrip from "../components/AdminSupplierStrip";
 import { formatFlexibleDate } from "../utils/dateUtils";
 import {
   RateDeadlinePill,
@@ -46,6 +47,7 @@ import {
 import {
   isNonRefundableRate,
   sumSelectedRooms,
+  slotRateValue,
   buildInhouseSingleBookingData,
   buildInhouseMultiBookingData,
 } from "../utils/inhouseBookingData";
@@ -328,9 +330,14 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
           return;
         }
 
+        // A multi-room search of a mapped hotel may be handed to the merged
+        // room list below, so it carries the GRN / GoGlobal multi-room
+        // options that page sends (other suppliers ignore them).
         const res = await axiosInstance.post(
           "/api/hotel-rooms/search",
-          payload,
+          (payload.rooms || []).length > 1
+            ? { ...payload, includeNonBundled: true, goglobalPerRoomMode: true }
+            : payload,
         );
 
         // console.log("room search res::", res);
@@ -421,6 +428,11 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                 rate: uplift(r.rate),
                 roomRateBasedOnRoomCount: uplift(r.roomRateBasedOnRoomCount),
                 recommendedRetailPrice: uplift(r.recommendedRetailPrice),
+                // Per-room prices (multi-room) get the same uplift.
+                perRoomRates: r.perRoomRates?.map((p) => ({
+                  ...p,
+                  totalRate: uplift(p.totalRate),
+                })),
                 _twentyFourHourMarkupApplied: upliftPct, // diagnostic flag
               }
             : r;
@@ -1316,6 +1328,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                             " (INHOUSE)" supplier suffix — the header is the
                             hotel, so it is shown without it. */}
                         <h2 className="hotel-name mb-2">{stripSupplierSuffix(hotel.hotelName)}</h2>
+                        <AdminSupplierStrip supplier={hotel.apiType || "INHOUSE"} hotelCode={hotel.supplierHotelCode || payload?.hotelCode} />
                         <div className="d-flex align-items-center gap-3 mb-2">
                           <div className="star-rating">
                             {renderStars(hotel.starRating)}
@@ -1782,7 +1795,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                       <div className="current-price">
                                         {formatPrice(
                                           isMultiRoom
-                                            ? rate.totalRate || 0
+                                            ? slotRateValue(rate, roomSlotIndex, "totalRate") || 0
                                             : rate.roomRateBasedOnRoomCount,
                                         )}
                                       </div>
@@ -2017,7 +2030,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                       <div className="fs-5 fw-bold text-primary">
                                         {formatPrice(
                                           isMultiRoom
-                                            ? rate.totalRate || 0
+                                            ? slotRateValue(rate, roomSlotIndex, "totalRate") || 0
                                             : rate.roomRateBasedOnRoomCount,
                                         )}
                                       </div>
@@ -2103,7 +2116,11 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                 // numberOfRooms-multiplied figure) so
                                 // the slot badge matches the per-room
                                 // price shown on the rate card.
-                                slotSelection.selectedRate.totalRate || 0,
+                                slotRateValue(
+                                  slotSelection.selectedRate,
+                                  roomSlotIndex,
+                                  "totalRate",
+                                ) || 0,
                               )}
                             </Badge>
                           ) : (

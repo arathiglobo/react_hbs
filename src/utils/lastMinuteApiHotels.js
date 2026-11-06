@@ -128,7 +128,9 @@ export function mapApiHotelToLastMinuteRow(hotel, searchId) {
     apiType,
     hotelCode,
     searchId,
-    hotelId: `${API_ID_PREFIX}-${apiType}-${hotelCode}`,
+    // What opens the room list. Agents' replies carry this and no apiType.
+    apiId: hotel.apiId || 0,
+    hotelId: `${API_ID_PREFIX}-${apiType || hotel.apiId || ""}-${hotelCode}`,
 
     // ── display fields, matching the inhouse HotelResult shape ──
     hotelName: hotel.hotelName || "Unknown Hotel",

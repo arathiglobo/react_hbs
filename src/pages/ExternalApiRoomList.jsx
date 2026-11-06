@@ -37,10 +37,13 @@ import "../styles/RoomList.css";
 import axiosInstance from "../components/AxiosInstance";
 import toast from "react-hot-toast";
 import { formatFlexibleDate } from "../utils/dateUtils";
-import { isAgentLogin, stripSupplierSuffix } from "../utils/supplierDisplay";
+import { isAdminLogin, isAgentLogin, stripSupplierSuffix, supplierCodeForBlock, supplierDisplayName } from "../utils/supplierDisplay";
+import AdminSupplierStrip from "../components/AdminSupplierStrip";
+import { streamRoomSearch } from "../utils/roomSearchStream";
 import {
   isNonRefundableRate,
   sumSelectedRooms,
+  slotRateValue,
   buildInhouseSingleBookingData,
   buildInhouseMultiBookingData,
 } from "../utils/inhouseBookingData";
@@ -147,9 +150,10 @@ const repricedHotelOrThrow = (resp) => {
 // ─── Hotels mapped across several suppliers ──────────────────────────────
 // /api/hotel-rooms/search returns ONE block per mapped supplier (hotel_mapping,
 // same master_hotel_id), each tagged with apiType / apiId / supplierHotelCode.
-// This page merges every block's room categories into one list; each rate
-// keeps `_blockIndex` (only set when there is more than one block) so it is
-// re-checked and booked through its OWN supplier's flow.
+// This page shows ONE hotel and lists every block's room types one by one;
+// each rate keeps `_blockIndex` (set when there is more than one block, and
+// always on a streamed search) so it is re-checked and booked through its OWN
+// supplier's flow.
 
 // One-shot hand-off written by RoomList.jsx when the in-house room search came
 // back with other suppliers' blocks: { payloadKey, response }.
@@ -164,37 +168,96 @@ const isInhouseResponseBlock = (h) =>
   Number(h?.apiId) === 1;
 
 /**
- * Merge the room categories of every supplier block into one list. Categories
- * with the same name (case / spacing ignored) are combined so the operator
- * sees one "Deluxe Room" with every supplier's rates under it; each rate keeps
- * its `_blockIndex`. A single block is returned untouched.
+ * One list of every supplier block's room types for a mapped hotel. Each
+ * supplier's room type stays its own entry, even when two suppliers use the
+ * same name (Room Mapping off; combineSameRooms below handles on); the render
+ * sorts them cheapest first. Each rate keeps its `_blockIndex`, and each room
+ * type gets a `_catKey` that does not change while more suppliers arrive, so an
+ * open room type stays open. A single block is returned untouched.
  */
 const mergeRoomCategories = (blocks) => {
   if (!Array.isArray(blocks) || blocks.length === 0) return [];
   if (blocks.length === 1) return blocks[0]?.roomCategories || [];
-  const byName = new Map();
-  blocks.forEach((block) => {
-    (block?.roomCategories || []).forEach((cat) => {
-      const key = String(cat?.roomCategory || "")
-        .trim()
-        .replace(/\s+/g, " ")
-        .toLowerCase();
-      const existing = byName.get(key);
-      if (existing) {
-        existing.availableRates = [
-          ...existing.availableRates,
-          ...(cat.availableRates || []),
-        ];
-      } else {
-        byName.set(key, {
-          ...cat,
-          availableRates: [...(cat.availableRates || [])],
-        });
-      }
-    });
-  });
-  return Array.from(byName.values());
+  return blocks.flatMap((block, blockIndex) =>
+    (block?.roomCategories || []).map((cat, catIndex) => ({
+      ...cat,
+      _catKey: `${blockIndex}-${catIndex}`,
+      availableRates: [...(cat.availableRates || [])],
+    })),
+  );
 };
+
+// Two names are the same room only when they differ in capitals or spacing.
+// Anything looser could combine two different rooms.
+const roomNameKey = (name) =>
+  String(name ?? "").toLowerCase().replace(/\s+/g, "");
+
+/**
+ * Room Mapping on: one entry per room name across all suppliers. Rate objects
+ * are kept as they are, so a picked rate stays the same object and each rate
+ * still books through its own supplier. `_catKey` comes from the name, so a
+ * room stays open while more suppliers answer. A room with no name can't be
+ * matched and keeps its own entry.
+ */
+const combineSameRooms = (categories) => {
+  const rooms = new Map();
+  categories.forEach((cat, index) => {
+    const nameKey = roomNameKey(cat?.roomCategory);
+    const key = nameKey ? `room-${nameKey}` : cat?._catKey || `unnamed-${index}`;
+    const room = rooms.get(key);
+    if (room) {
+      room.availableRates.push(...(cat?.availableRates || []));
+    } else {
+      rooms.set(key, {
+        ...cat,
+        _catKey: key,
+        availableRates: [...(cat?.availableRates || [])],
+      });
+    }
+  });
+  return [...rooms.values()];
+};
+
+/**
+ * One line above the room types while a mapped hotel's suppliers are still
+ * answering. Afterwards staff (never agents) see which supplier was left out
+ * because it timed out or failed.
+ */
+function SupplierProgressNote({ progress, showNames }) {
+  if (!progress || (progress.expected || 0) < 2) return null;
+  if (!progress.done) {
+    const pending = Math.max(0, progress.expected - progress.answered);
+    if (pending === 0) return null;
+    return (
+      <Alert variant="info" className="py-2 small d-flex align-items-center gap-2 mb-3" role="status">
+        <Spinner animation="border" size="sm" />
+        <span>
+          Checking {pending} more supplier{pending === 1 ? "" : "s"} for this
+          hotel — more room types may still appear.
+        </span>
+      </Alert>
+    );
+  }
+  if (progress.interrupted) {
+    return (
+      <Alert variant="warning" className="py-2 small mb-3">
+        The connection dropped before every supplier answered. Search again to
+        see all room types.
+      </Alert>
+    );
+  }
+  const missing = (progress.statuses || []).filter((s) =>
+    ["TIMEOUT", "ERROR", "BUSY"].includes(s?.status),
+  );
+  if (!showNames || missing.length === 0) return null;
+  const why = { TIMEOUT: "no answer in time", BUSY: "busy", ERROR: "error" };
+  return (
+    <Alert variant="warning" className="py-2 small mb-3">
+      Not included this time:{" "}
+      {missing.map((s) => `${s.apiType} (${why[s.status]})`).join(", ")}
+    </Alert>
+  );
+}
 
 function AccordionToggleButton({ eventKey, isActive }) {
   const decoratedOnClick = useAccordionButton(eventKey);
@@ -221,6 +284,8 @@ const ExternalApiRoomList = () => {
   // ─────────────────────────────── state ───────────────────────────────
   const [roomData, setRoomData] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Streamed search progress: { expected, answered, statuses[], done, interrupted }.
+  const [supplierProgress, setSupplierProgress] = useState(null);
   const [error, setError] = useState(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [hotelStaticData, setHotelStaticData] = useState(null);
@@ -377,6 +442,12 @@ const ExternalApiRoomList = () => {
   // resolve to hotels[0] / the search payload — i.e. today's behaviour.
   const responseBlocks = roomData?.hotels || [];
   const isMergedResponse = responseBlocks.length > 1;
+  // Room Mapping setting, only ever true for a mapped hotel: combine same-named
+  // rooms and show the cheapest rate. While the suppliers are still answering
+  // the value comes from the stream's first line (supplierProgress).
+  const combineRooms = Boolean(
+    roomData?.roomMappingEnabled ?? supplierProgress?.roomMappingEnabled,
+  );
   const blockIndexOfRate = (rate) =>
     Number.isInteger(rate?._blockIndex) && responseBlocks[rate._blockIndex]
       ? rate._blockIndex
@@ -1240,6 +1311,7 @@ const ExternalApiRoomList = () => {
       try {
         setLoading(true);
         setError(null);
+        setSupplierProgress(null);
 
         let payload = location.state?.payload;
         let meta = location.state?.meta;
@@ -1297,16 +1369,50 @@ const ExternalApiRoomList = () => {
           console.error("Error reading roomListPrefetch:", e);
         }
 
+        // Last-minute supplier flow (LastMinuteBookingPage → here): in-house
+        // last-minute deals have their own room list and booking flow, so a
+        // mapped hotel's in-house block is not offered on this page. Same for
+        // the Long Stay supplier flow: in-house long-stay contracts have their
+        // own room list too, and this block would carry normal contract rates.
+        const keepBlock = (h) =>
+          !(
+            (payload?.lastMinuteBooking === true || payload?.longStayBooking === true) &&
+            isInhouseResponseBlock(h)
+          );
+        // Rates sorted cheapest first; for a mapped hotel each rate is tagged
+        // with the index of the block it came from so it is re-checked and
+        // booked through its own supplier.
+        const enrichBlock = (h, blockIndex, tagRates) => ({
+          ...h,
+          roomCategories: (h.roomCategories || []).map((c) => {
+            const sortedRates = (c.availableRates || [])
+              .slice()
+              .sort((a, b) => (a.totalRate || 0) - (b.totalRate || 0));
+            return {
+              ...c,
+              availableRates: tagRates
+                ? sortedRates.map((r) => ({ ...r, _blockIndex: blockIndex }))
+                : sortedRates,
+            };
+          }),
+        });
+
         if (!searchData) {
           // For GRN multi-room searches, ask the backend to include
           // non-bundled + partial-bundled rates alongside bundled ones in the
           // response. The rates come back tagged with a `bundleType` field so
           // the UI can toggle between "Book as one package" (bundled) and
           // "Pick per room" (non-bundled) without a second network trip.
-          // Single-room and non-GRN searches are unaffected — the flag is
-          // GRN-scoped on the backend and other suppliers ignore it.
-          const isGrnMultiRoom =
-            Number(payload?.apiId) === 20 && (payload?.rooms || []).length > 1;
+          // Single-room searches are unaffected — the flag is GRN-scoped on
+          // the backend and other suppliers ignore it.
+          //
+          // A mapped hotel asks every one of its suppliers at once, so both
+          // this flag and the GoGlobal one below go on EVERY multi-room
+          // search, not only when the clicked card was GRN / GoGlobal —
+          // otherwise a mapped GRN or GoGlobal hotel answers with rates its
+          // multi-room booking can't use.
+          const isMultiRoomSearch = (payload?.rooms || []).length > 1;
+          const isGrnMultiRoom = isMultiRoomSearch;
           // GoGlobal (apiId 21) multi-room opt-in. When more than one room is
           // requested, ask the backend to fan out to K parallel single-room
           // HOTEL_SEARCH_REQUEST calls (spec §6) so each returned offer has
@@ -1315,8 +1421,7 @@ const ExternalApiRoomList = () => {
           // valuations (§7) + K bookings (§8) under one BasketNumber.
           // Single-room GoGlobal searches skip the flag → existing bundle
           // path runs unchanged; other suppliers ignore the flag.
-          const isGoGlobalMultiRoomSearch =
-            Number(payload?.apiId) === 21 && (payload?.rooms || []).length > 1;
+          const isGoGlobalMultiRoomSearch = isMultiRoomSearch;
           let searchBody = payload;
           if (isGrnMultiRoom) {
             searchBody = { ...searchBody, includeNonBundled: true };
@@ -1324,8 +1429,80 @@ const ExternalApiRoomList = () => {
           if (isGoGlobalMultiRoomSearch) {
             searchBody = { ...searchBody, goglobalPerRoomMode: true };
           }
-          const res = await axiosInstance.post("/api/hotel-rooms/search", searchBody);
-          searchData = res.data;
+
+          // Streamed search: every supplier of a mapped hotel is asked at once
+          // and its room types show the moment it answers — the page no longer
+          // waits for the slowest supplier. Earlier blocks are never rebuilt,
+          // so a rate the operator already picked stays the same object.
+          const streamed = [];
+          let shown = false;
+          try {
+            const done = await streamRoomSearch(searchBody, {
+              onStart: (ev) =>
+                setSupplierProgress({
+                  expected: (ev.suppliers || []).length,
+                  answered: 0,
+                  statuses: [],
+                  done: false,
+                  masterHotelName: ev.masterHotelName,
+                  roomMappingEnabled: ev.roomMappingEnabled === true,
+                }),
+              onSupplier: (ev) => {
+                (ev.hotels || []).filter(keepBlock).forEach((h) => {
+                  streamed.push(enrichBlock(h, streamed.length, true));
+                });
+                setSupplierProgress((p) =>
+                  p
+                    ? { ...p, answered: p.answered + 1, statuses: [...p.statuses, ev.status] }
+                    : p,
+                );
+                if (streamed.length > 0) {
+                  setRoomData({
+                    success: true,
+                    hotels: [...streamed],
+                    meta: meta || {},
+                    payload,
+                  });
+                  if (!shown) {
+                    shown = true;
+                    setLoading(false);
+                  }
+                }
+              },
+            });
+            setSupplierProgress((p) => ({
+              ...(p || {}),
+              done: true,
+              statuses: done.supplierStatus || p?.statuses || [],
+            }));
+            if (streamed.length > 0) {
+              setRoomData({
+                ...done,
+                success: true,
+                hotels: [...streamed],
+                meta: meta || {},
+                payload,
+              });
+              return;
+            }
+            searchData = { ...done, hotels: [] };
+          } catch (streamErr) {
+            if (!streamErr?.beforeData) {
+              console.error("Room search stream broke off:", streamErr);
+              setSupplierProgress((p) => ({ ...(p || {}), done: true, interrupted: true }));
+              if (shown) return;
+            }
+            // Nothing arrived (expired login, older backend, network): the
+            // plain search, which also runs the silent token refresh.
+            setSupplierProgress(null);
+          }
+
+          if (!searchData) {
+            const res = await axiosInstance.post("/api/hotel-rooms/search", searchBody, {
+              timeout: 60000,
+            });
+            searchData = res.data;
+          }
         }
 
         if (!searchData || searchData.success === false) {
@@ -1339,36 +1516,16 @@ const ExternalApiRoomList = () => {
           return;
         }
 
-        // Last-minute supplier flow (LastMinuteBookingPage → here): in-house
-        // last-minute deals have their own room list and booking flow, so a
-        // mapped hotel's in-house block is not offered on this page. Same for
-        // the Long Stay supplier flow: in-house long-stay contracts have their
-        // own room list too, and this block would carry normal contract rates.
-        let searchBlocks = searchData.hotels || [];
-        if (payload?.lastMinuteBooking === true || payload?.longStayBooking === true) {
-          searchBlocks = searchBlocks.filter((h) => !isInhouseResponseBlock(h));
-        }
-        // Mapped hotel (one block per supplier): tag every rate with the
-        // index of the block it came from so it is re-checked and booked
-        // through its own supplier. A single block stays untagged.
+        const searchBlocks = (searchData.hotels || []).filter(keepBlock);
+        // Mapped hotel (one block per supplier): tag every rate with its
+        // block. A single block stays untagged.
         const tagRatesWithBlock = searchBlocks.length > 1;
 
         const enriched = {
           ...searchData,
-          hotels: searchBlocks.map((h, blockIndex) => ({
-            ...h,
-            roomCategories: (h.roomCategories || []).map((c) => {
-              const sortedRates = (c.availableRates || [])
-                .slice()
-                .sort((a, b) => (a.totalRate || 0) - (b.totalRate || 0));
-              return {
-                ...c,
-                availableRates: tagRatesWithBlock
-                  ? sortedRates.map((r) => ({ ...r, _blockIndex: blockIndex }))
-                  : sortedRates,
-              };
-            }),
-          })),
+          hotels: searchBlocks.map((h, blockIndex) =>
+            enrichBlock(h, blockIndex, tagRatesWithBlock),
+          ),
           meta: meta || {},
           payload,
         };
@@ -1484,6 +1641,38 @@ const ExternalApiRoomList = () => {
         ? rate?.totalRate || 0
         : rate?.roomRateBasedOnRoomCount || rate?.totalRate || 0,
     ) || 0;
+
+  /**
+   * Room Mapping on: what a combined room shows for one room slot, out of the
+   * rates already allowed there. That is its cheapest rate, plus a rate already
+   * picked for this slot if a cheaper one has since appeared, so the pick can
+   * still be seen and removed. In a multi-room search "cheapest" means cheapest
+   * among the rates this slot can still take (one booking = one supplier, and
+   * Atharva needs one rate group); otherwise, once Room 1 is picked, Room 2
+   * could show only another supplier's rate that can't be chosen.
+   */
+  const cheapestRatesForSlot = (rates, roomSlotIndex) => {
+    const canBePicked = (rate) => {
+      if (!isMultiRoom) return true;
+      if (crossSupplierLockSlot(roomSlotIndex, rate) !== -1) return false;
+      if (String(selectionApiIdOfRate(rate) || "") !== "3" || !rate?.hKey) return true;
+      const otherPick = selectedRooms.find(
+        (r, i) => i !== roomSlotIndex && r?.selectedRate,
+      );
+      const otherHKey = otherPick?.selectedRate?.hKey;
+      return !otherHKey || otherHKey === rate.hKey;
+    };
+    const pool = rates.filter(canBePicked);
+    // A rate with no price must not win and hide the real ones.
+    const priceToCompare = (rate) => displayTotalOf(rate) || Infinity;
+    const cheapest = (pool.length > 0 ? pool : rates).reduce((best, rate) =>
+      priceToCompare(rate) < priceToCompare(best) ? rate : best,
+    );
+    const picked = isMultiRoom ? selectedRooms[roomSlotIndex]?.selectedRate : null;
+    return picked && picked !== cheapest && rates.includes(picked)
+      ? [cheapest, picked]
+      : [cheapest];
+  };
 
   // Nights across the searched stay — derived once at the render scope so
   // both the rate-card breakdown ("N nights × M rooms") and the Booking
@@ -3122,22 +3311,32 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
     );
   }
 
-  // Hotel header + the room list the page renders. For a hotel mapped across
-  // several suppliers the header comes from the first block (the supplier
-  // the operator clicked) and every block's room categories are merged into
-  // one list; each rate still knows its own block (`_blockIndex`). Single-
-  // supplier hotels render hotels[0] exactly as before.
-  const hotel = isMergedResponse
+  // Hotel header + the room list the page renders. A hotel mapped across
+  // several suppliers is ONE hotel: the header shows the group's name
+  // (masterHotelName). Its rooms follow the Room Mapping setting: on, same-named
+  // rooms are combined; off, every supplier's room types are listed one by one.
+  // Either way the list is cheapest first and each rate still knows its own block
+  // (`_blockIndex`). Single-supplier hotels render hotels[0] exactly as before.
+  const hotel = isMergedResponse || combineRooms
     ? {
         ...roomData.hotels[0],
-        roomCategories: mergeRoomCategories(roomData.hotels),
+        roomCategories: combineRooms
+          ? combineSameRooms(mergeRoomCategories(roomData.hotels))
+          : mergeRoomCategories(roomData.hotels),
       }
     : roomData.hotels[0];
   const payload = roomData.payload || {};
 
   // Admin / staff see which supplier each rate of a mapped hotel comes from;
   // agents never see supplier names.
-  const showSupplierBadge = isMergedResponse && !isAgentLogin();
+  // Admins always see each rate's supplier; staff only on a mapped hotel.
+  const showSupplierBadge =
+    isAdminLogin() || ((isMergedResponse || combineRooms) && !isAgentLogin());
+  // The room row carries it too on a mapped hotel, where the list mixes
+  // suppliers. A single-supplier hotel already has it in the page header.
+  const showRoomRowSupplier =
+    showSupplierBadge &&
+    (isMergedResponse || combineRooms || (supplierProgress?.expected || 0) > 1);
 
   // Supplier block (and its apiId / payload) of the rate(s) currently shown
   // in the Room Details modal — what that modal's Continue books with.
@@ -3343,7 +3542,15 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                         {/* The header is the hotel, not one supplier's
                             block — shown without the " (SUPPLIER)" suffix
                             mapped hotels carry, for every login. */}
-                        <h2 className="hotel-name mb-2">{stripSupplierSuffix(hotel.hotelName)}</h2>
+                        <h2 className="hotel-name mb-2">
+                          {roomData.masterHotelName ||
+                            supplierProgress?.masterHotelName ||
+                            stripSupplierSuffix(hotel.hotelName)}
+                        </h2>
+                        <AdminSupplierStrip
+                          supplier={supplierCodeForBlock(responseBlocks[0], roomData?.payload?.apiId)}
+                          hotelCode={responseBlocks[0]?.supplierHotelCode || roomData?.payload?.hotelCode}
+                        />
                         <div className="d-flex align-items-center gap-3 mb-2">
                           <div className="star-rating">
                             {renderStars(hotel.starRating)}
@@ -3611,6 +3818,11 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                 </div>
               </div>
 
+              <SupplierProgressNote
+                progress={supplierProgress}
+                showNames={!isAgentLogin()}
+              />
+
               <Row className="g-3">
                 <Col lg={3} md={4}>
                   <RoomFilters filters={filters} />
@@ -3638,7 +3850,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                       // (per night / pre-markup), so it can't be compared
                       // across suppliers.
                       const priceOf = (r) => {
-                        const v = isMergedResponse
+                        const v = isMergedResponse || combineRooms
                           ? displayTotalOf(r)
                           : Number(r?.rate);
                         return Number.isFinite(v)
@@ -3669,7 +3881,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                           onSelect={(key) => setSlotActiveKey(key)}
                         >
                           {sortedRoomCategories.map((category, index) => {
-                            const eventKey = index.toString();
+                            const eventKey = category._catKey || index.toString();
                             const isActive = slotActiveKey === eventKey;
                             const filteredRates = (
                               category.availableRates || []
@@ -3832,6 +4044,11 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                             if (filteredRates.length === 0) return null;
                             if (!matchesRoomSearch(category.roomCategory))
                               return null;
+                            // Picked last, so the cheapest rate is one that
+                            // passes the filters and suits this room slot.
+                            const shownRates = combineRooms
+                              ? cheapestRatesForSlot(filteredRates, roomSlotIndex)
+                              : filteredRates;
 
                             return (
                               <Accordion.Item
@@ -3848,6 +4065,28 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                       <h5 className="mb-1">
                                         {category.roomCategory}
                                       </h5>
+                                      {showRoomRowSupplier && (
+                                        <div className="d-flex flex-wrap gap-1">
+                                          {[
+                                            ...new Set(
+                                              shownRates.map((r) =>
+                                                supplierDisplayName(
+                                                  supplierCodeForBlock(blockOfRate(r), apiIdOfRate(r)),
+                                                ),
+                                              ),
+                                            ),
+                                          ].map((name) => (
+                                            <Badge
+                                              key={name}
+                                              bg="light"
+                                              text="dark"
+                                              className="border"
+                                            >
+                                              {name}
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
 
                                     <div className="d-flex align-items-center gap-3">
@@ -3862,13 +4101,13 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                               so their headers under-quoted. */}
                                           {formatPrice(
                                             Math.min(
-                                              ...filteredRates.map(displayTotalOf),
+                                              ...shownRates.map(displayTotalOf),
                                             ),
                                           )}
                                         </div>
                                         <div className="rates-count small text-muted">
-                                          {filteredRates.length} rate
-                                          {filteredRates.length !== 1
+                                          {shownRates.length} rate
+                                          {shownRates.length !== 1
                                             ? "s"
                                             : ""}{" "}
                                           available
@@ -3890,7 +4129,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                   style={isMultiRoom ? { padding: "0.5rem" } : undefined}
                                 >
                                   <Row className={isMultiRoom ? "g-2" : ""}>
-                                    {filteredRates.map((rate, rateIndex) => {
+                                    {shownRates.map((rate, rateIndex) => {
                                       // The rate's own supplier block (mapped
                                       // hotels hold several; otherwise this
                                       // is hotels[0], i.e. `hotel`).
@@ -4006,15 +4245,14 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                     </div>
                                                     {/* Mapped hotel: supplier of this
                                                         rate — admin / staff only. */}
-                                                    {showSupplierBadge &&
-                                                      rateBlock?.apiType && (
+                                                    {showSupplierBadge && (
                                                         <div className="mt-1">
                                                           <Badge
                                                             bg="light"
                                                             text="dark"
                                                             className="border"
                                                           >
-                                                            {rateBlock.apiType}
+                                                            {supplierDisplayName(supplierCodeForBlock(rateBlock, rateApiId))}
                                                           </Badge>
                                                         </div>
                                                       )}
@@ -4046,7 +4284,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                   <div className="current-price">
                                                     {formatPrice(
                                                       isMultiRoom
-                                                        ? rate.totalRate || 0
+                                                        ? slotRateValue(rate, roomSlotIndex, "totalRate") || 0
                                                         : rate.roomRateBasedOnRoomCount ||
                                                             rate.totalRate ||
                                                             0,
@@ -4308,14 +4546,13 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                       )}
                                                       {/* Mapped hotel: supplier of this
                                                           rate — admin / staff only. */}
-                                                      {showSupplierBadge &&
-                                                        rateBlock?.apiType && (
+                                                      {showSupplierBadge && (
                                                           <Badge
                                                             bg="light"
                                                             text="dark"
                                                             className="border"
                                                           >
-                                                            {rateBlock.apiType}
+                                                            {supplierDisplayName(supplierCodeForBlock(rateBlock, rateApiId))}
                                                           </Badge>
                                                         )}
                                                     </div>
@@ -4383,7 +4620,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                                   <div className="fs-5 fw-bold text-primary">
                                                     {formatPrice(
                                                       isMultiRoom
-                                                        ? rate.totalRate || 0
+                                                        ? slotRateValue(rate, roomSlotIndex, "totalRate") || 0
                                                         : rate.roomRateBasedOnRoomCount ||
                                                             rate.totalRate ||
                                                             0,
@@ -4607,8 +4844,11 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                       {slotSelection.selectedRate.roomCategory}
                                       {" — "}
                                       {formatPrice(
-                                        slotSelection.selectedRate.totalRate ||
-                                          0,
+                                        slotRateValue(
+                                          slotSelection.selectedRate,
+                                          roomSlotIndex,
+                                          "totalRate",
+                                        ) || 0,
                                       )}
                                     </Badge>
                                   )

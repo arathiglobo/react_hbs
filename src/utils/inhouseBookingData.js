@@ -28,10 +28,25 @@ export const isNonRefundableRate = (nonRefundable) => {
   return value === "true" || value === "y" || value === "yes";
 };
 
-/** Sum one numeric rate field across the picked room slots. */
+/**
+ * Room slot `slotIndex`'s own amount for `key` ("totalRate" /
+ * "totalRateWithoutMarkup"). On a multi-room in-house search the rate's
+ * `totalRate` is the stay total for ALL requested rooms together, so using
+ * it per slot charged that total once per room. The backend now also sends
+ * `perRoomRates[i]` — room i on its own, agent markup applied per room —
+ * and this prefers it. Falls back to the rate's own field when there is no
+ * per-room entry (single-room searches, other suppliers).
+ */
+export const slotRateValue = (rate, slotIndex, key) => {
+  const perRoom = rate?.perRoomRates?.[slotIndex];
+  if (perRoom && perRoom[key] != null) return perRoom[key];
+  return rate?.[key];
+};
+
+/** Sum one numeric rate field across the picked room slots (slot i = room i). */
 export const sumSelectedRooms = (selectedRooms, key) =>
   selectedRooms.reduce(
-    (acc, r) => acc + (Number(r.selectedRate?.[key]) || 0),
+    (acc, r, i) => acc + (Number(slotRateValue(r.selectedRate, i, key)) || 0),
     0,
   );
 
@@ -160,8 +175,9 @@ export const buildInhouseMultiBookingData = ({
       mealPlan: r.selectedRate?.mealPlan,
       contractLabel: r.selectedRate?.contractLabel,
       nonRefundable: r.selectedRate?.nonRefundable,
-      rate: r.selectedRate?.totalRate,
-      rateWithoutMarkup: r.selectedRate?.totalRateWithoutMarkup,
+      // This room's own price (HotelBookingPage posts it as rooms[i].rate).
+      rate: slotRateValue(r.selectedRate, i, "totalRate"),
+      rateWithoutMarkup: slotRateValue(r.selectedRate, i, "totalRateWithoutMarkup"),
       roomRateBasedOnRoomCount: r.selectedRate?.roomRateBasedOnRoomCount,
       roomRateBasedOnRoomCount_WithoutMarkup:
         r.selectedRate?.roomRateBasedOnRoomCount_WithoutMarkup,

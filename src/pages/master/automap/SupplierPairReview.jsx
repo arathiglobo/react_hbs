@@ -24,6 +24,11 @@ export default function SupplierPairReview({ suppliers, active, canAct, onChange
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [acting, setActing] = useState(null);
+  const [minConfidence, setMinConfidence] = useState("");
+  const [maxDistance, setMaxDistance] = useState("");
+  const [reason, setReason] = useState("");
+  const [selected, setSelected] = useState(() => new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
   const requestSeq = useRef(0);
 
   useEffect(() => {
@@ -40,12 +45,25 @@ export default function SupplierPairReview({ suppliers, active, canAct, onChange
       if (!silent) setLoading(true);
       try {
         const res = await axiosInstance.get("/api/hotel-mapping/auto/supplier-pairs", {
-          params: { search: debounced || undefined, supplier: supplier || undefined, page, size },
+          params: {
+            search: debounced || undefined,
+            supplier: supplier || undefined,
+            minConfidence: minConfidence || undefined,
+            maxDistance: maxDistance || undefined,
+            reason: reason || undefined,
+            page,
+            size,
+          },
           timeout: 30000,
         });
         if (seq !== requestSeq.current) return;
         setData(res.data);
         setError(null);
+        // A selection only ever covers rows the admin can see on this page.
+        setSelected((prev) => {
+          const visible = new Set((res.data?.content || []).map((p) => p.id));
+          return new Set([...prev].filter((id) => visible.has(id)));
+        });
       } catch (err) {
         if (seq !== requestSeq.current) return;
         setError(err?.response?.data?.error || err?.response?.data?.message || "The supplier pair list could not be loaded.");
@@ -53,7 +71,7 @@ export default function SupplierPairReview({ suppliers, active, canAct, onChange
         if (seq === requestSeq.current) setLoading(false);
       }
     },
-    [debounced, supplier, page, size],
+    [debounced, supplier, minConfidence, maxDistance, reason, page, size],
   );
 
   useEffect(() => {
@@ -128,10 +146,115 @@ export default function SupplierPairReview({ suppliers, active, canAct, onChange
   };
 
   const content = data?.content || [];
+  const allOnPageSelected = content.length > 0 && content.every((p) => selected.has(p.id));
+
+  const togglePage = () => {
+    setSelected(allOnPageSelected ? new Set() : new Set(content.map((p) => p.id)));
+  };
+
+  const toggleRow = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const bulk = async (action) => {
+    const approving = action === "APPROVE";
+    const rows = content.filter((p) => selected.has(p.id));
+    const sample = rows
+      .slice(0, 5)
+      .map((p) => `<li>${escapeHtml(p.a.name || p.a.supplierHotelId)} = ${escapeHtml(p.b.name || p.b.supplierHotelId)}</li>`)
+      .join("");
+    const confirm = await Swal.fire({
+      title: approving ? `Map ${rows.length} selected pairs?` : `Reject ${rows.length} selected pairs?`,
+      html:
+        `<div class="text-start small"><ul class="ps-3 mb-2">${sample}</ul>` +
+        (rows.length > 5 ? `<div class="mb-2">and ${rows.length - 5} more.</div>` : "") +
+        `<div class="text-muted">${
+          approving
+            ? "The server re-checks each pair before saving, and any that fails is left as it is."
+            : "These pairs will not be proposed again."
+        } Your login is recorded.</div></div>`,
+      icon: approving ? "question" : "warning",
+      showCancelButton: true,
+      confirmButtonText: approving ? "Yes, map them" : "Reject",
+      cancelButtonText: "Cancel",
+      confirmButtonColor: approving ? "#198754" : "#dc3545",
+    });
+    if (!confirm.isConfirmed) return;
+    setBulkBusy(true);
+    try {
+      const res = await axiosInstance.post(
+        "/api/hotel-mapping/auto/supplier-pairs/bulk",
+        { ids: rows.map((p) => p.id), action },
+        { timeout: 300000 },
+      );
+      const { done, failed, errors } = res.data;
+      if (failed > 0) {
+        toast.error(`${done} done, ${failed} failed. ${errors?.[0] || ""}`, { duration: 8000 });
+      } else {
+        toast.success(`${done} pair(s) ${approving ? "mapped" : "rejected"}.`);
+      }
+      setSelected(new Set());
+      await load(true);
+      if (onChanged) onChanged();
+    } catch (err) {
+      toast.error(err?.response?.data?.error || "The selected pairs could not be saved.");
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   return (
     <div className="d-flex flex-column gap-3">
       <div className="ahm-panel p-3 ahm-filters">
+        <div className="row g-2 align-items-end mb-2">
+          <div className="col-md-4">
+            <Form.Label className="small fw-semibold text-muted mb-1">Match score</Form.Label>
+            <Form.Select
+              value={minConfidence}
+              onChange={(e) => { setMinConfidence(e.target.value); setPage(0); }}
+              aria-label="Minimum match score"
+            >
+              <option value="">Any score</option>
+              <option value="99">99% or more</option>
+              <option value="95">95% or more</option>
+              <option value="90">90% or more</option>
+            </Form.Select>
+          </div>
+          <div className="col-md-4">
+            <Form.Label className="small fw-semibold text-muted mb-1">Distance apart</Form.Label>
+            <Form.Select
+              value={maxDistance}
+              onChange={(e) => { setMaxDistance(e.target.value); setPage(0); }}
+              aria-label="Maximum distance apart"
+            >
+              <option value="">Any distance</option>
+              <option value="50">Within 50 m</option>
+              <option value="100">Within 100 m</option>
+              <option value="300">Within 300 m</option>
+              <option value="1000">Within 1 km</option>
+            </Form.Select>
+          </div>
+          <div className="col-md-4">
+            <Form.Label className="small fw-semibold text-muted mb-1">Reason</Form.Label>
+            <Form.Select
+              value={reason}
+              onChange={(e) => { setReason(e.target.value); setPage(0); }}
+              aria-label="Why the pair is waiting"
+            >
+              <option value="">Any reason</option>
+              {["NAME_DIFFERS", "TOO_FAR", "CONFLICT"].map((r) => (
+                <option key={r} value={r}>
+                  {reasonLabel(r)}
+                </option>
+              ))}
+            </Form.Select>
+          </div>
+        </div>
         <div className="row g-2 align-items-end">
           <div className="col-lg-6 col-md-8">
             <Form.Label className="small fw-semibold text-muted mb-1">Search</Form.Label>
@@ -184,9 +307,33 @@ export default function SupplierPairReview({ suppliers, active, canAct, onChange
           </span>
           {loading && <Spinner animation="border" size="sm" role="status" aria-label="Loading" />}
         </div>
+        {canAct && selected.size > 0 && (
+          <div className="d-flex flex-wrap align-items-center gap-2 px-3 py-2 border-bottom">
+            <span className="small fw-semibold">{selected.size} selected</span>
+            <Button size="sm" variant="success" disabled={bulkBusy} onClick={() => bulk("APPROVE")}>
+              {bulkBusy ? <Spinner animation="border" size="sm" /> : "Map selected"}
+            </Button>
+            <Button size="sm" variant="outline-danger" disabled={bulkBusy} onClick={() => bulk("REJECT")}>
+              Reject selected
+            </Button>
+            <Button size="sm" variant="link" disabled={bulkBusy} onClick={() => setSelected(new Set())}>
+              Clear
+            </Button>
+          </div>
+        )}
         <Table responsive hover className="ahm-table">
           <thead>
             <tr>
+              {canAct && (
+                <th style={{ width: 36 }}>
+                  <Form.Check
+                    aria-label="Select all pairs on this page"
+                    checked={allOnPageSelected}
+                    disabled={bulkBusy || content.length === 0}
+                    onChange={togglePage}
+                  />
+                </th>
+              )}
               <th style={{ width: 44 }}>#</th>
               <th>Hotel A</th>
               <th>Hotel B</th>
@@ -198,6 +345,16 @@ export default function SupplierPairReview({ suppliers, active, canAct, onChange
           <tbody>
             {content.map((p, idx) => (
               <tr key={p.id}>
+                {canAct && (
+                  <td>
+                    <Form.Check
+                      aria-label={`Select pair ${p.id}`}
+                      checked={selected.has(p.id)}
+                      disabled={bulkBusy}
+                      onChange={() => toggleRow(p.id)}
+                    />
+                  </td>
+                )}
                 <td className="text-muted">{page * size + idx + 1}</td>
                 <td>
                   <PairSide side={p.a} />
@@ -257,11 +414,11 @@ export default function SupplierPairReview({ suppliers, active, canAct, onChange
             ))}
             {!loading && data && content.length === 0 && (
               <tr>
-                <td colSpan={canAct ? 6 : 5} className="ahm-empty">
+                <td colSpan={canAct ? 7 : 5} className="ahm-empty">
                   <div className="ahm-empty-icon">
                     <i className="fas fa-clipboard-check" aria-hidden="true"></i>
                   </div>
-                  {debounced || supplier
+                  {debounced || supplier || minConfidence || maxDistance || reason
                     ? "No pair matches these filters."
                     : "Nothing is waiting for review. Pairs appear here when two suppliers' hotels look alike but are not a 100% match."}
                 </td>
@@ -269,7 +426,7 @@ export default function SupplierPairReview({ suppliers, active, canAct, onChange
             )}
             {loading && !data && (
               <tr>
-                <td colSpan={canAct ? 6 : 5} className="text-center py-4">
+                <td colSpan={canAct ? 7 : 5} className="text-center py-4">
                   <Spinner animation="border" size="sm" className="me-2" /> Loading pairs…
                 </td>
               </tr>

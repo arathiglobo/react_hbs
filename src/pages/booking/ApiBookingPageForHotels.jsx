@@ -1331,10 +1331,19 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
       };
 
       const agentId = effectivePayload.agentId;
-      const requiredAmount = effectivePayload.rooms.reduce(
-        (sum, r) => sum + (r.rate || 0),
-        0,
-      );
+      // GRN (apiId 20): rooms sharing a rateKey each carry the ONE bundle
+      // price, so count it once — the same rule as `totalPrice` below, the
+      // backend's applyBundleSplit and the CC Avenue amount. Other suppliers
+      // sum every room as before.
+      const seenGrnRateKeys = new Set();
+      const requiredAmount = effectivePayload.rooms.reduce((sum, r, i) => {
+        if (Number(effectivePayload.apiId) === 20) {
+          const key = r.rateKey || `row-${i}`;
+          if (seenGrnRateKeys.has(key)) return sum;
+          seenGrnRateKeys.add(key);
+        }
+        return sum + (r.rate || 0);
+      }, 0);
 
       // A hold takes no credit at create — ATHARVA holds the room at the
       // supplier and vouchers later; a hold-capable API books the room now
