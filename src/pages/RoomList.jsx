@@ -36,6 +36,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/RoomList.css";
 import axiosInstance from "../components/AxiosInstance";
+import AdminSupplierStrip from "../components/AdminSupplierStrip";
 import { formatFlexibleDate } from "../utils/dateUtils";
 import {
   RateDeadlinePill,
@@ -329,9 +330,14 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
           return;
         }
 
+        // A multi-room search of a mapped hotel may be handed to the merged
+        // room list below, so it carries the GRN / GoGlobal multi-room
+        // options that page sends (other suppliers ignore them).
         const res = await axiosInstance.post(
           "/api/hotel-rooms/search",
-          payload,
+          (payload.rooms || []).length > 1
+            ? { ...payload, includeNonBundled: true, goglobalPerRoomMode: true }
+            : payload,
         );
 
         // console.log("room search res::", res);
@@ -1322,6 +1328,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                             " (INHOUSE)" supplier suffix — the header is the
                             hotel, so it is shown without it. */}
                         <h2 className="hotel-name mb-2">{stripSupplierSuffix(hotel.hotelName)}</h2>
+                        <AdminSupplierStrip supplier={hotel.apiType || "INHOUSE"} hotelCode={hotel.supplierHotelCode || payload?.hotelCode} />
                         <div className="d-flex align-items-center gap-3 mb-2">
                           <div className="star-rating">
                             {renderStars(hotel.starRating)}

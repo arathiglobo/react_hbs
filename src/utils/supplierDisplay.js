@@ -45,3 +45,53 @@ export function displayHotelName(name) {
   if (typeof name !== "string" || !isAgentLogin()) return name;
   return stripSupplierSuffix(name);
 }
+
+const SUPPLIER_NAMES = {
+  ATHARVA: "Atharva",
+  DARINA: "Darina",
+  GOGLOBAL: "GoGlobal",
+  GRN: "GRN",
+  INHOUSE: "In-house",
+  IWTX: "IWTX",
+  JUMEIRAH: "Jumeirah",
+  JUNIPER: "Juniper",
+  RATEHAWK: "RateHawk",
+  X3: "X3",
+};
+
+const SUPPLIER_BY_API_ID = {
+  1: "INHOUSE",
+  3: "ATHARVA",
+  10: "JUMEIRAH",
+  12: "IWTX",
+  14: "RATEHAWK",
+  15: "X3",
+  16: "DARINA",
+  17: "JUNIPER",
+  20: "GRN",
+  21: "GOGLOBAL",
+};
+
+/** True for ADMIN and SUPER_ADMIN logins. Display only: the backend enforces access itself. */
+export function isAdminLogin() {
+  try {
+    const active = (sessionStorage.getItem("currentActiveRole") || "").trim().toLowerCase();
+    const first = (sessionStorage.getItem("userRole") || "").split(",")[0].trim().toLowerCase();
+    const role = active || first;
+    return role === "admin" || role === "super_admin";
+  } catch {
+    return false;
+  }
+}
+
+export function supplierDisplayName(code) {
+  const key = String(code || "").trim().toUpperCase();
+  return SUPPLIER_NAMES[key] || key;
+}
+
+/** Supplier code of a room response block, falling back to the numeric supplier id. */
+export function supplierCodeForBlock(block, fallbackApiId) {
+  const type = String(block?.apiType || "").trim().toUpperCase();
+  if (type) return type;
+  return SUPPLIER_BY_API_ID[Number(block?.apiId)] || SUPPLIER_BY_API_ID[Number(fallbackApiId)] || "";
+}
