@@ -808,6 +808,12 @@ export default function Sidebar() {
           label: "Ledger",
           to: "/inhouse-accounts/ledger",
         },
+        {
+          // Unlike the two above, admin only: the list covers every agent.
+          label: "Credit Exceptions",
+          to: "/inhouse-accounts/booking-credit-exceptions",
+          roles: ["admin"],
+        },
         // {
         //   label: "Payment Gateway Transactions",
         //   to: "/inhouse-accounts/payment-gateway-transactions",
