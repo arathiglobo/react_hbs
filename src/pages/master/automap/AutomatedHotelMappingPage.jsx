@@ -12,7 +12,6 @@ import StatusPanel from "./StatusPanel";
 import MappedHotelsTab from "./MappedHotelsTab";
 import ManualReviewTab from "./ManualReviewTab";
 import NotMappedTab from "./NotMappedTab";
-import GiataPreviewTab from "./GiataPreviewTab";
 import CitiesReviewTab from "./CitiesReviewTab";
 import MappingRulesTab from "./MappingRulesTab";
 import useAutoMappingStatus from "./useAutoMappingStatus";
@@ -26,7 +25,7 @@ import { fmtNumber, statusMeta } from "./automapFormat";
  * inherits a clone of the opener's per-tab session and is already logged
  * in — see utils/authSession.js). It replaces the earlier modal popup.
  *
- * Not Mapped, GIATA Preview, Cities and Rules & Settings are the admin review
+ * Not Mapped, Cities and Rules & Settings are the admin review
  * tabs (see each component). The first three tabs are backed by /api/hotel-mapping/auto/*:
  *   Status        — live engine state (running / paused + reason / completed /
  *                   error), system load, progress figures, supplier health,
@@ -218,16 +217,6 @@ export default function AutomatedHotelMappingPage() {
                   }
                 >
                   <NotMappedTab suppliers={suppliers} active={tab === "unmapped"} />
-                </Tab>
-                <Tab
-                  eventKey="giata"
-                  title={
-                    <span>
-                      <i className="fas fa-fingerprint me-1" aria-hidden="true"></i> GIATA Preview
-                    </span>
-                  }
-                >
-                  <GiataPreviewTab active={tab === "giata"} onChanged={refresh} />
                 </Tab>
                 <Tab
                   eventKey="cities"

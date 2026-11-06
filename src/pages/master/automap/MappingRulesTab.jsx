@@ -171,7 +171,6 @@ export default function MappingRulesTab({ active }) {
                 <th className="text-end">Mapped</th>
                 <th className="text-end">Not mapped</th>
                 <th className="text-end">Still to check</th>
-                <th>GIATA codes</th>
                 <th>Note</th>
               </tr>
             </thead>
@@ -186,7 +185,6 @@ export default function MappingRulesTab({ active }) {
                   <td className="text-end">{fmtNumber(s.mappedHotels)}</td>
                   <td className="text-end">{fmtNumber(s.notMappedHotels)}</td>
                   <td className="text-end">{fmtNumber(s.waitingHotels)}</td>
-                  <td>{s.hasGiataCodes ? "Yes" : "No"}</td>
                   <td className="small text-muted">{s.note}</td>
                 </tr>
               ))}
