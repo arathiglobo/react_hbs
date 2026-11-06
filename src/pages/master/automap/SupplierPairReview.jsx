@@ -247,7 +247,7 @@ export default function SupplierPairReview({ suppliers, active, canAct, onChange
               aria-label="Why the pair is waiting"
             >
               <option value="">Any reason</option>
-              {["NAME_DIFFERS", "TOO_FAR", "CONFLICT", "GIATA_NAME_DIFFERS", "GIATA_TOO_FAR"].map((r) => (
+              {["NAME_DIFFERS", "TOO_FAR", "CONFLICT"].map((r) => (
                 <option key={r} value={r}>
                   {reasonLabel(r)}
                 </option>
