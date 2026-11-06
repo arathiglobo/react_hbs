@@ -129,7 +129,7 @@ export default function MappedHotelsTab({ suppliers, active, refreshKey }) {
           {supplierOnly && (
             <span className="small text-muted">
               Hotels two or more suppliers sell that we have no in-house hotel for. Search shows each as one hotel and its
-              room list shows every supplier's rooms.
+              room list draws on every supplier's rooms.
             </span>
           )}
         </div>

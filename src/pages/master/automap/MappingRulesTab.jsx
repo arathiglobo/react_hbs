@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Alert, Badge, Button, Spinner, Table } from "react-bootstrap";
+import { Alert, Badge, Button, Form, Spinner, Table } from "react-bootstrap";
 import axiosInstance from "../../../components/AxiosInstance";
-import { fmtNumber } from "./automapFormat";
+import { fmtDateTime, fmtNumber } from "./automapFormat";
 
 const STEPS = [
   {
@@ -30,7 +30,7 @@ const STEPS = [
   },
   {
     title: "Use in search",
-    text: "Linked hotels appear once in search at the cheapest rate, and the room page shows every linked supplier's rates.",
+    text: "Linked hotels appear once in search at the cheapest rate. The room page then follows the Room Mapping setting above.",
   },
   {
     title: "Not mapped",
@@ -43,6 +43,33 @@ export default function MappingRulesTab({ active }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [roomMapping, setRoomMapping] = useState(null);
+  const [roomMappingSaving, setRoomMappingSaving] = useState(false);
+  const [roomMappingError, setRoomMappingError] = useState(null);
+
+  const loadRoomMapping = useCallback(async () => {
+    try {
+      const res = await axiosInstance.get("/api/hotel-mapping/auto/room-mapping", { timeout: 30000 });
+      setRoomMapping(res.data);
+      setRoomMappingError(null);
+    } catch (err) {
+      setRoomMappingError(err?.response?.data?.error || "The Room Mapping setting could not be loaded.");
+    }
+  }, []);
+
+  // The box follows what the server saved, so a failed save leaves it as it was.
+  const saveRoomMapping = async (enabled) => {
+    setRoomMappingSaving(true);
+    try {
+      const res = await axiosInstance.post("/api/hotel-mapping/auto/room-mapping", { enabled }, { timeout: 30000 });
+      setRoomMapping(res.data);
+      setRoomMappingError(null);
+    } catch (err) {
+      setRoomMappingError(err?.response?.data?.error || "The Room Mapping setting could not be saved.");
+    } finally {
+      setRoomMappingSaving(false);
+    }
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,13 +85,53 @@ export default function MappingRulesTab({ active }) {
   }, []);
 
   useEffect(() => {
-    if (active) load();
-  }, [active, load]);
+    if (active) {
+      load();
+      loadRoomMapping();
+    }
+  }, [active, load, loadRoomMapping]);
 
   const groups = [...new Set((data?.settings || []).map((s) => s.group))];
 
   return (
     <div className="d-flex flex-column gap-3">
+      <div className="ahm-panel p-3">
+        <h6 className="fw-bold">Room list of mapped hotels</h6>
+        {roomMappingError && (
+          <Alert variant="danger" className="py-2 small">
+            {roomMappingError}
+          </Alert>
+        )}
+        <Form.Check
+          type="checkbox"
+          id="room-mapping-enabled"
+          label="Room Mapping"
+          className="fw-semibold"
+          checked={roomMapping?.enabled === true}
+          disabled={!roomMapping || roomMappingSaving}
+          onChange={(e) => saveRoomMapping(e.target.checked)}
+        />
+        <ul className="small text-muted mt-2 mb-2 ps-3">
+          <li>
+            <strong>Ticked:</strong> rooms with the same name from different suppliers are combined into one row, showing
+            the cheapest rate.
+          </li>
+          <li>
+            <strong>Unticked:</strong> every supplier's rooms are listed separately, with the supplier name for admins and
+            staff.
+          </li>
+        </ul>
+        <div className="small text-muted">
+          Applies from the next room search, with no restart.
+          {roomMapping?.updatedBy && (
+            <>
+              {" "}
+              Last changed by {roomMapping.updatedBy} on {fmtDateTime(roomMapping.updatedAt)}.
+            </>
+          )}
+        </div>
+      </div>
+
       <div className="ahm-panel p-3">
         <h6 className="fw-bold">How a hotel gets mapped</h6>
         <ol className="mb-0 ps-3">

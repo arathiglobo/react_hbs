@@ -5,9 +5,9 @@ import { CLIENT_LOCATION_HEADER, getClientLocationHeader } from "./geoLocation";
  * Room search that shows rooms while the suppliers are still answering.
  *
  * POST /api/hotel-rooms/search/stream answers with newline-delimited JSON:
- *   {"type":"start",   "masterHotelId", "masterHotelName", "suppliers":[{apiType,apiId,supplierHotelCode}]}
+ *   {"type":"start",   "masterHotelId", "masterHotelName", "roomMappingEnabled", "suppliers":[{apiType,apiId,supplierHotelCode}]}
  *   {"type":"supplier","status":{apiType,apiId,status,elapsedMs,roomCount,…}, "hotels":[…that supplier's blocks…]}
- *   {"type":"done",    "success", "message", "masterHotelId", "masterHotelName", "supplierStatus":[…]}
+ *   {"type":"done",    "success", "message", "masterHotelId", "masterHotelName", "roomMappingEnabled", "supplierStatus":[…]}
  * One "supplier" line per supplier, sent as soon as that supplier answers, so
  * the first rooms show in a second or two instead of after the slowest one.
  *

@@ -170,11 +170,10 @@ const isInhouseResponseBlock = (h) =>
 /**
  * One list of every supplier block's room types for a mapped hotel. Each
  * supplier's room type stays its own entry, even when two suppliers use the
- * same name (owner decision: the hotel is one, its room types are listed
- * individually); the render sorts them cheapest first. Each rate keeps its
- * `_blockIndex`, and each room type gets a `_catKey` that does not change
- * while more suppliers arrive, so an open room type stays open. A single block
- * is returned untouched.
+ * same name (Room Mapping off; combineSameRooms below handles on); the render
+ * sorts them cheapest first. Each rate keeps its `_blockIndex`, and each room
+ * type gets a `_catKey` that does not change while more suppliers arrive, so an
+ * open room type stays open. A single block is returned untouched.
  */
 const mergeRoomCategories = (blocks) => {
   if (!Array.isArray(blocks) || blocks.length === 0) return [];
@@ -186,6 +185,37 @@ const mergeRoomCategories = (blocks) => {
       availableRates: [...(cat.availableRates || [])],
     })),
   );
+};
+
+// Two names are the same room only when they differ in capitals or spacing.
+// Anything looser could combine two different rooms.
+const roomNameKey = (name) =>
+  String(name ?? "").toLowerCase().replace(/\s+/g, "");
+
+/**
+ * Room Mapping on: one entry per room name across all suppliers. Rate objects
+ * are kept as they are, so a picked rate stays the same object and each rate
+ * still books through its own supplier. `_catKey` comes from the name, so a
+ * room stays open while more suppliers answer. A room with no name can't be
+ * matched and keeps its own entry.
+ */
+const combineSameRooms = (categories) => {
+  const rooms = new Map();
+  categories.forEach((cat, index) => {
+    const nameKey = roomNameKey(cat?.roomCategory);
+    const key = nameKey ? `room-${nameKey}` : cat?._catKey || `unnamed-${index}`;
+    const room = rooms.get(key);
+    if (room) {
+      room.availableRates.push(...(cat?.availableRates || []));
+    } else {
+      rooms.set(key, {
+        ...cat,
+        _catKey: key,
+        availableRates: [...(cat?.availableRates || [])],
+      });
+    }
+  });
+  return [...rooms.values()];
 };
 
 /**
@@ -412,6 +442,12 @@ const ExternalApiRoomList = () => {
   // resolve to hotels[0] / the search payload — i.e. today's behaviour.
   const responseBlocks = roomData?.hotels || [];
   const isMergedResponse = responseBlocks.length > 1;
+  // Room Mapping setting, only ever true for a mapped hotel: combine same-named
+  // rooms and show the cheapest rate. While the suppliers are still answering
+  // the value comes from the stream's first line (supplierProgress).
+  const combineRooms = Boolean(
+    roomData?.roomMappingEnabled ?? supplierProgress?.roomMappingEnabled,
+  );
   const blockIndexOfRate = (rate) =>
     Number.isInteger(rate?._blockIndex) && responseBlocks[rate._blockIndex]
       ? rate._blockIndex
@@ -1404,6 +1440,7 @@ const ExternalApiRoomList = () => {
                   statuses: [],
                   done: false,
                   masterHotelName: ev.masterHotelName,
+                  roomMappingEnabled: ev.roomMappingEnabled === true,
                 }),
               onSupplier: (ev) => {
                 (ev.hotels || []).filter(keepBlock).forEach((h) => {
@@ -1599,6 +1636,38 @@ const ExternalApiRoomList = () => {
         ? rate?.totalRate || 0
         : rate?.roomRateBasedOnRoomCount || rate?.totalRate || 0,
     ) || 0;
+
+  /**
+   * Room Mapping on: what a combined room shows for one room slot, out of the
+   * rates already allowed there. That is its cheapest rate, plus a rate already
+   * picked for this slot if a cheaper one has since appeared, so the pick can
+   * still be seen and removed. In a multi-room search "cheapest" means cheapest
+   * among the rates this slot can still take (one booking = one supplier, and
+   * Atharva needs one rate group); otherwise, once Room 1 is picked, Room 2
+   * could show only another supplier's rate that can't be chosen.
+   */
+  const cheapestRatesForSlot = (rates, roomSlotIndex) => {
+    const canBePicked = (rate) => {
+      if (!isMultiRoom) return true;
+      if (crossSupplierLockSlot(roomSlotIndex, rate) !== -1) return false;
+      if (String(selectionApiIdOfRate(rate) || "") !== "3" || !rate?.hKey) return true;
+      const otherPick = selectedRooms.find(
+        (r, i) => i !== roomSlotIndex && r?.selectedRate,
+      );
+      const otherHKey = otherPick?.selectedRate?.hKey;
+      return !otherHKey || otherHKey === rate.hKey;
+    };
+    const pool = rates.filter(canBePicked);
+    // A rate with no price must not win and hide the real ones.
+    const priceToCompare = (rate) => displayTotalOf(rate) || Infinity;
+    const cheapest = (pool.length > 0 ? pool : rates).reduce((best, rate) =>
+      priceToCompare(rate) < priceToCompare(best) ? rate : best,
+    );
+    const picked = isMultiRoom ? selectedRooms[roomSlotIndex]?.selectedRate : null;
+    return picked && picked !== cheapest && rates.includes(picked)
+      ? [cheapest, picked]
+      : [cheapest];
+  };
 
   // Nights across the searched stay — derived once at the render scope so
   // both the rate-card breakdown ("N nights × M rooms") and the Booking
@@ -3239,13 +3308,16 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
 
   // Hotel header + the room list the page renders. A hotel mapped across
   // several suppliers is ONE hotel: the header shows the group's name
-  // (masterHotelName) and every supplier's room types are listed one by one
-  // in a single list, cheapest first; each rate still knows its own block
+  // (masterHotelName). Its rooms follow the Room Mapping setting: on, same-named
+  // rooms are combined; off, every supplier's room types are listed one by one.
+  // Either way the list is cheapest first and each rate still knows its own block
   // (`_blockIndex`). Single-supplier hotels render hotels[0] exactly as before.
-  const hotel = isMergedResponse
+  const hotel = isMergedResponse || combineRooms
     ? {
         ...roomData.hotels[0],
-        roomCategories: mergeRoomCategories(roomData.hotels),
+        roomCategories: combineRooms
+          ? combineSameRooms(mergeRoomCategories(roomData.hotels))
+          : mergeRoomCategories(roomData.hotels),
       }
     : roomData.hotels[0];
   const payload = roomData.payload || {};
@@ -3253,7 +3325,13 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
   // Admin / staff see which supplier each rate of a mapped hotel comes from;
   // agents never see supplier names.
   // Admins always see each rate's supplier; staff only on a mapped hotel.
-  const showSupplierBadge = isAdminLogin() || (isMergedResponse && !isAgentLogin());
+  const showSupplierBadge =
+    isAdminLogin() || ((isMergedResponse || combineRooms) && !isAgentLogin());
+  // The room row carries it too on a mapped hotel, where the list mixes
+  // suppliers. A single-supplier hotel already has it in the page header.
+  const showRoomRowSupplier =
+    showSupplierBadge &&
+    (isMergedResponse || combineRooms || (supplierProgress?.expected || 0) > 1);
 
   // Supplier block (and its apiId / payload) of the rate(s) currently shown
   // in the Room Details modal — what that modal's Continue books with.
@@ -3767,7 +3845,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                       // (per night / pre-markup), so it can't be compared
                       // across suppliers.
                       const priceOf = (r) => {
-                        const v = isMergedResponse
+                        const v = isMergedResponse || combineRooms
                           ? displayTotalOf(r)
                           : Number(r?.rate);
                         return Number.isFinite(v)
@@ -3961,6 +4039,11 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                             if (filteredRates.length === 0) return null;
                             if (!matchesRoomSearch(category.roomCategory))
                               return null;
+                            // Picked last, so the cheapest rate is one that
+                            // passes the filters and suits this room slot.
+                            const shownRates = combineRooms
+                              ? cheapestRatesForSlot(filteredRates, roomSlotIndex)
+                              : filteredRates;
 
                             return (
                               <Accordion.Item
@@ -3977,6 +4060,28 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                       <h5 className="mb-1">
                                         {category.roomCategory}
                                       </h5>
+                                      {showRoomRowSupplier && (
+                                        <div className="d-flex flex-wrap gap-1">
+                                          {[
+                                            ...new Set(
+                                              shownRates.map((r) =>
+                                                supplierDisplayName(
+                                                  supplierCodeForBlock(blockOfRate(r), apiIdOfRate(r)),
+                                                ),
+                                              ),
+                                            ),
+                                          ].map((name) => (
+                                            <Badge
+                                              key={name}
+                                              bg="light"
+                                              text="dark"
+                                              className="border"
+                                            >
+                                              {name}
+                                            </Badge>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
 
                                     <div className="d-flex align-items-center gap-3">
@@ -3991,13 +4096,13 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                               so their headers under-quoted. */}
                                           {formatPrice(
                                             Math.min(
-                                              ...filteredRates.map(displayTotalOf),
+                                              ...shownRates.map(displayTotalOf),
                                             ),
                                           )}
                                         </div>
                                         <div className="rates-count small text-muted">
-                                          {filteredRates.length} rate
-                                          {filteredRates.length !== 1
+                                          {shownRates.length} rate
+                                          {shownRates.length !== 1
                                             ? "s"
                                             : ""}{" "}
                                           available
@@ -4019,7 +4124,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                   style={isMultiRoom ? { padding: "0.5rem" } : undefined}
                                 >
                                   <Row className={isMultiRoom ? "g-2" : ""}>
-                                    {filteredRates.map((rate, rateIndex) => {
+                                    {shownRates.map((rate, rateIndex) => {
                                       // The rate's own supplier block (mapped
                                       // hotels hold several; otherwise this
                                       // is hotels[0], i.e. `hotel`).
