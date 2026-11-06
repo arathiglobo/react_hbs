@@ -16,6 +16,14 @@ import AgentSelect from "../components/AgentSelect";
 import AgentCreditBalance from "../components/AgentCreditBalance";
 import axiosInstance from "../components/AxiosInstance";
 import { logAgentSearch } from "../utils/agentSearchLog";
+import HotelSearchProgressBar from "../components/HotelSearchProgressBar";
+import {
+  incompleteSearchNotice,
+  mapHotelRow,
+  pollUntilFinished,
+  readProgress,
+  roomListApiId,
+} from "../utils/hotelSearchResults";
 import AdvertisementCarousel from "../components/AdvertisementCarousel";
 import TimeApplyPicker from "../components/TimeApplyPicker";
 import PriceRangeSlider from "../components/PriceRangeSlider";
@@ -25,109 +33,6 @@ import { ENABLE_MAP_PREVIEW } from "../config/featureFlags";
 import { FaSearch, FaStar, FaInfoCircle } from "react-icons/fa";
 import { useNavigate, useLocation } from "react-router-dom";
 import "../styles/HotelSearch.css";
-
-// ─────────────────────────────────────────────
-// Search Progress Bar
-// ─────────────────────────────────────────────
-// Default supplier list — used when the caller has no company restriction
-// or when the parent hasn't computed a narrower list yet. Kept out of
-// component body so its identity is stable across renders.
-const DEFAULT_PROGRESS_CHANNELS = [
-  "inhouse",
-  "iwtx",
-  "x3",
-  "ratehawk",
-  "darina",
-  "atharva",
-  "jumeirah",
-  "grn",
-];
-
-function SearchProgressBar({ pollStatus, completedChannels, channels, isLoading }) {
-  const effectiveChannels =
-    Array.isArray(channels) && channels.length > 0
-      ? channels
-      : DEFAULT_PROGRESS_CHANNELS;
-  const [progress, setProgress] = useState(0);
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    // isLoading covers the tiny window between the user's Search click and
-    // pollStatus flipping to IN_PROGRESS (handleSearchSubmit resets pollStatus
-    // to IDLE first). Without it, a Modify Search briefly hides the bar
-    // because the previous COMPLETED state is wiped before the new poll has
-    // started — the exact "accidentally hides" case the spec warns about.
-    //
-    // TIMEOUT counts as active too: the 30 s poll window has ended, but the
-    // late-results check is still waiting on slower suppliers (GRN can take
-    // 70-80 s). The bar stays up until the backend reports every active
-    // supplier finished (pollStatus flips to COMPLETED).
-    const isActive =
-      pollStatus === "IN_PROGRESS" ||
-      pollStatus === "TIMEOUT" ||
-      (!!isLoading && pollStatus !== "COMPLETED");
-    if (isActive) {
-      setVisible(true);
-      const done = completedChannels.size;
-      const target =
-        done === 0
-          ? 12
-          : Math.min(90, 12 + (done / effectiveChannels.length) * 78);
-      setProgress(target);
-    } else if (pollStatus === "COMPLETED") {
-      setProgress(100);
-      const timer = setTimeout(() => setVisible(false), 900);
-      return () => clearTimeout(timer);
-    } else {
-      setVisible(false);
-      setProgress(0);
-    }
-  }, [pollStatus, completedChannels, isLoading]);
-
-  if (!visible) return null;
-
-  return (
-    <div className="search-progress-bar-wrap">
-      {/* Label row — the pulsing dot before the label + the animated
-          "…" after it give a live "actively searching" cue that pairs
-          with the moving progress fill. Purely presentational; no
-          impact on state, polling, or completion timing. */}
-      <div className="d-flex justify-content-between align-items-center mb-2">
-        <span className="search-progress-label">
-          <span className="search-progress-dot" aria-hidden="true" />
-          Searching hotels
-          <span className="search-progress-ellipsis" aria-hidden="true">
-            <span>.</span>
-            <span>.</span>
-            <span>.</span>
-          </span>
-        </span>
-        <span className="search-progress-percent">{Math.round(progress)}%</span>
-      </div>
-
-      {/* Bar */}
-      <div className="search-progress-track">
-        <div
-          className="search-progress-fill"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-
-      {/* Channel pills */}
-      {/* <div className="search-progress-channels">
-        {channels.map((ch) => {
-          const done = completedChannels.has(ch);
-          return (
-            <span key={ch} className={`channel-pill ${done ? "done" : "pending"}`}>
-              {done ? "✓" : <span className="pill-dot" />}
-              {ch}
-            </span>
-          );
-        })}
-      </div> */}
-    </div>
-  );
-}
 
 // ─────────────────────────────────────────────
 // Counter Button helper
@@ -628,16 +533,12 @@ export default function HotelSearch({
   const [starRating, setStarRating] = useState(null);
   const [hotelType, setHotelType] = useState([]);
   const [channelType, setChannelType] = useState([]);
-  // Per-company supplier allow-list — populated once on mount from
-  // /api/hotel-search/my-allowed-suppliers. When `channelsUnrestricted`
-  // is true (no company assigned or no picks made yet) the sidebar
-  // channel filter keeps every option visible. Otherwise it narrows to
-  // the codes in `allowedChannels` so admins/agents only see the
-  // suppliers the super_admin has actually enabled for their company.
-  //
-  // Purely presentational — the server-side HotelApiCallerContext is
-  // still the authoritative gate on which suppliers are queried.
-  const [allowedChannels, setAllowedChannels] = useState(new Set());
+  // Per-company supplier list — populated once on mount from
+  // /api/hotel-search/my-allowed-suppliers. When `channelsUnrestricted` is
+  // true (no company assigned or no picks made yet) the sidebar channel filter
+  // keeps every option visible. Purely presentational — the server-side
+  // HotelApiCallerContext is still the authoritative gate on which suppliers
+  // are queried.
   const [channelsUnrestricted, setChannelsUnrestricted] = useState(true);
   // Every supplier super_admin has enabled for this company — the same
   // list the /admin/api-access grid renders. Drives which rows appear
@@ -767,12 +668,6 @@ export default function HotelSearch({
   // downstream `formatPrice(aed) = code + " " + aed * factor` renders the
   // correct amount with no direction guessing.
   const backendDisplayCurrencyRef = useRef({ code: "AED", factor: 1 });
-  // Live target for the running poll's `displayCurrencyCode` param. The
-  // pollUntilComplete closure re-reads this on every tick, so a picker
-  // change flows into subsequent poll requests without restarting the
-  // search. Setter also mutates the closed-over params object in place.
-  const pollCurrencyCodeRef = useRef(null);
-  const pollParamsRef = useRef(null);
   // Currency-version counter, bumped on every picker change. Any in-flight
   // request captures the version at send-time; if by the time the response
   // arrives the counter has advanced (user picked a new currency in the
@@ -807,14 +702,6 @@ export default function HotelSearch({
 
   const [allResults, setAllResults] = useState([]);
   const [finalHotelSearchTerm, setFinalHotelSearchTerm] = useState("");
-  // Mirror of finalHotelSearchTerm so the poll callback (a closure captured
-  // at handleSearchSubmit-time) can read the live value and skip its merge
-  // while a name filter is active. Without this the poll keeps repopulating
-  // allResults with unfiltered rows, undoing /filter-by-name mid-poll.
-  const finalHotelSearchTermRef = useRef("");
-  useEffect(() => {
-    finalHotelSearchTermRef.current = finalHotelSearchTerm;
-  }, [finalHotelSearchTerm]);
 
   // Fetch the caller's per-company supplier allow-list once on mount so
   // the Channel sidebar filter can show only the suppliers the caller is
@@ -830,21 +717,16 @@ export default function HotelSearch({
         );
         if (cancelled) return;
         const unrestricted = res?.data?.unrestricted !== false;
-        const codes = Array.isArray(res?.data?.codes) ? res.data.codes : [];
         const registered = Array.isArray(res?.data?.registered)
           ? res.data.registered
           : [];
         setChannelsUnrestricted(unrestricted);
-        setAllowedChannels(
-          new Set(codes.map((c) => String(c || "").toLowerCase())),
-        );
         setRegisteredChannels(
           new Set(registered.map((c) => String(c || "").toLowerCase())),
         );
       } catch (_) {
         if (!cancelled) {
           setChannelsUnrestricted(true);
-          setAllowedChannels(new Set());
           setRegisteredChannels(new Set());
         }
       }
@@ -853,11 +735,9 @@ export default function HotelSearch({
       cancelled = true;
     };
   }, []);
-  // Sequence guard for /filter-by-name — an older response can arrive after
-  // a newer one (500 ms debounce, no XHR cancel) and stomp results for the
-  // wrong term. Only the response whose seq matches the latest issued call
-  // is allowed to write to state.
-  const nameSearchSeqRef = useRef(0);
+  // Latest request wins. Polls and filter / page changes all fetch the list, and
+  // a slower older reply must not overwrite what a newer request brought.
+  const fetchSeqRef = useRef(0);
   const [agents, setAgents] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
   // When results are on screen the big search form collapses into a sticky
@@ -870,16 +750,10 @@ export default function HotelSearch({
   const [totalPages, setTotalPages] = useState(1);
   const [hasSearchResult, setHasSearchResult] = useState(false);
   const [pollStatus, setPollStatus] = useState("IDLE");
-  const completedChannelsRef = useRef(new Set());
-  const [completedChannels, setCompletedChannels] = useState(new Set());
-  // Set of every supplier the backend has confirmed it fan-out'd to,
-  // built from data.status keys as poll results arrive. Used as the
-  // DENOMINATOR by SearchProgressBar so the "%" reflects the real
-  // dispatched list (which varies by market/agent restrictions) —
-  // previously the bar divided by a hardcoded 8-supplier default and
-  // stalled at ~25% because only a subset ever reported back.
-  const dispatchedChannelsRef = useRef(new Set());
-  const [dispatchedChannels, setDispatchedChannels] = useState(new Set());
+  const pollStatusRef = useRef("IDLE");
+  pollStatusRef.current = pollStatus;
+  // Counts from the latest reply, for the progress state. See readProgress.
+  const [searchProgress, setSearchProgress] = useState(null);
   const [searchId, setSearchId] = useState(null);
   // Bumped at the start of every search. fetchHotels and the currency
   // picker's /resultsOut refetch capture it at send time and drop their
@@ -887,10 +761,6 @@ export default function HotelSearch({
   // belongs to the PREVIOUS search can never write that destination's rows
   // back into allResults after Modify Search → Search cleared them.
   const searchGenRef = useRef(0);
-  // Bumped by every fetchHotels call that REPLACES allResults, so a slower
-  // full-list /resultsOut reply (currency picker) can't overwrite a newer
-  // page or hotel-name result.
-  const replaceGenRef = useRef(0);
   const [isDestinationLoading, setIsDestinationLoading] = useState(false);
   const resultsRef = useRef(null);
   const [isInitialResultsLoaded, setIsInitialResultsLoaded] = useState(false);
@@ -939,22 +809,6 @@ export default function HotelSearch({
   const visibleChannelTypeOptions = channelsUnrestricted
     ? channelTypeOptions
     : channelTypeOptions.filter((o) => registeredChannels.has(o.value));
-  // SearchProgressBar's denominator — the list of suppliers we KNOW
-  // the backend actually dispatched to. Comes from data.status keys
-  // observed on the live poll (dispatchedChannels), with two fallbacks
-  // so the bar still renders sensibly before the first poll returns:
-  //   1. live dispatched list (arrives after the first successful poll)
-  //   2. explicit allow-list when the caller has one (super_admin ∩
-  //      admin-enabled) — same restriction the pill row used to use
-  //   3. SearchProgressBar's own DEFAULT_PROGRESS_CHANNELS fallback
-  const visibleProgressChannels = dispatchedChannels.size > 0
-    ? Array.from(dispatchedChannels)
-    : channelsUnrestricted
-      ? undefined
-      : channelTypeOptions
-          .filter((o) => allowedChannels.has(o.value))
-          .map((o) => o.value);
-
   // (channelHasResults is defined further down, right after
   // filteredResults, so the LIVE/OFF badge reflects what is actually
   // visible on screen instead of the full unfiltered result set.)
@@ -1292,8 +1146,7 @@ export default function HotelSearch({
     }
 
     // Budget — same inclusive AED bounds /results applies server-side (an
-    // undefined end is open); re-applied here so rows merged in by the poll
-    // obey it too.
+    // undefined end is open).
     if (minPriceParam !== undefined || maxPriceParam !== undefined) {
       results = results.filter((hotel) => {
         const p = Number(hotel.price);
@@ -1360,13 +1213,10 @@ export default function HotelSearch({
         });
     }
 
-    // Client-side sort so the visible list always matches the selected
-    // sort pill (Low to High is the default). The backend sorts each page,
-    // but the poll merges pages into `allResults` in insertion order via a
-    // Map — so a late-arriving supplier's cheap hotel would appear at the
-    // bottom of the list even when Low to High is selected. Re-sorting the
-    // current page here fixes that. Only the sort keys the UI can actually
-    // pick are handled; anything else keeps the incoming order.
+    // Keep the visible list matched to the selected sort pill (Low to High is
+    // the default). The server has already sorted this page, and a stable sort
+    // keeps its order for equal prices. Only the sort keys the UI can pick are
+    // handled; anything else keeps the incoming order.
     if (sortBy === "priceAsc" || sortBy === "priceDesc") {
       const dir = sortBy === "priceAsc" ? 1 : -1;
       // Copy so we don't mutate a memoized array from an earlier stage.
@@ -1740,20 +1590,13 @@ export default function HotelSearch({
     if (currencyTouchedRef.current) return;
     if (!currencyAgentId || currencyOptions.length === 0) return;
     let cancelled = false;
-    const searchGenAtRequest = searchGenRef.current;
     axiosInstance
       .get(`/api/agent/${currencyAgentId}`)
       .then((res) => {
         const code = res?.data?.currencyCode;
         if (cancelled || !code || currencyTouchedRef.current) return;
         const opt = currencyOptions.find((o) => o.code === code);
-        // Skip the on-screen re-convert if a new search started meanwhile:
-        // this closure's searchId would belong to the previous search.
-        if (opt) {
-          changeDisplayCurrency(opt, {
-            reconvertAll: searchGenAtRequest === searchGenRef.current,
-          });
-        }
+        if (opt) changeDisplayCurrency(opt);
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -1820,20 +1663,19 @@ export default function HotelSearch({
     });
   };
 
-  const fetchHotels = async (page, sid, agentId, nameSearch = "", currencyCodeOverride = null) => {
+  /**
+   * Fetches the page on screen and puts it on screen. The server's page replaces
+   * the list every time, while suppliers are answering too: the server has
+   * already grouped, filtered, sorted and paged it, so a hotel cannot show twice
+   * and a filter cannot be undone by the next reply.
+   */
+  const fetchHotels = async (page, sid, agentId, nameSearch = "") => {
+    const mySeq = ++fetchSeqRef.current;
     try {
       const isNameSearching = !!nameSearch.trim();
-      // Capture a per-call seq only for name-search. Basic (unfiltered)
-      // fetches don't need this — the poll loop is already the sole writer
-      // for them and never races with itself.
-      const mySeq = isNameSearching ? ++nameSearchSeqRef.current : null;
-      // Client-side owns hotel-name matching now (see filteredResults memo)
-      // so we always hit the plain /results endpoint. When a name filter is
-      // active we pull the entire result set in one page (mirroring the
-      // /resultsOut currency-refetch that already asks for size=100000) so
-      // the tokenized client filter can look at every hotel, not just the
-      // 10-row page slice — otherwise a hotel that sorts onto page 2+ could
-      // never match a partial name typed on page 1.
+      // Client-side owns hotel-name matching (see filteredResults), so a name
+      // filter pulls the entire result set in one page. Otherwise a hotel that
+      // sorts onto page 2+ could never match a partial name typed on page 1.
       const NAME_SEARCH_PAGE_SIZE = 100000;
       const endpoint = `/api/hotel-search/results/${sid}`;
 
@@ -1841,11 +1683,7 @@ export default function HotelSearch({
         agentId:
           agentId || (isAgentRole ? selfAgentId : agent) || 1,
         page: isNameSearching ? 0 : page,
-        // pageSize is kept for the paginated case so existing behaviour is
-        // preserved (backend defaults to 10 anyway). For the name-search
-        // fetch we must send `size` — the backend's Pageable binder reads
-        // `size` (verified: /results?pageSize=1000 returns 10, /results?
-        // size=1000 returns 1000), matching the /resultsOut convention.
+        // The backend reads `size`, and defaults to 10 like pageSize here.
         pageSize: isNameSearching ? undefined : pageSize,
         size: isNameSearching ? NAME_SEARCH_PAGE_SIZE : undefined,
         sortBy:
@@ -1864,115 +1702,40 @@ export default function HotelSearch({
         maxPrice: maxPriceParam,
       };
 
-      // Currency-conversion is fully backend-side now. When the operator
-      // picked an override from the (admin-only) currency dropdown we send
-      // it as `displayCurrencyCode`; otherwise the backend defaults to the
-      // agent's configured currency (Agent.currency_id → master_currency).
-      //
-      // `currencyCodeOverride` wins over the state read — the picker's
-      // onChange calls fetchHotels with the just-picked code even though
-      // setSelectedCurrency hasn't flushed yet, so the very first request
-      // after a picker change already carries the new code.
-      const effectiveCurrencyCode =
-        currencyCodeOverride || selectedCurrency?.code;
-      if (effectiveCurrencyCode) {
-        params.displayCurrencyCode = effectiveCurrencyCode;
+      // Currency conversion is fully backend-side. The admin-only picker's
+      // choice is sent as `displayCurrencyCode`; otherwise the backend defaults
+      // to the agent's configured currency.
+      if (selectedCurrency?.code) {
+        params.displayCurrencyCode = selectedCurrency.code;
       }
 
-      // hotelName is deliberately NOT sent — the client-side filter in
-      // filteredResults does tokenized substring matching, which is broader
-      // than the backend endpoint's whole-string match ("smart hyde" would
-      // otherwise return zero even though "Smart Hyde Park Inn" is in the
-      // result set). Server-side filters (starRating, apiType) still ride
-      // on the same request so combined filtering keeps working.
-
-      // Capture the currency-version at send-time; if the user picks a
-      // different currency before the response lands, we DROP the response
-      // rather than merge — otherwise a slow in-flight request would
-      // overwrite freshly-fetched rows with old-currency data (that was
-      // the "mixed AED/GBP cards" bug in the screenshot).
       const myCurrencyVersion = currencyVersionRef.current;
       const mySearchGen = searchGenRef.current;
-      if (isNameSearching || pollStatus !== "IN_PROGRESS") {
-        replaceGenRef.current += 1;
-      }
 
       const res = await axiosInstance.get(endpoint, {
         params,
       });
 
-      // A newer search has started since this request went out — its
-      // payload belongs to the previous destination, so never let it touch
-      // allResults / totals / hasSearchResult.
-      if (mySearchGen !== searchGenRef.current) {
-        return res.data;
-      }
-
-      // Drop stale name-search responses so an older term can't overwrite
-      // results for the term the user is actually looking at.
-      if (isNameSearching && mySeq !== nameSearchSeqRef.current) {
-        return res.data;
-      }
-
-      // Same idea for currency: if the picker moved on, this response is
-      // now stale — return the raw data (so the caller's Promise resolves
-      // as before) without touching allResults.
-      if (myCurrencyVersion !== currencyVersionRef.current) {
+      // Too late for the screen: a newer search has started, a newer request
+      // has been sent, or the currency has changed. The caller still gets the
+      // reply, so a poll can see that the search has finished.
+      if (
+        mySearchGen !== searchGenRef.current ||
+        mySeq !== fetchSeqRef.current ||
+        myCurrencyVersion !== currencyVersionRef.current
+      ) {
         return res.data;
       }
 
       const mappedResults = Array.isArray(res.data.result)
-        ? res.data.result.map((hotel, index) => ({
-            id: hotel.hotelCode
-              ? `${sid}-${hotel.hotelCode}`
-              : `${sid}-h${index + 1}`,
-            searchId: sid,
-            hotelCode: hotel.hotelCode || null,
-            name: hotel.hotelName || "Unknown Hotel",
-            address: hotel.hotelAddress || "",
-            city: hotel.hotelAddress
-              ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
-              : "Unknown City",
-            price: hotel.baseRate || null,
-            // Backend-converted price + code in the agent's display currency
-            // (see HotelSearchController.applyDisplayCurrency). Card renderer
-            // reads these; `price` (AED) stays the source of truth for every
-            // downstream flow (sorting, dedupe, booking payloads, credit
-            // checks) — same as before this fix.
-            displayPrice:
-              hotel.displayBaseRate != null ? hotel.displayBaseRate : hotel.baseRate,
-            displayCurrencyCode:
-              hotel.displayCurrencyCode || "AED",
-            displayFactor:
-              Number(res.data.displayCurrencyFactor) > 0
-                ? Number(res.data.displayCurrencyFactor)
-                : 1,
-            badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
-            image:
-              hotel.hotelImage ||
-              "https://details/assets/details/profilepic/hotel/hoteldefault.jpg",
-            rating: hotel.starRating || 0,
-            hotelType: "hotel",
-            channelType: hotel.apiType?.toLowerCase() || "inhouse",
-            // Refund Policy filter flags: true / false / null (unknown).
-            hasRefundable: hotel.hasRefundable ?? null,
-            hasNonRefundable: hotel.hasNonRefundable ?? null,
-            // How many suppliers sell this hotel (mapped hotels: best price of all).
-            supplierCount: hotel.supplierCount || 1,
-            // Surface the backend-computed promotion flag so the
-            // "Destination Sales" pill and filter actually work.
-            hasDestinationSales: !!hotel.hasDestinationSales,
-            flashSale: !!hotel.flashSale,
-            latitude: hotel.latitude,
-            longitude: hotel.longitude,
-            contactNumber: hotel.contactNumber || "",
-          }))
+        ? res.data.result.map((hotel, index) =>
+            mapHotelRow(hotel, sid, index, res.data),
+          )
         : [];
 
       // Envelope-level currency metadata that the RoomList / booking-page
-      // handoff needs. Cached on a ref so `handleHotelClick` (which reads
-      // the sessionStorage handoff) sees the latest value without depending
-      // on setState timing.
+      // handoff needs. Cached on a ref so the View Rooms click (which writes the
+      // sessionStorage handoff) sees the latest value.
       if (res.data && res.data.displayCurrencyCode) {
         backendDisplayCurrencyRef.current = {
           code: res.data.displayCurrencyCode,
@@ -1983,41 +1746,19 @@ export default function HotelSearch({
         };
       }
 
-      if (mappedResults.length > 0 || isNameSearching) {
-        if (pollStatus === "IN_PROGRESS" && !isNameSearching) {
-          setAllResults((prev) => {
-            const map = new Map(prev.map((h) => [h.id, h]));
-            mappedResults.forEach((h) => map.set(h.id, h));
-            return Array.from(map.values());
-          });
-        } else {
-          setAllResults(mappedResults);
-        }
-      } else if (!isNameSearching && pollStatus !== "IN_PROGRESS") {
-        setAllResults([]);
-      }
+      setAllResults(mappedResults);
+      if (mappedResults.length > 0) setIsInitialResultsLoaded(true);
 
-      // For a name-search fetch we pulled everything (up to
-      // NAME_SEARCH_PAGE_SIZE) in one go and filter it client-side, so the
-      // paginator collapses to a single page for the visible/filtered set.
-      // Everything else uses the server-side totals exactly as before.
-      if (isNameSearching) {
-        setTotalElements(mappedResults.length);
-        setTotalPages(1);
-      } else {
-        setTotalElements(Number(res.data.totalResults) || mappedResults.length);
-        setTotalPages(
-          Math.max(
-            1,
-            Math.ceil(
-              (Number(res.data.totalResults) || mappedResults.length) / pageSize,
-            ),
-          ),
-        );
-      }
-      // Keep the LIVE/OFF badges in sync on filter / page refetches too.
-      // The backend counts over the full set BEFORE the apiType filter,
-      // so ticking one channel never flips the others to OFF.
+      // A name filter pulled everything in one go and filters it client-side, so
+      // the paginator collapses to a single page. Everything else uses the
+      // server's totals.
+      const total = Number(res.data.totalResults) || mappedResults.length;
+      setTotalElements(isNameSearching ? mappedResults.length : total);
+      setTotalPages(isNameSearching ? 1 : Math.max(1, Math.ceil(total / pageSize)));
+
+      // Keep the LIVE/OFF badges in sync. The backend counts over the full set
+      // BEFORE the apiType filter, so ticking one channel never flips the others
+      // to OFF. Agents do not receive this: their page has no Channel filter.
       if (
         !isNameSearching &&
         res.data.channelCounts &&
@@ -2033,52 +1774,32 @@ export default function HotelSearch({
       }
       updatePriceBounds(res.data);
       setHasSearchResult(true);
+      if (res.data.progress) setSearchProgress(readProgress(res.data));
       return res.data;
     } catch (err) {
       console.error("Fetch hotels failed:", err);
-      if (!nameSearch) setPollStatus("ERROR");
+      // While suppliers are answering the poll tries again: one failed request
+      // must not end a search that is going well.
+      if (!nameSearch && pollStatusRef.current !== "IN_PROGRESS") {
+        setPollStatus("ERROR");
+      }
       throw err;
     }
   };
 
-  const pollUntilComplete = async (
-    url,
-    params,
-    checkComplete,
-    onUpdate,
-    intervalMs = 2000,
-    timeoutMs = 20000,
-    initialDelay = 2000,
-  ) => {
-    return new Promise((resolve, reject) => {
-      const startTime = Date.now();
-      let localPollCount = 0;
+  // The search's poll is started once but must always ask for what is on screen
+  // now: the current page, sort, filters and currency. Reassigned on every render.
+  const fetchCurrentPageRef = useRef(null);
+  fetchCurrentPageRef.current = (sid) =>
+    fetchHotels(pageIndex, sid, agent, finalHotelSearchTerm);
 
-      const poll = async () => {
-        try {
-          localPollCount++;
-          const res = await axiosInstance.get(url, { params });
-          if (onUpdate) onUpdate(res.data, localPollCount);
-          if (checkComplete(res.data)) {
-            setPollStatus("COMPLETED");
-            return resolve(res.data);
-          }
-          if (Date.now() - startTime >= timeoutMs) {
-            setPollStatus("TIMEOUT");
-            return reject(new Error("Polling timed out"));
-          }
-          setTimeout(poll, intervalMs);
-        } catch (err) {
-          console.error("Poll failed:", err);
-          setPollStatus("ERROR");
-          reject(err);
-        }
-      };
-
-      setPollStatus("IN_PROGRESS");
-      setTimeout(poll, initialDelay);
-    });
-  };
+  // Leaving the page ends its poll.
+  useEffect(
+    () => () => {
+      searchGenRef.current += 1;
+    },
+    [],
+  );
 
   const handleSearchSubmit = async (e) => {
     e.preventDefault();
@@ -2100,6 +1821,7 @@ export default function HotelSearch({
     // early-return exactly as it does on the very first search; the
     // generation bump covers any reply that is already in flight.
     searchGenRef.current += 1;
+    const mySearchGen = searchGenRef.current;
     setSearchId(null);
     setIsLoading(true);
     setHasSearched(true);
@@ -2115,10 +1837,7 @@ export default function HotelSearch({
     setTotalElements(0);
     setTotalPages(1);
     setIsInitialResultsLoaded(false);
-    completedChannelsRef.current = new Set();
-    setCompletedChannels(new Set());
-    dispatchedChannelsRef.current = new Set();
-    setDispatchedChannels(new Set());
+    setSearchProgress(null);
     // Drop the previous search's id until the new one comes back. Keeping it
     // let the results effect refetch the OLD search as soon as pollStatus
     // reset to IDLE — which is why a second Search press showed the first
@@ -2167,7 +1886,12 @@ export default function HotelSearch({
       );
       const newSearchId = searchKeyRes.data.searchId;
       if (!newSearchId) throw new Error("No searchId returned");
+      if (mySearchGen !== searchGenRef.current) return;
+      // The hotels found so far are usable from here on, so the form is free
+      // again: the bar shows the search is still going.
       setSearchId(newSearchId);
+      setPollStatus("IN_PROGRESS");
+      setIsLoading(false);
 
       // ── Agent search log (Unbooked Opportunities → Searches tab) ──────
       // Fire-and-forget snapshot of the search context so the admin AI
@@ -2186,231 +1910,15 @@ export default function HotelSearch({
         source: "search-page",
       });
 
-      const params = {
-        agentId,
-        page: 0,
-        pageSize,
-        sortBy:
-          sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
-        sortOrder:
-          sortBy === "priceAsc" ||
-          sortBy === "ratingAsc" ||
-          sortBy === "nameAsc"
-            ? "asc"
-            : "desc",
-        starRating: starRating ? starRating.value : undefined,
-        apiType:
-          channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
-        refundPolicy: refundPolicyParam,
-        // No minPrice / maxPrice — a new search resets the budget slider
-        // (its ends depend on the destination), so the poll is unfiltered.
-      };
-
-      // The poll uses the SAME /results endpoint fetchHotels does — pass the
-      // picker override the same way so the very first wave of results also
-      // arrives already converted to the chosen display currency. Missing
-      // this made the initial rows render in AED for the ~10-15 s the poll
-      // took to finish, which is the "still see AED" symptom.
-      // Read the ref, not the closure: the agent-default currency can land
-      // while the POST above is still awaiting.
-      const pollDisplayCode = selectedCurrencyCodeRef.current;
-      if (pollDisplayCode) {
-        params.displayCurrencyCode = pollDisplayCode;
-        pollCurrencyCodeRef.current = pollDisplayCode;
-      } else {
-        pollCurrencyCodeRef.current = null;
-      }
-      // Stash the params object so a picker change mid-poll can mutate its
-      // `displayCurrencyCode` field in place — pollUntilComplete's closure
-      // reads the SAME object each tick, so the new code takes effect on
-      // the next axios call without restarting the search.
-      pollParamsRef.current = params;
-
-      const expectedChannels = [
-        "inhouse",
-        // "iwtx",
-        // "x3",
-        "ratehawk",
-        // "darina",
-        // "atharva",
-        // "jumeirah",
-      ];
-
-      const finalPollData = await pollUntilComplete(
-        `/api/hotel-search/results/${newSearchId}`,
-        params,
-        (data) => data.finalStatus === "COMPLETED",
-        (data, pollCount) => {
-          // Discard the tick when the currency this response was generated
-          // in no longer matches what the user has picked. Prevents an
-          // in-flight tick (fired before the picker moved) from clobbering
-          // freshly-fetched rows in the new currency two seconds later.
-          if (
-            pollCurrencyCodeRef.current &&
-            data?.displayCurrencyCode &&
-            String(data.displayCurrencyCode).toUpperCase() !==
-              String(pollCurrencyCodeRef.current).toUpperCase()
-          ) {
-            return;
-          }
-
-          // Poll payload also carries the backend-converted display currency
-          // — same shape as the /results endpoint. Cache it on the ref so
-          // handleHotelClick's sessionStorage handoff picks up the correct
-          // {code, factor} even when the user clicks a card that arrived
-          // during the polling phase.
-          if (data && data.displayCurrencyCode) {
-            backendDisplayCurrencyRef.current = {
-              code: data.displayCurrencyCode,
-              factor:
-                data.displayCurrencyFactor != null
-                  ? Number(data.displayCurrencyFactor)
-                  : 1,
-            };
-          }
-
-          const mappedResults = Array.isArray(data.result)
-            ? data.result.map((hotel, index) => ({
-                id: hotel.hotelCode
-                  ? `${newSearchId}-${hotel.hotelCode}`
-                  : `${newSearchId}-h${index + 1}`,
-                searchId: newSearchId,
-                hotelCode: hotel.hotelCode || null,
-                name: hotel.hotelName || "Unknown Hotel",
-                address: hotel.hotelAddress || "",
-                city: hotel.hotelAddress
-                  ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
-                  : "Unknown City",
-                price: hotel.baseRate || null,
-                // Backend-converted display fields — MUST match the shape
-                // used by fetchHotels' mapping below. Missing these fields
-                // is what makes the FIRST wave of poll results render in
-                // raw AED even though the backend correctly sends GBP.
-                displayPrice:
-                  hotel.displayBaseRate != null ? hotel.displayBaseRate : hotel.baseRate,
-                displayCurrencyCode:
-                  hotel.displayCurrencyCode || "AED",
-                displayFactor:
-                  Number(data.displayCurrencyFactor) > 0
-                    ? Number(data.displayCurrencyFactor)
-                    : 1,
-                badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
-                image:
-                  hotel.hotelImage ||
-                  "https://details/assets/details/profilepic/hotel/hoteldefault.jpg",
-                rating: hotel.starRating || 0,
-                hotelType: "hotel",
-                channelType: hotel.apiType?.toLowerCase() || "inhouse",
-                // Refund Policy filter flags: true / false / null (unknown).
-                hasRefundable: hotel.hasRefundable ?? null,
-                hasNonRefundable: hotel.hasNonRefundable ?? null,
-                // How many suppliers sell this hotel (mapped hotels: best price of all).
-                supplierCount: hotel.supplierCount || 1,
-                // Surface backend promotion flags so the
-                // "Destination Sales" pill + filter actually work.
-                hasDestinationSales: !!hotel.hasDestinationSales,
-                flashSale: !!hotel.flashSale,
-                latitude: hotel.latitude,
-                longitude: hotel.longitude,
-                contactNumber: hotel.contactNumber || "",
-              }))
-            : [];
-
-          // When a hotel-name filter is active, /filter-by-name owns
-          // allResults. Merging the poll's unfiltered payload here would
-          // repopulate the list with non-matching hotels every 2 s and
-          // undo the filter. Clearing the box unblocks this branch on the
-          // next poll tick, and the poll returns the full Redis payload so
-          // the unfiltered list rebuilds naturally.
-          if (!finalHotelSearchTermRef.current.trim()) {
-            setAllResults((prev) => {
-              const map = new Map(prev.map((h) => [h.id, h]));
-              mappedResults.forEach((h) => map.set(h.id, h));
-              return Array.from(map.values());
-            });
-          }
-
-          const currentStatuses = data.status || {};
-          // Track every supplier the backend fan-out'd to (denominator)
-          // AND every one that reported COMPLETED (numerator). Iterate
-          // over the LIVE status keys so we never miss a supplier that
-          // wasn't on the old hardcoded expectedChannels list; the bar
-          // now progresses through every real reply and only reserves
-          // the final 10% for the overall COMPLETED flip.
-          let dispatchedGrew = false;
-          Object.keys(currentStatuses).forEach((ch) => {
-            if (!dispatchedChannelsRef.current.has(ch)) {
-              dispatchedChannelsRef.current.add(ch);
-              dispatchedGrew = true;
-            }
-            if (
-              currentStatuses[ch] === "COMPLETED" &&
-              !completedChannelsRef.current.has(ch)
-            ) {
-              completedChannelsRef.current.add(ch);
-            }
-          });
-          if (dispatchedGrew) {
-            setDispatchedChannels(new Set(dispatchedChannelsRef.current));
-          }
-          setCompletedChannels(new Set(completedChannelsRef.current));
-
-          if (pollCount === 1 || mappedResults.length > 0) {
-            setHasSearchResult(true);
-            if (
-              completedChannelsRef.current.size >= 1 ||
-              mappedResults.length > 0
-            ) {
-              setIsInitialResultsLoaded(true);
-            }
-          }
-
-          // Same reason as the setAllResults guard above — while a name
-          // filter is active the /filter-by-name response owns the paging
-          // counts; the unfiltered poll totals would flash the wrong page
-          // count next to a filtered list.
-          if (!finalHotelSearchTermRef.current.trim()) {
-            setTotalElements(Number(data.totalResults) || mappedResults.length);
-            setTotalPages(
-              Math.max(
-                1,
-                Math.ceil(
-                  (Number(data.totalResults) || mappedResults.length) / pageSize,
-                ),
-              ),
-            );
-          }
-
-          // Full-set supplier presence for the LIVE/OFF badges. Counted
-          // by the backend over every page, so it is correct even when
-          // the current page happens to be all one supplier.
-          if (data.channelCounts && typeof data.channelCounts === "object") {
-            setChannelsWithResults(
-              new Set(
-                Object.entries(data.channelCounts)
-                  .filter(([, n]) => Number(n) > 0)
-                  .map(([ct]) => String(ct).toLowerCase()),
-              ),
-            );
-          }
-          // Budget slider ends widen as more suppliers report in.
-          updatePriceBounds(data);
-        },
-        2000,
-        // 30 s poll ceiling — keeps the UI responsive; GRN's slower
-        // Dubai fan-out (~30-40 s) that would previously push the total
-        // wait to a full minute now caps out at 30 s. Faster suppliers
-        // (inhouse / RateHawk) still resolve early via the
-        // finalStatus=COMPLETED check, and any GRN rows that arrive
-        // between poll ticks before the timeout still show up. If GRN
-        // hasn't finished by then the catch below no longer flips
-        // hasSearched=false (existing behaviour after the 60 s bump), so
-        // filter changes keep working. Supplier legs that finish after the
-        // timeout are picked up by the late-results check (the effect right
-        // after the results effect).
-        30000,
-        2000,
-      );
+      const { outcome, reply: finalPollData } = await pollUntilFinished({
+        fetchPage: () => fetchCurrentPageRef.current(newSearchId),
+        isCancelled: () => mySearchGen !== searchGenRef.current,
+      });
+      if (outcome === "cancelled") return;
+      // The results effect fetches once more on this change, quietly, so the
+      // list is right even if the last poll's reply lost to a newer request.
+      backgroundRefreshRef.current = true;
+      setPollStatus(outcome === "completed" ? "COMPLETED" : "TIMEOUT");
       // ── 24 Hour Check-In post-processing ───────────────────────────
       // Probe each hotel's 24-hour config eligibility for the requested
       // check-in date+time. The result map keys hotelId -> { eligible,
@@ -2418,8 +1926,8 @@ export default function HotelSearch({
       // and uplift displayed rates.
       //
       // We read `finalPollData.result` (the freshest payload from the last
-      // poll) rather than `allResults`, because setAllResults inside the
-      // poll's onUpdate callback hasn't been flushed back into this
+      // poll) rather than `allResults`, because setAllResults from the
+      // poll hasn't been flushed back into this
       // closure — reading allResults here returns the stale value (empty
       // list on the first search), which would cause the probe to receive
       // no IDs and return {}, filtering every hotel out.
@@ -2456,21 +1964,14 @@ export default function HotelSearch({
       }
     } catch (err) {
       console.error("Search failed:", err);
-      // Timeouts (30 s ceiling for GRN) are NOT a real failure — the rows
-      // that came in via prior poll ticks are still valid. Flipping
-      // hasSearched=false here used to block every subsequent picker /
-      // filter refetch, which is exactly the "AED still shown after USD
-      // picked" symptom. Leave hasSearched=true so downstream effects
-      // (currency-picker refetch, channel filter, pagination) keep
-      // working.
-      const isTimeout =
-        err && (err.message === "Polling timed out" || err.name === "TimeoutError");
-      if (!isTimeout) {
+      // Only the request that starts the search can land here: polling handles
+      // its own failures.
+      if (mySearchGen === searchGenRef.current) {
         setHasSearched(false);
+        setPollStatus("ERROR");
       }
-      setPollStatus(isTimeout ? "TIMEOUT" : "ERROR");
     } finally {
-      setIsLoading(false);
+      if (mySearchGen === searchGenRef.current) setIsLoading(false);
     }
   };
 
@@ -2480,117 +1981,15 @@ export default function HotelSearch({
   //   (pollStatus === "IN_PROGRESS" || pollStatus === "COMPLETED");
 
   // Single path for every display-currency change (picker + agent default).
-  // Same code → no-op. Otherwise redirect the running poll, drop in-flight
-  // replies in the old currency, and re-convert what's already on screen.
-  const changeDisplayCurrency = (opt, { manual = false, reconvertAll = true } = {}) => {
+  // Same code → no-op. Otherwise drop in-flight replies in the old currency; the
+  // results effect then fetches the page again in the new one.
+  const changeDisplayCurrency = (opt, { manual = false } = {}) => {
     if (manual) currencyTouchedRef.current = true;
     if (!opt?.code) return;
     setSelectedCurrency(opt);
     if (opt.code === selectedCurrencyCodeRef.current) return;
     selectedCurrencyCodeRef.current = opt.code;
     currencyVersionRef.current += 1;
-    if (pollParamsRef.current) {
-      pollParamsRef.current.displayCurrencyCode = opt.code;
-    }
-    pollCurrencyCodeRef.current = opt.code;
-
-    // Once polling is over (or a name filter is active) the results effect
-    // REPLACES the list in the new currency itself (selectedCurrency?.code is
-    // one of its deps). While polling, its fetches only MERGE one page — even
-    // with a channel/star filter — so re-convert the whole list via /resultsOut.
-    const effectWillRefetch =
-      hasSearched &&
-      (pollStatus !== "IN_PROGRESS" || !!finalHotelSearchTermRef.current.trim());
-    if (!reconvertAll || !searchId || effectWillRefetch) return;
-
-    const myVersion = currencyVersionRef.current;
-    const mySearchGen = searchGenRef.current;
-    const myReplaceGen = replaceGenRef.current;
-    axiosInstance
-      .get(`/api/hotel-search/resultsOut/${searchId}`, {
-        params: {
-          agentId: (isAgentRole ? selfAgentId : agent) || 1,
-          page: 0,
-          size: 100000,
-          sortBy:
-            sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
-          sortOrder:
-            sortBy === "priceAsc" || sortBy === "ratingAsc" || sortBy === "nameAsc"
-              ? "asc"
-              : "desc",
-          starRating: starRating ? starRating.value : undefined,
-          apiType:
-            channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
-          refundPolicy: refundPolicyParam,
-          minPrice: minPriceParam,
-          maxPrice: maxPriceParam,
-          displayCurrencyCode: opt.code,
-        },
-      })
-      .then((res) => {
-        // Drop if the currency or search moved on, a newer page/name fetch
-        // replaced the list, or a hotel-name filter now owns allResults.
-        if (
-          myVersion !== currencyVersionRef.current ||
-          mySearchGen !== searchGenRef.current ||
-          myReplaceGen !== replaceGenRef.current ||
-          finalHotelSearchTermRef.current.trim()
-        ) {
-          return;
-        }
-        if (res.data && res.data.displayCurrencyCode) {
-          backendDisplayCurrencyRef.current = {
-            code: res.data.displayCurrencyCode,
-            factor:
-              res.data.displayCurrencyFactor != null
-                ? Number(res.data.displayCurrencyFactor)
-                : 1,
-          };
-        }
-        const mapped = Array.isArray(res.data?.result)
-          ? res.data.result.map((hotel, i) => ({
-              id: hotel.hotelCode
-                ? `${searchId}-${hotel.hotelCode}`
-                : `${searchId}-h${i + 1}`,
-              searchId,
-              hotelCode: hotel.hotelCode || null,
-              name: hotel.hotelName || "Unknown Hotel",
-              address: hotel.hotelAddress || "",
-              city: hotel.hotelAddress
-                ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
-                : "Unknown City",
-              price: hotel.baseRate || null,
-              displayPrice:
-                hotel.displayBaseRate != null ? hotel.displayBaseRate : hotel.baseRate,
-              displayCurrencyCode: hotel.displayCurrencyCode || "AED",
-              displayFactor:
-                Number(res.data.displayCurrencyFactor) > 0
-                  ? Number(res.data.displayCurrencyFactor)
-                  : 1,
-              badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
-              image:
-                hotel.hotelImage ||
-                "https://details/assets/details/profilepic/hotel/hoteldefault.jpg",
-              rating: hotel.starRating || 0,
-              hotelType: "hotel",
-              channelType: hotel.apiType?.toLowerCase() || "inhouse",
-              // Refund Policy filter flags: true / false / null (unknown).
-              hasRefundable: hotel.hasRefundable ?? null,
-              hasNonRefundable: hotel.hasNonRefundable ?? null,
-              // How many suppliers sell this hotel (mapped hotels: best price of all).
-              supplierCount: hotel.supplierCount || 1,
-              hasDestinationSales: !!hotel.hasDestinationSales,
-              flashSale: !!hotel.flashSale,
-              latitude: hotel.latitude,
-              longitude: hotel.longitude,
-              contactNumber: hotel.contactNumber || "",
-            }))
-          : [];
-        setAllResults(mapped);
-      })
-      .catch(() => {
-        /* fail-safe: leave existing rows */
-      });
   };
 
   const showResultsDuringPolling = hasSearchResult || allResults.length > 0;
@@ -2625,46 +2024,25 @@ export default function HotelSearch({
     return () => ro.disconnect();
   }, [collapseSearch]);
 
-  // Bumped by the late-results check below to make the results effect
-  // refetch the visible page. lateResultsRefreshRef marks that refetch as a
-  // background one so it doesn't flash the loading card every few seconds.
-  const [resultsRefreshTick, setResultsRefreshTick] = useState(0);
-  const lateResultsRefreshRef = useRef(false);
+  // Set just before the search finishes, so that last fetch stays quiet.
+  const backgroundRefreshRef = useRef(false);
 
+  // Fetches at once when the page, sort, a filter or the currency changes,
+  // including while suppliers are answering. The poll then keeps that same view
+  // up to date. No loading card during a search: the bar is already on screen and
+  // the hotels so far stay usable.
   useEffect(() => {
-    const isBackgroundRefresh = lateResultsRefreshRef.current;
-    lateResultsRefreshRef.current = false;
+    const quiet = backgroundRefreshRef.current || pollStatus === "IN_PROGRESS";
+    backgroundRefreshRef.current = false;
     if (!searchId || !hasSearched) return;
-    // Gate basic (unfiltered) fetches until polling finishes so we don't
-    // double-write allResults alongside the poll's merge. Name-search
-    // (/filter-by-name) is exempt — it targets a separate endpoint,
-    // REPLACES allResults on its own, and is protected from stale-response
-    // races by nameSearchSeqRef. Without this exemption, typing a hotel
-    // name during the initial supplier poll silently no-ops until poll
-    // completes, which is the "sometimes it doesn't work" symptom.
-    //
-    // Filter-driven fetches (channelType, starRating) are ALSO exempt from
-    // the guard: they issue a filtered /results call (e.g. apiType=GRN)
-    // that returns a different result set than the unfiltered poll, so
-    // the "double-write" concern doesn't apply. Blocking them meant that
-    // ticking Channel = GRN while a slow supplier (GRN itself, ~30-40 s
-    // for Dubai) was still polling silently zeroed the list.
-    const hasActiveFilter =
-      (channelType && channelType.length > 0) ||
-      !!starRating ||
-      !!refundPolicyParam ||
-      minPriceParam !== undefined ||
-      maxPriceParam !== undefined ||
-      (hotelType && hotelType.length > 0);
-    if (
-      pollStatus === "IN_PROGRESS" &&
-      !finalHotelSearchTerm.trim() &&
-      !hasActiveFilter
-    ) return;
-    if (!isBackgroundRefresh) setIsLoading(true);
-    fetchHotels(pageIndex, searchId, agent, finalHotelSearchTerm).finally(() => {
-      if (!isBackgroundRefresh) setIsLoading(false);
-    });
+    if (!quiet) setIsLoading(true);
+    fetchHotels(pageIndex, searchId, agent, finalHotelSearchTerm)
+      .catch(() => {
+        /* already reported by fetchHotels */
+      })
+      .finally(() => {
+        if (!quiet) setIsLoading(false);
+      });
   }, [
     pageIndex,
     sortBy,
@@ -2679,105 +2057,9 @@ export default function HotelSearch({
     hasSearched,
     pollStatus,
     finalHotelSearchTerm,
-    // Currency conversion happens server-side now (see fetchHotels — it
-    // sends `displayCurrencyCode=…` from selectedCurrency.code). Adding
-    // the code as a dep so a picker change re-fetches the results in the
-    // new currency instead of leaving stale numbers on screen.
+    // Conversion happens server-side, so a picker change has to fetch again.
     selectedCurrency?.code,
-    resultsRefreshTick,
   ]);
-
-  // Late supplier results. The search poll gives up after 30 s, but a slow
-  // supplier leg (GRN waits up to its 25 s cutoff_time; big cities take
-  // longer) can still add hotels after that. Nothing asked again, so those
-  // hotels only appeared on the next Search press. After a poll timeout,
-  // check the result count every few seconds until the backend reports every
-  // supplier finished, and refresh the visible page whenever the count moves.
-  // The "Searching hotels" bar stays up for this whole phase (TIMEOUT is an
-  // active state in SearchProgressBar) and hides once COMPLETED is set here.
-  useEffect(() => {
-    if (pollStatus !== "TIMEOUT" || !searchId) return;
-    const CHECK_EVERY_MS = 4000;
-    const GIVE_UP_AFTER_MS = 90000;
-    const startedAt = Date.now();
-    const mySearchGen = searchGenRef.current;
-    let cancelled = false;
-    let timer;
-    let lastTotal = null;
-
-    const checkForLateResults = async () => {
-      try {
-        const res = await axiosInstance.get(
-          `/api/hotel-search/results/${searchId}`,
-          {
-            params: {
-              agentId: (isAgentRole ? selfAgentId : agent) || 1,
-              page: 0,
-              size: 1,
-            },
-          },
-        );
-        if (cancelled || mySearchGen !== searchGenRef.current) return;
-        // Keep the bar's percentage moving as the slower suppliers report
-        // in — same bookkeeping the main poll does on each tick.
-        const lateStatuses = res.data?.status;
-        if (lateStatuses && typeof lateStatuses === "object") {
-          let dispatchedGrew = false;
-          let completedGrew = false;
-          Object.keys(lateStatuses).forEach((ch) => {
-            if (!dispatchedChannelsRef.current.has(ch)) {
-              dispatchedChannelsRef.current.add(ch);
-              dispatchedGrew = true;
-            }
-            if (
-              lateStatuses[ch] === "COMPLETED" &&
-              !completedChannelsRef.current.has(ch)
-            ) {
-              completedChannelsRef.current.add(ch);
-              completedGrew = true;
-            }
-          });
-          if (dispatchedGrew) {
-            setDispatchedChannels(new Set(dispatchedChannelsRef.current));
-          }
-          if (completedGrew) {
-            setCompletedChannels(new Set(completedChannelsRef.current));
-          }
-        }
-        if (res.data?.finalStatus === "COMPLETED") {
-          // pollStatus is a dependency of the results effect, so this also
-          // runs its final (background) refetch.
-          lateResultsRefreshRef.current = true;
-          setPollStatus("COMPLETED");
-          return;
-        }
-        const total = Number(res.data?.totalResults) || 0;
-        if (total !== lastTotal) {
-          lastTotal = total;
-          lateResultsRefreshRef.current = true;
-          setResultsRefreshTick((tick) => tick + 1);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        console.warn("Late supplier results check failed (will retry):", err);
-      }
-      if (Date.now() - startedAt < GIVE_UP_AFTER_MS) {
-        timer = setTimeout(checkForLateResults, CHECK_EVERY_MS);
-      } else if (!cancelled && mySearchGen === searchGenRef.current) {
-        // A supplier that never answers must not keep "Searching hotels"
-        // on screen forever. Stop waiting and treat the search as finished;
-        // the background refetch picks up anything that landed meanwhile.
-        lateResultsRefreshRef.current = true;
-        setPollStatus("COMPLETED");
-      }
-    };
-
-    timer = setTimeout(checkForLateResults, CHECK_EVERY_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [pollStatus, searchId, agent, selfAgentId, isAgentRole]);
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -3442,10 +2724,10 @@ export default function HotelSearch({
             }
             style={{ "--hs-summary-h": `${summaryBarHeight}px` }}
           >
-            <SearchProgressBar
+            <HotelSearchProgressBar
               pollStatus={pollStatus}
-              completedChannels={completedChannels}
-              channels={visibleProgressChannels}
+              progress={searchProgress}
+              hotelsSoFar={totalElements}
               isLoading={isLoading}
             />
           </div>
@@ -3948,14 +3230,33 @@ export default function HotelSearch({
                         <small className="text-muted fw-semibold">
                           Showing {startEntry} to {endEntry} of {displayTotal}{" "}
                           entries
-                          {(pollStatus === "IN_PROGRESS" ||
-                            pollStatus === "TIMEOUT") && (
+                          {pollStatus === "IN_PROGRESS" && (
                             <span className="ms-1 text-primary">
                               (updating…)
                             </span>
                           )}
                         </small>
                       </div>
+                    )}
+
+                    {/* Search has finished but not every supplier answered. The
+                        supplier names here come only from an admin's reply. */}
+                    {pollStatus === "TIMEOUT" ? (
+                      <div className="small text-muted mb-3" role="status">
+                        Could not reach the server to finish this search.
+                        Showing the hotels found so far.
+                      </div>
+                    ) : (
+                      pollStatus === "COMPLETED" &&
+                      incompleteSearchNotice(searchProgress) && (
+                        <div
+                          className="small text-muted mb-3"
+                          role="status"
+                          data-testid="hotel-search-incomplete"
+                        >
+                          {incompleteSearchNotice(searchProgress)}
+                        </div>
+                      )
                     )}
 
                     {isLoading && pollStatus !== "IN_PROGRESS" && (
@@ -4332,37 +3633,8 @@ export default function HotelSearch({
                                               ),
                                             }),
                                           );
-                                          const apiIdMapping = {
-                                            jumeirah: 10,
-                                            iwtx: 12,
-                                            x3: 15,
-                                            inhouse: 1,
-                                            ratehawk: 14,
-                                            darina: 16,
-                                            atharva: 3,
-                                            // GRN Connect. Room list backend
-                                            // routes apiId=20 to the new
-                                            // GrnHotelRoomSearchService which
-                                            // returns bundled rates only.
-                                            // 20 avoids colliding with the
-                                            // existing Juniper booking's 17.
-                                            grn: 20,
-                                            // GoGlobal (Yanolja Go Global).
-                                            // Room list backend routes apiId=21
-                                            // to GoGlobalHotelRoomSearchService
-                                            // (single-hotel availability).
-                                            // Without this entry the payload
-                                            // fell back to apiId 0 and the
-                                            // /api/hotel-rooms/search call was
-                                            // rejected with "API ID must be
-                                            // positive".
-                                            goglobal: 21,
-                                          };
-                                          const apiId =
-                                            apiIdMapping[
-                                              hotel.channelType?.toLowerCase()
-                                            ] || 0;
-                                         
+                                          const apiId = roomListApiId(hotel);
+
                                           // Display labels for values the
                                           // payload otherwise carries only
                                           // as ids/codes. Additive — they

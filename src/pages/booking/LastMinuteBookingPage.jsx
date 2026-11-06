@@ -669,7 +669,8 @@ export default function LastMinuteBookingPage() {
       };
 
       // Progress bar: every supplier the backend dispatched becomes a
-      // channel, and counts as done once it reports COMPLETED.
+      // channel, and counts as done once it has finished, however it ended, so a
+      // failed supplier cannot hold the bar back.
       const onSupplierStatus = (statuses) => {
         if (!isCurrent()) return;
         const keys = Object.keys(statuses);
@@ -678,7 +679,10 @@ export default function LastMinuteBookingPage() {
           return added.length ? [...prev, ...added] : prev;
         });
         setCompletedChannels((prev) => {
-          const finished = keys.filter((k) => statuses[k] === "COMPLETED" && !prev.has(k));
+          const finished = keys.filter(
+            (k) =>
+              ["COMPLETED", "ERROR", "TIMEOUT"].includes(statuses[k]) && !prev.has(k),
+          );
           if (!finished.length) return prev;
           const next = new Set(prev);
           finished.forEach((k) => next.add(k));
@@ -1458,7 +1462,7 @@ function ResultsWithFilters({
   // Last Minute booking list picks it up.
   const handleViewRooms = (hotel) => {
     if (hotel?.source === "API") {
-      const apiId = apiIdForApiType(hotel.apiType);
+      const apiId = hotel.apiId || apiIdForApiType(hotel.apiType);
       if (!apiId) {
         toast.error(
           isAgentLogin()
