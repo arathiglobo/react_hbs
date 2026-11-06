@@ -330,9 +330,14 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
           return;
         }
 
+        // A multi-room search of a mapped hotel may be handed to the merged
+        // room list below, so it carries the GRN / GoGlobal multi-room
+        // options that page sends (other suppliers ignore them).
         const res = await axiosInstance.post(
           "/api/hotel-rooms/search",
-          payload,
+          (payload.rooms || []).length > 1
+            ? { ...payload, includeNonBundled: true, goglobalPerRoomMode: true }
+            : payload,
         );
 
         // console.log("room search res::", res);
