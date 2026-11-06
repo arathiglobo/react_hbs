@@ -288,7 +288,28 @@ export default function LongStayBookingList() {
       const res = await axiosInstance.get(
         `/api/longStayBooking?page=0&size=500`,
       );
-      setBookings(res.data.content || []);
+      const longStayRows = res.data.content || [];
+      // Supplier hotels booked from the Long Stay page live in hotel_booking, so
+      // they come from their own endpoint. If that call fails the long-stay
+      // bookings still show, exactly as before.
+      let supplierRows = [];
+      try {
+        const supplierRes = await axiosInstance.get(
+          `/api/longStayBooking/supplier-bookings`,
+        );
+        if (Array.isArray(supplierRes.data)) supplierRows = supplierRes.data;
+      } catch (err) {
+        console.warn("Could not load Long Stay supplier bookings.", err);
+      }
+      setBookings(
+        supplierRows.length === 0
+          ? longStayRows
+          : [...longStayRows, ...supplierRows].sort(
+              (a, b) =>
+                new Date(b.bookingDateTime || 0) -
+                new Date(a.bookingDateTime || 0),
+            ),
+      );
     } catch {
       toast.error("Failed to load Long Stay bookings");
     } finally {
@@ -299,6 +320,18 @@ export default function LongStayBookingList() {
   useEffect(() => {
     fetchBookings();
   }, []);
+
+  // A supplier booking opens the standard hotel booking page, which cancels with
+  // the supplier. A long-stay booking opens its own page, as always.
+  const openBookingDetails = (b) => {
+    if (b.source === "API") {
+      navigate(`/booking-details/hotel-booking/${b.hotelBookingId}`);
+      return;
+    }
+    navigate(`/booking-details/long-stay-booking/${b.longStayBookingId}`, {
+      state: { booking: b },
+    });
+  };
 
   // Apply search + status + time-period filters in one pass.
   const filteredBookings = useMemo(() => {
@@ -1072,22 +1105,14 @@ export default function LongStayBookingList() {
                                         color: "#007bff",
                                         cursor: "pointer",
                                       }}
-                                      onClick={() =>
-                                        navigate(
-                                          `/booking-details/long-stay-booking/${b.longStayBookingId}`,
-                                          { state: { booking: b } },
-                                        )
-                                      }
+                                      onClick={() => openBookingDetails(b)}
                                       onKeyDown={(e) => {
                                         if (
                                           e.key === "Enter" ||
                                           e.key === " "
                                         ) {
                                           e.preventDefault();
-                                          navigate(
-                                            `/booking-details/long-stay-booking/${b.longStayBookingId}`,
-                                            { state: { booking: b } },
-                                          );
+                                          openBookingDetails(b);
                                         }
                                       }}
                                     />

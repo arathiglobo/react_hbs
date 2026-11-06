@@ -44,6 +44,8 @@ const PackageRates = () => {
   const [searchTimeout, setSearchTimeout] = useState(null);
   const [countries, setCountries] = useState([]);
   const [places, setPlaces] = useState([]);
+  // The selected place, when it isn't in the chosen country's list.
+  const [savedPlace, setSavedPlace] = useState(null);
   const [marketTypes, setMarketTypes] = useState([]);
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false);
   const [validityList, setValidityList] = useState([
@@ -90,7 +92,8 @@ const PackageRates = () => {
   const lastValidityAddTime = useRef(0);
   const lastOccupancyAddTime = useRef(0);
   const countryDebounceRef = useRef(null);
-  const placeDebounceRef = useRef(null);
+  // The country `places` was last requested for.
+  const placesCountryRef = useRef(null);
   const hotelDebounceRef = useRef(null);
 
   const [selectedCountryOption, setSelectedCountryOption] = useState(null);
@@ -124,6 +127,9 @@ const PackageRates = () => {
     placeId: "",
     noOfNights: "",
   });
+
+  // A country's full place list can be long; only this many render at once.
+  const MAX_VISIBLE_OPTIONS = 200;
 
   const SearchableSelect = ({
     options,
@@ -195,7 +201,7 @@ const PackageRates = () => {
       selectedOption?.countryName ||
       selectedOption?.placeName ||
       selectedOption?.marketTypeName ||
-      (value ? `Place ID: ${value}` : "");
+      "";
 
     return (
       <div className="position-relative">
@@ -262,7 +268,7 @@ const PackageRates = () => {
                 Loading...
               </div>
             ) : filteredOptions.length > 0 ? (
-              filteredOptions.map((option) => (
+              filteredOptions.slice(0, MAX_VISIBLE_OPTIONS).map((option) => (
                 <div
                   key={option.id}
                   className="px-3 py-2 cursor-pointer"
@@ -287,6 +293,11 @@ const PackageRates = () => {
               ))
             ) : (
               <div className="px-3 py-2 text-muted">No options found</div>
+            )}
+            {!isLoading && filteredOptions.length > MAX_VISIBLE_OPTIONS && (
+              <div className="px-3 py-2 text-muted small">
+                Showing the first {MAX_VISIBLE_OPTIONS}. Type to narrow the list.
+              </div>
             )}
           </div>
         )}
@@ -460,19 +471,25 @@ const PackageRates = () => {
     }
   };
 
-  const cityList = async (countryId, searchTerm = "") => {
+  // The chosen country's places. /api/province ignores countryId, so this uses the
+  // endpoint that filters by it. The whole list comes back, which keeps the
+  // selected place among the options; the Place box searches it in the browser.
+  const cityList = async (countryId) => {
+    const requestedCountry = String(countryId);
+    placesCountryRef.current = requestedCountry;
     try {
       setIsLoadingPlaces(true);
       const response = await axiosInstance.get(
-        `/api/province?countryId=${countryId}&page=0&limit=50&search=${encodeURIComponent(searchTerm)}`
+        `/api/province/getByCountryId/${countryId}`
       );
-      console.log("cityList response:", response.data);
+      // A newer country was chosen while this was loading.
+      if (placesCountryRef.current !== requestedCountry) return;
       setPlaces(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.log("axios call error for city list : ", error);
-      setPlaces([]);
+      if (placesCountryRef.current === requestedCountry) setPlaces([]);
     } finally {
-      setIsLoadingPlaces(false);
+      if (placesCountryRef.current === requestedCountry) setIsLoadingPlaces(false);
     }
   };
 
@@ -570,6 +587,7 @@ const PackageRates = () => {
 
     setPlaces([]);
     setIsLoadingPlaces(false);
+    placesCountryRef.current = null;
 
     if (value) {
       cityList(value);
@@ -1569,11 +1587,46 @@ const PackageRates = () => {
     }
   }, [packageCategories, editing, showModal]);
 
+  // Keyed on the country rather than on an empty list: a country with no places
+  // returns an empty list too, and that must not fetch again and again.
   useEffect(() => {
-    if (showModal && formData.countryId && !places.length && !isLoadingPlaces) {
+    if (showModal && formData.countryId && placesCountryRef.current !== String(formData.countryId)) {
       cityList(formData.countryId);
     }
-  }, [showModal, formData.countryId, places, isLoadingPlaces]);
+  }, [showModal, formData.countryId]);
+
+  // A saved rate can hold a place outside its country's list (picked while the
+  // list wasn't filtered by country, or removed since). Look its name up so the
+  // field still shows a name.
+  useEffect(() => {
+    const id = formData.placeId;
+    if (!showModal || !id || isLoadingPlaces) return undefined;
+    if (places.some((p) => String(p.id) === String(id))) return undefined;
+    if (savedPlace && String(savedPlace.id) === String(id)) return undefined;
+    let cancelled = false;
+    axiosInstance
+      .get(`/api/province/${id}`)
+      .then((res) => {
+        if (!cancelled) {
+          setSavedPlace({ id, name: res.data?.name || res.data?.stateName || "" });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [showModal, formData.placeId, places, isLoadingPlaces, savedPlace]);
+
+  const placeOptions = [
+    ...(savedPlace &&
+    String(savedPlace.id) === String(formData.placeId) &&
+    !places.some((p) => String(p.id) === String(savedPlace.id))
+      ? [savedPlace]
+      : []),
+    ...(Array.isArray(places)
+      ? places.map((p) => ({ id: p.id, name: p.name || p.stateName }))
+      : []),
+  ];
 
   return (
     <div className="min-vh-100 bg-light d-flex flex-column">
@@ -2088,22 +2141,12 @@ const PackageRates = () => {
                           name="placeId"
                           value={formData.placeId}
                           onChange={handlePlaceChange}
-                          onInputChange={(inputValue) => {
-                            if (placeDebounceRef.current) {
-                              clearTimeout(placeDebounceRef.current);
-                            }
-                            placeDebounceRef.current = setTimeout(() => {
-                              if (formData.countryId) {
-                                cityList(formData.countryId, inputValue);
-                              }
-                            }, 400);
-                          }}
                           placeholder={
                             !formData.countryId
                               ? "Select country first"
                               : "Search and select place"
                           }
-                          options={Array.isArray(places) ? places.map(p => ({ id: p.id, name: p.name || p.stateName })) : []}
+                          options={placeOptions}
                           disabled={!formData.countryId || viewMode}
                           isLoading={isLoadingPlaces}
                           isInvalid={!!validationErrors.placeId}

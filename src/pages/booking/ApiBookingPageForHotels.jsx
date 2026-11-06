@@ -249,11 +249,14 @@ const isHoldEligible = (bookingData) => {
 
 // Where to land after a successful booking. Last Minute supplier bookings
 // (payload.lastMinuteBooking, set by LastMinuteBookingPage) are tagged
-// LAST_MINUTE server-side, so they belong on the Last Minute booking list.
-const postBookingListPath = (isLastMinute) =>
-  isLastMinute
-    ? "/booking-details/last-minute-booking-list"
-    : "/booking-details/hotel-booking-list";
+// LAST_MINUTE server-side, so they belong on the Last Minute booking list. Long
+// Stay supplier bookings (payload.longStayBooking, set by LongStaySearch) are
+// tagged LONG_STAY and belong on the Long Stay booking list.
+const postBookingListPath = (isLastMinute, isLongStay = false) => {
+  if (isLastMinute) return "/booking-details/last-minute-booking-list";
+  if (isLongStay) return "/booking-details/long-stay-booking-list";
+  return "/booking-details/hotel-booking-list";
+};
 
 // The CC Avenue return path runs before bookingData state is restored, so it
 // reads the flag from the sessionStorage copy, which survives the round trip.
@@ -261,6 +264,15 @@ const storedBookingIsLastMinute = () => {
   try {
     const stored = JSON.parse(sessionStorage.getItem("bookingData") || "null");
     return stored?.payload?.lastMinuteBooking === true;
+  } catch (_) {
+    return false;
+  }
+};
+
+const storedBookingIsLongStay = () => {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem("bookingData") || "null");
+    return stored?.payload?.longStayBooking === true;
   } catch (_) {
     return false;
   }
@@ -576,7 +588,7 @@ const ApiBookingPageForHotels = () => {
             bookingResponse.message || "Booking created after payment.",
           );
           setShowConfirmModal(false);
-          navigate(postBookingListPath(storedBookingIsLastMinute()));
+          navigate(postBookingListPath(storedBookingIsLastMinute(), storedBookingIsLongStay()));
         } else {
           const beMsg = (bookingResponse && bookingResponse.message) || null;
           toast.error(
@@ -1260,10 +1272,14 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         // hotel booking (see BookingFlagStamper's kill-switch handling).
         lastMinuteBooking:
           bookingData?.payload?.lastMinuteBooking === true ? true : undefined,
+        // Same idea for the Long Stay page's supplier hotels: bookingType alone
+        // tells BookingFlagStamper to tag the row LONG_STAY.
         bookingType:
           bookingData?.payload?.lastMinuteBooking === true
             ? "LAST_MINUTE"
-            : undefined,
+            : bookingData?.payload?.longStayBooking === true
+              ? "LONG_STAY"
+              : undefined,
 
         // Display-currency preference carried through from the search /
         // room-list flow. Persisted on HotelBooking.displayCurrencyCode
@@ -1419,7 +1435,10 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         // Last Minute list instead (sessionStorage was cleared above, so the
         // flag comes from state).
         navigate(
-          postBookingListPath(bookingData?.payload?.lastMinuteBooking === true),
+          postBookingListPath(
+            bookingData?.payload?.lastMinuteBooking === true,
+            bookingData?.payload?.longStayBooking === true,
+          ),
         );
       } else if (statusUpper === "DUPLICATE") {
         // GRN error code 6000 — the exact booking already exists at the

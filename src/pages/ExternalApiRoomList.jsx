@@ -1341,9 +1341,11 @@ const ExternalApiRoomList = () => {
 
         // Last-minute supplier flow (LastMinuteBookingPage → here): in-house
         // last-minute deals have their own room list and booking flow, so a
-        // mapped hotel's in-house block is not offered on this page.
+        // mapped hotel's in-house block is not offered on this page. Same for
+        // the Long Stay supplier flow: in-house long-stay contracts have their
+        // own room list too, and this block would carry normal contract rates.
         let searchBlocks = searchData.hotels || [];
-        if (payload?.lastMinuteBooking === true) {
+        if (payload?.lastMinuteBooking === true || payload?.longStayBooking === true) {
           searchBlocks = searchBlocks.filter((h) => !isInhouseResponseBlock(h));
         }
         // Mapped hotel (one block per supplier): tag every rate with the
