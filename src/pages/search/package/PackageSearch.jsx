@@ -2055,7 +2055,7 @@ const PackageSearch = () => {
                       selectedPackage.containHotel === 1 ? "active" : ""
                     }`}
                   >
-                    <FaHotel className="me-1" /> Hotel
+                    <FaHotel className="me-1" /> Hotel 
                   </span>
                   <span
                     className={`include-chip ${
