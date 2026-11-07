@@ -23,6 +23,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import { toast } from "react-hot-toast";
+import { hidesTransporter } from "../../utils/supplierDisplay";
 import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -74,9 +75,9 @@ const STATUS_META = {
 // on the row entirely (fetched before this field existed) OR null (booking
 // created but never refreshed) is treated the same as 0 — "On Request" is
 // the correct label for "nothing has happened yet on i'way's side", it's
-// not a "no data" placeholder. Only cab rows with apiType "IWAY" carry a
-// real iway_trip_status; in-house rows return null here and fall back to
-// the pre-existing generic bucketing untouched.
+// not a "no data" placeholder. Only outside transfers (external) carry a
+// real trip status; in-house rows return null here and fall back to the
+// pre-existing generic bucketing untouched.
 const IWAY_BUCKET_BY_STATUS = {
   0: "onrequest",
   1: "confirmed",
@@ -86,8 +87,8 @@ const IWAY_BUCKET_BY_STATUS = {
   5: "cancelled",
 };
 const iwayBucketFor = (b) => {
-  if (b.apiType !== "IWAY") return null;
-  const s = b.iwayTripStatus == null ? 0 : b.iwayTripStatus;
+  if (!b.external) return null;
+  const s = b.tripStatus == null ? 0 : b.tripStatus;
   return IWAY_BUCKET_BY_STATUS[s] || "reconfirmed";
 };
 
@@ -388,7 +389,7 @@ const CabBookingList = () => {
         const hay = [
           b.packageBookCode,
           b.cabName,
-          b.transporter,
+          hidesTransporter(b) ? null : b.transporter,
           b.customer?.firstName,
           b.customer?.lastName,
           b.customer?.emailId,
@@ -895,7 +896,7 @@ const CabBookingList = () => {
                                     >
                                       {b.cabName || "-"}
                                     </span>
-                                    {b.transporter && (
+                                    {b.transporter && !hidesTransporter(b) && (
                                       <span
                                         className="text-muted"
                                         style={{ fontSize: "0.75rem" }}

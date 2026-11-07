@@ -910,7 +910,7 @@ export default function HotelSearch({
         );
 
         const response = await axiosInstance.get(
-          `/api/province?search=${encodeURIComponent(backendQuery)}`,
+          `/api/province?search=${encodeURIComponent(backendQuery)}&source=hotel-search`,
         );
         const cityApiRes = Array.isArray(response.data) ? response.data : [];
 

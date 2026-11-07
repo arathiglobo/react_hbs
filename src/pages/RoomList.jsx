@@ -550,10 +550,10 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
           let endpoint = "";
           switch (payload.apiId) {
             case 12:
-              endpoint = "/api/iwtx/hotel/availability";
+              endpoint = "/api/hotel-rates/12/availability";
               break;
             case 15:
-              endpoint = "/api/x3/hotel/availability";
+              endpoint = "/api/hotel-rates/15/availability";
               break;
           }
 

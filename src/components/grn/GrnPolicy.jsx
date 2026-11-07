@@ -1,6 +1,7 @@
 import React from "react";
 import { Badge, Button, Modal } from "react-bootstrap";
 import { isDeadlinePassed } from "../../utils/rateDeadline";
+import { withoutSupplierName } from "../../utils/supplierDisplay";
 import {
   REFUND_FLEXIBLE,
   REFUND_NON_REFUNDABLE,
@@ -381,8 +382,8 @@ export const GrnChangeNoticeModal = ({ show, items, onAccept, onCancel, formatPr
       </Modal.Header>
       <Modal.Body style={{ maxHeight: "70vh", overflowY: "auto" }}>
         <div className="alert alert-warning py-2 small mb-3" role="alert">
-          GRN re-verified this rate and reports a change since your search. Please
-          review the updated terms below. The booking will use the <strong>new</strong>{" "}
+          {withoutSupplierName("GRN re-verified this rate and reports a change since your search.")}{" "}
+          Please review the updated terms below. The booking will use the <strong>new</strong>{" "}
           price and policy.
         </div>
         {list.map((it, idx) => (

@@ -112,6 +112,8 @@ export const REASON_LABELS = {
   AMBIGUOUS: "Ambiguous (tie at 100%)",
   SINGLE_SUPPLIER: "100% — single supplier",
   CONFLICT: "Already mapped elsewhere",
+  SAME_CONTACT_EXACT: "Exact: same phone, email or website",
+  SAME_CONTACT: "Same phone, email or website, please check",
 };
 
 export function reasonLabel(code) {

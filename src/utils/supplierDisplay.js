@@ -62,6 +62,22 @@ export function withoutSupplierName(text) {
   return text.replace(SUPPLIER_NAME_RE, "Supplier");
 }
 
+/**
+ * For screen text written for staff that names a supplier, where "Supplier" in
+ * its place would read badly. Agent-side logins get the second wording.
+ */
+export function supplierText(staffText, agentText) {
+  return isAgentLogin() ? agentText : staffText;
+}
+
+/**
+ * On a booked outside transfer the transporter is the supplier's own provider
+ * name, so agent-side logins don't get one. In-house transporters stay.
+ */
+export function hidesTransporter(booking) {
+  return Boolean(booking?.external) && isAgentLogin();
+}
+
 /** Hotel name for display — supplier suffix removed for agent logins. */
 export function displayHotelName(name) {
   if (typeof name !== "string" || !isAgentLogin()) return name;
