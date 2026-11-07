@@ -4,14 +4,15 @@ import Swal from "sweetalert2";
 import toast from "react-hot-toast";
 import axiosInstance from "../../../components/AxiosInstance";
 import { escapeHtml, fmtNumber } from "./automapFormat";
+import SearchGapsPanel from "./SearchGapsPanel";
 
 const PROVIDERS = ["", "grn", "goglobal", "iwtx"];
 
 const errorText = (err, fallback) => err?.response?.data?.error || fallback;
 
 /**
- * City mapping review: one real city stored under two names, alternative names,
- * and supplier cities that hold hotels but have no mapping.
+ * City mapping review: what searches failed to find, one real city stored under
+ * two names, alternative names, and supplier cities that hold hotels but have no mapping.
  */
 export default function CitiesReviewTab({ active }) {
   const [suggestions, setSuggestions] = useState(null);
@@ -124,12 +125,18 @@ export default function CitiesReviewTab({ active }) {
       if (stats?.inserted > 0) {
         toast.success(`${g.name} is now mapped to ${cityName}.`);
         await loadGaps();
-      } else {
-        const why = stats?.unmatchedSamples?.[0]?.detail || stats?.conflictSamples?.[0]?.detail || stats?.error;
-        toast.error(why || "The mapping was not saved.");
+        return true;
       }
+      const why = stats?.unmatchedSamples?.[0]?.detail || stats?.conflictSamples?.[0]?.detail || stats?.error;
+      toast.error(why || "The mapping was not saved.");
+      return false;
     } catch (err) {
-      toast.error(errorText(err, "The mapping could not be saved."));
+      toast.error(
+        err?.response?.status === 403
+          ? "Only a super admin can save a city mapping."
+          : errorText(err, "The mapping could not be saved."),
+      );
+      return false;
     } finally {
       setActing(false);
     }
@@ -185,6 +192,8 @@ export default function CitiesReviewTab({ active }) {
           {error}
         </Alert>
       )}
+
+      <SearchGapsPanel active={active} onMap={savePair} acting={acting} />
 
       <div className="ahm-panel">
         <div className="ahm-panel-head">
