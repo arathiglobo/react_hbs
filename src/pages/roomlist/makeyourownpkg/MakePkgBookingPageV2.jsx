@@ -43,6 +43,7 @@ import AddOnServicesPanel, {
 } from "../../../components/AddOnServicesPanel";
 import axiosInstance from "../../../components/AxiosInstance";
 import toast from "react-hot-toast";
+import { REFUND_NON_REFUNDABLE, refundLabelText } from "../../../utils/refundLabel";
 import "../../../styles/HotelBookingPage.css";
 import "../../../styles/MakePkgBookingPage.css";
 
@@ -1333,6 +1334,10 @@ const MakePkgBookingPageV2 = () => {
               const day = String(deadline.getDate()).padStart(2, "0");
               return `${year}-${month}-${day}T00:00:00`;
             } else {
+              // The backend's own last free day, when the rate carries it.
+              if (hotel.refundTerms?.cutoff) {
+                return `${hotel.refundTerms.cutoff}T00:00:00`;
+              }
               // Refundable: 2 days before earliest fromDate from cancellationPolicy
               const policies = hotel.cancellationPolicy || [];
               if (policies.length === 0) {
@@ -1408,6 +1413,7 @@ const MakePkgBookingPageV2 = () => {
                   hotel.refundstatus === "N" ||
                   hotel.nonRefundable === true ||
                   hotel.nonRefundable === "true",
+                refundTerms: hotel.refundTerms,
                 currency: hotel.currency || "AED",
                 rate: roomRate,
                 rateWithoutMarkup: roomRateWithoutMarkup,
@@ -4007,18 +4013,24 @@ const MakePkgBookingPageV2 = () => {
                             }
                             const dates = [];
                             hotelsArr.forEach((it) => {
+                              const cutoff = it.hotel?.refundTerms?.cutoff;
+                              if (cutoff) {
+                                dates.push(new Date(`${cutoff}T00:00:00`));
+                                return;
+                              }
                               const policies = it.hotel?.cancellationPolicy || [];
                               policies.forEach((p) => {
                                 if (p && p.fromDate) {
                                   const dd = new Date(p.fromDate);
-                                  if (!isNaN(dd.getTime())) dates.push(dd);
+                                  if (!isNaN(dd.getTime())) {
+                                    dd.setDate(dd.getDate() - 2);
+                                    dates.push(dd);
+                                  }
                                 }
                               });
                             });
                             if (dates.length === 0) return null;
-                            const earliest = new Date(Math.min(...dates.map((d) => d.getTime())));
-                            earliest.setDate(earliest.getDate() - 2);
-                            return earliest;
+                            return new Date(Math.min(...dates.map((d) => d.getTime())));
                           } catch {
                             return null;
                           }
@@ -4105,9 +4117,9 @@ const MakePkgBookingPageV2 = () => {
                                     fontSize: "0.76rem",
                                   }}
                                 >
-                                  <span className="fw-bold">Non-Refundable:</span> One or more selected services
-                                  are non-refundable, so the entire package is
-                                  treated as non-refundable.
+                                  <span className="fw-bold">{refundLabelText(REFUND_NON_REFUNDABLE)}:</span> One or more selected services
+                                  are Non Refundable, so the entire package is
+                                  treated as Non Refundable.
                                 </div>
                               )}
                             </div>

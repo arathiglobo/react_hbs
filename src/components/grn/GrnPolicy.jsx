@@ -1,6 +1,12 @@
 import React from "react";
 import { Badge, Button, Modal } from "react-bootstrap";
 import { isDeadlinePassed } from "../../utils/rateDeadline";
+import {
+  REFUND_FLEXIBLE,
+  REFUND_NON_REFUNDABLE,
+  REFUND_PARTIAL,
+  refundLabelText,
+} from "../../utils/refundLabel";
 
 /**
  * GRN (apiId 20) cancellation-policy presentation, shared by the room list,
@@ -84,6 +90,12 @@ const shiftGrnDateString = (value, days) => {
   return `${day} ${MONTHS_SHORT[d.getMonth()]} ${d.getFullYear()}${rest}`;
 };
 
+const LABEL_TO_CATEGORY = {
+  [REFUND_FLEXIBLE]: "FULLY_REFUNDABLE",
+  [REFUND_PARTIAL]: "PARTIALLY_REFUNDABLE",
+  [REFUND_NON_REFUNDABLE]: "NON_REFUNDABLE",
+};
+
 /** Normalise a rate / slot object (search rate, recheck DTO or mapped payload row) into one policy view. */
 export const grnPolicyFromRate = (rate) => {
   if (!rate) return null;
@@ -93,14 +105,14 @@ export const grnPolicyFromRate = (rate) => {
       ? rate.cancellationPolicies
       : [];
   const nonRefundable = truthy(rate.nonRefundable);
-  let refundCategory = rate.refundCategory || null;
+  // The rule's answer for today, when the rate has one. It knows about the
+  // safety day, which GRN's own category doesn't.
+  let refundCategory =
+    LABEL_TO_CATEGORY[rate.refundTerms?.label] || rate.refundCategory || null;
   if (!refundCategory) {
     refundCategory = nonRefundable ? "NON_REFUNDABLE" : rows.length ? "FULLY_REFUNDABLE" : null;
   }
-  const refundStatus =
-    rate.refundStatus && /refundable/i.test(rate.refundStatus)
-      ? rate.refundStatus
-      : grnCategoryLabel(refundCategory, nonRefundable);
+  const refundStatus = grnCategoryLabel(refundCategory, nonRefundable);
   return {
     refundCategory,
     refundStatus,
@@ -130,13 +142,13 @@ export const grnPolicyFromRate = (rate) => {
 export const grnCategoryLabel = (category, nonRefundable) => {
   switch (category) {
     case "FULLY_REFUNDABLE":
-      return "Fully refundable";
+      return refundLabelText(REFUND_FLEXIBLE);
     case "PARTIALLY_REFUNDABLE":
-      return "Partially refundable";
+      return refundLabelText(REFUND_PARTIAL);
     case "NON_REFUNDABLE":
-      return "Non-refundable";
+      return refundLabelText(REFUND_NON_REFUNDABLE);
     default:
-      return nonRefundable ? "Non-refundable" : "Refundable";
+      return refundLabelText(nonRefundable ? REFUND_NON_REFUNDABLE : REFUND_FLEXIBLE);
   }
 };
 
@@ -164,7 +176,7 @@ export const isGrnDeadlinePassed = (policy) => {
   return isDeadlinePassed(policy.freeCancellationUntil);
 };
 
-/** Small pill: Fully refundable / Partially refundable / Non-refundable. */
+/** Small pill: Flexible / Flexible - Partial / Non Refundable. */
 export const GrnRefundBadge = ({ rate, policy, className = "" }) => {
   const p = policy || grnPolicyFromRate(rate);
   if (!p) return null;
@@ -179,7 +191,7 @@ export const GrnRefundBadge = ({ rate, policy, className = "" }) => {
         className={className}
         title={`Free-cancellation window closed on ${p.freeCancellationUntil}. Cancellation charges now apply.`}
       >
-        Non-refundable (deadline passed)
+        {refundLabelText(REFUND_NON_REFUNDABLE)}
       </Badge>
     );
   }
@@ -230,14 +242,14 @@ export const GrnDeadlinePill = ({ rate, policy }) => {
   if (p.refundCategory === "PARTIALLY_REFUNDABLE") {
     return (
       <span className="small fw-semibold" style={{ color: "#997404" }}>
-        {p.policyText || "Partially refundable — cancellation charges apply now"}
+        {p.policyText || "Flexible - Partial — cancellation charges apply now"}
       </span>
     );
   }
   if (p.refundCategory === "NON_REFUNDABLE") {
     return (
       <span className="small fw-semibold text-danger">
-        Non-refundable — no free cancellation
+        Non Refundable — no free cancellation
       </span>
     );
   }

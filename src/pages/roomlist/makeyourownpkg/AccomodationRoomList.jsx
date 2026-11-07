@@ -33,6 +33,8 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import "../../../styles/RoomList.css";
 import axiosInstance from "../../../components/AxiosInstance";
+import RefundBadge from "../../../components/RefundBadge";
+import { REFUND_NON_REFUNDABLE, labelOfRate } from "../../../utils/refundLabel";
 import axios from "axios";
 import toast from "react-hot-toast";
 
@@ -199,6 +201,7 @@ const AccomodationRoomList = () => {
         nationality : String(payload.nationality || ""),
         noOfRoom: String(hotelsdetail.numberOfRooms || payload.noOfRoom || "1"),
         refundstatus: refundstatus,
+        refundTerms: rate.refundTerms,
         searchRoomDTOs: searchRoomDTOs,
         agentId: String(payload.agentId || ""),
         totalRate: Number(rate.totalRate) || 0,
@@ -288,6 +291,11 @@ const AccomodationRoomList = () => {
               mealPlan: room.mealPlan,
               contractLabel: room.contractLabel,
               nonRefundable: room.nonRefundable,
+              // The chosen rate's terms, unless this fresh check now says non-refundable.
+              refundTerms:
+                labelOfRate({ nonRefundable: room.nonRefundable }) === REFUND_NON_REFUNDABLE
+                  ? undefined
+                  : rate.refundTerms,
               rate: room.rateDetails.rate,
               currency: room.currCode
               
@@ -315,6 +323,7 @@ const AccomodationRoomList = () => {
             mealPlan: rate.mealPlan,
             contractLabel: rate.contractLabel,
             nonRefundable: rate.nonRefundable,
+            refundTerms: rate.refundTerms,
             rate: rate.totalRate,
             currency: "AED",
             cancellationPolicy: hotelsdetail.cancellationPolicies,
@@ -364,18 +373,6 @@ const AccomodationRoomList = () => {
     }
   };
 
-  const getRefundStatusBadgeInRoomList = (nonRefundable) => {
-    const value = String(nonRefundable).toLowerCase();
-    switch (value) {
-      case "false":
-        return <Badge bg="success">Flexible</Badge>;
-      case "true":
-        return <Badge bg="danger">Non-Refundable</Badge>;
-      default:
-        return <Badge bg="secondary">{String(nonRefundable)}</Badge>;
-    }
-  };
-
   const getRoomStatusBadge = (roomStatus) => {
     switch (roomStatus) {
       case "On Request":
@@ -400,18 +397,6 @@ const AccomodationRoomList = () => {
         );
       default:
         return <Badge bg="secondary">{roomStatus}</Badge>;
-    }
-  };
-
-  const getRefundStatusBadge = (refundStatus) => {
-    // console.log("SELECTED refundStatus:::", refundStatus);
-    switch (refundStatus) {
-      case "FLEXIBLE":
-        return <Badge bg="success">Flexible</Badge>;
-      case "NON REFUNDABLE":
-        return <Badge bg="danger">Non-Refundable</Badge>;
-      default:
-        return <Badge bg="secondary">{refundStatus}</Badge>;
     }
   };
 
@@ -757,9 +742,7 @@ const AccomodationRoomList = () => {
                                       {getRoomStatusBadge(rate.roomStatus)}{" "}
                                     </span>
                                   </div>
-                                  {getRefundStatusBadgeInRoomList(
-                                    rate.nonRefundable
-                                  )}
+                                  <RefundBadge rate={rate} />
                                 </div>
 
                                 <div className="rate-pricing mb-3">
@@ -1089,11 +1072,7 @@ const AccomodationRoomList = () => {
                   <div className="d-flex justify-content-between mb-2">
                     <span>Refund Status:</span>
                     <span>
-                      {getRefundStatusBadge(
-                        selectedRate.nonRefundable === "Y"
-                          ? "NON REFUNDABLE"
-                          : "FLEXIBLE"
-                      )}
+                      <RefundBadge rate={selectedRate} />
                     </span>
                   </div>
                   <div className="d-flex justify-content-between">

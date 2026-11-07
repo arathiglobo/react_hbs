@@ -18,6 +18,14 @@ import {
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
+import { DEADLINE_TIME_EOD, isDeadlinePassed } from "../../utils/rateDeadline";
+import {
+  REFUND_FLEXIBLE,
+  REFUND_NON_REFUNDABLE,
+  REFUND_PARTIAL,
+  refundLabelText,
+  statusText,
+} from "../../utils/refundLabel";
 import toast from "react-hot-toast";
 // Reuses the "Select Payment Gateway" card-style radio styles (.pg-option*)
 // defined for HotelBookingPage.jsx's CC Avenue picker, so this page's
@@ -153,14 +161,24 @@ const voucherIndicatesDeferredCredit = (vg) => {
  * show the shared status if they agree, and say "Mixed" if they do not, so the
  * per-room cards below are read rather than the summary.
  */
+const roomRefundWords = (room) => {
+  const category = String(room?.refundCategory || "");
+  if (category === "FULLY_REFUNDABLE") return refundLabelText(REFUND_FLEXIBLE);
+  if (category === "PARTIALLY_REFUNDABLE") return refundLabelText(REFUND_PARTIAL);
+  if (category === "NON_REFUNDABLE") return refundLabelText(REFUND_NON_REFUNDABLE);
+  return statusText(room?.refundStatus);
+};
+
 const getRefundStatusLabel = (booking) => {
   const rooms = Array.isArray(booking?.rooms) ? booking.rooms : [];
   const perRoom = rooms
-    .map((r) => r?.refundStatus || r?.refundCategory)
+    .map(roomRefundWords)
     .filter((v) => v != null && String(v).trim() !== "");
-  if (perRoom.length === 0) return booking?.refundStatus || "-";
+  // The backend's answer for today, from the saved bands when there are any.
+  const whole = booking?.refundLabelText || statusText(booking?.refundStatus) || "-";
+  if (perRoom.length === 0) return whole;
   const distinct = [...new Set(perRoom.map((v) => String(v).trim()))];
-  if (distinct.length === 1) return distinct[0];
+  if (distinct.length === 1) return whole;
   return `Mixed — ${distinct.join(" / ")} (see per-room policy)`;
 };
 
@@ -714,9 +732,9 @@ export default function BookingDetailedView() {
     if (String(booking.refundStatus || "").toLowerCase() === "non-refundable") {
       return false;
     }
-    const deadline = new Date(booking.deadlineDate);
-    if (Number.isNaN(deadline.getTime())) return false;
-    return new Date() > deadline;
+    // The deadline date is free until 11:59 PM UAE, the same day the refund
+    // check on the server uses.
+    return isDeadlinePassed(booking.deadlineDate);
   })();
 
   const cancelBooking = async () => {
@@ -1852,7 +1870,7 @@ export default function BookingDetailedView() {
                           value={
                             booking.deadlineDate ? (
                               <span style={{ color: "#dc2626", fontWeight: 600 }}>
-                                {`${booking.deadlineDate.slice(0, 10)} 02:00 PM (UAE)`}
+                                {`${booking.deadlineDate.slice(0, 10)} ${DEADLINE_TIME_EOD}`}
                               </span>
                             ) : (
                               "-"
@@ -2028,7 +2046,7 @@ export default function BookingDetailedView() {
                           }}
                         >
                           <div style={{ fontWeight: 600, marginBottom: 2 }}>
-                            Cancellation policy: {room.refundStatus || "—"}
+                            Cancellation policy: {roomRefundWords(room) || "—"}
                             {room.freeCancellationUntil
                               ? ` · Free cancellation until ${room.freeCancellationUntil}`
                               : ""}
@@ -3465,8 +3483,9 @@ export default function BookingDetailedView() {
                             The free-cancellation deadline has passed
                           </div>
                           <div className="mb-2">
-                            You can still cancel this booking, but the booking
-                            amount will not be refunded to the agent's credit.
+                            {booking?.cancellationChargeNow != null
+                              ? `You can still cancel this booking. ${booking.cancellationChargeNow} will be kept as the cancellation charge and the rest refunded to the agent's credit.`
+                              : "You can still cancel this booking, but the booking amount will not be refunded to the agent's credit."}
                           </div>
                           <Form.Check
                             type="checkbox"

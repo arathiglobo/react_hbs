@@ -25,6 +25,8 @@ import {
 } from "react-bootstrap";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
+import RefundBadge from "../../components/RefundBadge";
+import { labelOfRate, refundLabelText, uaeToday } from "../../utils/refundLabel";
 import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
 import {
   GrnRefundBadge,
@@ -242,9 +244,7 @@ const isHoldEligible = (bookingData) => {
   if (hasNonRefundableRate(bookingData?.selectedRate)) return false;
   const deadline = deriveDeadlineDate(bookingData?.selectedRate || []);
   if (!deadline) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return deadline >= today;
+  return deadline >= uaeToday();
 };
 
 // Where to land after a successful booking. Last Minute supplier bookings
@@ -673,7 +673,7 @@ const ApiBookingPageForHotels = () => {
       case "FLEXIBLE":
         return <Badge bg="success">Flexible</Badge>;
       case "NON REFUNDABLE":
-        return <Badge bg="danger">Non-Refundable</Badge>;
+        return <Badge bg="danger">Non Refundable</Badge>;
       default:
         return <Badge bg="secondary">{refundStatus}</Badge>;
     }
@@ -930,6 +930,16 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         return false;
       }
       const freshRooms = Array.isArray(data.rooms) ? data.rooms : [];
+      // The prebook decides. Tell the operator if it differs from what the room
+      // list showed.
+      if (
+        data.refundTerms?.label &&
+        data.refundTerms.label !== labelOfRate(bookingData.selectedRate[0])
+      ) {
+        toast(
+          `The supplier's cancellation terms were confirmed: this rate is ${refundLabelText(data.refundTerms.label)}.`,
+        );
+      }
       const patched = bookingData.selectedRate.map((r, i) => {
         const match =
           freshRooms.find((pr) => (pr.roomSrNo ?? null) === i + 1) ||
@@ -940,6 +950,8 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
           atharvaHKey: data.hKey || r.atharvaHKey,
           atharvaRateKey: match?.rateKey || r.atharvaRateKey,
           atharvaPrebooked: true,
+          nonRefundable: data.nonRefundable ?? r.nonRefundable,
+          refundTerms: data.refundTerms ?? r.refundTerms,
           cancellationPolicy:
             (data.cancellationPolicies?.length && data.cancellationPolicies) ||
             r.cancellationPolicy,
@@ -1178,6 +1190,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
               rate.nonRefundable === true ||
               rate.nonRefundable === "true" ||
               rate.nonRefundable === "Y",
+            refundTerms: rate.refundTerms || null,
             currency: rate.currency || "AED",
             rate: parseFloat(rate.rate || 0),
             rateWithoutMarkup: parseFloat(rate.rateWithoutMarkup || 0),
@@ -1630,9 +1643,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
   const cancellationDeadline = deriveDeadlineDate(selectedRate);
   const isOutsideDeadline = (() => {
     if (!cancellationDeadline) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return today > cancellationDeadline;
+    return uaeToday() > cancellationDeadline;
   })();
 
   return (
@@ -1671,9 +1682,9 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                       year: "numeric",
                     })})`
                   : ""}
-                {" "}— this rate was flagged as refundable at search time, but the
-                free-cancellation cut-off is now in the past. Cancellation charges
-                will apply if the booking is cancelled after confirmation.
+                {" "}— the free-cancellation cut-off is now in the past.
+                Cancellation charges will apply if the booking is cancelled after
+                confirmation.
               </Alert>
             )}
             <Form onSubmit={openPolicyConsent}>
@@ -2253,13 +2264,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                                     // per room (non-bundled rooms differ).
                                     <GrnRefundBadge rate={room} />
                                   ) : (
-                                    getRefundStatusBadge(
-                                      room.nonRefundable === true ||
-                                        room.nonRefundable === "true" ||
-                                        room.nonRefundable === "Y"
-                                        ? "NON REFUNDABLE"
-                                        : "FLEXIBLE",
-                                    )
+                                    <RefundBadge rate={room} />
                                   )}
                                 </div>
                               ))}
@@ -2593,7 +2598,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                               className="policy-text fw-bold"
                               style={{ color: "#dc2626" }}
                             >
-                              Non-refundable
+                              Non Refundable
                             </div>
                             <div className="policy-text">
                               No refund will be provided if this booking is
@@ -3018,7 +3023,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                                       year: "numeric",
                                     },
                                   )}
-                                  , 02:00 PM (UAE)
+                                  , 11:59 PM (UAE)
                                 </span>
                                 {isOutsideDeadline ? (
                                   <span

@@ -37,6 +37,8 @@ import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import RoomFilters from "../../components/roomlist/RoomFilters";
 import useRoomFilters from "../../hooks/useRoomFilters";
+import RefundBadge from "../../components/RefundBadge";
+import { REFUND_FLEXIBLE, REFUND_NON_REFUNDABLE } from "../../utils/refundLabel";
 import { formatFlexibleDate } from "../../utils/dateUtils";
 import "../../styles/RoomList.css";
 
@@ -1151,17 +1153,15 @@ export default function DayStayRoomList() {
                                                 )}
                                               </div>
                                             </div>
-                                            {rate.nonRefundable === true ||
-                                            (rate.nonRefundable === undefined &&
-                                              rate.refundable === false) ? (
-                                              <Badge bg="danger">
-                                                Non-Refundable
-                                              </Badge>
-                                            ) : (
-                                              <Badge bg="success">
-                                                Flexible
-                                              </Badge>
-                                            )}
+                                            <RefundBadge
+                                              label={
+                                                rate.nonRefundable === true ||
+                                                (rate.nonRefundable === undefined &&
+                                                  rate.refundable === false)
+                                                  ? REFUND_NON_REFUNDABLE
+                                                  : REFUND_FLEXIBLE
+                                              }
+                                            />
                                           </div>
 
                                           <div className="rate-pricing text-center py-2">
@@ -1250,18 +1250,16 @@ export default function DayStayRoomList() {
                                                 </span>
                                               </div>
                                               <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                                                {rate.nonRefundable === true ||
-                                                (rate.nonRefundable ===
-                                                  undefined &&
-                                                  rate.refundable === false) ? (
-                                                  <Badge bg="danger">
-                                                    Non-Refundable
-                                                  </Badge>
-                                                ) : (
-                                                  <Badge bg="success">
-                                                    Flexible
-                                                  </Badge>
-                                                )}
+                                                <RefundBadge
+                                                  label={
+                                                    rate.nonRefundable === true ||
+                                                    (rate.nonRefundable ===
+                                                      undefined &&
+                                                      rate.refundable === false)
+                                                      ? REFUND_NON_REFUNDABLE
+                                                      : REFUND_FLEXIBLE
+                                                  }
+                                                />
                                                 {rate.roomStatus ===
                                                 "On Request" ? (
                                                   <Badge

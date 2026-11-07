@@ -33,6 +33,16 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import { createAmendmentLink } from "../../../utils/amendmentLink";
+import RefundBadge from "../../../components/RefundBadge";
+import {
+  REFUND_FLEXIBLE,
+  REFUND_NON_REFUNDABLE,
+  labelOfRate,
+  refundLabelText,
+  worstLabel,
+  uaeToday,
+} from "../../../utils/refundLabel";
+import { parseSupplierDate } from "../../../utils/rateDeadline";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
 
@@ -547,11 +557,20 @@ export default function SeniorCitizenBookingPage() {
   const isNonRefundableRate =
     bookingData?.selectedRate?.nonRefundable === true ||
     bookingData?.selectedRate?.nonRefundable === "true";
+
+  // The refund words shown on this page. A multi-room booking is as refundable
+  // as its worst room. The booking flow still follows isNonRefundableRate.
+  const bookingRefundLabel = bookingData?.roomBreakdown?.length
+    ? worstLabel(bookingData.roomBreakdown.map((slot) => labelOfRate(slot)))
+    : labelOfRate(bookingData?.selectedRate);
   // Cancellation deadline for display — end of the check-in day, mirrors
   // how the create payload stores deadlineDate (`${checkInDate}T23:59:59`).
   // Powers the "Refundable until this date" / "Passed" badge on the
   // confirm modal.
   const cancellationDeadline = (() => {
+    // The date the room list showed, when the rate carries it.
+    const cutoff = parseSupplierDate(bookingData?.selectedRate?.refundTerms?.cutoff);
+    if (cutoff) return cutoff;
     const cinRaw = bookingData?.payload?.checkInDate;
     if (!cinRaw) return null;
     const cin = new Date(cinRaw);
@@ -562,9 +581,7 @@ export default function SeniorCitizenBookingPage() {
   })();
   const isOutsideDeadline = (() => {
     if (!cancellationDeadline) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return today > cancellationDeadline;
+    return uaeToday() > cancellationDeadline;
   })();
   // Offer the Voucher Now / Voucher Later choice only for refundable,
   // Available rates. On-request / non-refundable rates skip the choice.
@@ -1239,6 +1256,9 @@ export default function SeniorCitizenBookingPage() {
                             <span className="badge bg-warning text-dark">
                               ⭐ {hotelStaticData.starRating} Star
                             </span>
+                            {selectedRate?.nonRefundable !== undefined && (
+                              <RefundBadge label={bookingRefundLabel} />
+                            )}
                             {promoSummary && (
                               <Badge bg="success" className="d-inline-flex align-items-center">
                                 <FaUserClock className="me-1" /> Senior {promoSummary}
@@ -1610,7 +1630,7 @@ export default function SeniorCitizenBookingPage() {
                                 className="badge bg-danger"
                                 style={{ fontSize: "0.7rem" }}
                               >
-                                Non-refundable
+                                {refundLabelText(REFUND_NON_REFUNDABLE)}
                               </span>
                             </p>
                             <p
@@ -1645,6 +1665,8 @@ export default function SeniorCitizenBookingPage() {
                                   >
                                     Passed
                                   </span>
+                                ) : bookingRefundLabel !== REFUND_FLEXIBLE ? (
+                                  <RefundBadge label={bookingRefundLabel} className="ms-2" />
                                 ) : (
                                   <span
                                     className="badge bg-success ms-2"
