@@ -113,7 +113,7 @@ export default function MappingRulesTab({ active }) {
         />
         <ul className="small text-muted mt-2 mb-2 ps-3">
           <li>
-            <strong>Ticked:</strong> rooms with the same name from different suppliers are combined into one row, showing
+            <strong>Ticked:</strong> rooms whose names have the same words, in any order, are combined into one row, showing
             the cheapest rate.
           </li>
           <li>

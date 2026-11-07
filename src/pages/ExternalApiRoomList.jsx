@@ -40,6 +40,7 @@ import { formatFlexibleDate } from "../utils/dateUtils";
 import { isAdminLogin, isAgentLogin, stripSupplierSuffix, supplierCodeForBlock, supplierDisplayName } from "../utils/supplierDisplay";
 import AdminSupplierStrip from "../components/AdminSupplierStrip";
 import { streamRoomSearch } from "../utils/roomSearchStream";
+import { cleanRoomName, fullRoomName, roomMatchKey } from "../utils/roomNameMatch";
 import {
   isNonRefundableRate,
   sumSelectedRooms,
@@ -187,22 +188,19 @@ const mergeRoomCategories = (blocks) => {
   );
 };
 
-// Two names are the same room only when they differ in capitals or spacing.
-// Anything looser could combine two different rooms.
-const roomNameKey = (name) =>
-  String(name ?? "").toLowerCase().replace(/\s+/g, "");
-
 /**
- * Room Mapping on: one entry per room name across all suppliers. Rate objects
- * are kept as they are, so a picked rate stays the same object and each rate
- * still books through its own supplier. `_catKey` comes from the name, so a
- * room stays open while more suppliers answer. A room with no name can't be
- * matched and keeps its own entry.
+ * Room Mapping on: one entry per room across all suppliers, matching on each
+ * supplier's full room name, so "Club Room, 1 King Bed" and "Club Room, 2 Twin
+ * Beds" stay apart even though the backend shortens both to "Club Room". Rate
+ * objects are kept as they are, so a picked rate stays the same object and each
+ * rate still books through its own supplier. `_catKey` comes from the name, so a
+ * room stays open while more suppliers answer. A name that can't be matched
+ * keeps its own entry.
  */
 const combineSameRooms = (categories) => {
   const rooms = new Map();
   categories.forEach((cat, index) => {
-    const nameKey = roomNameKey(cat?.roomCategory);
+    const nameKey = roomMatchKey(fullRoomName(cat));
     const key = nameKey ? `room-${nameKey}` : cat?._catKey || `unnamed-${index}`;
     const room = rooms.get(key);
     if (room) {
@@ -3332,11 +3330,15 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
   // Admins always see each rate's supplier; staff only on a mapped hotel.
   const showSupplierBadge =
     isAdminLogin() || ((isMergedResponse || combineRooms) && !isAgentLogin());
+  // A mapped hotel, even while only one of its suppliers has answered.
+  const isMappedRoomList =
+    isMergedResponse ||
+    combineRooms ||
+    roomData?.masterHotelId != null ||
+    (supplierProgress?.expected || 0) > 1;
   // The room row carries it too on a mapped hotel, where the list mixes
   // suppliers. A single-supplier hotel already has it in the page header.
-  const showRoomRowSupplier =
-    showSupplierBadge &&
-    (isMergedResponse || combineRooms || (supplierProgress?.expected || 0) > 1);
+  const showRoomRowSupplier = showSupplierBadge && isMappedRoomList;
 
   // Supplier block (and its apiId / payload) of the rate(s) currently shown
   // in the Room Details modal — what that modal's Continue books with.
@@ -4042,8 +4044,14 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                 });
                               });
                             if (filteredRates.length === 0) return null;
-                            if (!matchesRoomSearch(category.roomCategory))
-                              return null;
+                            // A mapped hotel's rows show the supplier's full
+                            // room name: the shortened one repeats, so one
+                            // supplier could list "Studio" eight times.
+                            const roomRowName = isMappedRoomList
+                              ? cleanRoomName(fullRoomName(category)) ||
+                                category.roomCategory
+                              : category.roomCategory;
+                            if (!matchesRoomSearch(roomRowName)) return null;
                             // Picked last, so the cheapest rate is one that
                             // passes the filters and suits this room slot.
                             const shownRates = combineRooms
@@ -4063,7 +4071,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                                   <div className="d-flex justify-content-between align-items-center w-100">
                                     <div className="room-category-info">
                                       <h5 className="mb-1">
-                                        {category.roomCategory}
+                                        {roomRowName}
                                       </h5>
                                       {showRoomRowSupplier && (
                                         <div className="d-flex flex-wrap gap-1">
