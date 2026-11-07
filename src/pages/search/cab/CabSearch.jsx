@@ -323,6 +323,9 @@ export const CabSearch = () => {
   // `suppliers` list POST /api/cab-search/search returns) — lets any
   // transfer API the backend adds show up in the Channel filter on its own.
   const [searchChannels, setSearchChannels] = useState([]);
+  // The search the results on screen came from. The booking uses it to take
+  // the provider name and vehicle photo from the cached search row.
+  const lastSearchIdRef = useRef(null);
   const [sortBy, setSortBy] = useState("price");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 5;
@@ -628,7 +631,7 @@ export const CabSearch = () => {
       // offers the same real-world place twice. The /registration/cabProvider
       // zone modal deliberately leaves this off so every in-house record
       // stays available for zone building.
-      params.set("applyIwayMapping", "true");
+      params.set("applyLocationMapping", "true");
 
       const res = await axiosInstance.get(
         `/api/cab-search/lookup?${params.toString()}`,
@@ -1074,7 +1077,7 @@ export const CabSearch = () => {
     // is supplier-native at BOTH ends never touches the in-house tables, so
     // demanding a city there would block a search we can actually serve.
     const routeIsFullyExternal =
-      pickupItem?.source === "IWAY" && dropoffItem?.source === "IWAY";
+      !!pickupItem?.externalId && !!dropoffItem?.externalId;
 
     if (!city && !routeIsFullyExternal) errs.city = "City is required.";
     if (changeDropCity && !dropCity && !routeIsFullyExternal)
@@ -1194,14 +1197,17 @@ export const CabSearch = () => {
     apiType: cab.apiType || null,
     channelType: cab.channelType || null,
     source: cab.apiType || cab.source || null,
-    iwayPriceId: cab.iwayPriceId || null,
-    iwayPriceUid: cab.iwayPriceUid || null,
+    // Neutral routing fields, sent for every login. Agent-side logins get no
+    // apiType / channelType, so booking never routes on those.
+    external: cab.external === true,
+    offerId: cab.offerId ?? null,
+    offerUid: cab.offerUid ?? null,
     // flexible_tariff flag from the i'way price offer (guide §11.6.2).
     // Carried through so CabBookingPage can forward it to /api/cab/book,
     // where the backend uses it to decide whether to send text_tablet
     // (Meet & Greet sign) on the create-order payload. Null on in-house
     // rows — the backend treats null as "M&G included" (safe default).
-    iwayFlexibleTariff:
+    flexibleTariff:
       cab.flexibleTariff != null ? Boolean(cab.flexibleTariff) : null,
     // allowable_time (seconds) from the i'way price offer — carried
     // through so CabBookingPage can forward it to /api/cab/book, where
@@ -1209,7 +1215,7 @@ export const CabSearch = () => {
     // §11.10 locally (pickup_time - now >= allowable_time + 20 min). Null
     // on in-house rows and on any i'way row whose search response omitted
     // the field — the backend then no-ops the check for backwards compat.
-    iwayAllowableTime:
+    allowableTime:
       cab.allowableTime != null ? Number(cab.allowableTime) : null,
     searchCabDetailsDTO: Array.isArray(cab.searchCabDetailsDTO)
       ? cab.searchCabDetailsDTO.map((d) => ({
@@ -1356,18 +1362,20 @@ export const CabSearch = () => {
               ? Array(transferChildren).fill(0)
               : [],
         agentId: agentId ? Number(agentId) : null,
-        // IWay leg piggybacked on the same request — backend skips the
-        // IWay fan-out when iwayEnabled=false or coords are missing.
-        iwayEnabled: iwayReady,
-        iwayStartPlaceId: iwayReady ? iwayPickupSelected.placeId : null,
-        iwayStartLat: iwayReady ? iwayPickupSelected.lat : null,
-        iwayStartLng: iwayReady ? iwayPickupSelected.lng : null,
-        iwayStartLabel: iwayReady ? iwayPickupSelected.label : null,
-        iwayFinishPlaceId: iwayReady ? iwayDropSelected.placeId : null,
-        iwayFinishLat: iwayReady ? iwayDropSelected.lat : null,
-        iwayFinishLng: iwayReady ? iwayDropSelected.lng : null,
-        iwayFinishLabel: iwayReady ? iwayDropSelected.label : null,
-        iwayCurrency: iwayReady ? currency?.value || null : null,
+        // IWay leg piggybacked on the same request. Sent only when it is
+        // requested, so an ordinary search names no supplier.
+        ...(iwayReady && {
+          iwayEnabled: true,
+          iwayStartPlaceId: iwayPickupSelected.placeId,
+          iwayStartLat: iwayPickupSelected.lat,
+          iwayStartLng: iwayPickupSelected.lng,
+          iwayStartLabel: iwayPickupSelected.label,
+          iwayFinishPlaceId: iwayDropSelected.placeId,
+          iwayFinishLat: iwayDropSelected.lat,
+          iwayFinishLng: iwayDropSelected.lng,
+          iwayFinishLabel: iwayDropSelected.label,
+          iwayCurrency: currency?.value || null,
+        }),
       };
 
       // Agent search log (Unbooked Opportunities → Searches tab) —
@@ -1405,6 +1413,7 @@ export const CabSearch = () => {
       );
       const searchId = initRes?.data?.searchId;
       if (!searchId) throw new Error("No searchId returned");
+      lastSearchIdRef.current = searchId;
 
       // Which suppliers the backend actually dispatched to, after agent
       // exclusion + company allow-list. Used below to decide whether a
@@ -1592,7 +1601,7 @@ export const CabSearch = () => {
 
   const handleBookNow = (cab, cabDetail) => {
 
-    const isIway = cab?.channelType === "iway" || cab?.source === "IWAY";
+    const isIway = cab?.external === true;
 
     // Recompute the row's price the same way the table shows it so the
     // booking page receives a consistent total. We carry BOTH the
@@ -1677,14 +1686,15 @@ export const CabSearch = () => {
         // request already sent, so the backend can re-resolve i'way
         // place_id/coordinates via IwayPlaceResolver at booking time exactly
         // as it did at search time.
-        apiType: isIway ? "IWAY" : null,
-        iwayPriceId: isIway ? (cab?.iwayPriceId ?? null) : null,
-        iwayPriceUid: isIway ? (cab?.iwayPriceUid ?? null) : null,
+        external: isIway,
+        offerId: isIway ? (cab?.offerId ?? null) : null,
+        offerUid: isIway ? (cab?.offerUid ?? null) : null,
+        searchId: isIway ? lastSearchIdRef.current : null,
         // Guide §11.10 pre-order time check on the backend needs the
         // offer's allowable_time. Carried on searchCriteria so
         // CabBookingPage doesn't have to re-read it off the cab row.
         // Null on in-house rows and on i'way rows whose offer omitted it.
-        iwayAllowableTime: isIway ? (cab?.iwayAllowableTime ?? null) : null,
+        allowableTime: isIway ? (cab?.allowableTime ?? null) : null,
         originLocation: isIway ? toTransferLocation(pickupItem, "AIRPORT") : null,
         destinationLocation: isIway ? toTransferLocation(dropoffItem, "HOTEL") : null,
       },

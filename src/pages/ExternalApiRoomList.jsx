@@ -557,7 +557,7 @@ const ExternalApiRoomList = () => {
     };
     try {
       const resp = await axiosInstance.post(
-        "/api/hotel-booking/atharva/prebook",
+        "/api/hotel-booking/rate-check/3",
         req,
       );
       const data = resp?.data || {};
@@ -610,7 +610,7 @@ const ExternalApiRoomList = () => {
     };
     try {
       const resp = await axiosInstance.post(
-        "/api/hotel-booking/grn/recheck",
+        "/api/hotel-booking/rate-check/20",
         req,
       );
       const data = resp?.data || {};
@@ -662,7 +662,7 @@ const ExternalApiRoomList = () => {
     };
     try {
       const resp = await axiosInstance.post(
-        "/api/hotel-booking/darina/prebook",
+        "/api/hotel-booking/rate-check/16",
         req,
       );
       return resp?.data || { success: false, message: "Empty response" };
@@ -701,7 +701,7 @@ const ExternalApiRoomList = () => {
     };
     try {
       const resp = await axiosInstance.post(
-        "/api/hotel-booking/ratehawk/prebook",
+        "/api/hotel-booking/rate-check/14",
         req,
       );
       return resp?.data || { success: false, message: "Empty response" };
@@ -742,7 +742,7 @@ const ExternalApiRoomList = () => {
     };
     try {
       const resp = await axiosInstance.post(
-        "/api/hotel-booking/goglobal/valuation",
+        "/api/hotel-booking/rate-check/21",
         req,
       );
       return resp?.data || { success: false, message: "Empty response" };
@@ -2432,8 +2432,8 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
 
           const endpoint =
             currentApiId === 12
-              ? "/api/iwtx/hotel/availability"
-              : "/api/x3/hotel/availability";
+              ? "/api/hotel-rates/12/availability"
+              : "/api/hotel-rates/15/availability";
 
           const response = await axiosInstance.post(endpoint, priceCheckReq);
           const respHotel = repricedHotelOrThrow(response);
@@ -2999,7 +2999,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
 
             const responses = await Promise.all(
               perRoomRequests.map((req) =>
-                axiosInstance.post("/api/x3/hotel/availability", req),
+                axiosInstance.post("/api/hotel-rates/15/availability", req),
               ),
             );
 
@@ -3076,8 +3076,8 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
 
             const endpoint =
               currentApiId === 12
-                ? "/api/iwtx/hotel/availability"
-                : "/api/x3/hotel/availability";
+                ? "/api/hotel-rates/12/availability"
+                : "/api/hotel-rates/15/availability";
 
             const response = await axiosInstance.post(endpoint, priceCheckReq);
             const respHotel = repricedHotelOrThrow(response);

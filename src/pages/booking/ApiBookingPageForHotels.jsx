@@ -36,6 +36,11 @@ import {
   grnIsBundledSelection,
 } from "../../components/grn/GrnPolicy";
 import {
+  displayHotelName,
+  supplierText,
+  withoutSupplierName,
+} from "../../utils/supplierDisplay";
+import {
   RateDeadlinePill,
   resolveDeadlineDate,
   isNonRefundable,
@@ -573,14 +578,15 @@ const ApiBookingPageForHotels = () => {
           bookingResponse.bookingId != 0;
         if (isSuccess) {
           toast.success(
-            bookingResponse.message || "Booking created after payment.",
+            withoutSupplierName(bookingResponse.message) ||
+              "Booking created after payment.",
           );
           setShowConfirmModal(false);
           navigate(postBookingListPath(storedBookingIsLastMinute()));
         } else {
           const beMsg = (bookingResponse && bookingResponse.message) || null;
           toast.error(
-            beMsg ||
+            withoutSupplierName(beMsg) ||
               "Payment succeeded but booking could not be created. Please contact support with your payment reference.",
           );
         }
@@ -589,7 +595,7 @@ const ApiBookingPageForHotels = () => {
           err?.response?.data?.message || err?.response?.data?.error || null;
         console.error("Post-payment finalize failed:", err);
         toast.error(
-          beMsg ||
+          withoutSupplierName(beMsg) ||
             "Payment succeeded but booking could not be created. Please contact support with your payment reference.",
         );
       } finally {
@@ -765,8 +771,14 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
       const trimmed = (panCardNo || "").trim().toUpperCase();
       if (!trimmed) {
         errors.panCardNo = requiresAtharvaPan()
-          ? "PAN Card No is required (Indian primary guest booking with Atharva)."
-          : "PAN Card No is required (this GRN rate mandates PAN on the holder).";
+          ? supplierText(
+              "PAN Card No is required (Indian primary guest booking with Atharva).",
+              "PAN Card No is required (Indian primary guest).",
+            )
+          : supplierText(
+              "PAN Card No is required (this GRN rate mandates PAN on the holder).",
+              "PAN Card No is required (this rate mandates PAN on the holder).",
+            );
         hasErrors = true;
       } else if (trimmed.length !== 10) {
         errors.panCardNo = "PAN must be 10 characters.";
@@ -853,7 +865,10 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
       const uniqueHKeys = [...new Set(hKeys)];
       if (uniqueHKeys.length > 1) {
         toast.error(
-          "Atharva multi-room bookings require all rooms to be selected from the same rate group. Please go back and reselect rates that appear under the same vendor.",
+          supplierText(
+            "Atharva multi-room bookings require all rooms to be selected from the same rate group. Please go back and reselect rates that appear under the same vendor.",
+            "Multi-room bookings on this rate require all rooms to be selected from the same rate group. Please go back and reselect rates that appear under the same vendor.",
+          ),
         );
         return false;
       }
@@ -918,14 +933,17 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         ),
       };
       const resp = await axiosInstance.post(
-        "/api/hotel-booking/atharva/prebook",
+        "/api/hotel-booking/rate-check/3",
         preReq,
       );
       const data = resp?.data;
       if (!data || data.success === false) {
         toast.error(
-          data?.message ||
-            "Atharva prebook failed — rate may no longer be available. Please repeat the search.",
+          withoutSupplierName(data?.message) ||
+            supplierText(
+              "Atharva prebook failed — rate may no longer be available. Please repeat the search.",
+              "Prebook failed — rate may no longer be available. Please repeat the search.",
+            ),
         );
         return false;
       }
@@ -974,8 +992,8 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         err?.response?.data?.message ||
         err?.response?.data?.error ||
         err?.message ||
-        "Atharva prebook request failed";
-      toast.error(backendMsg);
+        supplierText("Atharva prebook request failed", "Prebook request failed");
+      toast.error(withoutSupplierName(backendMsg));
       return false;
     } finally {
       // Always release the in-flight flag — whether the prebook
@@ -1417,7 +1435,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         bookingResponse?.bookingId != 0;
 
       if (bookingResponse && isSuccess) {
-        toast.success(bookingResponse.message);
+        toast.success(withoutSupplierName(bookingResponse.message));
         // Clear the cached booking payload so a browser-back or stale tab
         // can't resubmit the already-consumed Atharva tokenId / hKey /
         // per-room rateKey — those are single-use at the supplier and
@@ -1448,7 +1466,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         // supplier. Show a dedicated modal (not a toast) so the operator
         // has to acknowledge before continuing, and doesn't retry blindly.
         setDuplicateMessage(
-          bookingResponse?.message ||
+          withoutSupplierName(bookingResponse?.message) ||
             "Duplicate booking detected. This exact booking was already made. Please check your recent bookings before retrying.",
         );
         setShowDuplicateModal(true);
@@ -1460,7 +1478,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
           bookingResponse?.message ||
           bookingResponse?.error ||
           "Booking submission failed. Please try again.";
-        toast.error(detail);
+        toast.error(withoutSupplierName(detail));
       }
     } catch (err) {
       console.error("Error in booking confirmation:", err);
@@ -1469,7 +1487,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         err?.response?.data?.error ||
         err?.message ||
         "Booking submission failed. Please try again.";
-      toast.error(detail);
+      toast.error(withoutSupplierName(detail));
     } finally {
       setIsSubmitting(false);
       setShowConfirmModal(false);
@@ -2015,8 +2033,14 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                       </h5>
                       <div className="text-muted small mb-3">
                         {requiresAtharvaPan()
-                          ? "PAN is required for Indian nationals booking with Atharva. Enter the primary guest's PAN card details."
-                          : "This GRN rate mandates PAN on the holder. Enter the primary guest's PAN details."}
+                          ? supplierText(
+                              "PAN is required for Indian nationals booking with Atharva. Enter the primary guest's PAN card details.",
+                              "PAN is required for Indian nationals on this booking. Enter the primary guest's PAN card details.",
+                            )
+                          : supplierText(
+                              "This GRN rate mandates PAN on the holder. Enter the primary guest's PAN details.",
+                              "This rate mandates PAN on the holder. Enter the primary guest's PAN details.",
+                            )}
                       </div>
                       <Row className="g-3">
                         <Col md={6}>
@@ -2235,7 +2259,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                       <Card.Body className="p-3">
                         <div className="mb-3">
                           <div className="fw-bold text-primary mb-1">
-                            {hotelStaticData.hotelName}
+                            {displayHotelName(hotelStaticData.hotelName)}
                           </div>
                           <div className="text-muted small mb-2">
                             {hotelStaticData.address}
@@ -2455,8 +2479,8 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                           </Form.Label>
                           <Form.Check
                             type="radio"
-                            name="atharvaBookingMode"
-                            id="atharva-mode-voucher"
+                            name="bookingMode"
+                            id="booking-mode-voucher"
                             label="Book and Pay Now"
                             checked={bookingConfirmation === "Book & Voucher"}
                             onChange={() => {
@@ -2476,8 +2500,8 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                           {!hasNonRefundableRate(bookingData?.selectedRate) && (
                             <Form.Check
                               type="radio"
-                              name="atharvaBookingMode"
-                              id="atharva-mode-hold"
+                              name="bookingMode"
+                              id="booking-mode-hold"
                               label="Hold Room and Pay Later"
                               checked={
                                 bookingConfirmation === "Hold & Book Later"
@@ -2847,7 +2871,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                       <div className="mb-2">
                         <p className="mb-0 d-flex align-items-center flex-wrap">
                           <span className="fw-bold text-primary fs-5">
-                            {pendingPayload.hotelName}
+                            {displayHotelName(pendingPayload.hotelName)}
                           </span>
                           {pendingPayload.address && (
                             <span className="text-muted small ms-1">

@@ -32,8 +32,9 @@ const API_ID_PREFIX = "API";
  *   JUNIPER — searchable, but no room-list search exists for it yet
  *             (/api/hotel-rooms/search has no apiId 17), so its hotels could
  *             not be opened. Remove it from here once that lands.
- * Sent to /results as excludeApiTypes so the backend drops them BEFORE its
- * mapped-hotel dedup, and re-checked client-side for an older backend.
+ * The backend holds the same list and drops them BEFORE its mapped-hotel dedup
+ * when /results is asked with forPage=last-minute, so the request names no
+ * supplier. Re-checked client-side for an older backend.
  */
 const EXCLUDED_API_TYPES = ["INHOUSE", "JUNIPER"];
 
@@ -231,7 +232,7 @@ export async function searchApiHotels(payload, onPartial, opts = {}) {
       agentId: payload.agentId,
       page: 0,
       size: MAX_API_HOTELS,
-      excludeApiTypes: EXCLUDED_API_TYPES.join(","),
+      forPage: "last-minute",
     };
     const startedAt = Date.now();
 

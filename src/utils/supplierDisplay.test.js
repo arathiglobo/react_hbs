@@ -1,4 +1,4 @@
-import { isAgentLogin, withoutSupplierName } from "./supplierDisplay";
+import { hidesTransporter, isAgentLogin, supplierText, withoutSupplierName } from "./supplierDisplay";
 
 /** Sets up the login the way the login and role-picker pages store it. */
 function login({ roles = "", active = "" }) {
@@ -34,6 +34,47 @@ describe("isAgentLogin", () => {
   ])("does not treat %s as an agent", (_who, session) => {
     login(session);
     expect(isAgentLogin()).toBe(false);
+  });
+});
+
+describe("hidesTransporter", () => {
+  it.each([
+    ["a main agent", { roles: "AGENT" }],
+    ["a sub-agent", { roles: "SUB_AGENT,AGENT", active: "SUB_AGENT" }],
+    ["a sub-user", { roles: "SUB_USER,AGENT", active: "SUB_USER" }],
+  ])("hides an outside transfer's transporter from %s but keeps an in-house one", (_who, session) => {
+    login(session);
+    expect(hidesTransporter({ external: true })).toBe(true);
+    expect(hidesTransporter({ external: false })).toBe(false);
+    expect(hidesTransporter(null)).toBe(false);
+  });
+
+  it.each([
+    ["an admin", { roles: "ADMIN" }],
+    ["a super admin", { roles: "SUPER_ADMIN" }],
+  ])("keeps it for %s", (_who, session) => {
+    login(session);
+    expect(hidesTransporter({ external: true })).toBe(false);
+  });
+});
+
+describe("supplierText", () => {
+  it.each([
+    ["a main agent", { roles: "AGENT" }],
+    ["a sub-agent", { roles: "SUB_AGENT,AGENT", active: "SUB_AGENT" }],
+    ["a sub-user", { roles: "SUB_USER,AGENT", active: "SUB_USER" }],
+  ])("gives %s the agent wording", (_who, session) => {
+    login(session);
+    expect(supplierText("for i'way bookings", "for this booking")).toBe("for this booking");
+  });
+
+  it.each([
+    ["an admin", { roles: "ADMIN" }],
+    ["a super admin", { roles: "SUPER_ADMIN" }],
+    ["staff", { roles: "STAFF" }],
+  ])("gives %s the staff wording", (_who, session) => {
+    login(session);
+    expect(supplierText("for i'way bookings", "for this booking")).toBe("for i'way bookings");
   });
 });
 
