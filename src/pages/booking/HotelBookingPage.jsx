@@ -21,6 +21,8 @@ import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
 import { resolveInhouseDeadline } from "../../utils/rateDeadline";
+import RefundBadge from "../../components/RefundBadge";
+import { uaeToday, labelOfRate, chargeNowText, REFUND_PARTIAL } from "../../utils/refundLabel";
 
 // Dummy online-payment gateways shown when an agent's credit is short.
 // Each routes to /payment/<id> — a placeholder card-entry page.
@@ -343,7 +345,9 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
     }
     let cancelled = false;
     axiosInstance
-      .get(`/api/hotels/${hotelId}/max-cancellation-nights`)
+      .get(`/api/hotels/${hotelId}/max-cancellation-nights`, {
+        params: { checkIn: bookingData?.payload?.checkInDate },
+      })
       .then((res) => {
         if (!cancelled) {
           const n = Number(res?.data);
@@ -413,9 +417,7 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
   // resolve directly to RECONFIRMED).
   const isOutsideDeadline = (() => {
     if (!cancellationDeadline) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return today > cancellationDeadline;
+    return uaeToday() > cancellationDeadline;
   })();
 
   const isOnRequestRate =
@@ -506,11 +508,14 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
   //     Voucher Later would auto-cancel immediately.
   // Only shown for Available + refundable rates that actually have a
   // deadline. On-request and non-refundable flows never show the choice.
+  // A rate that only costs part of the booking keeps the choice after its
+  // deadline. A full charge comes through as a non-refundable rate instead.
+  const isPartialRate = labelOfRate(bookingData?.selectedRate) === REFUND_PARTIAL;
   const showVoucherChoice =
     !isOnRequestRate &&
     !isNonRefundableRate &&
     !!cancellationDeadline &&
-    !isOutsideDeadline;
+    (!isOutsideDeadline || isPartialRate);
 
   // Resolved status that will travel to the backend on
   // payload.bookingFlowStatus. Computed once here so the UI banner and
@@ -519,7 +524,7 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
     if (isOnRequestRate) return "REQUESTED";
     if (isNonRefundableRate) return "RECONFIRMED";
     // Deadline already passed → force "Book Now & Voucher Now" → RECONFIRMED.
-    if (isOutsideDeadline) return "RECONFIRMED";
+    if (isOutsideDeadline && !isPartialRate) return "RECONFIRMED";
     // Within deadline → respect the radio choice.
     return bookingConfirmation === "Book Now & Voucher later"
       ? "CONFIRMED"
@@ -976,7 +981,7 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
       case "FLEXIBLE":
         return <Badge bg="success">Flexible</Badge>;
       case "NON REFUNDABLE":
-        return <Badge bg="danger">Non-Refundable</Badge>;
+        return <Badge bg="danger">Non Refundable</Badge>;
       default:
         return <Badge bg="secondary">{refundStatus}</Badge>;
     }
@@ -1568,10 +1573,10 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
                       year: "numeric",
                     })})`
                   : ""}
-                {" "}— the Voucher Later option has been hidden and the booking
-                will be issued immediately (Book Now &amp; Voucher Now).
-                Cancellation charges will apply if the booking is cancelled
-                after confirmation.
+                {" "}—{" "}
+                {isPartialRate
+                  ? `${chargeNowText(bookingData?.selectedRate) || "Cancellation charges apply"}.`
+                  : "the Voucher Later option has been hidden and the booking will be issued immediately (Book Now & Voucher Now). Cancellation charges will apply if the booking is cancelled after confirmation."}
               </Alert>
             )}
             {/* Guest Details Section */}
@@ -1667,7 +1672,7 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
                                     month: "short",
                                     year: "numeric",
                                   },
-                                )}, 02:00 PM (UAE)`
+                                )}, 11:59 PM (UAE)`
                               : null;
                           return (
                             <Accordion.Item
@@ -2133,13 +2138,9 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
                             <span className="badge bg-warning text-dark">
                               ⭐ {hotelStaticData.starRating} Star
                             </span>
-                            {selectedRate?.nonRefundable !== undefined &&
-                              getRefundStatusBadge(
-                                selectedRate.nonRefundable === true ||
-                                  selectedRate.nonRefundable === "true"
-                                  ? "NON REFUNDABLE"
-                                  : "FLEXIBLE",
-                              )}
+                            {selectedRate?.nonRefundable !== undefined && (
+                              <RefundBadge rate={selectedRate} />
+                            )}
                            
                           </div>
                         </div>
@@ -2709,7 +2710,7 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
                                       year: "numeric",
                                     },
                                   )}
-                                  , 02:00 PM (UAE)
+                                  , 11:59 PM (UAE)
                                 </span>
                                 {isOutsideDeadline ? (
                                   <span

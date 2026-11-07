@@ -30,6 +30,7 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import { logAgentSearch } from "../../../utils/agentSearchLog";
+import { apiIdOfResult } from "../../../utils/hotelSearchResults";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
 import DateInput from "../../../components/DateInput";
@@ -745,18 +746,6 @@ export default function GovEmployeeSearch() {
   };
 
   // ── click "View Rooms" → navigate to gov-employee room-list ─────
-  const apiIdFromType = (apiType) => {
-    const map = {
-      inhouse: 1,
-      jumeirah: 10,
-      iwtx: 12,
-      x3: 15,
-      ratehawk: 14,
-      darina: 16,
-      atharva: 3,
-    };
-    return map[(apiType || "").toLowerCase()] || 1;
-  };
   const handleBookHotel = (h) => {
     // Use the first room's counts as the "primary" room for the
     // room-list page header; the page itself shows all rooms in the
@@ -774,7 +763,7 @@ export default function GovEmployeeSearch() {
       address: h.hotelAddress,
       starRating: h.starRating,
       apiType: h.apiType,
-      apiId: apiIdFromType(h.apiType),
+      apiId: apiIdOfResult(h),
       nationalityCode:
         (selectedNationality?.code || "").length === 2
           ? selectedNationality.code

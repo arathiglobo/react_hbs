@@ -57,6 +57,8 @@ import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import RoomFilters from "../../components/roomlist/RoomFilters";
 import useRoomFilters from "../../hooks/useRoomFilters";
+import RefundBadge from "../../components/RefundBadge";
+import { chargeNowText, labelOfRate } from "../../utils/refundLabel";
 import { formatFlexibleDate } from "../../utils/dateUtils";
 import "../../styles/RoomList.css";
 
@@ -212,7 +214,7 @@ const GovEmployeeRoomList = () => {
   const filters = useRoomFilters();
   const rateVisible = (r) =>
     filters.rateMatches({
-      isNonRefundable: String(r.nonRefundable).toLowerCase() === "true",
+      label: labelOfRate(r),
       mealPlan: r.mealPlan,
     });
 
@@ -255,13 +257,6 @@ const GovEmployeeRoomList = () => {
       case "full board": return <FaUtensils className="text-success" />;
       default:           return <FaUtensils className="text-primary" />;
     }
-  };
-
-  const getRefundStatusBadge = (nonRefundable) => {
-    const v = String(nonRefundable).toLowerCase();
-    if (v === "false") return <Badge bg="success">Flexible</Badge>;
-    if (v === "true")  return <Badge bg="danger">Non-Refundable</Badge>;
-    return <Badge bg="secondary">{String(nonRefundable)}</Badge>;
   };
 
   // Room availability status from POST /api/hotel-rooms/search. "On Request"
@@ -388,6 +383,7 @@ const GovEmployeeRoomList = () => {
       roomTypeCode: rate.roomTypeCode,
       contractLabel: rate.contractLabel,
       nonRefundable: rate.nonRefundable,
+      refundTerms: rate.refundTerms,
       rateBeforeDiscount: base,
       rate: after,
       rateWithoutMarkup: after,
@@ -532,6 +528,7 @@ const GovEmployeeRoomList = () => {
         roomTypeCode: primary.roomTypeCode,
         contractLabel: primary.contractLabel,
         nonRefundable: primary.nonRefundable,
+        refundTerms: primary.refundTerms,
         rateBeforeDiscount: sumBefore,
         rate: sumAfter,
         rateWithoutMarkup: sumAfter,
@@ -557,6 +554,7 @@ const GovEmployeeRoomList = () => {
             roomTypeCode: r.selectedRate?.roomTypeCode,
             contractLabel: r.selectedRate?.contractLabel,
             nonRefundable: !!r.selectedRate?.nonRefundable,
+            refundTerms: r.selectedRate?.refundTerms,
             rate: after,
             rateWithoutMarkup: after,
             rateBeforeDiscount: base,
@@ -917,8 +915,13 @@ const GovEmployeeRoomList = () => {
                                             {getRoomStatusBadge(rate.roomStatus)}
                                           </div>
                                         </div>
-                                        {getRefundStatusBadge(rate.nonRefundable)}
+                                        <RefundBadge rate={rate} />
                                       </div>
+                                      {chargeNowText(rate) && (
+                                        <div className="small fw-semibold" style={{ color: "#997404" }}>
+                                          {chargeNowText(rate)}
+                                        </div>
+                                      )}
 
                                       <div className="rate-pricing text-center py-2">
                                         {activePromotion && slotBase !== slotAfter && (
@@ -1012,7 +1015,7 @@ const GovEmployeeRoomList = () => {
                                             </span>
                                           </div>
                                           <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                                            {getRefundStatusBadge(rate.nonRefundable)}
+                                            <RefundBadge rate={rate} />
                                             {getRoomStatusBadge(rate.roomStatus)}
                                           </div>
                                         </div>
@@ -1020,6 +1023,11 @@ const GovEmployeeRoomList = () => {
                                           className="rate-features small text-muted d-flex flex-wrap gap-3"
                                           style={{ minWidth: 0 }}
                                         >
+                                          {chargeNowText(rate) && (
+                                            <div className="feature-item d-flex align-items-center fw-semibold" style={{ color: "#997404" }}>
+                                              {chargeNowText(rate)}
+                                            </div>
+                                          )}
                                           <div className="feature-item d-flex align-items-center text-truncate">
                                             <FaInfoCircle className="me-2 flex-shrink-0" />
                                             <span className="text-truncate">{rate.contractLabel}</span>

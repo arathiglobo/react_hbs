@@ -1,4 +1,5 @@
 import {
+  apiIdOfResult,
   incompleteSearchNotice,
   mapHotelRow,
   pollUntilFinished,
@@ -20,6 +21,30 @@ function reply({ total = 3, answered = 0, failed = 0, final = "IN_PROGRESS", sta
     result,
   };
 }
+
+describe("apiIdOfResult (student, senior citizen and gov employee results)", () => {
+  it.each([1, 3, 10, 12, 14, 15, 16, 20, 21])(
+    "opens supplier %i from an agent's card, which has no apiType",
+    (apiId) => {
+      expect(apiIdOfResult({ hotelCode: "H1", apiId })).toBe(apiId);
+    },
+  );
+
+  it("prefers the card's number over its supplier name", () => {
+    expect(apiIdOfResult({ apiType: "iwtx", apiId: 12 })).toBe(12);
+  });
+
+  it("reads a reply from an older backend by supplier name, GRN and GoGlobal included", () => {
+    expect(apiIdOfResult({ apiType: "ATHARVA" })).toBe(3);
+    expect(apiIdOfResult({ apiType: "grn" })).toBe(20);
+    expect(apiIdOfResult({ apiType: "goglobal" })).toBe(21);
+  });
+
+  it("falls back to in-house when a reply has neither", () => {
+    expect(apiIdOfResult({})).toBe(1);
+    expect(apiIdOfResult({ apiType: "unknown" })).toBe(1);
+  });
+});
 
 describe("mapHotelRow", () => {
   const cheapestFromIwtx = { cardKey: "M5", hotelCode: "IW1", apiType: "iwtx", apiId: 12, baseRate: 500 };

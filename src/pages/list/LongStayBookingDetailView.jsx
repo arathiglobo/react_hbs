@@ -39,6 +39,11 @@ import {
 } from "react-icons/fa";
 import axiosInstance from "../../components/AxiosInstance";
 import { formatDateTime } from "../../utils/dateUtils";
+import {
+  REFUND_FLEXIBLE,
+  REFUND_NON_REFUNDABLE,
+  refundLabelText,
+} from "../../utils/refundLabel";
 import Sidebar from "../../components/Sidebar";
 import Topbar from "../../components/TopBar";
 import { toast } from "react-hot-toast";
@@ -1252,11 +1257,14 @@ export default function LongStayBookingDetailView() {
                           value={detail.contractRateCode}
                         />
                         <InfoRow
-                          label="Refundable"
+                          label="Refund Status"
                           value={
-                            detail.refundable
-                              ? "Flexible"
-                              : "Non-Refundable"
+                            detail.refundLabelText ||
+                            refundLabelText(
+                              detail.refundable
+                                ? REFUND_FLEXIBLE
+                                : REFUND_NON_REFUNDABLE,
+                            )
                           }
                         />
                       </Col>

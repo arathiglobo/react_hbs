@@ -5,25 +5,34 @@
  * and booking payloads keep working exactly as before.
  */
 
-// Mirrors the backend hotelmapping Supplier enum. The unified room search
-// (/api/hotel-rooms/search) appends " (<SUPPLIER>)" to hotelName for hotels
-// mapped across several suppliers.
+// Mirrors the backend hotelmapping Supplier enum. For logins that may see
+// supplier names, the unified room search (/api/hotel-rooms/search) appends
+// " (<SUPPLIER>)" to hotelName for hotels mapped across several suppliers.
 const SUPPLIER_SUFFIX_RE =
   /\s*\((RATEHAWK|IWTX|ATHARVA|JUMEIRAH|DARINA|INHOUSE|X3|GRN|GOGLOBAL)\)\s*$/i;
 
+// Main agents, sub-agents and sub-users are all agent-side logins. A sub-account
+// holds AGENT and its own role and can pick either one after login. The backend
+// (SupplierVisibility) hides supplier names from all of them.
+const AGENT_SIDE_ROLES = ["AGENT", "AGENT_MAIN", "SUB_AGENT", "SUB_USER"];
+
 /**
- * Same agent-login detection used across the app: prefer the multi-role
- * currentActiveRole, fall back to userRole for single-role logins.
+ * Whether this login may not see supplier names. Prefers the multi-role
+ * currentActiveRole, and falls back to userRole for single-role logins.
  */
 export function isAgentLogin() {
   try {
     const activeRole = (sessionStorage.getItem("currentActiveRole") || "")
       .trim()
       .toUpperCase();
-    const storedRoles = (sessionStorage.getItem("userRole") || "").toUpperCase();
-    return activeRole
-      ? activeRole === "AGENT"
-      : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
+    if (activeRole) return AGENT_SIDE_ROLES.includes(activeRole);
+    const storedRoles = (sessionStorage.getItem("userRole") || "")
+      .split(",")
+      .map((role) => role.trim().toUpperCase());
+    return (
+      storedRoles.some((role) => AGENT_SIDE_ROLES.includes(role)) &&
+      !storedRoles.some((role) => role.includes("ADMIN"))
+    );
   } catch {
     return false;
   }
@@ -38,6 +47,19 @@ export function isAgentLogin() {
 export function stripSupplierSuffix(name) {
   if (typeof name !== "string") return name;
   return name.replace(SUPPLIER_SUFFIX_RE, "");
+}
+
+const SUPPLIER_NAME_RE =
+  /\b(atharva|darina|go\s?global|grn\w*|iol-?x|iwtx|i'?way|jumeirah|juniper|rate\s?hawk|x3)\b/gi;
+
+/**
+ * Text for the screen. A supplier's own error, or a label or message written for
+ * staff, can name the supplier, so for agent-side logins the name reads "Supplier".
+ * Not for hotel names: "Jumeirah" is also part of real hotels' names.
+ */
+export function withoutSupplierName(text) {
+  if (typeof text !== "string" || !isAgentLogin()) return text;
+  return text.replace(SUPPLIER_NAME_RE, "Supplier");
 }
 
 /** Hotel name for display — supplier suffix removed for agent logins. */

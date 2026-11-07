@@ -25,6 +25,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
+import { labelOfRate, refundLabelText, statusText } from "../../utils/refundLabel";
 import toast from "react-hot-toast";
 import {
   FaHistory, FaMapMarkerAlt, FaNetworkWired, FaCalendarAlt, FaClock,
@@ -401,6 +402,9 @@ export default function SeniorCitizenBookingDetailView() {
     .replace(/\s+/g, "")
     .toUpperCase();
   const isCancelled = !!booking?.cancelled;
+  // Today's label for an open booking. A cancelled one keeps its stored status.
+  const refundWordsNow =
+    (!isCancelled && booking?.refundLabelText) || statusText(booking?.refundStatus);
   const isConfirmedOrLater =
     normalizedStatus === "CONFIRMED" ||
     normalizedStatus === "RECONFIRMED" ||
@@ -1250,7 +1254,7 @@ export default function SeniorCitizenBookingDetailView() {
                         {booking.confirmationNumber && (
                           <InfoRow label="Confirmation No." value={booking.confirmationNumber} />
                         )}
-                        <InfoRow label="Refund Status" value={booking.refundStatus} />
+                        <InfoRow label="Refund Status" value={refundWordsNow || null} />
                         <InfoRow label="Voucher" value={booking.voucherGenerated} />
                         <InfoRow label="Payment Mode" value={booking.paymentMode} />
                         <InfoRow label="Total" value={money(booking.totalRate)} />
@@ -1337,7 +1341,7 @@ export default function SeniorCitizenBookingDetailView() {
                             <td>{r.mealPlan || "-"}</td>
                             <td>{r.adults || 0}</td>
                             <td>{r.children || 0}</td>
-                            <td>{r.nonRefundable ? "Non-Refundable" : "Flexible"}</td>
+                            <td>{refundLabelText(labelOfRate(r))}</td>
                             <td className="text-end">{money(r.rate)}</td>
                           </tr>
                         ))}
@@ -1380,9 +1384,11 @@ export default function SeniorCitizenBookingDetailView() {
                 <div style={card}>
                   <div style={SECTION_HEADER}>Cancellation Policy</div>
                   <div style={{ padding: "12px 16px", fontSize: "0.82rem", color: "#333" }}>
-                    {String(booking.refundStatus || "").toLowerCase().includes("non")
-                      ? "Non-Refundable — this booking cannot be cancelled for a refund once confirmed."
-                      : "Flexible — cancellation is allowed per the hotel's refund terms."}
+                    {refundWordsNow === "Non Refundable"
+                      ? "Non Refundable — this booking cannot be cancelled for a refund once confirmed."
+                      : refundWordsNow === "Flexible - Partial"
+                        ? "Flexible - Partial — cancelling now keeps part of the booking under the hotel's refund terms."
+                        : "Flexible — cancellation is allowed per the hotel's refund terms."}
                     {isCancelled && booking.cancellationReason && (
                       <div className="text-danger mt-2">Cancelled — {booking.cancellationReason}</div>
                     )}
@@ -1784,8 +1790,11 @@ export default function SeniorCitizenBookingDetailView() {
         </Modal.Header>
         <Modal.Body>
           <p className="text-muted small">
-            Are you sure you want to cancel this booking? Refundable bookings will have their agent
-            credit restored.
+            Are you sure you want to cancel this booking?{" "}
+            {booking?.refundAmountNow != null &&
+            Number(booking.refundAmountNow) < Number(booking.totalRate)
+              ? `Cancelling now keeps ${money(Number(booking.totalRate) - Number(booking.refundAmountNow))} as the cancellation charge.`
+              : "Refundable bookings will have their agent credit restored."}
           </p>
           {/* Informational only — booking value warning. Reuses the same
               money() helper used elsewhere on the page so the currency and

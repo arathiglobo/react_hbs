@@ -52,6 +52,17 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import { createAmendmentLink } from "../../../utils/amendmentLink";
+import RefundBadge from "../../../components/RefundBadge";
+import {
+  REFUND_FLEXIBLE,
+  REFUND_NON_REFUNDABLE,
+  labelOfRate,
+  refundLabelText,
+  worstLabel,
+  REFUND_PARTIAL,
+  uaeToday,
+} from "../../../utils/refundLabel";
+import { parseSupplierDate } from "../../../utils/rateDeadline";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
 
@@ -669,7 +680,15 @@ const GovEmployeeBookingPage = () => {
   const isNonRefundableRate =
     bookingData?.selectedRate?.nonRefundable === true ||
     bookingData?.selectedRate?.nonRefundable === "true";
+  // The refund words shown on this page. A multi-room booking is as refundable
+  // as its worst room. The booking flow still follows isNonRefundableRate.
+  const bookingRefundLabel = bookingData?.roomBreakdown?.length
+    ? worstLabel(bookingData.roomBreakdown.map((slot) => labelOfRate(slot)))
+    : labelOfRate(bookingData?.selectedRate);
   const cancellationDeadline = (() => {
+    // The date the room list showed, when the rate carries it.
+    const cutoff = parseSupplierDate(bookingData?.selectedRate?.refundTerms?.cutoff);
+    if (cutoff) return cutoff;
     const cinRaw = bookingData?.payload?.checkInDate;
     if (!cinRaw) return null;
     const cin = new Date(cinRaw);
@@ -680,18 +699,16 @@ const GovEmployeeBookingPage = () => {
   })();
   const isOutsideDeadline = (() => {
     if (!cancellationDeadline) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return today > cancellationDeadline;
+    return uaeToday() > cancellationDeadline;
   })();
-  // Only Available + refundable rates whose deadline is still upcoming
-  // get the choice. Every other case skips the card and resolves to
+  // Only Available + refundable rates whose deadline is still upcoming, or
+  // that only cost part of the booking after it, get the choice. Every other case skips the card and resolves to
   // ReConfirmed automatically.
   const showVoucherChoice =
     !isOnRequestRate &&
     !isNonRefundableRate &&
     !!cancellationDeadline &&
-    !isOutsideDeadline;
+    (!isOutsideDeadline || bookingRefundLabel === REFUND_PARTIAL);
   // Resolved confirmationStatus that travels to the backend.
   //   • Non-refundable        → ReConfirmed
   //   • Deadline already past → ReConfirmed (force Voucher Now)
@@ -705,7 +722,7 @@ const GovEmployeeBookingPage = () => {
     // must never resolve to ReConfirmed at create.
     if (isOnRequestRate) return "Confirmed";
     if (isNonRefundableRate) return "ReConfirmed";
-    if (isOutsideDeadline) return "ReConfirmed";
+    if (isOutsideDeadline && bookingRefundLabel !== REFUND_PARTIAL) return "ReConfirmed";
     return bookingConfirmation === "Book Now & Voucher later"
       ? "Confirmed"
       : "ReConfirmed";
@@ -937,8 +954,8 @@ const GovEmployeeBookingPage = () => {
       starRating: hotelStaticData.starRating,
       checkInDate: payload.checkInDate,
       checkOutDate: payload.checkOutDate,
-      // Cancellation deadline = end of the check-in day (mirrors senior flow);
-      // shown on the confirm modal + the booking detail view.
+      // The service saves the date from the hotel's policy instead, whenever the
+      // policy has a charging row. This is only the fallback.
       deadlineDate: payload.checkInDate
         ? `${String(payload.checkInDate).slice(0, 10)}T23:59:59`
         : null,
@@ -1371,7 +1388,7 @@ const GovEmployeeBookingPage = () => {
                                           month: "short",
                                           year: "numeric",
                                         },
-                                      )}, 02:00 PM (UAE)`
+                                      )}, 11:59 PM (UAE)`
                                     : null;
                                   return (
                                     <>
@@ -1637,19 +1654,7 @@ const GovEmployeeBookingPage = () => {
                               ⭐ {hotelStaticData.starRating} Star
                             </span>
                             {selectedRate?.nonRefundable !== undefined && (
-                              <Badge
-                                bg={
-                                  selectedRate.nonRefundable === true ||
-                                  selectedRate.nonRefundable === "true"
-                                    ? "danger"
-                                    : "success"
-                                }
-                              >
-                                {selectedRate.nonRefundable === true ||
-                                selectedRate.nonRefundable === "true"
-                                  ? "Non-Refundable"
-                                  : "Flexible"}
-                              </Badge>
+                              <RefundBadge label={bookingRefundLabel} />
                             )}
                             {activePromotion && (
                               <Badge
@@ -2145,7 +2150,7 @@ const GovEmployeeBookingPage = () => {
                                 className="badge bg-danger"
                                 style={{ fontSize: "0.7rem" }}
                               >
-                                Non-refundable
+                                {refundLabelText(REFUND_NON_REFUNDABLE)}
                               </span>
                             </p>
                             <p
@@ -2172,7 +2177,7 @@ const GovEmployeeBookingPage = () => {
                                       year: "numeric",
                                     },
                                   )}
-                                  , 02:00 PM (UAE)
+                                  , 11:59 PM (UAE)
                                 </span>
                                 {isOutsideDeadline ? (
                                   <span
@@ -2181,6 +2186,8 @@ const GovEmployeeBookingPage = () => {
                                   >
                                     Passed
                                   </span>
+                                ) : bookingRefundLabel !== REFUND_FLEXIBLE ? (
+                                  <RefundBadge label={bookingRefundLabel} className="ms-2" />
                                 ) : (
                                   <span
                                     className="badge bg-success ms-2"

@@ -16,6 +16,7 @@ import AgentSelect from "../components/AgentSelect";
 import AgentCreditBalance from "../components/AgentCreditBalance";
 import axiosInstance from "../components/AxiosInstance";
 import { logAgentSearch } from "../utils/agentSearchLog";
+import { isAgentLogin } from "../utils/supplierDisplay";
 import HotelSearchProgressBar from "../components/HotelSearchProgressBar";
 import {
   incompleteSearchNotice,
@@ -561,19 +562,21 @@ export default function HotelSearch({
   // narrows the WHOLE result set (all pages), and re-applied client-side in
   // filteredResults so the list is right even while suppliers are still
   // polling. At most one box can be ticked (the checkboxes clear each
-  // other); neither ticked = no narrowing. Strict: hotels whose
+  // other); none ticked = no narrowing. Strict: hotels whose
   // supplier sends no refund info at search time (flag null) are hidden
   // while either box is ticked.
   const [refundPolicy, setRefundPolicy] = useState({
     refundable: false,
+    partial: false,
     nonRefundable: false,
   });
-  const refundPolicyParam =
-    refundPolicy.refundable === refundPolicy.nonRefundable
-      ? undefined
-      : refundPolicy.refundable
-        ? "refundable"
-        : "nonRefundable";
+  const refundPolicyParam = refundPolicy.refundable
+    ? "refundable"
+    : refundPolicy.partial
+      ? "partial"
+      : refundPolicy.nonRefundable
+        ? "nonRefundable"
+        : undefined;
   // Budget slider + price chart (sidebar, above Refund Policy). All values
   // are AED, the unit of hotel.price / baseRate; labels convert to the
   // display currency.
@@ -1137,10 +1140,12 @@ export default function HotelSearch({
 
     // Refund Policy — strict: keep a hotel only when the backend confirms it
     // has a rate of the selected kind (flag === true). Unknown (null) is
-    // hidden too, so "Refundable" never lists a non-refundable-only hotel.
+    // hidden too, so "Flexible" never lists a non-refundable-only hotel.
     // Same rule as HotelSearchService.applyRefundPolicyFilter.
     if (refundPolicyParam === "refundable") {
       results = results.filter((hotel) => hotel.hasRefundable === true);
+    } else if (refundPolicyParam === "partial") {
+      results = results.filter((hotel) => hotel.hasPartial === true);
     } else if (refundPolicyParam === "nonRefundable") {
       results = results.filter((hotel) => hotel.hasNonRefundable === true);
     }
@@ -2945,11 +2950,25 @@ export default function HotelSearch({
                               <Form.Check
                                 type="checkbox"
                                 id="refund-policy-refundable"
-                                label="Refundable"
+                                label="Flexible"
                                 checked={refundPolicy.refundable}
                                 onChange={(e) =>
                                   setRefundPolicy({
                                     refundable: e.target.checked,
+                                    partial: false,
+                                    nonRefundable: false,
+                                  })
+                                }
+                              />
+                              <Form.Check
+                                type="checkbox"
+                                id="refund-policy-partial"
+                                label="Flexible - Partial"
+                                checked={refundPolicy.partial}
+                                onChange={(e) =>
+                                  setRefundPolicy({
+                                    refundable: false,
+                                    partial: e.target.checked,
                                     nonRefundable: false,
                                   })
                                 }
@@ -2962,6 +2981,7 @@ export default function HotelSearch({
                                 onChange={(e) =>
                                   setRefundPolicy({
                                     refundable: false,
+                                    partial: false,
                                     nonRefundable: e.target.checked,
                                   })
                                 }
@@ -3003,10 +3023,11 @@ export default function HotelSearch({
                           <hr />
 
                           {/* Channel — supplier/channel checkbox filter.
-                              Hidden for AGENT logins (agents book only
-                              through their contracted channel and the
-                              backend already scopes results). */}
-                          {!isAgentRole && (
+                              Hidden for agent-side logins, sub-accounts
+                              included (agents book only through their
+                              contracted channel and the backend already
+                              scopes results). */}
+                          {!isAgentLogin() && (
                             <>
                               <Form.Group>
                                 <Form.Label className="fw-semibold small">
@@ -3185,7 +3206,7 @@ export default function HotelSearch({
                               setHotelType([]);
                               setChannelType([]);
                               setAvailableDeals([]);
-                              setRefundPolicy({ refundable: false, nonRefundable: false });
+                              setRefundPolicy({ refundable: false, partial: false, nonRefundable: false });
                               setPriceSlider(null);
                               setPriceRange(null);
                               setSortBy("priceAsc");
@@ -3430,7 +3451,7 @@ export default function HotelSearch({
                                           (null) shows nothing. */}
                                       {hotel.hasRefundable === true && (
                                         <span
-                                          title="This hotel has at least one refundable rate"
+                                          title="This hotel has at least one rate that is free to cancel today"
                                           style={{
                                             backgroundColor: "#e8f5e9",
                                             color: "#1b7a2f",
@@ -3441,12 +3462,28 @@ export default function HotelSearch({
                                             display: "inline-block",
                                           }}
                                         >
-                                          Refundable
+                                          Flexible
+                                        </span>
+                                      )}
+                                      {hotel.hasPartial === true && (
+                                        <span
+                                          title="This hotel has at least one rate that costs part of the booking to cancel today"
+                                          style={{
+                                            backgroundColor: "#fff8e1",
+                                            color: "#8a6100",
+                                            border: "1px solid #f2dc9b",
+                                            padding: "3px 8px",
+                                            borderRadius: "4px",
+                                            fontSize: "0.75rem",
+                                            display: "inline-block",
+                                          }}
+                                        >
+                                          Flexible - Partial
                                         </span>
                                       )}
                                       {hotel.hasNonRefundable === true && (
                                         <span
-                                          title="This hotel has at least one non-refundable rate"
+                                          title="This hotel has at least one rate that can't be cancelled free"
                                           style={{
                                             backgroundColor: "#fdecea",
                                             color: "#b42318",
@@ -3879,7 +3916,7 @@ export default function HotelSearch({
                                   setSortBy("priceAsc");
                                   setHotelSearchTerm("");
                                   setAvailableDeals([])
-                                  setRefundPolicy({ refundable: false, nonRefundable: false });
+                                  setRefundPolicy({ refundable: false, partial: false, nonRefundable: false });
                                 }}
                               >
                                 Clear All Filters

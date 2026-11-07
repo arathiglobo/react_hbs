@@ -41,9 +41,10 @@ import { formatFlexibleDate } from "../utils/dateUtils";
 import {
   RateDeadlinePill,
   resolveInhouseDeadline,
-  isDeadlinePassed,
   DEADLINE_TIME_EOD,
 } from "../utils/rateDeadline";
+import RefundBadge from "../components/RefundBadge";
+import { labelOfRate, refundFilterMatches } from "../utils/refundLabel";
 import {
   isNonRefundableRate,
   sumSelectedRooms,
@@ -161,6 +162,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
   // Filter state
   const [refundFilter, setRefundFilter] = useState({
     refundable: false,
+    partial: false,
     nonRefundable: false,
   });
   const [roomTypeOptions, setRoomTypeOptions] = useState([]);
@@ -726,32 +728,6 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
     }
   };
 
-  // `deadlinePassed` (derived from isDeadlinePassed(inhouseDeadline) at the
-  // call site) downgrades a supplier-flagged Flexible rate whose free-
-  // cancellation window has already closed — otherwise the room list keeps
-  // promising green while the cancel gate on the saved booking already
-  // refuses.
-  const getRefundStatusBadgeInRoomList = (nonRefundable, deadlinePassed = false) => {
-    const value = String(nonRefundable).toLowerCase();
-    switch (value) {
-      case "false":
-        return deadlinePassed ? (
-          <Badge
-            bg="danger"
-            title="The free-cancellation window has already closed for this stay."
-          >
-            Deadline passed
-          </Badge>
-        ) : (
-          <Badge bg="success">Flexible</Badge>
-        );
-      case "true":
-        return <Badge bg="danger">Non-Refundable</Badge>;
-      default:
-        return <Badge bg="secondary">{String(nonRefundable)}</Badge>;
-    }
-  };
-
   const getRoomStatusBadge = (roomStatus) => {
     switch (roomStatus) {
       case "On Request":
@@ -795,7 +771,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
       case "FLEXIBLE":
         return <Badge bg="success">Flexible</Badge>;
       case "NON REFUNDABLE":
-        return <Badge bg="danger">Non-Refundable</Badge>;
+        return <Badge bg="danger">Non Refundable</Badge>;
       default:
         return <Badge bg="secondary">{refundStatus}</Badge>;
     }
@@ -884,7 +860,9 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
     }
     let cancelled = false;
     axiosInstance
-      .get(`/api/hotels/${hotelId}/max-cancellation-nights`)
+      .get(`/api/hotels/${hotelId}/max-cancellation-nights`, {
+        params: { checkIn: roomData?.payload?.checkInDate },
+      })
       .then((res) => {
         if (cancelled) return;
         const n = Number(res?.data);
@@ -963,13 +941,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
   };
 
   const matchesFilters = (rate) => {
-    const isNonRefundable =
-      String(rate.nonRefundable).toLowerCase() === "true";
-    if (refundFilter.refundable && refundFilter.nonRefundable) {
-      // both checked → no narrowing on refundability
-    } else if (refundFilter.refundable && isNonRefundable) {
-      return false;
-    } else if (refundFilter.nonRefundable && !isNonRefundable) {
+    if (!refundFilterMatches(refundFilter, labelOfRate(rate))) {
       return false;
     }
     if (selectedRoomTypes.length > 0) {
@@ -1516,11 +1488,25 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                         <Form.Check
                           type="checkbox"
                           id="filter-refundable"
-                          label="Refundable"
+                          label="Flexible"
                           checked={refundFilter.refundable}
                           onChange={(e) =>
                             setRefundFilter({
                               refundable: e.target.checked,
+                              partial: false,
+                              nonRefundable: false,
+                            })
+                          }
+                        />
+                        <Form.Check
+                          type="checkbox"
+                          id="filter-partial"
+                          label="Flexible - Partial"
+                          checked={refundFilter.partial}
+                          onChange={(e) =>
+                            setRefundFilter({
+                              refundable: false,
+                              partial: e.target.checked,
                               nonRefundable: false,
                             })
                           }
@@ -1533,6 +1519,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                           onChange={(e) =>
                             setRefundFilter({
                               refundable: false,
+                              partial: false,
                               nonRefundable: e.target.checked,
                             })
                           }
@@ -1558,6 +1545,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                       </div>
 
                       {(refundFilter.refundable ||
+                        refundFilter.partial ||
                         refundFilter.nonRefundable ||
                         selectedRoomTypes.length > 0) && (
                         <Button
@@ -1567,6 +1555,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                           onClick={() => {
                             setRefundFilter({
                               refundable: false,
+                              partial: false,
                               nonRefundable: false,
                             });
                             setSelectedRoomTypes([]);
@@ -1775,10 +1764,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                         </div>
                                       </div>
 
-                                      {getRefundStatusBadgeInRoomList(
-                                        rate.nonRefundable,
-                                        isDeadlinePassed(inhouseDeadline),
-                                      )}
+                                      <RefundBadge rate={rate} />
                                     </div>
 
                                     {/* Pricing
@@ -1971,10 +1957,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                           </span>
                                         </div>
                                         <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                                          {getRefundStatusBadgeInRoomList(
-                                            rate.nonRefundable,
-                                            isDeadlinePassed(inhouseDeadline),
-                                          )}
+                                          <RefundBadge rate={rate} />
                                           {rate.roomStatus === "On Request" ? (
                                             <Badge
                                               bg="warning"

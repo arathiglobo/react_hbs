@@ -76,6 +76,7 @@ export const buildInhouseSingleBookingData = ({
     mealPlan: rate.mealPlan,
     contractLabel: rate.contractLabel,
     nonRefundable: rate.nonRefundable,
+    refundTerms: rate.refundTerms,
     rate: rate.totalRate,
     rateWithoutMarkup: rate.totalRateWithoutMarkup,
     currency: "AED",
@@ -175,6 +176,7 @@ export const buildInhouseMultiBookingData = ({
       mealPlan: r.selectedRate?.mealPlan,
       contractLabel: r.selectedRate?.contractLabel,
       nonRefundable: r.selectedRate?.nonRefundable,
+      refundTerms: r.selectedRate?.refundTerms,
       // This room's own price (HotelBookingPage posts it as rooms[i].rate).
       rate: slotRateValue(r.selectedRate, i, "totalRate"),
       rateWithoutMarkup: slotRateValue(r.selectedRate, i, "totalRateWithoutMarkup"),

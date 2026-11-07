@@ -1656,10 +1656,11 @@ function ResultsWithFilters({
                 </Form.Group>
 
                 {/* Channel — supplier/channel checkbox filter.
-                    Hidden for AGENT logins (agents book only through their
-                    contracted channel and the backend already scopes results),
-                    and when no channel is enabled on /admin/api-access. */}
-                {!isAgentRole && channelOptions.length > 0 && (
+                    Hidden for agent-side logins, sub-accounts included (agents
+                    book only through their contracted channel and the backend
+                    already scopes results), and when no channel is enabled on
+                    /admin/api-access. */}
+                {!isAgentLogin() && channelOptions.length > 0 && (
                   <>
                     <hr />
 

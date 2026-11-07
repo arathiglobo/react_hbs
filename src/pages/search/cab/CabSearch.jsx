@@ -30,6 +30,7 @@ import Select from "react-select";
 import AgentSelect from "../../../components/AgentSelect";
 import axiosInstance from "../../../components/AxiosInstance";
 import { logAgentSearch } from "../../../utils/agentSearchLog";
+import { isAgentLogin } from "../../../utils/supplierDisplay";
 import { toast } from "react-hot-toast";
 import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
@@ -246,6 +247,8 @@ export const CabSearch = () => {
   const isAgentRole = activeRole
     ? activeRole === "AGENT"
     : storedRoles.includes("AGENT") && !storedRoles.includes("ADMIN");
+  // Agent-side logins (main agent, sub-agent, sub-user) never see supplier names.
+  const hideSupplierNames = isAgentLogin();
 
   // Try to use state from previous page if available
   const searchCriteria = location.state || {};
@@ -643,7 +646,11 @@ export const CabSearch = () => {
       push("ZONES", d.zones, (r) => r?.id != null);
       push("HOTELS", d.hotels, (r) => r?.id != null);
       push("AIRPORTS", d.airports, (r) => r?.id != null);
-      push("IWAY LOCATIONS", d.external, (r) => !!r?.externalId);
+      push(
+        hideSupplierNames ? "OTHER LOCATIONS" : "IWAY LOCATIONS",
+        d.external,
+        (r) => !!r?.externalId,
+      );
       return groups;
     } catch (err) {
       console.warn("Location lookup failed:", err?.message || err);
@@ -3379,66 +3386,71 @@ export const CabSearch = () => {
                             </Card.Body>
                           </Card> */}
 
-                          <Card className="border-0 shadow-sm rounded-3 mb-3">
-                            <Card.Header className="bg-white border-bottom fw-semibold d-flex justify-content-between align-items-center">
-                              {/* <span className="text-primary">Suppliers</span> */}
-                              <span className="text-primary">Channel</span>
-                              <span className="text-muted small">▾</span>
-                            </Card.Header>
-                            <Card.Body className="p-3">
-                              {/* filter-checkbox-list (HotelSearch.css) gives
-                                  the same checkbox rows as the hotel page's
-                                  Channel filter; badge styling matches too. */}
-                              <div className="filter-checkbox-list">
-                                {channelOptions.map(({ value, label }) => {
-                                  const isLive = channelsWithResults.has(value);
-                                  return (
-                                    <div
-                                      key={value}
-                                      className="d-flex align-items-center justify-content-between gap-2"
-                                      style={{ minHeight: 26 }}
-                                    >
-                                      <Form.Check
-                                        type="checkbox"
-                                        id={`channel-${value}`}
-                                        label={label}
-                                        checked={selectedSuppliers.includes(value)}
-                                        onChange={(e) => {
-                                          setSelectedSuppliers((prev) =>
-                                            e.target.checked
-                                              ? [...prev, value]
-                                              : prev.filter((x) => x !== value),
-                                          );
-                                          setCurrentPage(1);
-                                        }}
-                                      />
-                                      <span
-                                        title={
-                                          isLive
-                                            ? "Transfers from this channel are in the results"
-                                            : "No transfers from this channel in the results"
-                                        }
-                                        style={{
-                                          fontSize: "0.65rem",
-                                          fontWeight: 700,
-                                          padding: "1px 6px",
-                                          borderRadius: 10,
-                                          lineHeight: 1.4,
-                                          color: "#fff",
-                                          backgroundColor: isLive
-                                            ? "#198754"
-                                            : "#dc3545",
-                                          whiteSpace: "nowrap",
-                                        }}
+                          {/* Channel lists supplier names, so agent-side logins
+                              do not get it. Nothing selects a channel for them,
+                              so their results are never narrowed by it. */}
+                          {!hideSupplierNames && (
+                            <Card className="border-0 shadow-sm rounded-3 mb-3">
+                              <Card.Header className="bg-white border-bottom fw-semibold d-flex justify-content-between align-items-center">
+                                {/* <span className="text-primary">Suppliers</span> */}
+                                <span className="text-primary">Channel</span>
+                                <span className="text-muted small">▾</span>
+                              </Card.Header>
+                              <Card.Body className="p-3">
+                                {/* filter-checkbox-list (HotelSearch.css) gives
+                                    the same checkbox rows as the hotel page's
+                                    Channel filter; badge styling matches too. */}
+                                <div className="filter-checkbox-list">
+                                  {channelOptions.map(({ value, label }) => {
+                                    const isLive = channelsWithResults.has(value);
+                                    return (
+                                      <div
+                                        key={value}
+                                        className="d-flex align-items-center justify-content-between gap-2"
+                                        style={{ minHeight: 26 }}
                                       >
-                                        {isLive ? "LIVE" : "OFF"}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </Card.Body>
-                          </Card>
+                                        <Form.Check
+                                          type="checkbox"
+                                          id={`channel-${value}`}
+                                          label={label}
+                                          checked={selectedSuppliers.includes(value)}
+                                          onChange={(e) => {
+                                            setSelectedSuppliers((prev) =>
+                                              e.target.checked
+                                                ? [...prev, value]
+                                                : prev.filter((x) => x !== value),
+                                            );
+                                            setCurrentPage(1);
+                                          }}
+                                        />
+                                        <span
+                                          title={
+                                            isLive
+                                              ? "Transfers from this channel are in the results"
+                                              : "No transfers from this channel in the results"
+                                          }
+                                          style={{
+                                            fontSize: "0.65rem",
+                                            fontWeight: 700,
+                                            padding: "1px 6px",
+                                            borderRadius: 10,
+                                            lineHeight: 1.4,
+                                            color: "#fff",
+                                            backgroundColor: isLive
+                                              ? "#198754"
+                                              : "#dc3545",
+                                            whiteSpace: "nowrap",
+                                          }}
+                                        >
+                                          {isLive ? "LIVE" : "OFF"}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </Card.Body>
+                            </Card>
+                          )}
 
                           <Card className="border-0 shadow-sm rounded-3 mb-3">
                             <Card.Header className="bg-white border-bottom fw-semibold d-flex justify-content-between align-items-center">
@@ -3599,8 +3611,10 @@ export const CabSearch = () => {
                                             external supplier obvious at a
                                             glance without disturbing rows
                                             that come from the in-house
-                                            cabProvider search. */}
-                                        {(cab.channelType === "iway" ||
+                                            cabProvider search. Never for
+                                            agent-side logins. */}
+                                        {!hideSupplierNames &&
+                                          (cab.channelType === "iway" ||
                                           cab.source === "IWAY") && (
                                           <span
                                             className="badge"
@@ -3696,7 +3710,7 @@ export const CabSearch = () => {
                                                 {detail.dropOff || "N/A"}
                                               </div>
                                             )}
-                                            {cab.cabProviderName && (
+                                            {!hideSupplierNames && cab.cabProviderName && (
                                               <div className="small text-muted">
                                                 by {cab.cabProviderName}
                                               </div>
@@ -3850,7 +3864,7 @@ export const CabSearch = () => {
           const maxPax = cab.vehicleMaxCapacity ?? cab.capacityMax ?? "—";
           const maxLuggage =
             cab.vehicleMaxLuggage ?? cab.capacityMax ?? "—";
-          const supplier = cab.cabProviderName || "";
+          const supplier = hideSupplierNames ? "" : cab.cabProviderName || "";
           const { total: priceTotal, perUnit, label: priceLabel } =
             priceDetail(detail);
           const fmtAed = (n) =>
@@ -4041,12 +4055,14 @@ export const CabSearch = () => {
                             {cab.cabname || "—"} or similar
                           </span>
                         </div>
-                        <div className="ctm-info-row">
-                          <span className="ctm-info-label">Supplier</span>
-                          <span className="ctm-info-value">
-                            {supplier || "—"}
-                          </span>
-                        </div>
+                        {!hideSupplierNames && (
+                          <div className="ctm-info-row">
+                            <span className="ctm-info-label">Supplier</span>
+                            <span className="ctm-info-value">
+                              {supplier || "—"}
+                            </span>
+                          </div>
+                        )}
                         <div className="ctm-info-row">
                           <span className="ctm-info-label">Availability</span>
                           <span className="ctm-info-value text-success">
