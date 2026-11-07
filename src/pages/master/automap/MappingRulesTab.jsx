@@ -21,6 +21,10 @@ const STEPS = [
     text: "Identical name, same country, within the distance below (or same city when coordinates are missing), and sold by enough suppliers.",
   },
   {
+    title: "Same phone, email or website",
+    text: "Two suppliers' hotels with the same contact are compared, if no other hotel of either supplier uses it, because chains reuse contacts. The same country, within the distance below and sharing enough of the name makes an exact match. Any other pair goes to review, unless it is in another country or too far apart.",
+  },
+  {
     title: "Send to review",
     text: "A likely match that is not exact, such as a slightly different name, waits for an admin. Nothing here is linked without approval.",
   },
