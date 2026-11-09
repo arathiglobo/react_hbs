@@ -450,7 +450,7 @@ export default function App() {
         {/* Two-factor authentication is an agent-only feature — only agent
             logins are challenged for a second factor, so the enrolment page is
             scoped to them. The backend refuses non-agent callers as well. */}
-        <Route path="/two-factor-authentication" element={<PrivateRoute roles={["agent"]}><TwoFactorAuth /> </PrivateRoute> }/>
+        <Route path="/two-factor-authentication" element={<PrivateRoute roles={["agent", "admin", "super_admin"]}><TwoFactorAuth /> </PrivateRoute> }/>
         <Route path="/log-out" element={<PrivateRoute><Logout /> </PrivateRoute> }/>
 
         {/* Masters */}
