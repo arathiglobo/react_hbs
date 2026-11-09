@@ -42,6 +42,41 @@ const STEPS = [
   },
 ];
 
+const CITY_STEPS = [
+  {
+    title: "Collect",
+    text: "Each night, every supplier city that has hotels but no mapping is picked up.",
+  },
+  {
+    title: "Look at the hotels",
+    text: "Its hotels are compared with other suppliers' hotels already mapped: the same hotel linked across suppliers, and hotels within a kilometre.",
+  },
+  {
+    title: "Look at the name",
+    text: "The name is compared too, but only supports the hotels. A similar spelling alone never decides anything.",
+  },
+  {
+    title: "Confident",
+    text: "At least two signals agree on one of our cities, the states do not differ and it is not too far away. You can approve these as a whole group.",
+  },
+  {
+    title: "Send to review",
+    text: "If the signals disagree, or only one points at a city, an admin checks each one.",
+  },
+  {
+    title: "Approve",
+    text: "Nothing is mapped until an admin approves it. The usual checks still apply, and an existing mapping is never overwritten.",
+  },
+  {
+    title: "Turn down",
+    text: "A pair an admin turns down is remembered and not offered again.",
+  },
+  {
+    title: "Watch for wrong mappings",
+    text: "When two suppliers place one of our cities far apart, it is listed for checking and counts as evidence for nothing until then.",
+  },
+];
+
 /** Read-only view of how mapping works and every setting in force, for admins to review. */
 export default function MappingRulesTab({ active }) {
   const [data, setData] = useState(null);
@@ -140,6 +175,17 @@ export default function MappingRulesTab({ active }) {
         <h6 className="fw-bold">How a hotel gets mapped</h6>
         <ol className="mb-0 ps-3">
           {STEPS.map((s) => (
+            <li key={s.title} className="mb-1">
+              <strong>{s.title}.</strong> {s.text}
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <div className="ahm-panel p-3">
+        <h6 className="fw-bold">How a city gets mapped</h6>
+        <ol className="mb-0 ps-3">
+          {CITY_STEPS.map((s) => (
             <li key={s.title} className="mb-1">
               <strong>{s.title}.</strong> {s.text}
             </li>
