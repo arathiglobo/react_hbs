@@ -65,6 +65,8 @@ import {
 import { parseSupplierDate } from "../../../utils/rateDeadline";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
+import { sanitizeRichHtml } from "../../../utils/safeHtml";
+import { orderIdPathSegment } from "../../../utils/urlSafety";
 
 const SPECIAL_REQUEST_OPTIONS = [
   "Early Check-In",
@@ -492,7 +494,7 @@ const GovEmployeeBookingPage = () => {
         setIsFinalizingPayment(true);
         setIsSubmitting(true);
         const { data } = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize-govemployee/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize-govemployee/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (data?.success) {
           toast.success(
@@ -538,7 +540,7 @@ const GovEmployeeBookingPage = () => {
       }
       try {
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(
@@ -1974,7 +1976,7 @@ const GovEmployeeBookingPage = () => {
                           <div
                             className="terms-content"
                             dangerouslySetInnerHTML={{
-                              __html: termsAndConditions,
+                              __html: sanitizeRichHtml(termsAndConditions),
                             }}
                           />
                         ) : (

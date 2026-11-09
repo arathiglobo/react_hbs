@@ -64,6 +64,7 @@ import {
 } from "../utils/rateDeadline";
 import RefundBadge from "../components/RefundBadge";
 import { labelOfRate, repricedTerms } from "../utils/refundLabel";
+import { sanitizeSupplierHtml } from "../utils/safeHtml";
 
 /**
  * Renders "Valid: <from> - <to>" for a policy validity period, or null when
@@ -3369,11 +3370,11 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
       ? hotel.hotelDescription.trim()
       : "";
     if (!raw) return null;
-    // Supplier HTML — drop script blocks and inline event handlers before
-    // rendering; GRN's descriptions are plain <p>/<b>/<br /> markup.
-    const safe = raw
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+    // Supplier HTML — reduced by DOMPurify to plain formatting tags (no
+    // attributes, scripts or event handlers) before the section is cut out,
+    // and the cut-out piece is cleaned again. GRN's descriptions are plain
+    // <p>/<b>/<br /> markup, so they look the same as before.
+    const safe = sanitizeSupplierHtml(raw);
     // Show only the "Property Location" section. GRN's full description
     // (Attractions, Amenities, Business Amenities, Rooms, Dining …) runs to
     // dozens of lines and pushed the room list below the fold. The section
@@ -3381,10 +3382,10 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
     const location = safe.match(
       /<b>\s*Property Location\s*<\/b>[\s\S]*?(?=<\/p>|<p\b|<b>|$)/i,
     );
-    if (location) return `<p>${location[0]}</p>`;
+    if (location) return sanitizeSupplierHtml(`<p>${location[0]}</p>`);
     // No headed sections — fall back to the first paragraph, else as-is.
     const firstParagraph = safe.match(/<p\b[^>]*>[\s\S]*?<\/p>/i);
-    return firstParagraph ? firstParagraph[0] : safe;
+    return firstParagraph ? sanitizeSupplierHtml(firstParagraph[0]) : safe;
   })();
 
   return (

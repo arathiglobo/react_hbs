@@ -39,6 +39,7 @@ import {
 // with the same shell, summary cards, and Policies & Terms modal as
 // /booking/hotel.
 import "../../styles/HotelBookingPage.css";
+import { orderIdPathSegment } from "../../utils/urlSafety";
 
 // Online-payment gateways — mirrors HotelBookingPage so the operator gets
 // the same payment picker when the agent's credit is short. CC Avenue is
@@ -487,7 +488,7 @@ export default function LongStayBookingPage() {
       try {
         setSubmitting(true);
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(
@@ -497,7 +498,7 @@ export default function LongStayBookingPage() {
           return;
         }
         const res = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize-longstay/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize-longstay/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         toast.success(`Booking confirmed: ${res.data?.bookingCode || ""}`);
         sessionStorage.removeItem("longStayBookingDraft");

@@ -15,11 +15,34 @@ server {
     root /var/www/hbs-frontend/build;
     index index.html;
 
+    # Do not advertise the nginx version in headers / error pages.
+    server_tokens off;
+
+    # ===================================
+    # SECURITY HEADERS
+    # ===================================
+    # Declared once here and inherited by every location below. nginx drops
+    # these in any location that declares its own add_header, so a location
+    # that ever needs one must repeat this block.
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    # REPORT-ONLY: browsers log (DevTools console) what this policy would
+    # block, but block nothing, so the live site cannot break. Check the
+    # console on login, search, booking, CC Avenue payment, maps, reports
+    # (print windows) and PDF previews; add any source that is reported and
+    # genuinely needed, then rename the header to Content-Security-Policy.
+    add_header Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://desertbeds.com https://www.desertbeds.com https://nominatim.openstreetmap.org https://ipapi.co https://api.bigdatacloud.net; frame-src 'self' blob: data: https://*.ccavenue.com https://*.ccavenue.ae https://www.google.com https://maps.google.com; form-action 'self' https://*.ccavenue.com https://*.ccavenue.ae; frame-ancestors 'self'; object-src 'none'; base-uri 'self'" always;
+
     # ===================================
     # REACT FRONTEND
     # ===================================
     location / {
         try_files $uri /index.html;
+        # index.html must be re-checked on every load so a new deploy is
+        # picked up at once (its hashed /static/ files change names).
+        expires -1;
     }
 
     # ===================================
@@ -28,6 +51,16 @@ server {
     location /static/ {
         root /var/www/hbs-frontend/build;
         try_files $uri =404;
+        # Content-hashed file names (main.<hash>.js): safe to cache for a
+        # year, so a booking step opened in a new tab loads them from cache.
+        expires 1y;
+    }
+
+    # Source maps (/static/js/*.map) would publish the readable source code;
+    # refuse them. (.env.production does not set GENERATE_SOURCEMAP=false on
+    # this branch, so a build still writes them.)
+    location ~* \.map$ {
+        return 404;
     }
 
     # ===================================
@@ -48,7 +81,8 @@ server {
     # ===================================
     location /files/ {
         alias /opt/hotelbookingsystem/generated-pdfs/;
-        autoindex on;
+        # No directory listing: a PDF is reachable only by its exact name.
+        autoindex off;
     }
 
     # ===================================

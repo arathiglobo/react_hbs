@@ -604,7 +604,7 @@ const EmployeeReg = () => {
 
   const handleDelete = (item) => {
     Swal.fire({
-    title: `Are you sure? You want to delete ${item.firstName} ${item.lastName}`,
+    titleText: `Are you sure? You want to delete ${item.firstName} ${item.lastName}`,
 
       icon: "warning",
       showCancelButton: true,

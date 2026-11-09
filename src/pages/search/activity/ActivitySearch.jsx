@@ -23,6 +23,7 @@ import TopBar from "../../../components/TopBar";
 import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
+import { sanitizeRichHtml } from "../../../utils/safeHtml";
 
 function LazyImage({ src, alt, className }) {
   const containerRef = useRef(null);
@@ -1532,9 +1533,10 @@ const ActivitySearch = () => {
                                       className="text-secondary small mb-2"
                                       style={{ lineHeight: 1.5 }}
                                       dangerouslySetInnerHTML={{
-                                        __html:
+                                        __html: sanitizeRichHtml(
                                           activity.activityDetails.substring(0, 220) +
-                                          (activity.activityDetails.length > 220 ? "…" : ""),
+                                            (activity.activityDetails.length > 220 ? "…" : ""),
+                                        ),
                                       }}
                                     />
                                   )}
@@ -1843,7 +1845,7 @@ const ActivitySearch = () => {
                         className="text-secondary small"
                         style={{ lineHeight: 1.6 }}
                         dangerouslySetInnerHTML={{
-                          __html: selectedActivity.activityDetails,
+                          __html: sanitizeRichHtml(selectedActivity.activityDetails),
                         }}
                       />
                     </div>

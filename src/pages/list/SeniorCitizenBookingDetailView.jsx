@@ -36,6 +36,7 @@ import {
 // senior-citizen detail picker renders identically to the hotel detail
 // picker.
 import "../../styles/HotelBookingPage.css";
+import { orderIdPathSegment } from "../../utils/urlSafety";
 
 // Reverse-geocode browser coordinates to a readable address for the
 // Booking History audit trail. Tries OpenStreetMap Nominatim first
@@ -772,7 +773,7 @@ export default function SeniorCitizenBookingDetailView() {
         // Re-verify server-side before finalizing — never trust the
         // redirect's own query string alone.
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(
@@ -782,7 +783,7 @@ export default function SeniorCitizenBookingDetailView() {
           return;
         }
         const response = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize-seniorcitizen-reconfirm/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize-seniorcitizen-reconfirm/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (response.data?.success) {
           toast.success(

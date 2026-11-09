@@ -31,6 +31,7 @@ import toast from "react-hot-toast";
 // defined for HotelBookingPage.jsx's CC Avenue picker, so this page's
 // reconfirm-flow picker matches it exactly.
 import "../../styles/HotelBookingPage.css";
+import { orderIdPathSegment } from "../../utils/urlSafety";
 
 // Reverse-geocode browser coordinates to a readable address for the
 // Booking History audit trail. Tries OpenStreetMap Nominatim first
@@ -1016,7 +1017,7 @@ export default function BookingDetailedView() {
         // Re-verify server-side before finalizing — never trust the
         // redirect's own query string alone.
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(
@@ -1026,7 +1027,7 @@ export default function BookingDetailedView() {
           return;
         }
         const response = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize-reconfirm/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize-reconfirm/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         await handleReconfirmResponse(response.data);
       } catch (err) {

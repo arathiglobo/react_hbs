@@ -45,6 +45,7 @@ import {
   resolveDeadlineDate,
   isNonRefundable,
 } from "../../utils/rateDeadline";
+import { orderIdPathSegment } from "../../utils/urlSafety";
 
 // Online-payment gateways offered when the agent's credit is short.
 // Mirrors the same list Inhouse HotelBookingPage.jsx uses (line 25) so
@@ -575,7 +576,7 @@ const ApiBookingPageForHotels = () => {
         // Finalize replays the supplier booking (RateHawk can take up to
         // ~120 s), so allow longer than the 30 s client default.
         const response = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize/${orderIdPathSegment(ccavenueOrderId)}`,
           null,
           { timeout: 120000 },
         );
@@ -623,7 +624,7 @@ const ApiBookingPageForHotels = () => {
       }
       try {
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(

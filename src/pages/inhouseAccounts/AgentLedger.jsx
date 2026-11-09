@@ -16,6 +16,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import { FaFileDownload, FaSyncAlt, FaFilter, FaUndo } from "react-icons/fa";
+import { escapeHtml } from "../../utils/safeHtml";
 
 /**
  * Inhouse Accounts → Ledger.
@@ -213,11 +214,11 @@ export default function AgentLedger() {
         title: "Done",
         html:
           `<div style="text-align:left">` +
-          `Starting credit limits: <b>${s.openingBalanceLines ?? 0}</b><br/>` +
-          `Bookings made: <b>${s.bookingDebitLines ?? 0}</b><br/>` +
-          `Bookings cancelled: <b>${s.cancellationCreditLines ?? 0}</b><br/>` +
-          `Payments in: <b>${s.receiptCreditLines ?? 0}</b><br/><br/>` +
-          `<b>${s.totalWritten ?? 0}</b> new lines added` +
+          `Starting credit limits: <b>${escapeHtml(s.openingBalanceLines ?? 0)}</b><br/>` +
+          `Bookings made: <b>${escapeHtml(s.bookingDebitLines ?? 0)}</b><br/>` +
+          `Bookings cancelled: <b>${escapeHtml(s.cancellationCreditLines ?? 0)}</b><br/>` +
+          `Payments in: <b>${escapeHtml(s.receiptCreditLines ?? 0)}</b><br/><br/>` +
+          `<b>${escapeHtml(s.totalWritten ?? 0)}</b> new lines added` +
           (s.totalWritten === 0
             ? `<br/><span style="color:#666">Everything was already listed.</span>`
             : "") +

@@ -45,6 +45,8 @@ import {
 import { parseSupplierDate } from "../../../utils/rateDeadline";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
+import { sanitizeRichHtml } from "../../../utils/safeHtml";
+import { orderIdPathSegment } from "../../../utils/urlSafety";
 
 const SPECIAL_REQUEST_OPTIONS = [
   "Early Check-In", "Non-Smoking Rooms", "Ground Floor", "Wheelchair Access",
@@ -404,7 +406,7 @@ export default function SeniorCitizenBookingPage() {
         setIsFinalizingPayment(true);
         setIsSubmitting(true);
         const { data } = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize-seniorcitizen/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize-seniorcitizen/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (data?.success) {
           toast.success(
@@ -448,7 +450,7 @@ export default function SeniorCitizenBookingPage() {
       }
       try {
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(
@@ -1485,7 +1487,7 @@ export default function SeniorCitizenBookingPage() {
                         <h6 className="policy-section-title">Terms &amp; Conditions</h6>
                         {termsAndConditions ? (
                           <div className="terms-content"
-                               dangerouslySetInnerHTML={{ __html: termsAndConditions }} />
+                               dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(termsAndConditions) }} />
                         ) : (
                           <div className="policy-empty">
                             No terms &amp; conditions configured for this hotel.

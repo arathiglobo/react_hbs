@@ -1544,7 +1544,7 @@ const SchefferDriverReg = () => {
 
   const handleDelete = (item) => {
     Swal.fire({
-      title: `Are you sure? You want to delete ${item.providername}`,
+      titleText: `Are you sure? You want to delete ${item.providername}`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#d33",

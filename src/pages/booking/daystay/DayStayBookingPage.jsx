@@ -34,6 +34,8 @@ import {
   REFUND_NON_REFUNDABLE,
   refundLabelText,
 } from "../../../utils/refundLabel";
+import { sanitizeRichHtml } from "../../../utils/safeHtml";
+import { orderIdPathSegment } from "../../../utils/urlSafety";
 
 // Mirrors HotelBookingPage — the sole online-payment gateway surfaced when
 // the agent's available credit falls short of the booking amount. CCAvenue
@@ -459,7 +461,7 @@ export default function DayStayBookingPage() {
         setIsFinalizingPayment(true);
         setIsSubmitting(true);
         const response = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize-daystay/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize-daystay/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         const bookingResponse = response.data;
         const responseId = Number(bookingResponse?.id);
@@ -520,7 +522,7 @@ export default function DayStayBookingPage() {
       }
       try {
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(
@@ -2140,7 +2142,7 @@ export default function DayStayBookingPage() {
                           <div
                             className="terms-content"
                             dangerouslySetInnerHTML={{
-                              __html: hotelTermsAndConditions,
+                              __html: sanitizeRichHtml(hotelTermsAndConditions),
                             }}
                           />
                         ) : (

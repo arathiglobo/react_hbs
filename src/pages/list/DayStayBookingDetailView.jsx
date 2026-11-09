@@ -62,6 +62,7 @@ import {
 // modal below — same import BookingDetailedView.jsx uses so the day-stay
 // detail picker renders identically to the hotel detail picker.
 import "../../styles/HotelBookingPage.css";
+import { orderIdPathSegment } from "../../utils/urlSafety";
 
 // Online-payment gateways — mirrors BookingDetailedView (hotel). CCAvenue
 // is the only real gateway wired; the dummy /payment/:gateway path is kept
@@ -809,7 +810,7 @@ export default function DayStayBookingDetailView() {
         // Re-verify server-side before finalizing — never trust the
         // redirect's own query string alone.
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(
@@ -819,7 +820,7 @@ export default function DayStayBookingDetailView() {
           return;
         }
         await axiosInstance.post(
-          `/api/payment/ccavenue/finalize-daystay-reconfirm/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize-daystay-reconfirm/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         toast.success("Booking reconfirmed successfully!");
         await fetchDetail();

@@ -33,6 +33,7 @@ import {
   refundLabelText,
   uaeToday,
 } from "../../utils/refundLabel";
+import { orderIdPathSegment } from "../../utils/urlSafety";
 
 /**
  * LastMinuteBookingForm — booking creation page for the Last Minute flow.
@@ -564,7 +565,7 @@ export default function LastMinuteBookingForm() {
       try {
         setSubmitting(true);
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(
@@ -574,7 +575,7 @@ export default function LastMinuteBookingForm() {
           return;
         }
         const res = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize-lastminute/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize-lastminute/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (res.data?.success) {
           toast.success(
