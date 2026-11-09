@@ -36,6 +36,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/RoomList.css";
 import axiosInstance from "../components/AxiosInstance";
+import { SUPPLIER_SEARCH_TIMEOUT_MS } from "../config/apiTimeouts";
 import AdminSupplierStrip from "../components/AdminSupplierStrip";
 import { formatFlexibleDate } from "../utils/dateUtils";
 import {
@@ -44,7 +45,11 @@ import {
   DEADLINE_TIME_EOD,
 } from "../utils/rateDeadline";
 import RefundBadge from "../components/RefundBadge";
-import { labelOfRate, refundFilterMatches } from "../utils/refundLabel";
+import {
+  labelOfRate,
+  refundFilterFrom,
+  refundFilterMatches,
+} from "../utils/refundLabel";
 import {
   isNonRefundableRate,
   sumSelectedRooms,
@@ -296,6 +301,8 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
         let payload = location.state?.payload;
         let meta = location.state?.meta;
         let currencyInfo = location.state?.currency;
+        // Refund Policy box ticked on the hotel search page (none = null).
+        let searchRefundFilter = location.state?.refundFilter;
 
         // Fallback to sessionStorage if location.state is null (e.g., via window.open)
         if (!payload) {
@@ -306,6 +313,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
               payload = parsed.payload;
               meta = parsed.meta;
               currencyInfo = parsed.currency || currencyInfo;
+              searchRefundFilter = parsed.refundFilter || searchRefundFilter;
               setHotelStaticData(meta);
               setSearchPayload(payload);
               // console.log("Retrieved payload from sessionStorage:", payload);
@@ -325,6 +333,12 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
           });
         }
 
+        // Start with the search page's Refund Policy box ticked; the agent
+        // can still change it here.
+        if (searchRefundFilter) {
+          setRefundFilter(refundFilterFrom(searchRefundFilter));
+        }
+
         // console.log("payload::", payload);
         if (!payload) {
           setError("Missing search context. Please go back and try again.");
@@ -340,6 +354,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
           (payload.rooms || []).length > 1
             ? { ...payload, includeNonBundled: true, goglobalPerRoomMode: true }
             : payload,
+          { timeout: SUPPLIER_SEARCH_TIMEOUT_MS },
         );
 
         // console.log("room search res::", res);
@@ -398,7 +413,12 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
             handedOff = true;
             navigate("/api-room-list", {
               replace: true,
-              state: { payload, meta, currency: currencyInfo },
+              state: {
+                payload,
+                meta,
+                currency: currencyInfo,
+                refundFilter: searchRefundFilter,
+              },
             });
             return;
           }

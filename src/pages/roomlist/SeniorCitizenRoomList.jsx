@@ -26,6 +26,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
+import { SUPPLIER_SEARCH_TIMEOUT_MS } from "../../config/apiTimeouts";
 import RefundBadge from "../../components/RefundBadge";
 import { chargeNowText, labelOfRate, refundFilterMatches } from "../../utils/refundLabel";
 import { formatFlexibleDate } from "../../utils/dateUtils";
@@ -348,7 +349,7 @@ export default function SeniorCitizenRoomList() {
           apiId: Number(ctx.apiId || 1),
           rooms: roomsList,
         };
-        const { data } = await axiosInstance.post("/api/hotel-rooms/search", payload);
+        const { data } = await axiosInstance.post("/api/hotel-rooms/search", payload, { timeout: SUPPLIER_SEARCH_TIMEOUT_MS });
         if (!data || data.success === false) {
           setError(data?.message || "No rooms available for the selected hotel / dates.");
           return;

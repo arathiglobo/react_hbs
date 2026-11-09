@@ -82,6 +82,16 @@ export const refundFilterMatches = (filter, code) => {
 };
 
 /**
+ * A refund filter rebuilt from a stored or passed-along value (the hotel search
+ * hands its ticked box to the room list). Anything missing reads as unticked.
+ */
+export const refundFilterFrom = (value) => ({
+  refundable: value?.refundable === true,
+  partial: value?.partial === true,
+  nonRefundable: value?.nonRefundable === true,
+});
+
+/**
  * The terms after an IWTX or X3 price check. The check returns only a flag, so
  * the search's terms stand unless the flag now says non-refundable.
  */

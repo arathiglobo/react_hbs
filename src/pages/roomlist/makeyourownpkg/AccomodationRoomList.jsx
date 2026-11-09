@@ -33,6 +33,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import "../../../styles/RoomList.css";
 import axiosInstance from "../../../components/AxiosInstance";
+import { SUPPLIER_SEARCH_TIMEOUT_MS } from "../../../config/apiTimeouts";
 import RefundBadge from "../../../components/RefundBadge";
 import { REFUND_NON_REFUNDABLE, labelOfRate } from "../../../utils/refundLabel";
 import axios from "axios";
@@ -93,7 +94,8 @@ const AccomodationRoomList = () => {
 
         const res = await axiosInstance.post(
           "/api/hotel-rooms/search",
-          payload
+          payload,
+          { timeout: SUPPLIER_SEARCH_TIMEOUT_MS }
         );
 
         // console.log("room search res::", res);

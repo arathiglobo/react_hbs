@@ -218,6 +218,7 @@ import AutomatedHotelMappingPage from "./pages/master/automap/AutomatedHotelMapp
 import HotelMappingBulkList from "./pages/master/HotelMappingBulkList";
 import UnMappingCity from "./pages/master/UnMappingCity";
 import BulkCityMapping from "./pages/master/BulkCityMapping";
+import AutomatedCityMappingPage from "./pages/master/autocitymap/AutomatedCityMappingPage";
 import SubLocation from "./pages/master/SubLocation";
 import Airport from "./pages/master/Airport";
 import LocationHierarchy from "./pages/master/LocationHierarchy";
@@ -472,6 +473,7 @@ export default function App() {
         <Route path="/masters/location-hierarchy" element={<PrivateRoute><LocationHierarchy /></PrivateRoute>} />
         <Route path="/masters/city-mapping" element={<PrivateRoute roles={["admin"]}><CityMapping /></PrivateRoute>} />
         <Route path="/masters/city-mapping-bulk" element={<PrivateRoute roles={["super_admin"]}><BulkCityMapping /></PrivateRoute>} />
+        <Route path="/masters/city-mapping/automated" element={<PrivateRoute roles={["admin"]}><AutomatedCityMappingPage /></PrivateRoute>} />
         <Route path="/masters/city-unmapping" element={<PrivateRoute roles={["admin"]}><UnMappingCity /></PrivateRoute>} />
         <Route path="/masters/hotel-category" element={<PrivateRoute><HotelCategory /></PrivateRoute>} />
         <Route path="/masters/hotel-type" element={<PrivateRoute><HotelType /></PrivateRoute>} />

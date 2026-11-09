@@ -3829,9 +3829,20 @@ export default function HotelSearch({
                                                     ? backendCurrency.factor
                                                     : 1,
                                               };
+                                          // The Refund Policy box ticked
+                                          // here is ticked on the room list
+                                          // too, so it opens on the same
+                                          // kind of rates. Kept beside the
+                                          // payload, not in it: the payload
+                                          // is posted to the room search.
                                           sessionStorage.setItem(
                                             "roomListPayload",
-                                            JSON.stringify({ payload, meta, currency }),
+                                            JSON.stringify({
+                                              payload,
+                                              meta,
+                                              currency,
+                                              refundFilter: { ...refundPolicy },
+                                            }),
                                           );
                                           setTimeout(() => {
                                             // Dedicated 24-hour route in

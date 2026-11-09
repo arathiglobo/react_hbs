@@ -45,6 +45,7 @@ import {
 import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import { useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import axiosInstance from "../../components/AxiosInstance";
+import { SUPPLIER_SEARCH_TIMEOUT_MS } from "../../config/apiTimeouts";
 import { logAgentSearch } from "../../utils/agentSearchLog";
 import { toast } from "react-hot-toast";
 import "../../styles/RoomList.css";
@@ -1713,7 +1714,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
     };
 
     try {
-      const res = await axiosInstance.post("/api/hotel-rooms/search", payload);
+      const res = await axiosInstance.post("/api/hotel-rooms/search", payload, { timeout: SUPPLIER_SEARCH_TIMEOUT_MS });
 
       if (!res.data || res.data.success === false) {
         toast.error(res.data?.message || "Failed to fetch rooms.");

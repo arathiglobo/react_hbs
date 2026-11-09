@@ -35,6 +35,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/RoomList.css";
 import axiosInstance from "../components/AxiosInstance";
+import { SUPPLIER_SEARCH_TIMEOUT_MS } from "../config/apiTimeouts";
 import toast from "react-hot-toast";
 import { formatFlexibleDate } from "../utils/dateUtils";
 import { isAdminLogin, isAgentLogin, stripSupplierSuffix, supplierCodeForBlock, supplierDisplayName, withoutSupplierName } from "../utils/supplierDisplay";
@@ -63,7 +64,11 @@ import {
   resolveInhouseDeadline,
 } from "../utils/rateDeadline";
 import RefundBadge from "../components/RefundBadge";
-import { labelOfRate, repricedTerms } from "../utils/refundLabel";
+import {
+  labelOfRate,
+  refundFilterFrom,
+  repricedTerms,
+} from "../utils/refundLabel";
 
 /**
  * Renders "Valid: <from> - <to>" for a policy validity period, or null when
@@ -1298,6 +1303,9 @@ const ExternalApiRoomList = () => {
         let payload = location.state?.payload;
         let meta = location.state?.meta;
         let currencyInfo = location.state?.currency;
+        // Refund Policy box ticked on the hotel search page (none = null).
+        // RoomList.jsx passes it along when it hands a mapped hotel over.
+        let searchRefundFilter = location.state?.refundFilter;
 
         if (!payload) {
           try {
@@ -1307,6 +1315,7 @@ const ExternalApiRoomList = () => {
               payload = parsed.payload;
               meta = parsed.meta;
               currencyInfo = parsed.currency || currencyInfo;
+              searchRefundFilter = parsed.refundFilter || searchRefundFilter;
               setHotelStaticData(meta);
               setSearchPayload(payload);
             }
@@ -1321,6 +1330,12 @@ const ExternalApiRoomList = () => {
             factor:
               Number(currencyInfo.factor) > 0 ? Number(currencyInfo.factor) : 1,
           });
+        }
+
+        // Start with the search page's Refund Policy box ticked; the agent
+        // can still change it here.
+        if (searchRefundFilter) {
+          filters.setRefundFilter(refundFilterFrom(searchRefundFilter));
         }
 
         if (!payload) {
@@ -1481,7 +1496,7 @@ const ExternalApiRoomList = () => {
 
           if (!searchData) {
             const res = await axiosInstance.post("/api/hotel-rooms/search", searchBody, {
-              timeout: 60000,
+              timeout: SUPPLIER_SEARCH_TIMEOUT_MS,
             });
             searchData = res.data;
           }
@@ -1522,6 +1537,9 @@ const ExternalApiRoomList = () => {
     };
 
     fetchRooms();
+    // filters.setRefundFilter is a plain useState setter (stable) — only a
+    // new search (location.state) should re-run this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
 
   // Agent credit balance — same endpoint / same fallback keys as Inhouse.

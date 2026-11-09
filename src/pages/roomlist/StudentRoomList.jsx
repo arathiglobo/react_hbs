@@ -24,6 +24,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
+import { SUPPLIER_SEARCH_TIMEOUT_MS } from "../../config/apiTimeouts";
 import RoomFilters from "../../components/roomlist/RoomFilters";
 import useRoomFilters from "../../hooks/useRoomFilters";
 import RefundBadge from "../../components/RefundBadge";
@@ -304,7 +305,7 @@ export default function StudentRoomList() {
             adultAges: Array.from({ length: ctx.adults || 1 }, () => 30),
           })),
         };
-        const { data } = await axiosInstance.post("/api/hotel-rooms/search", payload);
+        const { data } = await axiosInstance.post("/api/hotel-rooms/search", payload, { timeout: SUPPLIER_SEARCH_TIMEOUT_MS });
         if (!data || data.success === false) {
           setError(data?.message || "No rooms available for the selected hotel / dates.");
           return;
