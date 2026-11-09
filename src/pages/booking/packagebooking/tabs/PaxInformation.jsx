@@ -10,6 +10,7 @@ import axiosInstance from "../../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supplierPayloadFields } from "../supplierHotels";
+import { useFeatureFlag } from "../../../../config/FeatureFlagsContext";
 // HotelBookingPage's stylesheet is the source of truth for the .pg-option /
 // .pg-option-selected / .pg-option-radio / .pg-option-logo classes used by
 // the "Select Payment Gateway" modal below — importing here keeps the modal
@@ -165,6 +166,9 @@ const PaxInformation = forwardRef(({
   const [selectedGateway, setSelectedGateway] = useState("");
   const [insufficientAmount, setInsufficientAmount] = useState(0);
   const [agentCardPaymentEnabled, setAgentCardPaymentEnabled] = useState(false);
+  // Backend switch package.payment.card-via-gateway: "Card" always pays
+  // through the gateway. Off by default (Card then behaves as before).
+  const cardViaGateway = !!useFeatureFlag("packageCardViaGateway");
   // Live snapshot of the agent's available credit — powers the Order
   // Summary modal's derived Payment Mode label so it can honestly show
   // "Online Payment (CC Avenue)" the moment credit is short, instead of
@@ -646,6 +650,21 @@ const PaxInformation = forwardRef(({
           })),
           cab: null,
           activity: null,
+          // Meal plan picked under the hotel. Its price is already inside
+          // totalPrice; this tells the backend which plan it was (stored on
+          // the booking and used by the server-side price check).
+          mealPlan: bookingData.selections.selectedMealPlan?.mealPlan
+            ? {
+                mealPlanCode: bookingData.selections.selectedMealPlan.mealPlan,
+                mealPlanName:
+                  bookingData.selections.selectedMealPlan.label ||
+                  bookingData.selections.selectedMealPlan.mealPlan,
+                selectedRate: Number(
+                  bookingData.selections.selectedMealPlan.totalRateWithMarkup || 0,
+                ),
+                currency: "AED",
+              }
+            : null,
         },
         // Programme fields captured on the Hotels tab.
         checkInDate: bookingData.programme?.checkInDate || null,
@@ -683,6 +702,42 @@ const PaxInformation = forwardRef(({
       // Fails OPEN: any credit-check request error just proceeds to /book,
       // which still has its own IllegalArgumentException backstop, so the
       // operator is never trapped.
+      // "Card" + pay now, with the card-via-gateway switch on: go straight to
+      // the payment gateway (same picker as the insufficient-credit path),
+      // never the credit limit. Switch off: skipped, Card behaves as before.
+      const isCardMode = ["CARD", "CARD_PAYMENT"].includes(
+        String(payload.modeOfPayment || "").trim().toUpperCase(),
+      );
+      if (
+        cardViaGateway &&
+        isCardMode &&
+        !editingBookingId &&
+        payload.agentId &&
+        bookingData?.programme?.bookingConfirmation !== "Book Now & Voucher later"
+      ) {
+        const cardTotal =
+          Number(payload.totalPrice || 0) + Number(payload.tourismDirham || 0);
+        if (cardTotal > 0) {
+          const agentResp = await axiosInstance
+            .get(`/api/agent/${payload.agentId}`)
+            .catch(() => ({ data: { cardPaymentEnabled: false } }));
+          setShowSummary(false);
+          setIsSubmitting(false);
+          if (!agentResp?.data?.cardPaymentEnabled) {
+            toast.error(
+              "Card payment is not enabled for this agent. Please choose Credit Limit.",
+            );
+            return;
+          }
+          setPendingPayload(payload);
+          setInsufficientAmount(cardTotal);
+          setAgentCardPaymentEnabled(true);
+          setSelectedGateway("");
+          setShowGatewayModal(true);
+          return;
+        }
+      }
+
       if (!editingBookingId && payload.agentId) {
         const payableTotal =
           Number(payload.totalPrice || 0) + Number(payload.tourismDirham || 0);

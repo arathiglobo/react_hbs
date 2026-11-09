@@ -37,16 +37,9 @@ import DateTimeApplyPicker, {
   parseLocalDateTime,
 } from "../../components/DateTimeApplyPicker";
 import {
-  SUPPLIER_LABELS,
   canSeeSupplierNames,
   parseSupplierProviders,
 } from "../booking/packagebooking/supplierHotels";
-
-// Suppliers a package can offer through "Allow supplier hotels". The backend
-// checks the posted codes against its own list (SupplierHotelProviders).
-const SUPPLIER_HOTEL_OPTIONS = Object.entries(SUPPLIER_LABELS).map(
-  ([value, label]) => ({ value, label })
-);
 
 // Enhanced SearchableSelect Component with loading support
 const SearchableSelect = ({
@@ -511,15 +504,9 @@ const PackageReg = () => {
         "Please select or enter at least one item in Inclusion, Exclusion, or Terms & Conditions";
     }
 
-    if (
-      canManageSupplierHotels &&
-      data.containHotel &&
-      data.supplierHotelsEnabled &&
-      !data.supplierHotelProviders?.length
-    ) {
-      errors.supplierHotelProviders =
-        "Please select at least one supplier for supplier hotels";
-    }
+    // (The "select at least one supplier" check went with the removed
+    // "Allow supplier hotels" option: there is nothing left on the form to fix
+    // it with, so it could only block a save without a visible reason.)
 
     return errors;
   };
@@ -2474,65 +2461,11 @@ const PackageReg = () => {
                             </div>
                           )}
                         </Form.Group>
-                        {/* Only offered with Hotel ticked: the backend switches
-                            supplier hotels off for a package without hotels. */}
-                        {canManageSupplierHotels && formData.containHotel && (
-                          <Form.Group className="mb-3">
-                            <FormCheck
-                              type="checkbox"
-                              id="allow-supplier-hotels"
-                              label="Allow supplier hotels"
-                              disabled={isViewMode}
-                              checked={!!formData.supplierHotelsEnabled}
-                              onChange={(e) =>
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  supplierHotelsEnabled: e.target.checked,
-                                }))
-                              }
-                            />
-                            <Form.Text className="text-muted d-block">
-                              Offers live hotels from the selected suppliers next
-                              to this package's own hotels when it is booked.
-                            </Form.Text>
-                            {formData.supplierHotelsEnabled && (
-                              <div className="mt-2">
-                                {SUPPLIER_HOTEL_OPTIONS.map((option) => (
-                                  <FormCheck
-                                    key={option.value}
-                                    inline
-                                    type="checkbox"
-                                    id={`supplier-hotel-${option.value}`}
-                                    label={option.label}
-                                    disabled={isViewMode}
-                                    checked={(
-                                      formData.supplierHotelProviders || []
-                                    ).includes(option.value)}
-                                    onChange={(e) =>
-                                      setFormData((prev) => {
-                                        const current =
-                                          prev.supplierHotelProviders || [];
-                                        return {
-                                          ...prev,
-                                          supplierHotelProviders: e.target.checked
-                                            ? [...current, option.value]
-                                            : current.filter(
-                                                (code) => code !== option.value
-                                              ),
-                                        };
-                                      })
-                                    }
-                                  />
-                                ))}
-                                {validationErrors.supplierHotelProviders && (
-                                  <div className="text-danger small mt-1">
-                                    {validationErrors.supplierHotelProviders}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </Form.Group>
-                        )}
+                        {/* "Allow supplier hotels" was removed from this form:
+                            supplier hotels are no longer set per package. A
+                            package that already has it keeps its saved value
+                            (it is still loaded and posted back unchanged on
+                            save); a new package never gets it. */}
                       </Col>
                       <Col md={6}>
                         <Form.Group className="mb-3">

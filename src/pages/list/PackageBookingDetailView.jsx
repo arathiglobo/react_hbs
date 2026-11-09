@@ -60,6 +60,14 @@ import {
   supplierLabel,
   supplierStatusLabel,
 } from "../booking/packagebooking/supplierHotels";
+import { useFeatureFlag } from "../../config/FeatureFlagsContext";
+import {
+  FulfilmentStatusBadge,
+  SupplierFulfilmentCell,
+  SupplierFulfilmentModal,
+  fetchFulfilment,
+  isTracked,
+} from "./PackageSupplierFulfilment";
 // HotelBookingPage's stylesheet is the source of truth for the .pg-option /
 // .pg-option-selected / .pg-option-radio / .pg-option-logo classes used by
 // the "Select Payment Gateway" modal below. Importing here keeps the modal
@@ -400,6 +408,16 @@ export default function PackageBookingDetailView() {
     useState(0);
   const [isFinalizingReconfirmPayment, setIsFinalizingReconfirmPayment] =
     useState(false);
+  // Backend switch package.payment.card-via-gateway: a "Card" booking is
+  // reconfirmed through the payment gateway, never the credit limit. Off by
+  // default (Reconfirm then behaves as before).
+  const cardViaGateway = !!useFeatureFlag("packageCardViaGateway");
+  // Backend switch package.admin-confirmation.enabled: a paid booking waits
+  // for an admin, who books the hotel with a supplier from Selected Services.
+  // Off by default (nothing below is fetched or rendered then).
+  const adminConfirmation = !!useFeatureFlag("packageAdminConfirmation");
+  const [fulfilment, setFulfilment] = useState(null);
+  const [showFulfilmentModal, setShowFulfilmentModal] = useState(false);
 
   // ── Add New Item (amendment) picker — same flow as hotel detail view.
   // Opens a modal listing every sub-booking type; the chosen type's create
@@ -450,6 +468,29 @@ export default function PackageBookingDetailView() {
     fetchDetails();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bookingId]);
+
+  // Admin confirmation status — refreshed whenever the booking's payment /
+  // cancellation state changes (reconfirm, cancel). Off: never fetched.
+  const loadFulfilment = async () => {
+    if (!adminConfirmation || !bookingId) return;
+    try {
+      setFulfilment(await fetchFulfilment(bookingId));
+    } catch (error) {
+      console.warn("Could not load the booking's confirmation status:", error);
+      setFulfilment(null);
+    }
+  };
+  useEffect(() => {
+    loadFulfilment();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    adminConfirmation,
+    bookingId,
+    bookingDetails?.bookingStatus,
+    bookingDetails?.isCancelled,
+  ]);
+  const showSupplierColumn =
+    adminConfirmation && canSeeSupplierNames() && isTracked(fulfilment);
 
   // CC Avenue post-payment resume — mirrors BookingDetailedView.jsx (hotel
   // reconfirm) and PackageCheckout.jsx (package create). CC Avenue's
@@ -721,6 +762,26 @@ export default function PackageBookingDetailView() {
   // the History modal picks up the freshly-captured reconfirm location + IP.
   const confirmReconfirmBooking = async () => {
     if (!bookingId) return;
+    // "Card" booking with the card-via-gateway switch on: pay through the
+    // gateway (same picker as the insufficient-credit path) instead of the
+    // credit limit. Switch off: skipped, Reconfirm behaves as before.
+    const isCardBooking = ["CARD", "CARD_PAYMENT"].includes(
+      String(bookingDetails?.modeOfPayment || "").trim().toUpperCase(),
+    );
+    if (cardViaGateway && isCardBooking && bookingDetails?.agentId) {
+      const agentResp = await axiosInstance
+        .get(`/api/agent/${bookingDetails.agentId}`)
+        .catch(() => ({ data: { cardPaymentEnabled: false } }));
+      setReconfirmInsufficientAmount(Number(bookingDetails?.totalPrice) || 0);
+      setShowReconfirmModal(false);
+      if (!agentResp?.data?.cardPaymentEnabled) {
+        toast.error("Card payment is not enabled for this agent.");
+        return;
+      }
+      setReconfirmSelectedGateway("");
+      setShowReconfirmGatewayModal(true);
+      return;
+    }
     try {
       setIsReconfirming(true);
       const response = await axiosInstance.put(
@@ -1711,7 +1772,12 @@ export default function PackageBookingDetailView() {
 
                 {/* ── Selected Services ──────────────────────────── */}
                 <div style={CARD_STYLE}>
-                  <div style={SECTION_HEADER}>Selected Services</div>
+                  <div style={SECTION_HEADER}>
+                    Selected Services
+                    {adminConfirmation && (
+                      <FulfilmentStatusBadge fulfilment={fulfilment} />
+                    )}
+                  </div>
                   <div style={{ padding: "10px 16px 12px" }}>
                     {bookingDetails.selections?.hotels &&
                     bookingDetails.selections.hotels.length > 0 ? (
@@ -1730,6 +1796,9 @@ export default function PackageBookingDetailView() {
                             >
                               Per Pax Rate
                             </th>
+                            {showSupplierColumn && (
+                              <th style={{ width: 280, paddingLeft: 28 }}>Supplier</th>
+                            )}
                           </tr>
                         </thead>
                         <tbody>
@@ -1762,6 +1831,18 @@ export default function PackageBookingDetailView() {
                                     </div>
                                   )}
                                 </td>
+                                {showSupplierColumn && (
+                                  <td style={{ paddingLeft: 28 }}>
+                                    {hIdx === 0 ? (
+                                      <SupplierFulfilmentCell
+                                        fulfilment={fulfilment}
+                                        onOpen={() => setShowFulfilmentModal(true)}
+                                      />
+                                    ) : (
+                                      <span className="text-muted">—</span>
+                                    )}
+                                  </td>
+                                )}
                               </tr>
                             ),
                           )}
@@ -1794,6 +1875,19 @@ export default function PackageBookingDetailView() {
                   </div>
                 </div>
 
+                {showSupplierColumn && (
+                  <SupplierFulfilmentModal
+                    show={showFulfilmentModal}
+                    onHide={() => setShowFulfilmentModal(false)}
+                    bookingId={bookingId}
+                    fulfilment={fulfilment}
+                    onDone={async () => {
+                      await fetchDetails();
+                      await loadFulfilment();
+                    }}
+                  />
+                )}
+
                 {/* ── Pricing ────────────────────────────────────── */}
                 <div style={CARD_STYLE}>
                   <div style={SECTION_HEADER}>Pricing</div>
@@ -1809,6 +1903,18 @@ export default function PackageBookingDetailView() {
                           value={`AED ${savedSupplierHotelRate(bookingDetails).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                         />
                       </>
+                    )}
+                    {/* Meal plan picked on the Hotels tab — only recorded for
+                        bookings made since the backend stores it. */}
+                    {bookingDetails.selections?.mealPlan?.mealPlanCode && (
+                      <InfoRow
+                        label="Meal Plan"
+                        value={`${bookingDetails.selections.mealPlan.mealPlanName || bookingDetails.selections.mealPlan.mealPlanCode}${
+                          bookingDetails.selections.mealPlan.selectedRate != null
+                            ? ` — AED ${parseFloat(bookingDetails.selections.mealPlan.selectedRate || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : ""
+                        }`}
+                      />
                     )}
                     {bookingDetails.tourismDirham != null &&
                       bookingDetails.tourismDirham !== 0 && (
