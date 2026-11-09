@@ -627,13 +627,13 @@ export default function App() {
         <Route path="/booking-details/scheffer-driver-booking/:id/notes" element={<PrivateRoute><SchefferDriverBookingNotesPage /></PrivateRoute>} />
         <Route path="/long-stay-room-list" element={<PrivateRoute><LongStayRoomList /></PrivateRoute>} />
         <Route path="/notifications" element={<PrivateRoute roles={["admin", "agent"]}><NotificationsPage /></PrivateRoute>} />
-        <Route path="/ai" element={<PrivateRoute><AiDashboard /></PrivateRoute>} />
-        <Route path="/ai/demand-forecast" element={<PrivateRoute><DemandForecast /></PrivateRoute>} />
-        <Route path="/ai/agent-behavior" element={<PrivateRoute><AgentBehavior /></PrivateRoute>} />
-        <Route path="/ai/no-show-risk" element={<PrivateRoute><NoShowRisk /></PrivateRoute>} />
+        <Route path="/ai" element={<PrivateRoute roles={["admin", "staff"]}><AiDashboard /></PrivateRoute>} />
+        <Route path="/ai/demand-forecast" element={<PrivateRoute roles={["admin", "staff"]}><DemandForecast /></PrivateRoute>} />
+        <Route path="/ai/agent-behavior" element={<PrivateRoute roles={["admin", "staff"]}><AgentBehavior /></PrivateRoute>} />
+        <Route path="/ai/no-show-risk" element={<PrivateRoute roles={["admin", "staff"]}><NoShowRisk /></PrivateRoute>} />
         {/* Admin-only report — sidebar hides it for non-admin roles; the
             backend endpoint returns 403 for non-admins as a second gate. */}
-        <Route path="/admin/unbooked-opportunities" element={<PrivateRoute><UnbookedOpportunities /></PrivateRoute>} />
+        <Route path="/admin/unbooked-opportunities" element={<PrivateRoute roles={["admin"]}><UnbookedOpportunities /></PrivateRoute>} />
         <Route path="/api-booking-page-hotels" element={<PrivateRoute><ApiBookingPageForHotels /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package" element={<PrivateRoute><MakeUrOwnPackage /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package/booking-page" element={<PrivateRoute><MakePkgBookingPage /></PrivateRoute>} />
