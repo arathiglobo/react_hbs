@@ -491,9 +491,9 @@ export default function App() {
         <Route path="/masters/terms-and-conditions" element={<PrivateRoute><TermsAndConditions /></PrivateRoute>} />
         <Route path="/masters/hotel-mapping" element={<PrivateRoute roles={["admin"]}><HotelMapping /></PrivateRoute>} />
         <Route path="/masters/hotel-mapping/automated" element={<PrivateRoute roles={["admin"]}><AutomatedHotelMappingPage /></PrivateRoute>} />
-        <Route path="/masters/transfer-airport-mapping" element={<PrivateRoute><TransferAirportMapping /></PrivateRoute>} />
-        <Route path="/masters/transfer-place-mapping" element={<PrivateRoute><TransferPlaceMapping /></PrivateRoute>} />
-        <Route path="/masters/transfer-hotel-mapping" element={<PrivateRoute><TransferHotelMapping /></PrivateRoute>} />
+        <Route path="/masters/transfer-airport-mapping" element={<PrivateRoute roles={["admin"]}><TransferAirportMapping /></PrivateRoute>} />
+        <Route path="/masters/transfer-place-mapping" element={<PrivateRoute roles={["admin"]}><TransferPlaceMapping /></PrivateRoute>} />
+        <Route path="/masters/transfer-hotel-mapping" element={<PrivateRoute roles={["admin"]}><TransferHotelMapping /></PrivateRoute>} />
         <Route path="/masters/hotel-upcooming-mapped-list" element={<PrivateRoute roles={["admin"]}><HotelMappingBulkList /></PrivateRoute>} />
         <Route path="/masters/fetch-new-hotels" element={<PrivateRoute roles={["admin"]}><FetchNewHotels /></PrivateRoute>} />
         <Route path="/masters/mapped-list" element={<PrivateRoute roles={["admin"]}><MappedList /></PrivateRoute>} />
