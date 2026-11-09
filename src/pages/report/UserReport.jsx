@@ -8,6 +8,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { escapeHtml } from "../../utils/safeHtml";
+import { csvCell } from "../../utils/csvSafe";
 
 
 export default function UserReport() {
@@ -412,12 +413,8 @@ export default function UserReport() {
       return;
     }
 
-    const escapeCSV = (v) => {
-      const s = normalizeCell(v);
-      return (s.includes(',') || s.includes('\n') || s.includes('"'))
-        ? `"${s.replace(/"/g, '""')}"`
-        : s;
-    };
+    // csvCell neutralises text a spreadsheet would run as a formula.
+    const escapeCSV = (value) => csvCell(value);
 
     const headers = ['Sl.No', 'Code', 'Name', 'Created By', 'Modified By'];
     let rows = [];

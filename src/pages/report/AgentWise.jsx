@@ -16,6 +16,7 @@ import City from "../../components/filters/City";
 import Country from "../../components/filters/Country";
 import Supplier from "../../components/filters/Supplier";
 import { escapeHtml } from "../../utils/safeHtml";
+import { csvCell } from "../../utils/csvSafe";
 
 function AgentWise() {
 
@@ -306,14 +307,8 @@ const handleSendEmail = async () => {
     : ['Sl.No', 'Hotel Name', 'Platform', 'Check In', 'Check Out', 'Hotel Type', 'No of Rooms', 'Customer Name'];
   
   // Create CSV content with proper escaping
-  const escapeCSV = (value) => {
-    if (value === null || value === undefined) return '';
-    const stringValue = String(value);
-    if (stringValue.includes(',') || stringValue.includes('\n') || stringValue.includes('"')) {
-      return `"${stringValue.replace(/"/g, '""')}"`;
-    }
-    return stringValue;
-  };
+  // csvCell neutralises text a spreadsheet would run as a formula.
+  const escapeCSV = (value) => csvCell(value);
   
   const csvContent = [
     headers.map(escapeCSV).join(','),

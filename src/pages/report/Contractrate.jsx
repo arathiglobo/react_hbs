@@ -12,6 +12,7 @@ import MarketType from "../../components/filters/MarketType";
 import Supplier from "../../components/filters/Supplier";
 import DestinationCity from "../../components/filters/DestinationCity";
 import { escapeHtml } from "../../utils/safeHtml";
+import { csvCell } from "../../utils/csvSafe";
 
 export default function Contractrate() {
   const [contracts, setContracts] = useState([]);
@@ -262,12 +263,8 @@ export default function Contractrate() {
       return;
     }
 
-    const escapeCSV = (v) => {
-      const s = String(v || "");
-      return (s.includes(",") || s.includes("\n") || s.includes('"'))
-        ? `"${s.replace(/"/g, '""')}"`
-        : s;
-    };
+    // csvCell neutralises text a spreadsheet would run as a formula.
+    const escapeCSV = (value) => csvCell(value);
 
     let csvRows = [];
     

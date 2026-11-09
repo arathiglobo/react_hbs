@@ -9,6 +9,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { escapeHtml } from "../../utils/safeHtml";
+import { csvCell } from "../../utils/csvSafe";
 
 
 function Comparison() {
@@ -346,14 +347,8 @@ function Comparison() {
     
     const headers = ['Sl.No', 'Entity Name', 'No Of Booking', 'Cancelled Booking'];
     
-    const escapeCSV = (value) => {
-      if (value === null || value === undefined) return '';
-      const stringValue = String(value);
-      if (stringValue.includes(',') || stringValue.includes('\n') || stringValue.includes('"')) {
-        return `"${stringValue.replace(/"/g, '""')}"`;
-      }
-      return stringValue;
-    };
+    // csvCell neutralises text a spreadsheet would run as a formula.
+    const escapeCSV = (value) => csvCell(value);
     
     const csvContent = [
       headers.map(escapeCSV).join(','),

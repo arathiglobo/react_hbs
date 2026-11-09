@@ -17,6 +17,7 @@ import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import { FaFileDownload, FaSyncAlt, FaFilter, FaUndo } from "react-icons/fa";
 import { escapeHtml } from "../../utils/safeHtml";
+import { csvCellQuoted } from "../../utils/csvSafe";
 
 /**
  * Inhouse Accounts → Ledger.
@@ -282,7 +283,7 @@ export default function AgentLedger() {
       "Paid by",
       "Note",
     ];
-    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const esc = (v) => csvCellQuoted(v); // neutralises formula-leading text
     const lines = rows.map((r, idx) =>
       [
         // Same continuous numbering as the table (newest = 1), so a row in

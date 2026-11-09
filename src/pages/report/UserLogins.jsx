@@ -8,6 +8,7 @@ import axiosInstance from "../../components/AxiosInstance";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { escapeHtml } from "../../utils/safeHtml";
+import { csvCell } from "../../utils/csvSafe";
 
 // Same "2026-Jul-29 - 09:55:21 AM" formatter the User Management → Login Logs
 // page uses, so a login prints identically on both screens. Null (an open
@@ -240,15 +241,8 @@ export default function UserLogins() {
     const headers = ['Sl.No', 'Code', 'Name', 'Login Type', 'Login', 'Logout'];
 
     // Create CSV content with proper escaping
-    const escapeCSV = (value) => {
-      if (value === null || value === undefined) return '';
-      const stringValue = String(value);
-      // If value contains comma, newline, or quote, wrap it in quotes and escape quotes
-      if (stringValue.includes(',') || stringValue.includes('\n') || stringValue.includes('"')) {
-        return `"${stringValue.replace(/"/g, '""')}"`;
-      }
-      return stringValue;
-    };
+    // csvCell neutralises text a spreadsheet would run as a formula.
+    const escapeCSV = (value) => csvCell(value);
 
     const csvContent = [
       headers.map(escapeCSV).join(','),
