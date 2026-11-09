@@ -24,6 +24,7 @@ import AgentBalanceDisplay from "../../../components/AgentBalanceDisplay";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
 import { sanitizeRichHtml } from "../../../utils/safeHtml";
+import { isAgentLogin } from "../../../utils/supplierDisplay";
 
 function LazyImage({ src, alt, className }) {
   const containerRef = useRef(null);
@@ -1772,7 +1773,7 @@ const ActivitySearch = () => {
                     ) : (
                       <Badge bg="success">Private</Badge>
                     )}
-                    {selectedActivity.apiType && !isAgentRole && (
+                    {selectedActivity.apiType && !isAgentLogin() && (
                       <Badge bg="dark">{selectedActivity.apiType}</Badge>
                     )}
                   </div>

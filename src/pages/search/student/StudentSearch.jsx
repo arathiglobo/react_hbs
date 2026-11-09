@@ -31,6 +31,7 @@ import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
 import DateInput from "../../../components/DateInput";
 import "../../../styles/HotelSearch.css";
+import { isAgentLogin } from "../../../utils/supplierDisplay";
 
 // ─────────────────────────────────────────────
 // Counter — same +/- counter as HotelSearch.jsx.
@@ -1275,7 +1276,7 @@ export default function StudentSearch() {
                             Hidden for AGENT logins (agents book only through
                             their contracted channel and the backend already
                             scopes results). */}
-                        {!isAgentRole && (
+                        {!isAgentLogin() && (
                           <>
                             <hr />
 

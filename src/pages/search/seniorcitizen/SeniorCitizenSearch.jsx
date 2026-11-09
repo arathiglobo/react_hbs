@@ -39,6 +39,7 @@ import DateInput from "../../../components/DateInput";
 import { FaSearch, FaStar, FaArrowLeft } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import "../../../styles/HotelSearch.css";
+import { isAgentLogin } from "../../../utils/supplierDisplay";
 
 function Counter({ value, min, max, onChange }) {
   return (
@@ -1466,7 +1467,7 @@ export default function SeniorCitizenSearch() {
                             Hidden for AGENT logins (agents book only through
                             their contracted channel and the backend already
                             scopes results). */}
-                        {!isAgentRole && (
+                        {!isAgentLogin() && (
                           <>
                             <hr />
                             <Form.Group>
@@ -1608,7 +1609,7 @@ export default function SeniorCitizenSearch() {
                                       !isAgentRole guard on the Channel Form
                                       Group), so surfacing it on each result
                                       card is out of scope for the agent. */}
-                                  {!isAgentRole && (
+                                  {!isAgentLogin() && (
                                     <div className="small text-muted mt-1">
                                       Channel:{" "}
                                       {(hotel.apiType || "INHOUSE").toUpperCase()}
