@@ -76,7 +76,17 @@ export const AUDIT_EVENTS = [
   "RESCAN_REQUESTED",
   "PAUSED",
   "RESUMED",
+  "APPROVE_ALL_STARTED",
+  "APPROVE_ALL_FINISHED",
+  "MAP_VERIFIED_STARTED",
+  "MAP_VERIFIED_FINISHED",
+  "REJECT_DIFFERENT_STARTED",
+  "REJECT_DIFFERENT_FINISHED",
 ];
+
+/** Text for SweetAlert html strings (city names come from supplier data). */
+export const escapeHtml = (s) =>
+  String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 export const fmtNumber = (n) => (n === null || n === undefined ? "—" : Number(n).toLocaleString());
 

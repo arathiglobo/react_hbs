@@ -368,9 +368,10 @@ export function apiIdForApiType(apiType) {
  * the Channel filter on /new-booking/hotel. Values are the lower-cased
  * apiType the page filters rows by ("inhouse" = the page's own last-minute
  * contract rates). Suppliers in EXCLUDED_API_TYPES are left out — their
- * hotels never reach this page.
+ * hotels never reach this page. Also the row list of the Build Your Own
+ * Package Channel filter (utils/packageHotelSearch.js).
  */
-const CHANNEL_OPTIONS = [
+export const CHANNEL_OPTIONS = [
   { value: "inhouse", label: "Inhouse" },
   { value: "iwtx", label: "Iwtx" },
   { value: "x3", label: "x3" },

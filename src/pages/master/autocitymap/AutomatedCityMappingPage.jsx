@@ -26,6 +26,8 @@ import AuditPanel from "./AuditPanel";
 import ReviewDialog from "./ReviewDialog";
 import DedupPanel from "./DedupPanel";
 import GeoSyncPanel from "./GeoSyncPanel";
+import RemainingPanel from "./RemainingPanel";
+import RemainingList from "./RemainingList";
 
 const VIEWS = [
   { key: "verify", label: "Needs verification", icon: "fa-user-check" },
@@ -78,6 +80,7 @@ export default function AutomatedCityMappingPage() {
   const [showRules, setShowRules] = useState(false);
   const [countryFilter, setCountryFilter] = useState("");
   const [mappedSource, setMappedSource] = useState("AUTOMATED");
+  const [remainingGroup, setRemainingGroup] = useState(null);
 
   const reloadAll = () => {
     setReloadKey((k) => k + 1);
@@ -352,6 +355,7 @@ export default function AutomatedCityMappingPage() {
                   <button type="button" key={v.key} className={`acm-view ${view === v.key ? "is-active" : ""}`} onClick={() => {
                     setCountryFilter("");
                     setMappedSource("AUTOMATED");
+                    setRemainingGroup(null);
                     setView(v.key);
                   }}>
                     <i className={`fas ${v.icon} me-1`} aria-hidden="true"></i>
@@ -365,9 +369,18 @@ export default function AutomatedCityMappingPage() {
               </nav>
               <div className="acm-view-body">
                 {view === "verify" && (
-                  <ResultsPanel active reloadKey={reloadKey} statuses="PENDING_REVIEW" providers={providers} onOpen={setOpenRow}
-                    hint="No verified match was found for these cities. Pick the right supplier city and approve it, or reject the suggestions. Sorted by the supplier's hotels, so the cities that matter most come first."
-                    emptyText="Nothing waits for verification." />
+                  <>
+                    <RemainingPanel reloadKey={reloadKey} selected={remainingGroup} onSelect={setRemainingGroup} />
+                    {remainingGroup ? (
+                      <RemainingList group={remainingGroup} reloadKey={reloadKey} providers={providers} onOpen={setOpenRow}
+                        onChanged={reloadAll} onBack={() => setRemainingGroup(null)} />
+                    ) : (
+                      <ResultsPanel active reloadKey={reloadKey} statuses="PENDING_REVIEW" providers={providers} onOpen={setOpenRow}
+                        bulkApprove onBulkDone={reloadAll}
+                        hint="No verified match was found for these cities. Pick the right supplier city and approve it, or reject the suggestions. To approve several at once, tick them: each is mapped to the supplier city shown in its row. Sorted by the supplier's hotels, so the cities that matter most come first."
+                        emptyText="Nothing waits for verification." />
+                    )}
+                  </>
                 )}
                 {view === "mapped" && <MappedPanel key={mappedSource || "all"} active reloadKey={reloadKey} providers={providers} onUndo={undo}
                   initialSource={mappedSource} />}
