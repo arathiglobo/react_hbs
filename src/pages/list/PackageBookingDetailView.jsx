@@ -68,6 +68,7 @@ import {
   fetchFulfilment,
   isTracked,
 } from "./PackageSupplierFulfilment";
+import { ServiceFulfilmentSections } from "./PackageServiceFulfilment";
 // HotelBookingPage's stylesheet is the source of truth for the .pg-option /
 // .pg-option-selected / .pg-option-radio / .pg-option-logo classes used by
 // the "Select Payment Gateway" modal below. Importing here keeps the modal
@@ -416,6 +417,15 @@ export default function PackageBookingDetailView() {
   // for an admin, who books the hotel with a supplier from Selected Services.
   // Off by default (nothing below is fetched or rendered then).
   const adminConfirmation = !!useFeatureFlag("packageAdminConfirmation");
+  // Backend switch package.service-fulfilment.enabled (on top of the one
+  // above): separate Book Hotel / Book Transfer / Book Activities cards below
+  // Selected Services, each service confirmed on its own
+  // (PackageServiceFulfilment.jsx). Off by default: none of it renders.
+  const serviceFulfilmentFlag = !!useFeatureFlag("packageServiceFulfilment");
+  const serviceFulfilment = adminConfirmation && serviceFulfilmentFlag;
+  // The Selected Preferred Hotels heading's slot for the booking's status and
+  // Reject booking (filled by ServiceFulfilmentSections' three-column layout).
+  const [servicesHeaderEl, setServicesHeaderEl] = useState(null);
   const [fulfilment, setFulfilment] = useState(null);
   const [showFulfilmentModal, setShowFulfilmentModal] = useState(false);
 
@@ -489,8 +499,11 @@ export default function PackageBookingDetailView() {
     bookingDetails?.bookingStatus,
     bookingDetails?.isCancelled,
   ]);
+  // With per-service confirmation on, hotels are booked from the separate
+  // "Book Hotel" card instead, so the old single-hotel Supplier column is not
+  // shown (flag off: exactly as before).
   const showSupplierColumn =
-    adminConfirmation && canSeeSupplierNames() && isTracked(fulfilment);
+    adminConfirmation && !serviceFulfilment && canSeeSupplierNames() && isTracked(fulfilment);
 
   // CC Avenue post-payment resume — mirrors BookingDetailedView.jsx (hotel
   // reconfirm) and PackageCheckout.jsx (package create). CC Avenue's
@@ -1348,6 +1361,20 @@ export default function PackageBookingDetailView() {
   const termsAndConditions = Array.isArray(packageView?.termsAndConditions)
     ? packageView.termsAndConditions
     : [];
+  // A saved inclusion / exclusion / term can hold several lines (a custom
+  // entry typed as a list in Package Registration). Each line is shown as its
+  // own bullet, in full, instead of the lines running together in one bullet.
+  const toBulletLines = (list, prefix) =>
+    list.flatMap((item, i) =>
+      String(item?.description ?? "")
+        .split(/\r?\n/)
+        .map((line) => line.replace(/^\s*[•·*-]\s*/, "").trim())
+        .filter(Boolean)
+        .map((text, k) => ({ key: `${prefix}-${item?.otherId ?? "custom"}-${i}-${k}`, text })),
+    );
+  const inclusionLines = toBulletLines(inclusions, "inc");
+  const exclusionLines = toBulletLines(exclusions, "exc");
+  const termsLines = toBulletLines(termsAndConditions, "tnc");
   const nights = packageView?.noOfNights ?? "";
   const nightsInt = parseInt(nights, 10);
   const daysInt = Number.isFinite(nightsInt) ? nightsInt + 1 : null;
@@ -1773,9 +1800,18 @@ export default function PackageBookingDetailView() {
                 {/* ── Selected Services ──────────────────────────── */}
                 <div style={CARD_STYLE}>
                   <div style={SECTION_HEADER}>
-                    Selected Services
-                    {adminConfirmation && (
+                    {/* Renamed only with per-service confirmation on (off: as before). */}
+                    {serviceFulfilment ? "Selected Preferred Hotels" : "Selected Services"}
+                    {/* With per-service confirmation on, the booking's status is on the Book Hotel card instead. */}
+                    {adminConfirmation && !serviceFulfilment && (
                       <FulfilmentStatusBadge fulfilment={fulfilment} />
+                    )}
+                    {serviceFulfilment && (
+                      <span
+                        ref={setServicesHeaderEl}
+                        className="ms-auto d-flex align-items-center gap-2"
+                        style={{ fontWeight: 400 }}
+                      />
                     )}
                   </div>
                   <div style={{ padding: "10px 16px 12px" }}>
@@ -1870,6 +1906,25 @@ export default function PackageBookingDetailView() {
                       <InfoRow
                         label="Activity"
                         value={`${bookingDetails.selections.activity.activityName} — AED ${parseFloat(bookingDetails.selections.activity.selectedRate || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
+                      />
+                    )}
+
+                    {/* ── Book Hotel / Book Transfer / Book Activities ── */}
+                    {/* Per-service confirmation only (flag off: not rendered): three
+                        columns inside this card, each opened below them. */}
+                    {serviceFulfilment && (
+                      <ServiceFulfilmentSections
+                        layout="columns"
+                        headerTarget={servicesHeaderEl}
+                        bookingId={bookingId}
+                        cardStyle={CARD_STYLE}
+                        headerStyle={SECTION_HEADER}
+                        canSeeSuppliers={canSeeSupplierNames()}
+                        refreshKey={`${bookingDetails?.bookingStatus}|${bookingDetails?.isCancelled}`}
+                        onChanged={async () => {
+                          await fetchDetails();
+                          await loadFulfilment();
+                        }}
                       />
                     )}
                   </div>
@@ -1979,10 +2034,10 @@ export default function PackageBookingDetailView() {
                       color: "#222",
                     }}
                   >
-                    {inclusions.length > 0 ? (
+                    {inclusionLines.length > 0 ? (
                       <ul style={{ marginBottom: 0, paddingLeft: "18px" }}>
-                        {inclusions.map((i) => (
-                          <li key={`inc-${i.otherId}`}>{i.description}</li>
+                        {inclusionLines.map((l) => (
+                          <li key={l.key}>{l.text}</li>
                         ))}
                       </ul>
                     ) : (
@@ -2003,10 +2058,10 @@ export default function PackageBookingDetailView() {
                       color: "#222",
                     }}
                   >
-                    {exclusions.length > 0 ? (
+                    {exclusionLines.length > 0 ? (
                       <ul style={{ marginBottom: 0, paddingLeft: "18px" }}>
-                        {exclusions.map((i) => (
-                          <li key={`exc-${i.otherId}`}>{i.description}</li>
+                        {exclusionLines.map((l) => (
+                          <li key={l.key}>{l.text}</li>
                         ))}
                       </ul>
                     ) : (
@@ -2039,7 +2094,7 @@ export default function PackageBookingDetailView() {
                 </div>
 
                 {/* ── Terms & Conditions ─────────────────────── */}
-                {termsAndConditions.length > 0 && (
+                {termsLines.length > 0 && (
                   <div style={CARD_STYLE}>
                     <div style={SECTION_HEADER}>Terms & Conditions</div>
                     <div
@@ -2050,8 +2105,8 @@ export default function PackageBookingDetailView() {
                       }}
                     >
                       <ul style={{ marginBottom: 0, paddingLeft: "18px" }}>
-                        {termsAndConditions.map((t) => (
-                          <li key={`tnc-${t.otherId}`}>{t.description}</li>
+                        {termsLines.map((l) => (
+                          <li key={l.key}>{l.text}</li>
                         ))}
                       </ul>
                     </div>

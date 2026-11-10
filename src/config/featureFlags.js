@@ -27,8 +27,15 @@ export const ENABLE_MAP_PREVIEW = true;
 //   When true, a paid package booking waits for an admin, who books its
 //   hotel with a supplier from the detail view's Selected Services (and the
 //   booking list gets an "Awaiting confirmation" type for admins).
+//
+//   packageServiceFulfilment — backend package.service-fulfilment.enabled
+//   (sent true only while packageAdminConfirmation is on too). When true,
+//   the detail view's Selected Services lists every hotel, the transfer and
+//   the activity, each with its own status and Book button for admins
+//   (PackageServiceFulfilment.jsx). When false, Selected Services is as before.
 export const DEFAULT_FEATURE_FLAGS = {
   rateCalendarEnabled: false,
   packageCardViaGateway: false,
   packageAdminConfirmation: false,
+  packageServiceFulfilment: false,
 };

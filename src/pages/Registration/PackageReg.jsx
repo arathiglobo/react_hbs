@@ -919,10 +919,21 @@ const PackageReg = () => {
   const cityList = async (countryId, searchTerm = "") => {
     try {
       setIsLoadingPlaces(true);
+      // Only the arriving country's cities. The plain /api/province list (used
+      // before) ignores countryId and returned the first 50 cities of every
+      // country, so the chosen country's cities were missing. getByCountryId
+      // always filters by country (and by name / code when a search is typed);
+      // the dropdown keeps showing at most 50, A to Z, as before.
       const response = await axiosInstance.get(
-        `/api/province?countryId=${countryId}&page=0&limit=50&search=${encodeURIComponent(searchTerm)}`
+        `/api/province/getByCountryId/${encodeURIComponent(countryId)}?search=${encodeURIComponent(searchTerm)}`
       );
-      setPlaces(Array.isArray(response.data) ? response.data : []);
+      const list = Array.isArray(response.data) ? response.data : [];
+      const byName = (p) => String(p?.name || p?.stateName || "");
+      setPlaces(
+        [...list]
+          .sort((a, b) => byName(a).localeCompare(byName(b)))
+          .slice(0, 50)
+      );
     } catch (error) {
       console.log("axios call error for city list : ", error);
       setPlaces([]);
