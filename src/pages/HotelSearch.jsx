@@ -101,7 +101,9 @@ function RoomGuestSelector({ value, onChange }) {
               children,
               childAges: Array.from(
                 { length: children },
-                (_, j) => r.childAges[j] || 5,
+                // `??` (not `||`) so a chosen age of 0 survives a
+                // children-count change instead of resetting to 5.
+                (_, j) => r.childAges[j] ?? 5,
               ),
             }
           : r,
@@ -208,7 +210,7 @@ function RoomGuestSelector({ value, onChange }) {
                       </label>
                       <Form.Select
                         size="sm"
-                        value={room.childAges[idx] || 5}
+                        value={room.childAges[idx] ?? 5}
                         onChange={(e) =>
                           setChildAge(i, idx, parseInt(e.target.value))
                         }

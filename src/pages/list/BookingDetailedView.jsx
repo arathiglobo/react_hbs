@@ -737,6 +737,20 @@ export default function BookingDetailedView() {
     return isDeadlinePassed(booking.deadlineDate);
   })();
 
+  /**
+   * Client rule: cancelling a non-refundable booking (any supplier or
+   * in-house) never puts money back on the agent's credit. Any refund is made
+   * by hand by the Finance team, not online. The cancel dialog says so and the
+   * operator has to accept it before the button unlocks. A "Mixed" booking
+   * (some rooms refundable, GRN only today) still gets the refundable rooms'
+   * share back, so its wording differs.
+   */
+  const isNonRefundableBooking =
+    String(booking?.refundStatus || "").toLowerCase() === "non-refundable";
+  const isMixedRefundBooking =
+    isNonRefundableBooking &&
+    String(getRefundStatusLabel(booking)).startsWith("Mixed");
+
   const cancelBooking = async () => {
     // Cancellation reason is now mandatory — the modal marks the field
     // with an asterisk + invalid state, and the "Yes, Cancel" button is
@@ -3503,6 +3517,38 @@ export default function BookingDetailedView() {
                           />
                         </div>
                       )}
+                      {/* Non-refundable: nothing goes back to the agent's
+                          credit online — only Finance can refund it. */}
+                      {isNonRefundableBooking && (
+                        <div className="mb-3 text-start small border border-danger-subtle bg-danger-subtle text-danger-emphasis rounded px-3 py-2">
+                          <div className="fw-semibold mb-1">
+                            <FaExclamationCircle className="me-2" />
+                            Non-refundable booking
+                          </div>
+                          <div className="mb-2">
+                            {isMixedRefundBooking
+                              ? "The non-refundable room(s) will not be refunded to the agent's credit. Only the refundable rooms' share goes back."
+                              : "The booking amount will not be refunded to the agent's credit."}{" "}
+                            A refund of a non-refundable amount can only be made
+                            by the Finance team. It cannot be done online.
+                          </div>
+                          <Form.Check
+                            type="checkbox"
+                            id="acceptNonRefundableCancellation"
+                            checked={acceptCancellationCharges}
+                            disabled={cancellingBooking}
+                            onChange={(e) =>
+                              setAcceptCancellationCharges(e.target.checked)
+                            }
+                            label={
+                              <span className="fw-semibold">
+                                I understand that the non-refundable amount will
+                                not be refunded online.
+                              </span>
+                            }
+                          />
+                        </div>
+                      )}
 
                       <Form.Group controlId="cancellationReason" className="text-start">
                         <Form.Label className="fw-semibold">
@@ -3550,7 +3596,8 @@ export default function BookingDetailedView() {
                       disabled={
                         cancellingBooking ||
                         !cancellationReason.trim() ||
-                        (isPastCancellationDeadline && !acceptCancellationCharges)
+                        ((isPastCancellationDeadline || isNonRefundableBooking) &&
+                          !acceptCancellationCharges)
                       }
                     >
                       {cancellingBooking ? (
