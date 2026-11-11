@@ -37,6 +37,7 @@ import RefundBadge from "../../../components/RefundBadge";
 import {
   REFUND_FLEXIBLE,
   REFUND_NON_REFUNDABLE,
+  REFUND_PARTIAL,
   labelOfRate,
   refundLabelText,
   worstLabel,
@@ -585,13 +586,21 @@ export default function SeniorCitizenBookingPage() {
     if (!cancellationDeadline) return false;
     return uaeToday() > cancellationDeadline;
   })();
-  // Offer the Voucher Now / Voucher Later choice only for refundable,
-  // Available rates. On-request / non-refundable rates skip the choice.
-  const showVoucherChoice = !isOnRequestRate && !isNonRefundableRate;
+  // Offer the Voucher Now / Voucher Later choice only for refundable
+  // Available rates that still have free-cancellation time left, or that only
+  // cost part of the booking after their deadline — the same rule as the
+  // Student page. A hold made after the deadline would be auto-cancelled at
+  // once, so the choice is not shown then.
+  const showVoucherChoice =
+    !isOnRequestRate &&
+    !isNonRefundableRate &&
+    !!cancellationDeadline &&
+    (!isOutsideDeadline || bookingRefundLabel === REFUND_PARTIAL);
   // Resolved status sent on payload.bookingFlowStatus.
   const resolvedBookingFlowStatus = (() => {
     if (isOnRequestRate) return "REQUESTED";
     if (isNonRefundableRate) return "RECONFIRMED";
+    if (isOutsideDeadline && bookingRefundLabel !== REFUND_PARTIAL) return "RECONFIRMED";
     return bookingConfirmation === "Book Now & Voucher later"
       ? "CONFIRMED"
       : "RECONFIRMED";
