@@ -21,6 +21,10 @@ import {
   FaUtensils,
 } from "react-icons/fa";
 import PaxInformation from "./tabs/PaxInformation";
+import {
+  BOOKING_STILL_PROCESSING_MESSAGE,
+  isRequestTimeout,
+} from "./bookingTimeout";
 // Abandoned-package-search follow-up email — flags the history row as
 // booked when the CCAvenue-paid booking finalises so the scheduler
 // stops considering it a follow-up candidate. Standard (non-paid) flow
@@ -227,6 +231,12 @@ const PackageCheckout = () => {
         const beMsg =
           err?.response?.data?.message || err?.message || null;
         console.error("Post-payment package finalize failed:", err);
+        // No reply in time: the booking may still be being created
+        // server-side, so don't report it as failed (see bookingTimeout.js).
+        if (isRequestTimeout(err)) {
+          toast.error(BOOKING_STILL_PROCESSING_MESSAGE, { duration: 10000 });
+          return;
+        }
         toast.error(
           beMsg ||
             "Payment succeeded but booking could not be created. Please contact support with your payment reference.",

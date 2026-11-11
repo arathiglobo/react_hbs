@@ -10,6 +10,10 @@ import axiosInstance from "../../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supplierPayloadFields } from "../supplierHotels";
+import {
+  BOOKING_STILL_PROCESSING_MESSAGE,
+  isRequestTimeout,
+} from "../bookingTimeout";
 import { useFeatureFlag } from "../../../../config/FeatureFlagsContext";
 // HotelBookingPage's stylesheet is the source of truth for the .pg-option /
 // .pg-option-selected / .pg-option-radio / .pg-option-logo classes used by
@@ -848,6 +852,15 @@ const PaxInformation = forwardRef(({
       }
     } catch (error) {
       console.error("Booking submission error:", error);
+      // Request timed out (no reply from the server): the server may still be
+      // finishing the booking, so "Failed" would be wrong and invites a second,
+      // duplicate booking. Point the operator at the booking list instead.
+      // Any reply the server did send (low credit, refused price check, …) is
+      // shown exactly as before.
+      if (isRequestTimeout(error)) {
+        toast.error(BOOKING_STILL_PROCESSING_MESSAGE, { duration: 10000 });
+        return;
+      }
       toast.error(
         error.response?.data?.message ||
           "Failed to confirm booking. Please try again.",
