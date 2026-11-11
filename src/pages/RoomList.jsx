@@ -36,6 +36,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/RoomList.css";
 import axiosInstance from "../components/AxiosInstance";
+import { SUPPLIER_SEARCH_TIMEOUT_MS } from "../config/apiTimeouts";
 import AdminSupplierStrip from "../components/AdminSupplierStrip";
 import { formatFlexibleDate } from "../utils/dateUtils";
 import {
@@ -351,6 +352,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
           (payload.rooms || []).length > 1
             ? { ...payload, includeNonBundled: true, goglobalPerRoomMode: true }
             : payload,
+          { timeout: SUPPLIER_SEARCH_TIMEOUT_MS },
         );
 
         // console.log("room search res::", res);

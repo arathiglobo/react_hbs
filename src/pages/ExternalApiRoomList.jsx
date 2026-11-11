@@ -35,6 +35,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/RoomList.css";
 import axiosInstance from "../components/AxiosInstance";
+import { SUPPLIER_SEARCH_TIMEOUT_MS } from "../config/apiTimeouts";
 import toast from "react-hot-toast";
 import { formatFlexibleDate } from "../utils/dateUtils";
 import { isAdminLogin, isAgentLogin, stripSupplierSuffix, supplierCodeForBlock, supplierDisplayName, withoutSupplierName } from "../utils/supplierDisplay";
@@ -1495,7 +1496,7 @@ const ExternalApiRoomList = () => {
 
           if (!searchData) {
             const res = await axiosInstance.post("/api/hotel-rooms/search", searchBody, {
-              timeout: 60000,
+              timeout: SUPPLIER_SEARCH_TIMEOUT_MS,
             });
             searchData = res.data;
           }
