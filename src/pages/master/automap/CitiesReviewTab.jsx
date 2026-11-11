@@ -4,14 +4,18 @@ import Swal from "sweetalert2";
 import toast from "react-hot-toast";
 import axiosInstance from "../../../components/AxiosInstance";
 import { escapeHtml, fmtNumber } from "./automapFormat";
+import CityDataFixesPanel from "./CityDataFixesPanel";
+import CityMatchingPanel from "./CityMatchingPanel";
+import SearchGapsPanel from "./SearchGapsPanel";
 
 const PROVIDERS = ["", "grn", "goglobal", "iwtx"];
 
 const errorText = (err, fallback) => err?.response?.data?.error || fallback;
 
 /**
- * City mapping review: one real city stored under two names, alternative names,
- * and supplier cities that hold hotels but have no mapping.
+ * City mapping review: automated matching, what searches failed to find, data fixes, one
+ * real city stored under two names, alternative names, and supplier cities that hold
+ * hotels but have no mapping.
  */
 export default function CitiesReviewTab({ active }) {
   const [suggestions, setSuggestions] = useState(null);
@@ -124,12 +128,18 @@ export default function CitiesReviewTab({ active }) {
       if (stats?.inserted > 0) {
         toast.success(`${g.name} is now mapped to ${cityName}.`);
         await loadGaps();
-      } else {
-        const why = stats?.unmatchedSamples?.[0]?.detail || stats?.conflictSamples?.[0]?.detail || stats?.error;
-        toast.error(why || "The mapping was not saved.");
+        return true;
       }
+      const why = stats?.unmatchedSamples?.[0]?.detail || stats?.conflictSamples?.[0]?.detail || stats?.error;
+      toast.error(why || "The mapping was not saved.");
+      return false;
     } catch (err) {
-      toast.error(errorText(err, "The mapping could not be saved."));
+      toast.error(
+        err?.response?.status === 403
+          ? "Only a super admin can save a city mapping."
+          : errorText(err, "The mapping could not be saved."),
+      );
+      return false;
     } finally {
       setActing(false);
     }
@@ -137,7 +147,7 @@ export default function CitiesReviewTab({ active }) {
 
   const mapToSuggested = async (g) => {
     const confirm = await Swal.fire({
-      title: `Map ${g.provider} "${g.name}" to our ${g.suggestedCityName}?`,
+      title: `Map ${g.provider} "${escapeHtml(g.name)}" to our ${escapeHtml(g.suggestedCityName)}?`,
       text: `${g.suggestionNeedsCheck ? "Only the words before the bracket match, so please check this is the same city. " : ""}${fmtNumber(g.hotels)} hotels will become reachable in searches for ${g.suggestedCityName}.`,
       icon: "question",
       showCancelButton: true,
@@ -148,7 +158,7 @@ export default function CitiesReviewTab({ active }) {
 
   const mapToChosen = async (g) => {
     const first = await Swal.fire({
-      title: `Map ${g.provider} "${g.name}"`,
+      title: `Map ${g.provider} "${escapeHtml(g.name)}"`,
       html: `<div class="small text-muted">${escapeHtml(g.countryName || "")} · ${fmtNumber(g.hotels)} hotels. Type the name of our city.</div>`,
       input: "text",
       inputValue: g.name,
@@ -185,6 +195,12 @@ export default function CitiesReviewTab({ active }) {
           {error}
         </Alert>
       )}
+
+      <CityMatchingPanel active={active} onChanged={loadGaps} />
+
+      <SearchGapsPanel active={active} onMap={savePair} acting={acting} />
+
+      <CityDataFixesPanel active={active} onChanged={loadGaps} />
 
       <div className="ahm-panel">
         <div className="ahm-panel-head">

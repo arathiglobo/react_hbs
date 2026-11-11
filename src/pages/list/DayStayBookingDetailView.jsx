@@ -53,10 +53,16 @@ import { toast } from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
+import {
+  REFUND_FLEXIBLE,
+  REFUND_NON_REFUNDABLE,
+  refundLabelText,
+} from "../../utils/refundLabel";
 // Source of the pg-option-* classes used by the Select Payment Gateway
 // modal below — same import BookingDetailedView.jsx uses so the day-stay
 // detail picker renders identically to the hotel detail picker.
 import "../../styles/HotelBookingPage.css";
+import { orderIdPathSegment } from "../../utils/urlSafety";
 
 // Online-payment gateways — mirrors BookingDetailedView (hotel). CCAvenue
 // is the only real gateway wired; the dummy /payment/:gateway path is kept
@@ -804,7 +810,7 @@ export default function DayStayBookingDetailView() {
         // Re-verify server-side before finalizing — never trust the
         // redirect's own query string alone.
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(
@@ -814,7 +820,7 @@ export default function DayStayBookingDetailView() {
           return;
         }
         await axiosInstance.post(
-          `/api/payment/ccavenue/finalize-daystay-reconfirm/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize-daystay-reconfirm/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         toast.success("Booking reconfirmed successfully!");
         await fetchDetail();
@@ -1452,7 +1458,7 @@ export default function DayStayBookingDetailView() {
                               <span
                                 style={{ color: "#dc2626", fontWeight: 600 }}
                               >
-                                {`${String(selected.deadlineDate).slice(0, 10)} 02:00 PM (UAE)`}
+                                {`${String(selected.deadlineDate).slice(0, 10)} 11:59 PM (UAE)`}
                               </span>
                             ) : (
                               "-"
@@ -1461,13 +1467,13 @@ export default function DayStayBookingDetailView() {
                         />
                         <InfoRow
                           label="Refund Status"
-                          value={
+                          value={refundLabelText(
                             (selected.rooms || []).some(
                               (r) => r?.nonRefundable === true,
                             )
-                              ? "Non-Refundable"
-                              : "Refundable"
-                          }
+                              ? REFUND_NON_REFUNDABLE
+                              : REFUND_FLEXIBLE,
+                          )}
                         />
                         <InfoRow
                           label="Total"

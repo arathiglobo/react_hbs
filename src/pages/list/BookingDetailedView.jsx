@@ -18,11 +18,20 @@ import {
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
+import { DEADLINE_TIME_EOD, isDeadlinePassed } from "../../utils/rateDeadline";
+import {
+  REFUND_FLEXIBLE,
+  REFUND_NON_REFUNDABLE,
+  REFUND_PARTIAL,
+  refundLabelText,
+  statusText,
+} from "../../utils/refundLabel";
 import toast from "react-hot-toast";
 // Reuses the "Select Payment Gateway" card-style radio styles (.pg-option*)
 // defined for HotelBookingPage.jsx's CC Avenue picker, so this page's
 // reconfirm-flow picker matches it exactly.
 import "../../styles/HotelBookingPage.css";
+import { orderIdPathSegment } from "../../utils/urlSafety";
 
 // Reverse-geocode browser coordinates to a readable address for the
 // Booking History audit trail. Tries OpenStreetMap Nominatim first
@@ -153,14 +162,24 @@ const voucherIndicatesDeferredCredit = (vg) => {
  * show the shared status if they agree, and say "Mixed" if they do not, so the
  * per-room cards below are read rather than the summary.
  */
+const roomRefundWords = (room) => {
+  const category = String(room?.refundCategory || "");
+  if (category === "FULLY_REFUNDABLE") return refundLabelText(REFUND_FLEXIBLE);
+  if (category === "PARTIALLY_REFUNDABLE") return refundLabelText(REFUND_PARTIAL);
+  if (category === "NON_REFUNDABLE") return refundLabelText(REFUND_NON_REFUNDABLE);
+  return statusText(room?.refundStatus);
+};
+
 const getRefundStatusLabel = (booking) => {
   const rooms = Array.isArray(booking?.rooms) ? booking.rooms : [];
   const perRoom = rooms
-    .map((r) => r?.refundStatus || r?.refundCategory)
+    .map(roomRefundWords)
     .filter((v) => v != null && String(v).trim() !== "");
-  if (perRoom.length === 0) return booking?.refundStatus || "-";
+  // The backend's answer for today, from the saved bands when there are any.
+  const whole = booking?.refundLabelText || statusText(booking?.refundStatus) || "-";
+  if (perRoom.length === 0) return whole;
   const distinct = [...new Set(perRoom.map((v) => String(v).trim()))];
-  if (distinct.length === 1) return distinct[0];
+  if (distinct.length === 1) return whole;
   return `Mixed — ${distinct.join(" / ")} (see per-room policy)`;
 };
 
@@ -714,10 +733,24 @@ export default function BookingDetailedView() {
     if (String(booking.refundStatus || "").toLowerCase() === "non-refundable") {
       return false;
     }
-    const deadline = new Date(booking.deadlineDate);
-    if (Number.isNaN(deadline.getTime())) return false;
-    return new Date() > deadline;
+    // The deadline date is free until 11:59 PM UAE, the same day the refund
+    // check on the server uses.
+    return isDeadlinePassed(booking.deadlineDate);
   })();
+
+  /**
+   * Client rule: cancelling a non-refundable booking (any supplier or
+   * in-house) never puts money back on the agent's credit. Any refund is made
+   * by hand by the Finance team, not online. The cancel dialog says so and the
+   * operator has to accept it before the button unlocks. A "Mixed" booking
+   * (some rooms refundable, GRN only today) still gets the refundable rooms'
+   * share back, so its wording differs.
+   */
+  const isNonRefundableBooking =
+    String(booking?.refundStatus || "").toLowerCase() === "non-refundable";
+  const isMixedRefundBooking =
+    isNonRefundableBooking &&
+    String(getRefundStatusLabel(booking)).startsWith("Mixed");
 
   const cancelBooking = async () => {
     // Cancellation reason is now mandatory — the modal marks the field
@@ -998,7 +1031,7 @@ export default function BookingDetailedView() {
         // Re-verify server-side before finalizing — never trust the
         // redirect's own query string alone.
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(
@@ -1008,7 +1041,7 @@ export default function BookingDetailedView() {
           return;
         }
         const response = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize-reconfirm/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize-reconfirm/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         await handleReconfirmResponse(response.data);
       } catch (err) {
@@ -1852,7 +1885,7 @@ export default function BookingDetailedView() {
                           value={
                             booking.deadlineDate ? (
                               <span style={{ color: "#dc2626", fontWeight: 600 }}>
-                                {`${booking.deadlineDate.slice(0, 10)} 02:00 PM (UAE)`}
+                                {`${booking.deadlineDate.slice(0, 10)} ${DEADLINE_TIME_EOD}`}
                               </span>
                             ) : (
                               "-"
@@ -2028,7 +2061,7 @@ export default function BookingDetailedView() {
                           }}
                         >
                           <div style={{ fontWeight: 600, marginBottom: 2 }}>
-                            Cancellation policy: {room.refundStatus || "—"}
+                            Cancellation policy: {roomRefundWords(room) || "—"}
                             {room.freeCancellationUntil
                               ? ` · Free cancellation until ${room.freeCancellationUntil}`
                               : ""}
@@ -3465,8 +3498,9 @@ export default function BookingDetailedView() {
                             The free-cancellation deadline has passed
                           </div>
                           <div className="mb-2">
-                            You can still cancel this booking, but the booking
-                            amount will not be refunded to the agent's credit.
+                            {booking?.cancellationChargeNow != null
+                              ? `You can still cancel this booking. ${booking.cancellationChargeNow} will be kept as the cancellation charge and the rest refunded to the agent's credit.`
+                              : "You can still cancel this booking, but the booking amount will not be refunded to the agent's credit."}
                           </div>
                           <Form.Check
                             type="checkbox"
@@ -3479,6 +3513,38 @@ export default function BookingDetailedView() {
                             label={
                               <span className="fw-semibold">
                                 I understand that the booking amount will not be refunded.
+                              </span>
+                            }
+                          />
+                        </div>
+                      )}
+                      {/* Non-refundable: nothing goes back to the agent's
+                          credit online — only Finance can refund it. */}
+                      {isNonRefundableBooking && (
+                        <div className="mb-3 text-start small border border-danger-subtle bg-danger-subtle text-danger-emphasis rounded px-3 py-2">
+                          <div className="fw-semibold mb-1">
+                            <FaExclamationCircle className="me-2" />
+                            Non-refundable booking
+                          </div>
+                          <div className="mb-2">
+                            {isMixedRefundBooking
+                              ? "The non-refundable room(s) will not be refunded to the agent's credit. Only the refundable rooms' share goes back."
+                              : "The booking amount will not be refunded to the agent's credit."}{" "}
+                            A refund of a non-refundable amount can only be made
+                            by the Finance team. It cannot be done online.
+                          </div>
+                          <Form.Check
+                            type="checkbox"
+                            id="acceptNonRefundableCancellation"
+                            checked={acceptCancellationCharges}
+                            disabled={cancellingBooking}
+                            onChange={(e) =>
+                              setAcceptCancellationCharges(e.target.checked)
+                            }
+                            label={
+                              <span className="fw-semibold">
+                                I understand that the non-refundable amount will
+                                not be refunded online.
                               </span>
                             }
                           />
@@ -3531,7 +3597,8 @@ export default function BookingDetailedView() {
                       disabled={
                         cancellingBooking ||
                         !cancellationReason.trim() ||
-                        (isPastCancellationDeadline && !acceptCancellationCharges)
+                        ((isPastCancellationDeadline || isNonRefundableBooking) &&
+                          !acceptCancellationCharges)
                       }
                     >
                       {cancellingBooking ? (

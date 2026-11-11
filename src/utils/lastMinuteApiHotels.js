@@ -32,8 +32,9 @@ const API_ID_PREFIX = "API";
  *   JUNIPER — searchable, but no room-list search exists for it yet
  *             (/api/hotel-rooms/search has no apiId 17), so its hotels could
  *             not be opened. Remove it from here once that lands.
- * Sent to /results as excludeApiTypes so the backend drops them BEFORE its
- * mapped-hotel dedup, and re-checked client-side for an older backend.
+ * The backend holds the same list and drops them BEFORE its mapped-hotel dedup
+ * when /results is asked with forPage=last-minute, so the request names no
+ * supplier. Re-checked client-side for an older backend.
  */
 const EXCLUDED_API_TYPES = ["INHOUSE", "JUNIPER"];
 
@@ -231,7 +232,7 @@ export async function searchApiHotels(payload, onPartial, opts = {}) {
       agentId: payload.agentId,
       page: 0,
       size: MAX_API_HOTELS,
-      excludeApiTypes: EXCLUDED_API_TYPES.join(","),
+      forPage: "last-minute",
     };
     const startedAt = Date.now();
 
@@ -367,9 +368,10 @@ export function apiIdForApiType(apiType) {
  * the Channel filter on /new-booking/hotel. Values are the lower-cased
  * apiType the page filters rows by ("inhouse" = the page's own last-minute
  * contract rates). Suppliers in EXCLUDED_API_TYPES are left out — their
- * hotels never reach this page.
+ * hotels never reach this page. Also the row list of the Build Your Own
+ * Package Channel filter (utils/packageHotelSearch.js).
  */
-const CHANNEL_OPTIONS = [
+export const CHANNEL_OPTIONS = [
   { value: "inhouse", label: "Inhouse" },
   { value: "iwtx", label: "Iwtx" },
   { value: "x3", label: "x3" },

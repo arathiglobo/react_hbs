@@ -990,7 +990,7 @@ function NotificationCell({ booking: b }) {
           {showConfirmIcon && (
             <FaExclamationCircle
               style={{ fontSize: "15px", color: "#ff9800", transition: "all 0.2s ease" }}
-              title="Non-refundable booking."
+              title="Non Refundable booking."
               onMouseEnter={(e) => { e.currentTarget.style.color = "#f57c00"; e.currentTarget.style.transform = "scale(1.15)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.color = "#ff9800"; e.currentTarget.style.transform = "scale(1)"; }}
             />

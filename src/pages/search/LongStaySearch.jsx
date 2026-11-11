@@ -1863,7 +1863,7 @@ export default function LongStaySearch() {
                               Hidden for AGENT logins (agents book only
                               through their contracted channel and the
                               backend already scopes results). */}
-                          {!isAgentRole && (
+                          {!isAgentLogin() && (
                             <>
                               <hr />
                               <Form.Group>

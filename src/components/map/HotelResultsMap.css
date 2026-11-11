@@ -1,0 +1,411 @@
+/* Results map (HotelResultsMap.jsx). Brand orange #F75E00, as on the page. */
+
+.hrm-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #e9eef3;
+  isolation: isolate;
+  font-size: 0.85rem;
+}
+
+/* Some app stylesheets set `* { transition: all .3s }`. On the map that
+   makes every tile and marker trail behind the pan and zoom. */
+.hrm-root,
+.hrm-root * {
+  transition: none;
+}
+
+.hrm-map {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.hrm-tiles {
+  filter: saturate(0.75) brightness(1.03);
+}
+
+/* ── Markers ─────────────────────────────────────────────── */
+
+.hrm-marker {
+  background: none;
+  border: 0;
+}
+
+.hrm-marker:focus {
+  outline: none;
+}
+
+.hrm-pill {
+  position: absolute;
+  left: 0;
+  bottom: 8px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #1f2937;
+  border: 1px solid rgba(15, 23, 42, 0.14);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.22);
+  font-weight: 700;
+  font-size: 0.78rem;
+  line-height: 1.1;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* The little pointer under the pill. */
+.hrm-pill::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  border-right: inherit;
+  border-bottom: inherit;
+  transform: translateX(-50%) rotate(45deg);
+  border-bottom-right-radius: 2px;
+}
+
+.hrm-pill--named {
+  border-radius: 12px;
+  padding: 5px 10px 6px;
+}
+
+.hrm-pill-name {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+  font-size: 0.72rem;
+  color: #4b5563;
+  margin-bottom: 2px;
+}
+
+.hrm-pill:hover,
+.hrm-marker:focus-visible .hrm-pill {
+  border-color: #f75e00;
+}
+
+.hrm-pill--active {
+  background: #f75e00;
+  border-color: #f75e00;
+  color: #ffffff;
+  transform: translateX(-50%) scale(1.08);
+  box-shadow: 0 6px 16px rgba(247, 94, 0, 0.4);
+  transition: transform 0.12s ease-out;
+}
+
+.hrm-pill--active .hrm-pill-name {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.hrm-marker:focus-visible .hrm-pill,
+.hrm-marker:focus-visible .hrm-cluster {
+  outline: 3px solid rgba(247, 94, 0, 0.45);
+  outline-offset: 2px;
+}
+
+/* Stands above its point like a price pill, so the two never overlap. */
+.hrm-cluster {
+  position: absolute;
+  left: 0;
+  bottom: 6px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #1f2937;
+  color: #ffffff;
+  font-weight: 700;
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 4px rgba(31, 41, 55, 0.18), 0 3px 8px rgba(15, 23, 42, 0.3);
+  cursor: pointer;
+  user-select: none;
+}
+
+.hrm-cluster--s { width: 32px; height: 32px; font-size: 0.78rem; }
+.hrm-cluster--m { width: 36px; height: 36px; font-size: 0.82rem; }
+.hrm-cluster--l { width: 40px; height: 40px; font-size: 0.85rem; }
+
+.hrm-cluster:hover {
+  background: #374151;
+}
+
+.hrm-cluster--active,
+.hrm-cluster--active:hover {
+  background: #f75e00;
+  box-shadow: 0 0 0 5px rgba(247, 94, 0, 0.28), 0 4px 12px rgba(247, 94, 0, 0.4);
+}
+
+/* ── Chips and notes over the map ───────────────────────── */
+
+.hrm-topleft {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: calc(100% - 130px);
+  pointer-events: none;
+}
+
+.hrm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #1f2937;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.hrm-chip--fit {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 500;
+  cursor: pointer;
+}
+
+.hrm-chip--fit:hover {
+  color: #f75e00;
+  border-color: #f75e00;
+}
+
+.hrm-updating {
+  color: #f75e00;
+  font-weight: 500;
+}
+
+.hrm-note {
+  max-width: 320px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #4b5563;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15);
+  font-size: 0.75rem;
+  line-height: 1.35;
+  pointer-events: none;
+}
+
+.hrm-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  color: #4b5563;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+}
+
+/* ── Hover card ─────────────────────────────────────────── */
+
+.hrm-card {
+  position: absolute;
+  z-index: 700;
+  width: 260px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.28);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  animation: hrmCardIn 0.14s ease-out both;
+}
+
+@keyframes hrmCardIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.hrm-card-photo {
+  height: 130px;
+  background: #eef1f5;
+}
+
+.hrm-card-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.hrm-card-noimage {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9aa4b2;
+  font-size: 2rem;
+  background: linear-gradient(135deg, #eef1f5, #e2e7ee);
+}
+
+.hrm-card-body {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hrm-card-name {
+  font-weight: 700;
+  color: #1f2937;
+  font-size: 0.92rem;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.hrm-card-stars {
+  color: #f5a524;
+  display: inline-flex;
+  gap: 2px;
+  font-size: 0.75rem;
+}
+
+.hrm-card-unrated {
+  color: #9aa4b2;
+  font-size: 0.75rem;
+}
+
+.hrm-card-price {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  font-weight: 700;
+  color: #1f2937;
+  font-size: 1rem;
+}
+
+.hrm-card-from {
+  font-weight: 500;
+  font-size: 0.72rem;
+  color: #6b7280;
+}
+
+.hrm-card-open {
+  margin-top: 6px;
+  align-self: stretch;
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 12px;
+  background: #f75e00;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.hrm-card-open:hover {
+  background: #de5400;
+}
+
+.hrm-card-open:focus-visible,
+.hrm-card-close:focus-visible,
+.hrm-chip--fit:focus-visible {
+  outline: 3px solid rgba(247, 94, 0, 0.45);
+  outline-offset: 2px;
+}
+
+.hrm-card-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+  cursor: pointer;
+}
+
+/* Phones: the card sits along the bottom, photo beside the details, above
+   the note and the zoom buttons. */
+.hrm-card--docked {
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  width: auto;
+  display: flex;
+  z-index: 800;
+}
+
+.hrm-card--docked .hrm-card-photo {
+  flex: 0 0 108px;
+  height: auto;
+  min-height: 118px;
+}
+
+.hrm-card--docked .hrm-card-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-right: 40px;
+}
+
+/* ── Hosts on the results page ──────────────────────────── */
+
+/* Wide screens: a panel beside the list that stays in view as it scrolls. */
+.hrm-panel {
+  position: sticky;
+  align-self: flex-start;
+  z-index: 1;
+}
+
+/* With the map beside it the list is narrower and its photos taller, so the
+   "image not available" picture would be cropped to "AGE NO". Show it whole. */
+.hs-with-map .hs-hotel-img img[src$="/images/not-available.jpg"] {
+  object-fit: contain;
+  background: #f1f3f5;
+}
+
+/* Narrow screens: the map fills the screen. */
+.hrm-modal .modal-body {
+  padding: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.hrm-modal .modal-body > .hrm-root {
+  flex: 1 1 auto;
+  height: auto;
+}
+
+.hrm-modal .hrm-root {
+  border-radius: 0;
+}
+
+.hrm-modal .modal-header {
+  padding: 10px 16px;
+}

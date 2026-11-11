@@ -45,10 +45,29 @@ import {
 import AgentBalanceDisplay from "../../components/AgentBalanceDisplay";
 import { useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import axiosInstance from "../../components/AxiosInstance";
+import { SUPPLIER_SEARCH_TIMEOUT_MS } from "../../config/apiTimeouts";
 import { logAgentSearch } from "../../utils/agentSearchLog";
 import { toast } from "react-hot-toast";
 import "../../styles/RoomList.css";
 import { isAgentLogin } from "../../utils/supplierDisplay";
+import RefundBadge from "../../components/RefundBadge";
+import { apiIdForApiType } from "../../utils/lastMinuteApiHotels";
+import {
+  PACKAGE_HOTEL_SEARCH_FRESH_MS,
+  channelRowsFor,
+  fetchRegisteredSuppliers,
+  fetchPackageHotels,
+  packageCheckOut,
+  packageHotelLegs,
+  packageRateTotals,
+  startPackageHotelSearches,
+} from "../../utils/packageHotelSearch";
+import {
+  TRANSFER_CHANNELS,
+  fetchSupplierLocations,
+  searchSupplierTransfers,
+  transferChannelOf,
+} from "../../utils/packageTransferSearch";
 
 // ─────────────────────────────────────────────
 // Search Progress Bar (same as HotelSearch)
@@ -77,7 +96,15 @@ function SearchProgressBar({ isLoading, pollStatus }) {
   if (!visible) return null;
 
   return (
-    <div className="search-progress-bar-wrap mb-3">
+    // In normal flow, not sticky. The shared .search-progress-bar-wrap class
+    // is sticky (top: 64px) for /new-booking/hotel, but here the bar sits
+    // inside a .card, which the app styles overflow: hidden. That card then
+    // becomes the sticky box, so the bar was pushed down over the top of the
+    // filter bar and the hotel list while a search was running.
+    <div
+      className="search-progress-bar-wrap mb-3"
+      style={{ position: "relative", top: "auto", zIndex: "auto" }}
+    >
       <div className="d-flex justify-content-between align-items-center mb-2">
         <span className="search-progress-label">Searching hotels...</span>
         <span className="search-progress-percent">{Math.round(progress)}%</span>
@@ -211,6 +238,54 @@ function LazyImage({ src, alt, className }) {
         />
       )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// Hotel-name search box (filter bar)
+// ─────────────────────────────────────────────
+// Same box and typewriter placeholder as the hotel-name search on
+// /new-booking/hotel. The animation lives here so its 100 ms ticks re-render
+// only this input, not the whole page and its hotel list.
+function HotelNameSearchInput({ value, onChange }) {
+  const [placeholder, setPlaceholder] = useState("");
+
+  useEffect(() => {
+    const fullText = "Search Hotel Name...";
+    let index = 0;
+    let isDeleting = false;
+    const interval = setInterval(() => {
+      if (!isDeleting) {
+        setPlaceholder(fullText.slice(0, index + 1));
+        index++;
+        if (index === fullText.length) setTimeout(() => (isDeleting = true), 900);
+      } else {
+        setPlaceholder(fullText.slice(0, index - 1));
+        index--;
+        if (index === 0) isDeleting = false;
+      }
+    }, 100);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <Form.Control
+      type="text"
+      placeholder={placeholder}
+      value={value}
+      onChange={onChange}
+      className="ms-auto ps-3"
+      style={{
+        height: "36px",
+        // Takes the room left on the row (up to 260px) instead of a full-width
+        // basis, so it stays on the same line as the stars / sort / Clear
+        // controls in this page's narrower column, and only wraps when the
+        // screen is genuinely too small.
+        flex: "1 1 160px",
+        maxWidth: "260px",
+        minWidth: "150px",
+      }}
+    />
   );
 }
 
@@ -570,43 +645,6 @@ export default function MakePkgCombineSearchV2() {
     }
   }, [dynamicAddonCatalog]);
 
-  // Wizard steps — Step 0 is the new "Select Services" picker; every
-  // following step is gated by the corresponding flag, so disabled
-  // services never get a detail page and never trigger validation.
-  // Order: selection → addons (catalogue order) → hotel → cab → tours.
-  // Hotel must come before Cab and Activities because the existing
-  // hasHotelInCart gate disables the "Add to cart" buttons on Cab and
-  // Activity rows until a hotel is in the cart — so the operator needs
-  // to land on the Hotel step first.
-  const wizardSteps = useMemo(() => {
-    const steps = [
-      {
-        key: "service-select",
-        label: "Select Services",
-        Icon: FaConciergeBell,
-        type: "select",
-      },
-      ...dynamicAddonCatalog
-        .filter((svc) => addonFlags[svc.key])
-        .map((svc) => ({
-          key: `addon-${svc.key}`,
-          label: svc.label,
-          Icon: FaConciergeBell,
-          type: "addon",
-          serviceKey: svc.key,
-        })),
-    ];
-    if (v2Services.hotel) {
-      steps.push({ key: "accommodation", label: "Hotel", Icon: FaHotel, type: "search" });
-    }
-    if (v2Services.transfer) {
-      steps.push({ key: "transfer", label: "Transfer", Icon: FaCar, type: "search" });
-    }
-    if (v2Services.tour) {
-      steps.push({ key: "tours", label: "Activities", Icon: FaTicketAlt, type: "search" });
-    }
-    return steps;
-  }, [v2Services, addonFlags, dynamicAddonCatalog]);
   const location = useLocation();
   // Pull search criteria from location.state first; fall back to the
   // sessionStorage snapshot written by MakeUrOwnPackageV2 / addons page
@@ -680,6 +718,67 @@ const [activeAccordion, setActiveAccordion] = useState({});
   }, [itineraryData]);
   const isMultiCity = searchedCities.length > 1;
   const [cityFilter, setCityFilter] = useState("ALL");
+
+  // Wizard steps — Step 0 is the new "Select Services" picker; every
+  // following step is gated by the corresponding flag, so disabled
+  // services never get a detail page and never trigger validation.
+  // Order: selection → addons (catalogue order) → hotel → cab → tours.
+  // Hotel must come before Cab and Activities because the existing
+  // hasHotelInCart gate disables the "Add to cart" buttons on Cab and
+  // Activity rows until a hotel is in the cart — so the operator needs
+  // to land on the Hotel step first.
+  //
+  // With several destinations there is one Hotel step per city, in the
+  // order the operator entered them, then one Transfer step per city
+  // ("Hotel – Dubai", "Hotel – Muroran", "Transfer – Dubai", …). Each
+  // carries its cityId and shows only that city; Activities stays one step.
+  const wizardSteps = useMemo(() => {
+    const steps = [
+      {
+        key: "service-select",
+        label: "Select Services",
+        Icon: FaConciergeBell,
+        type: "select",
+      },
+      ...dynamicAddonCatalog
+        .filter((svc) => addonFlags[svc.key])
+        .map((svc) => ({
+          key: `addon-${svc.key}`,
+          label: svc.label,
+          Icon: FaConciergeBell,
+          type: "addon",
+          serviceKey: svc.key,
+        })),
+    ];
+    const perCity = isMultiCity ? searchedCities : [null];
+    const labelFor = (base, city) => (city ? `${base} – ${city.label}` : base);
+    if (v2Services.hotel) {
+      perCity.forEach((city) =>
+        steps.push({
+          key: "accommodation",
+          label: labelFor("Hotel", city),
+          Icon: FaHotel,
+          type: "search",
+          cityId: city ? city.id : null,
+        })
+      );
+    }
+    if (v2Services.transfer) {
+      perCity.forEach((city) =>
+        steps.push({
+          key: "transfer",
+          label: labelFor("Transfer", city),
+          Icon: FaCar,
+          type: "search",
+          cityId: city ? city.id : null,
+        })
+      );
+    }
+    if (v2Services.tour) {
+      steps.push({ key: "tours", label: "Activities", Icon: FaTicketAlt, type: "search" });
+    }
+    return steps;
+  }, [v2Services, addonFlags, dynamicAddonCatalog, isMultiCity, searchedCities]);
   const matchesCity = useCallback(
     (cid) =>
       !isMultiCity || cityFilter === "ALL" || String(cid) === cityFilter,
@@ -688,6 +787,31 @@ const [activeAccordion, setActiveAccordion] = useState({});
 
   // v2: wizard step index — 0 = the new "Select Services" picker.
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
+
+  // A per-city Hotel / Transfer step scopes the page to its city (the hotel
+  // list, transfer locations and pickup/drop-off all read cityFilter); any
+  // other step starts on "All".
+  const stepCityId = wizardSteps[currentStepIdx]?.cityId || null;
+  useEffect(() => {
+    if (!isMultiCity) return;
+    setCityFilter(stepCityId || "ALL");
+  }, [stepCityId, isMultiCity]);
+
+  // A city tab on a per-city step opens that city's step of the same kind
+  // (Hotel – Muroran from Hotel – Dubai); elsewhere it filters as before.
+  const selectCity = (cityId) => {
+    const current = wizardSteps[currentStepIdx];
+    if (current?.cityId) {
+      const target = wizardSteps.findIndex(
+        (s) => s.key === current.key && s.cityId === cityId
+      );
+      if (target >= 0) {
+        setCurrentStepIdx(target);
+        return;
+      }
+    }
+    setCityFilter(cityId);
+  };
 
   // If the operator went Back and disabled a service whose detail step
   // was at the current index, clamp so we don't render a missing step.
@@ -745,11 +869,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [pageIndex, setPageIndex] = useState(0);
   const [pageSize] = useState(10);
-  const [totalElements, setTotalElements] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
   const [pollStatus, setPollStatus] = useState("IDLE");
-  const [completedChannels, setCompletedChannels] = useState(new Set());
-  const [searchId, setSearchId] = useState(null);
   const resultsRef = useRef(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [sortBy, setSortBy] = useState("priceAsc");
@@ -796,6 +916,35 @@ const [activeAccordion, setActiveAccordion] = useState({});
   // each cab DTO before sending the booking save payload.
   const [cabLookupOptions, setCabLookupOptions] = useState([]);
   const [cabLookupLoading, setCabLookupLoading] = useState(false);
+
+  // ── Supplier transfers (iWay) ──
+  // Supplier locations matching what the operator types in Pickup / Dropoff
+  // (the IWAY LOCATIONS group of /new-booking/cab), the supplier rows found
+  // for each city's route (key = city id, "" for a single-city search),
+  // whether a supplier search is running, the suppliers the backend
+  // searched, the Channel boxes ticked, and the registered suppliers
+  // (null = unrestricted) the Channel rows are built from.
+  const [supplierPickupOptions, setSupplierPickupOptions] = useState([]);
+  const [supplierDropoffOptions, setSupplierDropoffOptions] = useState([]);
+  const [supplierTransfersByCity, setSupplierTransfersByCity] = useState({});
+  const [supplierTransferSearching, setSupplierTransferSearching] = useState(false);
+  const [transferSearchChannels, setTransferSearchChannels] = useState([]);
+  const [selectedTransferChannels, setSelectedTransferChannels] = useState([]);
+  const [transferRegistered, setTransferRegistered] = useState(null);
+  // Why a city's supplier search came back empty, shown under Pickup /
+  // Dropoff: { pickup, dropoff } = which end was one of our own locations
+  // (those reach iWay only through Transfer Location Mapping), or
+  // { noOffers: true } when both ends were iWay locations.
+  const [supplierTransferNotices, setSupplierTransferNotices] = useState({});
+  const supplierSearchGenRef = useRef(0);
+  const supplierLookupTimersRef = useRef({});
+  useEffect(
+    () => () => {
+      supplierSearchGenRef.current += 1;
+      Object.values(supplierLookupTimersRef.current).forEach(clearTimeout);
+    },
+    []
+  );
   const [transferPickupZone, setTransferPickupZone] = useState(() => {
     try {
       const raw = sessionStorage.getItem("makePkgV2TransferPickup");
@@ -899,6 +1048,195 @@ const [activeAccordion, setActiveAccordion] = useState({});
     };
   }, [checkHotelInCart]);
 
+  // ── Hotel search: every active supplier ─────────────────────────
+  // One supplier search per destination city (utils/packageHotelSearch),
+  // the same search /new-booking/hotel runs — so in-house AND every
+  // supplier switched on for this agent/company is listed, each rate
+  // already carrying the selected agent's markup. hotelSearchGenRef ends a
+  // running poll when a newer search starts or the page unmounts;
+  // hotelFetchSeqRef keeps a slower, older reply from overwriting a newer
+  // one (polls and Channel-filter changes both refetch).
+  const hotelSearchGenRef = useRef(0);
+  const hotelFetchSeqRef = useRef(0);
+  const hotelSearchRef = useRef(null); // { startedAt, agentId, searches }
+  const channelParamRef = useRef("");
+  // Same rule as /new-booking/hotel: agent-side logins never see which
+  // supplier a hotel comes from, so they get no Channel filter.
+  const showChannelFilter = !isAgentLogin();
+  // Channel filter rows, built exactly as /new-booking/hotel builds them
+  // (channelRowsFor), and the suppliers that have hotels in the
+  // current search — what each row's LIVE/OFF badge reads.
+  const [channelRows, setChannelRows] = useState([]);
+  const [channelsWithResults, setChannelsWithResults] = useState(new Set());
+
+  useEffect(() => {
+    if (!showChannelFilter) return undefined;
+    let cancelled = false;
+    // One call feeds both Channel filters: the hotel rows and the
+    // transfer rows (Inhouse / IWay, as on /new-booking/cab).
+    fetchRegisteredSuppliers().then((registered) => {
+      if (cancelled) return;
+      setChannelRows(channelRowsFor(registered));
+      setTransferRegistered(registered);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(
+    () => () => {
+      hotelSearchGenRef.current += 1;
+    },
+    []
+  );
+
+  const applyHotelRows = (rows) => {
+    setAllResults(rows);
+    setHasSearchResult(true);
+    setIsInitialResultsLoaded(true);
+  };
+
+  // Read the current results (narrowed by the Channel filter, if any).
+  const refreshHotelRows = async (gen) => {
+    const handle = hotelSearchRef.current;
+    if (!handle || handle.searches.length === 0) return null;
+    const seq = ++hotelFetchSeqRef.current;
+    const reply = await fetchPackageHotels(handle.searches, {
+      agentId: handle.agentId,
+      apiType: channelParamRef.current,
+    });
+    if (gen !== hotelSearchGenRef.current) return null;
+    if (seq === hotelFetchSeqRef.current) {
+      applyHotelRows(reply.rows);
+      // Keep the LIVE/OFF badges in sync, as /new-booking/hotel does: the
+      // backend counts over the full set BEFORE the apiType filter, so
+      // ticking one channel never flips the others to OFF.
+      if (showChannelFilter) setChannelsWithResults(new Set(reply.liveCodes));
+    }
+    return reply;
+  };
+
+  // Poll a started search until every supplier has answered: the full list
+  // every 2 s for 30 s, then — slow suppliers routinely answer after 30 s —
+  // a cheap check every 4 s for up to 90 s more, refetching only when the
+  // hotel count moved or the search completed (the same two phases as
+  // /new-booking/hotel). A failed poll is retried and never clears the list,
+  // so one supplier failing never takes the others' hotels off the page.
+  const pollHotelSearch = async (handle) => {
+    const gen = ++hotelSearchGenRef.current;
+    hotelSearchRef.current = handle;
+    const cancelled = () => gen !== hotelSearchGenRef.current;
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    setChannelsWithResults(new Set());
+    setPageIndex(0);
+    setHasSearched(true);
+    setIsLoading(true);
+    setPollStatus("IN_PROGRESS");
+
+    let completed = false;
+    let lastTotal = null;
+    const startedAt = Date.now();
+    while (!cancelled()) {
+      const reply = await refreshHotelRows(gen);
+      if (cancelled()) return;
+      if (reply) {
+        if (reply.rows.length > 0) setIsLoading(false);
+        lastTotal = reply.total;
+        if (reply.completed) {
+          completed = true;
+          break;
+        }
+      }
+      if (Date.now() - startedAt >= 30000) break;
+      await sleep(2000);
+    }
+    if (cancelled()) return;
+
+    const lateStartedAt = Date.now();
+    while (!completed && !cancelled() && Date.now() - lateStartedAt < 90000) {
+      await sleep(4000);
+      if (cancelled()) return;
+      const check = await fetchPackageHotels(handle.searches, {
+        agentId: handle.agentId,
+        apiType: channelParamRef.current,
+        size: 1,
+      });
+      if (cancelled()) return;
+      if (check.completed || check.total !== lastTotal) {
+        const reply = await refreshHotelRows(gen);
+        if (cancelled()) return;
+        if (reply) lastTotal = reply.total;
+      }
+      completed = check.completed;
+    }
+    if (cancelled()) return;
+    setIsLoading(false);
+    setPollStatus("COMPLETED");
+  };
+
+  // Start a fresh hotel search from this page's criteria.
+  const runHotelSearch = async () => {
+    const legs = packageHotelLegs({ itinerary, destination });
+    if (legs.length === 0) return;
+    const gen = ++hotelSearchGenRef.current; // ends any running poll
+    setHasSearched(true);
+    setIsLoading(true);
+    setPollStatus("IN_PROGRESS");
+    const handle = await startPackageHotelSearches({
+      legs,
+      nationalityId: nationality?.value != null ? String(nationality.value) : "",
+      nationalityCode: nationality?.code || "",
+      checkIn,
+      checkOut: packageCheckOut(checkIn, nightsCount),
+      rooms,
+      agentId: agentId || agent || 1,
+    });
+    if (gen !== hotelSearchGenRef.current) return;
+    if (handle.searches.length === 0) {
+      applyHotelRows([]);
+      setIsLoading(false);
+      setPollStatus("ERROR");
+      toast.error("Hotel search could not be started. Please try again.");
+      return;
+    }
+    await pollHotelSearch(handle);
+  };
+
+  // Pick up the searches the criteria page started — or search again when
+  // they are old enough that their hotels may have left Redis.
+  const resumeHotelSearch = (handle) => {
+    const fresh =
+      handle &&
+      Array.isArray(handle.searches) &&
+      handle.searches.length > 0 &&
+      Date.now() - (Number(handle.startedAt) || 0) < PACKAGE_HOTEL_SEARCH_FRESH_MS;
+    if (fresh) pollHotelSearch(handle);
+    else runHotelSearch();
+  };
+
+  // Channel filter: the backend narrows to the ticked suppliers BEFORE it
+  // merges mapped hotels, so a hotel stays listed under every supplier that
+  // sells it, at that supplier's price. Clearing it reads the full list again.
+  useEffect(() => {
+    channelParamRef.current = channelType
+      .map((c) => String(c.value).toUpperCase())
+      .join(",");
+    const handle = hotelSearchRef.current;
+    if (!handle) return;
+    if (Date.now() - (Number(handle.startedAt) || 0) >= PACKAGE_HOTEL_SEARCH_FRESH_MS) {
+      runHotelSearch();
+      return;
+    }
+    const gen = hotelSearchGenRef.current;
+    setIsLoading(true);
+    refreshHotelRows(gen).finally(() => {
+      if (gen === hotelSearchGenRef.current) setIsLoading(false);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelType]);
+
   // Hydrate from the v2 prefetch (started on the criteria form page) so
   // the operator doesn't have to hit Search a second time on each tab.
   // We compare a hash of the criteria so stale results from a previous
@@ -907,29 +1245,32 @@ const [activeAccordion, setActiveAccordion] = useState({});
   // as a manual fallback.
   useEffect(() => {
     const storedKey = sessionStorage.getItem(PREFETCH_KEYS.criteria);
-    if (!storedKey) return;
     const currentKey = computeCriteriaKey(searchCriteria);
-    if (storedKey !== currentKey) return;
+    if (!storedKey || storedKey !== currentKey) {
+      // Nothing was prefetched for these criteria — search hotels here so
+      // the Hotel step never waits on a prefetch that is not coming.
+      if (v2Services.hotel) runHotelSearch();
+      return;
+    }
 
     const done = { hotel: false, transfer: false, tour: false };
 
     const tryHydrate = () => {
       if (!done.hotel && v2Services.hotel) {
         try {
+          // The criteria page stores the started supplier searches
+          // ({ startedAt, agentId, searches }); their hotels are read here.
           const raw = sessionStorage.getItem(PREFETCH_KEYS.hotel);
-          if (raw) {
-            const arr = JSON.parse(raw);
-            if (Array.isArray(arr)) {
-              setAllResults(arr);
-              setTotalElements(arr.length);
-              setTotalPages(Math.max(1, Math.ceil(arr.length / pageSize)));
-              setHasSearchResult(true);
-              setIsInitialResultsLoaded(true);
-              setPollStatus("COMPLETED");
-              setHasSearched(true);
-              setSearchId(null);
-              done.hotel = true;
-            }
+          const handle = raw ? JSON.parse(raw) : null;
+          const prefetchStatus = JSON.parse(
+            sessionStorage.getItem(PREFETCH_KEYS.status) || "{}"
+          );
+          if (handle && Array.isArray(handle.searches)) {
+            done.hotel = true;
+            resumeHotelSearch(handle);
+          } else if (prefetchStatus.hotel === "error") {
+            done.hotel = true;
+            runHotelSearch();
           }
         } catch {
           /* ignore */
@@ -998,6 +1339,11 @@ const [activeAccordion, setActiveAccordion] = useState({});
       tryHydrate();
       if (!isPending() || allTerminal() || Date.now() - startedAt > 60_000) {
         clearInterval(interval);
+        // The hotel prefetch never reported back — search from here.
+        if (v2Services.hotel && !done.hotel) {
+          done.hotel = true;
+          runHotelSearch();
+        }
       }
     }, 300);
     return () => clearInterval(interval);
@@ -1029,13 +1375,18 @@ const [activeAccordion, setActiveAccordion] = useState({});
     { value: "apartment", label: "Apartment" },
   ];
 
-  const channelTypeOptions = [
-    { value: "inhouse", label: "Inhouse" },
-    // { value: "iwtx", label: "Iwtx" },
-    // { value: "x3", label: "x3" },
-    // { value: "ratehawk", label: "Ratehawk" },
-    // { value: "darina", label: "Darina" },
-  ];
+  // Channels with at least one hotel in the CURRENT search — the LIVE/OFF
+  // badge next to each Channel row, same rule as /new-booking/hotel: LIVE =
+  // the backend's channelCounts (whole result set, every city) has hotels
+  // for it, plus any channel on the cards now on screen.
+  const channelHasResults = useMemo(() => {
+    const set = new Set(channelsWithResults);
+    for (const h of allResults || []) {
+      const ct = String(h?.channelType || "").toLowerCase();
+      if (ct) set.add(ct);
+    }
+    return set;
+  }, [channelsWithResults, allResults]);
 
   useEffect(() => {
     if (checkIn && nightsCount) {
@@ -1266,71 +1617,6 @@ const [activeAccordion, setActiveAccordion] = useState({});
     setChildAges(updatedAges);
   };
 
-  const fetchHotels = async (page, sid, agtId) => {
-    try {
-      const params = {
-        agentId: agtId || agent || 1,
-        page,
-        pageSize,
-        sortBy:
-          sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
-        sortOrder:
-          sortBy === "priceAsc" || sortBy === "ratingAsc" || sortBy === "nameAsc"
-            ? "asc"
-            : "desc",
-        // ── FIXED: single-select star ──
-        starRating: starRating ? starRating.value : undefined,
-        apiType:
-          channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
-      };
-
-      const res = await axiosInstance.get(`/hotel-search/results/${sid}`, { params });
-
-      const mappedResults = Array.isArray(res.data.result)
-        ? res.data.result.map((hotel, index) => ({
-            id: hotel.hotelCode
-              ? `${sid}-${hotel.hotelCode}`
-              : `${sid}-h${index + 1}`,
-            searchId: sid,
-            hotelCode: hotel.hotelCode || null,
-            name: hotel.hotelName || "Unknown Hotel",
-            address: hotel.hotelAddress || "",
-            cityId: hotel.cityId != null ? String(hotel.cityId) : "",
-            city:
-              hotel.cityName ||
-              (hotel.hotelAddress
-                ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
-                : "Unknown City"),
-            price: hotel.baseRate || null,
-            badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
-            image:
-              hotel.hotelImage ||
-              "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg",
-            rating: hotel.starRating || 0,
-            hotelType: "hotel",
-            channelType: hotel.apiType?.toLowerCase() || "inhouse",
-          }))
-        : [];
-
-      setAllResults(mappedResults);
-      setTotalElements(Number(res.data.totalResults) || mappedResults.length);
-      setTotalPages(
-        Math.max(
-          1,
-          Math.ceil(
-            (Number(res.data.totalResults) || mappedResults.length) / pageSize
-          )
-        )
-      );
-      setHasSearchResult(true);
-      return res.data;
-    } catch (err) {
-      console.error("Fetch hotels failed:", err);
-      setPollStatus("ERROR");
-      throw err;
-    }
-  };
-
   // Filtered results — FIXED: starRating is now single null | option
   const filteredResults = useMemo(() => {
     let results = allResults;
@@ -1365,28 +1651,97 @@ const [activeAccordion, setActiveAccordion] = useState({});
       results = results.filter((hotel) => selectedChannels.includes(hotel.channelType));
     }
 
+    // Sort By Price — the list merges every city's search, so it is sorted
+    // here. Hotels without a rate go last either way.
+    if (sortBy === "priceAsc" || sortBy === "priceDesc") {
+      const dir = sortBy === "priceAsc" ? 1 : -1;
+      results = [...results].sort((a, b) => {
+        if (a.price == null && b.price == null) return 0;
+        if (a.price == null) return 1;
+        if (b.price == null) return -1;
+        return (a.price - b.price) * dir;
+      });
+    }
+
     return results;
-  }, [allResults, hotelSearchTerm, starRating, hotelType, channelType, isMultiCity, cityFilter]);
+  }, [allResults, hotelSearchTerm, starRating, hotelType, channelType, sortBy, isMultiCity, cityFilter]);
 
   // City-filtered transfer / activity lists (multi-city searches only).
-  const filteredTransfers = useMemo(
-    () => transferResults.filter((cab) => matchesCity(cab.cityId)),
-    [transferResults, matchesCity]
+  // In-house transfers (every city) plus the supplier transfers found for
+  // each city's route.
+  const allTransfers = useMemo(
+    () => [...transferResults, ...Object.values(supplierTransfersByCity).flat()],
+    [transferResults, supplierTransfersByCity]
   );
+  // This city's transfers before the Channel filter — what LIVE/OFF reads.
+  const cityTransfers = useMemo(
+    () => allTransfers.filter((cab) => matchesCity(cab.cityId)),
+    [allTransfers, matchesCity]
+  );
+  const filteredTransfers = useMemo(
+    () =>
+      selectedTransferChannels.length === 0
+        ? cityTransfers
+        : cityTransfers.filter((cab) =>
+            selectedTransferChannels.includes(transferChannelOf(cab))
+          ),
+    [cityTransfers, selectedTransferChannels]
+  );
+  // Channel rows, built as /new-booking/cab builds them: in-house always,
+  // each transfer supplier registered for the company, plus any supplier the
+  // backend searched or that returned rows. LIVE = it has transfers here.
+  const transferChannelRows = useMemo(() => {
+    const live = new Set(cityTransfers.map(transferChannelOf));
+    const rows = TRANSFER_CHANNELS.filter(
+      (o) => o.value === "inhouse" || !transferRegistered || transferRegistered.has(o.value)
+    );
+    [...transferSearchChannels, ...live].forEach((c) => {
+      if (!rows.some((o) => o.value === c)) {
+        const known = TRANSFER_CHANNELS.find((o) => o.value === c);
+        rows.push(known || { value: c, label: c.charAt(0).toUpperCase() + c.slice(1) });
+      }
+    });
+    return { rows, live };
+  }, [cityTransfers, transferRegistered, transferSearchChannels]);
   const filteredTours = useMemo(
     () => tourResults.filter((activity) => matchesCity(activity.cityId)),
     [tourResults, matchesCity]
   );
 
-  const effectiveTotalPages = useMemo(() => Math.max(1, totalPages), [totalPages]);
+  // Hotel list paging: 10 hotels a page over the list exactly as it is
+  // filtered and sorted on screen, so every filter, the city tab and the
+  // price sort apply to all hotels, not just the page being shown. The page
+  // is clamped because a poll can bring a shorter list (e.g. once mapped
+  // hotels are merged) while a later page is open.
+  const totalElements = filteredResults.length;
+  const totalPages = Math.max(1, Math.ceil(totalElements / pageSize));
+  const currentPageIndex = Math.min(pageIndex, totalPages - 1);
+  const pagedResults = useMemo(
+    () =>
+      filteredResults.slice(
+        currentPageIndex * pageSize,
+        (currentPageIndex + 1) * pageSize
+      ),
+    [filteredResults, currentPageIndex, pageSize]
+  );
+
+  // A new filter, sort or city tab starts again from the first page.
+  useEffect(() => {
+    setPageIndex(0);
+  }, [hotelSearchTerm, starRating, hotelType, channelType, sortBy, cityFilter]);
+
+  const effectiveTotalPages = totalPages;
 
   const pageNumbers = useMemo(() => {
     const maxPagesToShow = 5;
-    const currentPage = pageIndex + 1;
-    const start = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+    const currentPage = currentPageIndex + 1;
+    const start = Math.max(
+      1,
+      Math.min(currentPage - Math.floor(maxPagesToShow / 2), totalPages - maxPagesToShow + 1)
+    );
     const end = Math.min(totalPages, start + maxPagesToShow - 1);
     return Array.from({ length: end - start + 1 }, (_, i) => start + i);
-  }, [pageIndex, totalPages]);
+  }, [currentPageIndex, totalPages]);
 
   const goToPage = (page) => {
     if (page >= 0 && page < totalPages) {
@@ -1398,12 +1753,6 @@ const [activeAccordion, setActiveAccordion] = useState({});
       }, 0);
     }
   };
-
-  useEffect(() => {
-    if (!searchId || !hasSearched) return;
-    setIsLoading(true);
-    fetchHotels(pageIndex, searchId, agent).finally(() => setIsLoading(false));
-  }, [pageIndex, sortBy, starRating, channelType, searchId, agent, hasSearched]);
 
   useEffect(() => {
     const style = document.createElement("style");
@@ -1418,158 +1767,34 @@ const [activeAccordion, setActiveAccordion] = useState({});
     return () => document.head.removeChild(style);
   }, []);
 
+  // Hotel step "Search" — the page currently has no hotel search form (the
+  // criteria page drives the search), but a re-search goes through the same
+  // supplier search as the prefetch so the result is identical.
   const handleHotelSearchSubmit = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     setErrors({});
-    setIsLoading(true);
-    setHasSearched(true);
-    setHasSearchResult(false);
-    setAllResults([]);
-    setPollStatus("IDLE");
     setPageIndex(0);
-    setTotalElements(0);
-    setTotalPages(1);
-    setCompletedChannels(new Set());
 
-    try {
-      // Fall back to itinerary[0] if `destination` somehow ended up null
-      // (e.g. came back from cart with a partially-populated state). This
-      // keeps the hotel-search payload populated.
-      const dest =
-        destination ||
-        (itinerary && itinerary.length > 0
-          ? itinerary[0]?.selectedDestination
-          : null) ||
-        {};
+    const dest =
+      destination ||
+      (itinerary && itinerary.length > 0
+        ? itinerary[0]?.selectedDestination
+        : null) ||
+      {};
+    // Agent search log (Unbooked Opportunities → Searches tab) —
+    // Build Your Own Package v2 hotel search.
+    logAgentSearch({
+      agentId: agentId || agent || 1,
+      destinationId: dest?.value,
+      destinationLabel: dest?.label,
+      nationalityLabel: nationality?.label,
+      checkIn,
+      checkOut,
+      rooms,
+      source: "make-your-own-package",
+    });
 
-      const nationalityId = nationality?.value != null
-        ? String(nationality.value)
-        : "";
-      const nationalityCode = nationality?.code || "";
-      const destinationCityId = dest?.value != null ? String(dest.value) : "";
-      const destinationCountryId =
-        dest?.countryId != null ? String(dest.countryId) : "";
-
-      const destinationCityIds =
-        itinerary && itinerary.length > 0
-          ? itinerary
-              .map((item) => item.selectedDestination?.value)
-              .filter((id) => id != null && id !== "")
-              .map(String)
-          : destinationCityId
-            ? [destinationCityId]
-            : [];
-
-      const noOfRooms = String(rooms.length);
-
-      const roomConfigurations = rooms.map((room, index) => ({
-        roomNo: index + 1,
-        adultCount: String(room.adults || 1),
-        childCount: String(room.children || 0),
-        childAges:
-          room.childAges && room.childAges.length > 0
-            ? room.childAges.map((age) => parseInt(age) || 0)
-            : room.children > 0
-            ? Array(room.children).fill(0)
-            : [0],
-        adultAges: room.adultAges?.length ? room.adultAges : [25],
-      }));
-
-      const agentIdFinal = agentId || agent || 1;
-
-      const searchPayloadReq = {
-        nationalityId,
-        nationalityCode,
-        destinationCityId,
-        destinationCityIds,
-        destinationCountryId,
-        checkIn,
-        checkOut,
-        noOfRooms,
-        roomConfigurations,
-        agentId: agentIdFinal,
-        apiType: ["INHOUSE"],
-      };
-
-      // Agent search log (Unbooked Opportunities → Searches tab) —
-      // Build Your Own Package v2 hotel search.
-      logAgentSearch({
-        agentId: agentIdFinal,
-        destinationId: dest?.value,
-        destinationLabel: dest?.label,
-        nationalityLabel: nationality?.label,
-        checkIn,
-        checkOut,
-        rooms,
-        source: "make-your-own-package",
-      });
-
-      const searchRes = await axiosInstance.post(
-        "/api/makeYourOwnPackageV2/hotel/search",
-        searchPayloadReq
-      );
-
-      const ensureHttpImage = (imageUrl) => {
-        if (!imageUrl) {
-          return "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg";
-        }
-        if (/^https?:\/\//i.test(imageUrl)) return imageUrl;
-        if (typeof imageUrl === "string") {
-          const fileName = imageUrl.split(/[/\\]/).pop();
-          if (fileName) {
-            return `https://b2b.choosenfly.com/assets/details/profilepic/hotel/${fileName}`;
-          }
-        }
-        return "https://b2b.choosenfly.com/assets/details/profilepic/hotel/hoteldefault.jpg";
-      };
-
-      const responseData = Array.isArray(searchRes.data) ? searchRes.data : [];
-
-      const mappedResults = responseData.map((hotel, index) => ({
-        id: hotel.hotelCode ? `local-${hotel.hotelCode}` : `local-h${index + 1}`,
-        searchId: "local",
-        hotelCode: hotel.hotelCode || null,
-        name: hotel.hotelName || "Unknown Hotel",
-        address: hotel.hotelAddress || "",
-        cityId: hotel.cityId != null ? String(hotel.cityId) : "",
-        city:
-          hotel.cityName ||
-          (hotel.hotelAddress
-            ? hotel.hotelAddress.split(", ").pop() || "Unknown City"
-            : "Unknown City"),
-        price: hotel.baseRate ?? null,
-        badge: hotel.baseRate ? "Rate Available" : "Rate Unavailable",
-        image: ensureHttpImage(hotel.hotelImage),
-        rating: hotel.starRating || 0,
-        hotelType: "hotel",
-        channelType: hotel.apiType?.toLowerCase() || "inhouse",
-      }));
-
-      setAllResults(mappedResults);
-      setTotalElements(mappedResults.length);
-      setTotalPages(Math.max(1, Math.ceil(mappedResults.length / pageSize)));
-      setHasSearchResult(true);
-      setIsInitialResultsLoaded(true);
-      setPollStatus("COMPLETED");
-      setSearchId(null);
-    } catch (err) {
-      console.error("Search failed:", err);
-      setHasSearched(false);
-      setPollStatus("ERROR");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handlePageChange = async (page) => {
-    if (page < 0 || page >= totalPages) return;
-    setPageIndex(page);
-    setIsLoading(true);
-    try {
-      await fetchHotels(page, searchId, agentId);
-    } finally {
-      setIsLoading(false);
-    }
+    await runHotelSearch();
   };
 
   const handleTransferChildAgeChange = (index, value) => {
@@ -1682,21 +1907,14 @@ const [activeAccordion, setActiveAccordion] = useState({});
       adultAges: Array.from({ length: r.adults || 1 }, () => 30),
     }));
 
-    const apiIdMapping = {
-      jumeirah: 10,
-      iwtx: 12,
-      x3: 15,
-      inhouse: 1,
-      ratehawk: 14,
-      darina: 16,
-    };
-
-    const apiId = apiIdMapping[hotel.channelType?.toLowerCase()] || 0;
+    // The room-list API id the search gave this card (the supplier whose
+    // price it shows). apiIdForApiType is only a fallback for a row without it.
+    const apiId = Number(hotel.apiId) || apiIdForApiType(hotel.channelType) || 0;
 
     const payload = {
       checkInDate: checkIn,
       checkOutDate: checkOut,
-      hotelCode: hotel.hotelCode || hotel.id?.split("-").slice(1).join("-") || "",
+      hotelCode: hotel.hotelCode || "",
       nationality: nationalityCode,
       agentId: String(agentIdToUse),
       apiId,
@@ -1709,10 +1927,11 @@ const [activeAccordion, setActiveAccordion] = useState({});
       starRating: hotel.rating || 0,
       phone: "",
       hotelImage: hotel.image,
+      cityId: hotel.cityId || "",
     };
 
     try {
-      const res = await axiosInstance.post("/api/hotel-rooms/search", payload);
+      const res = await axiosInstance.post("/api/hotel-rooms/search", payload, { timeout: SUPPLIER_SEARCH_TIMEOUT_MS });
 
       if (!res.data || res.data.success === false) {
         toast.error(res.data?.message || "Failed to fetch rooms.");
@@ -1720,17 +1939,35 @@ const [activeAccordion, setActiveAccordion] = useState({});
         return;
       }
 
+      const roomCount = roomsPayload.length;
+      const hotels = (res.data.hotels || []).map((h) => ({
+        ...h,
+        roomCategories: (h.roomCategories || []).map((c) => ({
+          ...c,
+          availableRates: (c.availableRates || [])
+            .slice()
+            .sort(
+              (a, b) =>
+                packageRateTotals(a, roomCount).selling -
+                packageRateTotals(b, roomCount).selling
+            ),
+        })),
+      }));
+      // A hotel sold by several suppliers comes back as one block per
+      // supplier. List every block's room types so no supplier's rooms are
+      // hidden; each keeps its block index so the cart records the supplier
+      // the rate really comes from.
+      const categories = [];
+      hotels.forEach((block, blockIndex) => {
+        (block.roomCategories || []).forEach((category) => {
+          categories.push({ ...category, blockIndex });
+        });
+      });
+
       const enriched = {
         ...res.data,
-        hotels: (res.data.hotels || []).map((h) => ({
-          ...h,
-          roomCategories: (h.roomCategories || []).map((c) => ({
-            ...c,
-            availableRates: (c.availableRates || [])
-              .slice()
-              .sort((a, b) => (a.totalRate || 0) - (b.totalRate || 0)),
-          })),
-        })),
+        hotels,
+        categories,
         meta: meta || {},
         payload,
       };
@@ -1744,14 +1981,23 @@ const [activeAccordion, setActiveAccordion] = useState({});
     }
   };
 
-  const handleAddToCart = async (hotelId, rate) => {
+  const handleAddToCart = async (hotelId, rate, category) => {
     const roomData = hotelRooms[hotelId];
     if (!roomData) return;
 
-    const { payload, hotels } = roomData;
-    const hotelsdetail = hotels[0];
-
-    console.log("hotels rate::", rate);
+    const { payload, hotels, meta } = roomData;
+    // The supplier block this rate belongs to (one per supplier of a mapped hotel).
+    const hotelsdetail =
+      (hotels || [])[category?.blockIndex ?? 0] || (hotels || [])[0] || {};
+    const rateApiId =
+      Number(hotelsdetail.apiId || category?.apiId || rate.apiId) ||
+      Number(payload.apiId || payload.api || 0);
+    // Same figure the rate card shows: the agent's markup is already in it
+    // (applied by the supplier's room search), so nothing is added here.
+    const { selling, withoutMarkup } = packageRateTotals(
+      rate,
+      (payload.rooms || []).length
+    );
 
     try {
       const searchRoomDTOs = (payload.rooms || []).map((room) => ({
@@ -1791,8 +2037,18 @@ const [activeAccordion, setActiveAccordion] = useState({});
         roomCategory: rate.roomCategory || "",
         roomType: rate.mealPlan || "",
         available,
-        api: Number(payload.apiId || payload.api || 0),
-        destinationCityId: String(payload.destinationCityId || payload.cityId || ""),
+        api: rateApiId,
+        // The supplier's own hotel code; the save keeps it next to api so a
+        // supplier hotel line is never read as an in-house hotel id.
+        supplierHotelCode: String(
+          hotelsdetail.supplierHotelCode ||
+            category?.supplierHotelCode ||
+            hotelsdetail.hotelId ||
+            ""
+        ),
+        destinationCityId: String(
+          payload.destinationCityId || payload.cityId || meta?.cityId || ""
+        ),
         destinationCountryId: String(payload.destinationCountryId || payload.countryId || ""),
         checkIn: payload.checkInDate || payload.checkIn || "",
         checkOut: payload.checkOutDate || payload.checkOut || "",
@@ -1800,10 +2056,19 @@ const [activeAccordion, setActiveAccordion] = useState({});
         nationality: String(payload.nationality || ""),
         noOfRoom: String(hotelsdetail.numberOfRooms || payload.noOfRoom || "1"),
         refundstatus,
+        refundTerms: rate.refundTerms,
         searchRoomDTOs,
         agentId: String(payload.agentId || ""),
-        totalRate: Number(rate.totalRate) || 0,
-        totalRateWithoutmrk: Number(rate.rateBeforeTax || rate.totalRate) || 0,
+        // The agent's price: the supplier rate PLUS this agent's markup — the
+        // figure the rate card shows and the agent pays. The booking page reads
+        // totalRateWithoutmrk as that price (its "Total Price", the package
+        // total and the saved total_price); totalRate becomes the selling price
+        // only when the cart's "Additional Markup %" is added on top of it.
+        totalRate: selling,
+        totalRateWithoutmrk: selling,
+        // The supplier's own rate before the agent's markup, kept apart for the
+        // saved hotel line (total_rate_without_markup). Never shown as a price.
+        totalRateWithoutMarkup: withoutMarkup,
         cancellationPolicy: cancellationPolicyList,
       };
 
@@ -1839,18 +2104,6 @@ const [activeAccordion, setActiveAccordion] = useState({});
         return <FaUtensils className="text-success" />;
       default:
         return <FaUtensils className="text-primary" />;
-    }
-  };
-
-  const getRefundStatusBadge = (nonRefundable) => {
-    const value = String(nonRefundable).toLowerCase();
-    switch (value) {
-      case "false":
-        return <Badge bg="success">Flexible</Badge>;
-      case "true":
-        return <Badge bg="danger">Non-Refundable</Badge>;
-      default:
-        return <Badge bg="secondary">{String(nonRefundable)}</Badge>;
     }
   };
 
@@ -2016,6 +2269,89 @@ const [activeAccordion, setActiveAccordion] = useState({});
     } finally {
       setTransferLoading(false);
     }
+    runSupplierTransferSearch();
+  };
+
+  // Supplier locations for what the operator types in Pickup / Dropoff,
+  // 300 ms after the last key (same feed as the /new-booking/cab dropdown).
+  const lookupSupplierLocations = (field, term) => {
+    const timers = supplierLookupTimersRef.current;
+    clearTimeout(timers[field]);
+    const setOptions =
+      field === "pickup" ? setSupplierPickupOptions : setSupplierDropoffOptions;
+    if (!term || term.trim().length < 2) {
+      setOptions([]);
+      return;
+    }
+    timers[field] = setTimeout(async () => {
+      setOptions(await fetchSupplierLocations(term, agentId || agent));
+    }, 300);
+  };
+  // The city zones / hotels / airports, plus the supplier locations found.
+  const supplierLocationGroup = isAgentLogin() ? "OTHER LOCATIONS" : "IWAY LOCATIONS";
+  const withSupplierLocations = (supplierOptions) =>
+    supplierOptions.length > 0
+      ? [...cabLookupOptions, { label: supplierLocationGroup, options: supplierOptions }]
+      : cabLookupOptions;
+  // Supplier locations are already matches for the typed text, so they are
+  // always listed; the city's own locations match on name or subtitle.
+  const transferLocationFilter = (option, input) => {
+    if (option?.data?.raw?.externalId) return true;
+    const needle = String(input || "").trim().toLowerCase();
+    if (!needle) return true;
+    return `${option?.data?.label || ""} ${option?.data?.subtitle || ""}`
+      .toLowerCase()
+      .includes(needle);
+  };
+
+  // Supplier transfers (iWay) for the route picked for this city. Runs
+  // next to the in-house search; its rows join the list as they arrive.
+  const runSupplierTransferSearch = async () => {
+    if (isMultiCity && cityFilter === "ALL") return;
+    if (!transferPickupZone || !transferDropoffZone) return;
+    const key = isMultiCity ? cityFilter : "";
+    const city = isMultiCity
+      ? searchedCities.find((c) => c.id === cityFilter) || null
+      : searchedCities[0] || null;
+    const gen = ++supplierSearchGenRef.current;
+    setSupplierTransferSearching(true);
+    setSupplierTransfersByCity((prev) => ({ ...prev, [key]: [] }));
+    setSupplierTransferNotices((prev) => ({ ...prev, [key]: null }));
+    // A pick from the IWAY LOCATIONS list carries i'way's own id; any other
+    // pick is one of our own locations.
+    const pickupIsSupplier = !!transferPickupZone?.raw?.externalId;
+    const dropoffIsSupplier = !!transferDropoffZone?.raw?.externalId;
+    const { rows, suppliers } = await searchSupplierTransfers({
+      pickup: transferPickupZone,
+      dropoff: transferDropoffZone,
+      date: transferPickupDate || travelDate || checkIn,
+      adults: transferAdults || adults || 1,
+      children: transferChildren || children || 0,
+      childAges: transferChildAges,
+      agentId: agentId || agent || 1,
+      city: isMultiCity ? city : city ? { ...city, id: "" } : null,
+      isCancelled: () => gen !== supplierSearchGenRef.current,
+    });
+    if (gen !== supplierSearchGenRef.current) return;
+    setSupplierTransfersByCity((prev) => ({ ...prev, [key]: rows }));
+    // No supplier transfers: say why. An own location reaches i'way only when
+    // it is mapped in Manage Masters → Transfer Location Mapping, so an
+    // unmapped one makes the backend skip i'way without asking it.
+    const supplierAsked =
+      suppliers.length === 0 || suppliers.some((s) => s !== "inhouse");
+    if (rows.length === 0 && supplierAsked) {
+      setSupplierTransferNotices((prev) => ({
+        ...prev,
+        [key]:
+          pickupIsSupplier && dropoffIsSupplier
+            ? { noOffers: true }
+            : { pickup: !pickupIsSupplier, dropoff: !dropoffIsSupplier },
+      }));
+    }
+    if (suppliers.length > 0) {
+      setTransferSearchChannels((prev) => Array.from(new Set([...prev, ...suppliers])));
+    }
+    setSupplierTransferSearching(false);
   };
 
   // Update the visible pickup/dropoff selection and, for multi-city,
@@ -2141,6 +2477,15 @@ const [activeAccordion, setActiveAccordion] = useState({});
       agentId: parseInt(agentValue) || 1,
       totalRate: totalRate || 0,
       totalRateWithoutmrk: totalRateWithoutMrk || 0,
+      // Supplier (iWay) transfer: the offer it was priced from, so the
+      // package keeps where it came from. In-house lines are unchanged.
+      ...(cab.external && {
+        external: true,
+        offerId: cab.offerId ?? null,
+        offerUid: cab.offerUid ?? null,
+        flexibleTariff: cab.flexibleTariff ?? null,
+        allowableTime: cab.allowableTime ?? null,
+      }),
     };
 
     if (!payload.cabId) {
@@ -2188,8 +2533,8 @@ const [activeAccordion, setActiveAccordion] = useState({});
   const hasActiveFilters =
     hotelSearchTerm || starRating || hotelType.length > 0 || channelType.length > 0;
 
-  const startEntry = totalElements === 0 ? 0 : pageIndex * pageSize + 1;
-  const endEntry = Math.min((pageIndex + 1) * pageSize, totalElements);
+  const startEntry = totalElements === 0 ? 0 : currentPageIndex * pageSize + 1;
+  const endEntry = Math.min((currentPageIndex + 1) * pageSize, totalElements);
 
   // On refresh we redirect to the Search Criteria form (effect above).
   // Render a lightweight loader meanwhile so the wizard's "Select
@@ -2230,7 +2575,9 @@ const [activeAccordion, setActiveAccordion] = useState({});
                 >
                   {isMultiCity ? (
                     <>
-                      {/* "All" + per-city clickable filters (multi-city only) */}
+                      {/* "All" + per-city clickable filters (multi-city only).
+                          A per-city Hotel / Transfer step has no "All". */}
+                      {!stepCityId && (
                       <div
                         role="button"
                         onClick={() => setCityFilter("ALL")}
@@ -2248,13 +2595,14 @@ const [activeAccordion, setActiveAccordion] = useState({});
                       >
                         All
                       </div>
+                      )}
                       {searchedCities.map((c) => {
                         const active = cityFilter === c.id;
                         return (
                           <div
                             key={c.id}
                             role="button"
-                            onClick={() => setCityFilter(c.id)}
+                            onClick={() => selectCity(c.id)}
                             className={`px-3 py-2 rounded-2 d-flex align-items-center border-end ${
                               active ? "bg-primary text-white" : "bg-white text-dark"
                             }`}
@@ -2562,8 +2910,11 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                   LEFT SIDEBAR (mirrors HotelSearch)
                               ──────────────────────────────────── */}
                              <Col lg={3} className="leftside d-none d-lg-block" style={{
-      position: "sticky",
-      top: "90px", // adjust based on TopBar height
+      // Not sticky: this column sits inside a .card, which the app styles
+      // overflow: hidden, so it could never stick to the screen — sticky only
+      // pushed it down below the filter bar once the progress bar had gone.
+      position: "relative",
+      top: "auto",
       maxHeight: "calc(100vh - 100px)",
       overflowY: "auto",
     }}>
@@ -2581,64 +2932,6 @@ const [activeAccordion, setActiveAccordion] = useState({});
             EXPLORE ON MAP 📍
           </button>
         </div>
-
-        {/* Hotel name search */}
-        <Form.Control
-          type="text"
-          placeholder="Search hotel name..."
-          className="mb-3"
-          value={hotelSearchTerm}
-          onChange={(e) => setHotelSearchTerm(e.target.value)}
-        />
-
-        {/* Star Rating */}
-        <Form.Group className="mb-3">
-          <Form.Label className="fw-semibold small">Star Rating</Form.Label>
-          <Select
-            options={starOptions}
-            value={starRating}
-            onChange={setStarRating}
-            placeholder="All Stars"
-            isClearable
-            className="modern-select-sm"
-            menuPortalTarget={document.body}
-            styles={{
-              control: (base) => ({
-                ...base,
-                height: "36px",
-                minHeight: "36px",
-                width: "100%",
-              }),
-              menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-              menu: (base) => ({ ...base, zIndex: 9999 }),
-            }}
-          />
-        </Form.Group>
-
-        <hr className="my-2" />
-
-        {/* Sort */}
-        <Form.Group className="mb-3">
-          <Form.Label className="fw-semibold small">Sort By Price</Form.Label>
-          <div className="d-flex gap-2">
-            <Button
-              size="sm"
-              className={`sort-pill w-50 ${sortBy === "priceAsc" ? "active" : ""}`}
-              onClick={() => setSortBy("priceAsc")}
-            >
-              Price ↑
-            </Button>
-            <Button
-              size="sm"
-              className={`sort-pill w-50 ${sortBy === "priceDesc" ? "active" : ""}`}
-              onClick={() => setSortBy("priceDesc")}
-            >
-              Price ↓
-            </Button>
-          </div>
-        </Form.Group>
-
-        <hr className="my-2" />
 
         {/* Hotel Type */}
         <Form.Group className="mb-3">
@@ -2662,41 +2955,63 @@ const [activeAccordion, setActiveAccordion] = useState({});
           </div>
         </Form.Group>
 
-        <hr className="my-2" />
-
-        {/* Channel
-        <Form.Group className="mb-3">
-          <Form.Label className="fw-semibold small">Channel</Form.Label>
-          <div className="filter-checkbox-list">
-            {channelTypeOptions.map((item) => (
-              <Form.Check
-                key={item.value}
-                type="checkbox"
-                id={`pkg-channel-${item.value}`}
-                label={item.label}
-                checked={channelType.some((c) => c.value === item.value)}
-                onChange={(e) => {
-                  if (e.target.checked)
-                    setChannelType([...channelType, item]);
-                  else
-                    setChannelType(channelType.filter((c) => c.value !== item.value));
-                }}
-              />
-            ))}
-          </div>
-        </Form.Group> */}
-
-        <hr className="my-2" />
-
-        {/* Clear All */}
-        <Button
-          className="clear-pill w-100"
-          variant="outline-primary"
-          size="sm"
-          onClick={clearAllFilters}
-        >
-          Clear All Filters
-        </Button>
+        {/* Channel — supplier/channel checkbox filter, the same rows,
+            labels, LIVE/OFF badges and behaviour as /new-booking/hotel.
+            Hidden for agent-side logins. Every supplier registered for the
+            company via /admin/api-access is a row; LIVE (green) = that
+            channel has hotels in this search's results, OFF (red) = none. */}
+        {showChannelFilter && (
+          <>
+          <hr className="my-2" />
+          <Form.Group className="mb-3">
+            <Form.Label className="fw-semibold small">Channel</Form.Label>
+            <div className="filter-checkbox-list">
+              {channelRows.map((item) => {
+                const isLive = channelHasResults.has(item.value);
+                return (
+                  <div
+                    key={item.value}
+                    className="d-flex align-items-center justify-content-between gap-2"
+                    style={{ minHeight: 26 }}
+                  >
+                    <Form.Check
+                      type="checkbox"
+                      id={`pkg-channel-${item.value}`}
+                      label={item.label}
+                      checked={channelType.some((c) => c.value === item.value)}
+                      onChange={(e) => {
+                        if (e.target.checked)
+                          setChannelType([...channelType, item]);
+                        else
+                          setChannelType(channelType.filter((c) => c.value !== item.value));
+                      }}
+                    />
+                    <span
+                      title={
+                        isLive
+                          ? "Hotels from this supplier are in the results"
+                          : "No hotels from this supplier in the results"
+                      }
+                      style={{
+                        fontSize: "0.65rem",
+                        fontWeight: 700,
+                        padding: "1px 6px",
+                        borderRadius: 10,
+                        lineHeight: 1.4,
+                        color: "#fff",
+                        backgroundColor: isLive ? "#198754" : "#dc3545",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {isLive ? "LIVE" : "OFF"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </Form.Group>
+          </>
+        )}
 
       </Card.Body>
     </Card>
@@ -2707,9 +3022,68 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                   RIGHT COLUMN
                               ──────────────────────────────────── */}
                               <Col lg={9}>
+                                {/* Filter bar — star rating, sort by price, Clear and
+                                    the hotel-name search, laid out as on
+                                    /new-booking/hotel. Same state as before, so
+                                    filtering and sorting are unchanged. */}
+                                <Card className="shadow-sm rounded-xl mb-3 filtersection">
+                                  <Card.Body className="p-2">
+                                    <div className="d-flex align-items-center gap-3 flex-wrap">
+                                      <Select
+                                        options={starOptions}
+                                        value={starRating}
+                                        onChange={setStarRating}
+                                        placeholder="All Stars"
+                                        className="modern-select-sm"
+                                        menuPortalTarget={document.body}
+                                        styles={{
+                                          control: (base) => ({
+                                            ...base,
+                                            height: "36px",
+                                            minHeight: "36px",
+                                            width: "180px",
+                                            background: "#ffffff",
+                                            color: "#000000",
+                                            marginLeft: "30px",
+                                          }),
+                                          menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                                          menu: (base) => ({ ...base, zIndex: 9999 }),
+                                        }}
+                                      />
 
-                            
+                                      <div className="d-flex gap-2">
+                                        <Button
+                                          size="sm"
+                                          className={`sort-pill ${sortBy === "priceAsc" ? "active" : ""}`}
+                                          onClick={() => setSortBy("priceAsc")}
+                                        >
+                                          Low to High
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          className={`sort-pill ${sortBy === "priceDesc" ? "active" : ""}`}
+                                          onClick={() => setSortBy("priceDesc")}
+                                        >
+                                          High to Low
+                                        </Button>
+                                      </div>
 
+                                      <Button
+                                        className="clear-pill"
+                                        variant="outline-primary"
+                                        size="sm"
+                                        onClick={clearAllFilters}
+                                      >
+                                        Clear
+                                      </Button>
+
+                                      <HotelNameSearchInput
+                                        value={hotelSearchTerm}
+                                        onChange={(e) => setHotelSearchTerm(e.target.value)}
+                                      />
+                                    </div>
+                                  </Card.Body>
+                                </Card>
 
                                 {/* ── Skeleton cards — first load only ── */}
                                 {isLoading && allResults.length === 0 && (
@@ -2724,7 +3098,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                 {(!isLoading || allResults.length > 0) && (
                                   <Row xs={1} className="g-4">
                                     {filteredResults.length > 0 ? (
-                                      filteredResults.map((hotel) => (
+                                      pagedResults.map((hotel) => (
                                         <Col key={hotel.id}>
                                           <div
                                             style={{
@@ -2773,18 +3147,21 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                                   >
                                                     <FaStar className="text-warning" />
                                                     {hotel.rating}
-                                                    <span
-                                                      style={{
-                                                        marginLeft: "4px",
-                                                        backgroundColor: "#6c757d",
-                                                        padding: "1px 6px",
-                                                        borderRadius: "10px",
-                                                      }}
-                                                    >
-                                                      {(
-                                                        hotel.channelType || ""
-                                                      ).toUpperCase()}
-                                                    </span>
+                                                    {/* Supplier the card's price comes from —
+                                                        never shown to agent-side logins
+                                                        (their results carry no supplier). */}
+                                                    {showChannelFilter && hotel.channelType && (
+                                                      <span
+                                                        style={{
+                                                          marginLeft: "4px",
+                                                          backgroundColor: "#6c757d",
+                                                          padding: "1px 6px",
+                                                          borderRadius: "10px",
+                                                        }}
+                                                      >
+                                                        {hotel.channelType.toUpperCase()}
+                                                      </span>
+                                                    )}
                                                   </div>
                                                 </div>
                                               </Col>
@@ -2923,12 +3300,9 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                                       Fetching rooms...
                                                     </p>
                                                   </div>
-                                                ) : hotelRooms[hotel.id] ? (
+                                                ) : hotelRooms[hotel.id]?.categories?.length > 0 ? (
                                                   <div className="room-categories-section">
-                                                    {(
-                                                      hotelRooms[hotel.id].hotels[0]
-                                                        .roomCategories || []
-                                                    ).map((category, idx) => (
+                                                    {hotelRooms[hotel.id].categories.map((category, idx) => (
                                                      <Accordion
   activeKey={activeAccordion[hotel.id + "-" + idx] || null}
   onSelect={(eventKey) => {
@@ -2959,7 +3333,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
         <div className="d-flex align-items-center gap-3">
           <div className="text-end">
             <span className="fw-bold text-primary">
-              From {formatPrice(Math.min(...category.availableRates.map(r => r.rate)))}
+              From {formatPrice(Math.min(...category.availableRates.map(r => packageRateTotals(r, rooms.length).selling)))}
             </span>
             <div className="small text-muted">
               {category.availableRates.length} rates
@@ -3004,9 +3378,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                                                             )}
                                                                           </div>
                                                                           <div>
-                                                                            {getRefundStatusBadge(
-                                                                              rate.nonRefundable
-                                                                            )}
+                                                                            <RefundBadge rate={rate} />
                                                                           </div>
                                                                         </div>
 
@@ -3017,12 +3389,14 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                                                               the price still reads as the visual
                                                                               anchor of the rate card. */}
                                                                           <div className="current-price fs-4 fw-bold text-dark">
+                                                                            {/* The price the rate is added to the
+                                                                                package at (agent markup included). */}
                                                                             {formatPrice(
-                                                                              rate.totalRate
+                                                                              packageRateTotals(rate, rooms.length).selling
                                                                             )}
                                                                           </div>
                                                                           {rate.recommendedRetailPrice >
-                                                                            rate.totalRate && (
+                                                                            packageRateTotals(rate, rooms.length).selling && (
                                                                             <div className="original-price text-muted text-decoration-line-through small">
                                                                               {formatPrice(
                                                                                 rate.recommendedRetailPrice
@@ -3077,7 +3451,8 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                                                             onClick={() =>
                                                                               handleAddToCart(
                                                                                 hotel.id,
-                                                                                rate
+                                                                                rate,
+                                                                                category
                                                                               )
                                                                             }
                                                                           >
@@ -3137,7 +3512,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                 )}
 
                                 {/* ── Bottom pagination ── */}
-                                {filteredResults.length > 0 && !hasActiveFilters && !(isMultiCity && cityFilter !== "ALL") && (
+                                {filteredResults.length > 0 && (
                                   <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-4">
                                     <small className="text-muted fw-semibold">
                                       Showing {startEntry}–{endEntry} of {totalElements}{" "}
@@ -3145,21 +3520,21 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                     </small>
                                     <Pagination className="mb-0 pagination-modern">
                                       <Pagination.Prev
-                                        disabled={pageIndex === 0}
-                                        onClick={() => goToPage(pageIndex - 1)}
+                                        disabled={currentPageIndex === 0}
+                                        onClick={() => goToPage(currentPageIndex - 1)}
                                       />
                                       {pageNumbers.map((n) => (
                                         <Pagination.Item
                                           key={n}
-                                          active={n === pageIndex + 1}
+                                          active={n === currentPageIndex + 1}
                                           onClick={() => goToPage(n - 1)}
                                         >
                                           {n}
                                         </Pagination.Item>
                                       ))}
                                       <Pagination.Next
-                                        disabled={pageIndex >= effectiveTotalPages - 1}
-                                        onClick={() => goToPage(pageIndex + 1)}
+                                        disabled={currentPageIndex >= effectiveTotalPages - 1}
+                                        onClick={() => goToPage(currentPageIndex + 1)}
                                       />
                                     </Pagination>
                                   </div>
@@ -3224,7 +3599,12 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                 isClearable
                                 isDisabled={!isCitySelectable}
                                 isLoading={cabLookupLoading}
-                                options={cabLookupOptions}
+                                options={withSupplierLocations(supplierPickupOptions)}
+                                filterOption={transferLocationFilter}
+                                onInputChange={(value, meta) => {
+                                  if (meta.action === "input-change") lookupSupplierLocations("pickup", value);
+                                  return value;
+                                }}
                                 value={transferPickupZone}
                                 placeholder="Select pickup location"
                                 onChange={handlePickupChange}
@@ -3261,7 +3641,12 @@ const [activeAccordion, setActiveAccordion] = useState({});
                                 isClearable
                                 isDisabled={!isCitySelectable}
                                 isLoading={cabLookupLoading}
-                                options={cabLookupOptions}
+                                options={withSupplierLocations(supplierDropoffOptions)}
+                                filterOption={transferLocationFilter}
+                                onInputChange={(value, meta) => {
+                                  if (meta.action === "input-change") lookupSupplierLocations("dropoff", value);
+                                  return value;
+                                }}
                                 value={transferDropoffZone}
                                 placeholder="Select dropoff location"
                                 onChange={handleDropoffChange}
@@ -3313,6 +3698,53 @@ const [activeAccordion, setActiveAccordion] = useState({});
                         </Card.Body>
                       </Card>
 
+                      {supplierTransferSearching && !transferLoading && (
+                        <div className="d-flex align-items-center gap-2 text-muted small mt-3">
+                          <Spinner animation="border" size="sm" />
+                          {isAgentLogin()
+                            ? "Searching more transfer options…"
+                            : "Searching IWay transfers…"}
+                        </div>
+                      )}
+
+                      {/* Why the supplier search found nothing for this city —
+                          most often a pickup / drop-off picked from our own
+                          locations, which reach iWay only once mapped. */}
+                      {(() => {
+                        const notice =
+                          !supplierTransferSearching && !transferLoading
+                            ? supplierTransferNotices[isMultiCity ? cityFilter : ""]
+                            : null;
+                        if (!notice) return null;
+                        const agentView = isAgentLogin();
+                        let message;
+                        if (notice.noOffers) {
+                          message = agentView
+                            ? "No more transfer options for this route."
+                            : "IWay returned no offers for this route.";
+                        } else {
+                          const both = notice.pickup && notice.dropoff;
+                          const ends = both
+                            ? "pickup and drop-off"
+                            : notice.pickup
+                              ? "pickup"
+                              : "drop-off";
+                          message = agentView
+                            ? `For more transfer options, choose the ${ends} from the OTHER LOCATIONS list (type at least 2 letters).`
+                            : `IWay returned no transfers: the ${ends} ${
+                                both ? "are your own locations" : "is one of your own locations"
+                              }, which reach IWay only when mapped under Manage Masters → Transfer Location Mapping (sub-locations can't be mapped). Choose ${
+                                both ? "them" : "it"
+                              } from the IWAY LOCATIONS list instead (type at least 2 letters).`;
+                        }
+                        return (
+                          <div className="d-flex align-items-start bg-light border rounded-2 px-3 py-2 mt-3 small">
+                            <FaInfoCircle className="text-primary me-2 mt-1 flex-shrink-0" />
+                            <span>{message}</span>
+                          </div>
+                        );
+                      })()}
+
                       {transferLoading && (
                         <Card className="shadow-sm rounded-xl mb-4 mt-4">
                           <Card.Body className="text-center py-5">
@@ -3338,21 +3770,89 @@ const [activeAccordion, setActiveAccordion] = useState({});
                         </div>
                       )}
 
-                      {hasTransferSearched && !transferLoading && transferResults.length > 0 && (
+                      {hasTransferSearched && !transferLoading && allTransfers.length > 0 && (
                         <div className="mt-4">
+                        <Row className="g-3">
+                          {/* Channel — same card, rows and LIVE/OFF badges as
+                              /new-booking/cab. Hidden for agent-side logins. */}
+                          {showChannelFilter && (
+                            <Col lg={3} md={4}>
+                              <Card className="border-0 shadow-sm rounded-3 mb-3">
+                                <Card.Header className="bg-white border-bottom fw-semibold d-flex justify-content-between align-items-center">
+                                  <span className="text-primary">Channel</span>
+                                  <span className="text-muted small">▾</span>
+                                </Card.Header>
+                                <Card.Body className="p-3">
+                                  <div className="filter-checkbox-list">
+                                    {transferChannelRows.rows.map(({ value, label }) => {
+                                      const isLive = transferChannelRows.live.has(value);
+                                      return (
+                                        <div
+                                          key={value}
+                                          className="d-flex align-items-center justify-content-between gap-2"
+                                          style={{ minHeight: 26 }}
+                                        >
+                                          <Form.Check
+                                            type="checkbox"
+                                            id={`pkg-transfer-channel-${value}`}
+                                            label={label}
+                                            checked={selectedTransferChannels.includes(value)}
+                                            onChange={(e) =>
+                                              setSelectedTransferChannels((prev) =>
+                                                e.target.checked
+                                                  ? [...prev, value]
+                                                  : prev.filter((x) => x !== value)
+                                              )
+                                            }
+                                          />
+                                          <span
+                                            title={
+                                              isLive
+                                                ? "Transfers from this channel are in the results"
+                                                : "No transfers from this channel in the results"
+                                            }
+                                            style={{
+                                              fontSize: "0.65rem",
+                                              fontWeight: 700,
+                                              padding: "1px 6px",
+                                              borderRadius: 10,
+                                              lineHeight: 1.4,
+                                              color: "#fff",
+                                              backgroundColor: isLive ? "#198754" : "#dc3545",
+                                              whiteSpace: "nowrap",
+                                            }}
+                                          >
+                                            {isLive ? "LIVE" : "OFF"}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </Card.Body>
+                              </Card>
+                            </Col>
+                          )}
+                          <Col lg={showChannelFilter ? 9 : 12} md={showChannelFilter ? 8 : 12}>
                           <h6 className="fw-bold mb-3">
                             Transfer Results ({filteredTransfers.length})
                           </h6>
 
                           {filteredTransfers.length === 0 && (
                             <div className="text-center text-muted py-4">
-                              No transfers found for the selected city.
+                              {selectedTransferChannels.length > 0
+                                ? "No transfers found for the selected channel(s)."
+                                : "No transfers found for the selected city."}
                             </div>
                           )}
 
                           <Row className="g-4">
                             {filteredTransfers.map((cab) => (
-                              <Col key={cab.cabid} lg={10} xl={9} className="mx-auto">
+                              <Col
+                                key={cab.cabid}
+                                lg={showChannelFilter ? 12 : 10}
+                                xl={showChannelFilter ? 12 : 9}
+                                className="mx-auto"
+                              >
                                 <Card className="mb-4 shadow-sm" style={{ borderRadius: "12px" }}>
                                   <Card.Body>
                                     <Row className="mb-3">
@@ -3551,10 +4051,15 @@ const [activeAccordion, setActiveAccordion] = useState({});
                               </Col>
                             ))}
                           </Row>
+                          </Col>
+                        </Row>
                         </div>
                       )}
 
-                      {hasTransferSearched && !transferLoading && transferResults.length === 0 && (
+                      {hasTransferSearched &&
+                        !transferLoading &&
+                        !supplierTransferSearching &&
+                        allTransfers.length === 0 && (
                         <div className="text-center text-muted mt-5">
                           <FaCar className="fs-1 mb-3 text-secondary" />
                           <h6>No transfers found for the selected dates.</h6>

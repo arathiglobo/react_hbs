@@ -424,8 +424,8 @@ export default function AgentAccounts() {
             </Card.Body>
           </Card>
 
-          {/* Amount Receive Modal */}
-          <Modal show={showModal} onHide={closeModal} centered>
+          {/* Amount Receive Modal (admins only, see isAdmin) */}
+          <Modal show={showModal && isAdmin} onHide={closeModal} centered>
             <Modal.Header closeButton={!isLoading}>
               <Modal.Title>
                 {editing ? "Update Amount Receive" : "Create Amount Receive"}

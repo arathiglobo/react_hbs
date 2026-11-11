@@ -914,11 +914,11 @@ export default function TopBar() {
         <FaKey className="me-2" />
         Change Password
       </Dropdown.Item>
-      {/* Agent-only: only agent logins are challenged for a second factor, so
-          showing this to an admin/staff/extranet user would offer them a
+      {/* Agents and admins only: they are the logins challenged for a second
+          factor, so showing this to a staff/extranet user would offer them a
           setting that never takes effect. The route and the backend endpoints
           enforce the same restriction. */}
-      {currentRole === "agent" && (
+      {["agent", "admin", "super_admin"].includes(currentRole) && (
         <>
           <Dropdown.Divider />
           <Dropdown.Item href="two-factor-authentication">

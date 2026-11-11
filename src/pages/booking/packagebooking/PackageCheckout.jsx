@@ -43,6 +43,7 @@ import "../../../styles/RoomList.css";
 // (booking-summary-card, hbp-summary-row, hbp-price-card, hbp-sticky-summary)
 // live in this stylesheet — imported so the sidebar picks up the HBP treatment.
 import "../../../styles/HotelBookingPage.css";
+import { orderIdPathSegment } from "../../../utils/urlSafety";
 
 // The stash channel that survives a hard refresh on this page. PackageBooking
 // writes it just before navigating here (see setCurrentStep-turned-navigate
@@ -197,7 +198,7 @@ const PackageCheckout = () => {
       try {
         setIsFinalizingPayment(true);
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(
@@ -207,7 +208,7 @@ const PackageCheckout = () => {
           return;
         }
         const res = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize-package/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize-package/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         const body = res?.data || {};
         if (body.bookingId) {

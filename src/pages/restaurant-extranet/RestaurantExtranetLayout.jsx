@@ -27,7 +27,7 @@ import {
  * function that receives `{ restaurantId, restaurantName, refresh }`).
  *
  * Auth posture matches the rest of the platform:
- *   • Standard `authToken` from localStorage is auto-attached by
+ *   • Standard `authToken` from this tab's sessionStorage is auto-attached by
  *     `axiosInstance`.
  *   • Missing token → redirect to /login.
  *   • 401/403 from any wrapped page → logout + redirect to /login.
@@ -82,7 +82,7 @@ const RestaurantExtranetLayout = ({ children, title, subtitle }) => {
 
   const handleLogout = async () => {
     // Same as TopBar.handleLogout: record logout_date_time server-side while
-    // the Bearer token is still in localStorage, then clear the client.
+    // the Bearer token is still in sessionStorage, then clear the client.
     try {
       await axiosInstance.post("/auth/logout", {}, { withCredentials: true });
     } catch {

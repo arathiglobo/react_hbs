@@ -26,10 +26,12 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import { logAgentSearch } from "../../../utils/agentSearchLog";
+import { apiIdOfResult } from "../../../utils/hotelSearchResults";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
 import DateInput from "../../../components/DateInput";
 import "../../../styles/HotelSearch.css";
+import { isAgentLogin } from "../../../utils/supplierDisplay";
 
 // ─────────────────────────────────────────────
 // Counter — same +/- counter as HotelSearch.jsx.
@@ -679,18 +681,6 @@ export default function StudentSearch() {
     }
   };
 
-  const apiIdFromType = (apiType) => {
-    const m = {
-      inhouse: 1,
-      jumeirah: 10,
-      iwtx: 12,
-      x3: 15,
-      ratehawk: 14,
-      darina: 16,
-      atharva: 3,
-    };
-    return m[(apiType || "").toLowerCase()] || 1;
-  };
   const handleViewRooms = (h) => {
     // Open /student-room-list in a NEW browser tab. React Router's
     // navigate-state can't cross a tab boundary, so the handoff context is
@@ -704,7 +694,7 @@ export default function StudentSearch() {
       address: h.hotelAddress,
       starRating: h.starRating,
       apiType: h.apiType,
-      apiId: apiIdFromType(h.apiType),
+      apiId: apiIdOfResult(h),
       nationalityCode:
         (selectedNationality?.code || "").length === 2
           ? selectedNationality.code
@@ -1286,7 +1276,7 @@ export default function StudentSearch() {
                             Hidden for AGENT logins (agents book only through
                             their contracted channel and the backend already
                             scopes results). */}
-                        {!isAgentRole && (
+                        {!isAgentLogin() && (
                           <>
                             <hr />
 

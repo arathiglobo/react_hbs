@@ -33,8 +33,21 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import { createAmendmentLink } from "../../../utils/amendmentLink";
+import RefundBadge from "../../../components/RefundBadge";
+import {
+  REFUND_FLEXIBLE,
+  REFUND_NON_REFUNDABLE,
+  REFUND_PARTIAL,
+  labelOfRate,
+  refundLabelText,
+  worstLabel,
+  uaeToday,
+} from "../../../utils/refundLabel";
+import { parseSupplierDate } from "../../../utils/rateDeadline";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
+import { sanitizeRichHtml } from "../../../utils/safeHtml";
+import { orderIdPathSegment } from "../../../utils/urlSafety";
 
 const SPECIAL_REQUEST_OPTIONS = [
   "Early Check-In", "Non-Smoking Rooms", "Ground Floor", "Wheelchair Access",
@@ -394,7 +407,7 @@ export default function SeniorCitizenBookingPage() {
         setIsFinalizingPayment(true);
         setIsSubmitting(true);
         const { data } = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize-seniorcitizen/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize-seniorcitizen/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (data?.success) {
           toast.success(
@@ -438,7 +451,7 @@ export default function SeniorCitizenBookingPage() {
       }
       try {
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(
@@ -547,11 +560,20 @@ export default function SeniorCitizenBookingPage() {
   const isNonRefundableRate =
     bookingData?.selectedRate?.nonRefundable === true ||
     bookingData?.selectedRate?.nonRefundable === "true";
+
+  // The refund words shown on this page. A multi-room booking is as refundable
+  // as its worst room. The booking flow still follows isNonRefundableRate.
+  const bookingRefundLabel = bookingData?.roomBreakdown?.length
+    ? worstLabel(bookingData.roomBreakdown.map((slot) => labelOfRate(slot)))
+    : labelOfRate(bookingData?.selectedRate);
   // Cancellation deadline for display — end of the check-in day, mirrors
   // how the create payload stores deadlineDate (`${checkInDate}T23:59:59`).
   // Powers the "Refundable until this date" / "Passed" badge on the
   // confirm modal.
   const cancellationDeadline = (() => {
+    // The date the room list showed, when the rate carries it.
+    const cutoff = parseSupplierDate(bookingData?.selectedRate?.refundTerms?.cutoff);
+    if (cutoff) return cutoff;
     const cinRaw = bookingData?.payload?.checkInDate;
     if (!cinRaw) return null;
     const cin = new Date(cinRaw);
@@ -562,17 +584,23 @@ export default function SeniorCitizenBookingPage() {
   })();
   const isOutsideDeadline = (() => {
     if (!cancellationDeadline) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return today > cancellationDeadline;
+    return uaeToday() > cancellationDeadline;
   })();
-  // Offer the Voucher Now / Voucher Later choice only for refundable,
-  // Available rates. On-request / non-refundable rates skip the choice.
-  const showVoucherChoice = !isOnRequestRate && !isNonRefundableRate;
+  // Offer the Voucher Now / Voucher Later choice only for refundable
+  // Available rates that still have free-cancellation time left, or that only
+  // cost part of the booking after their deadline — the same rule as the
+  // Student page. A hold made after the deadline would be auto-cancelled at
+  // once, so the choice is not shown then.
+  const showVoucherChoice =
+    !isOnRequestRate &&
+    !isNonRefundableRate &&
+    !!cancellationDeadline &&
+    (!isOutsideDeadline || bookingRefundLabel === REFUND_PARTIAL);
   // Resolved status sent on payload.bookingFlowStatus.
   const resolvedBookingFlowStatus = (() => {
     if (isOnRequestRate) return "REQUESTED";
     if (isNonRefundableRate) return "RECONFIRMED";
+    if (isOutsideDeadline && bookingRefundLabel !== REFUND_PARTIAL) return "RECONFIRMED";
     return bookingConfirmation === "Book Now & Voucher later"
       ? "CONFIRMED"
       : "RECONFIRMED";
@@ -1239,6 +1267,9 @@ export default function SeniorCitizenBookingPage() {
                             <span className="badge bg-warning text-dark">
                               ⭐ {hotelStaticData.starRating} Star
                             </span>
+                            {selectedRate?.nonRefundable !== undefined && (
+                              <RefundBadge label={bookingRefundLabel} />
+                            )}
                             {promoSummary && (
                               <Badge bg="success" className="d-inline-flex align-items-center">
                                 <FaUserClock className="me-1" /> Senior {promoSummary}
@@ -1465,7 +1496,7 @@ export default function SeniorCitizenBookingPage() {
                         <h6 className="policy-section-title">Terms &amp; Conditions</h6>
                         {termsAndConditions ? (
                           <div className="terms-content"
-                               dangerouslySetInnerHTML={{ __html: termsAndConditions }} />
+                               dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(termsAndConditions) }} />
                         ) : (
                           <div className="policy-empty">
                             No terms &amp; conditions configured for this hotel.
@@ -1610,7 +1641,7 @@ export default function SeniorCitizenBookingPage() {
                                 className="badge bg-danger"
                                 style={{ fontSize: "0.7rem" }}
                               >
-                                Non-refundable
+                                {refundLabelText(REFUND_NON_REFUNDABLE)}
                               </span>
                             </p>
                             <p
@@ -1645,6 +1676,8 @@ export default function SeniorCitizenBookingPage() {
                                   >
                                     Passed
                                   </span>
+                                ) : bookingRefundLabel !== REFUND_FLEXIBLE ? (
+                                  <RefundBadge label={bookingRefundLabel} className="ms-2" />
                                 ) : (
                                   <span
                                     className="badge bg-success ms-2"

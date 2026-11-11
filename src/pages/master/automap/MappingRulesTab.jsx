@@ -21,6 +21,10 @@ const STEPS = [
     text: "Identical name, same country, within the distance below (or same city when coordinates are missing), and sold by enough suppliers.",
   },
   {
+    title: "Same phone, email or website",
+    text: "Two suppliers' hotels with the same contact are compared, if no other hotel of either supplier uses it, because chains reuse contacts. The same country, within the distance below and sharing enough of the name makes an exact match. Any other pair goes to review, unless it is in another country or too far apart.",
+  },
+  {
     title: "Send to review",
     text: "A likely match that is not exact, such as a slightly different name, waits for an admin. Nothing here is linked without approval.",
   },
@@ -35,6 +39,41 @@ const STEPS = [
   {
     title: "Not mapped",
     text: "Anything still unlinked is listed on the Not Mapped tab, with the reason.",
+  },
+];
+
+const CITY_STEPS = [
+  {
+    title: "Collect",
+    text: "Each night, every supplier city that has hotels but no mapping is picked up.",
+  },
+  {
+    title: "Look at the hotels",
+    text: "Its hotels are compared with other suppliers' hotels already mapped: the same hotel linked across suppliers, and hotels within a kilometre.",
+  },
+  {
+    title: "Look at the name",
+    text: "The name is compared too, but only supports the hotels. A similar spelling alone never decides anything.",
+  },
+  {
+    title: "Confident",
+    text: "At least two signals agree on one of our cities, the states do not differ and it is not too far away. You can approve these as a whole group.",
+  },
+  {
+    title: "Send to review",
+    text: "If the signals disagree, or only one points at a city, an admin checks each one.",
+  },
+  {
+    title: "Approve",
+    text: "Nothing is mapped until an admin approves it. The usual checks still apply, and an existing mapping is never overwritten.",
+  },
+  {
+    title: "Turn down",
+    text: "A pair an admin turns down is remembered and not offered again.",
+  },
+  {
+    title: "Watch for wrong mappings",
+    text: "When two suppliers place one of our cities far apart, it is listed for checking and counts as evidence for nothing until then.",
   },
 ];
 
@@ -113,7 +152,7 @@ export default function MappingRulesTab({ active }) {
         />
         <ul className="small text-muted mt-2 mb-2 ps-3">
           <li>
-            <strong>Ticked:</strong> rooms with the same name from different suppliers are combined into one row, showing
+            <strong>Ticked:</strong> rooms whose names have the same words, in any order, are combined into one row, showing
             the cheapest rate.
           </li>
           <li>
@@ -136,6 +175,17 @@ export default function MappingRulesTab({ active }) {
         <h6 className="fw-bold">How a hotel gets mapped</h6>
         <ol className="mb-0 ps-3">
           {STEPS.map((s) => (
+            <li key={s.title} className="mb-1">
+              <strong>{s.title}.</strong> {s.text}
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <div className="ahm-panel p-3">
+        <h6 className="fw-bold">How a city gets mapped</h6>
+        <ol className="mb-0 ps-3">
+          {CITY_STEPS.map((s) => (
             <li key={s.title} className="mb-1">
               <strong>{s.title}.</strong> {s.text}
             </li>

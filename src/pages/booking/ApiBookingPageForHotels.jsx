@@ -25,6 +25,8 @@ import {
 } from "react-bootstrap";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
+import RefundBadge from "../../components/RefundBadge";
+import { labelOfRate, refundLabelText, uaeToday } from "../../utils/refundLabel";
 import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
 import {
   GrnRefundBadge,
@@ -34,10 +36,16 @@ import {
   grnIsBundledSelection,
 } from "../../components/grn/GrnPolicy";
 import {
+  displayHotelName,
+  supplierText,
+  withoutSupplierName,
+} from "../../utils/supplierDisplay";
+import {
   RateDeadlinePill,
   resolveDeadlineDate,
   isNonRefundable,
 } from "../../utils/rateDeadline";
+import { orderIdPathSegment } from "../../utils/urlSafety";
 
 // Online-payment gateways offered when the agent's credit is short.
 // Mirrors the same list Inhouse HotelBookingPage.jsx uses (line 25) so
@@ -114,7 +122,19 @@ const IWTX_API_ID = 12;
 // status is overridden to "Confirmed / On Reconfirmation" on hold; the
 // existing GoGlobal cancel adapter handles the auto-cancel path.
 const GOGLOBAL_API_ID = 21;
-const HOLD_CAPABLE_API_IDS = new Set([GRN_API_ID, IWTX_API_ID, GOGLOBAL_API_ID]);
+// X3 (15) and Darina (16) — backend hold branch added 2026-11-11 in
+// X3HotelBookingService and DarinaHotelBookingService through the shared
+// SupplierHoldRule: same deadline refusal and deferred credit as IWTX. The
+// auto-cancel uses their existing cancel adapters in SupplierCancellationDispatcher.
+const X3_API_ID = 15;
+const DARINA_API_ID = 16;
+export const HOLD_CAPABLE_API_IDS = new Set([
+  GRN_API_ID,
+  IWTX_API_ID,
+  GOGLOBAL_API_ID,
+  X3_API_ID,
+  DARINA_API_ID,
+]);
 
 /**
  * The booking's overall free-cancellation deadline, as a Date at local
@@ -145,7 +165,7 @@ const HOLD_CAPABLE_API_IDS = new Set([GRN_API_ID, IWTX_API_ID, GOGLOBAL_API_ID])
  * baked into what resolveDeadlineDate returns — do NOT subtract it again here.
  *
  * Note this also moves GRN's "Hold Room and Pay Later" gate, since
- * isHoldEligible calls this function and HOLD_CAPABLE_API_IDS is GRN-only.
+ * isHoldEligible calls this function for every supplier in HOLD_CAPABLE_API_IDS.
  * That is the intended behaviour: a hold is offered only while buffered
  * free-cancellation time remains, and the backend re-checks the same persisted
  * deadlineDate before holding.
@@ -236,15 +256,13 @@ const toDeadlinePayloadString = (d) => {
  * The backend re-checks this before sending anything to the supplier, so a
  * stale page cannot create a hold outside the window.
  */
-const isHoldEligible = (bookingData) => {
-  const apiId = bookingData?.payload?.apiId;
+export const isHoldEligible = (bookingData) => {
+  const apiId = Number(bookingData?.payload?.apiId);
   if (!HOLD_CAPABLE_API_IDS.has(apiId)) return false;
   if (hasNonRefundableRate(bookingData?.selectedRate)) return false;
   const deadline = deriveDeadlineDate(bookingData?.selectedRate || []);
   if (!deadline) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return deadline >= today;
+  return deadline >= uaeToday();
 };
 
 // Where to land after a successful booking. Last Minute supplier bookings
@@ -570,7 +588,7 @@ const ApiBookingPageForHotels = () => {
         // Finalize replays the supplier booking (RateHawk can take up to
         // ~120 s), so allow longer than the 30 s client default.
         const response = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize/${orderIdPathSegment(ccavenueOrderId)}`,
           null,
           { timeout: 120000 },
         );
@@ -585,14 +603,15 @@ const ApiBookingPageForHotels = () => {
           bookingResponse.bookingId != 0;
         if (isSuccess) {
           toast.success(
-            bookingResponse.message || "Booking created after payment.",
+            withoutSupplierName(bookingResponse.message) ||
+              "Booking created after payment.",
           );
           setShowConfirmModal(false);
           navigate(postBookingListPath(storedBookingIsLastMinute(), storedBookingIsLongStay()));
         } else {
           const beMsg = (bookingResponse && bookingResponse.message) || null;
           toast.error(
-            beMsg ||
+            withoutSupplierName(beMsg) ||
               "Payment succeeded but booking could not be created. Please contact support with your payment reference.",
           );
         }
@@ -601,7 +620,7 @@ const ApiBookingPageForHotels = () => {
           err?.response?.data?.message || err?.response?.data?.error || null;
         console.error("Post-payment finalize failed:", err);
         toast.error(
-          beMsg ||
+          withoutSupplierName(beMsg) ||
             "Payment succeeded but booking could not be created. Please contact support with your payment reference.",
         );
       } finally {
@@ -617,7 +636,7 @@ const ApiBookingPageForHotels = () => {
       }
       try {
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(
@@ -685,7 +704,7 @@ const ApiBookingPageForHotels = () => {
       case "FLEXIBLE":
         return <Badge bg="success">Flexible</Badge>;
       case "NON REFUNDABLE":
-        return <Badge bg="danger">Non-Refundable</Badge>;
+        return <Badge bg="danger">Non Refundable</Badge>;
       default:
         return <Badge bg="secondary">{refundStatus}</Badge>;
     }
@@ -777,8 +796,14 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
       const trimmed = (panCardNo || "").trim().toUpperCase();
       if (!trimmed) {
         errors.panCardNo = requiresAtharvaPan()
-          ? "PAN Card No is required (Indian primary guest booking with Atharva)."
-          : "PAN Card No is required (this GRN rate mandates PAN on the holder).";
+          ? supplierText(
+              "PAN Card No is required (Indian primary guest booking with Atharva).",
+              "PAN Card No is required (Indian primary guest).",
+            )
+          : supplierText(
+              "PAN Card No is required (this GRN rate mandates PAN on the holder).",
+              "PAN Card No is required (this rate mandates PAN on the holder).",
+            );
         hasErrors = true;
       } else if (trimmed.length !== 10) {
         errors.panCardNo = "PAN must be 10 characters.";
@@ -865,7 +890,10 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
       const uniqueHKeys = [...new Set(hKeys)];
       if (uniqueHKeys.length > 1) {
         toast.error(
-          "Atharva multi-room bookings require all rooms to be selected from the same rate group. Please go back and reselect rates that appear under the same vendor.",
+          supplierText(
+            "Atharva multi-room bookings require all rooms to be selected from the same rate group. Please go back and reselect rates that appear under the same vendor.",
+            "Multi-room bookings on this rate require all rooms to be selected from the same rate group. Please go back and reselect rates that appear under the same vendor.",
+          ),
         );
         return false;
       }
@@ -930,18 +958,31 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         ),
       };
       const resp = await axiosInstance.post(
-        "/api/hotel-booking/atharva/prebook",
+        "/api/hotel-booking/rate-check/3",
         preReq,
       );
       const data = resp?.data;
       if (!data || data.success === false) {
         toast.error(
-          data?.message ||
-            "Atharva prebook failed — rate may no longer be available. Please repeat the search.",
+          withoutSupplierName(data?.message) ||
+            supplierText(
+              "Atharva prebook failed — rate may no longer be available. Please repeat the search.",
+              "Prebook failed — rate may no longer be available. Please repeat the search.",
+            ),
         );
         return false;
       }
       const freshRooms = Array.isArray(data.rooms) ? data.rooms : [];
+      // The prebook decides. Tell the operator if it differs from what the room
+      // list showed.
+      if (
+        data.refundTerms?.label &&
+        data.refundTerms.label !== labelOfRate(bookingData.selectedRate[0])
+      ) {
+        toast(
+          `The supplier's cancellation terms were confirmed: this rate is ${refundLabelText(data.refundTerms.label)}.`,
+        );
+      }
       const patched = bookingData.selectedRate.map((r, i) => {
         const match =
           freshRooms.find((pr) => (pr.roomSrNo ?? null) === i + 1) ||
@@ -952,6 +993,8 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
           atharvaHKey: data.hKey || r.atharvaHKey,
           atharvaRateKey: match?.rateKey || r.atharvaRateKey,
           atharvaPrebooked: true,
+          nonRefundable: data.nonRefundable ?? r.nonRefundable,
+          refundTerms: data.refundTerms ?? r.refundTerms,
           cancellationPolicy:
             (data.cancellationPolicies?.length && data.cancellationPolicies) ||
             r.cancellationPolicy,
@@ -974,8 +1017,8 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         err?.response?.data?.message ||
         err?.response?.data?.error ||
         err?.message ||
-        "Atharva prebook request failed";
-      toast.error(backendMsg);
+        supplierText("Atharva prebook request failed", "Prebook request failed");
+      toast.error(withoutSupplierName(backendMsg));
       return false;
     } finally {
       // Always release the in-flight flag — whether the prebook
@@ -1190,6 +1233,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
               rate.nonRefundable === true ||
               rate.nonRefundable === "true" ||
               rate.nonRefundable === "Y",
+            refundTerms: rate.refundTerms || null,
             currency: rate.currency || "AED",
             rate: parseFloat(rate.rate || 0),
             rateWithoutMarkup: parseFloat(rate.rateWithoutMarkup || 0),
@@ -1420,7 +1464,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         bookingResponse?.bookingId != 0;
 
       if (bookingResponse && isSuccess) {
-        toast.success(bookingResponse.message);
+        toast.success(withoutSupplierName(bookingResponse.message));
         // Clear the cached booking payload so a browser-back or stale tab
         // can't resubmit the already-consumed Atharva tokenId / hKey /
         // per-room rateKey — those are single-use at the supplier and
@@ -1454,7 +1498,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         // supplier. Show a dedicated modal (not a toast) so the operator
         // has to acknowledge before continuing, and doesn't retry blindly.
         setDuplicateMessage(
-          bookingResponse?.message ||
+          withoutSupplierName(bookingResponse?.message) ||
             "Duplicate booking detected. This exact booking was already made. Please check your recent bookings before retrying.",
         );
         setShowDuplicateModal(true);
@@ -1466,7 +1510,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
           bookingResponse?.message ||
           bookingResponse?.error ||
           "Booking submission failed. Please try again.";
-        toast.error(detail);
+        toast.error(withoutSupplierName(detail));
       }
     } catch (err) {
       console.error("Error in booking confirmation:", err);
@@ -1475,7 +1519,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         err?.response?.data?.error ||
         err?.message ||
         "Booking submission failed. Please try again.";
-      toast.error(detail);
+      toast.error(withoutSupplierName(detail));
     } finally {
       setIsSubmitting(false);
       setShowConfirmModal(false);
@@ -1649,9 +1693,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
   const cancellationDeadline = deriveDeadlineDate(selectedRate);
   const isOutsideDeadline = (() => {
     if (!cancellationDeadline) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return today > cancellationDeadline;
+    return uaeToday() > cancellationDeadline;
   })();
 
   return (
@@ -1690,9 +1732,9 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                       year: "numeric",
                     })})`
                   : ""}
-                {" "}— this rate was flagged as refundable at search time, but the
-                free-cancellation cut-off is now in the past. Cancellation charges
-                will apply if the booking is cancelled after confirmation.
+                {" "}— the free-cancellation cut-off is now in the past.
+                Cancellation charges will apply if the booking is cancelled after
+                confirmation.
               </Alert>
             )}
             <Form onSubmit={openPolicyConsent}>
@@ -2023,8 +2065,14 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                       </h5>
                       <div className="text-muted small mb-3">
                         {requiresAtharvaPan()
-                          ? "PAN is required for Indian nationals booking with Atharva. Enter the primary guest's PAN card details."
-                          : "This GRN rate mandates PAN on the holder. Enter the primary guest's PAN details."}
+                          ? supplierText(
+                              "PAN is required for Indian nationals booking with Atharva. Enter the primary guest's PAN card details.",
+                              "PAN is required for Indian nationals on this booking. Enter the primary guest's PAN card details.",
+                            )
+                          : supplierText(
+                              "This GRN rate mandates PAN on the holder. Enter the primary guest's PAN details.",
+                              "This rate mandates PAN on the holder. Enter the primary guest's PAN details.",
+                            )}
                       </div>
                       <Row className="g-3">
                         <Col md={6}>
@@ -2243,7 +2291,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                       <Card.Body className="p-3">
                         <div className="mb-3">
                           <div className="fw-bold text-primary mb-1">
-                            {hotelStaticData.hotelName}
+                            {displayHotelName(hotelStaticData.hotelName)}
                           </div>
                           <div className="text-muted small mb-2">
                             {hotelStaticData.address}
@@ -2272,13 +2320,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                                     // per room (non-bundled rooms differ).
                                     <GrnRefundBadge rate={room} />
                                   ) : (
-                                    getRefundStatusBadge(
-                                      room.nonRefundable === true ||
-                                        room.nonRefundable === "true" ||
-                                        room.nonRefundable === "Y"
-                                        ? "NON REFUNDABLE"
-                                        : "FLEXIBLE",
-                                    )
+                                    <RefundBadge rate={room} />
                                   )}
                                 </div>
                               ))}
@@ -2469,8 +2511,8 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                           </Form.Label>
                           <Form.Check
                             type="radio"
-                            name="atharvaBookingMode"
-                            id="atharva-mode-voucher"
+                            name="bookingMode"
+                            id="booking-mode-voucher"
                             label="Book and Pay Now"
                             checked={bookingConfirmation === "Book & Voucher"}
                             onChange={() => {
@@ -2490,8 +2532,8 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                           {!hasNonRefundableRate(bookingData?.selectedRate) && (
                             <Form.Check
                               type="radio"
-                              name="atharvaBookingMode"
-                              id="atharva-mode-hold"
+                              name="bookingMode"
+                              id="booking-mode-hold"
                               label="Hold Room and Pay Later"
                               checked={
                                 bookingConfirmation === "Hold & Book Later"
@@ -2612,7 +2654,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                               className="policy-text fw-bold"
                               style={{ color: "#dc2626" }}
                             >
-                              Non-refundable
+                              Non Refundable
                             </div>
                             <div className="policy-text">
                               No refund will be provided if this booking is
@@ -2861,7 +2903,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                       <div className="mb-2">
                         <p className="mb-0 d-flex align-items-center flex-wrap">
                           <span className="fw-bold text-primary fs-5">
-                            {pendingPayload.hotelName}
+                            {displayHotelName(pendingPayload.hotelName)}
                           </span>
                           {pendingPayload.address && (
                             <span className="text-muted small ms-1">
@@ -3037,7 +3079,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                                       year: "numeric",
                                     },
                                   )}
-                                  , 02:00 PM (UAE)
+                                  , 11:59 PM (UAE)
                                 </span>
                                 {isOutsideDeadline ? (
                                   <span

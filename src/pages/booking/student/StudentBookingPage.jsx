@@ -36,8 +36,20 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import axiosInstance from "../../../components/AxiosInstance";
 import { createAmendmentLink } from "../../../utils/amendmentLink";
+import RefundBadge from "../../../components/RefundBadge";
+import {
+  REFUND_FLEXIBLE,
+  REFUND_NON_REFUNDABLE,
+  REFUND_PARTIAL,
+  labelOfRate,
+  refundLabelText,
+  worstLabel,
+  uaeToday,
+} from "../../../utils/refundLabel";
+import { parseSupplierDate } from "../../../utils/rateDeadline";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
+import { orderIdPathSegment } from "../../../utils/urlSafety";
 
 const SPECIAL_REQUEST_OPTIONS = [
   "Early Check-In", "Non-Smoking Rooms", "High Floor", "VIP Client",
@@ -432,7 +444,7 @@ export default function StudentBookingPage() {
         setIsFinalizingPayment(true);
         setIsSubmitting(true);
         const { data } = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize-student/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize-student/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (data?.success) {
           toast.success(
@@ -475,7 +487,7 @@ export default function StudentBookingPage() {
       }
       try {
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(
@@ -544,6 +556,9 @@ export default function StudentBookingPage() {
   //  straight away, exactly like the hotel flow.)
   // ────────────────────────────────────────────────────────────────
   const cancellationDeadline = (() => {
+    // The date the room list showed, when the rate carries it.
+    const cutoff = parseSupplierDate(bookingData?.selectedRate?.refundTerms?.cutoff);
+    if (cutoff) return cutoff;
     if (maxCancellationNights == null) return null;
     const cinRaw = bookingData?.payload?.checkInDate;
     if (!cinRaw) return null;
@@ -557,9 +572,7 @@ export default function StudentBookingPage() {
 
   const isOutsideDeadline = (() => {
     if (!cancellationDeadline) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return today > cancellationDeadline;
+    return uaeToday() > cancellationDeadline;
   })();
 
   const isOnRequestRate =
@@ -568,19 +581,26 @@ export default function StudentBookingPage() {
     bookingData?.selectedRate?.nonRefundable === true ||
     bookingData?.selectedRate?.nonRefundable === "true";
 
+  // The refund words shown on this page. A multi-room booking is as refundable
+  // as its worst room. The booking flow still follows isNonRefundableRate.
+  const bookingRefundLabel = bookingData?.roomBreakdown?.length
+    ? worstLabel(bookingData.roomBreakdown.map((slot) => labelOfRate(slot)))
+    : labelOfRate(bookingData?.selectedRate);
+
   // Show the Voucher Now / Voucher Later choice only for refundable
-  // Available rates that still have free-cancellation time left.
+  // Available rates that still have free-cancellation time left, or that only
+  // cost part of the booking after their deadline.
   const showVoucherChoice =
     !isOnRequestRate &&
     !isNonRefundableRate &&
     !!cancellationDeadline &&
-    !isOutsideDeadline;
+    (!isOutsideDeadline || bookingRefundLabel === REFUND_PARTIAL);
 
   // Resolved status sent on payload.bookingFlowStatus.
   const resolvedBookingFlowStatus = (() => {
     if (isOnRequestRate) return "REQUESTED";
     if (isNonRefundableRate) return "RECONFIRMED";
-    if (isOutsideDeadline) return "RECONFIRMED";
+    if (isOutsideDeadline && bookingRefundLabel !== REFUND_PARTIAL) return "RECONFIRMED";
     return bookingConfirmation === "Book Now & Voucher later"
       ? "CONFIRMED"
       : "RECONFIRMED";
@@ -1439,19 +1459,7 @@ export default function StudentBookingPage() {
                             ⭐ {hotelStaticData.starRating} Star
                           </span>
                           {selectedRate?.nonRefundable !== undefined && (
-                            <Badge
-                              bg={
-                                selectedRate.nonRefundable === true ||
-                                selectedRate.nonRefundable === "true"
-                                  ? "danger"
-                                  : "success"
-                              }
-                            >
-                              {selectedRate.nonRefundable === true ||
-                              selectedRate.nonRefundable === "true"
-                                ? "Non-Refundable"
-                                : "Flexible"}
-                            </Badge>
+                            <RefundBadge label={bookingRefundLabel} />
                           )}
                           {activePromotion && (
                             <Badge
@@ -1659,10 +1667,12 @@ export default function StudentBookingPage() {
                     <h6 className="policy-section-title">Cancellation Policy</h6>
                     <div className="policy-item">
                       <div className="policy-text">
-                        {selectedRate?.nonRefundable === true ||
-                        selectedRate?.nonRefundable === "true"
-                          ? "Non-Refundable — once confirmed this booking cannot be cancelled for a refund."
-                          : "Flexible — cancellation is allowed per the hotel's refund terms."}
+                        {refundLabelText(bookingRefundLabel)}
+                        {bookingRefundLabel === REFUND_NON_REFUNDABLE
+                          ? " — once confirmed this booking cannot be cancelled for a refund."
+                          : bookingRefundLabel === REFUND_PARTIAL
+                            ? " — cancelling now costs part of the booking, per the hotel's refund terms."
+                            : " — cancellation is allowed per the hotel's refund terms."}
                       </div>
                     </div>
                   </section>
@@ -1852,7 +1862,7 @@ export default function StudentBookingPage() {
                                 className="badge bg-danger"
                                 style={{ fontSize: "0.7rem" }}
                               >
-                                Non-refundable
+                                {refundLabelText(REFUND_NON_REFUNDABLE)}
                               </span>
                             </p>
                             <p
@@ -1887,6 +1897,8 @@ export default function StudentBookingPage() {
                                   >
                                     Passed
                                   </span>
+                                ) : bookingRefundLabel !== REFUND_FLEXIBLE ? (
+                                  <RefundBadge label={bookingRefundLabel} className="ms-2" />
                                 ) : (
                                   <span
                                     className="badge bg-success ms-2"

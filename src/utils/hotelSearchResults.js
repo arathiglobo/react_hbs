@@ -58,6 +58,7 @@ export function mapHotelRow(hotel, searchId, index, reply) {
     // Refund Policy filter flags: true / false / null (unknown).
     hasRefundable: hotel.hasRefundable ?? null,
     hasNonRefundable: hotel.hasNonRefundable ?? null,
+    hasPartial: hotel.hasPartial ?? null,
     // How many suppliers sell this hotel (mapped hotels: best price of all).
     supplierCount: hotel.supplierCount || 1,
     // Surface the backend-computed promotion flag so the "Destination Sales"
@@ -92,6 +93,31 @@ export function roomListApiId(card) {
     card?.apiId ||
     ROOM_LIST_API_IDS[String(card?.channelType || "").toLowerCase()] ||
     0
+  );
+}
+
+/**
+ * What View Rooms stores as "roomListPayload" for the room list it opens.
+ * refundPolicy is the search's Refund Policy value (see refundPolicyOfFilter),
+ * so the room list opens with the same box ticked. With no box ticked the key
+ * is left out and the room list opens as it always has.
+ */
+export function roomListHandoff({ payload, meta, currency, refundPolicy }) {
+  return refundPolicy
+    ? { payload, meta, currency, refundPolicy }
+    : { payload, meta, currency };
+}
+
+/**
+ * The number that opens a student, senior citizen or gov employee result's room
+ * list. Agents' replies carry apiId and no apiType. In-house when a reply has
+ * neither, as these pages have always done.
+ */
+export function apiIdOfResult(hotel) {
+  return (
+    Number(hotel?.apiId) ||
+    ROOM_LIST_API_IDS[String(hotel?.apiType || "").toLowerCase()] ||
+    1
   );
 }
 

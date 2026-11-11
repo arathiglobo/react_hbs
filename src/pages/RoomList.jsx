@@ -36,14 +36,20 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 import "../styles/RoomList.css";
 import axiosInstance from "../components/AxiosInstance";
+import { SUPPLIER_SEARCH_TIMEOUT_MS } from "../config/apiTimeouts";
 import AdminSupplierStrip from "../components/AdminSupplierStrip";
 import { formatFlexibleDate } from "../utils/dateUtils";
 import {
   RateDeadlinePill,
   resolveInhouseDeadline,
-  isDeadlinePassed,
   DEADLINE_TIME_EOD,
 } from "../utils/rateDeadline";
+import RefundBadge from "../components/RefundBadge";
+import {
+  labelOfRate,
+  refundFilterMatches,
+  refundFilterOfPolicy,
+} from "../utils/refundLabel";
 import {
   isNonRefundableRate,
   sumSelectedRooms,
@@ -161,6 +167,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
   // Filter state
   const [refundFilter, setRefundFilter] = useState({
     refundable: false,
+    partial: false,
     nonRefundable: false,
   });
   const [roomTypeOptions, setRoomTypeOptions] = useState([]);
@@ -294,6 +301,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
         let payload = location.state?.payload;
         let meta = location.state?.meta;
         let currencyInfo = location.state?.currency;
+        let refundPolicy = location.state?.refundPolicy;
 
         // Fallback to sessionStorage if location.state is null (e.g., via window.open)
         if (!payload) {
@@ -304,6 +312,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
               payload = parsed.payload;
               meta = parsed.meta;
               currencyInfo = parsed.currency || currencyInfo;
+              refundPolicy = parsed.refundPolicy;
               setHotelStaticData(meta);
               setSearchPayload(payload);
               // console.log("Retrieved payload from sessionStorage:", payload);
@@ -313,6 +322,11 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
             console.error("Error parsing sessionStorage:", e);
           }
         }
+
+        // Open with the Refund Policy box ticked on the search page, before
+        // the rates arrive. Nothing ticked there leaves the filter as it is.
+        const passedRefundFilter = refundFilterOfPolicy(refundPolicy);
+        if (passedRefundFilter) setRefundFilter(passedRefundFilter);
 
         // Apply the display currency chosen on the search page (defaults to
         // AED ×1 when absent). Rates themselves stay AED — see formatPrice.
@@ -338,6 +352,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
           (payload.rooms || []).length > 1
             ? { ...payload, includeNonBundled: true, goglobalPerRoomMode: true }
             : payload,
+          { timeout: SUPPLIER_SEARCH_TIMEOUT_MS },
         );
 
         // console.log("room search res::", res);
@@ -396,7 +411,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
             handedOff = true;
             navigate("/api-room-list", {
               replace: true,
-              state: { payload, meta, currency: currencyInfo },
+              state: { payload, meta, currency: currencyInfo, refundPolicy },
             });
             return;
           }
@@ -548,10 +563,10 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
           let endpoint = "";
           switch (payload.apiId) {
             case 12:
-              endpoint = "/api/iwtx/hotel/availability";
+              endpoint = "/api/hotel-rates/12/availability";
               break;
             case 15:
-              endpoint = "/api/x3/hotel/availability";
+              endpoint = "/api/hotel-rates/15/availability";
               break;
           }
 
@@ -726,32 +741,6 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
     }
   };
 
-  // `deadlinePassed` (derived from isDeadlinePassed(inhouseDeadline) at the
-  // call site) downgrades a supplier-flagged Flexible rate whose free-
-  // cancellation window has already closed — otherwise the room list keeps
-  // promising green while the cancel gate on the saved booking already
-  // refuses.
-  const getRefundStatusBadgeInRoomList = (nonRefundable, deadlinePassed = false) => {
-    const value = String(nonRefundable).toLowerCase();
-    switch (value) {
-      case "false":
-        return deadlinePassed ? (
-          <Badge
-            bg="danger"
-            title="The free-cancellation window has already closed for this stay."
-          >
-            Deadline passed
-          </Badge>
-        ) : (
-          <Badge bg="success">Flexible</Badge>
-        );
-      case "true":
-        return <Badge bg="danger">Non-Refundable</Badge>;
-      default:
-        return <Badge bg="secondary">{String(nonRefundable)}</Badge>;
-    }
-  };
-
   const getRoomStatusBadge = (roomStatus) => {
     switch (roomStatus) {
       case "On Request":
@@ -795,7 +784,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
       case "FLEXIBLE":
         return <Badge bg="success">Flexible</Badge>;
       case "NON REFUNDABLE":
-        return <Badge bg="danger">Non-Refundable</Badge>;
+        return <Badge bg="danger">Non Refundable</Badge>;
       default:
         return <Badge bg="secondary">{refundStatus}</Badge>;
     }
@@ -884,7 +873,9 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
     }
     let cancelled = false;
     axiosInstance
-      .get(`/api/hotels/${hotelId}/max-cancellation-nights`)
+      .get(`/api/hotels/${hotelId}/max-cancellation-nights`, {
+        params: { checkIn: roomData?.payload?.checkInDate },
+      })
       .then((res) => {
         if (cancelled) return;
         const n = Number(res?.data);
@@ -963,13 +954,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
   };
 
   const matchesFilters = (rate) => {
-    const isNonRefundable =
-      String(rate.nonRefundable).toLowerCase() === "true";
-    if (refundFilter.refundable && refundFilter.nonRefundable) {
-      // both checked → no narrowing on refundability
-    } else if (refundFilter.refundable && isNonRefundable) {
-      return false;
-    } else if (refundFilter.nonRefundable && !isNonRefundable) {
+    if (!refundFilterMatches(refundFilter, labelOfRate(rate))) {
       return false;
     }
     if (selectedRoomTypes.length > 0) {
@@ -1516,11 +1501,25 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                         <Form.Check
                           type="checkbox"
                           id="filter-refundable"
-                          label="Refundable"
+                          label="Flexible"
                           checked={refundFilter.refundable}
                           onChange={(e) =>
                             setRefundFilter({
                               refundable: e.target.checked,
+                              partial: false,
+                              nonRefundable: false,
+                            })
+                          }
+                        />
+                        <Form.Check
+                          type="checkbox"
+                          id="filter-partial"
+                          label="Flexible - Partial"
+                          checked={refundFilter.partial}
+                          onChange={(e) =>
+                            setRefundFilter({
+                              refundable: false,
+                              partial: e.target.checked,
                               nonRefundable: false,
                             })
                           }
@@ -1533,6 +1532,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                           onChange={(e) =>
                             setRefundFilter({
                               refundable: false,
+                              partial: false,
                               nonRefundable: e.target.checked,
                             })
                           }
@@ -1558,6 +1558,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                       </div>
 
                       {(refundFilter.refundable ||
+                        refundFilter.partial ||
                         refundFilter.nonRefundable ||
                         selectedRoomTypes.length > 0) && (
                         <Button
@@ -1567,6 +1568,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                           onClick={() => {
                             setRefundFilter({
                               refundable: false,
+                              partial: false,
                               nonRefundable: false,
                             });
                             setSelectedRoomTypes([]);
@@ -1775,10 +1777,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                         </div>
                                       </div>
 
-                                      {getRefundStatusBadgeInRoomList(
-                                        rate.nonRefundable,
-                                        isDeadlinePassed(inhouseDeadline),
-                                      )}
+                                      <RefundBadge rate={rate} />
                                     </div>
 
                                     {/* Pricing
@@ -1971,10 +1970,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
                                           </span>
                                         </div>
                                         <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                                          {getRefundStatusBadgeInRoomList(
-                                            rate.nonRefundable,
-                                            isDeadlinePassed(inhouseDeadline),
-                                          )}
+                                          <RefundBadge rate={rate} />
                                           {rate.roomStatus === "On Request" ? (
                                             <Badge
                                               bg="warning"
