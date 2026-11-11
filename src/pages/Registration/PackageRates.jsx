@@ -471,6 +471,44 @@ const PackageRates = () => {
     }
   };
 
+  // Edit / Copy: shows the rate's saved country in the Country box.
+  // fetchCountries("") loads only the first 20 countries (in id order), so a
+  // saved country further down was never found and the box stayed empty. When
+  // it isn't among them, the full list is fetched once to find it; it is then
+  // selected and kept among the options. Saving is unaffected:
+  // formData.countryId already holds the saved id.
+  const selectSavedCountry = async (countryId) => {
+    if (!countryId) {
+      setSelectedCountryOption(null);
+      fetchCountries("");
+      return;
+    }
+    const wanted = String(countryId);
+    const firstPage = await fetchCountries("");
+    let match = (firstPage || []).find((c) => String(c.value) === wanted);
+    if (!match) {
+      try {
+        const res = await axiosInstance.get(`/api/country?page=0&limit=1000`);
+        if (Array.isArray(res.data)) {
+          const found = res.data.find((country) => String(country.id) === wanted);
+          if (found) {
+            match = { value: found.id, label: found.name };
+          }
+        }
+      } catch (error) {
+        console.error("Error looking up the saved country:", error);
+      }
+    }
+    if (!match) return;
+    // Don't override a country the user picked while this was loading.
+    setSelectedCountryOption((prev) =>
+      prev && String(prev.value) !== wanted ? prev : match
+    );
+    setCountries((prev) =>
+      prev.some((c) => String(c.value) === wanted) ? prev : [match, ...prev]
+    );
+  };
+
   // The chosen country's places. /api/province ignores countryId, so this uses the
   // endpoint that filters by it. The whole list comes back, which keeps the
   // selected place among the options; the Place box searches it in the browser.
@@ -941,18 +979,9 @@ const PackageRates = () => {
     // Fetch places for the countryId
     if (countryId) {
       cityList(countryId);
-      fetchCountries("").then((options) => {
-        const matched = (options || []).find(
-          (c) => String(c.value) === String(countryId)
-        );
-        if (matched) {
-          setSelectedCountryOption(matched);
-        }
-      });
-    } else {
-      setSelectedCountryOption(null);
-      fetchCountries("");
     }
+    // Show the saved country, even when it isn't among the first 20 countries.
+    selectSavedCountry(countryId);
 
     setShowModal(true);
     setShowRateDetails(true);
@@ -1124,8 +1153,9 @@ const PackageRates = () => {
     setShowRateDetails(false);
     setShowModal(true);
 
-    // Fetch data on modal open
-    fetchCountries("");
+    // Fetch data on modal open. The copied rate's country is shown in the
+    // Country box (it used to stay empty though the copy kept its id).
+    selectSavedCountry(item.packageAccommodationrateDTO?.[0]?.countryId || "");
     marketTypeList();
     fetchPackageDetails();
     fetchHotels("");
