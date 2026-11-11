@@ -461,14 +461,13 @@ const AgentReg = ({ embedded = false, initialEditId = null, onClose = null } = {
   const [search, setSearch] = useState("");
   const [searchTimeout, setSearchTimeout] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-  // Column sort for the agent list. null = no explicit sort (backend keeps
-  // its historical order). First click on a sortable header sets desc
-  // (newest first for Registered Date), second click toggles to asc,
-  // subsequent clicks keep toggling. Only Registered Date is sortable
-  // today — extend `sortField` acceptance in the backend controller +
-  // wire another clickable header here to add more columns.
-  const [sortField, setSortField] = useState(null);
-  const [sortDir, setSortDir] = useState("desc");
+  // Column sort for the agent list. Defaults to Agent Name A→Z. Clicking
+  // Agent Name toggles A→Z / Z→A; clicking Registered Date starts at
+  // newest first, then toggles. To add more sortable columns, extend
+  // `sortField` acceptance in the backend controller + wire another
+  // clickable header here.
+  const [sortField, setSortField] = useState("agentName");
+  const [sortDir, setSortDir] = useState("asc");
   const [showLoginModal, setShowLoginModal] = useState(false);
   // True when /auth/checkRegisteredUserExist already returns a user for the
   // agent. In that case the modal switches to a read-only "Registered
@@ -1041,9 +1040,9 @@ const AgentReg = ({ embedded = false, initialEditId = null, onClose = null } = {
         params.append("search", searchTerm.trim());
       }
 
-      // Only forward sort params when the operator has explicitly picked
-      // a sortable column, so unrelated callers of /api/agent aren't
-      // affected. Backend maps "registeredDate" → entity `createdDate`.
+      // Sort params are opt-in on /api/agent, so other callers keep their
+      // order. Backend maps "agentName" → `companyName` (case-insensitive)
+      // and "registeredDate" → `createdDate`.
       if (sortOverride) {
         params.append("sort", sortOverride);
         params.append("direction", dirOverride || "desc");
@@ -2381,7 +2380,66 @@ const AgentReg = ({ embedded = false, initialEditId = null, onClose = null } = {
                 <thead>
                   <tr>
                     <th style={{ width: 100 }}>S/N</th>
-                    <th>Agent Name</th>
+                    <th
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={
+                        sortField === "agentName"
+                          ? sortDir === "asc"
+                            ? "ascending"
+                            : "descending"
+                          : "none"
+                      }
+                      style={{
+                        cursor: "pointer",
+                        userSelect: "none",
+                        whiteSpace: "nowrap",
+                      }}
+                      onClick={() => {
+                        // First click sorts A→Z; subsequent clicks toggle.
+                        // Reset to page 0 so results align with the new order.
+                        const nextDir =
+                          sortField === "agentName" && sortDir === "asc"
+                            ? "desc"
+                            : "asc";
+                        setSortField("agentName");
+                        setSortDir(nextDir);
+                        fetchAgentList(0, search, "agentName", nextDir);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          e.currentTarget.click();
+                        }
+                      }}
+                      title={
+                        sortField === "agentName"
+                          ? sortDir === "asc"
+                            ? "Sorted A to Z — click to sort Z to A"
+                            : "Sorted Z to A — click to sort A to Z"
+                          : "Click to sort by Agent Name"
+                      }
+                    >
+                      <span className="d-inline-flex align-items-center gap-1">
+                        Agent Name
+                        {sortField === "agentName" ? (
+                          <span
+                            className="text-primary fw-bold"
+                            aria-hidden="true"
+                          >
+                            {sortDir === "asc" ? "▲" : "▼"}
+                          </span>
+                        ) : (
+                          <span
+                            className="text-muted"
+                            style={{ opacity: 0.55, fontSize: "0.85em" }}
+                            aria-hidden="true"
+                          >
+                            ⇅
+                          </span>
+                        )}
+                      </span>
+                    </th>
                     <th
                       role="button"
                       tabIndex={0}

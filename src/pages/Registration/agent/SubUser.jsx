@@ -180,6 +180,8 @@ export default function SubUser() {
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
   const [searchTerm, setSearchTerm] = useState("");
+  // Sub User Name column sort: "asc" = A→Z (default), "desc" = Z→A.
+  const [nameSortDir, setNameSortDir] = useState("asc");
   // Master lookups for the Country → City dropdowns. ("City" maps to the
   // province/state master — the place level isn't captured for sub-users.)
   const [countries, setCountries] = useState([]);
@@ -621,11 +623,23 @@ export default function SubUser() {
   // Only the SUB_USER role is offered in the Login Details modal.
   const selectableRoles = rolesList.filter(isSubUserRole);
 
-  const filteredItems = items.filter((item) =>
-    item.agentName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.mobileNumber?.includes(searchTerm)
-  );
+  // Sorted by Sub User Name (agentName), case-insensitive. `numeric` keeps
+  // "AG22" before "AG112"; id breaks ties so equal names keep a stable order.
+  const filteredItems = items
+    .filter((item) =>
+      item.agentName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.mobileNumber?.includes(searchTerm)
+    )
+    .sort((a, b) => {
+      const byName = String(a.agentName || "").localeCompare(
+        String(b.agentName || ""),
+        undefined,
+        { sensitivity: "base", numeric: true }
+      );
+      const result = byName !== 0 ? byName : (a.id ?? 0) - (b.id ?? 0);
+      return nameSortDir === "asc" ? result : -result;
+    });
 
   const subAgentCurrencyLabel = () => {
     if (!subAgentCurrency) return "Not configured";
@@ -664,7 +678,33 @@ export default function SubUser() {
                 <thead className="bg-light">
                   <tr>
                     <th className="ps-4">S/N</th>
-                    <th>Sub User Name</th>
+                    <th
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={nameSortDir === "asc" ? "ascending" : "descending"}
+                      style={{ cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}
+                      onClick={() =>
+                        setNameSortDir((dir) => (dir === "asc" ? "desc" : "asc"))
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          e.currentTarget.click();
+                        }
+                      }}
+                      title={
+                        nameSortDir === "asc"
+                          ? "Sorted A to Z — click to sort Z to A"
+                          : "Sorted Z to A — click to sort A to Z"
+                      }
+                    >
+                      <span className="d-inline-flex align-items-center gap-1">
+                        Sub User Name
+                        <span aria-hidden="true">
+                          {nameSortDir === "asc" ? "▲" : "▼"}
+                        </span>
+                      </span>
+                    </th>
                     <th>Email</th>
                     <th>Mobile</th>
                     <th>Country</th>

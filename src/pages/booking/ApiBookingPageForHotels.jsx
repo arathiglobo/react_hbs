@@ -265,6 +265,35 @@ export const isHoldEligible = (bookingData) => {
   return deadline >= uaeToday();
 };
 
+/** True when no selected room is "On Request". A rate with no status counts as available. */
+const allRoomsAvailable = (selectedRates) =>
+  Array.isArray(selectedRates) &&
+  selectedRates.length > 0 &&
+  selectedRates.every(
+    (rate) => String(rate?.roomStatus || "").trim().toLowerCase() !== "on request",
+  );
+
+/**
+ * Show the "Are you sure you want to continue with the booking?" picker?
+ *
+ * ATHARVA and hold-capable suppliers inside their free window get it as
+ * before. Every other supplier gets it when all selected rooms are Available,
+ * with "Book and Pay Now" as the only choice — that books and charges credit
+ * straight away, which is what Confirm Booking already did for them.
+ */
+export const showsBookingModePicker = (bookingData) =>
+  bookingData?.payload?.apiId === 3 ||
+  isHoldEligible(bookingData) ||
+  allRoomsAvailable(bookingData?.selectedRate);
+
+/**
+ * Offer "Hold Room and Pay Later" in the picker? Only for ATHARVA (its own
+ * supplier hold) and hold-capable suppliers, never on a non-refundable rate.
+ */
+export const offersHoldOption = (bookingData) =>
+  (bookingData?.payload?.apiId === 3 || isHoldEligible(bookingData)) &&
+  !hasNonRefundableRate(bookingData?.selectedRate);
+
 // Where to land after a successful booking. Last Minute supplier bookings
 // (payload.lastMinuteBooking, set by LastMinuteBookingPage) are tagged
 // LAST_MINUTE server-side, so they belong on the Last Minute booking list. Long
@@ -1047,21 +1076,19 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
 
     const { errors, hasErrors } = validateForm();
 
-    // Whenever the booking-mode picker is on screen the operator MUST
-    // answer it before we open the policy modal — ATHARVA (apiId 3, its own
-    // supplier-side hold) and any hold-capable API whose rate is still
-    // inside its free-cancellation window. Merges into the same
-    // validationErrors bag as the guest-detail errors so a single toast
-    // covers both cases. Suppliers without a picker skip this entirely and
-    // submit exactly as they did before.
+    // Whenever the booking-mode picker is on screen (see
+    // showsBookingModePicker) the operator MUST answer it before we open the
+    // policy modal. Merges into the same validationErrors bag as the
+    // guest-detail errors so a single toast covers both cases. Suppliers
+    // without a picker (On Request rooms) submit exactly as before.
     if (
-      (bookingData?.payload?.apiId === 3 || isHoldEligible(bookingData)) &&
+      showsBookingModePicker(bookingData) &&
       bookingConfirmation !== "Book & Voucher" &&
       bookingConfirmation !== "Hold & Book Later"
     ) {
-      errors.bookingMode = hasNonRefundableRate(bookingData?.selectedRate)
-        ? "Please select Book and Pay Now to continue."
-        : "Please select a booking mode: Book and Pay Now or Hold Room and Pay Later.";
+      errors.bookingMode = offersHoldOption(bookingData)
+        ? "Please select a booking mode: Book and Pay Now or Hold Room and Pay Later."
+        : "Please select Book and Pay Now to continue.";
     }
 
     if (hasErrors || errors.bookingMode) {
@@ -2493,10 +2520,10 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                               settles on the detail page's Reconfirm click; the
                               deadline job cancels it at the supplier if nobody
                               reconfirms in time.
-                        Every other supplier renders no picker and is
-                        untouched. */}
-                    {(bookingData?.payload?.apiId === 3 ||
-                      isHoldEligible(bookingData)) && (
+                        Every other supplier gets the picker with "Book and
+                        Pay Now" only, when all selected rooms are Available
+                        (see showsBookingModePicker). */}
+                    {showsBookingModePicker(bookingData) && (
                       <Card className="shadow-sm rounded-3 border-0 mt-3">
                         {/* <Card.Header className="bg-light py-2">
                           <h6 className="mb-0 fw-bold">Booking Mode</h6>
@@ -2527,9 +2554,10 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                             }}
                             className="mb-1"
                           />
-                          {/* Never offered on a non-refundable booking —
-                              see hasNonRefundableRate. */}
-                          {!hasNonRefundableRate(bookingData?.selectedRate) && (
+                          {/* Only where the supplier supports a hold, never
+                              on a non-refundable booking — see
+                              offersHoldOption. */}
+                          {offersHoldOption(bookingData) && (
                             <Form.Check
                               type="radio"
                               name="bookingMode"
