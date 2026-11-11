@@ -7,6 +7,7 @@ import {
   progressPercent,
   readProgress,
   roomListApiId,
+  roomListHandoff,
 } from "./hotelSearchResults";
 
 const SUPPLIER_NAMES =
@@ -43,6 +44,28 @@ describe("apiIdOfResult (student, senior citizen and gov employee results)", () 
   it("falls back to in-house when a reply has neither", () => {
     expect(apiIdOfResult({})).toBe(1);
     expect(apiIdOfResult({ apiType: "unknown" })).toBe(1);
+  });
+});
+
+describe("roomListHandoff (what View Rooms stores for the room list)", () => {
+  const payload = { hotelCode: "IN5", apiId: 1 };
+  const meta = { hotelName: "Palm Hotel" };
+  const currency = { code: "AED", factor: 1 };
+
+  it.each(["refundable", "partial", "nonRefundable"])(
+    "carries the ticked Refund Policy box (%s)",
+    (refundPolicy) => {
+      const stored = JSON.parse(
+        JSON.stringify(roomListHandoff({ payload, meta, currency, refundPolicy })),
+      );
+      expect(stored).toEqual({ payload, meta, currency, refundPolicy });
+    },
+  );
+
+  it("stores exactly what it stored before when no box is ticked", () => {
+    expect(
+      JSON.stringify(roomListHandoff({ payload, meta, currency, refundPolicy: undefined })),
+    ).toBe(JSON.stringify({ payload, meta, currency }));
   });
 });
 

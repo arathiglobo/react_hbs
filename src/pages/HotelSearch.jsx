@@ -8,6 +8,7 @@ import {
   Pagination,
   Spinner,
   FormControl,
+  Modal,
 } from "react-bootstrap";
 import Sidebar from "../components/Sidebar";
 import TopBar from "../components/TopBar";
@@ -24,14 +25,27 @@ import {
   pollUntilFinished,
   readProgress,
   roomListApiId,
+  roomListHandoff,
 } from "../utils/hotelSearchResults";
+import { refundPolicyOfFilter } from "../utils/refundLabel";
 import AdvertisementCarousel from "../components/AdvertisementCarousel";
 import TimeApplyPicker from "../components/TimeApplyPicker";
 import PriceRangeSlider from "../components/PriceRangeSlider";
 import DateInput from "../components/DateInput";
-import MapModal from "../components/map/MapModal";
+import HotelResultsMap from "../components/map/HotelResultsMap";
+import useMapHotels, { MAP_MAX_HOTELS } from "../components/map/useMapHotels";
+import { formatHotelPrice } from "../components/map/hotelMapData";
+import {
+  filterHotelResults,
+  filtersKey,
+  idBatches,
+  needsWholeResultSet,
+  resultsQueryParams,
+} from "../utils/hotelResultFilters";
+import useTwentyFourHourEligibility from "../hooks/useTwentyFourHourEligibility";
+import { resultsCounterText } from "../utils/resultsCounter";
 import { ENABLE_MAP_PREVIEW } from "../config/featureFlags";
-import { FaSearch, FaStar, FaInfoCircle } from "react-icons/fa";
+import { FaSearch, FaStar, FaInfoCircle, FaMapMarkedAlt, FaList } from "react-icons/fa";
 import { useNavigate, useLocation } from "react-router-dom";
 import "../styles/HotelSearch.css";
 
@@ -370,6 +384,31 @@ function LazyImage({ src, alt, className }) {
 
 const fullText = "Search Hotel Name...";
 
+// Bootstrap's xl breakpoint: from here the map sits beside the list.
+const MAP_PANEL_MEDIA = "(min-width: 1200px)";
+
+/** Whether a CSS media query matches, kept up to date as the window resizes. */
+function useMediaQuery(query) {
+  const read = () =>
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia(query).matches
+      : false;
+  const [matches, setMatches] = useState(read);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return undefined;
+    const mql = window.matchMedia(query);
+    const onChange = () => setMatches(mql.matches);
+    onChange();
+    if (mql.addEventListener) mql.addEventListener("change", onChange);
+    else mql.addListener(onChange);
+    return () => {
+      if (mql.removeEventListener) mql.removeEventListener("change", onChange);
+      else mql.removeListener(onChange);
+    };
+  }, [query]);
+  return matches;
+}
+
 // ─────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────
@@ -570,13 +609,9 @@ export default function HotelSearch({
     partial: false,
     nonRefundable: false,
   });
-  const refundPolicyParam = refundPolicy.refundable
-    ? "refundable"
-    : refundPolicy.partial
-      ? "partial"
-      : refundPolicy.nonRefundable
-        ? "nonRefundable"
-        : undefined;
+  // View Rooms hands this same value to the room list (roomListHandoff), so
+  // the room list opens with the same box ticked.
+  const refundPolicyParam = refundPolicyOfFilter(refundPolicy);
   // Budget slider + price chart (sidebar, above Refund Policy). All values
   // are AED, the unit of hotel.price / baseRate; labels convert to the
   // display currency.
@@ -641,9 +676,15 @@ export default function HotelSearch({
   const [sortBy, setSortBy] = useState("priceAsc");
   const [hotelSearchTerm, setHotelSearchTerm] = useState("");
   const [errors, setErrors] = useState({});
-  // "Explore on Map" modal — shows every currently-visible hotel with
-  // usable coordinates. See components/map/MapModal.jsx.
-  const [showMapModal, setShowMapModal] = useState(false);
+  // Results map (components/map/HotelResultsMap). On wide screens it is a
+  // panel beside the list; below that it fills the screen. It shows every
+  // hotel that passes the filters, on every page.
+  const [showMap, setShowMap] = useState(false);
+  const isWideForMapPanel = useMediaQuery(MAP_PANEL_MEDIA);
+  // The hotel hovered in the list (its marker stands out) and on the map
+  // (its card in the list stands out, when it is on this page).
+  const [listHoverId, setListHoverId] = useState(null);
+  const [mapHoverId, setMapHoverId] = useState(null);
 
   // ── Currency conversion (display only) ────────────────────────────────
   // Conversion is done in the BACKEND now — HotelSearchController resolves
@@ -693,8 +734,11 @@ export default function HotelSearch({
   const [is24HourCheckin, setIs24HourCheckin] = useState(force24Hour);
   const [checkInTime24, setCheckInTime24] = useState("14:00");
   const [checkOutTime24, setCheckOutTime24] = useState("14:00"); // +24h default
-  // Map of hotelId → { eligible, percentage } returned by the probe endpoint.
-  const [twentyFourHourMap, setTwentyFourHourMap] = useState({});
+  // The check-in date and time of the last search pressed, which the 24-hour
+  // probe asks about (twentyFourHourMap, below). Editing the form without
+  // searching again leaves it alone, as the hotels on screen are still that
+  // search's.
+  const [searched24Slot, setSearched24Slot] = useState(null);
   const [clickedHotelIds, setClickedHotelIds] = useState([]);
 
   // Map of hotelId → { longStay, twentyFourHourCheckIn, lastMinute, dayStay,
@@ -1056,25 +1100,36 @@ export default function HotelSearch({
     return Array.from(ids).sort((a, b) => Number(a) - Number(b)).join(",");
   }, [allResults]);
 
+  // The id list the flags on hand belong to, and whether the hotels on hand
+  // are the whole result set. While a deal box is ticked and either is not
+  // ready yet, the list waits instead of saying "No hotels found".
+  const [featureFlagsCsv, setFeatureFlagsCsv] = useState("");
+  const [wholeSetLoaded, setWholeSetLoaded] = useState(false);
+
   useEffect(() => {
     if (!resultHotelIdsCsv) {
       setFeatureFlagsMap({});
+      setFeatureFlagsCsv("");
       return;
     }
     let cancelled = false;
-    (async () => {
-      try {
-        const res = await axiosInstance.get(
-          `/api/hotel-feature-flags?ids=${resultHotelIdsCsv}`
-        );
-        if (cancelled) return;
-        const hotels = res?.data?.hotels || {};
-        setFeatureFlagsMap(hotels);
-      } catch (err) {
-        console.warn("hotel-feature-flags fetch failed (non-fatal):", err);
-        if (!cancelled) setFeatureFlagsMap({});
-      }
-    })();
+    // A deal filter loads the whole result set (needsWholeResultSet), so the
+    // ids go in batches to keep each URL short.
+    Promise.all(
+      idBatches(resultHotelIdsCsv).map((csv) =>
+        axiosInstance
+          .get(`/api/hotel-feature-flags?ids=${csv}`)
+          .then((res) => res?.data?.hotels || {})
+          .catch((err) => {
+            console.warn("hotel-feature-flags fetch failed (non-fatal):", err);
+            return {};
+          }),
+      ),
+    ).then((parts) => {
+      if (cancelled) return;
+      setFeatureFlagsMap(Object.assign({}, ...parts));
+      setFeatureFlagsCsv(resultHotelIdsCsv);
+    });
     return () => { cancelled = true; };
   }, [resultHotelIdsCsv]);
 
@@ -1101,149 +1156,67 @@ export default function HotelSearch({
     "Honeymoon":               { cls: "deal-honeymoon",   route: "/new-booking/honeymoon"           },
   };
 
-  const filteredResults = useMemo(() => {
-    let results = allResults;
+  // Every filter on the page, in the shape utils/hotelResultFilters.js takes.
+  // The list and the map both filter with it, so they always agree.
+  const resultFilters = useMemo(
+    () => ({
+      nameQuery: hotelSearchTerm,
+      starRating: starRating ? starRating.value : null,
+      hotelTypes: hotelType.map((t) => t.value),
+      channelTypes: channelType.map((c) => c.value),
+      refundPolicy: refundPolicyParam,
+      minPrice: minPriceParam,
+      maxPrice: maxPriceParam,
+      deals: availableDeals.map((d) => d.value),
+      twentyFourHour: !!is24HourCheckin,
+      sortBy,
+    }),
+    [hotelSearchTerm, starRating, hotelType, channelType, refundPolicyParam,
+      minPriceParam, maxPriceParam, availableDeals, is24HourCheckin, sortBy],
+  );
 
-    // Hotel Name filter (client-side): case-insensitive, whitespace-
-    // tokenized substring match — ALL tokens must appear somewhere in
-    // hotel.name. Handles the "smart hyde" → "Smart Hyde Park Inn" case
-    // that the backend's whole-string /filter-by-name endpoint rejects,
-    // and normalizes redundant whitespace between tokens ("smart   hyde").
-    const rawNameQuery = String(hotelSearchTerm || "").trim();
-    if (rawNameQuery) {
-      const tokens = rawNameQuery.toLowerCase().split(/\s+/).filter(Boolean);
-      if (tokens.length > 0) {
-        results = results.filter((hotel) => {
-          const name = String(hotel?.name || "").toLowerCase();
-          return tokens.every((t) => name.includes(t));
-        });
-      }
-    }
+  // 24 Hour Check-In: hotelId → { eligible, percentage } from
+  // /api/24-hour-checkin/probe-bulk, for the hotels that pass every other
+  // filter (the ones the list would show if eligible). Probed again for the
+  // new hotels whenever those change (page, sort, filters, more hotels while
+  // suppliers answer) and merged, so pages already seen keep theirs.
+  const twentyFourHourCandidates = useMemo(
+    () =>
+      is24HourCheckin
+        ? filterHotelResults(
+            allResults,
+            { ...resultFilters, twentyFourHour: false },
+            { featureFlagsMap },
+          )
+        : [],
+    [is24HourCheckin, allResults, resultFilters, featureFlagsMap],
+  );
+  const twentyFourHourMap = useTwentyFourHourEligibility({
+    enabled: is24HourCheckin,
+    searchId,
+    date: searched24Slot?.date,
+    time: searched24Slot?.time,
+    hotels: twentyFourHourCandidates,
+  });
 
-    if (starRating) {
-      results = results.filter(
-        (hotel) => Number(hotel.rating) === Number(starRating.value),
-      );
-    }
-    if (hotelType.length > 0) {
-      const selectedTypes = hotelType.map((t) => t.value);
-      results = results.filter((hotel) =>
-        selectedTypes.includes(hotel.hotelType),
-      );
-    }
-    if (channelType.length > 0) {
-      const selectedChannels = channelType.map((c) => c.value);
-      results = results.filter((hotel) =>
-        selectedChannels.includes(hotel.channelType),
-      );
-    }
+  const filteredResults = useMemo(
+    () =>
+      filterHotelResults(allResults, resultFilters, {
+        featureFlagsMap,
+        twentyFourHourMap,
+      }),
+    [allResults, resultFilters, featureFlagsMap, twentyFourHourMap],
+  );
 
-    // Refund Policy — strict: keep a hotel only when the backend confirms it
-    // has a rate of the selected kind (flag === true). Unknown (null) is
-    // hidden too, so "Flexible" never lists a non-refundable-only hotel.
-    // Same rule as HotelSearchService.applyRefundPolicyFilter.
-    if (refundPolicyParam === "refundable") {
-      results = results.filter((hotel) => hotel.hasRefundable === true);
-    } else if (refundPolicyParam === "partial") {
-      results = results.filter((hotel) => hotel.hasPartial === true);
-    } else if (refundPolicyParam === "nonRefundable") {
-      results = results.filter((hotel) => hotel.hasNonRefundable === true);
-    }
-
-    // Budget — same inclusive AED bounds /results applies server-side (an
-    // undefined end is open).
-    if (minPriceParam !== undefined || maxPriceParam !== undefined) {
-      results = results.filter((hotel) => {
-        const p = Number(hotel.price);
-        return (
-          Number.isFinite(p) &&
-          (minPriceParam === undefined || p >= minPriceParam) &&
-          (maxPriceParam === undefined || p <= maxPriceParam)
-        );
-      });
-    }
-
-    // Available Deals — OR-match across the selected option values.
-    if (availableDeals.length > 0) {
-      const selected = new Set(availableDeals.map((d) => d.value));
-      const hasFeatureLabel = (hotel, label) =>
-        getHotelFeatureLabels(hotel).some(
-          (f) => String(f).toLowerCase() === String(label).toLowerCase()
-        );
-      results = results.filter((hotel) => {
-        if (selected.has("flashSale") && getHotelFeatureLabels(hotel).length > 0) return true;
-        if (selected.has("longStay") && hasFeatureLabel(hotel, "Long Stay")) return true;
-        if (selected.has("twentyFourHour") && hasFeatureLabel(hotel, "24 Hour Check-In")) return true;
-        if (selected.has("lastMinute") && hasFeatureLabel(hotel, "Last Minute")) return true;
-        if (selected.has("dayStay") && hasFeatureLabel(hotel, "Day Stay")) return true;
-        if (selected.has("meetingSpace") && hasFeatureLabel(hotel, "Meeting & Space")) return true;
-        if (selected.has("govEmployee") &&
-            (hasFeatureLabel(hotel, "Govt Employee Discount") || hasFeatureLabel(hotel, "Govt Employee"))) return true;
-        if (selected.has("studentDiscount") && hasFeatureLabel(hotel, "Student Discount")) return true;
-        if (selected.has("seniorCitizen") && hasFeatureLabel(hotel, "Senior Citizen")) return true;
-        if (selected.has("destinationSales") && hotel.hasDestinationSales === true) return true;
-        return false;
-      });
-    }
-
-    // ── 24 Hour Check-In transform ──────────────────────────────────
-    // When the toggle is on, keep ONLY hotels the probe marked eligible
-    // and uplift the displayed price by the configured percentage.
-    //
-    // The probe-bulk response is keyed by the numeric hotel_id ("5"), but
-    // hotel.hotelCode is the prefixed string ("IN5"). Strip the non-digit
-    // prefix the same way we did when building the probe payload, so the
-    // map lookup actually hits.
-    if (is24HourCheckin) {
-      const numericId = (code) => {
-        const m = String(code || "").match(/(\d+)$/);
-        return m ? m[1] : null;
-      };
-      results = results
-        .filter((hotel) => {
-          const meta = twentyFourHourMap[numericId(hotel.hotelCode)];
-          return meta && meta.eligible;
-        })
-        .map((hotel) => {
-          const meta = twentyFourHourMap[numericId(hotel.hotelCode)];
-          const pct = Number(meta?.percentage || 0);
-          const base = Number(hotel.price || 0);
-          const uplifted = +(base * (1 + pct / 100)).toFixed(2);
-          // The card renders displayPrice, so convert the uplifted AED price
-          // once with the backend factor (same maths as RoomList).
-          const factor = Number(hotel.displayFactor) > 0 ? Number(hotel.displayFactor) : 1;
-          const displayPrice =
-            pct > 0 ? Math.round(uplifted * factor * 100 + 1e-9) / 100 : hotel.displayPrice;
-          return { ...hotel, price: uplifted, displayPrice, _twentyFourHourPercentage: pct };
-        });
-    }
-
-    // Keep the visible list matched to the selected sort pill (Low to High is
-    // the default). The server has already sorted this page, and a stable sort
-    // keeps its order for equal prices. Only the sort keys the UI can pick are
-    // handled; anything else keeps the incoming order.
-    if (sortBy === "priceAsc" || sortBy === "priceDesc") {
-      const dir = sortBy === "priceAsc" ? 1 : -1;
-      // Copy so we don't mutate a memoized array from an earlier stage.
-      results = [...results].sort((a, b) => {
-        const pa = Number(a?.price);
-        const pb = Number(b?.price);
-        // Rows without a numeric price sink to the bottom regardless of
-        // direction, so they never distort the top of the list.
-        const aMissing = !Number.isFinite(pa);
-        const bMissing = !Number.isFinite(pb);
-        if (aMissing && bMissing) return 0;
-        if (aMissing) return 1;
-        if (bMissing) return -1;
-        return (pa - pb) * dir;
-      });
-    }
-
-    return results;
-  }, [allResults, hotelSearchTerm, starRating, hotelType, channelType,
-      availableDeals, featureFlagsMap, refundPolicyParam,
-      minPriceParam, maxPriceParam,
-      is24HourCheckin, twentyFourHourMap, sortBy]);
+  // A deal filter loads the whole result set into one page (see fetchHotels),
+  // and its matches are known only once the deal flags for those hotels are in.
+  const dealsTicked = availableDeals.length > 0;
+  // A failed fetch ends the wait, so the list never spins for good.
+  const dealFlagsPending =
+    dealsTicked &&
+    pollStatus !== "ERROR" &&
+    (!wholeSetLoaded ||
+      (!!resultHotelIdsCsv && featureFlagsCsv !== resultHotelIdsCsv));
 
   // Channels that returned at least one hotel for the CURRENT search —
   // drives the LIVE/OFF badge next to each Channel filter row.
@@ -1266,21 +1239,45 @@ export default function HotelSearch({
     return set;
   }, [channelsWithResults, allResults]);
 
-  // "Explore on Map" markers — one per currently-visible (filtered) hotel.
-  // MapModal itself drops any entry whose lat/lng isn't a finite number, so
-  // no need to pre-filter here.
-  const mapMarkers = useMemo(
+  // The map's hotels: every page of the search the server's filters let
+  // through (useMapHotels), then the same page filters as the list, with
+  // deal flags and 24-hour eligibility looked up for those hotels too.
+  const mapOpen = ENABLE_MAP_PREVIEW && showMap && hasSearchResult;
+  const mapPanelOpen = mapOpen && isWideForMapPanel;
+  const mapQuery = useMemo(
     () =>
-      filteredResults.map((hotel) => ({
-        id: hotel.id,
-        name: hotel.name,
-        lat: hotel.latitude,
-        lng: hotel.longitude,
-        address: hotel.address,
-        contactNumber: hotel.contactNumber,
-      })),
-    [filteredResults],
+      resultsQueryParams(resultFilters, {
+        agentId: (isAgentRole ? selfAgentId : agent) || 1,
+        displayCurrencyCode: selectedCurrency?.code,
+      }),
+    [resultFilters, isAgentRole, selfAgentId, agent, selectedCurrency],
   );
+  const mapData = useMapHotels({
+    enabled: mapOpen,
+    searchId,
+    query: mapQuery,
+    searching: pollStatus === "IN_PROGRESS",
+    needDealFlags: availableDeals.length > 0,
+    twentyFourHour:
+      is24HourCheckin && pollStatus !== "IN_PROGRESS" && checkIn && checkInTime24
+        ? { date: checkIn, time: checkInTime24 }
+        : null,
+  });
+  const mapHotels = useMemo(
+    () =>
+      filterHotelResults(mapData.hotels, resultFilters, {
+        featureFlagsMap: { ...featureFlagsMap, ...mapData.featureFlagsMap },
+        twentyFourHourMap: { ...twentyFourHourMap, ...mapData.twentyFourHourMap },
+      }),
+    [mapData.hotels, mapData.featureFlagsMap, mapData.twentyFourHourMap,
+      resultFilters, featureFlagsMap, twentyFourHourMap],
+  );
+  const mapNote =
+    mapData.totalResults > MAP_MAX_HOTELS
+      ? `Showing the first ${MAP_MAX_HOTELS} of ${mapData.totalResults} hotels, in the list's order. Narrow the filters to see the rest.`
+      : mapData.failed
+        ? "Couldn't refresh the map. Showing the last hotels loaded."
+        : null;
 
   // Union of active feature labels across hotels currently in view. Order
   // mirrors the backend's canonical ordering (Long Stay → 24 Hour Check-In
@@ -1309,19 +1306,17 @@ export default function HotelSearch({
     [totalPages],
   );
 
-  // Counter reflects rows that are actually rendered on screen, not the
-  // raw server count. On the 24-hour route (and any flow where a
-  // client-side filter — 24hr eligibility, star rating, deals, etc. —
-  // trims the fetched page), filteredResults.length can be smaller than
-  // the backend's totalElements. Using filteredResults for the range and
-  // capping the "of X" at what's visible keeps the "Showing 1 to N of N"
-  // pill honest without touching pagination controls (which still use
-  // totalPages / totalElements from the server).
-  const shownCount = filteredResults.length;
-  const startEntry = shownCount === 0 ? 0 : pageIndex * pageSize + 1;
-  const endEntry = pageIndex * pageSize + shownCount;
-  const displayTotal =
-    shownCount < allResults.length ? endEntry : Math.max(totalElements, endEntry);
+  // The "Showing … entries" line. When the page's own filters (24-hour
+  // eligibility, name, hotel type, deals) drop hotels from a server page, it
+  // counts that page only, as other pages are not known (utils/resultsCounter).
+  const resultsCounter = resultsCounterText({
+    pageIndex,
+    pageSize,
+    shown: filteredResults.length,
+    pageRows: allResults.length,
+    totalElements,
+    totalPages: effectiveTotalPages,
+  });
 
   // Page buttons: always the first 3 and last 3 pages, plus the current
   // page and its neighbours (so the window slides as you page through the
@@ -1620,7 +1615,7 @@ export default function HotelSearch({
       resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [starRating, hotelType, channelType, sortBy, refundPolicyParam,
-      minPriceParam, maxPriceParam]);
+      minPriceParam, maxPriceParam, availableDeals]);
 
   // After a fresh search, jump the viewport to the very top of the page so
   // the operator sees the "Hotel / Accommodation" heading and summary strip
@@ -1678,41 +1673,28 @@ export default function HotelSearch({
     const mySeq = ++fetchSeqRef.current;
     try {
       const isNameSearching = !!nameSearch.trim();
-      // Client-side owns hotel-name matching (see filteredResults), so a name
-      // filter pulls the entire result set in one page. Otherwise a hotel that
-      // sorts onto page 2+ could never match a partial name typed on page 1.
+      // Client-side owns hotel-name and deal matching (see filteredResults), so
+      // either filter pulls the entire result set in one page. Otherwise a
+      // hotel that sorts onto page 2+ could never match on page 1.
+      const wholeSet = needsWholeResultSet({
+        nameQuery: nameSearch,
+        deals: resultFilters.deals,
+      });
       const NAME_SEARCH_PAGE_SIZE = 100000;
       const endpoint = `/api/hotel-search/results/${sid}`;
 
-      const params = {
-        agentId:
-          agentId || (isAgentRole ? selfAgentId : agent) || 1,
-        page: isNameSearching ? 0 : page,
-        // The backend reads `size`, and defaults to 10 like pageSize here.
-        pageSize: isNameSearching ? undefined : pageSize,
-        size: isNameSearching ? NAME_SEARCH_PAGE_SIZE : undefined,
-        sortBy:
-          sortBy === "priceAsc" || sortBy === "priceDesc" ? "baseRate" : sortBy,
-        sortOrder:
-          sortBy === "priceAsc" ||
-          sortBy === "ratingAsc" ||
-          sortBy === "nameAsc"
-            ? "asc"
-            : "desc",
-        starRating: starRating ? starRating.value : undefined,
-        apiType:
-          channelType.map((c) => c.value.toUpperCase()).join(",") || undefined,
-        refundPolicy: refundPolicyParam,
-        minPrice: minPriceParam,
-        maxPrice: maxPriceParam,
-      };
-
+      // The server-side filters, shared with the map (utils/hotelResultFilters).
       // Currency conversion is fully backend-side. The admin-only picker's
       // choice is sent as `displayCurrencyCode`; otherwise the backend defaults
       // to the agent's configured currency.
-      if (selectedCurrency?.code) {
-        params.displayCurrencyCode = selectedCurrency.code;
-      }
+      const params = resultsQueryParams(resultFilters, {
+        agentId: agentId || (isAgentRole ? selfAgentId : agent) || 1,
+        page: wholeSet ? 0 : page,
+        // The backend reads `size`, and defaults to 10 like pageSize here.
+        pageSize: wholeSet ? undefined : pageSize,
+        size: wholeSet ? NAME_SEARCH_PAGE_SIZE : undefined,
+        displayCurrencyCode: selectedCurrency?.code,
+      });
 
       const myCurrencyVersion = currencyVersionRef.current;
       const mySearchGen = searchGenRef.current;
@@ -1752,14 +1734,15 @@ export default function HotelSearch({
       }
 
       setAllResults(mappedResults);
+      setWholeSetLoaded(wholeSet);
       if (mappedResults.length > 0) setIsInitialResultsLoaded(true);
 
-      // A name filter pulled everything in one go and filters it client-side, so
-      // the paginator collapses to a single page. Everything else uses the
-      // server's totals.
+      // A name or deal filter pulled everything in one go and filters it
+      // client-side, so the paginator collapses to a single page. Everything
+      // else uses the server's totals.
       const total = Number(res.data.totalResults) || mappedResults.length;
-      setTotalElements(isNameSearching ? mappedResults.length : total);
-      setTotalPages(isNameSearching ? 1 : Math.max(1, Math.ceil(total / pageSize)));
+      setTotalElements(wholeSet ? mappedResults.length : total);
+      setTotalPages(wholeSet ? 1 : Math.max(1, Math.ceil(total / pageSize)));
 
       // Keep the LIVE/OFF badges in sync. The backend counts over the full set
       // BEFORE the apiType filter, so ticking one channel never flips the others
@@ -1843,6 +1826,7 @@ export default function HotelSearch({
     setTotalPages(1);
     setIsInitialResultsLoaded(false);
     setSearchProgress(null);
+    setSearched24Slot({ date: checkIn, time: checkInTime24 });
     // Drop the previous search's id until the new one comes back. Keeping it
     // let the results effect refetch the OLD search as soon as pollStatus
     // reset to IDLE — which is why a second Search press showed the first
@@ -1915,7 +1899,7 @@ export default function HotelSearch({
         source: "search-page",
       });
 
-      const { outcome, reply: finalPollData } = await pollUntilFinished({
+      const { outcome } = await pollUntilFinished({
         fetchPage: () => fetchCurrentPageRef.current(newSearchId),
         isCancelled: () => mySearchGen !== searchGenRef.current,
       });
@@ -1924,49 +1908,8 @@ export default function HotelSearch({
       // list is right even if the last poll's reply lost to a newer request.
       backgroundRefreshRef.current = true;
       setPollStatus(outcome === "completed" ? "COMPLETED" : "TIMEOUT");
-      // ── 24 Hour Check-In post-processing ───────────────────────────
-      // Probe each hotel's 24-hour config eligibility for the requested
-      // check-in date+time. The result map keys hotelId -> { eligible,
-      // percentage }; filteredResults uses it to filter non-eligible hotels
-      // and uplift displayed rates.
-      //
-      // We read `finalPollData.result` (the freshest payload from the last
-      // poll) rather than `allResults`, because setAllResults from the
-      // poll hasn't been flushed back into this
-      // closure — reading allResults here returns the stale value (empty
-      // list on the first search), which would cause the probe to receive
-      // no IDs and return {}, filtering every hotel out.
-      if (is24HourCheckin) {
-        try {
-          // hotelCode comes back as a string like "IN5" / "IN12" — the
-          // numeric tail is the real hotel_id. Strip the leading "IN" (or
-          // any non-digit prefix) before sending to the probe endpoint.
-          const idsAfterSearch = (finalPollData?.result || [])
-            .map((h) => {
-              const raw = String(h.hotelCode || "");
-              const m = raw.match(/(\d+)$/);
-              return m ? Number(m[1]) : NaN;
-            })
-            .filter((n) => Number.isFinite(n) && n > 0);
-
-          if (idsAfterSearch.length > 0 && checkIn && checkInTime24) {
-            const probeRes = await axiosInstance.post(
-              "/api/24-hour-checkin/probe-bulk",
-              {
-                hotelIds: idsAfterSearch,
-                date: checkIn,
-                time: checkInTime24,
-              }
-            );
-            setTwentyFourHourMap(probeRes.data || {});
-          } else {
-            setTwentyFourHourMap({});
-          }
-        } catch (probeErr) {
-          console.warn("24-hour probe failed (non-fatal):", probeErr);
-          setTwentyFourHourMap({});
-        }
-      }
+      // 24 Hour Check-In eligibility is probed by useTwentyFourHourEligibility
+      // for whatever hotels are on screen, so page 2 and later get theirs too.
     } catch (err) {
       console.error("Search failed:", err);
       // Only the request that starts the search can land here: polling handles
@@ -1997,11 +1940,256 @@ export default function HotelSearch({
     currencyVersionRef.current += 1;
   };
 
+  // View Rooms: hands the search to the hotel's room list in a new tab. The
+  // results list and the map's hotel card both open rooms through here.
+  const openRoomList = (hotel) => {
+    setClickedHotelIds((prev) => [
+      ...prev,
+      hotel.id,
+    ]);
+    const nationalityCode =
+      (selectedNationality?.code || "")
+        .length === 2
+        ? selectedNationality.code
+        : " ";
+    const roomsPayload = rooms.map(
+      (r) => ({
+        adults: r.adults || 1,
+        children: r.children || 0,
+        childAges: r.childAges || [],
+        adultAges: Array.from(
+          { length: r.adults || 1 },
+          () => 30,
+        ),
+      }),
+    );
+    const apiId = roomListApiId(hotel);
+
+    // Display labels for values the
+    // payload otherwise carries only
+    // as ids/codes. Additive — they
+    // ride through RoomList into the
+    // booking page, which posts them
+    // to /api/search-history/save so
+    // the admin "Hotel Booking
+    // History" report can show the
+    // search context even if the
+    // booking tab is closed before
+    // the booking is created.
+    const pickedAgentId = String(
+      isAgentRole ? selfAgentId : agent,
+    );
+    const pickedAgent = (
+      Array.isArray(agents) ? agents : []
+    ).find(
+      (a) => String(a?.id) === pickedAgentId,
+    );
+    const agentName = isAgentRole
+      ? sessionStorage.getItem("UserName") ||
+        ""
+      : pickedAgent
+        ? pickedAgent.companyName ||
+          pickedAgent.name ||
+          `${pickedAgent.firstName || ""} ${pickedAgent.lastName || ""}`.trim()
+        : "";
+    const payload = {
+      checkInDate: checkIn,
+      checkOutDate: checkOut,
+      hotelCode:
+        hotel.hotelCode ||
+        hotel.id
+          ?.split("-")
+          .slice(1)
+          .join("-") ||
+        "",
+      nationality: nationalityCode,
+      agentId: String(
+        isAgentRole ? selfAgentId : agent
+      ),
+      agentName,
+      destinationLabel:
+        selectedDestination?.label || "",
+      nationalityLabel:
+        selectedNationality?.label || "",
+      // Agent logins: booking is done by
+      // the logged-in agent, so carry the
+      // agent's own name (no staff
+      // employee is picked). Admin/staff:
+      // the selected employee's label.
+      employeeName: isAgentRole
+        ? agentName || null
+        : selectedEmployee?.label || null,
+      nightsCount: nights,
+      apiId,
+      rooms: roomsPayload,
+      parentBookingCode:
+        parentBookingCode || null,
+      // Optional "Booking Done By"
+      // selection — null when the
+      // user skipped the dropdown.
+      // Flows through RoomList ->
+      // HotelBookingPage unchanged
+      // (those layers spread payload
+      // through transparently). Agent
+      // logins never pick a staff
+      // employee, so this stays null.
+      employeeId: isAgentRole
+        ? null
+        : selectedEmployee?.value || null,
+      // Booking Done On Behalf Of
+      // Agent Staff — the picked
+      // sub-user of the selected
+      // agent. Both fields ride
+      // through RoomList →
+      // HotelBookingPage → POST
+      // /api/hotel-booking/create,
+      // where the backend
+      // (InhouseHotelBookingService)
+      // persists them onto
+      // hotel_booking.agent_staff_id /
+      // agent_staff_name. Null when
+      // no agent staff was picked,
+      // so bookings without the
+      // dropdown behave exactly as
+      // before this feature.
+      agentStaffId:
+        selectedAgentStaff?.value != null
+          ? String(selectedAgentStaff.value)
+          : null,
+      agentStaffName:
+        selectedAgentStaff?.label || null,
+      // 24 Hour Check-In flags — only
+      // populated when the user opted
+      // in. RoomList / HotelBookingPage
+      // forward these to the create-
+      // booking endpoint, which stamps
+      // them onto the new HotelBooking
+      // row (additive, non-breaking).
+      is24HourCheckin: !!is24HourCheckin,
+      checkInTime: is24HourCheckin
+        ? checkInTime24
+        : null,
+      checkOutTime: is24HourCheckin
+        ? checkOutTime24
+        : null,
+      twentyFourHourPercentage:
+        hotel._twentyFourHourPercentage ||
+        null,
+    };
+    const meta = {
+      hotelName: hotel.name,
+      address:
+        hotel.address || hotel.city,
+      starRating: hotel.rating || 0,
+      phone: "",
+      hotelImage: hotel.image,
+    };
+    // Carry the chosen display currency
+    // into the room list so it shows
+    // rates in the same currency. `factor`
+    // is the AED→target multiplier; rates
+    // stay AED in every payload (display
+    // only). AED → factor 1.
+    // Currency handoff comes straight
+    // from the backend response — the
+    // envelope carries the resolved
+    // {code, factor} where factor is
+    // "target-per-1-AED", so the
+    // downstream RoomList / booking
+    // pages just do
+    // `aedAmount × factor` for their
+    // display without doing any rate
+    // lookup or direction guessing.
+    // Prefer the clicked card's own
+    // code/factor so RoomList matches it
+    // even while other rows mid-refresh.
+    const backendCurrency =
+      backendDisplayCurrencyRef.current ||
+      { code: "AED", factor: 1 };
+    const currency = hotel.displayCurrencyCode
+      ? {
+          code: hotel.displayCurrencyCode,
+          factor:
+            Number(hotel.displayFactor) > 0
+              ? Number(hotel.displayFactor)
+              : 1,
+        }
+      : {
+          code: backendCurrency.code || "AED",
+          factor:
+            Number.isFinite(backendCurrency.factor) &&
+            backendCurrency.factor > 0
+              ? backendCurrency.factor
+              : 1,
+        };
+    sessionStorage.setItem(
+      "roomListPayload",
+      JSON.stringify(
+        roomListHandoff({
+          payload,
+          meta,
+          currency,
+          refundPolicy: refundPolicyParam,
+        }),
+      ),
+    );
+    setTimeout(() => {
+      // Dedicated 24-hour route in
+      // 24-hour mode so the
+      // downstream room list and
+      // booking page can render
+      // 24-hour-specific UI without
+      // touching the inhouse
+      // /room-list flow.
+      // religiousMode > force24Hour > apiId — religious
+      // is only supported for the inhouse flow (apiId 1);
+      // it never touches /api-room-list.
+      const route =
+        religiousMode && apiId === 1
+          ? "/religious-room-list"
+          : force24Hour
+            ? "/room-list-24hr"
+            : apiId === 1
+              ? "/room-list"
+              : "/api-room-list";
+      window.open(route, "_blank");
+    }, 50);
+  };
+
   const showResultsDuringPolling = hasSearchResult || allResults.length > 0;
 
   // Collapse the full search form into the sticky summary strip once results
   // are on screen, unless the user explicitly chose to modify the search.
   const collapseSearch = showResultsDuringPolling && !isEditingSearch;
+
+  // The map, shown either beside the list or full screen (see the end of the
+  // page). It zooms to fit again when a filter changes or a new search runs.
+  const resultsMap = mapOpen ? (
+    <HotelResultsMap
+      hotels={mapHotels}
+      highlightedId={listHoverId}
+      onHoverHotel={setMapHoverId}
+      onOpenHotel={openRoomList}
+      fitKey={`${searchId}|${filtersKey(resultFilters)}`}
+      loading={mapData.loading}
+      note={mapNote}
+      emptyText={
+        mapData.failed && mapData.hotels.length === 0
+          ? "Couldn't load the hotels for the map. Try again in a moment."
+          : null
+      }
+      currencyCode={displayCurrencyCode}
+    />
+  ) : null;
+  // Below the TopBar and the collapsed summary strip, both sticky.
+  const mapPanelTop = 64 + (collapseSearch ? summaryBarHeight + 6 : 0) + 10;
+
+  useEffect(() => {
+    if (!mapOpen) {
+      setListHoverId(null);
+      setMapHoverId(null);
+    }
+  }, [mapOpen]);
 
   // Track the summary bar's live height. When the summary bar shows up the
   // sticky progress bar has to sit right below it (both are sticky at the
@@ -2062,6 +2250,9 @@ export default function HotelSearch({
     hasSearched,
     pollStatus,
     finalHotelSearchTerm,
+    // Ticking the first deal box (or clearing the last) switches between one
+    // page and the whole set; changing deals in between filters what's loaded.
+    dealsTicked,
     // Conversion happens server-side, so a picker change has to fetch again.
     selectedCurrency?.code,
   ]);
@@ -2809,7 +3000,7 @@ export default function HotelSearch({
     </div>
   </div>
 )}
-                <Row className="g-4">
+                <Row className={`g-4${mapPanelOpen ? " hs-with-map" : ""}`}>
                   {/* Left Sidebar */}
                   <Col lg={3} className="leftside d-none d-lg-block">
                     <div className="left-fixed">
@@ -2825,7 +3016,7 @@ export default function HotelSearch({
                               <button
                                 type="button"
                                 className="map-overlay-btn"
-                                onClick={() => setShowMapModal(true)}
+                                onClick={() => setShowMap(true)}
                               >
                                 EXPLORE ON MAP 📍
                               </button>
@@ -3154,7 +3345,7 @@ export default function HotelSearch({
                   </Col>
 
                   {/* Right Content */}
-                  <Col lg={9}>
+                  <Col lg={9} xl={mapPanelOpen ? 5 : 9}>
                     <Card className="shadow-sm rounded-xl mb-3 filtersection">
                       <Card.Body className="p-2">
                         <div className="d-flex align-items-center gap-3 flex-wrap">
@@ -3216,6 +3407,31 @@ export default function HotelSearch({
                             Clear
                           </Button>
 
+                          {/* Map / List toggle. Beside the list from 1200px,
+                              full screen below that (the only way in on a
+                              phone, where the sidebar is hidden). */}
+                          {ENABLE_MAP_PREVIEW && (
+                            <Button
+                              size="sm"
+                              variant="outline-primary"
+                              className={`sort-pill hs-map-toggle ${showMap ? "active" : ""}`}
+                              aria-pressed={showMap}
+                              onClick={() => setShowMap((v) => !v)}
+                            >
+                              {showMap && isWideForMapPanel ? (
+                                <>
+                                  <FaList className="me-1" aria-hidden="true" />
+                                  Hide map
+                                </>
+                              ) : (
+                                <>
+                                  <FaMapMarkedAlt className="me-1" aria-hidden="true" />
+                                  Map
+                                </>
+                              )}
+                            </Button>
+                          )}
+
                           {/* Hotel-name search — moved here from the left
                               sidebar. Same state + handlers (500 ms
                               debounce, page-reset) so filtering / name
@@ -3249,8 +3465,7 @@ export default function HotelSearch({
                     {(hasSearchResult || allResults.length > 0) && (
                       <div className="d-flex justify-content-between align-items-center mb-3">
                         <small className="text-muted fw-semibold">
-                          Showing {startEntry} to {endEntry} of {displayTotal}{" "}
-                          entries
+                          {resultsCounter}
                           {pollStatus === "IN_PROGRESS" && (
                             <span className="ms-1 text-primary">
                               (updating…)
@@ -3295,13 +3510,27 @@ export default function HotelSearch({
                       {filteredResults.length > 0 ? (
                         filteredResults.map((hotel) => (
                           <Col xs={12} key={hotel.id}>
+                            {/* Hovering the card highlights its marker on the
+                                map; hovering the marker highlights the card. */}
                             <div
+                              onMouseEnter={
+                                mapOpen ? () => setListHoverId(hotel.id) : undefined
+                              }
+                              onMouseLeave={
+                                mapOpen ? () => setListHoverId(null) : undefined
+                              }
                               style={{
                                 position: "relative",
                                 backgroundColor: "white",
-                                border: "1px solid #dee2e6",
+                                border:
+                                  mapOpen && mapHoverId === hotel.id
+                                    ? "1px solid #F75E00"
+                                    : "1px solid #dee2e6",
                                 borderRadius: "12px",
-                                boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                                boxShadow:
+                                  mapOpen && mapHoverId === hotel.id
+                                    ? "0 0 0 3px rgba(247,94,0,0.25), 0 6px 16px rgba(0,0,0,0.12)"
+                                    : "0 2px 8px rgba(0,0,0,0.08)",
                                 overflow: "hidden",
                               }}
                             >
@@ -3350,10 +3579,11 @@ export default function HotelSearch({
                                           supplier a hotel came from —
                                           agents book against a single
                                           curated inventory and the label
-                                          just adds noise. Guarded on
-                                          isAgentRole so admin / super
-                                          admin / all other roles keep it. */}
-                                      {!isAgentRole && (
+                                          just adds noise. Hidden for every
+                                          agent-side login (isAgentLogin) and
+                                          when the hotel has no channelType,
+                                          so no empty grey pill is drawn. */}
+                                      {!isAgentLogin() && hotel.channelType && (
                                         <span
                                           style={{
                                             marginLeft: "5px",
@@ -3622,16 +3852,8 @@ export default function HotelSearch({
                                           color: "#333",
                                         }}
                                       >
-                                        {hotel.price
-                                          ? `${hotel.displayCurrencyCode || displayCurrencyCode} ${Number(
-                                              hotel.displayPrice != null
-                                                ? hotel.displayPrice
-                                                : hotel.price,
-                                            ).toLocaleString(undefined, {
-                                              minimumFractionDigits: 2,
-                                              maximumFractionDigits: 2,
-                                            })}`
-                                          : "Price on request"}
+                                        {/* Same text as the map's marker. */}
+                                        {formatHotelPrice(hotel, displayCurrencyCode)}
                                       </div>
 
                                       <div
@@ -3649,212 +3871,7 @@ export default function HotelSearch({
                                             ? "secondary"
                                             : "primary"
                                         }
-                                        onClick={() => {
-                                          setClickedHotelIds((prev) => [
-                                            ...prev,
-                                            hotel.id,
-                                          ]);
-                                          const nationalityCode =
-                                            (selectedNationality?.code || "")
-                                              .length === 2
-                                              ? selectedNationality.code
-                                              : " ";
-                                          const roomsPayload = rooms.map(
-                                            (r) => ({
-                                              adults: r.adults || 1,
-                                              children: r.children || 0,
-                                              childAges: r.childAges || [],
-                                              adultAges: Array.from(
-                                                { length: r.adults || 1 },
-                                                () => 30,
-                                              ),
-                                            }),
-                                          );
-                                          const apiId = roomListApiId(hotel);
-
-                                          // Display labels for values the
-                                          // payload otherwise carries only
-                                          // as ids/codes. Additive — they
-                                          // ride through RoomList into the
-                                          // booking page, which posts them
-                                          // to /api/search-history/save so
-                                          // the admin "Hotel Booking
-                                          // History" report can show the
-                                          // search context even if the
-                                          // booking tab is closed before
-                                          // the booking is created.
-                                          const pickedAgentId = String(
-                                            isAgentRole ? selfAgentId : agent,
-                                          );
-                                          const pickedAgent = (
-                                            Array.isArray(agents) ? agents : []
-                                          ).find(
-                                            (a) => String(a?.id) === pickedAgentId,
-                                          );
-                                          const agentName = isAgentRole
-                                            ? sessionStorage.getItem("UserName") ||
-                                              ""
-                                            : pickedAgent
-                                              ? pickedAgent.companyName ||
-                                                pickedAgent.name ||
-                                                `${pickedAgent.firstName || ""} ${pickedAgent.lastName || ""}`.trim()
-                                              : "";
-                                          const payload = {
-                                            checkInDate: checkIn,
-                                            checkOutDate: checkOut,
-                                            hotelCode:
-                                              hotel.hotelCode ||
-                                              hotel.id
-                                                ?.split("-")
-                                                .slice(1)
-                                                .join("-") ||
-                                              "",
-                                            nationality: nationalityCode,
-                                            agentId: String(
-                                              isAgentRole ? selfAgentId : agent
-                                            ),
-                                            agentName,
-                                            destinationLabel:
-                                              selectedDestination?.label || "",
-                                            nationalityLabel:
-                                              selectedNationality?.label || "",
-                                            // Agent logins: booking is done by
-                                            // the logged-in agent, so carry the
-                                            // agent's own name (no staff
-                                            // employee is picked). Admin/staff:
-                                            // the selected employee's label.
-                                            employeeName: isAgentRole
-                                              ? agentName || null
-                                              : selectedEmployee?.label || null,
-                                            nightsCount: nights,
-                                            apiId,
-                                            rooms: roomsPayload,
-                                            parentBookingCode:
-                                              parentBookingCode || null,
-                                            // Optional "Booking Done By"
-                                            // selection — null when the
-                                            // user skipped the dropdown.
-                                            // Flows through RoomList ->
-                                            // HotelBookingPage unchanged
-                                            // (those layers spread payload
-                                            // through transparently). Agent
-                                            // logins never pick a staff
-                                            // employee, so this stays null.
-                                            employeeId: isAgentRole
-                                              ? null
-                                              : selectedEmployee?.value || null,
-                                            // Booking Done On Behalf Of
-                                            // Agent Staff — the picked
-                                            // sub-user of the selected
-                                            // agent. Both fields ride
-                                            // through RoomList →
-                                            // HotelBookingPage → POST
-                                            // /api/hotel-booking/create,
-                                            // where the backend
-                                            // (InhouseHotelBookingService)
-                                            // persists them onto
-                                            // hotel_booking.agent_staff_id /
-                                            // agent_staff_name. Null when
-                                            // no agent staff was picked,
-                                            // so bookings without the
-                                            // dropdown behave exactly as
-                                            // before this feature.
-                                            agentStaffId:
-                                              selectedAgentStaff?.value != null
-                                                ? String(selectedAgentStaff.value)
-                                                : null,
-                                            agentStaffName:
-                                              selectedAgentStaff?.label || null,
-                                            // 24 Hour Check-In flags — only
-                                            // populated when the user opted
-                                            // in. RoomList / HotelBookingPage
-                                            // forward these to the create-
-                                            // booking endpoint, which stamps
-                                            // them onto the new HotelBooking
-                                            // row (additive, non-breaking).
-                                            is24HourCheckin: !!is24HourCheckin,
-                                            checkInTime: is24HourCheckin
-                                              ? checkInTime24
-                                              : null,
-                                            checkOutTime: is24HourCheckin
-                                              ? checkOutTime24
-                                              : null,
-                                            twentyFourHourPercentage:
-                                              hotel._twentyFourHourPercentage ||
-                                              null,
-                                          };
-                                          const meta = {
-                                            hotelName: hotel.name,
-                                            address:
-                                              hotel.address || hotel.city,
-                                            starRating: hotel.rating || 0,
-                                            phone: "",
-                                            hotelImage: hotel.image,
-                                          };
-                                          // Carry the chosen display currency
-                                          // into the room list so it shows
-                                          // rates in the same currency. `factor`
-                                          // is the AED→target multiplier; rates
-                                          // stay AED in every payload (display
-                                          // only). AED → factor 1.
-                                          // Currency handoff comes straight
-                                          // from the backend response — the
-                                          // envelope carries the resolved
-                                          // {code, factor} where factor is
-                                          // "target-per-1-AED", so the
-                                          // downstream RoomList / booking
-                                          // pages just do
-                                          // `aedAmount × factor` for their
-                                          // display without doing any rate
-                                          // lookup or direction guessing.
-                                          // Prefer the clicked card's own
-                                          // code/factor so RoomList matches it
-                                          // even while other rows mid-refresh.
-                                          const backendCurrency =
-                                            backendDisplayCurrencyRef.current ||
-                                            { code: "AED", factor: 1 };
-                                          const currency = hotel.displayCurrencyCode
-                                            ? {
-                                                code: hotel.displayCurrencyCode,
-                                                factor:
-                                                  Number(hotel.displayFactor) > 0
-                                                    ? Number(hotel.displayFactor)
-                                                    : 1,
-                                              }
-                                            : {
-                                                code: backendCurrency.code || "AED",
-                                                factor:
-                                                  Number.isFinite(backendCurrency.factor) &&
-                                                  backendCurrency.factor > 0
-                                                    ? backendCurrency.factor
-                                                    : 1,
-                                              };
-                                          sessionStorage.setItem(
-                                            "roomListPayload",
-                                            JSON.stringify({ payload, meta, currency }),
-                                          );
-                                          setTimeout(() => {
-                                            // Dedicated 24-hour route in
-                                            // 24-hour mode so the
-                                            // downstream room list and
-                                            // booking page can render
-                                            // 24-hour-specific UI without
-                                            // touching the inhouse
-                                            // /room-list flow.
-                                            // religiousMode > force24Hour > apiId — religious
-                                            // is only supported for the inhouse flow (apiId 1);
-                                            // it never touches /api-room-list.
-                                            const route =
-                                              religiousMode && apiId === 1
-                                                ? "/religious-room-list"
-                                                : force24Hour
-                                                  ? "/room-list-24hr"
-                                                  : apiId === 1
-                                                    ? "/room-list"
-                                                    : "/api-room-list";
-                                            window.open(route, "_blank");
-                                          }, 50);
-                                        }}
+                                        onClick={() => openRoomList(hotel)}
                                       >
                                         View Rooms
                                       </Button>
@@ -3866,7 +3883,7 @@ export default function HotelSearch({
                             </div>
                           </Col>
                         ))
-                      ) : pollStatus === "IN_PROGRESS" || isLoading ? (
+                      ) : pollStatus === "IN_PROGRESS" || isLoading || dealFlagsPending ? (
                         // Search is still in flight — the supplier
                         // fan-out hasn't finished yet, so an empty
                         // filteredResults just means we don't have
@@ -3928,9 +3945,16 @@ export default function HotelSearch({
                     </Row>
 
                     {/* {hasSearched && */}
-                    {filteredResults.length > 0 &&
+                    {/* Shown whenever the server sent hotels for this page,
+                        even if 24-hour eligibility or Hotel Type leaves none
+                        on screen: other pages may have some, and without the
+                        pager there is no way on. (Every result is a "hotel"
+                        today, so ticking Hotel removes nothing.) A name or
+                        deal filter shows the whole set on one page, so it
+                        has none. */}
+                    {allResults.length > 0 &&
                       totalElements > 0 &&
-                      !(hotelSearchTerm || hotelType.length > 0) && (
+                      !(hotelSearchTerm || dealsTicked) && (
                         <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4 mt-3">
                           <small className="text-muted fw-semibold"></small>
                           <Pagination className="mb-0 pagination-modern">
@@ -3959,18 +3983,42 @@ export default function HotelSearch({
                         </div>
                       )}
                   </Col>
+
+                  {/* Map beside the list (1200px and wider). Sticky, so it
+                      stays in view while the list scrolls. */}
+                  {mapPanelOpen && (
+                    <Col
+                      xl={4}
+                      className="d-none d-xl-block hrm-panel"
+                      style={{
+                        top: mapPanelTop,
+                        height: `calc(100vh - ${mapPanelTop + 16}px)`,
+                      }}
+                    >
+                      {resultsMap}
+                    </Col>
+                  )}
                 </Row>
               </div>
             </div>
           )}
 
+          {/* Map on narrower screens: full screen, closed with the X. */}
           {ENABLE_MAP_PREVIEW && (
-            <MapModal
-              show={showMapModal}
-              onHide={() => setShowMapModal(false)}
-              markers={mapMarkers}
-              title="Explore on Map"
-            />
+            <Modal
+              show={mapOpen && !isWideForMapPanel}
+              onHide={() => setShowMap(false)}
+              fullscreen
+              className="hrm-modal"
+              aria-labelledby="hrm-modal-title"
+            >
+              <Modal.Header closeButton>
+                <Modal.Title as="h6" id="hrm-modal-title" className="mb-0">
+                  Hotels on the map
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body>{!isWideForMapPanel && resultsMap}</Modal.Body>
+            </Modal>
           )}
         </main>
       </div>

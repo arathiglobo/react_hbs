@@ -82,6 +82,40 @@ export const refundFilterMatches = (filter, code) => {
 };
 
 /**
+ * The hotel search's Refund Policy value: "refundable" (the Flexible box),
+ * "partial" or "nonRefundable", the same values /api/hotel-search/results
+ * takes. Undefined when no box is ticked. View Rooms hands this value to the
+ * room list, so both pages read the boxes through these two functions.
+ */
+export const refundPolicyOfFilter = (filter) =>
+  filter?.refundable
+    ? "refundable"
+    : filter?.partial
+      ? "partial"
+      : filter?.nonRefundable
+        ? "nonRefundable"
+        : undefined;
+
+/**
+ * The boxes to tick for a Refund Policy value, case-insensitive like the
+ * backend. Null for no value or one it doesn't know, so the room list keeps
+ * its own default.
+ */
+export const refundFilterOfPolicy = (policy) => {
+  const value = String(policy ?? "").trim().toLowerCase();
+  if (value === "refundable") {
+    return { refundable: true, partial: false, nonRefundable: false };
+  }
+  if (value === "partial") {
+    return { refundable: false, partial: true, nonRefundable: false };
+  }
+  if (value === "nonrefundable") {
+    return { refundable: false, partial: false, nonRefundable: true };
+  }
+  return null;
+};
+
+/**
  * The terms after an IWTX or X3 price check. The check returns only a flag, so
  * the search's terms stand unless the flag now says non-refundable.
  */

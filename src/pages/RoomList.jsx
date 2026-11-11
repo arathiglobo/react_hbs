@@ -44,7 +44,11 @@ import {
   DEADLINE_TIME_EOD,
 } from "../utils/rateDeadline";
 import RefundBadge from "../components/RefundBadge";
-import { labelOfRate, refundFilterMatches } from "../utils/refundLabel";
+import {
+  labelOfRate,
+  refundFilterMatches,
+  refundFilterOfPolicy,
+} from "../utils/refundLabel";
 import {
   isNonRefundableRate,
   sumSelectedRooms,
@@ -296,6 +300,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
         let payload = location.state?.payload;
         let meta = location.state?.meta;
         let currencyInfo = location.state?.currency;
+        let refundPolicy = location.state?.refundPolicy;
 
         // Fallback to sessionStorage if location.state is null (e.g., via window.open)
         if (!payload) {
@@ -306,6 +311,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
               payload = parsed.payload;
               meta = parsed.meta;
               currencyInfo = parsed.currency || currencyInfo;
+              refundPolicy = parsed.refundPolicy;
               setHotelStaticData(meta);
               setSearchPayload(payload);
               // console.log("Retrieved payload from sessionStorage:", payload);
@@ -315,6 +321,11 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
             console.error("Error parsing sessionStorage:", e);
           }
         }
+
+        // Open with the Refund Policy box ticked on the search page, before
+        // the rates arrive. Nothing ticked there leaves the filter as it is.
+        const passedRefundFilter = refundFilterOfPolicy(refundPolicy);
+        if (passedRefundFilter) setRefundFilter(passedRefundFilter);
 
         // Apply the display currency chosen on the search page (defaults to
         // AED ×1 when absent). Rates themselves stay AED — see formatPrice.
@@ -398,7 +409,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
             handedOff = true;
             navigate("/api-room-list", {
               replace: true,
-              state: { payload, meta, currency: currencyInfo },
+              state: { payload, meta, currency: currencyInfo, refundPolicy },
             });
             return;
           }

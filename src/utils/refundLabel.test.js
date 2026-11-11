@@ -6,7 +6,9 @@ import {
   labelOfRate,
   labelOfStatus,
   refundFilterMatches,
+  refundFilterOfPolicy,
   refundLabelText,
+  refundPolicyOfFilter,
   statusText,
   uaeToday,
   worstLabel,
@@ -60,6 +62,45 @@ describe("refundFilterMatches", () => {
     expect(refundFilterMatches(both, REFUND_FLEXIBLE)).toBe(true);
     expect(refundFilterMatches(both, REFUND_NON_REFUNDABLE)).toBe(true);
     expect(refundFilterMatches(both, REFUND_PARTIAL)).toBe(false);
+  });
+});
+
+describe("Refund Policy value handed from the search to the room list", () => {
+  const BOXES = [
+    ["refundable", { refundable: true, partial: false, nonRefundable: false }, REFUND_FLEXIBLE],
+    ["partial", { refundable: false, partial: true, nonRefundable: false }, REFUND_PARTIAL],
+    ["nonRefundable", { refundable: false, partial: false, nonRefundable: true }, REFUND_NON_REFUNDABLE],
+  ];
+
+  it.each(BOXES)("%s ticks the same box on both pages", (policy, boxes) => {
+    expect(refundPolicyOfFilter(boxes)).toBe(policy);
+    expect(refundFilterOfPolicy(policy)).toEqual(boxes);
+  });
+
+  it.each(BOXES)("%s keeps only rates with the matching label", (policy, _boxes, code) => {
+    const passed = refundFilterOfPolicy(policy);
+    const kept = [REFUND_FLEXIBLE, REFUND_PARTIAL, REFUND_NON_REFUNDABLE].filter((c) =>
+      refundFilterMatches(passed, c),
+    );
+    expect(kept).toEqual([code]);
+  });
+
+  it("reads the value case-insensitively, as the backend does", () => {
+    expect(refundFilterOfPolicy(" NonRefundable ")).toEqual(BOXES[2][1]);
+    expect(refundFilterOfPolicy("PARTIAL")).toEqual(BOXES[1][1]);
+  });
+
+  it("has no value with no box ticked", () => {
+    expect(refundPolicyOfFilter({ refundable: false, partial: false, nonRefundable: false })).toBeUndefined();
+    expect(refundPolicyOfFilter(undefined)).toBeUndefined();
+  });
+
+  it("ticks nothing for no value or one it doesn't know", () => {
+    expect(refundFilterOfPolicy(undefined)).toBeNull();
+    expect(refundFilterOfPolicy(null)).toBeNull();
+    expect(refundFilterOfPolicy("")).toBeNull();
+    expect(refundFilterOfPolicy("refundable,partial")).toBeNull();
+    expect(refundFilterOfPolicy("FLEXIBLE")).toBeNull();
   });
 });
 

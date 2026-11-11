@@ -63,7 +63,11 @@ import {
   resolveInhouseDeadline,
 } from "../utils/rateDeadline";
 import RefundBadge from "../components/RefundBadge";
-import { labelOfRate, repricedTerms } from "../utils/refundLabel";
+import {
+  labelOfRate,
+  refundFilterOfPolicy,
+  repricedTerms,
+} from "../utils/refundLabel";
 import { sanitizeSupplierHtml } from "../utils/safeHtml";
 
 /**
@@ -1232,6 +1236,7 @@ const ExternalApiRoomList = () => {
 
   // Shared filter state — same hook every other room-list page uses.
   const filters = useRoomFilters();
+  const { setRefundFilter } = filters;
 
   // Rate → normalised shape the shared predicate understands.
   //
@@ -1299,6 +1304,7 @@ const ExternalApiRoomList = () => {
         let payload = location.state?.payload;
         let meta = location.state?.meta;
         let currencyInfo = location.state?.currency;
+        let refundPolicy = location.state?.refundPolicy;
 
         if (!payload) {
           try {
@@ -1308,6 +1314,7 @@ const ExternalApiRoomList = () => {
               payload = parsed.payload;
               meta = parsed.meta;
               currencyInfo = parsed.currency || currencyInfo;
+              refundPolicy = parsed.refundPolicy;
               setHotelStaticData(meta);
               setSearchPayload(payload);
             }
@@ -1315,6 +1322,12 @@ const ExternalApiRoomList = () => {
             console.error("Error parsing sessionStorage:", e);
           }
         }
+
+        // Open with the Refund Policy box ticked on the search page (or
+        // handed on by RoomList for a mapped hotel), before the rates
+        // arrive. Nothing ticked there leaves the filter as it is.
+        const passedRefundFilter = refundFilterOfPolicy(refundPolicy);
+        if (passedRefundFilter) setRefundFilter(passedRefundFilter);
 
         if (currencyInfo) {
           setDisplayCurrency({
@@ -1523,7 +1536,9 @@ const ExternalApiRoomList = () => {
     };
 
     fetchRooms();
-  }, [location.state]);
+    // setRefundFilter is the hook's state setter and never changes, so this
+    // still runs once per search.
+  }, [location.state, setRefundFilter]);
 
   // Agent credit balance — same endpoint / same fallback keys as Inhouse.
   useEffect(() => {
