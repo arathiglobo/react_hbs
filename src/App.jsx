@@ -188,7 +188,6 @@ import OnlineDailySalesReport from "./pages/report/OnlineDailySalesReport";
 import TimeLimitOnlineDailySalesReport from "./pages/report/TimeLimitOnlineDailySalesReport";
 import ExternalApiRoomList from "./pages/ExternalApiRoomList";
 import HotelBookingPage from "./pages/booking/HotelBookingPage";
-import DummyPaymentPage from "./pages/booking/DummyPaymentPage";
 import CCAvenueCheckoutPage from "./pages/booking/CCAvenueCheckoutPage";
 import ApiBookingPageForHotels from "./pages/booking/ApiBookingPageForHotels";
 import LongStaySearch from "./pages/search/LongStaySearch";
@@ -452,13 +451,12 @@ export default function App() {
         {/* Two-factor authentication is an agent-only feature — only agent
             logins are challenged for a second factor, so the enrolment page is
             scoped to them. The backend refuses non-agent callers as well. */}
-        <Route path="/two-factor-authentication" element={<PrivateRoute roles={["agent"]}><TwoFactorAuth /> </PrivateRoute> }/>
+        <Route path="/two-factor-authentication" element={<PrivateRoute roles={["agent", "admin", "super_admin"]}><TwoFactorAuth /> </PrivateRoute> }/>
         <Route path="/log-out" element={<PrivateRoute><Logout /> </PrivateRoute> }/>
 
         {/* Masters */}
         <Route path="/masters/designations" element={<PrivateRoute><Designations /></PrivateRoute>} />
         <Route path="/masters/bank" element={<PrivateRoute><Bank /></PrivateRoute>} />
-        <Route path="/masters/user-roles" element={<PrivateRoute><UserRoles /></PrivateRoute>} />
         <Route path="/masters/contact-type" element={<PrivateRoute><ContactType /></PrivateRoute>} />
         <Route path="/masters/markup-type" element={<PrivateRoute><MarkupType /></PrivateRoute>} />
         <Route path="/masters/cab-type" element={<PrivateRoute><CabType /></PrivateRoute>} />
@@ -493,31 +491,31 @@ export default function App() {
         <Route path="/masters/terms-and-conditions" element={<PrivateRoute><TermsAndConditions /></PrivateRoute>} />
         <Route path="/masters/hotel-mapping" element={<PrivateRoute roles={["admin"]}><HotelMapping /></PrivateRoute>} />
         <Route path="/masters/hotel-mapping/automated" element={<PrivateRoute roles={["admin"]}><AutomatedHotelMappingPage /></PrivateRoute>} />
-        <Route path="/masters/transfer-airport-mapping" element={<PrivateRoute><TransferAirportMapping /></PrivateRoute>} />
-        <Route path="/masters/transfer-place-mapping" element={<PrivateRoute><TransferPlaceMapping /></PrivateRoute>} />
-        <Route path="/masters/transfer-hotel-mapping" element={<PrivateRoute><TransferHotelMapping /></PrivateRoute>} />
+        <Route path="/masters/transfer-airport-mapping" element={<PrivateRoute roles={["admin"]}><TransferAirportMapping /></PrivateRoute>} />
+        <Route path="/masters/transfer-place-mapping" element={<PrivateRoute roles={["admin"]}><TransferPlaceMapping /></PrivateRoute>} />
+        <Route path="/masters/transfer-hotel-mapping" element={<PrivateRoute roles={["admin"]}><TransferHotelMapping /></PrivateRoute>} />
         <Route path="/masters/hotel-upcooming-mapped-list" element={<PrivateRoute roles={["admin"]}><HotelMappingBulkList /></PrivateRoute>} />
         <Route path="/masters/fetch-new-hotels" element={<PrivateRoute roles={["admin"]}><FetchNewHotels /></PrivateRoute>} />
         <Route path="/masters/mapped-list" element={<PrivateRoute roles={["admin"]}><MappedList /></PrivateRoute>} />
      
         {/* :bar_chart: Reports */}
-        <Route path="/report/booking" element={<PrivateRoute><ReportBooking /></PrivateRoute>} />
-        <Route path="/report/cancellation" element={<PrivateRoute><CancellationReport /></PrivateRoute>} />
-        <Route path="/report/inventory-status" element={<PrivateRoute><InventoryStatus /></PrivateRoute>} />
-        <Route path="/report/hotel-wise" element={<PrivateRoute><HotelWise /></PrivateRoute>} />
-        <Route path="/report/accounts" element={<PrivateRoute><Accounts /></PrivateRoute>} />
-        <Route path="/report/day-wise" element={<PrivateRoute><DayWise /></PrivateRoute>} />
-        <Route path="/report/monthly-wise" element={<PrivateRoute><MonthlyWise /></PrivateRoute>} />
-        <Route path="/report/comparison" element={<PrivateRoute><Comparison /></PrivateRoute>} />
-        <Route path="/report/agent-wise" element={<PrivateRoute><AgentWise /></PrivateRoute>} />
-        <Route path="/report/contract-expiry" element={<PrivateRoute><ContractExpiryReport /></PrivateRoute>} />
-        <Route path="/report/contract-rate" element={<PrivateRoute><Contractrate /></PrivateRoute>} />
-        <Route path="/report/user-report" element={<PrivateRoute><UserReport /></PrivateRoute>} />
-        <Route path="/report/stop-sale" element={<PrivateRoute><Stopsalereport /></PrivateRoute>} />
-        <Route path="/report/user-logins" element={<PrivateRoute><UserLogins /></PrivateRoute>} />
-        <Route path="/report/offline-daily-sales" element={<PrivateRoute><OfflineBookingDailySalesStatement /></PrivateRoute>} />
-        <Route path="/report/online-daily-sales" element={<PrivateRoute><OnlineDailySalesReport /></PrivateRoute>} />
-        <Route path="/report/time-limit-daily-sales" element={<PrivateRoute><TimeLimitOnlineDailySalesReport /></PrivateRoute>} />
+        <Route path="/report/booking" element={<PrivateRoute roles={["admin"]}><ReportBooking /></PrivateRoute>} />
+        <Route path="/report/cancellation" element={<PrivateRoute roles={["admin"]}><CancellationReport /></PrivateRoute>} />
+        <Route path="/report/inventory-status" element={<PrivateRoute roles={["admin"]}><InventoryStatus /></PrivateRoute>} />
+        <Route path="/report/hotel-wise" element={<PrivateRoute roles={["admin"]}><HotelWise /></PrivateRoute>} />
+        <Route path="/report/accounts" element={<PrivateRoute roles={["admin"]}><Accounts /></PrivateRoute>} />
+        <Route path="/report/day-wise" element={<PrivateRoute roles={["admin"]}><DayWise /></PrivateRoute>} />
+        <Route path="/report/monthly-wise" element={<PrivateRoute roles={["admin"]}><MonthlyWise /></PrivateRoute>} />
+        <Route path="/report/comparison" element={<PrivateRoute roles={["admin"]}><Comparison /></PrivateRoute>} />
+        <Route path="/report/agent-wise" element={<PrivateRoute roles={["admin"]}><AgentWise /></PrivateRoute>} />
+        <Route path="/report/contract-expiry" element={<PrivateRoute roles={["admin"]}><ContractExpiryReport /></PrivateRoute>} />
+        <Route path="/report/contract-rate" element={<PrivateRoute roles={["admin"]}><Contractrate /></PrivateRoute>} />
+        <Route path="/report/user-report" element={<PrivateRoute roles={["admin"]}><UserReport /></PrivateRoute>} />
+        <Route path="/report/stop-sale" element={<PrivateRoute roles={["admin"]}><Stopsalereport /></PrivateRoute>} />
+        <Route path="/report/user-logins" element={<PrivateRoute roles={["admin"]}><UserLogins /></PrivateRoute>} />
+        <Route path="/report/offline-daily-sales" element={<PrivateRoute roles={["admin","agent"]}><OfflineBookingDailySalesStatement /></PrivateRoute>} />
+        <Route path="/report/online-daily-sales" element={<PrivateRoute roles={["admin","agent"]}><OnlineDailySalesReport /></PrivateRoute>} />
+        <Route path="/report/time-limit-daily-sales" element={<PrivateRoute roles={["admin","agent"]}><TimeLimitOnlineDailySalesReport /></PrivateRoute>} />
         <Route path="/report/hotel-booking-history" element={<PrivateRoute roles={["admin"]}><HotelBookingHistory /></PrivateRoute>} />
 
         {/* Super Admin — API access control for external clients. Restricted
@@ -615,7 +613,9 @@ export default function App() {
         {/* Last Minute Room List — opened from "View Rooms" button on the search page */}
         <Route path="/last-minute-room-list" element={<PrivateRoute><LastMinuteRoomList /></PrivateRoute>} />
         <Route path="/hotel-booking-page" element={<PrivateRoute><HotelBookingPage /></PrivateRoute>} />
-        <Route path="/payment/:gateway" element={<PrivateRoute><DummyPaymentPage /></PrivateRoute>} />
+        {/* The dummy /payment/:gateway page took no payment and its resume path
+            could confirm a booking unpaid (S:PAY-02). Every page offers CC Avenue
+            only, which goes to /payment/ccavenue-redirect below. */}
         <Route path="/payment/ccavenue-redirect" element={<PrivateRoute><CCAvenueCheckoutPage /></PrivateRoute>} />
         <Route path="/new-booking/long-stay" element={<PrivateRoute><LongStaySearch /></PrivateRoute>} />
         <Route path="/long-stay-booking-page" element={<PrivateRoute><LongStayBookingPage /></PrivateRoute>} />
@@ -629,13 +629,13 @@ export default function App() {
         <Route path="/booking-details/scheffer-driver-booking/:id/notes" element={<PrivateRoute><SchefferDriverBookingNotesPage /></PrivateRoute>} />
         <Route path="/long-stay-room-list" element={<PrivateRoute><LongStayRoomList /></PrivateRoute>} />
         <Route path="/notifications" element={<PrivateRoute roles={["admin", "agent"]}><NotificationsPage /></PrivateRoute>} />
-        <Route path="/ai" element={<PrivateRoute><AiDashboard /></PrivateRoute>} />
-        <Route path="/ai/demand-forecast" element={<PrivateRoute><DemandForecast /></PrivateRoute>} />
-        <Route path="/ai/agent-behavior" element={<PrivateRoute><AgentBehavior /></PrivateRoute>} />
-        <Route path="/ai/no-show-risk" element={<PrivateRoute><NoShowRisk /></PrivateRoute>} />
+        <Route path="/ai" element={<PrivateRoute roles={["admin", "staff"]}><AiDashboard /></PrivateRoute>} />
+        <Route path="/ai/demand-forecast" element={<PrivateRoute roles={["admin", "staff"]}><DemandForecast /></PrivateRoute>} />
+        <Route path="/ai/agent-behavior" element={<PrivateRoute roles={["admin", "staff"]}><AgentBehavior /></PrivateRoute>} />
+        <Route path="/ai/no-show-risk" element={<PrivateRoute roles={["admin", "staff"]}><NoShowRisk /></PrivateRoute>} />
         {/* Admin-only report — sidebar hides it for non-admin roles; the
             backend endpoint returns 403 for non-admins as a second gate. */}
-        <Route path="/admin/unbooked-opportunities" element={<PrivateRoute><UnbookedOpportunities /></PrivateRoute>} />
+        <Route path="/admin/unbooked-opportunities" element={<PrivateRoute roles={["admin"]}><UnbookedOpportunities /></PrivateRoute>} />
         <Route path="/api-booking-page-hotels" element={<PrivateRoute><ApiBookingPageForHotels /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package" element={<PrivateRoute><MakeUrOwnPackage /></PrivateRoute>} />
         <Route path="/new-booking/make-your-own-package/booking-page" element={<PrivateRoute><MakePkgBookingPage /></PrivateRoute>} />
@@ -772,10 +772,10 @@ export default function App() {
             All inner data calls go via /api/restaurant-extranet/** and
             are scoped server-side by the JWT's username → UserAccount
             → userId resolution. */}
-        <Route path="/restaurant-extranet/dashboard" element={<RestaurantExtranetDashboard />} />
-        <Route path="/restaurant-extranet/reservations" element={<RestaurantExtranetReservations />} />
-        <Route path="/restaurant-extranet/calendar" element={<RestaurantExtranetCalendar />} />
-        <Route path="/restaurant-extranet/gallery" element={<RestaurantExtranetGallery />} />
+        <Route path="/restaurant-extranet/dashboard" element={<PrivateRoute roles={["restaurant_extranet"]}><RestaurantExtranetDashboard /></PrivateRoute>} />
+        <Route path="/restaurant-extranet/reservations" element={<PrivateRoute roles={["restaurant_extranet"]}><RestaurantExtranetReservations /></PrivateRoute>} />
+        <Route path="/restaurant-extranet/calendar" element={<PrivateRoute roles={["restaurant_extranet"]}><RestaurantExtranetCalendar /></PrivateRoute>} />
+        <Route path="/restaurant-extranet/gallery" element={<PrivateRoute roles={["restaurant_extranet"]}><RestaurantExtranetGallery /></PrivateRoute>} />
         <Route path="/restaurant-extranet/profile" element={<RestaurantExtranetProfile />} />
         <Route path="/restaurant-extranet/profile/edit" element={<RestaurantExtranetProfileEdit />} />
 

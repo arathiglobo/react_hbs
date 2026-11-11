@@ -45,6 +45,7 @@ import {
   resolveDeadlineDate,
   isNonRefundable,
 } from "../../utils/rateDeadline";
+import { orderIdPathSegment } from "../../utils/urlSafety";
 
 // Online-payment gateways offered when the agent's credit is short.
 // Mirrors the same list Inhouse HotelBookingPage.jsx uses (line 25) so
@@ -121,7 +122,19 @@ const IWTX_API_ID = 12;
 // status is overridden to "Confirmed / On Reconfirmation" on hold; the
 // existing GoGlobal cancel adapter handles the auto-cancel path.
 const GOGLOBAL_API_ID = 21;
-const HOLD_CAPABLE_API_IDS = new Set([GRN_API_ID, IWTX_API_ID, GOGLOBAL_API_ID]);
+// X3 (15) and Darina (16) — backend hold branch added 2026-11-11 in
+// X3HotelBookingService and DarinaHotelBookingService through the shared
+// SupplierHoldRule: same deadline refusal and deferred credit as IWTX. The
+// auto-cancel uses their existing cancel adapters in SupplierCancellationDispatcher.
+const X3_API_ID = 15;
+const DARINA_API_ID = 16;
+export const HOLD_CAPABLE_API_IDS = new Set([
+  GRN_API_ID,
+  IWTX_API_ID,
+  GOGLOBAL_API_ID,
+  X3_API_ID,
+  DARINA_API_ID,
+]);
 
 /**
  * The booking's overall free-cancellation deadline, as a Date at local
@@ -152,7 +165,7 @@ const HOLD_CAPABLE_API_IDS = new Set([GRN_API_ID, IWTX_API_ID, GOGLOBAL_API_ID])
  * baked into what resolveDeadlineDate returns — do NOT subtract it again here.
  *
  * Note this also moves GRN's "Hold Room and Pay Later" gate, since
- * isHoldEligible calls this function and HOLD_CAPABLE_API_IDS is GRN-only.
+ * isHoldEligible calls this function for every supplier in HOLD_CAPABLE_API_IDS.
  * That is the intended behaviour: a hold is offered only while buffered
  * free-cancellation time remains, and the backend re-checks the same persisted
  * deadlineDate before holding.
@@ -243,8 +256,8 @@ const toDeadlinePayloadString = (d) => {
  * The backend re-checks this before sending anything to the supplier, so a
  * stale page cannot create a hold outside the window.
  */
-const isHoldEligible = (bookingData) => {
-  const apiId = bookingData?.payload?.apiId;
+export const isHoldEligible = (bookingData) => {
+  const apiId = Number(bookingData?.payload?.apiId);
   if (!HOLD_CAPABLE_API_IDS.has(apiId)) return false;
   if (hasNonRefundableRate(bookingData?.selectedRate)) return false;
   const deadline = deriveDeadlineDate(bookingData?.selectedRate || []);
@@ -575,7 +588,7 @@ const ApiBookingPageForHotels = () => {
         // Finalize replays the supplier booking (RateHawk can take up to
         // ~120 s), so allow longer than the 30 s client default.
         const response = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize/${orderIdPathSegment(ccavenueOrderId)}`,
           null,
           { timeout: 120000 },
         );
@@ -623,7 +636,7 @@ const ApiBookingPageForHotels = () => {
       }
       try {
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(

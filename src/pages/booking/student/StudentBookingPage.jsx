@@ -49,6 +49,7 @@ import {
 import { parseSupplierDate } from "../../../utils/rateDeadline";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
+import { orderIdPathSegment } from "../../../utils/urlSafety";
 
 const SPECIAL_REQUEST_OPTIONS = [
   "Early Check-In", "Non-Smoking Rooms", "High Floor", "VIP Client",
@@ -443,7 +444,7 @@ export default function StudentBookingPage() {
         setIsFinalizingPayment(true);
         setIsSubmitting(true);
         const { data } = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize-student/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize-student/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (data?.success) {
           toast.success(
@@ -486,7 +487,7 @@ export default function StudentBookingPage() {
       }
       try {
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(

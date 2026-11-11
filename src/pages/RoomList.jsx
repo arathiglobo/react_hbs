@@ -47,8 +47,8 @@ import {
 import RefundBadge from "../components/RefundBadge";
 import {
   labelOfRate,
-  refundFilterFrom,
   refundFilterMatches,
+  refundFilterOfPolicy,
 } from "../utils/refundLabel";
 import {
   isNonRefundableRate,
@@ -301,8 +301,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
         let payload = location.state?.payload;
         let meta = location.state?.meta;
         let currencyInfo = location.state?.currency;
-        // Refund Policy box ticked on the hotel search page (none = null).
-        let searchRefundFilter = location.state?.refundFilter;
+        let refundPolicy = location.state?.refundPolicy;
 
         // Fallback to sessionStorage if location.state is null (e.g., via window.open)
         if (!payload) {
@@ -313,7 +312,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
               payload = parsed.payload;
               meta = parsed.meta;
               currencyInfo = parsed.currency || currencyInfo;
-              searchRefundFilter = parsed.refundFilter || searchRefundFilter;
+              refundPolicy = parsed.refundPolicy;
               setHotelStaticData(meta);
               setSearchPayload(payload);
               // console.log("Retrieved payload from sessionStorage:", payload);
@@ -324,6 +323,11 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
           }
         }
 
+        // Open with the Refund Policy box ticked on the search page, before
+        // the rates arrive. Nothing ticked there leaves the filter as it is.
+        const passedRefundFilter = refundFilterOfPolicy(refundPolicy);
+        if (passedRefundFilter) setRefundFilter(passedRefundFilter);
+
         // Apply the display currency chosen on the search page (defaults to
         // AED ×1 when absent). Rates themselves stay AED — see formatPrice.
         if (currencyInfo) {
@@ -331,12 +335,6 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
             code: currencyInfo.code || "AED",
             factor: Number(currencyInfo.factor) > 0 ? Number(currencyInfo.factor) : 1,
           });
-        }
-
-        // Start with the search page's Refund Policy box ticked; the agent
-        // can still change it here.
-        if (searchRefundFilter) {
-          setRefundFilter(refundFilterFrom(searchRefundFilter));
         }
 
         // console.log("payload::", payload);
@@ -413,12 +411,7 @@ const RoomList = ({ force24Hour = false, religiousMode = false } = {}) => {
             handedOff = true;
             navigate("/api-room-list", {
               replace: true,
-              state: {
-                payload,
-                meta,
-                currency: currencyInfo,
-                refundFilter: searchRefundFilter,
-              },
+              state: { payload, meta, currency: currencyInfo, refundPolicy },
             });
             return;
           }

@@ -24,6 +24,7 @@ import Swal from "sweetalert2";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
+import { escapeHtml } from "../../utils/safeHtml";
 
 const PAYMENT_MODES = ["Cash", "Card", "UPI", "Online", "Net Banking"];
 
@@ -418,7 +419,7 @@ const HoneymoonBooking = () => {
       await Swal.fire({
         icon: "success",
         title: "Booking Confirmed!",
-        html: `<div>Your booking number is <strong>${res.data?.bookingNumber}</strong></div>`,
+        html: `<div>Your booking number is <strong>${escapeHtml(res.data?.bookingNumber)}</strong></div>`,
         confirmButtonText: "View Bookings",
       });
       navigate("/booking-details/honeymoon-booking-list");

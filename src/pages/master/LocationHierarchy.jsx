@@ -442,7 +442,7 @@ export default function LocationHierarchy() {
           : "";
 
     const result = await Swal.fire({
-      title: `Delete ${label.toLowerCase()} "${node.name}"?`,
+      titleText: `Delete ${label.toLowerCase()} "${node.name}"?`,
       text: `It will no longer appear in the ${label} dropdowns. Agents, hotels and bookings that already use it are not affected.${childNote}`,
       icon: "warning",
       showCancelButton: true,

@@ -115,7 +115,7 @@ export default function SearchGapsPanel({ active, onMap, acting }) {
       const hotels = res.data || [];
       const list = hotels.map((h) => `<li>${escapeHtml(h.name || h.code)}</li>`).join("");
       await Swal.fire({
-        title: `${supplierLabel(row.supplier)} hotels in ${row.suggestion.name}`,
+        title: `${supplierLabel(row.supplier)} hotels in ${escapeHtml(row.suggestion.name)}`,
         html:
           hotels.length === 0
             ? "<div>We keep no local hotel list to show for this supplier city.</div>"
@@ -129,7 +129,7 @@ export default function SearchGapsPanel({ active, onMap, acting }) {
 
   const map = async (row) => {
     const confirm = await Swal.fire({
-      title: `Map ${supplierLabel(row.supplier)} "${row.suggestion.name}" to our ${row.cityName}?`,
+      title: `Map ${supplierLabel(row.supplier)} "${escapeHtml(row.suggestion.name)}" to our ${escapeHtml(row.cityName)}?`,
       text: "This is only a name match, so please check it is the same place. New searches for this city will then reach this supplier.",
       icon: "question",
       showCancelButton: true,

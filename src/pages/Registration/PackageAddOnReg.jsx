@@ -119,7 +119,7 @@ export default function PackageAddOnReg() {
 
   const handleDelete = async (row) => {
     const res = await Swal.fire({
-      title: `Delete "${row.name}"?`,
+      titleText: `Delete "${row.name}"?`,
       text: "This will remove the master record and all its rates.",
       icon: "warning",
       showCancelButton: true,

@@ -93,6 +93,17 @@ axiosInstance.interceptors.response.use(
       (error.response.status === 401 || error.response.status === 403) &&
       !originalRequest._retry
     ) {
+      // S:SEC-08: the request left with an older access token than the one
+      // this tab holds now (it was in flight while another request's refresh
+      // finished). Re-send it with the current token; refreshing again would
+      // rotate the refresh cookie a second time for nothing. If the current
+      // token is refused too, that retry comes back here and refreshes.
+      const currentToken = getAuthToken();
+      const sentAuthorization = originalRequest.headers?.Authorization;
+      if (currentToken && sentAuthorization && sentAuthorization !== `Bearer ${currentToken}`) {
+        return axiosInstance(originalRequest);
+      }
+
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });

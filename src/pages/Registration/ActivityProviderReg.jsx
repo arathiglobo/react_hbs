@@ -273,7 +273,7 @@ const ActivityProviderReg = () => {
 
   const handleDelete = (item) => {
     Swal.fire({
-      title: `Are you sure? You want to delete ${item.providerName}`,
+      titleText: `Are you sure? You want to delete ${item.providerName}`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#d33",

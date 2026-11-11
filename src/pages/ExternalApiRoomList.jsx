@@ -66,9 +66,10 @@ import {
 import RefundBadge from "../components/RefundBadge";
 import {
   labelOfRate,
-  refundFilterFrom,
+  refundFilterOfPolicy,
   repricedTerms,
 } from "../utils/refundLabel";
+import { sanitizeSupplierHtml } from "../utils/safeHtml";
 
 /**
  * Renders "Valid: <from> - <to>" for a policy validity period, or null when
@@ -1236,6 +1237,7 @@ const ExternalApiRoomList = () => {
 
   // Shared filter state — same hook every other room-list page uses.
   const filters = useRoomFilters();
+  const { setRefundFilter } = filters;
 
   // Rate → normalised shape the shared predicate understands.
   //
@@ -1303,9 +1305,7 @@ const ExternalApiRoomList = () => {
         let payload = location.state?.payload;
         let meta = location.state?.meta;
         let currencyInfo = location.state?.currency;
-        // Refund Policy box ticked on the hotel search page (none = null).
-        // RoomList.jsx passes it along when it hands a mapped hotel over.
-        let searchRefundFilter = location.state?.refundFilter;
+        let refundPolicy = location.state?.refundPolicy;
 
         if (!payload) {
           try {
@@ -1315,7 +1315,7 @@ const ExternalApiRoomList = () => {
               payload = parsed.payload;
               meta = parsed.meta;
               currencyInfo = parsed.currency || currencyInfo;
-              searchRefundFilter = parsed.refundFilter || searchRefundFilter;
+              refundPolicy = parsed.refundPolicy;
               setHotelStaticData(meta);
               setSearchPayload(payload);
             }
@@ -1324,18 +1324,18 @@ const ExternalApiRoomList = () => {
           }
         }
 
+        // Open with the Refund Policy box ticked on the search page (or
+        // handed on by RoomList for a mapped hotel), before the rates
+        // arrive. Nothing ticked there leaves the filter as it is.
+        const passedRefundFilter = refundFilterOfPolicy(refundPolicy);
+        if (passedRefundFilter) setRefundFilter(passedRefundFilter);
+
         if (currencyInfo) {
           setDisplayCurrency({
             code: currencyInfo.code || "AED",
             factor:
               Number(currencyInfo.factor) > 0 ? Number(currencyInfo.factor) : 1,
           });
-        }
-
-        // Start with the search page's Refund Policy box ticked; the agent
-        // can still change it here.
-        if (searchRefundFilter) {
-          filters.setRefundFilter(refundFilterFrom(searchRefundFilter));
         }
 
         if (!payload) {
@@ -1537,10 +1537,9 @@ const ExternalApiRoomList = () => {
     };
 
     fetchRooms();
-    // filters.setRefundFilter is a plain useState setter (stable) — only a
-    // new search (location.state) should re-run this.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state]);
+    // setRefundFilter is the hook's state setter and never changes, so this
+    // still runs once per search.
+  }, [location.state, setRefundFilter]);
 
   // Agent credit balance — same endpoint / same fallback keys as Inhouse.
   useEffect(() => {
@@ -3387,11 +3386,11 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
       ? hotel.hotelDescription.trim()
       : "";
     if (!raw) return null;
-    // Supplier HTML — drop script blocks and inline event handlers before
-    // rendering; GRN's descriptions are plain <p>/<b>/<br /> markup.
-    const safe = raw
-      .replace(/<script[\s\S]*?<\/script>/gi, "")
-      .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+    // Supplier HTML — reduced by DOMPurify to plain formatting tags (no
+    // attributes, scripts or event handlers) before the section is cut out,
+    // and the cut-out piece is cleaned again. GRN's descriptions are plain
+    // <p>/<b>/<br /> markup, so they look the same as before.
+    const safe = sanitizeSupplierHtml(raw);
     // Show only the "Property Location" section. GRN's full description
     // (Attractions, Amenities, Business Amenities, Rooms, Dining …) runs to
     // dozens of lines and pushed the room list below the fold. The section
@@ -3399,10 +3398,10 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
     const location = safe.match(
       /<b>\s*Property Location\s*<\/b>[\s\S]*?(?=<\/p>|<p\b|<b>|$)/i,
     );
-    if (location) return `<p>${location[0]}</p>`;
+    if (location) return sanitizeSupplierHtml(`<p>${location[0]}</p>`);
     // No headed sections — fall back to the first paragraph, else as-is.
     const firstParagraph = safe.match(/<p\b[^>]*>[\s\S]*?<\/p>/i);
-    return firstParagraph ? firstParagraph[0] : safe;
+    return firstParagraph ? sanitizeSupplierHtml(firstParagraph[0]) : safe;
   })();
 
   return (

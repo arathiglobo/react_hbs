@@ -52,7 +52,14 @@
 //   data-activity="…"                     explicit label for an element
 //   data-activity-component="…"           names the component of its contents
 
-import { getAuthToken, getCurrentActiveRole, getUserName, getUserRole } from "./authSession";
+import {
+  getAuthToken,
+  getCurrentActiveRole,
+  getRestaurantExtranetEmail,
+  getRestaurantExtranetToken,
+  getUserName,
+  getUserRole,
+} from "./authSession";
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || "";
 const ENDPOINT = `${API_BASE}/api/activity-log/client`;
@@ -79,10 +86,9 @@ const MAX_LABEL_DESCENDANTS = 12;
 const SID_KEY = "activityLogSid";
 const SID_OWNER_KEY = "activityLogSidOwner";
 const GLOBAL_FLAG = "__hbsActivityLogger";
-// The restaurant extranet signs in on its own and keeps its own token.
+// The restaurant extranet signs in on its own and keeps its own token
+// (sessionStorage, see utils/authSession.js).
 const EXTRANET_PREFIX = "/restaurant-extranet";
-const EXTRANET_TOKEN_KEY = "restaurantExtranetToken";
-const EXTRANET_EMAIL_KEY = "restaurantExtranetEmail";
 const REFRESH_PATH = "/auth/refresh-token";
 
 const CLICKABLE = [
@@ -191,14 +197,6 @@ function hasFewDescendants(el, max) {
   return true;
 }
 
-function readLocal(key) {
-  try {
-    return localStorage.getItem(key) || undefined;
-  } catch (_) {
-    return undefined;
-  }
-}
-
 function newId() {
   return typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID().replace(/-/g, "").slice(0, 16)
@@ -239,9 +237,9 @@ function identitySnapshot() {
     let role = getUserRole() || undefined;
     let active = activeRole();
     if (!token && window.location.pathname.startsWith(EXTRANET_PREFIX)) {
-      token = readLocal(EXTRANET_TOKEN_KEY);
+      token = getRestaurantExtranetToken() || undefined;
       if (token) {
-        user = user || readLocal(EXTRANET_EMAIL_KEY);
+        user = user || getRestaurantExtranetEmail() || undefined;
         role = role || "restaurant_extranet";
         active = active || "restaurant_extranet";
       }

@@ -37,6 +37,7 @@ import RefundBadge from "../../../components/RefundBadge";
 import {
   REFUND_FLEXIBLE,
   REFUND_NON_REFUNDABLE,
+  REFUND_PARTIAL,
   labelOfRate,
   refundLabelText,
   worstLabel,
@@ -45,6 +46,8 @@ import {
 import { parseSupplierDate } from "../../../utils/rateDeadline";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
+import { sanitizeRichHtml } from "../../../utils/safeHtml";
+import { orderIdPathSegment } from "../../../utils/urlSafety";
 
 const SPECIAL_REQUEST_OPTIONS = [
   "Early Check-In", "Non-Smoking Rooms", "Ground Floor", "Wheelchair Access",
@@ -404,7 +407,7 @@ export default function SeniorCitizenBookingPage() {
         setIsFinalizingPayment(true);
         setIsSubmitting(true);
         const { data } = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize-seniorcitizen/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize-seniorcitizen/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (data?.success) {
           toast.success(
@@ -448,7 +451,7 @@ export default function SeniorCitizenBookingPage() {
       }
       try {
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(
@@ -583,13 +586,21 @@ export default function SeniorCitizenBookingPage() {
     if (!cancellationDeadline) return false;
     return uaeToday() > cancellationDeadline;
   })();
-  // Offer the Voucher Now / Voucher Later choice only for refundable,
-  // Available rates. On-request / non-refundable rates skip the choice.
-  const showVoucherChoice = !isOnRequestRate && !isNonRefundableRate;
+  // Offer the Voucher Now / Voucher Later choice only for refundable
+  // Available rates that still have free-cancellation time left, or that only
+  // cost part of the booking after their deadline — the same rule as the
+  // Student page. A hold made after the deadline would be auto-cancelled at
+  // once, so the choice is not shown then.
+  const showVoucherChoice =
+    !isOnRequestRate &&
+    !isNonRefundableRate &&
+    !!cancellationDeadline &&
+    (!isOutsideDeadline || bookingRefundLabel === REFUND_PARTIAL);
   // Resolved status sent on payload.bookingFlowStatus.
   const resolvedBookingFlowStatus = (() => {
     if (isOnRequestRate) return "REQUESTED";
     if (isNonRefundableRate) return "RECONFIRMED";
+    if (isOutsideDeadline && bookingRefundLabel !== REFUND_PARTIAL) return "RECONFIRMED";
     return bookingConfirmation === "Book Now & Voucher later"
       ? "CONFIRMED"
       : "RECONFIRMED";
@@ -1485,7 +1496,7 @@ export default function SeniorCitizenBookingPage() {
                         <h6 className="policy-section-title">Terms &amp; Conditions</h6>
                         {termsAndConditions ? (
                           <div className="terms-content"
-                               dangerouslySetInnerHTML={{ __html: termsAndConditions }} />
+                               dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(termsAndConditions) }} />
                         ) : (
                           <div className="policy-empty">
                             No terms &amp; conditions configured for this hotel.

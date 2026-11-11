@@ -66,6 +66,7 @@ import {
 // visually identical to the Hotel / Package-Create / LastMinute / LongStay
 // flows without a copy.
 import "../../styles/HotelBookingPage.css";
+import { orderIdPathSegment } from "../../utils/urlSafety";
 
 // Line under a supplier hotel's name. Admins see the supplier and whether it
 // still has to be booked by hand; everyone else only sees it's a live-rate hotel.
@@ -478,7 +479,7 @@ export default function PackageBookingDetailView() {
       try {
         setIsFinalizingReconfirmPayment(true);
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(
@@ -488,7 +489,7 @@ export default function PackageBookingDetailView() {
           return;
         }
         const res = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize-package-reconfirm/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize-package-reconfirm/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         const body = res?.data || {};
         if (body.status === "success") {

@@ -97,6 +97,18 @@ export function roomListApiId(card) {
 }
 
 /**
+ * What View Rooms stores as "roomListPayload" for the room list it opens.
+ * refundPolicy is the search's Refund Policy value (see refundPolicyOfFilter),
+ * so the room list opens with the same box ticked. With no box ticked the key
+ * is left out and the room list opens as it always has.
+ */
+export function roomListHandoff({ payload, meta, currency, refundPolicy }) {
+  return refundPolicy
+    ? { payload, meta, currency, refundPolicy }
+    : { payload, meta, currency };
+}
+
+/**
  * The number that opens a student, senior citizen or gov employee result's room
  * list. Agents' replies carry apiId and no apiType. In-house when a reply has
  * neither, as these pages have always done.

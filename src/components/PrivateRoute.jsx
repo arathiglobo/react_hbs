@@ -34,8 +34,15 @@ const PrivateRoute = ({ children, roles }) => {
     const storedRoles = getUserRole()
       .split(",")
       .map((role) => role.trim().toLowerCase());
+    // The active role counts only if the user really holds it (an edited
+    // "currentActiveRole" must not open admin pages). Super admin holds
+    // admin too — the Sidebar switches it to "admin" on /adminDashboard.
+    const activeCandidate = getCurrentActiveRole().toLowerCase();
+    const holdsActiveRole =
+      storedRoles.includes(activeCandidate) ||
+      (activeCandidate === "admin" && storedRoles.includes("super_admin"));
     const currentRole =
-      getCurrentActiveRole().toLowerCase() ||
+      (holdsActiveRole ? activeCandidate : "") ||
       storedRoles[0] ||
       "";
 

@@ -91,6 +91,43 @@ export const getUserId = () => read(KEYS.userId);
 export const getAdSessionId = () => read(KEYS.adSessionId);
 
 export const setUserId = (id) => write(KEYS.userId, id);
+
+// Restaurant-extranet sign-in (pages/restaurant-extranet/RestaurantExtranetLogin.jsx)
+// keeps its own token under separate keys so it never replaces the admin /
+// agent authToken. Like authToken it lives in THIS tab's sessionStorage —
+// never localStorage, which every script and every tab of the origin can
+// read and which outlives the browser session.
+export const RESTAURANT_EXTRANET_KEYS = {
+  token: "restaurantExtranetToken",
+  restaurantId: "restaurantExtranetRestaurantId",
+  restaurantName: "restaurantExtranetRestaurantName",
+  email: "restaurantExtranetEmail",
+};
+
+export const getRestaurantExtranetToken = () => read(RESTAURANT_EXTRANET_KEYS.token);
+export const getRestaurantExtranetEmail = () => read(RESTAURANT_EXTRANET_KEYS.email);
+
+export function setRestaurantExtranetSession({ token, restaurantId, restaurantName, email }) {
+  write(RESTAURANT_EXTRANET_KEYS.token, token);
+  if (restaurantId !== null && restaurantId !== undefined) {
+    write(RESTAURANT_EXTRANET_KEYS.restaurantId, String(restaurantId));
+  }
+  if (restaurantName) write(RESTAURANT_EXTRANET_KEYS.restaurantName, restaurantName);
+  if (email) write(RESTAURANT_EXTRANET_KEYS.email, email);
+}
+
+/**
+ * Removes restaurant-extranet values that older builds left in localStorage.
+ * Called once at start-up (index.js); a stale token there is dropped rather
+ * than moved, so it can no longer be read by other tabs or scripts.
+ */
+export function purgeLegacyRestaurantExtranetStorage() {
+  try {
+    Object.values(RESTAURANT_EXTRANET_KEYS).forEach((k) => localStorage.removeItem(k));
+  } catch (_) {
+    /* storage unavailable — nothing to purge */
+  }
+}
 export const setCurrentActiveRole = (role) => write(KEYS.currentActiveRole, role);
 
 /**

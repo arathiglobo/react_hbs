@@ -8,6 +8,7 @@ import Swal from "sweetalert2";
 import { FaEdit, FaTrash, FaPlus, FaSearch, FaChevronDown, FaUndo, FaTimes, FaCheck, FaSignInAlt, FaCreditCard, FaEye, FaEyeSlash, FaToggleOn, FaToggleOff } from "react-icons/fa";
 import { formatDateTimeDisplay } from "../../../utils/dateUtils";
 import AgentSelect from "../../../components/AgentSelect";
+import { escapeHtml } from "../../../utils/safeHtml";
 
 // Searchable Select Component for large lists
 const SearchableSelect = ({ label, name, value, options, onChange, placeholder, onSearch, isLoading, error, required }) => {
@@ -552,7 +553,7 @@ export default function SubAgent() {
       String(item.status || "").trim().toLowerCase() !== "inactive";
     const nextLabel = isActive ? "Inactive" : "Active";
     Swal.fire({
-      title: `Set ${item.companyName || "this sub agent"} to ${nextLabel}?`,
+      titleText: `Set ${item.companyName || "this sub agent"} to ${nextLabel}?`,
       // Inactive switches the sub agent's login off (backend sets
       // user_accounts.active). Bookings and history are kept.
       text: isActive
@@ -984,7 +985,7 @@ export default function SubAgent() {
   const handleDeleteTempCredit = (row) => {
     Swal.fire({
       title: "Delete this temporary credit limit?",
-      html: `Amount: <b>${row.amount}</b><br/>This removes it immediately — it will no longer count toward the sub agent's available credit.`,
+      html: `Amount: <b>${escapeHtml(row.amount)}</b><br/>This removes it immediately — it will no longer count toward the sub agent's available credit.`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#d33",

@@ -23,6 +23,8 @@ import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
 import { resolveInhouseDeadline } from "../../utils/rateDeadline";
 import RefundBadge from "../../components/RefundBadge";
 import { uaeToday, labelOfRate, chargeNowText, REFUND_PARTIAL } from "../../utils/refundLabel";
+import { sanitizeRichHtml } from "../../utils/safeHtml";
+import { orderIdPathSegment } from "../../utils/urlSafety";
 
 // Dummy online-payment gateways shown when an agent's credit is short.
 // Each routes to /payment/<id> — a placeholder card-entry page.
@@ -799,7 +801,7 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
         setIsFinalizingPayment(true);
         setIsSubmitting(true);
         const response = await axiosInstance.post(
-          `/api/payment/ccavenue/finalize/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/finalize/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         const bookingResponse = response.data;
         if (
@@ -861,7 +863,7 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
       }
       try {
         const statusResponse = await axiosInstance.get(
-          `/api/payment/ccavenue/status/${ccavenueOrderId}`,
+          `/api/payment/ccavenue/status/${orderIdPathSegment(ccavenueOrderId)}`,
         );
         if (statusResponse.data?.status !== "SUCCESS") {
           toast.error(
@@ -2473,7 +2475,7 @@ const HotelBookingPage = ({ force24Hour = false, religiousMode = false } = {}) =
                           <div
                             className="terms-content"
                             dangerouslySetInnerHTML={{
-                              __html: termsAndConditions,
+                              __html: sanitizeRichHtml(termsAndConditions),
                             }}
                           />
                         ) : (
