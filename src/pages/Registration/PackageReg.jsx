@@ -37,16 +37,9 @@ import DateTimeApplyPicker, {
   parseLocalDateTime,
 } from "../../components/DateTimeApplyPicker";
 import {
-  SUPPLIER_LABELS,
   canSeeSupplierNames,
   parseSupplierProviders,
 } from "../booking/packagebooking/supplierHotels";
-
-// Suppliers a package can offer through "Allow supplier hotels". The backend
-// checks the posted codes against its own list (SupplierHotelProviders).
-const SUPPLIER_HOTEL_OPTIONS = Object.entries(SUPPLIER_LABELS).map(
-  ([value, label]) => ({ value, label })
-);
 
 // Enhanced SearchableSelect Component with loading support
 const SearchableSelect = ({
@@ -511,15 +504,9 @@ const PackageReg = () => {
         "Please select or enter at least one item in Inclusion, Exclusion, or Terms & Conditions";
     }
 
-    if (
-      canManageSupplierHotels &&
-      data.containHotel &&
-      data.supplierHotelsEnabled &&
-      !data.supplierHotelProviders?.length
-    ) {
-      errors.supplierHotelProviders =
-        "Please select at least one supplier for supplier hotels";
-    }
+    // (The "select at least one supplier" check went with the removed
+    // "Allow supplier hotels" option: there is nothing left on the form to fix
+    // it with, so it could only block a save without a visible reason.)
 
     return errors;
   };
@@ -932,10 +919,21 @@ const PackageReg = () => {
   const cityList = async (countryId, searchTerm = "") => {
     try {
       setIsLoadingPlaces(true);
+      // Only the arriving country's cities. The plain /api/province list (used
+      // before) ignores countryId and returned the first 50 cities of every
+      // country, so the chosen country's cities were missing. getByCountryId
+      // always filters by country (and by name / code when a search is typed);
+      // the dropdown keeps showing at most 50, A to Z, as before.
       const response = await axiosInstance.get(
-        `/api/province?countryId=${countryId}&page=0&limit=50&search=${encodeURIComponent(searchTerm)}`
+        `/api/province/getByCountryId/${encodeURIComponent(countryId)}?search=${encodeURIComponent(searchTerm)}`
       );
-      setPlaces(Array.isArray(response.data) ? response.data : []);
+      const list = Array.isArray(response.data) ? response.data : [];
+      const byName = (p) => String(p?.name || p?.stateName || "");
+      setPlaces(
+        [...list]
+          .sort((a, b) => byName(a).localeCompare(byName(b)))
+          .slice(0, 50)
+      );
     } catch (error) {
       console.log("axios call error for city list : ", error);
       setPlaces([]);
@@ -2474,65 +2472,11 @@ const PackageReg = () => {
                             </div>
                           )}
                         </Form.Group>
-                        {/* Only offered with Hotel ticked: the backend switches
-                            supplier hotels off for a package without hotels. */}
-                        {canManageSupplierHotels && formData.containHotel && (
-                          <Form.Group className="mb-3">
-                            <FormCheck
-                              type="checkbox"
-                              id="allow-supplier-hotels"
-                              label="Allow supplier hotels"
-                              disabled={isViewMode}
-                              checked={!!formData.supplierHotelsEnabled}
-                              onChange={(e) =>
-                                setFormData((prev) => ({
-                                  ...prev,
-                                  supplierHotelsEnabled: e.target.checked,
-                                }))
-                              }
-                            />
-                            <Form.Text className="text-muted d-block">
-                              Offers live hotels from the selected suppliers next
-                              to this package's own hotels when it is booked.
-                            </Form.Text>
-                            {formData.supplierHotelsEnabled && (
-                              <div className="mt-2">
-                                {SUPPLIER_HOTEL_OPTIONS.map((option) => (
-                                  <FormCheck
-                                    key={option.value}
-                                    inline
-                                    type="checkbox"
-                                    id={`supplier-hotel-${option.value}`}
-                                    label={option.label}
-                                    disabled={isViewMode}
-                                    checked={(
-                                      formData.supplierHotelProviders || []
-                                    ).includes(option.value)}
-                                    onChange={(e) =>
-                                      setFormData((prev) => {
-                                        const current =
-                                          prev.supplierHotelProviders || [];
-                                        return {
-                                          ...prev,
-                                          supplierHotelProviders: e.target.checked
-                                            ? [...current, option.value]
-                                            : current.filter(
-                                                (code) => code !== option.value
-                                              ),
-                                        };
-                                      })
-                                    }
-                                  />
-                                ))}
-                                {validationErrors.supplierHotelProviders && (
-                                  <div className="text-danger small mt-1">
-                                    {validationErrors.supplierHotelProviders}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </Form.Group>
-                        )}
+                        {/* "Allow supplier hotels" was removed from this form:
+                            supplier hotels are no longer set per package. A
+                            package that already has it keeps its saved value
+                            (it is still loaded and posted back unchanged on
+                            save); a new package never gets it. */}
                       </Col>
                       <Col md={6}>
                         <Form.Group className="mb-3">

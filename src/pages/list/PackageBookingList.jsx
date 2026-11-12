@@ -23,6 +23,8 @@ import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
+import { useFeatureFlag } from "../../config/FeatureFlagsContext";
+import { canSeeSupplierNames } from "../booking/packagebooking/supplierHotels";
 // Shared "hotel booking list" look (Lexend, red/white theme, table/card/
 // pagination styling). Same skin the /booking-details/hotel-booking-list,
 // long-stay, and last-minute lists use — the four pages line up visually.
@@ -205,6 +207,9 @@ const PackageBookingList = () => {
   });
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState("all");
+  // Backend switch package.admin-confirmation.enabled: admins get an
+  // "Awaiting confirmation" booking type. Off by default.
+  const adminConfirmation = !!useFeatureFlag("packageAdminConfirmation");
   const [search, setSearch] = useState("");
   const [perPage, setPerPage] = useState(10);
   const [page, setPage] = useState(1);
@@ -268,7 +273,11 @@ const PackageBookingList = () => {
       // / completed / reconfirmed / confirmed) falls back to the active-
       // bookings endpoint — ReConfirmed / Confirmed then narrow client-side.
       let endpoint;
-      if (status === "all") {
+      if (status === "awaiting") {
+        // Admin confirmation queue: paid bookings no admin has confirmed or
+        // rejected yet (only offered while packageAdminConfirmation is on).
+        endpoint = "/api/v1/package-booking/fulfilment/pending";
+      } else if (status === "all") {
         endpoint = "/api/v1/package-booking/all";
       } else if (status === "cancelled") {
         endpoint = "/api/v1/package-booking/cancelled";
@@ -619,6 +628,9 @@ const PackageBookingList = () => {
                           <option value="reconfirmed">ReConfirmed</option>
                           <option value="confirmed">Confirmed</option>
                           <option value="cancelled">Cancelled</option>
+                          {adminConfirmation && canSeeSupplierNames() && (
+                            <option value="awaiting">Awaiting confirmation</option>
+                          )}
                         </Form.Select>
                       </Col>
                       <Col xs={12} md={6} lg={4} xl={3}>

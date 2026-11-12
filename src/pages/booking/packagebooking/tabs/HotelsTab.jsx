@@ -15,13 +15,7 @@ import {
   FaSuitcase,
   FaBed,
 } from "react-icons/fa";
-import SupplierHotelsSection from "./SupplierHotelsSection";
-import {
-  packageSupplierProviders,
-  selectedSupplierHotel,
-  supplierHotelKey,
-  toSupplierSelection,
-} from "../supplierHotels";
+import { selectedSupplierHotel } from "../supplierHotels";
 
 const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFixed, bookingData, programme, updateData, updateProgramme, packageRate, onPackageRateResolved, onPrev, onNext }) => {
   const [hotels, setHotels] = useState([]);
@@ -219,10 +213,10 @@ const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFix
     });
   };
 
-  // A supplier hotel has no hotelId, so its "selected" state is read straight
-  // from the parent's selections. Own-hotel selection above is untouched:
-  // picking an own hotel replaces selectedHotels, which clears this too.
-  const supplierProviders = packageSupplierProviders(packageView);
+  // Live supplier hotels are no longer offered on this page. This only
+  // recognises one already saved on an older booking that is being amended
+  // (a supplier hotel has no hotelId, so it is read from the selections);
+  // picking an own hotel replaces selectedHotels, which clears it.
   const selectedSupplier = selectedSupplierHotel(bookingData);
 
   // A supplier hotel's price is added to the package rate, so that rate has to
@@ -235,26 +229,6 @@ const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFix
   const packageRateMessage = isLoading
     ? "Please wait, the package rate is still loading."
     : "The package rate isn't available for these dates, so a live hotel can't be added.";
-
-  const toggleSupplierHotel = (hotel) => {
-    const isCurrentPick =
-      selectedSupplier &&
-      supplierHotelKey(selectedSupplier.supplier, selectedSupplier.supplierHotelCode) ===
-        supplierHotelKey(hotel.supplier, hotel.hotelCode);
-    if (!isCurrentPick && !packageRateKnown) {
-      toast.error(packageRateMessage);
-      return;
-    }
-    setSelectedHotelId(null);
-    setSelectedMealPlan(null);
-    const pick = isCurrentPick ? null : toSupplierSelection(hotel);
-    updateData({
-      selectedHotels: pick ? [pick] : [],
-      hotelPrice: pick ? Number(pick.totalRateWithMarkup || 0) : 0,
-      selectedMealPlan: null,
-      mealPlanPrice: 0,
-    });
-  };
 
   // On Next: a hotel MUST be selected before proceeding to checkout — no
   // "proceed anyway" escape hatch per product spec. Toast the operator and
@@ -438,7 +412,7 @@ const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFix
           <div className="room-categories-section">
             <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
               <h4 className="mb-0">
-                Hotels included in this package
+                Select Your Preferred Hotel
               </h4>
               {hotels.length > 0 && (
                 <span className="prg-section-pill">
@@ -453,7 +427,7 @@ const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFix
                 as a popup when the user presses Next (see the Modal below). */}
             {hotels.length > 0 && (
               <div className="prg-hotel-select-hint mb-3">
-                Select a hotel to continue.
+                Choose your preferred hotel to continue.
               </div>
             )}
 
@@ -632,20 +606,9 @@ const HotelsTab = ({ searchParams, searchCityId, searchRoomCount, packageRateFix
             )}
           </div>
 
-          {/* Only for a package registered with "Allow supplier hotels", or a
-              booking being amended that already holds a supplier hotel. */}
-          {(supplierProviders.length > 0 || selectedSupplier) && (
-            <SupplierHotelsSection
-              providers={supplierProviders}
-              searchParams={searchParams}
-              checkInDate={programme?.checkInDate || searchParams.travelDate}
-              searchCityId={searchCityId}
-              searchRoomCount={searchRoomCount}
-              selected={selectedSupplier}
-              onToggle={toggleSupplierHotel}
-              getImageUrl={getImageUrl}
-            />
-          )}
+          {/* The "More hotels with live rates" (supplier hotels) section was
+              removed: the booking page offers only the package's own hotels,
+              for every login. */}
       </div>
 
       {/* Cancellation Policy card removed per product spec — the same

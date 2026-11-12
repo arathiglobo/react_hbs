@@ -1558,7 +1558,7 @@ export default function HotelSearch({
   // /api/personalProfile/{UserName}) so we can look up their currency below.
   useEffect(() => {
     if (!isAgentRole) return;
-    const cached = sessionStorage.getItem("userId");
+    const cached = sessionStorage.getItem("userId"); 
     if (cached) { setSelfAgentId(cached); return; }
     const userName =
       sessionStorage.getItem("UserName");

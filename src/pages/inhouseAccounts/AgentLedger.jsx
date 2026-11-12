@@ -53,6 +53,7 @@ const ENTRY_TYPES = [
   { value: "", label: "Everything" },
   { value: "BOOKING_DEBIT", label: "Booking made" },
   { value: "CANCELLATION_CREDIT", label: "Booking cancelled" },
+  { value: "CANCELLATION_NOT_REFUNDED", label: "Cancelled, not refunded" },
   { value: "RECEIPT_CREDIT", label: "Money paid in" },
   { value: "ADDITIONAL_CREDIT", label: "Credit added" },
   { value: "CREDIT_LIMIT_INCREASE", label: "Limit raised" },
@@ -60,6 +61,21 @@ const ENTRY_TYPES = [
   { value: "ADJUSTMENT_DEBIT", label: "Money taken out" },
   { value: "ADJUSTMENT_CREDIT", label: "Money added" },
 ];
+
+// A non-refundable booking that was cancelled: a zero line, because nothing
+// goes back to the agent's credit online. Only the Finance team can refund it.
+const NOT_REFUNDED = "CANCELLATION_NOT_REFUNDED";
+
+// Badge colours for "What happened": green money in, red money out, amber for
+// a cancellation that gave nothing back.
+const badgeColours = (e) => {
+  if (e.entryType === NOT_REFUNDED) {
+    return { bg: "warning-subtle", text: "warning-emphasis" };
+  }
+  return e.direction === "CREDIT"
+    ? { bg: "success-subtle", text: "success" }
+    : { bg: "danger-subtle", text: "danger" };
+};
 
 const MODULES = [
   { value: "", label: "All types" },
@@ -218,6 +234,10 @@ export default function AgentLedger() {
           `Starting credit limits: <b>${escapeHtml(s.openingBalanceLines ?? 0)}</b><br/>` +
           `Bookings made: <b>${escapeHtml(s.bookingDebitLines ?? 0)}</b><br/>` +
           `Bookings cancelled: <b>${escapeHtml(s.cancellationCreditLines ?? 0)}</b><br/>` +
+          `Cancelled, not refunded: <b>${escapeHtml(s.cancelledNotRefundedLines ?? 0)}</b><br/>` +
+          (s.removedNonRefundableRefundLines > 0
+            ? `Wrong refund lines removed (non-refundable): <b>${escapeHtml(s.removedNonRefundableRefundLines)}</b><br/>`
+            : "") +
           `Payments in: <b>${escapeHtml(s.receiptCreditLines ?? 0)}</b><br/><br/>` +
           `<b>${escapeHtml(s.totalWritten ?? 0)}</b> new lines added` +
           (s.totalWritten === 0
@@ -385,7 +405,10 @@ export default function AgentLedger() {
               <p className="text-muted small mb-3">
                 Every time an agent books something, cancels a booking, or pays
                 money in, one line is added here — and the balance shows what
-                they had left to spend right after it.
+                they had left to spend right after it. A cancelled
+                non-refundable booking shows as <b>Cancelled, not refunded</b>:
+                nothing goes back to the agent's credit, and only the Finance
+                team can refund it.
               </p>
               <Row className="g-3">
                 <Col xs={6} md={3}>
@@ -613,14 +636,8 @@ export default function AgentLedger() {
                           {!isAgentView && <td>{e.agentName}</td>}
                           <td>
                             <Badge
-                              bg={
-                                e.direction === "CREDIT"
-                                  ? "success-subtle"
-                                  : "danger-subtle"
-                              }
-                              text={
-                                e.direction === "CREDIT" ? "success" : "danger"
-                              }
+                              bg={badgeColours(e).bg}
+                              text={badgeColours(e).text}
                             >
                               {e.entryTypeLabel}
                             </Badge>
