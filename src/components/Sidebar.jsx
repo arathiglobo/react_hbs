@@ -871,6 +871,23 @@ export function buildSidebarItems({ currentRole, hotelId, dashboardPath }) {
         // },
       ],
     },
+    {
+      // Finance's daily list of cancelled bookings whose refund is made by
+      // hand (today: hotel bookings paid by card through CC Avenue); resolve
+      // each within 2 working days. Staff only; super_admin inherits the
+      // admin entry. Both codes are seeded in the backend (MenuItemSeeder),
+      // so super_admin can hide them per role in Assign Menu.
+      code: "top_finance",
+      label: "Finance",
+      roles: ["admin", "staff"],
+      children: [
+        {
+          code: "fin_refund_review",
+          label: "Refund Review",
+          to: "/finance/refund-review",
+        },
+      ],
+    },
     // {
     //   label: "Assigned Agents",
     //   to: "/assigned-agents",
