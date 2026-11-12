@@ -275,13 +275,15 @@ export default function Sidebar() {
   // change. Fail-open — any error keeps the full hardcoded menu visible,
   // so a network hiccup can never blank the sidebar. Applied via
   // roleAllows below (returns false when the item's code is in the set).
+  // Also re-fetched when the Assign Menu screen saves or resets a role
+  // ("sidebarHiddenMenusChanged"), so the change shows without a reload.
   useEffect(() => {
     if (!currentRole) {
       setHiddenCodes(new Set());
       return undefined;
     }
     let cancelled = false;
-    (async () => {
+    const loadHiddenCodes = async () => {
       try {
         const res = await axiosInstance.get("/api/sidebar/hidden-menus", {
           params: { role: currentRole },
@@ -292,9 +294,12 @@ export default function Sidebar() {
       } catch (_) {
         if (!cancelled) setHiddenCodes(new Set());
       }
-    })();
+    };
+    loadHiddenCodes();
+    window.addEventListener("sidebarHiddenMenusChanged", loadHiddenCodes);
     return () => {
       cancelled = true;
+      window.removeEventListener("sidebarHiddenMenusChanged", loadHiddenCodes);
     };
   }, [currentRole]);
 
@@ -390,7 +395,35 @@ export default function Sidebar() {
     labelForDashboard = "Hotel Dashboard";
   }
 
-  const items = [
+  const items = buildSidebarItems({ currentRole, hotelId, dashboardPath });
+
+  return renderSidebar({
+    items,
+    currentRole,
+    hiddenCodes,
+    isSubAccountAgent,
+    isComingSoonForRole,
+    openGroups,
+    setOpenGroups,
+    collapsed,
+    toggleCollapsed,
+    show,
+    handleClose,
+    sidebarRef,
+    offcanvasRef,
+    approvalsPendingByCode,
+    approvalsPendingCount,
+  });
+}
+
+/**
+ * The full, unfiltered sidebar menu. Kept outside the component so the
+ * Assign Menu screen reads the very same entries and role rules the sidebar
+ * renders (see sidebarMenuCodesForRole) instead of a copy that drifts.
+ * Add, rename or re-role menu entries here exactly as before.
+ */
+export function buildSidebarItems({ currentRole, hotelId, dashboardPath }) {
+  return [
     {
       code: "top_dashboard",
       label: labelForDashboard,
@@ -618,7 +651,7 @@ export default function Sidebar() {
         { code: "reg_restaurants",   label: "Restaurants",                    to: "/restaurant/list" },
         { code: "reg_honeymoon",     label: "Honeymoon Packages",             to: "/honeymoon/list" },
         { code: "reg_ayurveda",      label: "Ayurveda",                       to: "/registration/ayurveda" },
-        { code: "reg_scheffer",      label: "Chauffer Driver and Limousine",  to: "/registration/schefferDriver" },
+        { code: "reg_scheffer",      label: "Chauffeur Driver and Limousine", to: "/registration/schefferDriver" },
         { code: "reg_package_addons", label: "Build Your Own Package Add-Ons", to: "/registration/package-addons" },
       ], 
     },
@@ -673,11 +706,13 @@ export default function Sidebar() {
           to: "/new-booking/student",
         },
         {
+          code: "nb_senior_citizen",
          label: "Senior Citizen",
          to: "/new-booking/senior-citizen",
         },
         // Religious flow — same HotelSearch, destination locked to Mecca/Medina.
         {
+          code: "nb_religious",
           label: "Religious",
           to: "/new-booking/religious",
         },
@@ -748,36 +783,44 @@ export default function Sidebar() {
         //   to: "/booking-details/quotation-list-list",
         // },
         {
+          code: "bl_offline",
           label: "Offline",
           to: "/booking-details/offline-booking-list",
           roles: ["admin","agent"],
         },
         {
+          code: "bl_restaurant",
           label: "Restaurants",
           to: "/booking-details/restaurant-booking-list",
         },
         {
+          code: "bl_honeymoon",
           label: "Honeymoon Packages",
           to: "/booking-details/honeymoon-booking-list",
         },
         // Meet & Space booking list — view + cancel from this page
         {
+          code: "bl_meet_space",
           label: "Meet & Space",
           to: "/booking-details/meet-and-space-booking-list",
         },
         {
+          code: "bl_gov",
           label: "Govt / Airlines",
           to: "/booking-details/gov-employee-booking-list",
         },
         {
+          code: "bl_ayurveda",
           label: "Ayurveda",
           to: "/booking-details/ayurveda-booking-list",
         },
         {
+          code: "bl_student",
           label: "Student",
           to: "/booking-details/student-booking-list",
         },
         {
+          code: "bl_senior_citizen",
           label: "Senior Citizen",
           to: "/booking-details/senior-citizen-booking-list",
         },
@@ -1022,20 +1065,80 @@ export default function Sidebar() {
 
 
   ];
+}
 
-  // Filter menu based on allowed roles
-  // Filter menu based on allowed roles. Child items (and items inside
-  // groups) may also carry a `roles` key — those without one stay visible
-  // to every role that can see the parent.
-  //
-  // super_admin inherits every menu that admin can see so a SUPER_ADMIN
-  // login keeps every admin tool (Manage Masters, Reports, Registration,
-  // …) and additionally sees SUPER_ADMIN-only groups (roles: ["super_admin"]).
-  //
-  // `excludeRoles` opts individual items OUT of that inheritance — used for
-  // screens where admin's context (their own company) makes sense but
-  // super_admin's "sees everything" model doesn't (e.g., the per-company
-  // API access page super_admin governs via a different super_admin screen).
+// Filter menu based on allowed roles. Child items (and items inside
+// groups) may also carry a `roles` key — those without one stay visible
+// to every role that can see the parent.
+//
+// super_admin inherits every menu that admin can see so a SUPER_ADMIN
+// login keeps every admin tool (Manage Masters, Reports, Registration,
+// …) and additionally sees SUPER_ADMIN-only groups (roles: ["super_admin"]).
+//
+// `excludeRoles` opts individual items OUT of that inheritance — used for
+// screens where admin's context (their own company) makes sense but
+// super_admin's "sees everything" model doesn't (e.g., the per-company
+// API access page super_admin governs via a different super_admin screen).
+export function sidebarEntryAllowed(entry, role) {
+  if (!entry.roles) return true;
+  if (Array.isArray(entry.excludeRoles) && entry.excludeRoles.includes(role)) return false;
+  if (entry.roles.includes(role)) return true;
+  if (role === "super_admin" && entry.roles.includes("admin")) return true;
+  return false;
+}
+
+const hasEntries = (entry) =>
+  (Array.isArray(entry.children) && entry.children.length > 0) ||
+  (Array.isArray(entry.groups) && entry.groups.length > 0);
+
+/**
+ * Codes of the menu entries `role` sees before any super_admin override —
+ * the entries the Assign Menu screen offers for that role. Walks the same
+ * items with the same rules as the rendered sidebar (role filter, and a
+ * group left with nothing to open is not shown). Per-login rules such as
+ * the sub-account Registration rule are ignored: the screen assigns per
+ * role, not per user.
+ */
+export function sidebarMenuCodesForRole(role) {
+  const codes = new Set();
+  const visit = (entries) => {
+    (entries || []).forEach((entry) => {
+      if (!sidebarEntryAllowed(entry, role)) return;
+      const kids = [
+        ...(Array.isArray(entry.children) ? entry.children : []),
+        ...(Array.isArray(entry.groups)
+          ? entry.groups.flatMap((group) => group.children || [])
+          : []),
+      ];
+      const allowedKids = kids.filter((kid) => sidebarEntryAllowed(kid, role));
+      if (hasEntries(entry) && allowedKids.length === 0 && !entry.to) return;
+      if (entry.code) codes.add(entry.code);
+      visit(allowedKids);
+    });
+  };
+  visit(buildSidebarItems({ currentRole: role, hotelId: null, dashboardPath: "/" }));
+  return codes;
+}
+
+// Second half of <Sidebar />: filters the menu for the active role and
+// renders it. A plain function (no hooks) called from Sidebar's render.
+function renderSidebar({
+  items,
+  currentRole,
+  hiddenCodes,
+  isSubAccountAgent,
+  isComingSoonForRole,
+  openGroups,
+  setOpenGroups,
+  collapsed,
+  toggleCollapsed,
+  show,
+  handleClose,
+  sidebarRef,
+  offcanvasRef,
+  approvalsPendingByCode,
+  approvalsPendingCount,
+}) {
   const roleAllows = (entry) => {
     // Super_admin's per-role visibility overlay — an entry whose stable
     // {@code code} appears in the hidden-set is dropped no matter what
@@ -1043,11 +1146,7 @@ export default function Sidebar() {
     // eligible for hiding; sub-menu leaves without a code stay visible
     // as before (they're gated only by their parent's visibility today).
     if (entry.code && hiddenCodes.has(entry.code)) return false;
-    if (!entry.roles) return true;
-    if (Array.isArray(entry.excludeRoles) && entry.excludeRoles.includes(currentRole)) return false;
-    if (entry.roles.includes(currentRole)) return true;
-    if (currentRole === "super_admin" && entry.roles.includes("admin")) return true;
-    return false;
+    return sidebarEntryAllowed(entry, currentRole);
   };
 
   const filteredItems = items
@@ -1072,8 +1171,13 @@ export default function Sidebar() {
             !Array.isArray(group.children) || group.children.length > 0,
         );
     }
+    // A group whose every entry was filtered out (e.g. super_admin hid all
+    // of Approvals' children on Assign Menu) has nothing left to open and
+    // no page of its own — without this it rendered as a dead "#" link.
+    if (hasEntries(item) && !hasEntries(next) && !item.to) return null;
     return next;
-  });
+  })
+    .filter(Boolean);
 
   const toggleGroup = (groupKey, isTopLevelItem = false) => {
     console.log("Toggling group:", groupKey, "isTopLevelItem:", isTopLevelItem); // Debug log
