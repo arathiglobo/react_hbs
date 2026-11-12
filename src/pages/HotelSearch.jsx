@@ -115,7 +115,9 @@ function RoomGuestSelector({ value, onChange }) {
               children,
               childAges: Array.from(
                 { length: children },
-                (_, j) => r.childAges[j] || 5,
+                // `??` (not `||`) so a chosen age of 0 survives a
+                // children-count change instead of resetting to 5.
+                (_, j) => r.childAges[j] ?? 5,
               ),
             }
           : r,
@@ -222,7 +224,7 @@ function RoomGuestSelector({ value, onChange }) {
                       </label>
                       <Form.Select
                         size="sm"
-                        value={room.childAges[idx] || 5}
+                        value={room.childAges[idx] ?? 5}
                         onChange={(e) =>
                           setChildAge(i, idx, parseInt(e.target.value))
                         }
@@ -1556,7 +1558,7 @@ export default function HotelSearch({
   // /api/personalProfile/{UserName}) so we can look up their currency below.
   useEffect(() => {
     if (!isAgentRole) return;
-    const cached = sessionStorage.getItem("userId");
+    const cached = sessionStorage.getItem("userId"); 
     if (cached) { setSelfAgentId(cached); return; }
     const userName =
       sessionStorage.getItem("UserName");
