@@ -312,7 +312,28 @@ export default function DayStayBookingList() {
     try {
       setLoading(true);
       const res = await axiosInstance.get("/api/day-stay-booking");
-      setBookings(Array.isArray(res.data) ? res.data : []);
+      const dayStayRows = Array.isArray(res.data) ? res.data : [];
+      // Supplier hotels booked from the Day Stay page live in hotel_booking, so
+      // they come from their own endpoint (empty unless that feature is on).
+      // If that call fails the day-stay bookings still show, exactly as before.
+      let supplierRows = [];
+      try {
+        const supplierRes = await axiosInstance.get(
+          "/api/day-stay-booking/supplier-bookings",
+        );
+        if (Array.isArray(supplierRes.data)) supplierRows = supplierRes.data;
+      } catch (err) {
+        console.warn("Could not load Day Stay supplier bookings.", err);
+      }
+      setBookings(
+        supplierRows.length === 0
+          ? dayStayRows
+          : [...dayStayRows, ...supplierRows].sort(
+              (a, b) =>
+                new Date(b.createdAt || b.bookingDate || 0) -
+                new Date(a.createdAt || a.bookingDate || 0),
+            ),
+      );
     } catch {
       toast.error("Failed to load Day Stay bookings");
       setBookings([]);
@@ -324,6 +345,18 @@ export default function DayStayBookingList() {
   useEffect(() => {
     fetchBookings();
   }, []);
+
+  // A supplier booking opens the standard hotel booking page, which cancels with
+  // the supplier. A day-stay booking opens its own page, as always.
+  const openBookingDetails = (b) => {
+    if (b.source === "API") {
+      navigate(`/booking-details/hotel-booking/${b.hotelBookingId}`);
+      return;
+    }
+    navigate(`/booking-details/day-stay-booking/${b.id}`, {
+      state: { booking: b },
+    });
+  };
 
   // Apply search + status + time-period + check-in-date filters in one pass.
   const filteredBookings = useMemo(() => {
@@ -1203,22 +1236,14 @@ export default function DayStayBookingList() {
                                         color: "#007bff",
                                         cursor: "pointer",
                                       }}
-                                      onClick={() =>
-                                        navigate(
-                                          `/booking-details/day-stay-booking/${b.id}`,
-                                          { state: { booking: b } },
-                                        )
-                                      }
+                                      onClick={() => openBookingDetails(b)}
                                       onKeyDown={(e) => {
                                         if (
                                           e.key === "Enter" ||
                                           e.key === " "
                                         ) {
                                           e.preventDefault();
-                                          navigate(
-                                            `/booking-details/day-stay-booking/${b.id}`,
-                                            { state: { booking: b } },
-                                          );
+                                          openBookingDetails(b);
                                         }
                                       }}
                                     />
