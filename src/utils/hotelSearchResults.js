@@ -7,12 +7,12 @@
 /**
  * How often to ask for the page again, and how long to wait for the server to
  * report the search finished. The server stops waiting for suppliers after
- * app.hotel-search.supplier-timeout-ms (180 s by default), so the ceiling only
+ * app.hotel-search.supplier-timeout-ms (220 s by default), so the ceiling only
  * matters when the server itself can no longer be reached.
  */
 export const POLL_INTERVAL_MS = 2000;
 export const FIRST_POLL_DELAY_MS = 1000;
-export const POLL_CEILING_MS = 240000;
+export const POLL_CEILING_MS = 270000;
 export const MAX_FAILED_POLLS_IN_A_ROW = 5;
 
 const NO_IMAGE = "https://details/assets/details/profilepic/hotel/hoteldefault.jpg";
@@ -125,21 +125,31 @@ export function apiIdOfResult(hotel) {
  * Progress from a reply. `reply.progress` holds counts only; `suppliers` is what
  * an admin's reply says about each one. An agent's reply carries neutral labels
  * ("supplier-1"), which are left out so they can never reach the screen.
+ *
+ * `partial` counts suppliers that answered, but with a batch or page of their
+ * answer missing even after a second try. `partialSuppliers` names them; only
+ * an admin's reply carries those names.
  */
 export function readProgress(reply) {
   const counts = reply?.progress || {};
   const total = Number(counts.total) || 0;
   const answered = Number(counts.answered) || 0;
   const failed = Number(counts.failed) || 0;
+  const partial = Number(counts.partial) || 0;
   const suppliers = Object.entries(reply?.status || {})
     .filter(([name]) => !/^supplier-\d+$/.test(name))
     .map(([name, status]) => ({ name, status }));
+  const partialSuppliers = Object.entries(reply?.partialSuppliers || {})
+    .filter(([name]) => !/^supplier-\d+$/.test(name))
+    .map(([name, reason]) => ({ name, reason }));
   return {
     total,
     answered,
     failed,
+    partial,
     complete: reply?.finalStatus === "COMPLETED",
     suppliers,
+    partialSuppliers,
   };
 }
 
@@ -167,22 +177,37 @@ export function progressMessage(progress, hotelsSoFar) {
 }
 
 /**
- * What to tell the user about suppliers that did not answer once the search has
- * finished, or null when all of them did.
+ * What to tell the user, once the search has finished, about suppliers that did
+ * not answer and suppliers that answered only in part, or null when every
+ * supplier answered in full. Names suppliers only when the reply did.
  */
 export function incompleteSearchNotice(progress) {
   const failed = Number(progress?.failed) || 0;
-  if (!progress?.complete || failed <= 0) return null;
-  const named = (progress.suppliers || [])
-    .filter((s) => s.status === "ERROR" || s.status === "TIMEOUT")
-    .map(
-      (s) =>
-        `${s.name.toUpperCase()} (${s.status === "TIMEOUT" ? "timed out" : "failed"})`,
+  const partial = Number(progress?.partial) || 0;
+  if (!progress?.complete || (failed <= 0 && partial <= 0)) return null;
+  const parts = [];
+  if (failed > 0) {
+    const named = (progress.suppliers || [])
+      .filter((s) => s.status === "ERROR" || s.status === "TIMEOUT")
+      .map(
+        (s) =>
+          `${s.name.toUpperCase()} (${s.status === "TIMEOUT" ? "timed out" : "failed"})`,
+      );
+    parts.push(
+      named.length > 0
+        ? `Did not answer: ${named.join(", ")}.`
+        : `${failed} ${failed === 1 ? "supplier" : "suppliers"} did not answer.`,
     );
-  if (named.length > 0) {
-    return `Did not answer: ${named.join(", ")}. Showing all the hotels found.`;
   }
-  return `${failed} ${failed === 1 ? "supplier" : "suppliers"} did not answer. Showing all the hotels found.`;
+  if (partial > 0) {
+    const named = (progress.partialSuppliers || []).map((s) => s.name.toUpperCase());
+    parts.push(
+      named.length > 0
+        ? `Answered in part, some of their hotels may be missing: ${named.join(", ")}.`
+        : `${partial} ${partial === 1 ? "supplier" : "suppliers"} answered in part, so some hotels may be missing.`,
+    );
+  }
+  return `${parts.join(" ")} Showing all the hotels found.`;
 }
 
 /**

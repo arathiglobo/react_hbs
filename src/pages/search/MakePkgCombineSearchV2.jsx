@@ -1155,7 +1155,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
     if (cancelled()) return;
 
     const lateStartedAt = Date.now();
-    while (!completed && !cancelled() && Date.now() - lateStartedAt < 180000) {
+    while (!completed && !cancelled() && Date.now() - lateStartedAt < 220000) {
       await sleep(4000);
       if (cancelled()) return;
       const check = await fetchPackageHotels(handle.searches, {

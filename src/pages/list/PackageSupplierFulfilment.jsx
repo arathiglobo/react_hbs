@@ -19,8 +19,8 @@ import { toast } from "react-hot-toast";
 import axiosInstance from "../../components/AxiosInstance";
 
 const BASE = "/api/v1/package-booking/fulfilment";
-// Supplier searches can take over a minute (GRN is slow).
-const SUPPLIER_TIMEOUT_MS = 210000;
+// Supplier searches can take over a minute (GRN is slow); the backend waits up to 230 s.
+const SUPPLIER_TIMEOUT_MS = 250000;
 
 const money = (value, currency = "AED") =>
   value === null || value === undefined || value === ""
