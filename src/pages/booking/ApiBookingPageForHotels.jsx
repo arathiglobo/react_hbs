@@ -46,6 +46,10 @@ import {
   isNonRefundable,
 } from "../../utils/rateDeadline";
 import { orderIdPathSegment } from "../../utils/urlSafety";
+import {
+  SUPPLIER_BOOKING_TIMEOUT_MS,
+  SUPPLIER_SEARCH_TIMEOUT_MS,
+} from "../../config/apiTimeouts";
 
 // Online-payment gateways offered when the agent's credit is short.
 // Mirrors the same list Inhouse HotelBookingPage.jsx uses (line 25) so
@@ -585,12 +589,12 @@ const ApiBookingPageForHotels = () => {
       try {
         setIsFinalizingPayment(true);
         setIsSubmitting(true);
-        // Finalize replays the supplier booking (RateHawk can take up to
-        // ~120 s), so allow longer than the 30 s client default.
+        // Finalize replays the supplier booking, so it waits as long as a
+        // booking does (config/apiTimeouts), not the 30 s client default.
         const response = await axiosInstance.post(
           `/api/payment/ccavenue/finalize/${orderIdPathSegment(ccavenueOrderId)}`,
           null,
-          { timeout: 120000 },
+          { timeout: SUPPLIER_BOOKING_TIMEOUT_MS },
         );
         const bookingResponse = response.data;
         const statusUpper = String(bookingResponse?.status || "").toUpperCase();
@@ -957,9 +961,11 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
           },
         ),
       };
+      // One Atharva call, allowed 180 s like every supplier call.
       const resp = await axiosInstance.post(
         "/api/hotel-booking/rate-check/3",
         preReq,
+        { timeout: SUPPLIER_SEARCH_TIMEOUT_MS },
       );
       const data = resp?.data;
       if (!data || data.success === false) {
@@ -1436,20 +1442,16 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         }
       }
 
-      // RateHawk (apiId=14) can legitimately take 60-120s end-to-end:
-      // prebook (docs recommend 60s timeout) + booking/form/ + booking/finish/
-      // + status polling (up to 90s per RateHawk contract). The shared
-      // AxiosInstance's 30s default is too short for that flow and would
-      // surface as a client-side "timeout of 30000ms exceeded" even when
-      // the booking is still legitimately in progress on the backend.
-      // Override the per-call timeout ONLY for RateHawk so no other
-      // supplier's flow is slowed down. 120s = generous headroom that
-      // still fits within the backend's worst-case budget.
-      const isRatehawk = Number(bookingData?.payload?.apiId) === 14;
+      // Every supplier booking makes one or more supplier calls, each allowed
+      // 180 s (RateHawk adds up to 300 s of status checks). The shared
+      // AxiosInstance's 30 s default would show "timeout of 30000ms exceeded"
+      // while the booking is still going through on the backend, so the page
+      // waits as long as a booking can take (config/apiTimeouts). The limit
+      // only matters when no answer comes; a quick booking returns at once.
       const response = await axiosInstance.post(
         "/api/hotel-booking/create",
         effectivePayload,
-        isRatehawk ? { timeout: 120000 } : undefined,
+        { timeout: SUPPLIER_BOOKING_TIMEOUT_MS },
       );
       const bookingResponse = response.data;
 

@@ -20,7 +20,7 @@ import axiosInstance from "../../components/AxiosInstance";
 
 const BASE = "/api/v1/package-booking/fulfilment";
 // Supplier searches can take over a minute (GRN is slow).
-const SUPPLIER_TIMEOUT_MS = 180000;
+const SUPPLIER_TIMEOUT_MS = 210000;
 
 const money = (value, currency = "AED") =>
   value === null || value === undefined || value === ""

@@ -152,7 +152,7 @@ export async function searchSupplierTransfers({
   agentId,
   city,
   isCancelled = () => false,
-  timeoutMs = 90000,
+  timeoutMs = 210000,
 }) {
   const origin = toTransferLocation(pickup?.raw);
   const destination = toTransferLocation(dropoff?.raw);

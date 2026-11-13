@@ -35,6 +35,7 @@ import {
   supplierText,
   withoutSupplierName,
 } from "../../utils/supplierDisplay";
+import { SUPPLIER_BOOKING_TIMEOUT_MS } from "../../config/apiTimeouts";
 
 const emptyCabPolicies = {
   terms: [],
@@ -1125,7 +1126,11 @@ const CabBookingPage = () => {
     if (!pendingPayload) return;
     setIsSubmitting(true);
     try {
-      const response = await axiosInstance.post("/api/cab/book", pendingPayload);
+      // An i'way booking makes several i'way calls in a row (check time,
+      // create, approve, documents), each allowed 180 s.
+      const response = await axiosInstance.post("/api/cab/book", pendingPayload, {
+        timeout: SUPPLIER_BOOKING_TIMEOUT_MS,
+      });
 
       if (response && (response.data?.success !== false && response.status === 200)) {
         if (isIway) {

@@ -7,12 +7,12 @@
 /**
  * How often to ask for the page again, and how long to wait for the server to
  * report the search finished. The server stops waiting for suppliers after
- * app.hotel-search.supplier-timeout-ms (90 s by default), so the ceiling only
+ * app.hotel-search.supplier-timeout-ms (180 s by default), so the ceiling only
  * matters when the server itself can no longer be reached.
  */
 export const POLL_INTERVAL_MS = 2000;
 export const FIRST_POLL_DELAY_MS = 1000;
-export const POLL_CEILING_MS = 150000;
+export const POLL_CEILING_MS = 240000;
 export const MAX_FAILED_POLLS_IN_A_ROW = 5;
 
 const NO_IMAGE = "https://details/assets/details/profilepic/hotel/hoteldefault.jpg";

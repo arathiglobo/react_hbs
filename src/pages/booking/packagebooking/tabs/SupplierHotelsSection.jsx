@@ -16,8 +16,8 @@ import {
   supplierLabel,
 } from "../supplierHotels";
 
-// The backend waits up to 100s for a supplier; the shared axios timeout is 30s.
-const SUPPLIER_SEARCH_TIMEOUT_MS = 110000;
+// The backend waits up to 190s for a supplier; the shared axios timeout is 30s.
+const SUPPLIER_SEARCH_TIMEOUT_MS = 200000;
 
 const HOTELS_PER_PAGE = 10;
 

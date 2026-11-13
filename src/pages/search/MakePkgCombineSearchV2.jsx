@@ -1120,7 +1120,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
 
   // Poll a started search until every supplier has answered: the full list
   // every 2 s for 30 s, then — slow suppliers routinely answer after 30 s —
-  // a cheap check every 4 s for up to 90 s more, refetching only when the
+  // a cheap check every 4 s for up to 180 s more, refetching only when the
   // hotel count moved or the search completed (the same two phases as
   // /new-booking/hotel). A failed poll is retried and never clears the list,
   // so one supplier failing never takes the others' hotels off the page.
@@ -1155,7 +1155,7 @@ const [activeAccordion, setActiveAccordion] = useState({});
     if (cancelled()) return;
 
     const lateStartedAt = Date.now();
-    while (!completed && !cancelled() && Date.now() - lateStartedAt < 90000) {
+    while (!completed && !cancelled() && Date.now() - lateStartedAt < 180000) {
       await sleep(4000);
       if (cancelled()) return;
       const check = await fetchPackageHotels(handle.searches, {
