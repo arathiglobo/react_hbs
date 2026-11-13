@@ -629,7 +629,7 @@
   border: 6px solid transparent;
   border-radius: 50%;
   animation: ringSpin 1.2s linear infinite;
-}
+} 
 
 .loader-ring span:nth-child(1) {
   border-top-color: #F75E00;
