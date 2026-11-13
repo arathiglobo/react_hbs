@@ -2658,7 +2658,7 @@ const AgentReg = ({ embedded = false, initialEditId = null, onClose = null } = {
                     <Row>
                       <Col md={3}>
                         <Form.Group className="mb-3">
-                          <Form.Label>Company Name</Form.Label>
+                          <Form.Label>Company Name <span className="text-danger">*</span></Form.Label>
                           <Form.Control
                             value={formData.companyName}
                             placeholder="Enter company name"
@@ -2726,7 +2726,7 @@ const AgentReg = ({ embedded = false, initialEditId = null, onClose = null } = {
                           fields grouped, no orphan column. */}
                       <Col md={3}>
                         <Form.Group className="mb-3">
-                          <Form.Label>First Name</Form.Label>
+                          <Form.Label>First Name <span className="text-danger">*</span></Form.Label>
                           <Form.Control
                             value={formData.firstName}
                             placeholder="Enter first name"
@@ -2761,7 +2761,7 @@ const AgentReg = ({ embedded = false, initialEditId = null, onClose = null } = {
                       </Col>
                       <Col md={3}>
                         <Form.Group className="mb-3">
-                          <Form.Label>Last Name</Form.Label>
+                          <Form.Label>Last Name <span className="text-danger">*</span></Form.Label>
                           <Form.Control
                             value={formData.lastName}
                             placeholder="Enter last name"
@@ -2912,7 +2912,7 @@ const AgentReg = ({ embedded = false, initialEditId = null, onClose = null } = {
                       </Col>
                       <Col md={4}>
                         <Form.Group className="mb-3">
-                          <Form.Label>Company Type</Form.Label>
+                          <Form.Label>Company Type <span className="text-danger">*</span></Form.Label>
                           <Form.Select
                             value={formData.agentCategoryId}
                             onChange={isViewMode ? undefined : (e) => {
@@ -3191,7 +3191,7 @@ const AgentReg = ({ embedded = false, initialEditId = null, onClose = null } = {
                         <Row>
                           <Col md={6}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Agent Email</Form.Label>
+                              <Form.Label>Agent Email <span className="text-danger">*</span></Form.Label>
                               <Form.Control
                                 value={formData.personalEmail}
                                 placeholder="Enter email"
@@ -3280,7 +3280,7 @@ const AgentReg = ({ embedded = false, initialEditId = null, onClose = null } = {
                         <Row>
                           <Col md={6}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Mobile Number</Form.Label>
+                              <Form.Label>Mobile Number <span className="text-danger">*</span></Form.Label>
                               <Form.Control
                                 type="tel"
                                 inputMode="tel"
@@ -3363,7 +3363,7 @@ const AgentReg = ({ embedded = false, initialEditId = null, onClose = null } = {
                           </Col>
                           <Col md={6}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Country</Form.Label>
+                              <Form.Label>Country <span className="text-danger">*</span></Form.Label>
                               <SearchableSelect
                                 name="countryId"
                                 value={formData.countryId}
@@ -3386,7 +3386,7 @@ const AgentReg = ({ embedded = false, initialEditId = null, onClose = null } = {
                         <Row>
                           <Col md={6}>
                             <Form.Group className="mb-3">
-                              <Form.Label>City</Form.Label>
+                              <Form.Label>City <span className="text-danger">*</span></Form.Label>
                               <SearchableSelect
                                 name="provinceId"
                                 value={formData.provinceId}
@@ -3417,7 +3417,7 @@ const AgentReg = ({ embedded = false, initialEditId = null, onClose = null } = {
                           </Col>
                           <Col md={6}>
                             <Form.Group className="mb-3">
-                              <Form.Label>Location</Form.Label>
+                              <Form.Label>Location <span className="text-danger">*</span></Form.Label>
                               <SearchableSelect
                                 name="placeId"
                                 value={formData.placeId}
@@ -3449,7 +3449,7 @@ const AgentReg = ({ embedded = false, initialEditId = null, onClose = null } = {
                         </Row>
                         <Col md={12}>
                           <Form.Group className="mb-3">
-                            <Form.Label>Address</Form.Label>
+                            <Form.Label>Address <span className="text-danger">*</span></Form.Label>
                             <Form.Control
                               as="textarea"
                               rows={3}

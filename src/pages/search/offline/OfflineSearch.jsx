@@ -508,7 +508,7 @@ const OfflineSearch = () => {
                     {!isAgentRole && (
                     <Col lg={3}>
                       <Form.Group>
-                        <Form.Label className="form-label-modern">Search Agent</Form.Label>
+                        <Form.Label className="form-label-modern">Search Agent <span className="text-danger">*</span></Form.Label>
                         <Select
                           className={`react-select-premium ${errors.agentId ? "is-invalid-select" : ""}`}
                           classNamePrefix="react-select"
@@ -520,6 +520,11 @@ const OfflineSearch = () => {
                           placeholder="Select Agent..."
                           isSearchable
                           isClearable
+                          menuPortalTarget={document.body}
+                          menuPosition="fixed"
+                          styles={{
+                            menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+                          }}
                         />
                         {errors.agentId && <div className="text-danger small mt-1">{errors.agentId}</div>}
                         <AgentBalanceDisplay agentId={formData.agentId?.value} />
@@ -530,7 +535,7 @@ const OfflineSearch = () => {
                     {/* REF NO */}
                     <Col lg={3}>
                       <Form.Group>
-                        <Form.Label className="form-label-modern">REF NO</Form.Label>
+                        <Form.Label className="form-label-modern">REF NO <span className="text-danger">*</span></Form.Label>
                         <Form.Control
                           type="text"
                           className={`form-control-premium ${errors.refNo ? "is-invalid" : ""}`}
@@ -566,7 +571,7 @@ const OfflineSearch = () => {
                   {/* Customer Name */}
                   <Col lg={3} md={6}>
                     <Form.Group>
-                      <Form.Label className="form-label-modern">Customer Name</Form.Label>
+                      <Form.Label className="form-label-modern">Customer Name <span className="text-danger">*</span></Form.Label>
                       <Form.Control
                         type="text"
                         className={`form-control-premium ${errors.customerName ? "is-invalid" : ""}`}
@@ -649,7 +654,7 @@ const OfflineSearch = () => {
                   {/* Contact No */}
                   <Col lg={3} md={6}>
                     <Form.Group>
-                      <Form.Label className="form-label-modern">Contact No</Form.Label>
+                      <Form.Label className="form-label-modern">Contact No <span className="text-danger">*</span></Form.Label>
                       <Form.Control
                         type="text"
                         className={`form-control-premium ${errors.contactNo ? "is-invalid" : ""}`}
@@ -672,7 +677,7 @@ const OfflineSearch = () => {
                   {/* Booking Done By */}
                   <Col lg={6} md={6}>
                     <Form.Group>
-                      <Form.Label className="form-label-modern">Booking Done By</Form.Label>
+                      <Form.Label className="form-label-modern">Booking Done By <span className="text-danger">*</span></Form.Label>
                       <Select
                         className={`react-select-premium ${errors.bookingDoneBy ? "is-invalid-select" : ""}`}
                         classNamePrefix="react-select"
@@ -690,7 +695,7 @@ const OfflineSearch = () => {
                   {/* Currency */}
                   <Col lg={6} md={6}>
                     <Form.Group>
-                      <Form.Label className="form-label-modern">Currency</Form.Label>
+                      <Form.Label className="form-label-modern">Currency <span className="text-danger">*</span></Form.Label>
                       <Select
                         className={`react-select-premium ${errors.currency ? "is-invalid-select" : ""}`}
                         classNamePrefix="react-select"

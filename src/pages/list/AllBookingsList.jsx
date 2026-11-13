@@ -24,8 +24,8 @@ import "../../styles/AllBookingsList.css";
 
 // Unified "All Bookings" list — reads GET /api/unified-bookings/list, a
 // new, standalone, read-only endpoint that combines Hotel, 24 Hour,
-// Last Minute, Long Stay, Day Stay, Government Employee, Student and
-// Senior Citizen bookings into one list. This page is intentionally
+// Last Minute, Long Stay, Day Stay, Government Employee, Student,
+// Senior Citizen and Offline bookings into one list. This page is intentionally
 // built to look and behave exactly like HotelBookingList.jsx (same
 // shell, header, filters card, table, pagination, status colouring,
 // styling) — the ONLY functional addition is the Booking Type dropdown
@@ -95,6 +95,7 @@ const BOOKING_TYPE_OPTIONS = [
   { value: "Government Employee", label: "Government Employee" },
   { value: "Student", label: "Student" },
   { value: "Senior Citizen", label: "Senior Citizen" },
+  { value: "Offline", label: "Offline" },
 ];
 
 // Same badge palette idea as the reference page's "24H" badge — one
@@ -108,6 +109,7 @@ const TYPE_BADGE_CLASS = {
   "Government Employee": "bg-secondary-subtle text-secondary border border-secondary-subtle",
   "Student": "bg-dark-subtle text-dark border border-dark-subtle",
   "Senior Citizen": "bg-secondary-subtle text-secondary border border-secondary-subtle",
+  "Offline": "bg-light text-dark border border-dark-subtle",
 };
 
 // Resolve a human-readable Payment Mode label — identical logic to
@@ -161,6 +163,9 @@ const getPaymentModeLabel = (booking) => {
 // marker, so a Confirmed-then-Cancelled booking can carry reconfirmation=true
 // and would be wrongly reported as Paid.
 const getPaymentStatusLabel = (booking) => {
+  // Offline bookings are entered after the fact and have no payment flow,
+  // so their "Confirmed" must not read as "Payment Pending".
+  if (booking?.bookingType === "Offline") return "-";
   const rawStatus = String(booking?.confirmationStatus || "");
   const segments = rawStatus
     .split("/")
