@@ -613,6 +613,7 @@
   justify-content: center;
 }
 
+
 .loader-ring {
   position: relative;
   width: 72px;
@@ -628,7 +629,7 @@
   border: 6px solid transparent;
   border-radius: 50%;
   animation: ringSpin 1.2s linear infinite;
-}
+} 
 
 .loader-ring span:nth-child(1) {
   border-top-color: #F75E00;
@@ -637,7 +638,7 @@
 .loader-ring span:nth-child(2) {
   border-right-color: #6f42c1;
   animation-delay: -0.2s;
-}
+} 
 
 .loader-ring span:nth-child(3) {
   border-bottom-color: #20c997;

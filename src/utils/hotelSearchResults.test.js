@@ -14,11 +14,21 @@ const SUPPLIER_NAMES =
   /grn|iwtx|x3|atharva|ratehawk|jumeirah|darina|goglobal|juniper/i;
 
 /** A reply as the server sends it, with only what a test cares about. */
-function reply({ total = 3, answered = 0, failed = 0, final = "IN_PROGRESS", status = {}, result = [] } = {}) {
+function reply({
+  total = 3,
+  answered = 0,
+  failed = 0,
+  partial = 0,
+  final = "IN_PROGRESS",
+  status = {},
+  partialSuppliers,
+  result = [],
+} = {}) {
   return {
     finalStatus: final,
-    progress: { total, answered, failed, complete: final === "COMPLETED" },
+    progress: { total, answered, failed, partial, complete: final === "COMPLETED" },
     status,
+    partialSuppliers,
     result,
   };
 }
@@ -180,6 +190,71 @@ describe("progress", () => {
     expect(incompleteSearchNotice(readProgress(reply({ answered: 1, failed: 1 })))).toBeNull();
     expect(incompleteSearchNotice(readProgress(reply({ answered: 3, final: "COMPLETED" })))).toBeNull();
     expect(incompleteSearchNotice(null)).toBeNull();
+  });
+
+  it("names a supplier that answered in part for an admin", () => {
+    const progress = readProgress(
+      reply({
+        total: 3,
+        answered: 3,
+        partial: 1,
+        final: "COMPLETED",
+        status: { grn: "COMPLETED", atharva: "COMPLETED", x3: "COMPLETED" },
+        partialSuppliers: { atharva: "batch 2/5: HTTP 500 (after a second try)" },
+      }),
+    );
+
+    expect(progress.partial).toBe(1);
+    expect(progress.partialSuppliers).toEqual([
+      { name: "atharva", reason: "batch 2/5: HTTP 500 (after a second try)" },
+    ]);
+    expect(incompleteSearchNotice(progress)).toBe(
+      "Answered in part, some of their hotels may be missing: ATHARVA. Showing all the hotels found.",
+    );
+  });
+
+  it("says both who did not answer and who answered in part", () => {
+    const progress = readProgress(
+      reply({
+        total: 3,
+        answered: 2,
+        failed: 1,
+        partial: 1,
+        final: "COMPLETED",
+        status: { grn: "TIMEOUT", atharva: "COMPLETED", x3: "COMPLETED" },
+        partialSuppliers: { atharva: "batch 2/5: HTTP 500" },
+      }),
+    );
+
+    expect(incompleteSearchNotice(progress)).toBe(
+      "Did not answer: GRN (timed out). Answered in part, some of their hotels may be missing: ATHARVA."
+        + " Showing all the hotels found.",
+    );
+  });
+
+  it("counts partial answers for an agent without naming anyone", () => {
+    const notice = incompleteSearchNotice(
+      readProgress(
+        reply({
+          total: 2,
+          answered: 2,
+          partial: 2,
+          final: "COMPLETED",
+          status: { "supplier-1": "COMPLETED", "supplier-2": "COMPLETED" },
+        }),
+      ),
+    );
+
+    expect(notice).toBe(
+      "2 suppliers answered in part, so some hotels may be missing. Showing all the hotels found.",
+    );
+    expect(notice).not.toMatch(SUPPLIER_NAMES);
+  });
+
+  it("says nothing about a partial answer before the search has finished", () => {
+    expect(
+      incompleteSearchNotice(readProgress(reply({ total: 3, answered: 1, partial: 1 }))),
+    ).toBeNull();
   });
 });
 

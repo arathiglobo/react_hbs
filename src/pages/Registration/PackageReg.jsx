@@ -1882,11 +1882,13 @@ const PackageReg = () => {
   const goPrevTab = () => {
     if (!isFirstTab) setActiveTab(TAB_ORDER[currentTabIdx - 1]);
   };
-  const goNextTab = () => {
-    // Light per-tab guardrails: on Basic Details, warn if the required
-    // fields aren't filled but still let the user proceed (final submit
-    // enforces). On other tabs just advance.
-    if (activeTab === "basic") {
+  // Can the user leave `tab` going forward? Basic Details needs its
+  // required fields; Itinerary needs at least one day with a heading, place
+  // or activities. Shows the errors and a toast when not. View mode is never
+  // blocked — there is nothing to fix there.
+  const passesTabCheck = (tab) => {
+    if (isViewMode) return true;
+    if (tab === "basic") {
       const errs = validateForm(formData);
       const basicKeys = [
         "packageName", "packageCode", "packageType", "packageCategory",
@@ -1898,10 +1900,41 @@ const PackageReg = () => {
       if (Object.keys(basicErrs).length > 0) {
         setValidationErrors((prev) => ({ ...prev, ...basicErrs }));
         toast.error("Please fill required fields in Basic Details before continuing.");
-        return;
+        return false;
       }
     }
+    if (tab === "itinerary") {
+      const errs = validateForm(formData);
+      if (errs.itinerary) {
+        setValidationErrors((prev) => ({ ...prev, itinerary: errs.itinerary }));
+        toast.error(errs.itinerary);
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const goNextTab = () => {
+    if (!passesTabCheck(activeTab)) return;
     if (!isLastTab) setActiveTab(TAB_ORDER[currentTabIdx + 1]);
+  };
+
+  // Clicking a tab name: going back is always allowed. Going forward runs
+  // the same checks as Next for every tab being skipped, and stops on the
+  // first one that fails so its message is on screen.
+  const handleTabSelect = (key) => {
+    if (!key) return;
+    const targetIdx = TAB_ORDER.indexOf(key);
+    if (targetIdx > currentTabIdx && currentTabIdx >= 0) {
+      for (let i = currentTabIdx; i < targetIdx; i++) {
+        const tab = TAB_ORDER[i];
+        if (!passesTabCheck(tab)) {
+          if (tab !== activeTab) setActiveTab(tab);
+          return;
+        }
+      }
+    }
+    setActiveTab(key);
   };
 
   return (
@@ -2158,7 +2191,7 @@ const PackageReg = () => {
               )} */}
               <Tabs
                 activeKey={activeTab}
-                onSelect={(k) => k && setActiveTab(k)}
+                onSelect={handleTabSelect}
                 id="package-tabs"
                 className="mb-3"
               >
@@ -2427,8 +2460,10 @@ const PackageReg = () => {
                               />
                             )} 
                           </div>
+                          {/* d-block: the message is not a direct sibling of
+                              the red input, so Bootstrap would keep it hidden. */}
                           {validationErrors.packageCategory && (
-                            <Form.Control.Feedback type="invalid">
+                            <Form.Control.Feedback type="invalid" className="d-block">
                               {validationErrors.packageCategory}
                             </Form.Control.Feedback>
                           )}
@@ -2627,6 +2662,14 @@ const PackageReg = () => {
                             isDisabled={isViewMode}
                             className={`react-select-container ${validationErrors.countryId ? "is-invalid" : ""}`}
                             classNamePrefix="react-select"
+                            // Red border on error: the global
+                            // .react-select__control.is-invalid rule
+                            // (custom.scss) needs the class on the control
+                            // itself, not on the outer container.
+                            classNames={{
+                              control: () =>
+                                validationErrors.countryId ? "is-invalid" : "",
+                            }}
                           />
                           {validationErrors.countryId && (
                             <div className="text-danger small mt-1">
@@ -2666,8 +2709,10 @@ const PackageReg = () => {
                               disabled={isViewMode || !formData.countryId}
                               isLoading={isLoadingPlaces}
                             />
+                            {/* d-block: SearchableSelect wraps the red input,
+                                so Bootstrap would keep this message hidden. */}
                             {validationErrors.placeId && (
-                              <Form.Control.Feedback type="invalid">
+                              <Form.Control.Feedback type="invalid" className="d-block">
                                 {validationErrors.placeId}
                               </Form.Control.Feedback>
                             )}
@@ -2721,7 +2766,7 @@ const PackageReg = () => {
                         </Form.Group>
                         <Form.Group className="mb-3">
                           <Form.Label>
-                            No of nights <span className="text-danger">*</span>
+                            No of nights 
                           </Form.Label>
                           <Form.Select
                             value={formData.noOfNights}
@@ -2793,6 +2838,14 @@ const PackageReg = () => {
                     )}
                   </div>
                   {console.log("packageItinearyDTOList::" , packageItinearyDTOList)}
+                  {/* Itinerary error — set by Next or the final save; it
+                      clears as soon as a day gets a heading, place or
+                      activities (see updateItineraryDay). */}
+                  {validationErrors.itinerary && (
+                    <div className="alert alert-danger py-2 small mb-3" role="alert">
+                      {validationErrors.itinerary}
+                    </div>
+                  )}
                   {packageItinearyDTOList.map((day, index) => (
                     <Card key={index} className="mb-3">
                       <Card.Header className="d-flex justify-content-between align-items-center">

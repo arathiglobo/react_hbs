@@ -1,4 +1,9 @@
-import { HOLD_CAPABLE_API_IDS, isHoldEligible } from "./ApiBookingPageForHotels";
+import {
+  HOLD_CAPABLE_API_IDS,
+  isHoldEligible,
+  offersHoldOption,
+  showsBookingModePicker,
+} from "./ApiBookingPageForHotels";
 import { REFUND_FLEXIBLE } from "../../utils/refundLabel";
 
 jest.mock("../../components/AxiosInstance", () => ({
@@ -68,5 +73,55 @@ describe("Hold Room and Pay Later on the supplier booking page", () => {
 
   test("a rate with no free-cancellation date is not offered the hold", () => {
     expect(isHoldEligible(booking(15, [{ rate: 500, nonRefundable: false }]))).toBe(false);
+  });
+});
+
+describe("Book and Pay Now picker on the supplier booking page", () => {
+  const withStatus = (rate, roomStatus) => ({ ...rate, roomStatus });
+
+  test.each([
+    ["RateHawk", 14],
+    ["Jumeirah", 10],
+    ["Juniper", 17],
+  ])("%s shows Book and Pay Now only, for an Available room", (_name, apiId) => {
+    const data = booking(apiId, [withStatus(refundableRate(10), "Available")]);
+    expect(showsBookingModePicker(data)).toBe(true);
+    expect(offersHoldOption(data)).toBe(false);
+  });
+
+  test("a non-refundable Available room still shows Book and Pay Now", () => {
+    const data = booking(14, [{ rate: 500, nonRefundable: true, roomStatus: "Available" }]);
+    expect(showsBookingModePicker(data)).toBe(true);
+    expect(offersHoldOption(data)).toBe(false);
+  });
+
+  test("a rate with no room status counts as Available", () => {
+    expect(showsBookingModePicker(booking(14, [refundableRate(10)]))).toBe(true);
+  });
+
+  test("an On Request room shows no picker for a supplier without a hold", () => {
+    const data = booking(14, [withStatus(refundableRate(10), "On Request")]);
+    expect(showsBookingModePicker(data)).toBe(false);
+  });
+
+  test("one On Request room among several hides the picker", () => {
+    const data = booking(14, [
+      withStatus(refundableRate(10), "Available"),
+      withStatus(refundableRate(10), "On Request"),
+    ]);
+    expect(showsBookingModePicker(data)).toBe(false);
+  });
+
+  test.each(SUPPLIERS)("%s still offers both options inside its free window", (_name, apiId) => {
+    const data = booking(apiId, [refundableRate(10)]);
+    expect(showsBookingModePicker(data)).toBe(true);
+    expect(offersHoldOption(data)).toBe(true);
+  });
+
+  test("Atharva keeps its picker, without the hold on a non-refundable rate", () => {
+    expect(offersHoldOption(booking(3, [refundableRate(10)]))).toBe(true);
+    const nonRefundable = booking(3, [{ rate: 500, nonRefundable: true, roomStatus: "On Request" }]);
+    expect(showsBookingModePicker(nonRefundable)).toBe(true);
+    expect(offersHoldOption(nonRefundable)).toBe(false);
   });
 });

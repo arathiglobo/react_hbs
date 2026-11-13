@@ -46,6 +46,10 @@ import {
   isNonRefundable,
 } from "../../utils/rateDeadline";
 import { orderIdPathSegment } from "../../utils/urlSafety";
+import {
+  SUPPLIER_BOOKING_TIMEOUT_MS,
+  SUPPLIER_SEARCH_TIMEOUT_MS,
+} from "../../config/apiTimeouts";
 
 // Online-payment gateways offered when the agent's credit is short.
 // Mirrors the same list Inhouse HotelBookingPage.jsx uses (line 25) so
@@ -264,6 +268,35 @@ export const isHoldEligible = (bookingData) => {
   if (!deadline) return false;
   return deadline >= uaeToday();
 };
+
+/** True when no selected room is "On Request". A rate with no status counts as available. */
+const allRoomsAvailable = (selectedRates) =>
+  Array.isArray(selectedRates) &&
+  selectedRates.length > 0 &&
+  selectedRates.every(
+    (rate) => String(rate?.roomStatus || "").trim().toLowerCase() !== "on request",
+  );
+
+/**
+ * Show the "Are you sure you want to continue with the booking?" picker?
+ *
+ * ATHARVA and hold-capable suppliers inside their free window get it as
+ * before. Every other supplier gets it when all selected rooms are Available,
+ * with "Book and Pay Now" as the only choice — that books and charges credit
+ * straight away, which is what Confirm Booking already did for them.
+ */
+export const showsBookingModePicker = (bookingData) =>
+  bookingData?.payload?.apiId === 3 ||
+  isHoldEligible(bookingData) ||
+  allRoomsAvailable(bookingData?.selectedRate);
+
+/**
+ * Offer "Hold Room and Pay Later" in the picker? Only for ATHARVA (its own
+ * supplier hold) and hold-capable suppliers, never on a non-refundable rate.
+ */
+export const offersHoldOption = (bookingData) =>
+  (bookingData?.payload?.apiId === 3 || isHoldEligible(bookingData)) &&
+  !hasNonRefundableRate(bookingData?.selectedRate);
 
 // Where to land after a successful booking. Last Minute supplier bookings
 // (payload.lastMinuteBooking, set by LastMinuteBookingPage) are tagged
@@ -597,12 +630,12 @@ const ApiBookingPageForHotels = () => {
       try {
         setIsFinalizingPayment(true);
         setIsSubmitting(true);
-        // Finalize replays the supplier booking (RateHawk can take up to
-        // ~120 s), so allow longer than the 30 s client default.
+        // Finalize replays the supplier booking, so it waits as long as a
+        // booking does (config/apiTimeouts), not the 30 s client default.
         const response = await axiosInstance.post(
           `/api/payment/ccavenue/finalize/${orderIdPathSegment(ccavenueOrderId)}`,
           null,
-          { timeout: 120000 },
+          { timeout: SUPPLIER_BOOKING_TIMEOUT_MS },
         );
         const bookingResponse = response.data;
         const statusUpper = String(bookingResponse?.status || "").toUpperCase();
@@ -975,9 +1008,11 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
           },
         ),
       };
+      // One Atharva call, allowed 180 s like every supplier call.
       const resp = await axiosInstance.post(
         "/api/hotel-booking/rate-check/3",
         preReq,
+        { timeout: SUPPLIER_SEARCH_TIMEOUT_MS },
       );
       const data = resp?.data;
       if (!data || data.success === false) {
@@ -1065,21 +1100,19 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
 
     const { errors, hasErrors } = validateForm();
 
-    // Whenever the booking-mode picker is on screen the operator MUST
-    // answer it before we open the policy modal — ATHARVA (apiId 3, its own
-    // supplier-side hold) and any hold-capable API whose rate is still
-    // inside its free-cancellation window. Merges into the same
-    // validationErrors bag as the guest-detail errors so a single toast
-    // covers both cases. Suppliers without a picker skip this entirely and
-    // submit exactly as they did before.
+    // Whenever the booking-mode picker is on screen (see
+    // showsBookingModePicker) the operator MUST answer it before we open the
+    // policy modal. Merges into the same validationErrors bag as the
+    // guest-detail errors so a single toast covers both cases. Suppliers
+    // without a picker (On Request rooms) submit exactly as before.
     if (
-      (bookingData?.payload?.apiId === 3 || isHoldEligible(bookingData)) &&
+      showsBookingModePicker(bookingData) &&
       bookingConfirmation !== "Book & Voucher" &&
       bookingConfirmation !== "Hold & Book Later"
     ) {
-      errors.bookingMode = hasNonRefundableRate(bookingData?.selectedRate)
-        ? "Please select Book and Pay Now to continue."
-        : "Please select a booking mode: Book and Pay Now or Hold Room and Pay Later.";
+      errors.bookingMode = offersHoldOption(bookingData)
+        ? "Please select a booking mode: Book and Pay Now or Hold Room and Pay Later."
+        : "Please select Book and Pay Now to continue.";
     }
 
     if (hasErrors || errors.bookingMode) {
@@ -1456,20 +1489,16 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
         }
       }
 
-      // RateHawk (apiId=14) can legitimately take 60-120s end-to-end:
-      // prebook (docs recommend 60s timeout) + booking/form/ + booking/finish/
-      // + status polling (up to 90s per RateHawk contract). The shared
-      // AxiosInstance's 30s default is too short for that flow and would
-      // surface as a client-side "timeout of 30000ms exceeded" even when
-      // the booking is still legitimately in progress on the backend.
-      // Override the per-call timeout ONLY for RateHawk so no other
-      // supplier's flow is slowed down. 120s = generous headroom that
-      // still fits within the backend's worst-case budget.
-      const isRatehawk = Number(bookingData?.payload?.apiId) === 14;
+      // Every supplier booking makes one or more supplier calls, each allowed
+      // 180 s (RateHawk adds up to 300 s of status checks). The shared
+      // AxiosInstance's 30 s default would show "timeout of 30000ms exceeded"
+      // while the booking is still going through on the backend, so the page
+      // waits as long as a booking can take (config/apiTimeouts). The limit
+      // only matters when no answer comes; a quick booking returns at once.
       const response = await axiosInstance.post(
         "/api/hotel-booking/create",
         effectivePayload,
-        isRatehawk ? { timeout: 120000 } : undefined,
+        { timeout: SUPPLIER_BOOKING_TIMEOUT_MS },
       );
       const bookingResponse = response.data;
 
@@ -2514,10 +2543,10 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                               settles on the detail page's Reconfirm click; the
                               deadline job cancels it at the supplier if nobody
                               reconfirms in time.
-                        Every other supplier renders no picker and is
-                        untouched. */}
-                    {(bookingData?.payload?.apiId === 3 ||
-                      isHoldEligible(bookingData)) && (
+                        Every other supplier gets the picker with "Book and
+                        Pay Now" only, when all selected rooms are Available
+                        (see showsBookingModePicker). */}
+                    {showsBookingModePicker(bookingData) && (
                       <Card className="shadow-sm rounded-3 border-0 mt-3">
                         {/* <Card.Header className="bg-light py-2">
                           <h6 className="mb-0 fw-bold">Booking Mode</h6>
@@ -2548,9 +2577,10 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                             }}
                             className="mb-1"
                           />
-                          {/* Never offered on a non-refundable booking —
-                              see hasNonRefundableRate. */}
-                          {!hasNonRefundableRate(bookingData?.selectedRate) && (
+                          {/* Only where the supplier supports a hold, never
+                              on a non-refundable booking — see
+                              offersHoldOption. */}
+                          {offersHoldOption(bookingData) && (
                             <Form.Check
                               type="radio"
                               name="bookingMode"

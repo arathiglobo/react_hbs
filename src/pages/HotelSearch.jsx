@@ -3659,76 +3659,16 @@ export default function HotelSearch({
                                           {hotel.badge}
                                         </span>
                                       )}
-                                      {/* A hotel several suppliers sell is one
-                                          card at the best price; its room list
-                                          shows every supplier's room types. */}
-                                      {hotel.supplierCount > 1 && (
-                                        <span
-                                          title="Best price shown. Opening the hotel lists the room types of every supplier that sells it."
-                                          style={{
-                                            backgroundColor: "#e7f1ff",
-                                            color: "#0b4a8b",
-                                            border: "1px solid #b6d4fe",
-                                            padding: "3px 8px",
-                                            borderRadius: "4px",
-                                            fontSize: "0.75rem",
-                                            display: "inline-block",
-                                          }}
-                                        >
-                                          Best of {hotel.supplierCount} suppliers
-                                        </span>
-                                      )}
-                                      {/* Refund pills — only when the supplier
-                                          told us at search time; unknown
-                                          (null) shows nothing. */}
-                                      {hotel.hasRefundable === true && (
-                                        <span
-                                          title="This hotel has at least one rate that is free to cancel today"
-                                          style={{
-                                            backgroundColor: "#e8f5e9",
-                                            color: "#1b7a2f",
-                                            border: "1px solid #b7e0c0",
-                                            padding: "3px 8px",
-                                            borderRadius: "4px",
-                                            fontSize: "0.75rem",
-                                            display: "inline-block",
-                                          }}
-                                        >
-                                          Flexible
-                                        </span>
-                                      )}
-                                      {hotel.hasPartial === true && (
-                                        <span
-                                          title="This hotel has at least one rate that costs part of the booking to cancel today"
-                                          style={{
-                                            backgroundColor: "#fff8e1",
-                                            color: "#8a6100",
-                                            border: "1px solid #f2dc9b",
-                                            padding: "3px 8px",
-                                            borderRadius: "4px",
-                                            fontSize: "0.75rem",
-                                            display: "inline-block",
-                                          }}
-                                        >
-                                          Flexible - Partial
-                                        </span>
-                                      )}
-                                      {hotel.hasNonRefundable === true && (
-                                        <span
-                                          title="This hotel has at least one rate that can't be cancelled free"
-                                          style={{
-                                            backgroundColor: "#fdecea",
-                                            color: "#b42318",
-                                            border: "1px solid #f5c2c0",
-                                            padding: "3px 8px",
-                                            borderRadius: "4px",
-                                            fontSize: "0.75rem",
-                                            display: "inline-block",
-                                          }}
-                                        >
-                                          Non Refundable
-                                        </span>
-                                      )}
+                                      {/* Rate Available is the only box on the
+                                          card, for in-house and supplier hotels
+                                          alike: no "Best of N suppliers" and no
+                                          Flexible / Flexible - Partial / Non
+                                          Refundable pills. A hotel several
+                                          suppliers sell is still one card at
+                                          the best price, and the hasRefundable /
+                                          hasPartial / hasNonRefundable flags
+                                          still drive the sidebar Refund Policy
+                                          filter. */}
                                       {/* Flash Sale badge — shown beside Rate Available
                                           when the hotel has any active deal feature.
                                           Uses the same /images/flash-sale-logo.png asset

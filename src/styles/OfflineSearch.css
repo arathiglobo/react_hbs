@@ -10,7 +10,11 @@
   background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(10px);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
-  overflow: hidden;
+  /* clip, not hidden: overflow: hidden makes the card the scroll box of the
+     sticky summary strip (.hs-summary-bar, top: 64px), which pushes the strip
+     64px down over the "Supplier Types" heading and the form title. clip still
+     trims the rounded corners and lets the strip stick to the page instead. */
+  overflow: clip;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   padding: 0.5rem;
 }
