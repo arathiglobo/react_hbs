@@ -206,8 +206,11 @@ const MarkHandledModal = ({ row, onClose, onChanged }) => {
       onChanged();
       onClose();
     } catch (err) {
-      // A 409 means the list behind this dialog is out of date.
-      if (err.response?.status === 409) onChanged();
+      // A 409 (handled by someone else, or its booking reappeared) or a 404
+      // (row gone) means the list behind this dialog is out of date.
+      if (err.response?.status === 409 || err.response?.status === 404) {
+        onChanged();
+      }
       setError(
         err.response?.status === 403
           ? "Only admins can do this."
