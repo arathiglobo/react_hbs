@@ -153,6 +153,12 @@ export function mapApiHotelToLastMinuteRow(hotel, searchId) {
     latitude: hotel.latitude,
     longitude: hotel.longitude,
     contactNumber: hotel.contactNumber || "",
+
+    // Refund flags the hotel search sent (null = unknown). Read only by the
+    // Refund Policy filter (utils/refundPolicyFilter.js).
+    hasRefundable: hotel.hasRefundable ?? null,
+    hasPartial: hotel.hasPartial ?? null,
+    hasNonRefundable: hotel.hasNonRefundable ?? null,
   };
 }
 

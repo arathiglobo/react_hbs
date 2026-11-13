@@ -1371,9 +1371,13 @@ const ExternalApiRoomList = () => {
         // mapped hotel's in-house block is not offered on this page. Same for
         // the Long Stay supplier flow: in-house long-stay contracts have their
         // own room list too, and this block would carry normal contract rates.
+        // Same again for the Day Stay supplier flow (day-stay contracts have
+        // their own room list).
         const keepBlock = (h) =>
           !(
-            (payload?.lastMinuteBooking === true || payload?.longStayBooking === true) &&
+            (payload?.lastMinuteBooking === true ||
+              payload?.longStayBooking === true ||
+              payload?.dayStayBooking === true) &&
             isInhouseResponseBlock(h)
           );
         // Rates sorted cheapest first; for a mapped hotel each rate is tagged

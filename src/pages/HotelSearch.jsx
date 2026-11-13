@@ -1565,7 +1565,7 @@ export default function HotelSearch({
     if (!userName) return;
     let cancelled = false;
     axiosInstance
-      .get(`/api/personalProfile/${userName}`)
+      .get(`/api/personalProfile/${userName}`) 
       .then((res) => {
         if (cancelled) return;
         if (res?.data?.id != null) {

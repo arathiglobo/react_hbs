@@ -302,10 +302,13 @@ export const offersHoldOption = (bookingData) =>
 // (payload.lastMinuteBooking, set by LastMinuteBookingPage) are tagged
 // LAST_MINUTE server-side, so they belong on the Last Minute booking list. Long
 // Stay supplier bookings (payload.longStayBooking, set by LongStaySearch) are
-// tagged LONG_STAY and belong on the Long Stay booking list.
-const postBookingListPath = (isLastMinute, isLongStay = false) => {
+// tagged LONG_STAY and belong on the Long Stay booking list. Day Stay supplier
+// bookings (payload.dayStayBooking, set by DayStaySearch) are tagged DAY_STAY
+// and belong on the Day Stay booking list.
+const postBookingListPath = (isLastMinute, isLongStay = false, isDayStay = false) => {
   if (isLastMinute) return "/booking-details/last-minute-booking-list";
   if (isLongStay) return "/booking-details/long-stay-booking-list";
+  if (isDayStay) return "/booking-details/day-stay-booking-list";
   return "/booking-details/hotel-booking-list";
 };
 
@@ -324,6 +327,15 @@ const storedBookingIsLongStay = () => {
   try {
     const stored = JSON.parse(sessionStorage.getItem("bookingData") || "null");
     return stored?.payload?.longStayBooking === true;
+  } catch (_) {
+    return false;
+  }
+};
+
+const storedBookingIsDayStay = () => {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem("bookingData") || "null");
+    return stored?.payload?.dayStayBooking === true;
   } catch (_) {
     return false;
   }
@@ -640,7 +652,13 @@ const ApiBookingPageForHotels = () => {
               "Booking created after payment.",
           );
           setShowConfirmModal(false);
-          navigate(postBookingListPath(storedBookingIsLastMinute(), storedBookingIsLongStay()));
+          navigate(
+            postBookingListPath(
+              storedBookingIsLastMinute(),
+              storedBookingIsLongStay(),
+              storedBookingIsDayStay(),
+            ),
+          );
         } else {
           const beMsg = (bookingResponse && bookingResponse.message) || null;
           toast.error(
@@ -1356,7 +1374,9 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
             ? "LAST_MINUTE"
             : bookingData?.payload?.longStayBooking === true
               ? "LONG_STAY"
-              : undefined,
+              : bookingData?.payload?.dayStayBooking === true
+                ? "DAY_STAY"
+                : undefined,
 
         // Display-currency preference carried through from the search /
         // room-list flow. Persisted on HotelBooking.displayCurrencyCode
@@ -1520,6 +1540,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
           postBookingListPath(
             bookingData?.payload?.lastMinuteBooking === true,
             bookingData?.payload?.longStayBooking === true,
+            bookingData?.payload?.dayStayBooking === true,
           ),
         );
       } else if (statusUpper === "DUPLICATE") {
