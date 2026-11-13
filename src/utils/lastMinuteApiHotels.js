@@ -190,7 +190,7 @@ export function isApiHotel(hotel) {
  *                                        same window /new-booking/hotel uses)
  * @param {number}   opts.initialDelay    wait before first poll (default 2000)
  * @param {number}   opts.lateIntervalMs  phase-2 check cadence (default 4000)
- * @param {number}   opts.lateWindowMs    phase-2 length (default 90000)
+ * @param {number}   opts.lateWindowMs    phase-2 length (default 220000, the search deadline)
  * @param {function} opts.isCancelled     () => boolean; true stops polling
  *                                        (e.g. a newer search started)
  * @param {function} opts.onStatus        (statuses, finalStatus) => void, after
@@ -207,7 +207,7 @@ export async function searchApiHotels(payload, onPartial, opts = {}) {
     timeoutMs = 30000,
     initialDelay = 2000,
     lateIntervalMs = 4000,
-    lateWindowMs = 90000,
+    lateWindowMs = 220000,
     isCancelled = () => false,
     onStatus = null,
   } = opts;

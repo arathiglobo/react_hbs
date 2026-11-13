@@ -8,8 +8,9 @@ import Sidebar from "../../../components/Sidebar";
 import TopBar from "../../../components/TopBar";
 import AdvertisementCarousel from "../../../components/AdvertisementCarousel";
 import AgentCreditBalance from "../../../components/AgentCreditBalance";
-import { FaSearch } from "react-icons/fa";
+import { FaSearch, FaEdit } from "react-icons/fa";
 import { toast } from "react-hot-toast";
+import Swal from "sweetalert2";
 import "../../../styles/OfflineSearch.css";
 
 // Import Supplier Components
@@ -96,6 +97,20 @@ function RoomGuestSelector({ value, onChange }) {
   );
 }
 
+// Booking Done By / Currency sit on the card's last row, and
+// .search-card-premium has overflow: hidden, so their option lists are
+// rendered on document.body (menuPortalTarget) instead of being clipped.
+// A portaled menu is outside .react-select-premium, so the menu look from
+// OfflineSearch.css is repeated here.
+const portalSelectStyles = {
+  menuPortal: (base) => ({ ...base, zIndex: 9999 }),
+  menu: (base) => ({
+    ...base,
+    borderRadius: 12,
+    overflow: "hidden",
+    boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
+  }),
+};
 
 const OfflineSearch = () => {
   // Agent logins book under themselves — the backend forces the booking to
@@ -114,8 +129,6 @@ const OfflineSearch = () => {
   const [formData, setFormData] = useState({
     agentId: null,
     refNo: "",
-    checkIn: "",
-    checkOut: "",
     searchGuest: "",
     customerName: "",
     invoiceNo: "",
@@ -248,19 +261,10 @@ const OfflineSearch = () => {
     if (!isAgentRole && !formData.agentId) newErrors.agentId = "Agent is required";
     if (!formData.refNo.trim()) newErrors.refNo = "REF No is required";
     if (!formData.customerName.trim()) newErrors.customerName = "Customer Name is required";
-    if (!formData.checkIn) newErrors.checkIn = "Check In date is required";
-    if (!formData.checkOut) newErrors.checkOut = "Check Out date is required";
     if (!formData.contactNo.trim()) newErrors.contactNo = "Contact No is required";
     if (!formData.bookingDoneBy) newErrors.bookingDoneBy = "Booking Done By is required";
     if (!formData.currency) newErrors.currency = "Currency is required";
     return newErrors;
-  };
-
-  const getMinCheckOut = () => {
-    if (!formData.checkIn) return "";
-    const d = new Date(formData.checkIn);
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split("T")[0];
   };
 
   // ─────────────────────────────────────────────
@@ -277,12 +281,6 @@ const OfflineSearch = () => {
     if (errors[name]) setErrors((prev) => { const { [name]: _, ...rest } = prev; return rest; });
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return "";
-    const [year, month, day] = dateString.split("-");
-    return `${day}-${month}-${year}`;
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -296,8 +294,6 @@ const OfflineSearch = () => {
 
     const payload = {
       supplierMainBasicId: "0",
-      checkIn: formatDate(formData.checkIn),
-      checkOut: formatDate(formData.checkOut),
       agentId: formData.agentId?.value || "1",
       customerName: formData.customerName,
       trn: "",
@@ -356,6 +352,60 @@ const OfflineSearch = () => {
     fetchSupplierEntries();
   };
 
+  // Edit button in the line table (Miscellaneous rows only): the row is
+  // loaded into the Miscellaneous form, which saves it back under its own
+  // miscellaneousId instead of adding a new line.
+  const [editingMiscEntry, setEditingMiscEntry] = useState(null);
+
+  // A new basic booking (Modify Search → ADD) starts with no line being edited.
+  useEffect(() => {
+    setEditingMiscEntry(null);
+  }, [mainBasicId]);
+
+  const handleEditMiscEntry = (entry) => {
+    setActiveSupplier("Miscellaneous");
+    setEditingMiscEntry(entry);
+    if (resultsRef.current) {
+      resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
+  const handleMiscSaved = () => {
+    setEditingMiscEntry(null);
+    handleAddEntry();
+  };
+
+  // Trash button in the line table: soft-deletes the line on the server
+  // (DELETE /api/v1/offline-booking/line/{id}), then reloads the table so
+  // the totals below follow.
+  const [deletingLineId, setDeletingLineId] = useState(null);
+
+  const handleDeleteEntry = async (entry) => {
+    const result = await Swal.fire({
+      title: "Delete this item?",
+      text: `${entry.supplierType || "Item"}${entry.description ? ` – ${entry.description}` : ""}`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Yes, delete it!",
+    });
+    if (!result.isConfirmed) return;
+
+    setDeletingLineId(entry.id);
+    try {
+      await axiosInstance.delete(`/api/v1/offline-booking/line/${entry.id}`);
+      toast.success("Item deleted");
+      if (editingMiscEntry && editingMiscEntry.id === entry.id) setEditingMiscEntry(null);
+      await fetchSupplierEntries();
+    } catch (error) {
+      console.error("Error deleting offline booking line:", error);
+      toast.error(error.response?.data?.message || "Failed to delete item");
+    } finally {
+      setDeletingLineId(null);
+    }
+  };
+
   const handleFinalSubmit = async () => {
     if (!mainBasicId) {
       toast.error("Please add basic details first");
@@ -409,7 +459,14 @@ const OfflineSearch = () => {
       case "Visa":
         return <OfflineVisa {...commonProps} />;
       case "Miscellaneous":
-        return <OfflineMiscellaneous {...commonProps} />;
+        return (
+          <OfflineMiscellaneous
+            {...commonProps}
+            onAdd={handleMiscSaved}
+            editingEntry={editingMiscEntry}
+            onCancelEdit={() => setEditingMiscEntry(null)}
+          />
+        );
       default:
         return null;
     }
@@ -454,12 +511,6 @@ const OfflineSearch = () => {
                     {formData.customerName && (
                       <span className="hs-summary-chip hs-summary-chip-main">
                         {formData.customerName}
-                      </span>
-                    )}
-                    {formData.checkIn && (
-                      <span className="hs-summary-chip">
-                        {formData.checkIn}
-                        {formData.checkOut ? ` → ${formData.checkOut}` : ""}
                       </span>
                     )}
                     <span className="hs-summary-chip">
@@ -595,46 +646,7 @@ const OfflineSearch = () => {
                 )}
                 </div>
 
-                <Row className="g-4 mb-4">
-                  {/* Check In */}
-                  <Col lg={3} md={6}>
-                    <Form.Group>
-                      <Form.Label className="form-label-modern">Check In</Form.Label>
-                      <Form.Control
-                        type="date"
-                        className={`form-control-premium ${errors.checkIn ? "is-invalid" : ""}`}
-                        name="checkIn"
-                        value={formData.checkIn}
-                        onChange={(e) => {
-                          const newCheckIn = e.target.value;
-                          setFormData((prev) => ({
-                            ...prev,
-                            checkIn: newCheckIn,
-                            checkOut: prev.checkOut && prev.checkOut <= newCheckIn ? "" : prev.checkOut,
-                          }));
-                          if (errors.checkIn) setErrors((prev) => { const { checkIn: _, ...rest } = prev; return rest; });
-                        }}
-                      />
-                      {errors.checkIn && <div className="text-danger small mt-1">{errors.checkIn}</div>}
-                    </Form.Group>
-                  </Col>
-
-                  {/* Check Out */}
-                  <Col lg={3} md={6}>
-                    <Form.Group>
-                      <Form.Label className="form-label-modern">Check Out</Form.Label>
-                      <Form.Control
-                        type="date"
-                        className={`form-control-premium ${errors.checkOut ? "is-invalid" : ""}`}
-                        name="checkOut"
-                        value={formData.checkOut}
-                        min={getMinCheckOut()}
-                        onChange={handleInputChange}
-                      />
-                      {errors.checkOut && <div className="text-danger small mt-1">{errors.checkOut}</div>}
-                    </Form.Group>
-                  </Col>
-
+                <Row className="g-4 mb-5">
                    {/* Invoice No */}
                   <Col lg={3} md={6}>
                     <Form.Group>
@@ -666,16 +678,9 @@ const OfflineSearch = () => {
                       {errors.contactNo && <div className="text-danger small mt-1">{errors.contactNo}</div>}
                     </Form.Group>
                   </Col>
-                
-                </Row>
-
-                <Row className="g-4 mb-5">
-                 
-
-                  
 
                   {/* Booking Done By */}
-                  <Col lg={6} md={6}>
+                  <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="form-label-modern">Booking Done By <span className="text-danger">*</span></Form.Label>
                       <Select
@@ -687,13 +692,15 @@ const OfflineSearch = () => {
                         isLoading={isLoadingEmployees}
                         placeholder="Select Employee..."
                         isSearchable
+                        menuPortalTarget={document.body}
+                        styles={portalSelectStyles}
                       />
                       {errors.bookingDoneBy && <div className="text-danger small mt-1">{errors.bookingDoneBy}</div>}
                     </Form.Group>
                   </Col>
 
                   {/* Currency */}
-                  <Col lg={6} md={6}>
+                  <Col lg={3} md={6}>
                     <Form.Group>
                       <Form.Label className="form-label-modern">Currency <span className="text-danger">*</span></Form.Label>
                       <Select
@@ -705,6 +712,8 @@ const OfflineSearch = () => {
                         isLoading={isLoadingCurrencies}
                         placeholder="Select Currency..."
                         isSearchable
+                        menuPortalTarget={document.body}
+                        styles={portalSelectStyles}
                       />
                       {errors.currency && <div className="text-danger small mt-1">{errors.currency}</div>}
                     </Form.Group>
@@ -745,7 +754,11 @@ const OfflineSearch = () => {
                                 key={type}
                                 type="button"
                                 className={`supplier-nav-item ${activeSupplier === type ? "active" : ""}`}
-                                onClick={() => setActiveSupplier(type)}
+                                onClick={() => {
+                                  setActiveSupplier(type);
+                                  // Leaving the Miscellaneous tab drops an unsaved edit.
+                                  if (type !== "Miscellaneous") setEditingMiscEntry(null);
+                                }}
                               >
                                 <span className="chevron-icon">
                                   {activeSupplier === type ? "▾" : "▸"}
@@ -785,7 +798,10 @@ const OfflineSearch = () => {
                         <tbody>
                           {supplierEntries.length > 0 ? (
                             supplierEntries.map((entry, idx) => (
-                              <tr key={idx}>
+                              <tr
+                                key={idx}
+                                className={editingMiscEntry && editingMiscEntry.id === entry.id ? "table-active" : ""}
+                              >
                                 <td>{idx + 1}</td>
                                 <td>{entry.supplierType}</td>
                                 <td>{entry.description}</td>
@@ -795,9 +811,35 @@ const OfflineSearch = () => {
                                 <td>{entry.tax}%</td>
                                 <td>{entry.taxAmount}</td>
                                 <td>{entry.subTotal}</td>
-                                <td>
-                                  <Button variant="link" className="p-0 text-danger">
-                                    🗑
+                                <td className="text-nowrap">
+                                  {/* Edit: Miscellaneous lines only. Rows from a backend
+                                      that doesn't send miscellaneousId get no button, so
+                                      a save can't add a duplicate line instead of updating. */}
+                                  {entry.supplierType === "Miscellaneous" && entry.miscellaneousId ? (
+                                    <Button
+                                      variant="link"
+                                      className="p-0 me-3 text-primary"
+                                      title="Edit"
+                                      aria-label="Edit"
+                                      disabled={deletingLineId === entry.id}
+                                      onClick={() => handleEditMiscEntry(entry)}
+                                    >
+                                      <FaEdit />
+                                    </Button>
+                                  ) : null}
+                                  <Button
+                                    variant="link"
+                                    className="p-0 text-danger"
+                                    title="Delete"
+                                    aria-label="Delete"
+                                    disabled={deletingLineId === entry.id}
+                                    onClick={() => handleDeleteEntry(entry)}
+                                  >
+                                    {deletingLineId === entry.id ? (
+                                      <Spinner animation="border" size="sm" />
+                                    ) : (
+                                      "🗑"
+                                    )}
                                   </Button>
                                 </td>
                               </tr>

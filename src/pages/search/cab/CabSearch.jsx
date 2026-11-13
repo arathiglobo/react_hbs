@@ -1244,7 +1244,7 @@ export const CabSearch = () => {
   const pollUntilCabSearchComplete = async (
     searchId,
     onUpdate,
-    { intervalMs = 2000, timeoutMs = 30000, initialDelay = 500 } = {},
+    { intervalMs = 2000, timeoutMs = 210000, initialDelay = 500 } = {},
   ) => {
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
