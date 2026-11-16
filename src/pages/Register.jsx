@@ -322,15 +322,8 @@ const Register = () => {
 
       const currencyData = Array.isArray(response.data) ? response.data : [];
       setCurrencies(currencyData);
-
-      // Auto-select first currency if none selected
-      if (currencyData.length > 0 && !formData.currency) {
-        console.log("Auto-selecting currency:", currencyData[0].currencyId);
-        setFormData(prev => ({
-          ...prev,
-          currency: currencyData[0].currencyId
-        }));
-      }
+      // No auto-select — the dropdown stays on "Select currency" until the
+      // user picks one; required-field validation enforces a choice.
     } catch (error) {
       console.log("axios call error for currency list : ", error);
     }
@@ -451,6 +444,7 @@ const Register = () => {
       // if (!formData.markup) newErrors.markup = "Markup is required";
 
     } else if (currentStep === 2) {
+      if (!formData.salutation) newErrors.salutation = "Salutation is required";
       if (!formData.firstName.trim()) newErrors.firstName = "First Name is required";
       if (!formData.lastName.trim()) newErrors.lastName = "Last Name is required";
       if (!formData.mobileNumber.trim()) newErrors.mobileNumber = "Mobile Number is required";
@@ -552,6 +546,7 @@ const Register = () => {
       newErrors.agentCategoryId = "Company Type or Agent category is required";
     if (!formData.currency) newErrors.currency = "Currency is required";
     // if (!formData.markup) newErrors.markup = "Markup is required";
+    if (!formData.salutation) newErrors.salutation = "Salutation is required";
     if (!formData.firstName.trim())
       newErrors.firstName = "First Name is required";
     if (!formData.lastName.trim()) newErrors.lastName = "Last Name is required";
@@ -1191,12 +1186,14 @@ const Register = () => {
                         <Row className="g-3">
                           <Col md={2}>
                             <Form.Group>
-                              <Form.Label className="form-label">Salutation</Form.Label>
+                              <Form.Label className="form-label">
+                                Salutation <span className="required">*</span>
+                              </Form.Label>
                               <Form.Select
                                 name="salutation"
                                 value={formData.salutation}
                                 onChange={handleChange}
-                                className="form-input"
+                                className={`form-input ${errors.salutation ? 'is-invalid' : ''}`}
                               >
                                 <option value="">Select</option>
                                 {SALUTATIONS.map((s) => (
@@ -1205,6 +1202,11 @@ const Register = () => {
                                   </option>
                                 ))}
                               </Form.Select>
+                              {errors.salutation && (
+                                <Form.Control.Feedback type="invalid">
+                                  {errors.salutation}
+                                </Form.Control.Feedback>
+                              )}
                             </Form.Group>
                           </Col>
 
