@@ -176,6 +176,14 @@ export default function AgentIncentiveDashboard() {
     return Number(summary.rewardAmount || 0);
   }, [summary]);
 
+  // A claim pays for whole target blocks; the rest carries over.
+  const claimSplit = useMemo(() => {
+    const earned = Number(summary?.totalPointsEarned || 0);
+    const target = Number(summary?.targetPoints) || DEFAULT_TARGET_POINTS;
+    const used = Math.floor(earned / target) * target;
+    return { used, leftover: earned - used };
+  }, [summary]);
+
   const ENTRIES_PER_PAGE = 10;
   const entriesTotalPages = Math.max(1, Math.ceil(rows.length / ENTRIES_PER_PAGE));
   const entriesCurrentPage = Math.min(entriesPage, entriesTotalPages);
@@ -341,6 +349,11 @@ export default function AgentIncentiveDashboard() {
                           <div className="fs-3 fw-semibold">
                             {summary.totalPointsEarned || 0}
                           </div>
+                          {Number(summary.carriedOverPoints) > 0 && (
+                            <div className="text-muted mt-1" style={{ fontSize: "0.7rem" }}>
+                              Includes {summary.carriedOverPoints} carried over from your last claim
+                            </div>
+                          )}
                         </Card.Body>
                       </Card>
                     </div>
@@ -392,7 +405,11 @@ export default function AgentIncentiveDashboard() {
                       disabled={!summary.eligibleToClaim}
                       onClick={openClaimModal}
                     >
-                      {summary.eligibleToClaim ? "Claim Reward" : "Claim — target not reached"}
+                      {summary.eligibleToClaim
+                        ? "Claim Reward"
+                        : (summary.totalPointsEarned || 0) >= (summary.targetPoints || DEFAULT_TARGET_POINTS)
+                        ? "Claim — no reward amount set"
+                        : "Claim — target not reached"}
                     </Button>
                   </div>
 
@@ -548,6 +565,13 @@ export default function AgentIncentiveDashboard() {
                 <div className="display-6 fw-semibold text-success mt-1">
                   AED {calculatedAmount.toFixed(2)}
                 </div>
+                {claimSplit.leftover > 0 && (
+                  <div className="small mt-1">
+                    This claim uses <strong>{claimSplit.used}</strong> points. The other{" "}
+                    <strong>{claimSplit.leftover}</strong> stay on your balance toward the next
+                    reward.
+                  </div>
+                )}
                 <div className="small text-muted">
                   This amount will be processed after admin approval.
                 </div>

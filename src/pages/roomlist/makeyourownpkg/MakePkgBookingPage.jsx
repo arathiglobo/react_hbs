@@ -42,6 +42,7 @@ import axiosInstance from "../../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import "../../../styles/HotelBookingPage.css";
 import "../../../styles/MakePkgBookingPage.css";
+import { packageCutoffDay } from "../../../utils/rateDeadline";
 
 const MakePkgBookingPage = () => {
   const navigate = useNavigate();
@@ -971,8 +972,9 @@ const MakePkgBookingPage = () => {
               return `${year}-${month}-${day}T00:00:00`;
             } else {
               // The backend's own last free day, when the rate carries it.
+              // (RateHawk's exact time saves the day before — packages go by day.)
               if (hotel.refundTerms?.cutoff) {
-                return `${hotel.refundTerms.cutoff}T00:00:00`;
+                return `${packageCutoffDay(hotel.refundTerms)}T00:00:00`;
               }
               // Refundable: 2 days before earliest fromDate from cancellationPolicy
               const policies = hotel.cancellationPolicy || [];

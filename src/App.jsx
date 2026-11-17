@@ -228,6 +228,7 @@ import PackageSearch from "./pages/search/package/PackageSearch";
 import PackageBooking from "./pages/booking/packagebooking/PackageBooking";
 import PackageCheckout from "./pages/booking/packagebooking/PackageCheckout";
 import FetchNewHotels from "./pages/master/FetchNewHotels";
+import RateHawkStaticData from "./pages/master/RateHawkStaticData";
 import PackageBookingList from "./pages/list/PackageBookingList";
 import PackageBookingDetailView from "./pages/list/PackageBookingDetailView";
 import OfflineSearch from "./pages/search/offline/OfflineSearch";
@@ -497,6 +498,8 @@ export default function App() {
         <Route path="/masters/transfer-hotel-mapping" element={<PrivateRoute roles={["admin"]}><TransferHotelMapping /></PrivateRoute>} />
         <Route path="/masters/hotel-upcooming-mapped-list" element={<PrivateRoute roles={["admin"]}><HotelMappingBulkList /></PrivateRoute>} />
         <Route path="/masters/fetch-new-hotels" element={<PrivateRoute roles={["admin"]}><FetchNewHotels /></PrivateRoute>} />
+        {/* RateHawk static data: daily incremental_dump + full dump refresh (api.ratehawk.staticdata). */}
+        <Route path="/masters/ratehawk-static-data" element={<PrivateRoute roles={["admin"]}><RateHawkStaticData /></PrivateRoute>} />
         <Route path="/masters/mapped-list" element={<PrivateRoute roles={["admin"]}><MappedList /></PrivateRoute>} />
      
         {/* :bar_chart: Reports */}

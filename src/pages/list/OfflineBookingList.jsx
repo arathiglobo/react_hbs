@@ -36,6 +36,7 @@ import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import RoomCountSummary from "../../components/RoomCountSummary";
+import { getCurrentActiveRole, getUserRole } from "../../utils/authSession";
 import "../../styles/HotelBookingListModern.css";
 
 const PER_PAGE_OPTIONS = [10, 25, 50, 100];
@@ -51,12 +52,17 @@ const COLUMN_WIDTHS = {
   sn: "40px",
   bookDate: "95px",
   invoice: "110px",
-  agent: "130px",
-  bookingDetails: "260px",
-  noOfRooms: "120px",
-  total: "110px",
-  status: "110px",
-  action: "70px",
+  agent: "120px",
+  paxName: "130px",
+  pax: "70px",
+  hotel: "140px",
+  booker: "100px",
+  checkIn: "95px",
+  checkOut: "95px",
+  noOfRooms: "110px",
+  total: "100px",
+  status: "105px",
+  action: "60px",
 };
 
 const STATUS_META = {
@@ -67,15 +73,47 @@ const STATUS_META = {
   CANCELLED: { label: "Cancelled", bg: "#fdecec", color: "#b42318", dot: "#ef4444" },
 };
 
-const fmtDate = (iso) => {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  if (isNaN(d)) return typeof iso === "string" ? iso.slice(0, 10) : "-";
+// Reads the leading "yyyy-MM-dd" as a LOCAL calendar date. `new Date("2026-11-20")`
+// would be UTC midnight, which shows as 19 Nov in any timezone west of UTC.
+const parseLocalDate = (value) => {
+  if (!value) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const d = new Date(value);
+  return isNaN(d) ? null : d;
+};
+
+const fmtDate = (value) => {
+  const d = parseLocalDate(value);
+  if (!d) return "-";
   return d.toLocaleDateString("en-GB", {
     day: "2-digit",
     month: "short",
     year: "numeric",
   });
+};
+
+// "1 adult" / "2 adults, 1 child" under the pax count.
+const fmtPaxBreakdown = (b) => {
+  const adult = Number(b?.adult) || 0;
+  const child = Number(b?.child) || 0;
+  const parts = [];
+  if (adult) parts.push(`${adult} adult${adult === 1 ? "" : "s"}`);
+  if (child) parts.push(`${child} ${child === 1 ? "child" : "children"}`);
+  return parts.join(", ");
+};
+
+// Grand total with its currency; "-" when the booking has no total yet.
+const fmtTotal = (b) => {
+  const raw = b?.totalAmount ?? b?.grandTotal;
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  const amount = n.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return b?.currency ? `${b.currency} ${amount}` : amount;
 };
 
 const StatusPill = ({ meta, raw }) => {
@@ -111,18 +149,20 @@ const StatusPill = ({ meta, raw }) => {
 const normStatus = (v) =>
   String(v ?? "").replace(/[\s_-]+/g, "").toLowerCase();
 
-// Derive a STATUS_META key for the pill. Offline bookings don't expose a
-// single `bookingStatus` field consistently, so fall back to cancel flag
-// then check-out date.
+// Derive a STATUS_META key for the pill. The list API sends `bookingStatus`
+// (Confirmed / Completed / Cancelled — the same rule as the All Bookings
+// list); the check-out fallback only covers an older backend.
 const deriveStatusKey = (b) => {
   const raw = normStatus(b?.bookingStatus || b?.status);
   if (raw === "cancelled" || b?.cancelStatus === true) return "CANCELLED";
   if (raw === "confirmed") return "CONFIRMED";
   if (raw === "completed") return "COMPLETED";
   if (raw === "pending" || raw === "onrequest") return "PENDING";
-  const co = b?.checkOut ? new Date(b.checkOut) : null;
-  if (co && !isNaN(co)) {
-    return co < new Date() ? "COMPLETED" : "CONFIRMED";
+  const co = parseLocalDate(b?.checkOut);
+  if (co) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return co < today ? "COMPLETED" : "CONFIRMED";
   }
   return null;
 };
@@ -130,9 +170,19 @@ const deriveStatusKey = (b) => {
 const OfflineBookingList = () => {
   const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
-  const [role, setRole] = useState(() => {
-    return sessionStorage.getItem("currentActiveRole")?.toLowerCase() || null;
+  // Active role from this tab's session, like the All Bookings list. It used
+  // to be overridden by a "currentActiveRole" left in localStorage by older
+  // builds, which hid the Agent column from admins.
+  const [role] = useState(() => {
+    const active = getCurrentActiveRole().toLowerCase();
+    if (active) return active;
+    const userRoles = getUserRole().toLowerCase().split(",").map((r) => r.trim());
+    if (userRoles.includes("agent")) return "agent";
+    if (userRoles.includes("staff")) return "staff";
+    if (userRoles.includes("admin")) return "admin";
+    return userRoles[0] || null;
   });
+  const isAdmin = role === "admin" || role === "super_admin";
   const [userId, setUserId] = useState(() => {
     const stored = sessionStorage.getItem("userId");
     return stored && stored !== "null" ? stored : null;
@@ -166,23 +216,6 @@ const OfflineBookingList = () => {
     ],
     [],
   );
-
-  // Role sync if missing from localStorage initially
-  useEffect(() => {
-    const storedRole = localStorage
-      .getItem("currentActiveRole")
-      ?.toLowerCase();
-    if (storedRole && storedRole !== role) {
-      setRole(storedRole);
-    } else if (!storedRole) {
-      const userRoles = (sessionStorage.getItem("userRole") || "")
-        .toLowerCase()
-        .split(",");
-      if (userRoles.includes("agent")) setRole("agent");
-      else if (userRoles.includes("staff")) setRole("staff");
-      else if (userRoles.includes("admin")) setRole("admin");
-    }
-  }, [role]);
 
   // Fetch userId if missing
   useEffect(() => {
@@ -335,7 +368,7 @@ const OfflineBookingList = () => {
     lineHeight: 1.2,
   };
 
-  const colCount = role === "admin" ? 9 : 8;
+  const colCount = isAdmin ? 14 : 13;
   const safeTotalPages = Math.max(1, totalPages || 1);
   const hasResults = visibleBookings.length > 0;
   const displayStart = hasResults ? (page - 1) * perPage + 1 : 0;
@@ -559,7 +592,7 @@ const OfflineBookingList = () => {
                           >
                             Invoice
                           </th>
-                          {role === "admin" && (
+                          {isAdmin && (
                             <th
                               style={{
                                 ...baseHeaderStyle,
@@ -572,10 +605,53 @@ const OfflineBookingList = () => {
                           <th
                             style={{
                               ...baseHeaderStyle,
-                              width: COLUMN_WIDTHS.bookingDetails,
+                              width: COLUMN_WIDTHS.paxName,
                             }}
                           >
-                            Booking Details
+                            Pax Name
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.pax,
+                            }}
+                          >
+                            Pax
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.hotel,
+                            }}
+                          >
+                            Hotel
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              width: COLUMN_WIDTHS.booker,
+                            }}
+                          >
+                            Booker
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.checkIn,
+                            }}
+                          >
+                            Check In
+                          </th>
+                          <th
+                            style={{
+                              ...baseHeaderStyle,
+                              textAlign: "center",
+                              width: COLUMN_WIDTHS.checkOut,
+                            }}
+                          >
+                            Check Out
                           </th>
                           <th
                             style={{
@@ -700,43 +776,100 @@ const OfflineBookingList = () => {
                                     {booking.invoiceNumber || "-"}
                                   </span>
                                 </td>
-                                {role === "admin" && (
+                                {isAdmin && (
                                   <td
                                     style={{
                                       ...baseCellStyle,
                                       width: COLUMN_WIDTHS.agent,
                                     }}
                                   >
-                                    {booking.agentName || "Direct Client"}
+                                    <span className="fw-medium text-dark">
+                                      {booking.agentName || "Direct Client"}
+                                    </span>
                                   </td>
                                 )}
                                 <td
                                   style={{
                                     ...baseCellStyle,
-                                    width: COLUMN_WIDTHS.bookingDetails,
+                                    width: COLUMN_WIDTHS.paxName,
                                   }}
                                 >
-                                  <div className="fw-semibold text-dark">
+                                  <span className="fw-semibold text-dark">
                                     {booking.customerName || "-"}
-                                  </div>
-                                  <div
-                                    className="text-muted"
-                                    style={{
-                                      fontSize: "0.72rem",
-                                      lineHeight: 1.5,
-                                    }}
-                                  >
-                                    {fmtDate(booking.checkIn)} →{" "}
-                                    {fmtDate(booking.checkOut)}
-                                    <br />
-                                    {booking.adult || 0} adult
-                                    {(booking.adult || 0) === 1 ? "" : "s"}
-                                    {booking.child
-                                      ? `, ${booking.child} child${
-                                          booking.child === 1 ? "" : "ren"
-                                        }`
-                                      : ""}
-                                  </div>
+                                  </span>
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.pax,
+                                  }}
+                                >
+                                  {Number(booking.totalPax) > 0 ? (
+                                    <>
+                                      <div className="fw-semibold text-dark">
+                                        {booking.totalPax}
+                                      </div>
+                                      {fmtPaxBreakdown(booking) && (
+                                        <div
+                                          className="text-muted"
+                                          style={{ fontSize: "0.7rem" }}
+                                        >
+                                          {fmtPaxBreakdown(booking)}
+                                        </div>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.hotel,
+                                  }}
+                                >
+                                  {booking.hotelName ? (
+                                    <span className="fw-semibold text-dark">
+                                      {booking.hotelName}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
+                                </td>
+                                <td
+                                  style={{
+                                    ...baseCellStyle,
+                                    width: COLUMN_WIDTHS.booker,
+                                  }}
+                                >
+                                  {booking.bookerName ? (
+                                    <span className="fw-medium text-dark">
+                                      {booking.bookerName}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
+                                </td>
+                                <td
+                                  className="text-muted"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.checkIn,
+                                  }}
+                                >
+                                  {fmtDate(booking.checkIn)}
+                                </td>
+                                <td
+                                  className="text-muted"
+                                  style={{
+                                    ...baseCellStyle,
+                                    textAlign: "center",
+                                    width: COLUMN_WIDTHS.checkOut,
+                                  }}
+                                >
+                                  {fmtDate(booking.checkOut)}
                                 </td>
                                 {/* No. of Rooms — summed across the booking's
                                     hotel lines (totalRooms / roomSummary). */}
@@ -760,11 +893,13 @@ const OfflineBookingList = () => {
                                     whiteSpace: "nowrap",
                                   }}
                                 >
-                                  <span className="fw-semibold text-dark">
-                                    {booking.totalAmount ||
-                                      booking.grandTotal ||
-                                      "0.00"}
-                                  </span>
+                                  {fmtTotal(booking) ? (
+                                    <span className="fw-semibold text-dark">
+                                      {fmtTotal(booking)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-muted">-</span>
+                                  )}
                                 </td>
                                 <td
                                   style={{
