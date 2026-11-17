@@ -1200,6 +1200,7 @@ const Register = () => {
                                   <option key={s} value={s}>
                                     {s}
                                   </option>
+                                  
                                 ))}
                               </Form.Select>
                               {errors.salutation && (
