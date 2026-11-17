@@ -15,6 +15,7 @@ import Sidebar from "../components/Sidebar";
 import Topbar from "../components/TopBar";
 import axiosInstance from "../components/AxiosInstance";
 import { toast } from "react-hot-toast";
+import { csvCell } from "../utils/csvSafe";
 import {
   FaPrint,
   FaFileExcel,
@@ -66,6 +67,10 @@ const TABLE_CHROME_PX = 88; // column header row + pagination bar
 const MIN_ROWS_PER_PAGE = 3;
 const MAX_ROWS_PER_PAGE = 10; // the list shows at most 10 invoices per page
 
+// The Excel export pulls every invoice, not just the rows on screen, in
+// pages of this size.
+const EXPORT_PAGE_SIZE = 500;
+
 // Proportional column widths — they add up to 100% so the grid always spans
 // exactly the available width, whatever the window size.
 const COLUMN_WIDTHS = {
@@ -99,6 +104,12 @@ export default function Invoice() {
   const [totalElements, setTotalElements] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [hasAppliedFilters, setHasAppliedFilters] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  // The source and criteria the list was last loaded with, so the Excel export
+  // fetches the same invoices the page shows (criteria edited afterwards
+  // without pressing Search are not applied).
+  const lastQueryRef = useRef({ filtered: false });
 
   // The page size is derived from the viewport rather than fixed, so the grid
   // always shows as many rows as fit and never needs a scrollbar. 0 means
@@ -191,6 +202,7 @@ export default function Invoice() {
   };
 
   const fetchInitialInvoiceData = async (pageNumber = 0) => {
+    lastQueryRef.current = { filtered: false };
     setIsLoading(true);
     setError("");
     try {
@@ -214,6 +226,7 @@ export default function Invoice() {
   };
 
   const fetchFilteredInvoiceData = async (pageNumber = 0) => {
+    lastQueryRef.current = { filtered: true, agent, fromDate, toDate };
     setIsLoading(true);
     setError("");
     try {
@@ -411,8 +424,10 @@ export default function Invoice() {
   // non-refundable rooms' share — for a booking cancelled on or before its
   // deadline, in-house or supplier. Rows without it (other booking types,
   // older API) show the booking total.
-  const formatBookingAmount = (invoice, billed = true) => {
-    if (!invoice) return "-";
+  //
+  // bookingAmountParts holds the rule; formatBookingAmount renders it for the
+  // grid and the Excel export writes the currency and number separately.
+  const bookingAmountParts = (invoice, billed = true) => {
     const hasInvoiceAmount =
       billed &&
       invoice.invoiceAmount !== null &&
@@ -426,15 +441,25 @@ export default function Invoice() {
         invoice.invoiceDisplayAmount !== undefined
           ? Number(invoice.invoiceDisplayAmount)
           : amt;
-      return `${code} ${shown.toLocaleString("en-US", {
+      return { code, amount: shown };
+    }
+    return {
+      code: "AED",
+      amount: hasInvoiceAmount ? invoice.invoiceAmount : invoice.totalRate,
+    };
+  };
+
+  const formatBookingAmount = (invoice, billed = true) => {
+    if (!invoice) return "-";
+    const { code, amount } = bookingAmountParts(invoice, billed);
+    if (code !== "AED") {
+      return `${code} ${amount.toLocaleString("en-US", {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
       })}`;
     }
     // existing AED formatter
-    return formatCurrency(
-      hasInvoiceAmount ? invoice.invoiceAmount : invoice.totalRate,
-    );
+    return formatCurrency(amount);
   };
 
   // Tooltip on the amount cell, so a 0.00 (or reduced) amount explains itself.
@@ -450,11 +475,162 @@ export default function Invoice() {
     window.print();
   };
 
-  const handleExcel = () => {
-    // TODO: Implement Excel export functionality
-    toast("Excel export functionality coming soon", {
-      icon: "ℹ️",
+  // Every invoice for the source and criteria the list was last loaded with —
+  // all pages, not only the rows on screen. Same endpoints as the grid.
+  const fetchAllInvoicesForExport = async () => {
+    const query = lastQueryRef.current;
+    const rows = [];
+
+    for (let page = 0; ; page++) {
+      let response;
+      if (query.filtered) {
+        const params = { page, limit: EXPORT_PAGE_SIZE };
+        if (query.agent) params.agent = query.agent;
+        if (query.fromDate) params.fromDate = query.fromDate;
+        if (query.toDate) params.toDate = query.toDate;
+        response = await axiosInstance.get("/api/bookings/full-list", {
+          params,
+          timeout: 120000,
+        });
+        if (response.data && response.data.success === false) {
+          const failure = new Error(
+            response.data.message || "Failed to fetch bookings",
+          );
+          failure.response = response;
+          throw failure;
+        }
+      } else {
+        response = await axiosInstance.get("/api/unified-bookings/list", {
+          params: { page, size: EXPORT_PAGE_SIZE },
+          timeout: 120000,
+        });
+      }
+
+      const data = response.data;
+      const pageData = data?.bookings || data?.data || data;
+      if (Array.isArray(pageData)) {
+        // An unpaged answer already holds every row.
+        rows.push(...pageData);
+        break;
+      }
+      const content = pageData?.content || pageData?.bookings || [];
+      rows.push(...content);
+
+      const totalPages = pageData?.totalPages ?? data?.totalPages;
+      if (
+        content.length < EXPORT_PAGE_SIZE ||
+        (totalPages !== null &&
+          totalPages !== undefined &&
+          page + 1 >= totalPages)
+      ) {
+        break;
+      }
+    }
+
+    return rows.map(normalizeInvoiceRow);
+  };
+
+  // Downloads the whole TAX INVOICE LIST (every page, current criteria) as a
+  // UTF-8 CSV that opens in Excel — the same export format as the report
+  // pages, with cells neutralised by csvCell.
+  const handleExcel = async () => {
+    if (isExporting) return;
+    if (!totalElements) {
+      toast.error("No invoices to export");
+      return;
+    }
+
+    setIsExporting(true);
+    let rows;
+    try {
+      rows = await fetchAllInvoicesForExport();
+    } catch (err) {
+      console.error("Error exporting invoices:", err);
+      toast.error(
+        err.response?.data?.message || "Could not export the invoice list",
+      );
+      return;
+    } finally {
+      setIsExporting(false);
+    }
+
+    if (!rows.length) {
+      toast.error("No invoices to export");
+      return;
+    }
+
+    // "-" is the grid's placeholder for a missing value; the file leaves
+    // the cell empty instead.
+    const blankIfDash = (text) => (text === "-" ? "" : text);
+
+    const headers = [
+      "S.N",
+      "Customer",
+      "Agent",
+      "Booking Code",
+      "Booking Date",
+      "Hotel Name",
+      "Check-In",
+      "Check-Out",
+      "Currency",
+      "Total Amount",
+      "Confirmation Code",
+    ];
+
+    const lines = rows.map((invoice, index) => {
+      // Same amount and currency the grid shows, written as a plain number
+      // so the column can be summed in Excel.
+      const { code, amount } = bookingAmountParts(invoice);
+      const value = Number(amount);
+      const hasAmount =
+        amount !== null &&
+        amount !== undefined &&
+        amount !== "" &&
+        Number.isFinite(value);
+
+      return [
+        index + 1,
+        invoice.customerName,
+        invoice.agentName,
+        invoice.bookingCode,
+        blankIfDash(formatDateTime(invoice.bookingDate)),
+        invoice.hotelName,
+        blankIfDash(formatDateShort(invoice.checkInDate)),
+        blankIfDash(formatDateShort(invoice.checkOutDate)),
+        hasAmount ? code : "",
+        hasAmount ? value.toFixed(2) : "",
+        // Filtered list: confirmationCode; default list: referenceNumber
+        // (the same booking reference).
+        firstNonEmpty(invoice.confirmationCode, invoice.referenceNumber),
+      ]
+        .map(csvCell)
+        .join(",");
     });
+
+    const csvContent = [headers.map(csvCell).join(","), ...lines].join("\n");
+
+    // BOM so Excel reads the file as UTF-8.
+    const BOM = "﻿";
+    const blob = new Blob([BOM + csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const today = new Date();
+    const stamp = [
+      today.getFullYear(),
+      String(today.getMonth() + 1).padStart(2, "0"),
+      String(today.getDate()).padStart(2, "0"),
+    ].join("-");
+
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `tax-invoice-list-${stamp}.csv`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+
+    toast.success(
+      `Exported ${rows.length} ${rows.length === 1 ? "invoice" : "invoices"}`,
+    );
   };
 
   // Booking extras live in a popover rather than an expanding row: an inline
@@ -592,9 +768,14 @@ export default function Invoice() {
                   <FaPrint className="me-2" />
                   Print
                 </Button>
-                <Button variant="secondary" onClick={handleExcel}>
+                <Button
+                  variant="secondary"
+                  onClick={handleExcel}
+                  disabled={isExporting || isLoading}
+                  title="Download every invoice in the list"
+                >
                   <FaFileExcel className="me-2" />
-                  Excel
+                  {isExporting ? "Exporting..." : "Excel"}
                 </Button>
               </div>
             </Card.Header>

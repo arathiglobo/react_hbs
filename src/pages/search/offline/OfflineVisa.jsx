@@ -3,6 +3,7 @@ import { Row, Col, Form, Button, Spinner } from "react-bootstrap";
 import Select from "react-select";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
+import useOfflineLineEdit, { asText, supplierOptionFromLine } from "../../../hooks/useOfflineLineEdit";
 
 const initialForm = {
   supplier: null,
@@ -13,10 +14,33 @@ const initialForm = {
   sellingPrice: "",
 };
 
-const OfflineVisa = ({ mainBasicId, invoiceNo, onAdd }) => {
+// A saved visa line (GET /api/v1/offline-booking/line/{id}) → this form.
+const formFromLine = (data) => {
+  const l = data.line || {};
+  return {
+    supplier: supplierOptionFromLine(data),
+    visa: l.visa || "",
+    price: asText(l.price),
+    tax: asText(l.tax, "0"),
+    quantity: asText(l.quantity, "1"),
+    sellingPrice: asText(l.sellingPrice),
+  };
+};
+
+// editingEntry: a line-table row being edited (null = adding a new line).
+// onCancelEdit: leave edit mode without saving.
+const OfflineVisa = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdit }) => {
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { isEditing, editData, isLoadingEdit } = useOfflineLineEdit({
+    editingEntry,
+    initialForm,
+    toForm: formFromLine,
+    setForm,
+    setErrors,
+    onCancelEdit,
+  });
   const [supplierOptions, setSupplierOptions] = useState([]);
   const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
 
@@ -85,12 +109,14 @@ const OfflineVisa = ({ mainBasicId, invoiceNo, onAdd }) => {
 
   const handleSubmit = async (ev) => {
     ev.preventDefault();
+    if (isEditing && !editData) return; // still loading the line being edited
     const formErrors = validate();
     if (Object.keys(formErrors).length > 0) { setErrors(formErrors); return; }
 
     setIsSubmitting(true);
     const payload = {
-      visaId: "0",
+      // "0" adds a new line; an existing id updates that line in place.
+      visaId: isEditing ? String(editData.line.visaId) : "0",
       supplierMainBasicId: String(mainBasicId),
       supplierId: String(form.supplier?.value),
       visa: form.visa,
@@ -108,12 +134,12 @@ const OfflineVisa = ({ mainBasicId, invoiceNo, onAdd }) => {
         payload
       );
       if (response.data && response.data !== 0) {
-        toast.success("Visa details added successfully");
+        toast.success(isEditing ? "Visa details updated successfully" : "Visa details added successfully");
         if (onAdd) onAdd();
         setForm(initialForm);
         setErrors({});
       } else {
-        toast.error("Failed to add visa details");
+        toast.error(isEditing ? "Failed to update visa details" : "Failed to add visa details");
       }
     } catch (error) {
       console.error("Error saving visa:", error);
@@ -128,7 +154,7 @@ const OfflineVisa = ({ mainBasicId, invoiceNo, onAdd }) => {
 
   return (
     <div className="supplier-form-panel">
-      <h5 className="supplier-form-title">Visa</h5>
+      <h5 className="supplier-form-title">{isEditing ? "Edit Visa" : "Visa"}</h5>
       <Form onSubmit={handleSubmit}>
         <Row className="g-3">
           <Col lg={4} md={6}>
@@ -227,18 +253,33 @@ const OfflineVisa = ({ mainBasicId, invoiceNo, onAdd }) => {
             </Form.Group>
           </Col>
 
-          <Col lg={4} md={12} className="d-flex align-items-end">
+          <Col lg={4} md={12} className="d-flex align-items-end gap-2">
             <Button
               type="submit"
               className="supplier-submit-btn w-100"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isLoadingEdit}
             >
               {isSubmitting ? (
                 <><Spinner animation="border" size="sm" className="me-2" />Saving...</>
+              ) : isLoadingEdit ? (
+                <><Spinner animation="border" size="sm" className="me-2" />Loading...</>
+              ) : isEditing ? (
+                <>Update &rarr;</>
               ) : (
                 <>Add &rarr;</>
               )}
             </Button>
+            {isEditing && (
+              <Button
+                type="button"
+                variant="outline-secondary"
+                className="w-50"
+                disabled={isSubmitting}
+                onClick={() => onCancelEdit && onCancelEdit()}
+              >
+                Cancel
+              </Button>
+            )}
           </Col>
         </Row>
       </Form>

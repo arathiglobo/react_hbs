@@ -712,7 +712,7 @@ export default function VisaDetails() {
                     <Col md={4}>
                       <Form.Group className="mb-3">
                         <Form.Label className="fw-semibold">
-                          Passport Country
+                          Passport Country <span className="text-danger">*</span>
                         </Form.Label>
                         <SearchableSelect
                           name="passportCountry"
@@ -727,16 +727,16 @@ export default function VisaDetails() {
                           disabled={isViewMode}
                         />
                         {errors.passportCountry && (
-                          <Form.Control.Feedback type="invalid">
+                          <div className="text-danger small mt-1">
                             {errors.passportCountry}
-                          </Form.Control.Feedback>
+                          </div>
                         )}
                       </Form.Group>
                     </Col>
                     <Col md={4}>
                       <Form.Group className="mb-3">
                         <Form.Label className="fw-semibold">
-                          Country
+                          Country <span className="text-danger">*</span>
                         </Form.Label>
                         <SearchableSelect
                           name="country"
@@ -751,16 +751,16 @@ export default function VisaDetails() {
                           disabled={isViewMode}
                         />
                         {errors.country && (
-                          <Form.Control.Feedback type="invalid">
+                          <div className="text-danger small mt-1">
                             {errors.country}
-                          </Form.Control.Feedback>
+                          </div>
                         )}
                       </Form.Group>
                     </Col>
                     <Col md={4}>
                   <Form.Group className="mb-3">
                     <Form.Label className="fw-semibold">
-                          Passport Code
+                          Passport Code <span className="text-danger">*</span>
                     </Form.Label>
                         <Form.Control
                           value={formData.passportCode}
@@ -789,7 +789,7 @@ export default function VisaDetails() {
 
                   <Form.Group className="mb-3">
                     <Form.Label className="fw-semibold">
-                      * Visa Description
+                      Visa Description <span className="text-danger">*</span>
                     </Form.Label>
                     <Form.Control
                       as="textarea"

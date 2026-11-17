@@ -26,7 +26,10 @@ import {
  *
  * Every date resolved here is pulled one day earlier than the supplier's own
  * cut-off — see SUPPLIER_DEADLINE_BUFFER_DAYS — so a cancellation is actioned
- * with a day in hand. INHOUSE has the same treatment under
+ * with a day in hand. RateHawk is the exception: its deadline comes from the
+ * backend as an exact UAE time (`refundTerms.cutoffTime`, converted from
+ * RateHawk's UTC+0, no buffer) and is shown and checked to the minute — see
+ * "Exact deadlines" below. INHOUSE has the same treatment under
  * INHOUSE_DEADLINE_BUFFER_DAYS, and GRN under GRN_DEADLINE_BUFFER_DAYS in
  * components/grn/GrnPolicy.jsx, where it also keeps its own colour-coded,
  * IST-based pill rather than routing through this file.
@@ -83,6 +86,103 @@ export const parseSupplierDate = (value) => {
 
   const nat = new Date(str);
   return Number.isNaN(nat.getTime()) ? null : nat;
+};
+
+/**
+ * ── Exact deadlines (RateHawk) ──────────────────────────────────────────
+ *
+ * RateHawk sends its free-cancellation deadline to the minute in UTC+0. The
+ * backend converts it to the same instant on the UAE clock with no safety
+ * buffer (RatehawkCancellationTime.java) and hands it over as
+ * `refundTerms.cutoffTime` ("2026-12-20T04:00"). It is shown as
+ * "20 Dec 2026, 04:00 AM (UAE)" and is past from that minute on. Every other
+ * supplier's deadline is a day, free until 11:59 PM UAE.
+ *
+ * Exact times are held in a Date's local fields as UAE wall-clock values, the
+ * same convention uaeToday() uses, so they compare with uaeNow() directly. An
+ * exact deadline is never exactly midnight (the backend keeps UAE midnight as
+ * 23:59 the day before), so a Date with a time of day is an exact one and a
+ * Date at midnight is a day deadline.
+ */
+
+/** "2026-12-20T04:00[:00]" (UAE wall clock) → Date, or null without a time. */
+export const parseExactUaeTime = (value) => {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const m = String(value || "").trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})[T\s](\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+};
+
+/** The UAE wall-clock time now, in a Date's local fields (like uaeToday). */
+export const uaeNow = (now = new Date()) => {
+  const parts = {};
+  new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Dubai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  })
+    .formatToParts(now)
+    .forEach((p) => {
+      parts[p.type] = p.value;
+    });
+  return new Date(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+};
+
+/** True for a resolved deadline Date that carries a time of day (RateHawk). */
+export const isExactDeadline = (d) =>
+  d instanceof Date && !Number.isNaN(d.getTime()) && (d.getHours() !== 0 || d.getMinutes() !== 0);
+
+/** True from the minute after an exact UAE deadline. */
+export const isExactDeadlinePassed = (value) => {
+  const d = parseExactUaeTime(value);
+  return d ? uaeNow() > d : false;
+};
+
+/** "04:00 AM (UAE)" for an exact deadline. */
+export const exactTimeLabel = (d) => {
+  const t = parseExactUaeTime(d);
+  if (!t) return DEADLINE_TIME_EOD;
+  const h = t.getHours();
+  const hh = String(h % 12 === 0 ? 12 : h % 12).padStart(2, "0");
+  const mm = String(t.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm} ${h < 12 ? "AM" : "PM"} (UAE)`;
+};
+
+/** A resolved deadline Date as text: exact → "20 Dec 2026, 04:00 AM (UAE)", day → "…, 11:59 PM (UAE)". */
+export const formatResolvedDeadline = (d) => {
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return null;
+  const day = `${String(d.getDate()).padStart(2, "0")} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  return `${day}, ${isExactDeadline(d) ? exactTimeLabel(d) : DEADLINE_TIME_EOD}`;
+};
+
+/** Passed? Exact deadlines by the minute, day deadlines by the UAE day. */
+export const isResolvedDeadlinePassed = (d) =>
+  isExactDeadline(d) ? isExactDeadlinePassed(d) : isDeadlinePassed(d);
+
+/** A saved booking's deadline is exact when it is RateHawk's and has a time (older RateHawk bookings were saved at 00:00). */
+export const isExactBookingDeadline = (apiId, deadlineDate) =>
+  String(apiId || "").trim().toUpperCase() === "RATEHAWK" && !isMidnightOrDateOnly(deadlineDate);
+
+/**
+ * The deadline DAY a package booking saves for a hotel rate. Packages judge
+ * their deadline by the day (free until 11:59 PM UAE), so a rate with an
+ * exact RateHawk time saves the day before it — the same day as before exact
+ * times existed — and can never promise more than RateHawk gives. Other rates
+ * save their cutoff unchanged.
+ */
+export const packageCutoffDay = (refundTerms) => {
+  const cutoff = refundTerms?.cutoff;
+  if (!cutoff) return null;
+  if (!refundTerms?.cutoffTime) return cutoff;
+  const d = parseSupplierDate(cutoff);
+  if (!d) return cutoff;
+  d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
 /** One display format for every supplier: "18 Nov 2026". */
@@ -161,8 +261,12 @@ export const resolveDeadlineInfo = (rate, fallbackPolicies) => {
 
   // 0. The backend's own answer (RefundRule.java), already with its safety day.
   //    A rate the rule has judged has no other date to look for: no cutoff means
-  //    no free window.
+  //    no free window. RateHawk's comes as an exact UAE time, no buffer.
   if (rate.refundTerms?.label) {
+    const exact = rate.refundTerms.cutoff ? parseExactUaeTime(rate.refundTerms.cutoffTime) : null;
+    if (exact) {
+      return { date: exact, exact: true, source: "refund terms (exact UAE time)", raw: rate.refundTerms.cutoffTime };
+    }
     const cutoff = parseSupplierDate(rate.refundTerms.cutoff);
     return cutoff
       ? { date: cutoff, source: "refund terms", raw: rate.refundTerms.cutoff }
@@ -379,11 +483,12 @@ export const RateDeadlinePill = ({
   // A rate that had a free window and lost it says when it closed.
   const passedCutoff =
     judged && label === REFUND_NON_REFUNDABLE
-      ? parseSupplierDate(rate?.refundTerms?.cutoff)
+      ? (rate?.refundTerms?.cutoff && parseExactUaeTime(rate?.refundTerms?.cutoffTime))
+        || parseSupplierDate(rate?.refundTerms?.cutoff)
       : null;
 
   const info = passedCutoff
-    ? { date: passedCutoff, source: "refund terms", raw: rate.refundTerms.cutoff }
+    ? { date: passedCutoff, source: "refund terms", raw: rate.refundTerms.cutoffTime || rate.refundTerms.cutoff }
     : label === REFUND_NON_REFUNDABLE
       ? null
       : deadlineOverride && !judged
@@ -400,19 +505,22 @@ export const RateDeadlinePill = ({
 
   const { date, source, raw } = info;
   const dateText = `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+  // RateHawk: its exact UAE time, checked to the minute. Others: the day.
+  const exact = isExactDeadline(date);
+  const timeText = exact ? exactTimeLabel(date) : timeLabel;
 
   // Deadline day is already in the past: what the supplier called "flexible"
   // no longer buys the operator a free cancellation. Show the same red styling
   // as the no-free-cancellation case, but a distinct message so the operator
   // sees WHY (time, not the supplier's own rate choice) and the tooltip still
   // carries the original date + source for triage.
-  if (isDeadlinePassed(date)) {
+  if (exact ? isExactDeadlinePassed(date) : isDeadlinePassed(date)) {
     return (
       <span
         className="text-danger fw-semibold"
-        title={`Free-cancellation window closed on ${dateText}, ${timeLabel} — read from ${source}${raw ? `: ${raw}` : ""}`}
+        title={`Free-cancellation window closed on ${dateText}, ${timeText} — read from ${source}${raw ? `: ${raw}` : ""}`}
       >
-        Free-cancellation window has passed ({dateText})
+        Free-cancellation window has passed ({dateText}{exact ? `, ${timeText}` : ""})
       </span>
     );
   }
@@ -422,7 +530,7 @@ export const RateDeadlinePill = ({
       className="text-danger fw-semibold"
       title={`Cancel before this date/time to avoid charges — read from ${source}${raw ? `: ${raw}` : ""}`}
     >
-      Deadline Date: {dateText}, {timeLabel}
+      Deadline Date: {dateText}, {timeText}
     </span>
   );
 };

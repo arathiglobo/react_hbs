@@ -3,6 +3,7 @@ import { Row, Col, Form, Button, Spinner, Modal } from "react-bootstrap";
 import Select from "react-select";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
+import useOfflineLineEdit, { asText, supplierOptionFromLine } from "../../../hooks/useOfflineLineEdit";
 
 const initialForm = {
   supplier: null,
@@ -20,10 +21,53 @@ const initialForm = {
   summary: "",
 };
 
-const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd }) => {
+// A saved hotel line (GET /api/v1/offline-booking/line/{id}) → this form.
+const formFromLine = (data) => {
+  const l = data.line || {};
+  const dates = data.isoDates || {};
+  const hotelId = l.hotelId && l.hotelId !== "null" ? l.hotelId : "";
+  let hotel = null;
+  if (hotelId) {
+    hotel = { value: Number.isNaN(Number(hotelId)) ? hotelId : Number(hotelId), label: l.hotelName || hotelId };
+  } else if (l.hotelName) {
+    // Typed in through the "+" popup: no hotel id, the name only.
+    hotel = { value: `manual-${l.supplierHotelTypeId}`, label: l.hotelName, isManual: true };
+  }
+  return {
+    supplier: supplierOptionFromLine(data),
+    hotel,
+    roomType: l.roomType || "",
+    mealPlan:
+      l.mealPlanTypeId === null || l.mealPlanTypeId === undefined
+        ? null
+        : { value: l.mealPlanTypeId, label: data.mealPlanName || String(l.mealPlanTypeId) },
+    addOn: l.bedType ? { value: l.bedType, label: l.bedType } : null,
+    bookingCode: l.bookingCode || "",
+    noOfRooms: asText(l.qty),
+    unitPrice: asText(l.unitPrice),
+    tax: asText(l.taxPercent),
+    sellingPrice: asText(l.sellingPrice),
+    checkIn: dates.hotelcheckIndate || "",
+    checkOut: dates.hotelcheckoutdate || "",
+    // A blank summary is saved as "Nil".
+    summary: l.summary && l.summary !== "Nil" ? l.summary : "",
+  };
+};
+
+// editingEntry: a line-table row being edited (null = adding a new line).
+// onCancelEdit: leave edit mode without saving.
+const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdit }) => {
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { isEditing, editData, isLoadingEdit } = useOfflineLineEdit({
+    editingEntry,
+    initialForm,
+    toForm: formFromLine,
+    setForm,
+    setErrors,
+    onCancelEdit,
+  });
 
   const [supplierOptions, setSupplierOptions] = useState([]);
   const [hotelOptions, setHotelOptions] = useState([]);
@@ -190,12 +234,14 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isEditing && !editData) return; // still loading the line being edited
     const formErrors = validate();
     if (Object.keys(formErrors).length > 0) { setErrors(formErrors); return; }
 
     setIsSubmitting(true);
     const payload = {
-      supplierHotelTypeId: "0",
+      // "0" adds a new line; an existing id updates that line in place.
+      supplierHotelTypeId: isEditing ? String(editData.line.supplierHotelTypeId) : "0",
       supplierMainBasicId: String(mainBasicId),
       supplierId: String(form.supplier?.value),
       roomType: form.roomType,
@@ -223,14 +269,14 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd }) => {
         payload
       );
       if (response.data && response.data !== 0) {
-        toast.success("Hotel details added successfully");
+        toast.success(isEditing ? "Hotel details updated successfully" : "Hotel details added successfully");
         if (onAdd) {
           onAdd(); // Trigger refresh in parent
         }
         setForm(initialForm);
         setErrors({});
       } else {
-        toast.error("Failed to add hotel details");
+        toast.error(isEditing ? "Failed to update hotel details" : "Failed to add hotel details");
       }
     } catch (error) {
       console.error("Error saving hotel:", error);
@@ -245,7 +291,7 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd }) => {
 
   return (
     <div className="supplier-form-panel">
-      <h5 className="supplier-form-title">Hotel</h5>
+      <h5 className="supplier-form-title">{isEditing ? "Edit Hotel" : "Hotel"}</h5>
       <Form onSubmit={handleSubmit}>
         <Row className="g-3">
           {/* Supplier */}
@@ -494,18 +540,33 @@ const OfflineHotel = ({ mainBasicId, invoiceNo, onAdd }) => {
           </Col>
 
           {/* Submit */}
-          <Col lg={4} md={12} className="d-flex align-items-end">
+          <Col lg={4} md={12} className="d-flex align-items-end gap-2">
             <Button
               type="submit"
               className="supplier-submit-btn w-100"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isLoadingEdit}
             >
               {isSubmitting ? (
                 <><Spinner animation="border" size="sm" className="me-2" />Saving...</>
+              ) : isLoadingEdit ? (
+                <><Spinner animation="border" size="sm" className="me-2" />Loading...</>
+              ) : isEditing ? (
+                <>Update &rarr;</>
               ) : (
                 <>Add &rarr;</>
               )}
             </Button>
+            {isEditing && (
+              <Button
+                type="button"
+                variant="outline-secondary"
+                className="w-50"
+                disabled={isSubmitting}
+                onClick={() => onCancelEdit && onCancelEdit()}
+              >
+                Cancel
+              </Button>
+            )}
           </Col>
         </Row>
       </Form>

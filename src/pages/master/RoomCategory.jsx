@@ -7,6 +7,12 @@ import { toast } from "react-hot-toast";
 import Swal from "sweetalert2";
 import { FaEdit, FaTrash } from "react-icons/fa";
 import BackButton from "../../components/BackButton";
+// .pagination-modern (the orange rounded pager used on /new-booking/hotel)
+// lives here. Its rules are namespaced, so importing it does not restyle
+// anything else on this page — Province.jsx imports it the same way.
+import "../../styles/HotelSearch.css";
+
+const PAGE_SIZE = 10;
 
 export default function RoomCategory() {
   const [items, setItems] = useState([]);
@@ -19,6 +25,12 @@ export default function RoomCategory() {
   const [errors, setErrors] = useState({});
   const [page, setPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  // Real row count for the current search, from the backend's X-Total-Count
+  // header on /api/roomCategory. 0 means unknown (older backend build).
+  const [totalElements, setTotalElements] = useState(0);
+  // Room Category column sort, done on the backend across all pages.
+  // "asc" = A→Z (the default), "desc" = Z→A. Clicking the header toggles it.
+  const [sortDir, setSortDir] = useState("asc");
   const [search, setSearch] = useState("");
   const [searchTimeout, setSearchTimeout] = useState(null);
   const [searchTerm, setSearchTerm] = useState(null);
@@ -125,12 +137,20 @@ export default function RoomCategory() {
     setErrors({});
   };
 
-  const fetchRoomCategoryList = async (pageNum = 0, searchTerm = search) => {
+  const fetchRoomCategoryList = async (
+    pageNum = 0,
+    searchTerm = search,
+    dirOverride = sortDir,
+  ) => {
     setIsLoading(true);
     try {
       const params = new URLSearchParams({
         page: pageNum.toString(),
-        limit: "10",
+        limit: String(PAGE_SIZE),
+        // Sorted by room category name, A→Z or Z→A (the backend applies it
+        // across all pages, not just the current one).
+        sortBy: "name",
+        direction: dirOverride === "desc" ? "desc" : "asc",
       });
 
       if (searchTerm && searchTerm.trim()) {
@@ -144,30 +164,81 @@ export default function RoomCategory() {
      // Check if response has data and pagination info
      if (res.data && Array.isArray(res.data)) {
         setItems(res.data);
-        // Since backend doesn't return totalPages, we'll calculate it based on data length
-        // If we get less than 10 items, it's likely the last page
-        if (res.data.length < 10) {
+        // Size the pager from the real match count (X-Total-Count header),
+        // so the last pages can be shown up front. Falls back to the old
+        // page-length guess only when the header is missing.
+        const rawTotal = Number(res.headers?.["x-total-count"]);
+        if (Number.isFinite(rawTotal) && rawTotal >= 0) {
+          setTotalElements(rawTotal);
+          setTotalPages(Math.max(1, Math.ceil(rawTotal / PAGE_SIZE)));
+        } else if (res.data.length < PAGE_SIZE) {
+          setTotalElements(pageNum * PAGE_SIZE + res.data.length);
           setTotalPages(pageNum + 1);
         } else {
-          // If we get exactly 10 items, there might be more pages
-          // We'll set a reasonable total or keep the current totalPages
-          setTotalPages(Math.max(totalPages, pageNum + 2));
+          setTotalElements(0);
+          setTotalPages((prev) => Math.max(prev, pageNum + 2));
         }
 
         setPage(pageNum);
       } else {
         setItems([]);
         setTotalPages(0);
+        setTotalElements(0);
         setPage(0);
       }
     } catch (err) {
       toast.error("Failed to load room categories");
       setItems([]);
       setTotalPages(0);
+      setTotalElements(0);
       setPage(0);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // ── Pager — same format as /new-booking/hotel (src/pages/HotelSearch.jsx):
+  //    always the first 3 and last 3 pages, plus the current page and its
+  //    neighbours; "…" fills each gap. A gap of one page shows that page
+  //    instead, since an ellipsis there would hide nothing.
+  const effectiveTotalPages = Math.max(1, totalPages);
+
+  const pageNumbers = useMemo(() => {
+    const EDGE_PAGES = 3;
+    const current = page + 1;
+    const total = effectiveTotalPages;
+    const shown = new Set();
+    for (let i = 1; i <= Math.min(EDGE_PAGES, total); i++) shown.add(i);
+    for (let i = Math.max(1, total - EDGE_PAGES + 1); i <= total; i++) shown.add(i);
+    for (let i = Math.max(1, current - 1); i <= Math.min(total, current + 1); i++) {
+      shown.add(i);
+    }
+    const sorted = Array.from(shown).sort((a, b) => a - b);
+    const nums = [];
+    sorted.forEach((n, idx) => {
+      const prev = sorted[idx - 1];
+      if (prev !== undefined && n - prev === 2) nums.push(prev + 1);
+      else if (prev !== undefined && n - prev > 2) nums.push(`ellipsis-${prev}`);
+      nums.push(n);
+    });
+    return nums;
+  }, [page, effectiveTotalPages]);
+
+  // Jump to a 0-based page; ignores out-of-range requests. Uses the text in
+  // the search box (searchTerm), so paging through search results stays
+  // filtered.
+  const goToPage = (idx) => {
+    if (idx < 0 || idx >= effectiveTotalPages) return;
+    fetchRoomCategoryList(idx, searchTerm || "");
+  };
+
+  // Header click: the list starts A→Z, so each click flips the direction.
+  // Goes back to page 1 so the new order starts from the top, and keeps
+  // the current search.
+  const toggleNameSort = () => {
+    const nextDir = sortDir === "asc" ? "desc" : "asc";
+    setSortDir(nextDir);
+    fetchRoomCategoryList(0, searchTerm || "", nextDir);
   };
 
   const saveRoomCategory = async () => {
@@ -296,7 +367,37 @@ export default function RoomCategory() {
                 <thead>
                   <tr>
                     <th style={{ width: 100 }}>S/N</th>
-                    <th>Room Category</th>
+                    {/* Sortable header — same look and behaviour as Agent
+                        Name on /registration/agent (AgentReg.jsx). */}
+                    <th
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortDir === "asc" ? "ascending" : "descending"}
+                      style={{
+                        cursor: "pointer",
+                        userSelect: "none",
+                        whiteSpace: "nowrap",
+                      }}
+                      onClick={toggleNameSort}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggleNameSort();
+                        }
+                      }}
+                      title={
+                        sortDir === "asc"
+                          ? "Sorted A to Z — click to sort Z to A"
+                          : "Sorted Z to A — click to sort A to Z"
+                      }
+                    >
+                      <span className="d-inline-flex align-items-center gap-1">
+                        Room Category
+                        <span className="text-primary fw-bold" aria-hidden="true">
+                          {sortDir === "asc" ? "▲" : "▼"}
+                        </span>
+                      </span>
+                    </th>
                     <th>Category Code</th>
                     <th style={{ width: 160 }}>Actions</th>
                   </tr>
@@ -350,30 +451,36 @@ export default function RoomCategory() {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="d-flex justify-content-between align-items-center p-3 border-top">
+                <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 p-3 border-top">
                   <div>
                     <small className="text-muted">
-                      Showing {items.length} of {totalPages * 10} room categories
+                      Showing {items.length} of{" "}
+                      {totalElements > 0 ? totalElements : totalPages * PAGE_SIZE}{" "}
+                      room categories
                     </small>
                   </div>
                   <div>
-                    <Pagination className="mb-0">
+                    <Pagination className="mb-0 pagination-modern">
                       <Pagination.Prev
                         disabled={page === 0}
-                        onClick={() => fetchRoomCategoryList(page - 1, search)}
+                        onClick={() => goToPage(page - 1)}
                       />
-                      {[...Array(totalPages).keys()].map((num) => (
-                        <Pagination.Item
-                          key={num}
-                          active={num === page}
-                          onClick={() => fetchRoomCategoryList(num, search)}
-                        >
-                          {num + 1}
-                        </Pagination.Item>
-                      ))}
+                      {pageNumbers.map((n) =>
+                        typeof n === "number" ? (
+                          <Pagination.Item
+                            key={n}
+                            active={n === page + 1}
+                            onClick={() => goToPage(n - 1)}
+                          >
+                            {n}
+                          </Pagination.Item>
+                        ) : (
+                          <Pagination.Ellipsis key={n} disabled />
+                        ),
+                      )}
                       <Pagination.Next
-                        disabled={page === totalPages - 1}
-                        onClick={() => fetchRoomCategoryList(page + 1, search)}
+                        disabled={page >= effectiveTotalPages - 1}
+                        onClick={() => goToPage(page + 1)}
                       />
                     </Pagination>
                   </div>
