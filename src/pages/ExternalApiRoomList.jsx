@@ -301,6 +301,9 @@ const ExternalApiRoomList = () => {
   const [searchPayload, setSearchPayload] = useState(null);
   const [loadingRate, setLoadingRate] = useState(false);
   const [showUnavailableModal, setShowUnavailableModal] = useState(false);
+  // RateHawk prebook said the picked rate is gone. RateHawk's rule: no
+  // looking for the same rate again — the user starts a new search.
+  const [rateGone, setRateGone] = useState(null); // { message } | null
   // Default view for rate cards. Changed to "list" so the first render
   // after clicking "View Details / Book" shows the vertical list layout
   // (denser, easier scanning of rate details) rather than the grid tiles.
@@ -1195,6 +1198,20 @@ const ExternalApiRoomList = () => {
   // we convert with the same factor the rest of the page uses; when it's
   // in some other currency (a property charging locally) we render it
   // unconverted so an AED factor never touches the wrong quote.
+  // RateHawk taxes NOT included in the price (tax_data.taxes[] with
+  // included_by_supplier=false): the live prebook's figures win, else the
+  // search's. Paid at the hotel, shown separately, never added to the rate.
+  const ratehawkPayableAtHotel = (live, rate) => {
+    const fromLive =
+      live?.payableAtHotelAmount != null || !!live?.payableAtHotelDescription;
+    const src = fromLive ? live : rate;
+    return {
+      payableAtHotelAmount: src?.payableAtHotelAmount ?? null,
+      payableAtHotelCurrency: src?.payableAtHotelCurrency ?? null,
+      payableAtHotelDescription: src?.payableAtHotelDescription ?? null,
+    };
+  };
+
   const renderPayableAtHotelPill = (rate) => {
     const amount = rate?.payableAtHotelAmount;
     const label = rate?.payableAtHotelDescription;
@@ -2241,6 +2258,10 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
 
       if (!live?.success) {
         setLoadingRate(false);
+        if (live?.searchAgain) {
+          setRateGone({ message: live.message });
+          return;
+        }
         alert(
           live?.message ||
             "RateHawk prebook failed. Please retry or reselect the rate.",
@@ -2287,6 +2308,10 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
               live.cancellationPolicies) ||
             rate.cancellationPolicies,
           deadlineDate: live.deadlineDate ?? rate.deadlineDate,
+
+          // Taxes RateHawk did NOT include in the price (paid at the
+          // hotel) — the live prebook's figures, else the search's.
+          ...ratehawkPayableAtHotel(live, rate),
         },
       ];
 
@@ -2877,6 +2902,11 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
           const firstFail = results.find((r) => !r?.success);
           if (firstFail) {
             setLoadingRate(false);
+            const gone = results.find((r) => r?.searchAgain);
+            if (gone) {
+              setRateGone({ message: gone.message });
+              return;
+            }
             alert(
               firstFail.message ||
                 "One of the selected rates is no longer available. Please reselect.",
@@ -2911,6 +2941,7 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                   live.cancellationPolicies) ||
                 r.cancellationPolicies,
               deadlineDate: live.deadlineDate ?? r.deadlineDate,
+              ...ratehawkPayableAtHotel(live, r),
             };
           });
           setSelectedRate(accurateRates);
@@ -3556,6 +3587,42 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                   }}
                 >
                   Back to Search
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            {/* RateHawk: the picked rate is no longer available (prebook
+                rejected it). Per RateHawk the user searches again rather
+                than the system looking for the same rate. */}
+            <Modal
+              show={!!rateGone}
+              onHide={() => setRateGone(null)}
+              centered
+            >
+              <Modal.Header closeButton>
+                <Modal.Title>Rate No Longer Available</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                <p className="mb-0">
+                  {rateGone?.message ||
+                    "This rate is no longer available. Please search again and choose a new rate."}
+                </p>
+              </Modal.Body>
+              <Modal.Footer>
+                <Button
+                  variant="outline-secondary"
+                  onClick={() => setRateGone(null)}
+                >
+                  Close
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setRateGone(null);
+                    navigate("/new-booking/hotel");
+                  }}
+                >
+                  Search again
                 </Button>
               </Modal.Footer>
             </Modal>
@@ -5115,6 +5182,13 @@ if (currentApiId === apiIdMapping.RATEHAWK) {
                               {formatPrice(perRoomStayTotal)}
                             </span>
                           </div>
+                          {/* Taxes / charges paid at the hotel (RateHawk
+                              non-included taxes, GRN hotel charges): shown
+                              separately, not part of the total above. */}
+                          {(rate?.payableAtHotelAmount != null ||
+                            rate?.payableAtHotelDescription) && (
+                            <div className="mb-2">{renderPayableAtHotelPill(rate)}</div>
+                          )}
                           <div className="d-flex justify-content-between mb-2">
                             <span>Refund Status:</span>
                             <span>

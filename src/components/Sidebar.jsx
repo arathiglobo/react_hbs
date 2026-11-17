@@ -502,6 +502,9 @@ export function buildSidebarItems({ currentRole, hotelId, dashboardPath }) {
             { label: "Bulk (Auto) Mapping", to: "/masters/city-mapping-bulk", roles: ["super_admin"] },
             { label: "Hotel", to: "/masters/hotel-mapping" },
             { label: "Fetch Hotels", to: "/masters/fetch-new-hotels" },
+            // RateHawk hotel static data: daily incremental dump + full refresh
+            // after a missed day, as RateHawk requires (status + manual runs).
+            { label: "RateHawk Static Data", to: "/masters/ratehawk-static-data" },
 
             // Nested subgroup — a child carrying its own `children` renders as
             // a collapsible accordion inside the group (see the group renderer

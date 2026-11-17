@@ -112,6 +112,14 @@ const portalSelectStyles = {
   }),
 };
 
+// Supplier-type tabs. A line-table row's supplierType is "HOTEL", "ACTIVITY",
+// "CAB", "VISA" or "Miscellaneous" — tabForEntry maps it to its tab.
+const SUPPLIER_TABS = ["Hotel", "Activity", "Cab", "Visa", "Miscellaneous"];
+const tabForEntry = (entry) =>
+  SUPPLIER_TABS.find(
+    (tab) => tab.toLowerCase() === String(entry?.supplierType || "").toLowerCase()
+  ) || null;
+
 const OfflineSearch = () => {
   // Agent logins book under themselves — the backend forces the booking to
   // the logged-in agent, so the manual Agent picker is hidden and the
@@ -352,26 +360,39 @@ const OfflineSearch = () => {
     fetchSupplierEntries();
   };
 
-  // Edit button in the line table (Miscellaneous rows only): the row is
-  // loaded into the Miscellaneous form, which saves it back under its own
-  // miscellaneousId instead of adding a new line.
-  const [editingMiscEntry, setEditingMiscEntry] = useState(null);
+  // Edit button in the line table: the row's supplier tab opens with the
+  // line loaded into its form, which saves it back under the line's own id
+  // instead of adding a new line. Miscellaneous fills from the table row;
+  // Hotel / Activity / Cab / Visa load the saved line from the server
+  // (GET /api/v1/offline-booking/line/{id}), as the row doesn't hold every field.
+  const [editingEntry, setEditingEntry] = useState(null);
 
   // A new basic booking (Modify Search → ADD) starts with no line being edited.
   useEffect(() => {
-    setEditingMiscEntry(null);
+    setEditingEntry(null);
   }, [mainBasicId]);
 
-  const handleEditMiscEntry = (entry) => {
-    setActiveSupplier("Miscellaneous");
-    setEditingMiscEntry(entry);
+  const canEditEntry = (entry) => {
+    const tab = tabForEntry(entry);
+    if (!tab) return false;
+    // Miscellaneous saves under the row's miscellaneousId; a backend that
+    // doesn't send it gets no button, so a save can't add a duplicate line.
+    if (tab === "Miscellaneous") return Boolean(entry.miscellaneousId);
+    return true;
+  };
+
+  const handleEditEntry = (entry) => {
+    const tab = tabForEntry(entry);
+    if (!tab) return;
+    setActiveSupplier(tab);
+    setEditingEntry(entry);
     if (resultsRef.current) {
       resultsRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
-  const handleMiscSaved = () => {
-    setEditingMiscEntry(null);
+  const handleEntrySaved = () => {
+    setEditingEntry(null);
     handleAddEntry();
   };
 
@@ -396,7 +417,7 @@ const OfflineSearch = () => {
     try {
       await axiosInstance.delete(`/api/v1/offline-booking/line/${entry.id}`);
       toast.success("Item deleted");
-      if (editingMiscEntry && editingMiscEntry.id === entry.id) setEditingMiscEntry(null);
+      if (editingEntry && editingEntry.id === entry.id) setEditingEntry(null);
       await fetchSupplierEntries();
     } catch (error) {
       console.error("Error deleting offline booking line:", error);
@@ -444,10 +465,14 @@ const OfflineSearch = () => {
   };
 
   const renderSupplierForm = () => {
-    const commonProps = { 
-      mainBasicId, 
-      invoiceNo: savedInvoiceNo, 
-      onAdd: handleAddEntry 
+    const commonProps = {
+      mainBasicId,
+      invoiceNo: savedInvoiceNo,
+      onAdd: handleEntrySaved,
+      // Only the open tab's form renders; it gets the line being edited
+      // when that line belongs to its tab.
+      editingEntry: editingEntry && tabForEntry(editingEntry) === activeSupplier ? editingEntry : null,
+      onCancelEdit: () => setEditingEntry(null),
     };
     switch (activeSupplier) {
       case "Hotel":
@@ -459,14 +484,7 @@ const OfflineSearch = () => {
       case "Visa":
         return <OfflineVisa {...commonProps} />;
       case "Miscellaneous":
-        return (
-          <OfflineMiscellaneous
-            {...commonProps}
-            onAdd={handleMiscSaved}
-            editingEntry={editingMiscEntry}
-            onCancelEdit={() => setEditingMiscEntry(null)}
-          />
-        );
+        return <OfflineMiscellaneous {...commonProps} />;
       default:
         return null;
     }
@@ -749,15 +767,15 @@ const OfflineSearch = () => {
                         <div className="supplier-sidebar">
                           <h6 className="supplier-sidebar-title">SUPPLIER TYPES</h6>
                           <div className="supplier-nav-list">
-                            {["Hotel", "Activity", "Cab", "Visa", "Miscellaneous"].map((type) => (
+                            {SUPPLIER_TABS.map((type) => (
                               <button
                                 key={type}
                                 type="button"
                                 className={`supplier-nav-item ${activeSupplier === type ? "active" : ""}`}
                                 onClick={() => {
                                   setActiveSupplier(type);
-                                  // Leaving the Miscellaneous tab drops an unsaved edit.
-                                  if (type !== "Miscellaneous") setEditingMiscEntry(null);
+                                  // Leaving the edited line's tab drops the unsaved edit.
+                                  if (editingEntry && tabForEntry(editingEntry) !== type) setEditingEntry(null);
                                 }}
                               >
                                 <span className="chevron-icon">
@@ -800,7 +818,7 @@ const OfflineSearch = () => {
                             supplierEntries.map((entry, idx) => (
                               <tr
                                 key={idx}
-                                className={editingMiscEntry && editingMiscEntry.id === entry.id ? "table-active" : ""}
+                                className={editingEntry && editingEntry.id === entry.id ? "table-active" : ""}
                               >
                                 <td>{idx + 1}</td>
                                 <td>{entry.supplierType}</td>
@@ -812,17 +830,15 @@ const OfflineSearch = () => {
                                 <td>{entry.taxAmount}</td>
                                 <td>{entry.subTotal}</td>
                                 <td className="text-nowrap">
-                                  {/* Edit: Miscellaneous lines only. Rows from a backend
-                                      that doesn't send miscellaneousId get no button, so
-                                      a save can't add a duplicate line instead of updating. */}
-                                  {entry.supplierType === "Miscellaneous" && entry.miscellaneousId ? (
+                                  {/* Edit: every supplier type (see canEditEntry). */}
+                                  {canEditEntry(entry) ? (
                                     <Button
                                       variant="link"
                                       className="p-0 me-3 text-primary"
                                       title="Edit"
                                       aria-label="Edit"
                                       disabled={deletingLineId === entry.id}
-                                      onClick={() => handleEditMiscEntry(entry)}
+                                      onClick={() => handleEditEntry(entry)}
                                     >
                                       <FaEdit />
                                     </Button>

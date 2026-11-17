@@ -3,6 +3,7 @@ import { Row, Col, Form, Button, Spinner } from "react-bootstrap";
 import Select from "react-select";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
+import useOfflineLineEdit, { asText, supplierOptionFromLine } from "../../../hooks/useOfflineLineEdit";
 
 const initialForm = {
   timeType: "arrival", // arrival or departure
@@ -22,10 +23,45 @@ const initialForm = {
   time: "",
 };
 
-const OfflineCab = ({ mainBasicId, invoiceNo, onAdd }) => {
+// A saved transfer line (GET /api/v1/offline-booking/line/{id}) → this form.
+// Arrival and departure keep their date / points / time in different fields.
+const formFromLine = (data) => {
+  const l = data.line || {};
+  const dates = data.isoDates || {};
+  const isArrival = l.departureTime !== true;
+  return {
+    timeType: isArrival ? "arrival" : "departure",
+    supplier: supplierOptionFromLine(data),
+    arrivalTransfer: l.arrivalTransfer || "",
+    quantity: asText(l.quantity, "1"),
+    driverName: l.driverName || "",
+    vehicleName: l.vehicleName || "",
+    vechicleNumber: l.vechicleNumber || "",
+    rate: asText(l.rate),
+    tax: asText(l.tax, "0"),
+    sellingPrice: asText(l.sellingPrice),
+    date: (isArrival ? dates.checkinDate : dates.checkOutDate) || "",
+    pickupPoint: (isArrival ? l.pickupPoint : l.cabdepPickPoint) || "",
+    dropOffPoint: (isArrival ? l.cabArrivalDropOffpoint : l.dropOffPoint) || "",
+    flightNumber: l.flightNumber || "",
+    time: (isArrival ? l.ETA ?? l.eta : l.ETD ?? l.etd) || "",
+  };
+};
+
+// editingEntry: a line-table row being edited (null = adding a new line).
+// onCancelEdit: leave edit mode without saving.
+const OfflineCab = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdit }) => {
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { isEditing, editData, isLoadingEdit } = useOfflineLineEdit({
+    editingEntry,
+    initialForm,
+    toForm: formFromLine,
+    setForm,
+    setErrors,
+    onCancelEdit,
+  });
   const [supplierOptions, setSupplierOptions] = useState([]);
   const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
 
@@ -101,14 +137,18 @@ const OfflineCab = ({ mainBasicId, invoiceNo, onAdd }) => {
 
   const handleSubmit = async (ev) => {
     ev.preventDefault();
+    if (isEditing && !editData) return; // still loading the line being edited
     const formErrors = validate();
     if (Object.keys(formErrors).length > 0) { setErrors(formErrors); return; }
 
     setIsSubmitting(true);
     const isArrival = form.timeType === "arrival";
-    
+
     const payload = {
-      id: "0",
+      // "0" adds a new transfer; an existing id updates it in place (the
+      // Arrival / Departure choice is locked while editing, so the id is
+      // always looked up in the right table).
+      id: isEditing ? String(editData.line.id) : "0",
       supplierMainBasicId: String(mainBasicId),
       supplierId: String(form.supplier?.value),
       arrivalTime: isArrival,
@@ -139,12 +179,12 @@ const OfflineCab = ({ mainBasicId, invoiceNo, onAdd }) => {
         payload
       );
       if (response.data && response.data !== 0) {
-        toast.success("Cab details added successfully");
+        toast.success(isEditing ? "Cab details updated successfully" : "Cab details added successfully");
         if (onAdd) onAdd();
         setForm(initialForm);
         setErrors({});
       } else {
-        toast.error("Failed to add cab details");
+        toast.error(isEditing ? "Failed to update cab details" : "Failed to add cab details");
       }
     } catch (error) {
       console.error("Error saving cab:", error);
@@ -159,9 +199,11 @@ const OfflineCab = ({ mainBasicId, invoiceNo, onAdd }) => {
 
   return (
     <div className="supplier-form-panel">
-      <h5 className="supplier-form-title">Cab</h5>
+      <h5 className="supplier-form-title">{isEditing ? "Edit Cab" : "Cab"}</h5>
       <Form onSubmit={handleSubmit}>
         <div className="d-flex gap-4 mb-3">
+          {/* Locked while editing: arrival and departure transfers are saved
+              in different tables, so a line can't switch between them. */}
           <Form.Check
             type="radio"
             label="Arrival Time"
@@ -169,6 +211,7 @@ const OfflineCab = ({ mainBasicId, invoiceNo, onAdd }) => {
             value="arrival"
             checked={form.timeType === "arrival"}
             onChange={(e) => setForm(prev => ({ ...prev, timeType: e.target.value }))}
+            disabled={isEditing}
             id="cab-arrival"
             className="modern-radio"
           />
@@ -179,6 +222,7 @@ const OfflineCab = ({ mainBasicId, invoiceNo, onAdd }) => {
             value="departure"
             checked={form.timeType === "departure"}
             onChange={(e) => setForm(prev => ({ ...prev, timeType: e.target.value }))}
+            disabled={isEditing}
             id="cab-departure"
             className="modern-radio"
           />
@@ -396,18 +440,32 @@ const OfflineCab = ({ mainBasicId, invoiceNo, onAdd }) => {
             </Form.Group>
           </Col>
 
-          <Col md={12}>
+          <Col md={12} className="d-flex gap-2">
             <Button
               type="submit"
               className="supplier-submit-btn"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isLoadingEdit}
             >
               {isSubmitting ? (
                 <><Spinner animation="border" size="sm" className="me-2" />Saving...</>
+              ) : isLoadingEdit ? (
+                <><Spinner animation="border" size="sm" className="me-2" />Loading...</>
+              ) : isEditing ? (
+                <>Update &rarr;</>
               ) : (
                 <>Add &rarr;</>
               )}
             </Button>
+            {isEditing && (
+              <Button
+                type="button"
+                variant="outline-secondary"
+                disabled={isSubmitting}
+                onClick={() => onCancelEdit && onCancelEdit()}
+              >
+                Cancel
+              </Button>
+            )}
           </Col>
         </Row>
       </Form>
