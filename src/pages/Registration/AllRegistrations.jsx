@@ -8,7 +8,14 @@ import {
   InputGroup,
   Pagination,
 } from "react-bootstrap";
-import { FaSearch, FaInbox, FaSync } from "react-icons/fa";
+import {
+  FaSearch,
+  FaInbox,
+  FaSync,
+  FaSort,
+  FaSortAlphaDown,
+  FaSortAlphaDownAlt,
+} from "react-icons/fa";
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
@@ -40,6 +47,7 @@ const SOURCES = [
       country: r.countryName,
       mobile: r.mobileNumber,
       email: r.personalEmail,
+      registeredAt: r.registeredDate,
     }),
   },
   {
@@ -62,6 +70,7 @@ const SOURCES = [
         country: null,
         mobile: c ? c.mobileNumber : null,
         email: c ? c.personalEmail : null,
+        registeredAt: r.createdDate,
       };
     },
   },
@@ -79,6 +88,7 @@ const SOURCES = [
       country: null,
       mobile: r.phonenumber,
       email: r.emailid,
+      registeredAt: r.createdDate,
     }),
   },
   {
@@ -95,6 +105,7 @@ const SOURCES = [
       country: r.countryName,
       mobile: r.mobileNo,
       email: r.emailId,
+      registeredAt: r.createdDate,
     }),
   },
   {
@@ -111,6 +122,7 @@ const SOURCES = [
       country: null,
       mobile: r.phoneNumber,
       email: r.email,
+      registeredAt: r.createdDate,
     }),
   },
   {
@@ -129,6 +141,7 @@ const SOURCES = [
       country: r.countryName,
       mobile: r.contactNumber,
       email: r.email,
+      registeredAt: r.createdDate,
     }),
   },
   {
@@ -147,6 +160,7 @@ const SOURCES = [
       country: null,
       mobile: r.phonenumber,
       email: r.emailid,
+      registeredAt: r.createdDate,
     }),
   },
 ];
@@ -154,6 +168,54 @@ const SOURCES = [
 function joinName(first, last) {
   const parts = [first, last].filter((p) => p && String(p).trim());
   return parts.length ? parts.join(" ") : null;
+}
+
+// Registration date as epoch ms, or null. The backend sends LocalDateTime
+// as an ISO string ("2026-11-16T17:42:33.135059"); the array form
+// ([y, m, d, h, mi, s, ns]) is handled too in case Jackson is set up that way.
+function registeredTime(v) {
+  if (v == null || v === "") return null;
+  if (Array.isArray(v)) {
+    const [y, mo = 1, d = 1, h = 0, mi = 0, sec = 0] = v;
+    return new Date(y, mo - 1, d, h, mi, sec).getTime();
+  }
+  // Trim microseconds to milliseconds so every browser parses it.
+  const iso = String(v).trim().replace(" ", "T").replace(/(\.\d{3})\d+/, "$1");
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? null : t;
+}
+
+// Newest registration first, across every type. Rows without a date go
+// last, newest id first.
+export function compareLatestFirst(a, b) {
+  const ta = registeredTime(a.registeredAt);
+  const tb = registeredTime(b.registeredAt);
+  if (ta != null && tb != null && ta !== tb) return tb - ta;
+  if (ta != null && tb == null) return -1;
+  if (ta == null && tb != null) return 1;
+  const ia = Number(a.id);
+  const ib = Number(b.id);
+  if (Number.isFinite(ia) && Number.isFinite(ib) && ia !== ib) return ib - ia;
+  return 0;
+}
+
+// Agency Name header sort: "default" keeps the latest registration on top,
+// then each click goes A–Z → Z–A → back to default.
+const NAME_SORT_NEXT = { default: "asc", asc: "desc", desc: "default" };
+const NAME_SORT_META = {
+  default: { Icon: FaSort, title: "Sort A–Z", ariaSort: "none" },
+  asc: { Icon: FaSortAlphaDown, title: "Sort Z–A", ariaSort: "ascending" },
+  desc: { Icon: FaSortAlphaDownAlt, title: "Back to latest first", ariaSort: "descending" },
+};
+
+// Agency names A–Z (or Z–A), case-insensitive and number-aware ("AG2"
+// before "AG10"). Rows without a name stay at the bottom either way.
+export function compareByName(a, b, dir = "asc") {
+  const an = (a.companyName || "").toString().trim();
+  const bn = (b.companyName || "").toString().trim();
+  if (!an || !bn) return an ? -1 : bn ? 1 : 0;
+  const c = an.localeCompare(bn, undefined, { sensitivity: "base", numeric: true });
+  return dir === "desc" ? -c : c;
 }
 
 function display(v) {
@@ -174,6 +236,7 @@ export default function AllRegistrations() {
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [nameSort, setNameSort] = useState("default");
 
   useEffect(() => {
     let cancelled = false;
@@ -208,13 +271,8 @@ export default function AllRegistrations() {
         }
       });
 
-      // Sort by company name so the list reads predictably across a
-      // mixed set of types.
-      merged.sort((a, b) => {
-        const an = (a.companyName || "").toString().toLowerCase();
-        const bn = (b.companyName || "").toString().toLowerCase();
-        return an.localeCompare(bn);
-      });
+      // Latest registration on top.
+      merged.sort(compareLatestFirst);
 
       setRows(merged);
       setLoading(false);
@@ -240,15 +298,24 @@ export default function AllRegistrations() {
     );
   }, [rows, search]);
 
+  // rows are already latest-first, so "default" needs no sort.
+  const sorted = useMemo(() => {
+    if (nameSort === "default") return filtered;
+    return [...filtered].sort((a, b) => compareByName(a, b, nameSort));
+  }, [filtered, nameSort]);
+
   useEffect(() => {
     setCurrentPage(1);
-  }, [search]);
+  }, [search, nameSort]);
 
-  const totalCount = filtered.length;
+  const nameSortMeta = NAME_SORT_META[nameSort];
+  const NameSortIcon = nameSortMeta.Icon;
+
+  const totalCount = sorted.length;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
   const startIdx = (safePage - 1) * PAGE_SIZE;
-  const pageRows = filtered.slice(startIdx, startIdx + PAGE_SIZE);
+  const pageRows = sorted.slice(startIdx, startIdx + PAGE_SIZE);
   const displayStart = totalCount === 0 ? 0 : startIdx + 1;
   const displayEnd = Math.min(startIdx + PAGE_SIZE, totalCount);
 
@@ -362,7 +429,37 @@ export default function AllRegistrations() {
                           <tr>
                             <th style={{ width: "48px" }}>#</th>
                             <th>Type</th>
-                            <th>Agency Name</th>
+                            <th aria-sort={nameSortMeta.ariaSort}>
+                              <button
+                                type="button"
+                                onClick={() => setNameSort((s) => NAME_SORT_NEXT[s])}
+                                title={nameSortMeta.title}
+                                aria-label={`Agency Name, ${nameSortMeta.title}`}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "6px",
+                                  background: "none",
+                                  border: 0,
+                                  padding: 0,
+                                  color: "inherit",
+                                  font: "inherit",
+                                  letterSpacing: "inherit",
+                                  textTransform: "inherit",
+                                  cursor: "pointer",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                Agency Name
+                                <NameSortIcon
+                                  aria-hidden="true"
+                                  style={{
+                                    fontSize: "0.85rem",
+                                    color: nameSort === "default" ? "#adb5bd" : "#f75e00",
+                                  }}
+                                />
+                              </button>
+                            </th>
                             <th>Contact Person</th>
                             <th>Designation</th>
                             <th>City</th>
