@@ -1565,7 +1565,7 @@ export default function HotelSearch({
     if (!userName) return;
     let cancelled = false;
     axiosInstance
-      .get(`/api/personalProfile/${userName}`)
+      .get(`/api/personalProfile/${userName}`) 
       .then((res) => {
         if (cancelled) return;
         if (res?.data?.id != null) {
@@ -3796,6 +3796,25 @@ export default function HotelSearch({
                                       >
                                         {/* Same text as the map's marker. */}
                                         {formatHotelPrice(hotel, displayCurrencyCode)}
+                                        {/* Taxes paid at the hotel, NOT in the price
+                                            above (RateHawk included_by_supplier=false). */}
+                                        {(hotel.payableAtHotelAmount != null ||
+                                          hotel.payableAtHotelDescription) && (
+                                          <div className="small text-muted fw-normal">
+                                            + payable at hotel
+                                            {hotel.payableAtHotelAmount != null
+                                              ? `: ${hotel.payableAtHotelCurrency ? `${hotel.payableAtHotelCurrency} ` : ""}${Number(
+                                                  hotel.payableAtHotelAmount,
+                                                ).toLocaleString(undefined, {
+                                                  minimumFractionDigits: 2,
+                                                  maximumFractionDigits: 2,
+                                                })}`
+                                              : ""}
+                                            {hotel.payableAtHotelDescription
+                                              ? ` (${hotel.payableAtHotelDescription})`
+                                              : ""}
+                                          </div>
+                                        )}
                                       </div>
 
                                       <div

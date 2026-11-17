@@ -52,6 +52,11 @@ export function toLongStayHotelRow(row) {
     hotelType: "hotel",
     channelType: String(row.apiType || "").toLowerCase(),
     contactNumber: row.contactNumber || "",
+    // Refund flags the hotel search sent (null = unknown). Read only by the
+    // Refund Policy filter (utils/refundPolicyFilter.js).
+    hasRefundable: row.hasRefundable ?? null,
+    hasPartial: row.hasPartial ?? null,
+    hasNonRefundable: row.hasNonRefundable ?? null,
   };
 }
 

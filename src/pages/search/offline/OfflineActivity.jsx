@@ -3,6 +3,7 @@ import { Row, Col, Form, Button, Spinner } from "react-bootstrap";
 import Select from "react-select";
 import axiosInstance from "../../../components/AxiosInstance";
 import { toast } from "react-hot-toast";
+import useOfflineLineEdit, { asText, supplierOptionFromLine } from "../../../hooks/useOfflineLineEdit";
 
 const initialForm = {
   supplier: null,
@@ -17,10 +18,37 @@ const initialForm = {
   sellingPrice: "",
 };
 
-const OfflineActivity = ({ mainBasicId, invoiceNo, onAdd }) => {
+// A saved activity line (GET /api/v1/offline-booking/line/{id}) → this form.
+const formFromLine = (data) => {
+  const l = data.line || {};
+  return {
+    supplier: supplierOptionFromLine(data),
+    activity: l.activity || "",
+    date: (data.isoDates || {}).date || "",
+    pickupPoint: l.pickupPoint || "",
+    activityType: l.activityType || "",
+    activityTraveller: l.activityTraveller || "adult",
+    activityTravellerCount: asText(l.activityTravellerCount, "1"),
+    unitPrice: asText(l.unitPrice),
+    tax: asText(l.tax, "0"),
+    sellingPrice: asText(l.sellingPrice),
+  };
+};
+
+// editingEntry: a line-table row being edited (null = adding a new line).
+// onCancelEdit: leave edit mode without saving.
+const OfflineActivity = ({ mainBasicId, invoiceNo, onAdd, editingEntry, onCancelEdit }) => {
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { isEditing, editData, isLoadingEdit } = useOfflineLineEdit({
+    editingEntry,
+    initialForm,
+    toForm: formFromLine,
+    setForm,
+    setErrors,
+    onCancelEdit,
+  });
   const [supplierOptions, setSupplierOptions] = useState([]);
   const [isLoadingSuppliers, setIsLoadingSuppliers] = useState(false);
 
@@ -95,12 +123,14 @@ const OfflineActivity = ({ mainBasicId, invoiceNo, onAdd }) => {
 
   const handleSubmit = async (ev) => {
     ev.preventDefault();
+    if (isEditing && !editData) return; // still loading the line being edited
     const formErrors = validate();
     if (Object.keys(formErrors).length > 0) { setErrors(formErrors); return; }
 
     setIsSubmitting(true);
     const payload = {
-      supplierActivityId: "0",
+      // "0" adds a new line; an existing id updates that line in place.
+      supplierActivityId: isEditing ? String(editData.line.supplierActivityId) : "0",
       supplierMainBasicId: String(mainBasicId),
       supplierId: String(form.supplier?.value),
       activity: form.activity,
@@ -121,12 +151,12 @@ const OfflineActivity = ({ mainBasicId, invoiceNo, onAdd }) => {
         payload
       );
       if (response.data && response.data !== 0) {
-        toast.success("Activity details added successfully");
+        toast.success(isEditing ? "Activity details updated successfully" : "Activity details added successfully");
         if (onAdd) onAdd();
         setForm(initialForm);
         setErrors({});
       } else {
-        toast.error("Failed to add activity details");
+        toast.error(isEditing ? "Failed to update activity details" : "Failed to add activity details");
       }
     } catch (error) {
       console.error("Error saving activity:", error);
@@ -141,7 +171,7 @@ const OfflineActivity = ({ mainBasicId, invoiceNo, onAdd }) => {
 
   return (
     <div className="supplier-form-panel">
-      <h5 className="supplier-form-title">Activity</h5>
+      <h5 className="supplier-form-title">{isEditing ? "Edit Activity" : "Activity"}</h5>
       <Form onSubmit={handleSubmit}>
         <Row className="g-3">
           <Col lg={4} md={6}>
@@ -297,18 +327,33 @@ const OfflineActivity = ({ mainBasicId, invoiceNo, onAdd }) => {
             </Form.Group>
           </Col>
 
-          <Col lg={4} md={12} className="d-flex align-items-end">
+          <Col lg={4} md={12} className="d-flex align-items-end gap-2">
             <Button
               type="submit"
               className="supplier-submit-btn w-100"
-              disabled={isSubmitting}
+              disabled={isSubmitting || isLoadingEdit}
             >
               {isSubmitting ? (
                 <><Spinner animation="border" size="sm" className="me-2" />Saving...</>
+              ) : isLoadingEdit ? (
+                <><Spinner animation="border" size="sm" className="me-2" />Loading...</>
+              ) : isEditing ? (
+                <>Update &rarr;</>
               ) : (
                 <>Add &rarr;</>
               )}
             </Button>
+            {isEditing && (
+              <Button
+                type="button"
+                variant="outline-secondary"
+                className="w-50"
+                disabled={isSubmitting}
+                onClick={() => onCancelEdit && onCancelEdit()}
+              >
+                Cancel
+              </Button>
+            )}
           </Col>
         </Row>
       </Form>

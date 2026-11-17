@@ -18,7 +18,13 @@ import {
 import Sidebar from "../../components/Sidebar";
 import TopBar from "../../components/TopBar";
 import axiosInstance from "../../components/AxiosInstance";
-import { DEADLINE_TIME_EOD, isDeadlinePassed } from "../../utils/rateDeadline";
+import {
+  DEADLINE_TIME_EOD,
+  exactTimeLabel,
+  isDeadlinePassed,
+  isExactBookingDeadline,
+  isExactDeadlinePassed,
+} from "../../utils/rateDeadline";
 import {
   REFUND_FLEXIBLE,
   REFUND_NON_REFUNDABLE,
@@ -734,8 +740,11 @@ export default function BookingDetailedView() {
       return false;
     }
     // The deadline date is free until 11:59 PM UAE, the same day the refund
-    // check on the server uses.
-    return isDeadlinePassed(booking.deadlineDate);
+    // check on the server uses. RateHawk's is its exact UAE time (converted
+    // from UTC, no buffer), checked to the minute like the server does.
+    return isExactBookingDeadline(booking.apiId, booking.deadlineDate)
+      ? isExactDeadlinePassed(booking.deadlineDate)
+      : isDeadlinePassed(booking.deadlineDate);
   })();
 
   /**
@@ -1885,7 +1894,11 @@ export default function BookingDetailedView() {
                           value={
                             booking.deadlineDate ? (
                               <span style={{ color: "#dc2626", fontWeight: 600 }}>
-                                {`${booking.deadlineDate.slice(0, 10)} ${DEADLINE_TIME_EOD}`}
+                                {`${booking.deadlineDate.slice(0, 10)} ${
+                                  isExactBookingDeadline(booking.apiId, booking.deadlineDate)
+                                    ? exactTimeLabel(booking.deadlineDate)
+                                    : DEADLINE_TIME_EOD
+                                }`}
                               </span>
                             ) : (
                               "-"

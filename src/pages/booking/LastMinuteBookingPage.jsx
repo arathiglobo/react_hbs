@@ -32,6 +32,13 @@ import {
 } from "../../utils/lastMinuteApiHotels";
 import "../../styles/HotelSearch.css";
 import { isAgentLogin } from "../../utils/supplierDisplay";
+import {
+  NO_REFUND_POLICY,
+  isRefundPolicyActive,
+  refundPolicyMatches,
+  lastMinuteRefundFlags,
+  supplierRefundFlags,
+} from "../../utils/refundPolicyFilter";
 
 // Default placeholder when the hotel has no image.
 const DEFAULT_HOTEL_IMAGE =
@@ -1267,6 +1274,11 @@ function ResultsWithFilters({
   const [starRating, setStarRating] = useState(STAR_OPTIONS[0]);
   const [sortBy, setSortBy] = useState("priceAsc");
   const [pageIndex, setPageIndex] = useState(0);
+  // Refund Policy — the same three boxes as /new-booking/hotel; ticking one
+  // clears the others. Inhouse hotels are labelled from the rooms this search
+  // already returned, the way /last-minute-room-list labels them; supplier
+  // hotels use the flags the hotel search sent (utils/refundPolicyFilter.js).
+  const [refundPolicy, setRefundPolicy] = useState(NO_REFUND_POLICY);
 
   // Budget slider + price chart — the same control /new-booking/hotel has.
   // All values are AED, the unit of fromRate (what each card shows, × the
@@ -1370,13 +1382,26 @@ function ResultsWithFilters({
       });
     }
 
+    // Refund Policy — strict, as on /new-booking/hotel: only hotels known to
+    // have a rate of the ticked kind stay; unknown is hidden too.
+    if (isRefundPolicyActive(refundPolicy)) {
+      list = list.filter((h) =>
+        refundPolicyMatches(
+          refundPolicy,
+          h.source === "API"
+            ? supplierRefundFlags(h)
+            : lastMinuteRefundFlags(h, results?.checkInDate)
+        )
+      );
+    }
+
     // Sort
     const cheapest = (h) => (h.fromRate != null ? Number(h.fromRate) : Infinity);
     if (sortBy === "priceAsc") list.sort((a, b) => cheapest(a) - cheapest(b));
     else if (sortBy === "priceDesc") list.sort((a, b) => cheapest(b) - cheapest(a));
 
     return list;
-  }, [results, hotelSearchTerm, starRating, hotelType, channelType, sortBy, apiHotelsEnabled, priceSlider]);
+  }, [results, hotelSearchTerm, starRating, hotelType, channelType, sortBy, apiHotelsEnabled, priceSlider, refundPolicy]);
 
   // Channel rows: only the channels the company has ENABLED on
   // /admin/api-access — a switched-off API (INHOUSE included) is not listed.
@@ -1543,6 +1568,7 @@ function ResultsWithFilters({
     setHotelType([]);
     setChannelType([]);
     setPriceSlider(null);
+    setRefundPolicy(NO_REFUND_POLICY);
     setSortBy("priceAsc");
     setHotelSearchTerm("");
   };
@@ -1633,6 +1659,48 @@ function ResultsWithFilters({
                     <hr />
                   </>
                 )}
+
+                {/* Refund Policy — same boxes and placement as
+                    /new-booking/hotel. The boxes are mutually exclusive:
+                    ticking one clears the others, and unticking shows every
+                    hotel again. */}
+                <Form.Group className="mb-2">
+                  <Form.Label className="fw-semibold small">Refund Policy</Form.Label>
+                  <div className="filter-checkbox-list">
+                    <Form.Check
+                      type="checkbox"
+                      id="lm-refund-policy-refundable"
+                      label="Flexible"
+                      checked={refundPolicy.refundable}
+                      onChange={(e) => {
+                        setRefundPolicy({ ...NO_REFUND_POLICY, refundable: e.target.checked });
+                        setPageIndex(0);
+                      }}
+                    />
+                    <Form.Check
+                      type="checkbox"
+                      id="lm-refund-policy-partial"
+                      label="Flexible - Partial"
+                      checked={refundPolicy.partial}
+                      onChange={(e) => {
+                        setRefundPolicy({ ...NO_REFUND_POLICY, partial: e.target.checked });
+                        setPageIndex(0);
+                      }}
+                    />
+                    <Form.Check
+                      type="checkbox"
+                      id="lm-refund-policy-non-refundable"
+                      label="Non Refundable"
+                      checked={refundPolicy.nonRefundable}
+                      onChange={(e) => {
+                        setRefundPolicy({ ...NO_REFUND_POLICY, nonRefundable: e.target.checked });
+                        setPageIndex(0);
+                      }}
+                    />
+                  </div>
+                </Form.Group>
+
+                <hr />
 
                 {/* Hotel type */}
                 <Form.Group className="mb-2">
@@ -1909,19 +1977,23 @@ function HotelCard({ hotel: h, onViewRooms, currencyCode = "AED", currencyFactor
                   single-source; now that contract rates and live supplier
                   rates can appear in one list, the operator has to be able to
                   tell them apart at a glance. Inhouse rows are unchanged. */}
-              <span
-                style={{
-                  marginLeft: "5px",
-                  backgroundColor: h.source === "API" ? "#0d6efd" : "#6c757d",
-                  padding: "2px 6px",
-                  borderRadius: "10px",
-                }}
-              >
-                {/* Agents must not see the supplier name. */}
-                {h.source === "API"
-                  ? isAgentLogin() ? "API" : h.apiType || "API"
-                  : "INHOUSE"}
-              </span>
+              {/* Same grey pill as the /new-booking/hotel result card, for
+                  supplier and inhouse rows alike, and like that page it is
+                  hidden for every agent-side login. */}
+              {!isAgentLogin() && (
+                <span
+                  style={{
+                    marginLeft: "5px",
+                    backgroundColor: "#6c757d",
+                    padding: "2px 6px",
+                    borderRadius: "10px",
+                  }}
+                >
+                  {h.source === "API"
+                    ? String(h.apiType || "API").toUpperCase()
+                    : "INHOUSE"}
+                </span>
+              )}
             </div>
           </div>
         </Col>

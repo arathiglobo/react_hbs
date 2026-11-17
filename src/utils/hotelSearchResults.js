@@ -61,6 +61,12 @@ export function mapHotelRow(hotel, searchId, index, reply) {
     hasPartial: hotel.hasPartial ?? null,
     // How many suppliers sell this hotel (mapped hotels: best price of all).
     supplierCount: hotel.supplierCount || 1,
+    // Charges paid at the hotel, NOT in the price (RateHawk taxes with
+    // included_by_supplier=false). Shown under the price on the card, in the
+    // currency quoted; amount null + description when they could not be totalled.
+    payableAtHotelAmount: hotel.payableAtHotelAmount ?? null,
+    payableAtHotelCurrency: hotel.payableAtHotelCurrency || null,
+    payableAtHotelDescription: hotel.payableAtHotelDescription || null,
     // Surface the backend-computed promotion flag so the "Destination Sales"
     // pill and filter work.
     hasDestinationSales: !!hotel.hasDestinationSales,

@@ -26,7 +26,7 @@ import {
 import axiosInstance from "../../components/AxiosInstance";
 import toast from "react-hot-toast";
 import RefundBadge from "../../components/RefundBadge";
-import { labelOfRate, refundLabelText, uaeToday } from "../../utils/refundLabel";
+import { labelOfRate, refundLabelText } from "../../utils/refundLabel";
 import { toLocalDateTime, formatDateTime } from "../../utils/dateUtils";
 import {
   GrnRefundBadge,
@@ -44,6 +44,9 @@ import {
   RateDeadlinePill,
   resolveDeadlineDate,
   isNonRefundable,
+  isExactDeadline,
+  isResolvedDeadlinePassed,
+  formatResolvedDeadline,
 } from "../../utils/rateDeadline";
 import { orderIdPathSegment } from "../../utils/urlSafety";
 import {
@@ -168,6 +171,9 @@ export const HOLD_CAPABLE_API_IDS = new Set([
  * SUPPLIER_DEADLINE_BUFFER_DAYS / GRN_DEADLINE_BUFFER_DAYS buffer is already
  * baked into what resolveDeadlineDate returns — do NOT subtract it again here.
  *
+ * RateHawk: resolveDeadlineDate returns its exact UAE time (no buffer), which
+ * keeps its time of day here; every other deadline is a day, at midnight.
+ *
  * Note this also moves GRN's "Hold Room and Pay Later" gate, since
  * isHoldEligible calls this function for every supplier in HOLD_CAPABLE_API_IDS.
  * That is the intended behaviour: a hold is offered only while buffered
@@ -181,7 +187,7 @@ const deriveDeadlineDate = (selectedRates) => {
 
   if (deadlines.length === 0) return null;
   const earliest = new Date(Math.min(...deadlines.map((d) => d.getTime())));
-  earliest.setHours(0, 0, 0, 0);
+  if (!isExactDeadline(earliest)) earliest.setHours(0, 0, 0, 0);
   return earliest;
 };
 
@@ -240,12 +246,20 @@ const buildGrnPolicyLines = (selectedRates) => {
   });
 };
 
-/** Format a Date as the LocalDateTime string the backend payload expects. */
+/**
+ * Format a Date as the LocalDateTime string the backend payload expects: the
+ * day at 00:00, or RateHawk's exact UAE time ("2026-12-20T04:00:00").
+ */
 const toDeadlinePayloadString = (d) => {
   if (!d) return null;
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
+  if (isExactDeadline(d)) {
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${year}-${month}-${day}T${hh}:${mm}:00`;
+  }
   return `${year}-${month}-${day}T00:00:00`;
 };
 
@@ -266,7 +280,7 @@ export const isHoldEligible = (bookingData) => {
   if (hasNonRefundableRate(bookingData?.selectedRate)) return false;
   const deadline = deriveDeadlineDate(bookingData?.selectedRate || []);
   if (!deadline) return false;
-  return deadline >= uaeToday();
+  return !isResolvedDeadlinePassed(deadline);
 };
 
 /** True when no selected room is "On Request". A rate with no status counts as available. */
@@ -302,10 +316,13 @@ export const offersHoldOption = (bookingData) =>
 // (payload.lastMinuteBooking, set by LastMinuteBookingPage) are tagged
 // LAST_MINUTE server-side, so they belong on the Last Minute booking list. Long
 // Stay supplier bookings (payload.longStayBooking, set by LongStaySearch) are
-// tagged LONG_STAY and belong on the Long Stay booking list.
-const postBookingListPath = (isLastMinute, isLongStay = false) => {
+// tagged LONG_STAY and belong on the Long Stay booking list. Day Stay supplier
+// bookings (payload.dayStayBooking, set by DayStaySearch) are tagged DAY_STAY
+// and belong on the Day Stay booking list.
+const postBookingListPath = (isLastMinute, isLongStay = false, isDayStay = false) => {
   if (isLastMinute) return "/booking-details/last-minute-booking-list";
   if (isLongStay) return "/booking-details/long-stay-booking-list";
+  if (isDayStay) return "/booking-details/day-stay-booking-list";
   return "/booking-details/hotel-booking-list";
 };
 
@@ -324,6 +341,15 @@ const storedBookingIsLongStay = () => {
   try {
     const stored = JSON.parse(sessionStorage.getItem("bookingData") || "null");
     return stored?.payload?.longStayBooking === true;
+  } catch (_) {
+    return false;
+  }
+};
+
+const storedBookingIsDayStay = () => {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem("bookingData") || "null");
+    return stored?.payload?.dayStayBooking === true;
   } catch (_) {
     return false;
   }
@@ -640,7 +666,13 @@ const ApiBookingPageForHotels = () => {
               "Booking created after payment.",
           );
           setShowConfirmModal(false);
-          navigate(postBookingListPath(storedBookingIsLastMinute(), storedBookingIsLongStay()));
+          navigate(
+            postBookingListPath(
+              storedBookingIsLastMinute(),
+              storedBookingIsLongStay(),
+              storedBookingIsDayStay(),
+            ),
+          );
         } else {
           const beMsg = (bookingResponse && bookingResponse.message) || null;
           toast.error(
@@ -1356,7 +1388,9 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
             ? "LAST_MINUTE"
             : bookingData?.payload?.longStayBooking === true
               ? "LONG_STAY"
-              : undefined,
+              : bookingData?.payload?.dayStayBooking === true
+                ? "DAY_STAY"
+                : undefined,
 
         // Display-currency preference carried through from the search /
         // room-list flow. Persisted on HotelBooking.displayCurrencyCode
@@ -1520,6 +1554,7 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
           postBookingListPath(
             bookingData?.payload?.lastMinuteBooking === true,
             bookingData?.payload?.longStayBooking === true,
+            bookingData?.payload?.dayStayBooking === true,
           ),
         );
       } else if (statusUpper === "DUPLICATE") {
@@ -1629,7 +1664,9 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
     // the backend applies (one charge per picked rate).
     const seenKeys = new Set();
     const rows = allRows.filter((r, i) => {
-      const key = r?.atharvaRateKey || r?.rateKey || `row-${i}`;
+      // RateHawk rows have no rateKey: their book_hash (roomTypeCode) names
+      // the rate, so a rate's taxes are counted once, like GRN's charges.
+      const key = r?.atharvaRateKey || r?.rateKey || r?.roomTypeCode || `row-${i}`;
       if (seenKeys.has(key)) return false;
       seenKeys.add(key);
       return true;
@@ -1722,7 +1759,8 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
   const cancellationDeadline = deriveDeadlineDate(selectedRate);
   const isOutsideDeadline = (() => {
     if (!cancellationDeadline) return false;
-    return uaeToday() > cancellationDeadline;
+    // RateHawk: past from its exact UAE minute; others: from the next UAE day.
+    return isResolvedDeadlinePassed(cancellationDeadline);
   })();
 
   return (
@@ -3101,15 +3139,9 @@ const requiresPan = () => requiresAtharvaPan() || requiresGrnPan();
                                 <strong>Cancellation Deadline:</strong>
                                 <br />
                                 <span className="text-dark">
-                                  {cancellationDeadline.toLocaleDateString(
-                                    "en-GB",
-                                    {
-                                      day: "2-digit",
-                                      month: "short",
-                                      year: "numeric",
-                                    },
-                                  )}
-                                  , 11:59 PM (UAE)
+                                  {/* "20 Dec 2026, 04:00 AM (UAE)" for RateHawk's
+                                      exact time, "…, 11:59 PM (UAE)" otherwise. */}
+                                  {formatResolvedDeadline(cancellationDeadline)}
                                 </span>
                                 {isOutsideDeadline ? (
                                   <span
