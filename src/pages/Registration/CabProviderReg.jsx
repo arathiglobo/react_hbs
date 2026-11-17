@@ -1011,12 +1011,36 @@ const CabProviderReg = () => {
 
   // Remove duplicate useEffect hooks - country change is handled in handleCountryChange
 
+  // Required fields of the "Cab List" section (the cab currently being added).
+  const CAB_FIELD_KEYS = ["cabCode", "cabName", "countryId", "placeId"];
+
+  const validateCabFields = (data) => {
+    const newErrors = {};
+    const isBlank = (value) => !(value ? String(value).trim() : "");
+    if (isBlank(data.cabCode)) newErrors.cabCode = "Cab Code is required";
+    if (isBlank(data.cabName)) newErrors.cabName = "Cab Name is required";
+    if (isBlank(data.countryId)) newErrors.countryId = "Country is required";
+    if (isBlank(data.placeId)) newErrors.placeId = "State is required";
+    return newErrors;
+  };
+
+  const clearCabFieldErrors = () => {
+    setValidationErrors((prev) => {
+      const next = { ...prev };
+      CAB_FIELD_KEYS.forEach((key) => delete next[key]);
+      return next;
+    });
+  };
+
   // Add cab to list
   const addCabToList = () => {
-    if (!formData.cabCode || !formData.cabName || !formData.countryId || !formData.placeId) {
-      toast.error("Please fill cab code, name, country and place before adding to list");
+    const cabErrors = validateCabFields(formData);
+    if (Object.keys(cabErrors).length > 0) {
+      setValidationErrors((prev) => ({ ...prev, ...cabErrors }));
+      toast.error("Please fill cab code, name, country and state before adding to list");
       return;
     }
+    clearCabFieldErrors();
 
     // Pickup/dropoff locations are now managed per-cab via the Zone icon on
     // the cab provider list (after the provider is saved), not in this modal.
@@ -1098,7 +1122,8 @@ const CabProviderReg = () => {
     
     // Store the cab being edited
     setEditingCab(cab);
-    
+    clearCabFieldErrors();
+
     // Populate form fields with existing cab data
     setFormData(prev => ({
       ...prev,
@@ -1264,7 +1289,12 @@ const CabProviderReg = () => {
 
   const saveCab = async (e) => {
     e.preventDefault();
-    const errors = validateCabForm(formData);
+    // When no cab has been added yet, the Cab List fields are required too,
+    // so flag them alongside the provider fields in the same pass.
+    const errors = {
+      ...validateCabForm(formData),
+      ...(cabList.length === 0 ? validateCabFields(formData) : {}),
+    };
     if (Object.keys(errors).length > 0) {
       setValidationErrors(errors);
       return;
@@ -2102,16 +2132,29 @@ const CabProviderReg = () => {
                               <Form.Control
                             value={formData.cabCode}
                             placeholder="Enter cab code"
+                            isInvalid={!!validationErrors.cabCode}
                                 {...getFormControlProps(
                               "cabCode",
-                              (e) =>
+                              (e) => {
                                     setFormData({
                                       ...formData,
                                   cabCode: e.target.value,
-                                }),
+                                });
+                                if (validationErrors.cabCode) {
+                                  setValidationErrors(prev => ({
+                                    ...prev,
+                                    cabCode: ""
+                                  }));
+                                }
+                              },
                               {}
                             )}
                           />
+                          {validationErrors.cabCode && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.cabCode}
+                            </Form.Control.Feedback>
+                          )}
                             </Form.Group>
                           </Col>
                       <Col md={3}>
@@ -2122,16 +2165,29 @@ const CabProviderReg = () => {
                               <Form.Control
                             value={formData.cabName}
                             placeholder="Enter cab name"
+                            isInvalid={!!validationErrors.cabName}
                                 {...getFormControlProps(
                               "cabName",
-                                  (e) =>
+                                  (e) => {
                                     setFormData({
                                       ...formData,
                                   cabName: e.target.value,
-                                    }),
+                                    });
+                                    if (validationErrors.cabName) {
+                                      setValidationErrors(prev => ({
+                                        ...prev,
+                                        cabName: ""
+                                      }));
+                                    }
+                                  },
                                   {}
                                 )}
                               />
+                          {validationErrors.cabName && (
+                            <Form.Control.Feedback type="invalid">
+                              {validationErrors.cabName}
+                            </Form.Control.Feedback>
+                          )}
                             </Form.Group>
                           </Col>
                       <Col md={3}>
@@ -2153,7 +2209,15 @@ const CabProviderReg = () => {
                             menuPortalTarget={document.body}
                             styles={{
                               menuPortal: (base) => ({ ...base, zIndex: 9999 }),
-                              menu: (base) => ({ ...base, zIndex: 9999 })
+                              menu: (base) => ({ ...base, zIndex: 9999 }),
+                              control: (base) =>
+                                validationErrors.countryId
+                                  ? {
+                                      ...base,
+                                      borderColor: "#dc3545",
+                                      "&:hover": { borderColor: "#dc3545" },
+                                    }
+                                  : base,
                             }}
                             filterOption={() => true} // Server-side filtering
                             placeholder="Search and select country"
@@ -2168,7 +2232,7 @@ const CabProviderReg = () => {
                             classNamePrefix="react-select"
                           />
                           {validationErrors.countryId && (
-                            <Form.Control.Feedback type="invalid">
+                            <Form.Control.Feedback type="invalid" className="d-block">
                               {validationErrors.countryId}
                             </Form.Control.Feedback>
                           )}
@@ -2196,7 +2260,7 @@ const CabProviderReg = () => {
                             isLoading={isLoadingPlaces}
                           />
                           {validationErrors.placeId && (
-                                <Form.Control.Feedback type="invalid">
+                                <Form.Control.Feedback type="invalid" className="d-block">
                               {validationErrors.placeId}
                                 </Form.Control.Feedback>
                               )}
